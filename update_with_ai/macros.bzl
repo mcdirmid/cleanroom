@@ -53,15 +53,27 @@ def _update_with_ai_impl(ctx):
                     "label": str(dep.label),
                     "path": f.short_path,
                 })
-    
+
+    # Feedback deps are automatically included in deps: the manifest's deps
+    # list is the union of the declared deps and the feedback deps (deduped),
+    # so feedback deps are cleaned before run and their srcs output is
+    # readable, exactly like declared deps.
+    _all_deps = list(ctx.attr.deps)
+    _seen = {str(dep.label): True for dep in _all_deps}
+    for dep in ctx.attr.feedback_deps:
+        if str(dep.label) not in _seen:
+            _all_deps.append(dep)
+            _seen[str(dep.label)] = True
+
     # Build the manifest
     manifest_content = {
         "label": str(ctx.label),
         "name": ctx.attr.name,
         "prompt": ctx.attr.prompt,
         "tools": [str(t) for t in ctx.attr.tools],
-        "deps": [str(dep.label) for dep in ctx.attr.deps],
+        "deps": [str(dep.label) for dep in _all_deps],
         "silent_deps": [str(dep.label) for dep in ctx.attr.silent_deps],
+        "feedback_deps": [str(dep.label) for dep in ctx.attr.feedback_deps],
         "srcs": [str(s) for s in ctx.attr.srcs],
         "silent_srcs": [str(s) for s in ctx.attr.silent_srcs],
         "verify": ctx.attr.verify if ctx.attr.verify else None,
@@ -93,10 +105,13 @@ _update_with_ai_rule = rule(
             doc = "List of tool targets",
         ),
         "deps": attr.label_list(
-            doc = "List of dependency node targets (cleaned before run)",
+            doc = "List of dependency node targets (cleaned before run) whose srcs output is readable",
         ),
         "silent_deps": attr.label_list(
-            doc = "List of dependency node targets whose output is readable but cleaned after",
+            doc = "List of dependency node targets whose output is not readable and whose changes do not propagate to this node",
+        ),
+        "feedback_deps": attr.label_list(
+            doc = "List of dependency node targets that can receive feedback; these nodes are automatically included in deps",
         ),
         "srcs": attr.string_list(
             doc = "File paths the agent can write (these files need not pre-exist)",
@@ -122,6 +137,7 @@ def update_with_ai(
         tools = [],
         deps = [],
         silent_deps = [],
+        feedback_deps = [],
         srcs = [],
         silent_srcs = [],
         verify = "",
@@ -163,9 +179,12 @@ def update_with_ai(
         name: Target name
         prompt: Agent prompt string
         tools: List of tool targets
-        deps: List of dependency node targets (cleaned before run)
-        silent_deps: List of dependency node targets whose output is
-            readable but cleaned after
+        deps: List of dependency node targets (cleaned before run) whose
+            srcs output is readable
+        silent_deps: List of dependency node targets whose output is not
+            readable and whose changes do not propagate to this node
+        feedback_deps: List of dependency node targets that can receive
+            feedback; these nodes are automatically included in deps
         srcs: Files agent can write that are readable by deps
         silent_srcs: Files agent can write that are NOT readable by deps
         verify: Shell command to run when the agent calls verify()
@@ -183,6 +202,7 @@ def update_with_ai(
         tools = tools,
         deps = deps,
         silent_deps = silent_deps,
+        feedback_deps = feedback_deps,
         srcs = srcs,
         silent_srcs = silent_srcs,
         verify = verify,
@@ -191,23 +211,26 @@ def update_with_ai(
     # Create a clean target that runs DAG cleaning.
     # This calls a helper rule that produces a binary wrapper.
     _clean_target = name + "_clean"
-    _bazel_node_clean_rule(
+    _update_ai_node_clean_rule(
         name = _clean_target,
         node = ":{}".format(name),  # the node manifest
-        deps = deps + silent_deps,  # dependency manifests for graph resolution
+        # dependency manifests for graph resolution: deps (which includes
+        # feedback_deps), silent_deps, and feedback_deps (explicit, so a
+        # feedback dep declared without a deps entry is still resolvable)
+        deps = deps + silent_deps + feedback_deps,
         config = config,            # optional agent_config default for this node
     )
     
     # Create a feedback target that delivers feedback to the node itself,
     # marking it dirty so a subsequent *_clean run processes the feedback.
     _feedback_target = name + "_feedback"
-    _bazel_node_feedback_rule(
+    _update_ai_node_feedback_rule(
         name = _feedback_target,
         node = ":{}".format(name),  # the node manifest
     )
 
 # ============================================================================
-# Rule: bazel_node_clean (generates a clean target per node)
+# Rule: update_ai_node_clean (generates a clean target per node)
 # ============================================================================
 
 def _apparent_label(label):
@@ -224,7 +247,7 @@ def _apparent_label(label):
         s = s[s.index("//"):]
     return s
 
-def _bazel_node_clean_impl(ctx):
+def _update_ai_node_clean_impl(ctx):
     """Generates a Python binary that runs DAG cleaning on a node."""
     _node = ctx.attr.node
     _manifest = _node[DefaultInfo].files.to_list()[0]  # _manifest.json
@@ -369,8 +392,8 @@ def _bazel_node_clean_impl(ctx):
         ),
     ]
 
-_bazel_node_clean_rule = rule(
-    implementation = _bazel_node_clean_impl,
+_update_ai_node_clean_rule = rule(
+    implementation = _update_ai_node_clean_impl,
     executable = True,
     attrs = {
         "node": attr.label(
@@ -403,10 +426,10 @@ _bazel_node_clean_rule = rule(
 )
 
 # ============================================================================
-# Rule: bazel_node_feedback (generates a feedback target per node)
+# Rule: update_ai_node_feedback (generates a feedback target per node)
 # ============================================================================
 
-def _bazel_node_feedback_impl(ctx):
+def _update_ai_node_feedback_impl(ctx):
     """Generates a Python binary that delivers feedback to the node itself."""
     _node = ctx.attr.node
     _manifest = _node[DefaultInfo].files.to_list()[0]  # _manifest.json
@@ -504,8 +527,8 @@ def _bazel_node_feedback_impl(ctx):
         ),
     ]
 
-_bazel_node_feedback_rule = rule(
-    implementation = _bazel_node_feedback_impl,
+_update_ai_node_feedback_rule = rule(
+    implementation = _update_ai_node_feedback_impl,
     executable = True,
     attrs = {
         "node": attr.label(

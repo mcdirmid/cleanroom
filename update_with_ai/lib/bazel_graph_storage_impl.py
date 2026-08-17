@@ -40,7 +40,7 @@ Config = GraphConfig
 
 # The per-package data file (pinned by the implementation LLS): maps node IDs
 # to entries holding the node's pending messages and known reverse dependencies.
-HARNESS_FILE = ".bazelharness.json"
+HARNESS_FILE = ".update_with_ai.json"
 
 
 class BaseBazelGraphStorageImpl(BazelGraphStorage):
@@ -67,6 +67,7 @@ class BaseBazelGraphStorageImpl(BazelGraphStorage):
         self._config = config
         self._graph_source: GraphSource = self._resolve_graph_source()
         self._adjacency: Dict[NodeId, List[NodeId]] = self._build_adjacency()
+        self._propagating_deps: Dict[NodeId, List[NodeId]] = self._build_propagating_deps()
         self._definitions: Dict[NodeId, NodeDefinition] = self._build_definitions()
         self._package_dirs: Dict[NodeId, PackageDirectory] = self._build_package_dirs()
 
@@ -92,6 +93,20 @@ class BaseBazelGraphStorageImpl(BazelGraphStorage):
         """
         raise NotImplementedError(
             "Subclasses must implement _build_adjacency"
+        )
+
+    def _build_propagating_deps(self) -> Dict[NodeId, List[NodeId]]:
+        """
+        Build the change-propagating dependency map from the graph source.
+
+        Returns a mapping from each node to its propagating dependencies:
+        the dependencies whose changes propagate to the node (they record the
+        node as a known reverse dependency). Dependencies whose changes do not
+        propagate (silent dependencies) are excluded even though they are
+        dependencies for graph traversal.
+        """
+        raise NotImplementedError(
+            "Subclasses must implement _build_propagating_deps"
         )
 
     def _build_definitions(self) -> Dict[NodeId, NodeDefinition]:
@@ -240,11 +255,14 @@ class BaseBazelGraphStorageImpl(BazelGraphStorage):
         if deps is None:
             raise ValueError(f"Unknown node: {node_id}")
         # Side effect per the dag_storage contract: record the node as a known
-        # reverse dependency of each dependency it provides, at most once per
-        # dependency (deduplicated). Every declared dependency resolves to a
-        # package directory (dependencies lacking their own manifest are
-        # synthesized from their label during manifest loading).
-        for dep in deps:
+        # reverse dependency of each propagating dependency it provides, at most
+        # once per dependency (deduplicated). Silent dependencies are
+        # dependencies for graph traversal but their changes do not propagate
+        # to the node, so they are not recorded: the node does not become dirty
+        # when a silent dependency changes. Every propagating dependency
+        # resolves to a package directory (dependencies lacking their own
+        # manifest are synthesized from their label during manifest loading).
+        for dep in self._propagating_deps.get(node_id, deps):
             pkg_dir = self.resolve_package_directory(dep)
             harness_file = os.path.join(pkg_dir, HARNESS_FILE)
             self._add_reverse_dependency(harness_file, dep, node_id)
@@ -353,7 +371,7 @@ def _build_sandbox_config(
         file_mappings=file_mappings,
         readable_paths=readable_paths,
         writable_paths=writable_paths,
-        blame_targets=list(manifest.get("deps", [])) + list(manifest.get("silent_deps", [])),  # pyright: ignore[reportArgumentType]
+        blame_targets=list(manifest.get("feedback_deps", [])),  # pyright: ignore[reportArgumentType]
         read_size_limit=8096,
         search_result_limit=10,
         verification_callback=_build_verify_callback(
@@ -382,6 +400,7 @@ def _synthesized_manifest(label: str) -> Dict[str, Any]:
         "tools": [],
         "deps": [],
         "silent_deps": [],
+        "feedback_deps": [],
         "srcs": [],
         "silent_srcs": [],
         "verify": None,
@@ -452,6 +471,7 @@ class BazelGraphStorageFileImpl(BaseBazelGraphStorageImpl):
 
         raw: Dict[NodeId, Any] = {}
         pkg_dirs: Dict[NodeId, PackageDirectory] = {}
+        self._propagating_deps: Dict[NodeId, List[NodeId]] = {}
         for json_path in manifests:
             with open(json_path) as f:
                 manifest = json.load(f)
@@ -465,9 +485,21 @@ class BazelGraphStorageFileImpl(BaseBazelGraphStorageImpl):
             raw[node_id] = manifest
 
         for node_id, manifest in raw.items():
+            # Feedback deps are automatically included in deps: the deps used
+            # for readability and adjacency are the manifest's deps expanded
+            # with its feedback deps (deduplicated). This holds even when the
+            # manifest was produced without the macro's own expansion.
+            raw_deps: List[NodeId] = list(manifest.get("deps", []))
+            feedback_deps: List[NodeId] = list(manifest.get("feedback_deps", []))
+            deps: List[NodeId] = list(raw_deps)
+            for fd in feedback_deps:
+                if fd not in deps:
+                    deps.append(fd)
+
             # Collect dependency srcs (bare names) -> their package directories.
+            # Only deps' srcs are readable; silent_deps' srcs are not.
             dep_srcs: Dict[str, str] = {}
-            for dep in list(manifest.get("deps", [])) + list(manifest.get("silent_deps", [])):
+            for dep in deps:
                 dep_manifest = raw.get(dep)
                 if dep_manifest is None:
                     continue  # dep manifest not in this graph's runfiles
@@ -501,11 +533,16 @@ class BazelGraphStorageFileImpl(BaseBazelGraphStorageImpl):
                 ),
             )
 
-            # Build adjacency: deps and silent_deps are the node's dependencies
-            deps: List[NodeId] = list(manifest.get("deps", []))
+            # Build adjacency: deps (including feedback deps) and silent_deps
+            # are the node's dependencies.
             silent_deps: List[NodeId] = list(manifest.get("silent_deps", []))
             all_deps: List[NodeId] = deps + silent_deps
             self._adjacency[node_id] = all_deps
+
+            # Propagating deps: only deps (including feedback deps) propagate
+            # change messages to the node; silent deps are dependencies for
+            # traversal but are not recorded as reverse dependencies.
+            self._propagating_deps[node_id] = deps
 
             # Package directory = parent of manifest file (in the real source tree)
             self._package_dirs[node_id] = pkg_dir
@@ -526,11 +563,17 @@ class BazelGraphStorageFileImpl(BaseBazelGraphStorageImpl):
             raw[dep] = _synthesized_manifest(dep)
             self._definitions[dep] = _synthesized_definition()
             self._adjacency[dep] = []
+            self._propagating_deps[dep] = []
             self._package_dirs[dep] = _package_dir_from_label(dep, self._real_root)
 
     def _build_adjacency(self) -> Dict[NodeId, List[NodeId]]:
         """Override: adjacency is pre-built from manifests."""
         return self._adjacency
+
+    def _build_propagating_deps(self) -> Dict[NodeId, List[NodeId]]:
+        """Override: propagating deps are pre-built from manifests (deps and
+        feedback deps; silent deps are excluded)."""
+        return self._propagating_deps
 
     def _build_definitions(self) -> Dict[NodeId, NodeDefinition]:
         """Override: definitions are pre-built from manifests."""

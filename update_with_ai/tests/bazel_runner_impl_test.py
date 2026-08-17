@@ -6,7 +6,7 @@ dependencies (bazel_runner-low.md, dag-low.md, dag_storage-low.md,
 dag_clean_logic-low.md, agent_loop-low.md):
 
 - inject_feedback returns (True, NoChangeResult()) on success and stores the
-  messages in the node's pending message store (.bazelharness.json in the package
+  messages in the node's pending message store (.update_with_ai.json in the package
   directory); returns (False, FailureResult()) for a nonexistent node without
   mutating any state.
 - inject_feedback builds its own graph per call, and run_dag builds its own
@@ -385,7 +385,7 @@ class TestInjectFeedback(unittest.TestCase):
         _write_manifest(self._root / "tests" / "example", NODE_LABEL)
 
     def test_delivers_feedback_to_node_itself(self) -> None:
-        """Messages are stored in the node's pending message store (.bazelharness.json)."""
+        """Messages are stored in the node's pending message store (.update_with_ai.json)."""
         self._write_workspace()
         with _patch_env():
             success, result = self._runner.inject_feedback(
@@ -425,7 +425,7 @@ class TestInjectFeedback(unittest.TestCase):
         # No state was mutated: the node's pending messages are unchanged and
         # no new message state appeared anywhere in the workspace.
         self.assertEqual(_read_pending(self._tmp, NODE_LABEL), ["pre-existing"])
-        self.assertEqual(len(list(self._root.rglob(".bazelharness.json"))), 1)
+        self.assertEqual(len(list(self._root.rglob(".update_with_ai.json"))), 1)
 
     def test_constructs_own_graph_no_shared_state_with_run_dag(self) -> None:
         """
@@ -554,7 +554,7 @@ class TestRunDag(unittest.TestCase):
         base.mkdir()
         # Mirror the package directory under the base: the graph maps package
         # directories onto the BUILD_WORKSPACE_DIRECTORY tree (the "real
-        # source root"), where the message store reads/writes .bazelharness.json.
+        # source root"), where the message store reads/writes .update_with_ai.json.
         (base / "tests" / "example").mkdir(parents=True)
         self._write_workspace()
 

@@ -33,7 +33,9 @@ class BazelNodeLoaderImpl(BazelNodeLoader): ...
 - `_agent_loop`: the agent loop used for running prompts (set externally after construction).
 
 **Manifest fields** (static data from manifest, per the interface spec's `BazNode`):
-- `label`, `prompt`, `tools`, `deps`, `silent_deps`, `srcs`, `silent_srcs`.
+- `label`, `prompt`, `tools`, `deps`, `silent_deps`, `feedback_deps`, `srcs`, `silent_srcs`.
+
+**Deps expansion**: when a manifest's `feedback_deps` include a label not already in its `deps`, the loaded node's `deps` gain that label (deduplicated), so a node's deps always include its feedback deps even when the manifest was produced without the macro's own expansion.
 
 ## Config
 

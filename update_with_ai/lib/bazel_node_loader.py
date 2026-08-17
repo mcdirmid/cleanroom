@@ -11,7 +11,7 @@ bazel_node_loader_impl.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Protocol
 
 from .tool_provider import ToolProvider
@@ -28,10 +28,11 @@ class BazNode(ToolProvider):
     label: str
     prompt: str
     tools: List[str]          # Tool target labels
-    deps: List[str]           # Dependency node labels
-    silent_deps: List[str]    # Silent deps (output readable, cleaned after)
+    deps: List[str]           # Dependency node labels (incl. feedback deps)
+    silent_deps: List[str]    # Silent deps (cleaned before run; output not readable; changes do not propagate)
     srcs: List[str]           # Files the agent can write that deps can read
     silent_srcs: List[str]    # Files the agent can write that deps cannot read
+    feedback_deps: List[str] = field(default_factory=list)  # Deps that can receive feedback; included in deps
 
 
 class BazelNodeLoader(Protocol):

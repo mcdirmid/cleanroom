@@ -12,9 +12,9 @@ if [ ! -d "$ws" ]; then
     exit 1
 fi
 
-specs=("$ws"/specs/*-high.md)
+specs=("$ws"/update_with_ai/specs/*-high.md)
 if [ ${#specs[@]} -eq 0 ]; then
-    echo "no high-level specs found under $ws/specs" >&2
+    echo "no high-level specs found under $ws/update_with_ai/specs" >&2
     exit 1
 fi
 

@@ -14,6 +14,17 @@ load("//update_with_ai:macros.bzl", "update_with_ai")
 #   bazel run //tests/example:sample_node_1_feedback -- "add a lion to foo.txt"
 #   bazel run //tests/example:sample_node_1_clean
 #
+# Dependency semantics:
+#   deps         — cleaned before this node; their srcs output is readable
+#   silent_deps  — cleaned before this node; their srcs output is NOT readable;
+#                  their changes do NOT propagate to this node (this node does
+#                  not become dirty when a silent dep changes)
+#   feedback_deps — can receive feedback from this node (via the blame tool);
+#                   automatically included in deps, so also cleaned before this
+#                   node and their srcs output is readable
+#   srcs         — files this agent can write that deps can read
+#   silent_srcs  — files this agent can write that deps cannot read
+#
 # Agent/model configuration (see update_with_ai/agent_config.bzl and
 # agent_configs/BUILD.bazel). The *_clean binary resolves an agent_config
 # target in this priority order:
@@ -31,10 +42,22 @@ update_with_ai(
     prompt = "select 5 animals to list in foo.txt on their own lines, create foo.txt if it does not exist",
 )
 
-# Create a dependent node
+# sample_node_2 declares sample_node_1 as a feedback dep: it can read foo.txt
+# (feedback deps are automatically included in deps) and it can blame
+# sample_node_1 (deliver feedback to it) when its output is unsatisfactory.
 update_with_ai(
     srcs = ["bar.txt"],
     name = "sample_node_2",
-    prompt = "for each animal in foo.txt, bar.txt should list that animal along with a person who resembles it.",
-    silent_deps = [":sample_node_1"],
+    prompt = "for each animal in foo.txt, bar.txt should list how a different specific person would describe that animal.",
+    feedback_deps = [":sample_node_1"],
+)
+
+# sample_node_3 declares sample_node_2 as a silent dep: sample_node_2 is
+# cleaned first, but its srcs output (foo.txt, bar.txt) is NOT readable, so
+# this prompt must not reference them.
+update_with_ai(
+    srcs = ["baz.txt"],
+    name = "sample_node_3",
+    prompt = "for each line in bar.txt, guess the employer of the person involved.",
+    silent_deps = [":sample_node_2"],
 )

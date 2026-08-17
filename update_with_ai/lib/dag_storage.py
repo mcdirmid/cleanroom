@@ -57,8 +57,11 @@ class DagStorage(Protocol):
 
         Preconditions: node_id must exist in the graph.
         Postconditions: Returns the node's direct dependencies. Records the node
-                       as a known reverse dependency of each provided dependency
-                       (each dependency's known reverse dependencies gain the node).
+                       as a known reverse dependency of each propagating
+                       dependency it provides (each propagating dependency's
+                       known reverse dependencies gain the node; dependencies
+                       whose changes do not propagate to the node are not
+                       recorded).
         Failure Handling: If node_id does not exist, behavior is undefined.
         HLS Justification: "The client may retrieve a node's dependencies."
         """

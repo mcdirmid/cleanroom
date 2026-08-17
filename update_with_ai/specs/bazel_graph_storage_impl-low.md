@@ -50,7 +50,7 @@ The implementation is constructed with the `bazel_graph_storage` interface's `Gr
 
 3. **`resolve_package_directory`**: Derives the package directory (BUILD file's directory) from the built-in mapping.
 
-4. **`get_node_dependencies`**: Returns the node's direct dependencies from the adjacency map. As a side effect (per the `dag_storage` contract), records the node as a known reverse dependency of each dependency: each dependency's message-file entry gains the node among its known reverse dependencies.
+4. **`get_node_dependencies`**: Returns the node's direct dependencies from the adjacency map. As a side effect (per the `dag_storage` contract), records the node as a known reverse dependency of each propagating dependency: each propagating dependency's message-file entry gains the node among its known reverse dependencies. Dependencies whose changes do not propagate to the node (silent deps) are dependencies for graph traversal but are not recorded.
 
 5. **`get_known_reverse_dependencies`**: Returns the node's known reverse dependencies from its message-file entry (empty if the file or the node's entry is absent).
 
@@ -60,19 +60,20 @@ The implementation is constructed with the `bazel_graph_storage` interface's `Gr
 
 8. **`delete_node_data`** — Deletes the node's data: removes the node's entry from the file entirely, so both its pending messages and its known reverse dependencies are deleted.
 
-Persistence: a single JSON file named `.bazelharness.json` per package directory maps node IDs to entries holding the node's pending messages and known reverse dependencies. Reads treat a missing file as empty. Writes are atomic: new content is written to a temporary file, which is then atomically replaced onto `.bazelharness.json`. A write that fails before the replacement leaves the previous file unchanged (the node's data is not updated).
+Persistence: a single JSON file named `.update_with_ai.json` per package directory maps node IDs to entries holding the node's pending messages and known reverse dependencies. Reads treat a missing file as empty. Writes are atomic: new content is written to a temporary file, which is then atomically replaced onto `.update_with_ai.json`. A write that fails before the replacement leaves the previous file unchanged (the node's data is not updated).
 
 **Subclass: `BazelGraphStorageFileImpl`** (concrete implementation) overrides the abstract methods and loads all data from manifests during `__init__`:
 - The subclass requires `workspace_root` in the config (a `graph_source`-only config is rejected): it locates manifest files under the workspace root.
-- For each manifest file, constructs a `NodeDefinition` with `prompt` from the manifest and `sandbox_config` populated from `srcs`, `silent_srcs`, `deps`, `silent_deps`, and `verify` fields (see `_build_sandbox_config` helper).
-- For each node, builds adjacency from `deps` and `silent_deps` (all declared dependencies are the node's direct dependencies).
+- For each manifest file, constructs a `NodeDefinition` with `prompt` from the manifest and `sandbox_config` populated from `srcs`, `silent_srcs`, `deps`, `silent_deps`, `feedback_deps`, and `verify` fields (see `_build_sandbox_config` helper).
+- For each node, builds adjacency from `deps` and `silent_deps` (all declared dependencies are the node's direct dependencies). The deps used for readability and adjacency are the manifest's `deps` expanded with its `feedback_deps` (deduplicated), so a node's deps always include its feedback deps even when the manifest was produced without the macro's own expansion.
+- For each node, builds the propagating deps from its deps (the manifest's `deps` expanded with its `feedback_deps`); silent deps are adjacency-only and are not propagating deps.
 - A declared dependency without its own manifest is synthesized from its label (package directory derived from the label's package path; empty prompt, no sources, no dependencies), so that every declared dependency resolves to a node.
 - Derives package directories from the manifest file location (mapped onto the real source tree via `BUILD_WORKSPACE_DIRECTORY` environment variable).
 
 **`_build_sandbox_config` helper**: Given a manifest and file mappings, constructs a `SandboxConfig` with:
-- `readable_paths`: the node's own `srcs` plus its dependencies' `srcs` (neither the node's own `silent_srcs` nor the dependencies' `silent_srcs` are readable)
+- `readable_paths`: the node's own `srcs` plus its deps' `srcs` (deps include feedback deps; neither the node's own `silent_srcs` nor the deps' `silent_srcs` are readable, and silent deps' `srcs` are not readable)
 - `writable_paths`: the node's own `srcs` + `silent_srcs`
-- `blame_targets`: `deps` + `silent_deps` (the node's declared and silent dependencies)
+- `blame_targets`: the manifest's `feedback_deps` (only feedback deps may receive feedback from the node)
 - `read_size_limit` and `search_result_limit`: values are not pinned in this spec (the implementation sets fixed values)
 - `verification_callback`: built from the manifest's `verify` field (a shell command string).
 
@@ -92,7 +93,7 @@ Persistence: a single JSON file named `.bazelharness.json` per package directory
 
 ## Non-Concerns
 
-- **Harness file naming:** Pinned to `.bazelharness.json` in the package directory (the interface leaves the filename open).
+- **Harness file naming:** Pinned to `.update_with_ai.json` in the package directory (the interface leaves the filename open).
 - **Concurrency:** Behavior with concurrent writers is unspecified.
 - **Serialization format:** Messages and known reverse dependencies are serialized as JSON; the node-ID-keyed mapping is an internal representation detail.
 - **Empty entries:** `delete_node_data` removes the node's key from the file rather than writing an empty entry.

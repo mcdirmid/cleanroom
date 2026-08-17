@@ -35,7 +35,7 @@ from update_with_ai.lib.bazel_graph_storage_impl import (
 from update_with_ai.lib.dag_storage import NodeMessage, PendingMessages
 from update_with_ai.lib.sandbox import SandboxConfig
 
-HARNESS_FILE = ".bazelharness.json"
+HARNESS_FILE = ".update_with_ai.json"
 
 
 def _make_definition(prompt: str) -> NodeDefinition:
@@ -61,14 +61,21 @@ class _MockGraphStorageImpl(BaseBazelGraphStorageImpl):
         adjacency: Dict[NodeId, List[NodeId]],
         definitions: Optional[Dict[NodeId, NodeDefinition]] = None,
         package_dirs: Optional[Dict[NodeId, PackageDirectory]] = None,
+        propagating: Optional[Dict[NodeId, List[NodeId]]] = None,
     ) -> None:
         self._adjacency = adjacency
         self._definitions = definitions or {}
         self._package_dirs = package_dirs or {}
+        # By default every dependency propagates; pass `propagating` to model
+        # dependencies whose changes do not propagate (silent deps).
+        self._propagating = propagating if propagating is not None else adjacency
         super().__init__(GraphConfig(graph_source="mock-graph-source"))
 
     def _build_adjacency(self) -> Dict[NodeId, List[NodeId]]:
         return self._adjacency
+
+    def _build_propagating_deps(self) -> Dict[NodeId, List[NodeId]]:
+        return self._propagating
 
     def _build_definitions(self) -> Dict[NodeId, NodeDefinition]:
         return self._definitions
@@ -145,7 +152,9 @@ class TestBaseBazelGraphStorageImplResolution(unittest.TestCase):
 
 class TestReverseDependencyRecording(unittest.TestCase):
     """dag_storage contract: get_node_dependencies records the node as a known
-    reverse dependency of each dependency (at most once); recordings persist."""
+    reverse dependency of each propagating dependency (at most once);
+    dependencies whose changes do not propagate are not recorded; recordings
+    persist."""
 
     def setUp(self) -> None:
         self._tmp_root = tempfile.mkdtemp(prefix="bgsi_revdep_")
@@ -182,6 +191,36 @@ class TestReverseDependencyRecording(unittest.TestCase):
             graph.get_known_reverse_dependencies("//pkg:c"), ["//pkg:a"]
         )
         self.assertEqual(graph.get_known_reverse_dependencies("//pkg:a"), [])
+
+    def test_non_propagating_dependencies_are_not_recorded(self):
+        """dag_storage LLS: a node is recorded as a reverse dependency only of
+        its propagating dependencies; dependencies whose changes do not
+        propagate to it (silent deps) are not recorded."""
+        graph = _MockGraphStorageImpl(
+            adjacency={
+                "//pkg:a": ["//pkg:b", "//pkg:c"],
+                "//pkg:b": [],
+                "//pkg:c": [],
+            },
+            propagating={
+                # c is an adjacency dependency of a but does not propagate.
+                "//pkg:a": ["//pkg:b"],
+                "//pkg:b": [],
+                "//pkg:c": [],
+            },
+            definitions={},
+            package_dirs={
+                "//pkg:a": self.pkg_a,
+                "//pkg:b": self.pkg_b,
+                "//pkg:c": self.pkg_c,
+            },
+        )
+        graph.get_node_dependencies("//pkg:a")
+
+        self.assertEqual(
+            graph.get_known_reverse_dependencies("//pkg:b"), ["//pkg:a"]
+        )
+        self.assertEqual(graph.get_known_reverse_dependencies("//pkg:c"), [])
 
     def test_repeated_recordings_are_deduplicated(self):
         # dag_storage LLS: a node is recorded at most once per dependency;
@@ -234,7 +273,7 @@ class TestMessageFileOperations(unittest.TestCase):
     # -- get_pending_messages ------------------------------------------------
 
     def test_get_pending_messages_missing_file_returns_empty(self):
-        """LLS: a missing .bazelharness.json reads as empty and is not created."""
+        """LLS: a missing .update_with_ai.json reads as empty and is not created."""
         self.assertEqual(self.graph.get_pending_messages("node_a"), [])
         self.assertFalse(os.path.exists(self.harness_file("node_a")))
 
@@ -304,8 +343,8 @@ class TestMessageFileOperations(unittest.TestCase):
 
     # -- file naming and layout ---------------------------------------------
 
-    def test_harness_file_is_bazelharness_json_in_package_dir(self):
-        """LLS: a single JSON file named .bazelharness.json in the node.s package directory."""
+    def test_harness_file_is_update_with_ai_json_in_package_dir(self):
+        """LLS: a single JSON file named .update_with_ai.json in the node.s package directory."""
         self.graph.add_messages("node_a", ["msg"])
 
         messages_file = self.harness_file("node_a")
@@ -314,7 +353,7 @@ class TestMessageFileOperations(unittest.TestCase):
         self.assertTrue(os.path.isfile(messages_file))
 
     def test_single_messages_file_per_package_directory(self):
-        """LLS: one .bazelharness.json per package directory holds all nodes in it."""
+        """LLS: one .update_with_ai.json per package directory holds all nodes in it."""
         shared = _make_pkg_dir(self._tmp_root, "shared_pkg")
         graph = _MockGraphStorageImpl(
             adjacency={"node_a": [], "node_b": []},
@@ -329,7 +368,7 @@ class TestMessageFileOperations(unittest.TestCase):
         self.assertEqual(graph.get_pending_messages("node_b"), ["b"])
 
     def test_different_packages_have_separate_message_files(self):
-        """LLS: each package directory holds its own .bazelharness.json."""
+        """LLS: each package directory holds its own .update_with_ai.json."""
         self.graph.add_messages("node_a", ["a"])
         self.graph.add_messages("node_b", ["b"])
 
@@ -344,7 +383,7 @@ class TestMessageFileOperations(unittest.TestCase):
     # -- atomic writes -------------------------------------------------------
 
     def test_write_uses_temp_file_and_atomic_replace(self):
-        """LLS: writes go to a temporary file, then atomically replaced onto .bazelharness.json."""
+        """LLS: writes go to a temporary file, then atomically replaced onto .update_with_ai.json."""
         messages_file = self.harness_file("node_a")
         calls: List[tuple] = []
         real_replace = os.replace
@@ -432,8 +471,10 @@ class _Workspace:
       //pkg_a:a  deps=["//pkg_c:c"], srcs=["a1.txt"],
                  silent_srcs=["a_priv.txt"], verify="echo verification-output"
       //pkg_b:b  deps=["//pkg_a:a"], silent_deps=["//pkg_c:c"],
+                 feedback_deps=["//pkg_a:a"],
                  srcs=["b1.txt", "shared.txt"], silent_srcs=["b_priv.txt"]
-      //pkg_c:c  srcs=["shared.txt"]
+      //pkg_c:c  srcs=["shared.txt", "c_only.txt"]
+      //pkg_d:d  feedback_deps=["//pkg_a:a"], srcs=["d1.txt"]
     """
 
     def __init__(self) -> None:
@@ -450,6 +491,7 @@ class _Workspace:
         silent_srcs: Optional[List[str]] = None,
         deps: Optional[List[str]] = None,
         silent_deps: Optional[List[str]] = None,
+        feedback_deps: Optional[List[str]] = None,
         verify: Optional[str] = None,
     ) -> None:
         pkg_dir = self.root / pkg
@@ -461,6 +503,7 @@ class _Workspace:
             "tools": [],
             "deps": deps or [],
             "silent_deps": silent_deps or [],
+            "feedback_deps": feedback_deps or [],
             "srcs": srcs or [],
             "silent_srcs": silent_srcs or [],
             "verify": verify,
@@ -492,9 +535,22 @@ class _Workspace:
             silent_srcs=["b_priv.txt"],
             deps=["//pkg_a:a"],
             silent_deps=["//pkg_c:c"],
+            feedback_deps=["//pkg_a:a"],
         )
         self.write_manifest(
-            "pkg_c", "c", "//pkg_c:c", "prompt for c", srcs=["shared.txt"]
+            "pkg_c",
+            "c",
+            "//pkg_c:c",
+            "prompt for c",
+            srcs=["shared.txt", "c_only.txt"],
+        )
+        self.write_manifest(
+            "pkg_d",
+            "d",
+            "//pkg_d:d",
+            "prompt for d",
+            srcs=["d1.txt"],
+            feedback_deps=["//pkg_a:a"],
         )
 
     def close(self) -> None:
@@ -546,17 +602,32 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
     def test_readable_paths_are_own_srcs_plus_dep_srcs(self):
         with self._workspace() as ws:
             graph = self._build_graph(ws)
-            # b's readable: own srcs (b1, shared) + a's srcs (a1). c's
-            # "shared.txt" collides with b's own src and is not duplicated.
+            # b's readable: own srcs (b1, shared) + deps' srcs (a's a1). c is a
+            # silent dep of b: its "shared.txt" collides with b's own src and is
+            # not duplicated, and "c_only.txt" is not readable at all.
             self.assertCountEqual(
                 graph.resolve_node_definition("//pkg_b:b").sandbox_config.readable_paths,
                 ["b1.txt", "shared.txt", "a1.txt"],
             )
-            # a's readable: own srcs (a1) + c's srcs (shared).
+            # a's readable: own srcs (a1) + deps' srcs (c's shared, c_only).
             self.assertCountEqual(
                 graph.resolve_node_definition("//pkg_a:a").sandbox_config.readable_paths,
-                ["a1.txt", "shared.txt"],
+                ["a1.txt", "shared.txt", "c_only.txt"],
             )
+
+    def test_readable_paths_exclude_silent_dep_srcs(self):
+        """A silent dep's srcs are not readable: c is b's silent dep, so
+        c_only.txt (c's src) is neither readable nor mapped for b."""
+        with self._workspace() as ws:
+            graph = self._build_graph(ws)
+            b_readable = graph.resolve_node_definition(
+                "//pkg_b:b"
+            ).sandbox_config.readable_paths
+            b_mappings = graph.resolve_node_definition(
+                "//pkg_b:b"
+            ).sandbox_config.file_mappings
+            self.assertNotIn("c_only.txt", b_readable)
+            self.assertNotIn("c_only.txt", b_mappings)
 
     def test_readable_paths_exclude_silent_srcs(self):
         with self._workspace() as ws:
@@ -571,6 +642,18 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
             self.assertNotIn("b_priv.txt", b_readable)  # own silent_srcs
             self.assertNotIn("a_priv.txt", b_readable)  # dep's silent_srcs
             self.assertNotIn("a_priv.txt", a_readable)  # own silent_srcs
+
+    def test_feedback_deps_are_included_in_deps(self):
+        """A feedback dep is automatically a dep: d declares only feedback_deps
+        ["//pkg_a:a"], so a's srcs are readable, a is in d's adjacency, and a
+        is d's only blame target."""
+        with self._workspace() as ws:
+            graph = self._build_graph(ws)
+            d_readable = graph.resolve_node_definition(
+                "//pkg_d:d"
+            ).sandbox_config.readable_paths
+            self.assertCountEqual(d_readable, ["d1.txt", "a1.txt"])
+            self.assertEqual(graph.get_node_dependencies("//pkg_d:d"), ["//pkg_a:a"])
 
     def test_writable_paths_are_own_srcs_plus_own_silent_srcs(self):
         with self._workspace() as ws:
@@ -588,16 +671,24 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
             self.assertCountEqual(a_writable, ["a1.txt", "a_priv.txt"])
             self.assertNotIn("shared.txt", a_writable)  # c's src, not writable
 
-    def test_blame_targets_are_deps_plus_silent_deps(self):
+    def test_blame_targets_are_feedback_deps(self):
+        """Only feedback deps may receive feedback: b's blame targets are its
+        feedback dep a; its silent dep c is not a blame target."""
         with self._workspace() as ws:
             graph = self._build_graph(ws)
             self.assertEqual(
                 graph.resolve_node_definition("//pkg_b:b").sandbox_config.blame_targets,
-                ["//pkg_a:a", "//pkg_c:c"],
+                ["//pkg_a:a"],
             )
             self.assertEqual(
+                graph.resolve_node_definition("//pkg_d:d").sandbox_config.blame_targets,
+                ["//pkg_a:a"],
+            )
+            # No feedback deps declared -> no blame targets (deps and silent
+            # deps alone do not make targets blameable).
+            self.assertEqual(
                 graph.resolve_node_definition("//pkg_a:a").sandbox_config.blame_targets,
-                ["//pkg_c:c"],
+                [],
             )
             self.assertEqual(
                 graph.resolve_node_definition("//pkg_c:c").sandbox_config.blame_targets,
@@ -619,6 +710,8 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
             self.assertEqual(
                 b_mappings["a1.txt"], str(ws.root / "pkg_a" / "a1.txt")
             )
+            # b's silent dep c's srcs are not mapped (not readable).
+            self.assertNotIn("c_only.txt", b_mappings)
             # a's dep src maps into its own package dir
             a_mappings = graph.resolve_node_definition(
                 "//pkg_a:a"
@@ -649,19 +742,48 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
                 graph.get_node_dependencies("//pkg_a:a"), ["//pkg_c:c"]
             )
             self.assertEqual(graph.get_node_dependencies("//pkg_c:c"), [])
+            # d declares only feedback deps; they are its dependencies.
+            self.assertEqual(
+                graph.get_node_dependencies("//pkg_d:d"), ["//pkg_a:a"]
+            )
 
     def test_get_node_dependencies_records_reverse_dependencies(self):
         with self._workspace() as ws:
             graph = self._build_graph(ws)
             graph.get_node_dependencies("//pkg_b:b")
 
+            # a is b's dep (propagating): b is recorded as a's reverse dep.
             self.assertEqual(
                 graph.get_known_reverse_dependencies("//pkg_a:a"), ["//pkg_b:b"]
             )
-            self.assertEqual(
-                graph.get_known_reverse_dependencies("//pkg_c:c"), ["//pkg_b:b"]
-            )
+            # c is b's silent dep: b is NOT recorded as c's reverse dep, so
+            # c's changes do not propagate to b (b does not become dirty).
+            self.assertEqual(graph.get_known_reverse_dependencies("//pkg_c:c"), [])
             self.assertEqual(graph.get_known_reverse_dependencies("//pkg_b:b"), [])
+
+    def test_silent_deps_are_dependencies_but_do_not_propagate_changes(self):
+        """A silent dep is still a dependency (adjacency, cleaned before the
+        node) but does not record the node as a reverse dependency."""
+        with self._workspace() as ws:
+            graph = self._build_graph(ws)
+            # c is b's silent dep: it is in b's dependencies...
+            self.assertEqual(
+                graph.get_node_dependencies("//pkg_b:b"),
+                ["//pkg_a:a", "//pkg_c:c"],
+            )
+            # ...but b is not recorded as c's reverse dependency.
+            self.assertEqual(graph.get_known_reverse_dependencies("//pkg_c:c"), [])
+            # a is b's (propagating) dep: b is recorded.
+            self.assertEqual(
+                graph.get_known_reverse_dependencies("//pkg_a:a"), ["//pkg_b:b"]
+            )
+            # Feedback deps propagate too: d declares a as a feedback dep, so
+            # d is recorded as a's reverse dependency when d's deps resolve.
+            graph.get_node_dependencies("//pkg_d:d")
+            self.assertEqual(
+                graph.get_known_reverse_dependencies("//pkg_a:a"),
+                ["//pkg_b:b", "//pkg_d:d"],
+            )
 
     def test_resolve_package_directory_returns_manifest_directory(self):
         with self._workspace() as ws:

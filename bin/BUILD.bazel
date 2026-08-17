@@ -17,7 +17,7 @@ sh_test(
     srcs = ["spec_lint_test.sh"],
     data = [
         "//bin:spec_lint.py",
-        "//specs:high_specs",
+        "//update_with_ai/specs:high_specs",
     ],
     tags = ["lint"],
 )

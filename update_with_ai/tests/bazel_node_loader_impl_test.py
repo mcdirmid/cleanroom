@@ -144,6 +144,7 @@ class _TempRunfilesTestCase(unittest.TestCase):
         tools: Optional[List[str]] = None,
         deps: Optional[List[str]] = None,
         silent_deps: Optional[List[str]] = None,
+        feedback_deps: Optional[List[str]] = None,
         srcs: Optional[List[str]] = None,
         silent_srcs: Optional[List[str]] = None,
     ) -> Path:
@@ -156,6 +157,7 @@ class _TempRunfilesTestCase(unittest.TestCase):
             "tools": tools if tools is not None else [],
             "deps": deps if deps is not None else [],
             "silent_deps": silent_deps if silent_deps is not None else [],
+            "feedback_deps": feedback_deps if feedback_deps is not None else [],
             "srcs": srcs if srcs is not None else [],
             "silent_srcs": silent_srcs if silent_srcs is not None else [],
         }
@@ -185,6 +187,7 @@ class TestLoadNode(_TempRunfilesTestCase):
             tools=["//pkg:tool_a"],
             deps=["//pkg:dep"],
             silent_deps=["//pkg:silent_dep"],
+            feedback_deps=["//pkg:fdep"],
             srcs=["foo.txt"],
             silent_srcs=["private.log"],
         )
@@ -193,10 +196,30 @@ class TestLoadNode(_TempRunfilesTestCase):
         self.assertEqual(node.label, "//pkg:target")
         self.assertEqual(node.prompt, "Target prompt")
         self.assertEqual(node.tools, ["//pkg:tool_a"])
-        self.assertEqual(node.deps, ["//pkg:dep"])
+        self.assertEqual(node.deps, ["//pkg:dep", "//pkg:fdep"])
         self.assertEqual(node.silent_deps, ["//pkg:silent_dep"])
+        self.assertEqual(node.feedback_deps, ["//pkg:fdep"])
         self.assertEqual(node.srcs, ["foo.txt"])
         self.assertEqual(node.silent_srcs, ["private.log"])
+
+    def test_load_node_includes_feedback_deps_in_deps(self):
+        """Feedback deps are automatically included in deps: a manifest with
+        deps [] and feedback_deps ["//pkg:fdep"] loads a node whose deps
+        include "//pkg:fdep" (deduplicated)."""
+        self.write_manifest("pkg", "fdep", "//pkg:fdep", prompt="FD")
+        self.write_manifest(
+            "pkg",
+            "root",
+            "//pkg:root",
+            prompt="Root",
+            feedback_deps=["//pkg:fdep"],
+        )
+        root = self.load_impl("//pkg:root")
+        self.assertEqual(root.feedback_deps, ["//pkg:fdep"])
+        self.assertEqual(root.deps, ["//pkg:fdep"])
+        self.assertEqual(
+            [n.label for n in root._dependency_nodes], ["//pkg:fdep"]
+        )
 
     def test_load_node_unknown_label_returns_none(self):
         """Unknown labels produce None (invalid labels never cached)."""

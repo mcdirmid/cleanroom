@@ -1,6 +1,6 @@
 # dag_storage
 
-terms (owned): node, message, pending message, dependency, reverse dependency, subgraph
+terms (owned): node, message, pending message, dependency, propagating dependency, reverse dependency, subgraph
 
 ## Purpose
 
@@ -11,15 +11,16 @@ Provides persistent storage for messages addressed to nodes and access to graph 
 - Node: a vertex in the graph; messages are addressed to nodes.
 - Message: a string addressed to a node.
 - Pending message: a message delivered to a node and not cleaned since delivery.
-- Dependency: A depends on B -> A has an outgoing edge to B, and A is a reverse dependency of B.
-- Reverse dependency: a node recorded as depending on another; recording happens when a node retrieves a dependency, at most once per dependency (repeated retrievals add no duplicates).
+- Dependency: A depends on B -> A has an outgoing edge to B.
+- Propagating dependency: a dependency whose changes propagate to the depending node; retrieving a node's dependencies records the node as a reverse dependency of each of its propagating dependencies, and of no other dependency.
+- Reverse dependency: a node recorded as depending on another; recording happens when a node retrieves a dependency, at most once per dependency, and only for its propagating dependencies (repeated retrievals add no duplicates).
 - Subgraph: a target node (included) plus all nodes reachable through its direct and indirect dependencies.
 
 ## Observable dataflow
 
 - Inputs: read pending messages, add messages, delete a node's data, retrieve a node's dependencies, retrieve a node's known reverse dependencies.
 - Outputs: messages exactly as stored; dependencies as declared; reverse dependencies exactly as recorded.
-- Retrieving a node's dependencies records the node as a reverse dependency of each of those dependencies.
+- Retrieving a node's dependencies records the node as a reverse dependency of each of its propagating dependencies.
 - Messages and reverse dependencies persist across restarts; operations are atomic per node.
 
 ## Contract
@@ -37,7 +38,7 @@ Provides persistent storage for messages addressed to nodes and access to graph 
 - Messages and reverse dependencies persist across restarts.
 - Read, write, and delete operations are atomic per node.
 - Messages are provided exactly as stored; dependencies as declared; reverse dependencies exactly as recorded.
-- Retrieving a node's dependencies records the node as a reverse dependency of each of those dependencies, at most once per dependency.
+- Retrieving a node's dependencies records the node as a reverse dependency of each of its propagating dependencies, at most once per dependency.
 
 **The component assumes:**
 

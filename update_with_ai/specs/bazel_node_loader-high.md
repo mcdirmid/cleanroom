@@ -2,7 +2,7 @@
 
 imports: tool_provider (tool definitions and execution)
 terms (from tool_provider): tool definition, tool result, signal, tool failure
-terms (owned): manifest, loaded node, node prompt, dependency node, tool provider
+terms (owned): manifest, loaded node, node prompt, dependency node, tool provider, feedback deps
 
 ## Purpose
 
@@ -10,10 +10,11 @@ Provides runtime loading of node manifests (produced at build time by update_wit
 
 ## Owned definitions
 
-- Manifest: a build-time file produced for a node, containing the node's label, prompt, declared tools, declared and silent dependencies, declared and silent source files, and an optional verification command. The exact file format is unspecified.
+- Manifest: a build-time file produced for a node, containing the node's label, prompt, declared tools, declared dependencies, silent dependencies, feedback deps, declared and silent source files, and an optional verification command. The exact file format is unspecified.
 - Loaded node: a runtime representation of a Bazel target — its manifest data (label, prompt, tools, dependencies, source files) — providing tool definitions and tool execution resolved at runtime from its declared tools.
 - Node prompt: the agent prompt string associated with a loaded node.
 - Dependency node: a loaded node resolved from a manifest, representing a declared dependency of this node.
+- Feedback deps: dependency node targets that can receive feedback from the node; feedback deps are also declared dependencies of the node.
 - Tool provider: a component that provides tool definitions and executes tool calls, identified by a Bazel label.
 
 ## Observable dataflow
@@ -43,6 +44,7 @@ Provides runtime loading of node manifests (produced at build time by update_wit
 - A loaded node is provided when its manifest is found; when the manifest cannot be found, no node is provided (manifests are never modified).
 - Nodes are cached by label; repeated loads of the same label provide the same node.
 - The graph is loaded starting from the root label, recursively loading all transitive dependencies, including silent dependencies.
+- A node's deps include its feedback deps; loading a node's dependencies loads its feedback deps as dependency nodes.
 - Manifest file paths are derived deterministically from labels.
 - Tool definitions are resolved from the node's declared tools; a tool call no tool handles signals a tool failure.
 - Dependency nodes are resolved from the node's declared dependencies.

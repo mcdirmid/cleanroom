@@ -45,8 +45,9 @@ class DagStorage(Protocol):
 
 - **Subgraph**: A target node (included) and all nodes reachable through its direct and indirect dependencies. The subgraph rooted at a node is that node and its transitive dependencies.
 - **Pending message**: A message that has been delivered to a node and has not been cleaned since delivery.
-- **Reverse dependency**: If a node A depends on a node B, then A is a reverse dependency of B.
-- **Known reverse dependencies**: The nodes recorded as depending on a node — nodes that list the node among their dependencies. A node becomes a known reverse dependency of each of its dependencies when the node's dependencies are retrieved. A node is recorded at most once per dependency; repeated recordings do not add duplicates.
+- **Propagating dependency**: A dependency whose changes propagate to the depending node. Only propagating dependencies record the depending node as a reverse dependency when its dependencies are retrieved.
+- **Reverse dependency**: If a node A depends on a node B and B is a propagating dependency of A, then A is a reverse dependency of B.
+- **Known reverse dependencies**: The nodes recorded as depending on a node — nodes that list the node among their propagating dependencies. A node becomes a known reverse dependency of each of its propagating dependencies when the node's dependencies are retrieved. A node is recorded at most once per dependency; repeated recordings do not add duplicates. Dependencies whose changes do not propagate to the node are not recorded.
 
 ## Component-Provided Operations
 
@@ -107,7 +108,7 @@ def get_node_dependencies(self, node_id: NodeId) -> NodeDependencies
 
 **Postconditions:**
 - Provides the node's direct dependencies
-- Records the node as a known reverse dependency of each provided dependency, at most once per dependency (each dependency's known reverse dependencies gain the node; repeated recordings do not duplicate it)
+- Records the node as a known reverse dependency of each propagating dependency, at most once per dependency (each propagating dependency's known reverse dependencies gain the node; repeated recordings do not duplicate it). Dependencies whose changes do not propagate to the node are not recorded.
 
 
 **HLS Justification:** "The client may retrieve a node's dependencies."

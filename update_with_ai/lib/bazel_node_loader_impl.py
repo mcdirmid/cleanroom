@@ -222,12 +222,24 @@ class BazelNodeLoaderImpl(BazelNodeLoader):
         with open(manifest_path) as f:
             data = json.load(f)
 
+        # Feedback deps are automatically included in deps: the loaded node's
+        # deps are the manifest's deps expanded with its feedback deps
+        # (deduplicated). This holds even when the manifest was produced
+        # without the macro's own expansion.
+        raw_deps = list(data.get("deps", []))
+        feedback_deps = list(data.get("feedback_deps", []))
+        deps = list(raw_deps)
+        for fd in feedback_deps:
+            if fd not in deps:
+                deps.append(fd)
+
         node = BazNodeImpl(
             label=data["label"],
             prompt=data["prompt"],
             tools=data.get("tools", []),
-            deps=data.get("deps", []),
+            deps=deps,
             silent_deps=data.get("silent_deps", []),
+            feedback_deps=feedback_deps,
             srcs=data.get("srcs", []),
             silent_srcs=data.get("silent_srcs", []),
         )
