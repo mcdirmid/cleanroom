@@ -1,0 +1,8 @@
+# specs/BUILD.bazel
+# High-level specification files, linted by //bin:spec_lint_test.
+
+filegroup(
+    name = "high_specs",
+    srcs = glob(["*-high.md"]),
+    visibility = ["//visibility:public"],
+)

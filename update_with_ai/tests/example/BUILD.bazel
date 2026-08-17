@@ -1,0 +1,40 @@
+# tests/example/BUILD.bazel
+#
+# This file demonstrates the new usage via the update_with_ai macro.
+# The macro automatically generates a *_clean and a *_feedback target for each node.
+
+load("//update_with_ai:macros.bzl", "update_with_ai")
+
+# Create a node — the macro automatically generates:
+#   //tests/example:sample_node_1
+#   //tests/example:sample_node_1_clean      (runs DAG cleaning on this node)
+#   //tests/example:sample_node_1_feedback   (delivers CLI feedback to this node)
+#
+# Deliver feedback to a node (marks it dirty with pending feedback), then clean:
+#   bazel run //tests/example:sample_node_1_feedback -- "add a lion to foo.txt"
+#   bazel run //tests/example:sample_node_1_clean
+#
+# Agent/model configuration (see update_with_ai/agent_config.bzl and
+# agent_configs/BUILD.bazel). The *_clean binary resolves an agent_config
+# target in this priority order:
+#   1. --config <label>            bazel run ... -- --config //agent_configs:staging
+#   2. AGENT_CONFIG_TARGET env     AGENT_CONFIG_TARGET=//agent_configs:staging bazel run ...
+#   3. the `config` attribute below (per-node default; unset here)
+#   4. --define=AGENT_CONFIG=...   set in .bazelrc (or your ~/.bazelrc for a
+#                                  personal default)
+#   5. //agent_configs:default convention
+# The API key is never in Bazel: it comes from AGENT_API_KEY_DEV (or
+# AGENT_API_KEY) at run time.
+update_with_ai(
+    srcs = ["foo.txt"],
+    name = "sample_node_1",
+    prompt = "select 5 animals to list in foo.txt on their own lines, create foo.txt if it does not exist",
+)
+
+# Create a dependent node
+update_with_ai(
+    srcs = ["bar.txt"],
+    name = "sample_node_2",
+    prompt = "for each animal in foo.txt, bar.txt should list that animal along with a person who resembles it.",
+    silent_deps = [":sample_node_1"],
+)

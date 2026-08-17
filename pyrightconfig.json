@@ -1,0 +1,7 @@
+{
+  "exclude": ["**/node_modules", "**/__pycache__", "**/*_pb2.py"],
+  "pythonVersion": "3.12",
+  "reportUnknownMemberType": false,
+  "reportUnknownVariableType": false,
+  "reportUnknownArgumentType": false
+}

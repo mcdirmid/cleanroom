@@ -1,0 +1,39 @@
+1. use bazel to run tests
+2. you can type check using bazel by adding _type_check to the end of the target, you should always type check a file after you make changes. 
+3. Always run tests with bazel's test timeout (120 seconds).
+4. If you decide to break rule 1 and run the test directly, you must still set a timeout.
+
+## Bazel Test Timeout Implementation
+
+### Bazel Commands:
+- Run tests: `bazel test //path/to/target`
+- Run with timeout: `bazel test --test_timeout=120 //path/to/target`
+- Run type check: `bazel test //path/to/target_type_check`
+- Run all tests: `bazel test //...`
+- Run specific test: `bazel test //path/to/target --test_filter=test_name`
+
+### Test Timeout Flags:
+- `--test_timeout`: Set timeout in seconds (120 seconds recommended)
+- `--test_verbose_timeout_warnings`: Show tests with oversized timeouts
+- `--test_timeout=300`: Set 5-minute timeout for slow tests
+- `--test_timeout=120`: Set 2-minute timeout for standard tests
+
+## Python Direct Test Execution Timeout Implementation
+
+### For pytest:
+1. Always use blaze test, not pytest.
+2. If you break that rule, run: `pytest --timeout=120`
+3. Per-test timeout: `@pytest.mark.timeout(120)`
+4. Global config in `pytest.ini`: `timeout = 120`
+
+### For unittest:
+1. Use subprocess with timeout: `subprocess.run(["python3", "-m", "unittest"], timeout=120)`
+2. Use Popen with wait: `proc.wait(timeout=120)`
+
+### Example for direct Python execution:
+```python
+import subprocess
+result = subprocess.run(["python3", "-m", "unittest"], timeout=120, check=True)
+```
+
+Note: Always wrap subprocess calls with try/except to handle TimeoutExpired exceptions gracefully.

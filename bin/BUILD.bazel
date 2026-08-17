@@ -1,0 +1,23 @@
+# bin/BUILD.bazel
+load("//bin:pyright_library.bzl", "pyright_library")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+exports_files(["check_types.sh"])
+
+pyright_library(
+    name = "spec_lint",
+    srcs = ["spec_lint.py"],
+    pyright_deps = [],
+    visibility = ["//visibility:public"],
+)
+
+# Gate: the high-level specs must pass spec_lint.py.
+sh_test(
+    name = "spec_lint_test",
+    srcs = ["spec_lint_test.sh"],
+    data = [
+        "//bin:spec_lint.py",
+        "//specs:high_specs",
+    ],
+    tags = ["lint"],
+)

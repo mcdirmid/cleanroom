@@ -1,0 +1,17 @@
+[@@//update_with_ai/tests/example:sample_node_2] message_added (user): for each animal in foo.txt, bar.txt should list that animal along with a person who resembles it.\n\nFiles you can read: bar.txt, foo.txt\nFiles you can write: bar.txt\n\nFeedback from dependents:\n- ...
+[@@//update_with_ai/tests/example:sample_node_2] api_response: prompt 803 | completion 53 | total 856
+[@@//update_with_ai/tests/example:sample_node_2] message_added (assistant): tool_calls=read_file, read_file
+[@@//update_with_ai/tests/example:sample_node_2] tool_called: read_file({"file_path": "foo.txt"}); read_file({"file_path": "bar.txt"})
+[@@//update_with_ai/tests/example:sample_node_2] tool_result (2): content_id='foo.txt' stub_previous=False content='Bear\\nBaboon\\nBadger\\nBeaver\\nBison'; content_id='bar.txt' stub_previous=False content='Bear — Tarzan\\nBaboon — Gordon Ramsay\\nBadger — Wolverine\\nBeaver — Jerry Seinfe'
+[@@//update_with_ai/tests/example:sample_node_2] message_added (tool): Bear\nBaboon\nBadger\nBeaver\nBison
+[@@//update_with_ai/tests/example:sample_node_2] message_added (tool): Bear — Tarzan\nBaboon — Gordon Ramsay\nBadger — Wolverine\nBeaver — Jerry Seinfeld\nBison — Stephen Colbert
+[@@//update_with_ai/tests/example:sample_node_2] api_response: prompt 923 | completion 160 | total 1083
+[@@//update_with_ai/tests/example:sample_node_2] message_added (assistant): Looking at the animals in `foo.txt` — Bear, Baboon, Badger, Beaver, and Bison — I need to match each with a person whose name starts with 'C'.\n\nThe current `bar.txt` has people like Tarzan, Gordon R...
+[@@//update_with_ai/tests/example:sample_node_2] tool_called: write_file({"content": "Bear — Charlize Theron\nBaboon — Cate Blanchett\nBadger — Chris Hemsworth\nBeaver — Car)
+[@@//update_with_ai/tests/example:sample_node_2] tool_result (1): content_id='bar.txt' stub_previous=True content=''
+[@@//update_with_ai/tests/example:sample_node_2] message_stubbed: content_id='bar.txt' stubbed='Content removed because newer version is available' replacement=''
+[@@//update_with_ai/tests/example:sample_node_2] message_added (tool): 
+[@@//update_with_ai/tests/example:sample_node_2] api_response: prompt 1077 | completion 13 | total 1090
+[@@//update_with_ai/tests/example:sample_node_2] message_added (assistant): tool_calls=succeed
+[@@//update_with_ai/tests/example:sample_node_2] tool_called: succeed({})
+[@@//update_with_ai/tests/example:sample_node_2] run_terminated: ChangeResult(messages=['Task completed successfully'], type='change') | cumulative: prompt 2803 completion 226 total 3029 (3 requests) context 0

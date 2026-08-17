@@ -1,0 +1,109 @@
+load("//bin:pyright_library.bzl", "pyright_binary", "pyright_test")
+
+pyright_binary(
+    name = "agent_loop_driver",
+    srcs = ["agent_loop_driver.py"],
+    main = "agent_loop_driver.py",
+    pyright_deps = [
+        "//update_with_ai/lib:tool_provider", 
+        "//update_with_ai/lib:agent_loop", 
+        "//update_with_ai/lib:agent_loop_impl", 
+    ],
+)
+
+pyright_test(
+    name = "agent_loop_impl_test",
+    srcs = ["agent_loop_impl_test.py"],
+    pyright_deps = [
+        "//update_with_ai/lib:tool_provider", 
+        "//update_with_ai/lib:agent_loop", 
+        "//update_with_ai/lib:agent_loop_impl", 
+    ],
+)
+
+pyright_test(
+    name = "sandbox_impl_test",
+    srcs = ["sandbox_impl_test.py"],
+    pyright_deps = [
+        "//update_with_ai/lib:tool_provider", 
+        "//update_with_ai/lib:sandbox", 
+        "//update_with_ai/lib:sandbox_impl", 
+        "//update_with_ai/lib:dag_clean_logic",
+    ],
+)
+
+pyright_test(
+    name = "dag_impl_test",
+    srcs = ["dag_impl_test.py"],
+    pyright_deps = [
+        "//update_with_ai/lib:dag", 
+        "//update_with_ai/lib:dag_storage", 
+        "//update_with_ai/lib:dag_clean_logic", 
+        "//update_with_ai/lib:dag_impl", 
+    ],
+)
+
+pyright_test(
+    name = "bazel_graph_storage_impl_test",
+    srcs = ["bazel_graph_storage_impl_test.py"],
+    pyright_deps = [
+        "//update_with_ai/lib:bazel_graph_storage",
+        "//update_with_ai/lib:bazel_graph_storage_impl",
+        "//update_with_ai/lib:dag_storage",
+        "//update_with_ai/lib:sandbox",
+    ],
+)
+
+pyright_test(
+    name = "agent_node_clean_logic_impl_test",
+    srcs = ["agent_node_clean_logic_impl_test.py"],
+    pyright_deps = [
+        "//update_with_ai/lib:dag_clean_logic",
+        "//update_with_ai/lib:dag_storage",
+        "//update_with_ai/lib:bazel_graph_storage",
+        "//update_with_ai/lib:agent_loop",
+        "//update_with_ai/lib:sandbox",
+        "//update_with_ai/lib:tool_provider",
+        "//update_with_ai/lib:agent_node_clean_logic_impl",
+    ],
+)
+
+pyright_test(
+    name = "bazel_node_loader_impl_test",
+    srcs = ["bazel_node_loader_impl_test.py"],
+    pyright_deps = [
+        "//update_with_ai/lib:bazel_node_loader",
+        "//update_with_ai/lib:bazel_node_loader_impl",
+        "//update_with_ai/lib:tool_provider",
+    ],
+)
+
+pyright_test(
+    name = "bazel_macros_test",
+    srcs = ["bazel_macros_test.py"],
+    pyright_deps = [],
+)
+
+pyright_test(
+    name = "bazel_runner_impl_test",
+    srcs = ["bazel_runner_impl_test.py"],
+    pyright_deps = [
+        "//update_with_ai/lib:bazel_runner_impl",
+        "//update_with_ai/lib:bazel_graph_storage",
+        "//update_with_ai/lib:bazel_graph_storage_impl",
+        "//update_with_ai/lib:dag_storage",
+        "//update_with_ai/lib:agent_loop",
+        "//update_with_ai/lib:dag_clean_logic",
+        "//update_with_ai/lib:tool_provider",
+    ],
+)
+
+pyright_test(
+    name = "bazel_agent_config_impl_test",
+    srcs = ["bazel_agent_config_impl_test.py"],
+    pyright_deps = [
+        "//update_with_ai/lib:bazel_agent_config",
+        "//update_with_ai/lib:bazel_agent_config_impl",
+        "//update_with_ai/lib:agent_loop",
+    ],
+)

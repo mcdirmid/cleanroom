@@ -1,0 +1,16 @@
+# pkg/BUILD.bazel
+load("//update_with_ai:macros.bzl", "update_with_ai")
+
+# Create an AI agent node.
+# The macro automatically generates:
+#   //pkg:my_node          — the node manifest
+#   //pkg:my_node_clean    — binary that runs DAG cleaning on this node
+#   //pkg:my_node_feedback — binary that delivers feedback to this node
+#
+# Agent/model config (see update_with_ai/agent_config.bzl):
+#   bazel run //pkg:my_node_clean            # uses the .bazelrc / //agent_configs:default default
+#   bazel run //pkg:my_node_clean -- --config //agent_configs:default
+update_with_ai(
+    name = "my_node",
+    prompt = "Hello world",
+)

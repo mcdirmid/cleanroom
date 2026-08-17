@@ -1,0 +1,4 @@
+# update_with_ai/BUILD.bazel
+
+# Making the bzl files explicitly visible to the repository
+exports_files(["macros.bzl", "agent_config.bzl"])
