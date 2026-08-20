@@ -99,7 +99,7 @@ pyright_library(
     srcs = [
         "bazel_graph_storage_impl.py",
     ],
-    pyright_deps = [":bazel_graph_storage", ":dag_storage", ":sandbox"],
+    pyright_deps = [":bazel_graph_storage", ":dag_storage", ":sandbox", ":sandbox_impl"],
     visibility = ["//visibility:public"],
 )
 

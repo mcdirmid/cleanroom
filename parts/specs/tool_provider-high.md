@@ -15,7 +15,6 @@ Provides tool definitions and executes tool calls, standardizing how tools are d
 - Signal: the indicator of whether execution continues, terminates, or fails; the signals are continue, terminate the run with success, terminate the run with failure, and tool failure.
 - Termination result: the outcome of a successfully terminated session, carried by the successful termination signal: completed with no changes, completed with changes to propagate, or attributed to dependencies with feedback for correction.
 - Tool failure: an invalid tool call; the operation is not executed and the session continues.
-- Session: the sequence of tool calls and outcomes of a single run, continuing until a termination signal is produced.
 
 ## Observable dataflow
 
@@ -23,7 +22,7 @@ Provides tool definitions and executes tool calls, standardizing how tools are d
 - Outputs: the tool-definition list; per call, exactly one outcome — a tool result, continue, terminate with success (carrying a termination result), terminate with failure (carrying a failure value), or tool failure.
 - Termination is atomic: once a termination signal is produced, no further tool results are produced.
 - The provider may maintain state across tool calls within a single session; no state persists across sessions.
-- Stubbing: when a result's flag is true, all previous non-stubbed results with the same content ID are hidden before the new result is produced; when false, previous results are left visible.
+- Stubbing: when a result's flag is true, all previous non-stubbed results with the same content ID are stubbed before the new result is produced; when false, previous results are unchanged. Stubbing preserves message positions.
 - The provider does not interpret tool results — it produces them. The consumer routes signals and interprets the carried termination result.
 
 ## Contract
@@ -41,7 +40,6 @@ Provides tool definitions and executes tool calls, standardizing how tools are d
 
 - Tool definitions conform to the schema format defined by this interface.
 - Tool results contain the content, the content ID (or none), and the stub flag.
-- A tool result never carries the stub text: the stub text appears only when previous tool results are replaced in the conversation. A tool call either succeeds — a tool result with semantic content — or fails — a tool failure explaining why the call could not be performed; a tool failure is never a stub.
 - When the stub flag is true, all previous non-stubbed results with the same content ID are stubbed before the new result is produced; when false, previous results remain unchanged.
 - Each tool call produces exactly one outcome: a tool result, continue, terminate with success, terminate with failure, or tool failure.
 - A successful termination signal always carries a termination result; a failure termination signal carries a value describing the failure.

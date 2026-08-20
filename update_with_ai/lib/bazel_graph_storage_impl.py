@@ -6,9 +6,10 @@ storage with per-package message files.
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import json
 import os
+import subprocess
 from pathlib import Path
 
 from .bazel_graph_storage import (
@@ -33,6 +34,7 @@ from .sandbox import (
     WritablePaths,
     BlameTargets,
 )
+from .sandbox_impl import READ_SIZE_LIMIT
 
 # The implementation is constructed with the interface's GraphConfig (see
 # bazel_graph_storage-low.md); the Config alias names it per the implementation spec.
@@ -351,12 +353,18 @@ class BaseBazelGraphStorageImpl(BazelGraphStorage):
 
 
 def _build_verify_callback(verify_cmd: str) -> Optional[VerificationCallback]:
-    """Build a verification callback from a shell command string."""
+    """Build a verification callback from a shell command string.
+
+    Returns (success, output): success is True when the command exits 0.
+    The exit code (not the output text) is what the sandbox uses to gate
+    succeed() — see sandbox-high.md / sandbox-low.md.
+    """
     if not verify_cmd:
         return None
-    def _callback() -> str:
-        result = os.popen(verify_cmd).read()
-        return result
+    def _callback() -> Tuple[bool, str]:
+        proc = subprocess.run(verify_cmd, shell=True, capture_output=True, text=True)
+        output = (proc.stdout or "") + (proc.stderr or "")
+        return proc.returncode == 0, output
     return _callback
 
 
@@ -372,7 +380,7 @@ def _build_sandbox_config(
         readable_paths=readable_paths,
         writable_paths=writable_paths,
         blame_targets=list(manifest.get("feedback_deps", [])),  # pyright: ignore[reportArgumentType]
-        read_size_limit=8096,
+        read_size_limit=READ_SIZE_LIMIT,
         search_result_limit=10,
         verification_callback=_build_verify_callback(
             str(manifest.get("verify") or "")  # pyright: ignore[reportArgumentType]
@@ -401,6 +409,7 @@ def _synthesized_manifest(label: str) -> Dict[str, Any]:
         "deps": [],
         "silent_deps": [],
         "feedback_deps": [],
+        "star_deps": [],
         "srcs": [],
         "silent_srcs": [],
         "verify": None,
@@ -417,7 +426,7 @@ def _synthesized_definition() -> NodeDefinition:
             readable_paths=[],
             writable_paths=[],
             blame_targets=[],
-            read_size_limit=8096,
+            read_size_limit=READ_SIZE_LIMIT,
             search_result_limit=10,
             verification_callback=None,
         ),
@@ -485,16 +494,21 @@ class BazelGraphStorageFileImpl(BaseBazelGraphStorageImpl):
             raw[node_id] = manifest
 
         for node_id, manifest in raw.items():
-            # Feedback deps are automatically included in deps: the deps used
-            # for readability and adjacency are the manifest's deps expanded
-            # with its feedback deps (deduplicated). This holds even when the
-            # manifest was produced without the macro's own expansion.
+            # Feedback deps and star deps are automatically included in deps:
+            # the deps used for readability and adjacency are the manifest's
+            # deps expanded with its feedback deps and star deps
+            # (deduplicated). This holds even when the manifest was produced
+            # without the macro's own expansion.
             raw_deps: List[NodeId] = list(manifest.get("deps", []))
             feedback_deps: List[NodeId] = list(manifest.get("feedback_deps", []))
+            star_deps: List[NodeId] = [str(sd) for sd in manifest.get("star_deps", [])]
             deps: List[NodeId] = list(raw_deps)
             for fd in feedback_deps:
                 if fd not in deps:
                     deps.append(fd)
+            for sd in star_deps:
+                if sd not in deps:
+                    deps.append(sd)
 
             # Collect dependency srcs (bare names) -> their package directories.
             # Only deps' srcs are readable; silent_deps' srcs are not.
@@ -504,6 +518,43 @@ class BazelGraphStorageFileImpl(BaseBazelGraphStorageImpl):
                 if dep_manifest is None:
                     continue  # dep manifest not in this graph's runfiles
                 dep_pkg = pkg_dirs[dep]
+                for src in dep_manifest.get("srcs", []):
+                    s = str(src)
+                    dep_srcs.setdefault(s, dep_pkg)
+
+            # Star deps' transitive closure is readable: every node reachable
+            # from a star dep through deps and star deps (never silent deps)
+            # contributes its declared sources, exactly like a direct dep.
+            # The closure is computed from the loaded manifests at
+            # initialization, so a node can read the sources of its spec
+            # deps' whole dependency graph.
+            closure: List[NodeId] = []
+            closure_seen: set = set()
+            queue: List[NodeId] = list(star_deps)
+            while queue:
+                label = queue.pop(0)
+                if label in closure_seen:
+                    continue
+                closure_seen.add(label)
+                closure.append(label)
+                dep_manifest = raw.get(label)
+                if dep_manifest is None:
+                    continue  # star dep manifest not in this graph's runfiles
+                follow: List[NodeId] = list(dep_manifest.get("deps", []))
+                for sd in dep_manifest.get("star_deps", []):
+                    if sd not in follow:
+                        follow.append(sd)
+                for fd in dep_manifest.get("feedback_deps", []):
+                    if fd not in follow:
+                        follow.append(fd)
+                queue.extend(follow)
+            for label in closure:
+                dep_manifest = raw.get(label)
+                if dep_manifest is None:
+                    continue
+                dep_pkg = pkg_dirs.get(label)
+                if dep_pkg is None:
+                    continue
                 for src in dep_manifest.get("srcs", []):
                     s = str(src)
                     dep_srcs.setdefault(s, dep_pkg)
@@ -555,6 +606,7 @@ class BazelGraphStorageFileImpl(BaseBazelGraphStorageImpl):
         for manifest in raw.values():
             declared_deps.extend(manifest.get("deps", []))
             declared_deps.extend(manifest.get("silent_deps", []))
+            declared_deps.extend(manifest.get("star_deps", []))
         for dep in declared_deps:
             if dep in raw:
                 continue

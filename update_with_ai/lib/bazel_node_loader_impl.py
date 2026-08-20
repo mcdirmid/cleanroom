@@ -18,9 +18,23 @@ from .tool_provider import ToolFailure, ToolCallOutcome, ToolExecutor
 from .agent_loop import AgentResult
 
 
+def _main_repo_names() -> List[str]:
+    """Names the main repository may appear under in the runfiles tree.
+
+    Bzlmod exposes the main repository as "_main"; legacy workspaces use the
+    workspace name, which `bazel test` exposes via TEST_WORKSPACE. No literal
+    workspace name is assumed.
+    """
+    names = ["_main"]
+    workspace = os.environ.get("TEST_WORKSPACE")
+    if workspace:
+        names.append(workspace)
+    return names
+
+
 def _get_runfiles_path() -> Path:
     """
-    Get the runfiles directory path.
+    Get the runfiles directory path (the main repository's runfiles root).
 
     Returns:
         Path to runfiles directory
@@ -29,15 +43,21 @@ def _get_runfiles_path() -> Path:
     try:
         from bazel_tools.tools.python.runfiles import runfiles  # type: ignore
         r = runfiles.Create()
-        runfiles_dir = r.Rlocation("cleanroom")
-        if runfiles_dir:
-            return Path(runfiles_dir)
+        for name in _main_repo_names():
+            runfiles_dir = r.Rlocation(name)
+            if runfiles_dir:
+                return Path(runfiles_dir)
     except ImportError:
         pass
 
-    # Fallback: use environment variable or current directory
+    # Fallback: RUNFILES_DIR is the runfiles root; the main repository sits
+    # under one of the candidate names (or directly at the root).
     runfiles_path = os.environ.get("RUNFILES_DIR")
     if runfiles_path:
+        for name in _main_repo_names():
+            candidate = Path(runfiles_path) / name
+            if candidate.exists():
+                return candidate
         return Path(runfiles_path)
 
     return Path.cwd()

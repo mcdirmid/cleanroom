@@ -1,0 +1,21 @@
+# tests/consumer/BUILD.bazel
+#
+# Demonstrates cross-package node dependencies: this package depends on
+# //update_with_ai/tests/example:sample_node_1, which declares
+# visibility = ["//visibility:public"] on all of its generated targets.
+# Without that visibility argument, this dependency would fail Bazel's
+# visibility analysis. (sample_node_2 in the example package also depends on
+# sample_node_1, but it lives in the same package, so it would not prove the
+# visibility attribute is forwarded to the node manifest target.)
+#
+# Build with:
+#   bazel build //update_with_ai/tests/consumer:all
+load("//update_with_ai:macros.bzl", "update_with_ai")
+
+update_with_ai(
+    srcs = ["animals.txt"],
+    name = "consumer_node",
+    prompt = "for each animal in foo.txt, list it in animals.txt along with its typical habitat.",
+    deps = ["//update_with_ai/tests/example:sample_node_1"],
+)
+

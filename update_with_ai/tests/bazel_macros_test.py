@@ -21,6 +21,7 @@ class TestBazelMacros(unittest.TestCase):
             "deps": ["//pkg:dep"],
             "silent_deps": ["//pkg:silent_dep"],
             "feedback_deps": ["//pkg:fdep"],
+            "star_deps": ["//pkg:star_dep"],
             "srcs": [":src1"],
             "silent_srcs": [":silent_src1"],
             "dependency_paths": [],
@@ -33,6 +34,7 @@ class TestBazelMacros(unittest.TestCase):
         self.assertIn("deps", manifest)
         self.assertIn("silent_deps", manifest)
         self.assertIn("feedback_deps", manifest)
+        self.assertIn("star_deps", manifest)
         self.assertIn("srcs", manifest)
         self.assertIn("silent_srcs", manifest)
         
@@ -41,6 +43,7 @@ class TestBazelMacros(unittest.TestCase):
         self.assertIsInstance(manifest["deps"], list)
         self.assertIsInstance(manifest["silent_deps"], list)
         self.assertIsInstance(manifest["feedback_deps"], list)
+        self.assertIsInstance(manifest["star_deps"], list)
         self.assertIsInstance(manifest["srcs"], list)
         self.assertIsInstance(manifest["silent_srcs"], list)
     

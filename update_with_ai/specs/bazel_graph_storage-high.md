@@ -4,7 +4,7 @@ imports: dag_storage (contract fulfilled with Bazel workspace data), sandbox (no
 terms (from dag_storage): node, message, pending message, dependency, propagating dependency, reverse dependency, subgraph
 terms (from sandbox): blame target
 terms (refined): node -> a Bazel target identified by its label, propagating dependency -> a node's declared dependencies, excluding its silent dependencies
-terms (owned): node definition, package directory, silent dependency
+terms (owned): node definition, package directory, silent dependency, star dependency
 
 ## Purpose
 
@@ -16,6 +16,7 @@ Provides Bazel-workspace-backed storage and graph access for the agent build: no
 - Package directory: the directory containing a node's BUILD file; also where the node's messages are stored.
 - A node's dependencies are the targets it declares. The component does not execute builds; it provides the graph and storage as data.
 - Silent dependency: a dependency a node declares as silent; a silent dependency is a dependency (cleaned before the declaring node) whose changes do not propagate to the declaring node.
+- Star dependency: a dependency a node declares as a star dependency; a star dependency is a dependency (cleaned before the declaring node) whose declared sources, and the declared sources of every node reachable from it through dependencies excluding silent dependencies, are readable by the declaring node.
 - A propagating dependency of a node is a declared dependency whose changes propagate to the node; a node's propagating dependencies are its declared dependencies, excluding its silent dependencies.
 - Retrieving a node's dependencies records the node as a reverse dependency of each declared dependency that is not silent, and of no silent dependency.
 

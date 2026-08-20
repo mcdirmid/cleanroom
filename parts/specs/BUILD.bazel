@@ -1,0 +1,40 @@
+# parts/specs/BUILD.bazel
+#
+# High-level specification nodes for the DAG components. Each
+# update_hls_with_ai call returns a handle carrying the node's transitive
+# spec-dep closure; a dependent node passes the handles of its spec deps
+# (not raw labels), so its manifest deps and lint coverage include the full
+# transitive closure. Handles require deps to be created before dependents.
+
+load("//update_with_ai:specs.bzl", "update_spec_with_ai")
+
+dag_storage = update_spec_with_ai(
+    name = "dag_storage",
+    spec_deps = [],
+)
+
+
+
+# tool_provider is referenced by dag_clean_logic (and others); it is a
+# reference-only spec (owns its terms, depends on nothing).
+tool_provider = update_spec_with_ai(
+    name = "tool_provider",
+    spec_deps = [],
+)
+
+dag_clean_logic = update_spec_with_ai(
+    name = "dag_clean_logic",
+    # The text references dag_storage and tool_provider; both must be in
+    # spec_deps so the agent context can read them.
+    spec_deps = [dag_storage, tool_provider],
+)
+
+dag = update_spec_with_ai(
+    name = "dag",
+    spec_deps = [dag_storage, dag_clean_logic],
+)
+
+dag_impl = update_spec_with_ai(
+    name = "dag_impl",
+    spec_deps = [dag, dag_storage, dag_clean_logic],
+)

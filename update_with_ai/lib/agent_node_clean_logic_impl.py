@@ -112,6 +112,20 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
                 if arguments:
                     return method(**arguments)
                 return method()
+            except TypeError as e:
+                # A parameter-name slip (e.g. "new_str" instead of
+                # "new_content"): tell the agent which parameters the tool
+                # actually accepts so it can retry without re-reading.
+                params = "unknown"
+                for td in tools:
+                    fn = td.get("function", {})
+                    if fn.get("name") == name:
+                        props = fn.get("parameters", {}).get("properties", {})
+                        params = ", ".join(sorted(props))
+                        break
+                return ToolFailure[str](
+                    f"Invalid parameters for {name}: {e} — valid parameters: {params}"
+                )
             except Exception as e:
                 return ToolFailure[str](str(e))
 

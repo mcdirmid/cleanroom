@@ -3,7 +3,7 @@
 fulfills: bazel_graph_storage
 imports: dag_storage (contract), sandbox (configuration construction)
 terms (from dag_storage): node, message, pending message, dependency, propagating dependency, reverse dependency
-terms (from bazel_graph_storage): node definition, package directory, silent dependency
+terms (from bazel_graph_storage): node definition, package directory, silent dependency, star dependency
 terms (from sandbox): blame, blame target
 terms (from bazel_node_loader): manifest, feedback deps
 terms (refined): node -> a Bazel target identified by its label
@@ -19,6 +19,7 @@ terms (refined): node -> a Bazel target identified by its label
 - Resolving a node's dependencies records the node as a known reverse dependency of each propagating dependency it provides, per the dag_storage contract: each propagating dependency's entry in the message file gains the node among its known reverse dependencies. A node's propagating dependencies are its declared deps (including its feedback deps); silent deps are dependencies (cleaned before the node) but are not recorded, so a silent dep's changes do not propagate to the node.
 - The sandbox configuration constructed for a node grants read access to the node's declared sources and its deps' declared sources, and write access to the node's own declared sources (including its silent sources). Silent deps' declared sources are not readable.
 - A node's deps include its feedback deps: feedback deps' declared sources are readable, exactly as deps' declared sources are.
+- A node's deps include its star deps: the sandbox configuration constructed for a node grants read access to the declared sources of each star dep and of every node in its transitive closure over dependencies excluding silent dependencies. The closure is computed at initialization from the loaded manifests; a star dep's own deps are followed, never its silent deps.
 - The blame targets in the sandbox configuration are the node's feedback deps; only feedback deps may receive feedback from the node.
 
 ### Operation Boundaries

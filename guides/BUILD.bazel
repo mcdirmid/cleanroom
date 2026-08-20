@@ -1,0 +1,22 @@
+load("//update_with_ai:guides.bzl", "update_guide_with_ai")
+
+update_guide_with_ai(
+    name = "high_level_spec",
+    srcs = ["high_level_spec.md"],
+    display_name = "high-level specification guide",
+    deps = [],
+)
+
+update_guide_with_ai(
+    name = "low_level_spec",
+    srcs = ["low_level_spec.md"],
+    display_name = "low-level specification guide",
+    deps = [],
+)
+
+update_guide_with_ai(
+    name = "high_to_low",
+    srcs = ["high_to_low.md"],
+    display_name = "high-level to low-level spec conversion guide",
+    deps = [":high_level_spec", ":low_level_spec"],
+)

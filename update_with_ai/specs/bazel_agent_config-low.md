@@ -1,5 +1,4 @@
 <!-- Dependencies (md files to read alongside this one):
-  - bazel_agent_config-high.md
   - agent_loop-low.md
 -->
 

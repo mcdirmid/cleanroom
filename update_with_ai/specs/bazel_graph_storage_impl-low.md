@@ -65,17 +65,19 @@ Persistence: a single JSON file named `.update_with_ai.json` per package directo
 **Subclass: `BazelGraphStorageFileImpl`** (concrete implementation) overrides the abstract methods and loads all data from manifests during `__init__`:
 - The subclass requires `workspace_root` in the config (a `graph_source`-only config is rejected): it locates manifest files under the workspace root.
 - For each manifest file, constructs a `NodeDefinition` with `prompt` from the manifest and `sandbox_config` populated from `srcs`, `silent_srcs`, `deps`, `silent_deps`, `feedback_deps`, and `verify` fields (see `_build_sandbox_config` helper).
-- For each node, builds adjacency from `deps` and `silent_deps` (all declared dependencies are the node's direct dependencies). The deps used for readability and adjacency are the manifest's `deps` expanded with its `feedback_deps` (deduplicated), so a node's deps always include its feedback deps even when the manifest was produced without the macro's own expansion.
-- For each node, builds the propagating deps from its deps (the manifest's `deps` expanded with its `feedback_deps`); silent deps are adjacency-only and are not propagating deps.
+- For each node, builds adjacency from `deps` and `silent_deps` (all declared dependencies are the node's direct dependencies). The deps used for readability and adjacency are the manifest's `deps` expanded with its `feedback_deps` and `star_deps` (deduplicated), so a node's deps always include its feedback deps and star deps even when the manifest was produced without the macro's own expansion.
+- For each node, builds the propagating deps from its deps (the manifest's `deps` expanded with its `feedback_deps` and `star_deps`); silent deps are adjacency-only and are not propagating deps.
+- For each node with `star_deps`, computes the star closure from the loaded manifests: every node reachable from a star dep through `deps` and `star_deps` (never `silent_deps`), traversed once each. Each node in the closure contributes its `srcs` to the node's readable set exactly like a direct dep; a star dep whose manifest is not loaded contributes nothing.
 - A declared dependency without its own manifest is synthesized from its label (package directory derived from the label's package path; empty prompt, no sources, no dependencies), so that every declared dependency resolves to a node.
 - Derives package directories from the manifest file location (mapped onto the real source tree via `BUILD_WORKSPACE_DIRECTORY` environment variable).
 
 **`_build_sandbox_config` helper**: Given a manifest and file mappings, constructs a `SandboxConfig` with:
-- `readable_paths`: the node's own `srcs` plus its deps' `srcs` (deps include feedback deps; neither the node's own `silent_srcs` nor the deps' `silent_srcs` are readable, and silent deps' `srcs` are not readable)
+- `readable_paths`: the node's own `srcs` plus its deps' `srcs` and the `srcs` of every node in its star deps' transitive closure (deps include feedback deps and star deps; neither the node's own `silent_srcs` nor the deps' `silent_srcs` are readable, silent deps' `srcs` are not readable, and star-closure traversal never follows `silent_deps`)
 - `writable_paths`: the node's own `srcs` + `silent_srcs`
 - `blame_targets`: the manifest's `feedback_deps` (only feedback deps may receive feedback from the node)
-- `read_size_limit` and `search_result_limit`: values are not pinned in this spec (the implementation sets fixed values)
-- `verification_callback`: built from the manifest's `verify` field (a shell command string).
+- `read_size_limit`: pinned to the `READ_SIZE_LIMIT` constant (20,000 bytes) exported by `sandbox_impl` — the maximum content a single read or chunk read may return
+- `search_result_limit`: pinned to 10 — the maximum matches a single search may return
+- `verification_callback`: built from the manifest's `verify` field (a shell command string); `_build_verify_callback` runs the command via `subprocess` and returns `(success, output)` where `success` is `True` when the command exits 0. The success flag gates `succeed` (see sandbox specs).
 
 **HLS Justification:** Reads node manifests and constructs NodeDefinition objects from manifest fields.
 

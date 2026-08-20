@@ -19,9 +19,7 @@ Provides persistent storage for messages addressed to nodes and access to graph 
 ## Observable dataflow
 
 - Inputs: read pending messages, add messages, delete a node's data, retrieve a node's dependencies, retrieve a node's known reverse dependencies.
-- Outputs: messages exactly as stored; dependencies as declared; reverse dependencies exactly as recorded.
 - Retrieving a node's dependencies records the node as a reverse dependency of each of its propagating dependencies.
-- Messages and reverse dependencies persist across restarts; operations are atomic per node.
 
 ## Contract
 

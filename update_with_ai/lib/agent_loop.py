@@ -94,6 +94,7 @@ LogEvent = Literal[
     "tool_called",
     "tool_result",
     "api_response",
+    "response_truncated",
     "reminder_injected",
     "final_answer",
     "run_terminated",
@@ -106,6 +107,7 @@ The type of log event being reported:
 - tool_called: Model requested tool execution
 - tool_result: Tool execution results received
 - api_response: API response received (includes per-request token usage)
+- response_truncated: Model response stopped at the generation limit
 - reminder_injected: Termination reminder injected into conversation
 - final_answer: Final answer produced (normal completion)
 - run_terminated: Tool signaled termination
@@ -125,6 +127,7 @@ Event data fields:
 - tool_called: {"tool_calls": List[ToolCall]}
 - tool_result: {"results": List[ToolResult]}
 - api_response: {"usage": Usage}
+- response_truncated: {"message": HistoryEntry, "usage": Usage}
 - reminder_injected: {"message": str}
 - final_answer: {"answer": str, "usage": Usage, "cumulative_usage": CumulativeUsage, "final_context_size": int}
 - run_terminated: {"termination_value": <the termination signal's value>, "usage": Usage, "cumulative_usage": CumulativeUsage, "final_context_size": int}
@@ -149,6 +152,7 @@ class AgentLoopConfig:
     timeout: float = 60.0
     max_tokens: Optional[int] = None
     termination_reminder_generator: Optional[TerminationReminderGenerator] = None
+    continuation_prompt: Optional[str] = None
 
 class AgentLoop(Protocol):
     """

@@ -36,10 +36,17 @@ load("//update_with_ai:macros.bzl", "update_with_ai")
 #   5. //agent_configs:default convention
 # The API key is never in Bazel: it comes from AGENT_API_KEY_DEV (or
 # AGENT_API_KEY) at run time.
+#
+# visibility: applied to all three generated targets (the node manifest,
+# sample_node_1_clean, and sample_node_1_feedback). Public here so the
+# consumer package below (and any other package) can depend on this node and
+# run its *_clean / *_feedback binaries. Omit it for Bazel's default
+# package-private visibility.
 update_with_ai(
     srcs = ["foo.txt"],
     name = "sample_node_1",
     prompt = "select 5 animals to list in foo.txt on their own lines, create foo.txt if it does not exist",
+    visibility = ["//visibility:public"],
 )
 
 # sample_node_2 declares sample_node_1 as a feedback dep: it can read foo.txt

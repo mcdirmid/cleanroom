@@ -28,6 +28,7 @@ class ToolResult:
     content: ToolResultContent
     content_id: Optional[ContentId]
     stub_previous: bool
+    note: str = ""
     type: Literal["tool_result"] = "tool_result"
 
 class TerminateSuccessResult(Protocol):

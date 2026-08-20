@@ -4,19 +4,22 @@ load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 exports_files(["check_types.sh"])
 
+# The linter is referenced by hls_lint test targets in other packages.
+exports_files(["hls_lint.py"], visibility = ["//visibility:public"])
+
 pyright_library(
-    name = "spec_lint",
-    srcs = ["spec_lint.py"],
+    name = "hls_lint",
+    srcs = ["hls_lint.py"],
     pyright_deps = [],
     visibility = ["//visibility:public"],
 )
 
-# Gate: the high-level specs must pass spec_lint.py.
+# Gate: the high-level specs must pass hls_lint.py.
 sh_test(
-    name = "spec_lint_test",
-    srcs = ["spec_lint_test.sh"],
+    name = "hls_lint_test",
+    srcs = ["hls_lint_test.sh"],
     data = [
-        "//bin:spec_lint.py",
+        "//bin:hls_lint.py",
         "//update_with_ai/specs:high_specs",
     ],
     tags = ["lint"],

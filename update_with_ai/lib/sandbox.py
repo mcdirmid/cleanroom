@@ -31,7 +31,10 @@ Feedback = str
 Blame = Tuple[BlameTarget, Feedback]
 ReadSizeLimit = int
 SearchResultLimit = int
-VerificationCallback = Optional[Callable[[], str]]
+# A verification callback runs a shell command and returns (success, output):
+# success is True when the command exited 0. The sandbox uses the success flag
+# to gate succeed() (see sandbox-high.md / sandbox-low.md).
+VerificationCallback = Optional[Callable[[], Tuple[bool, str]]]
 
 @dataclass
 class SandboxConfig:
@@ -42,6 +45,7 @@ class SandboxConfig:
     blame_targets: BlameTargets
     read_size_limit: ReadSizeLimit
     search_result_limit: SearchResultLimit
+    diff_size_limit: Optional[int] = None
     verification_callback: VerificationCallback = None
 
 WriteOccurred = bool
@@ -75,57 +79,142 @@ class Sandbox(Protocol):
         """
         ...
 
-    def read_file(self, file_path: VirtualName, offset: Optional[int] = None,
-                  limit: Optional[int] = None) -> ToolCallOutcome:
+    def read_file(self, file_path: VirtualName, start_line: int = 1,
+                  end_line: Optional[int] = None,
+                  include_line_numbers: bool = False) -> ToolCallOutcome:
         """
-        Read content from a file using the virtual name provided by the agent.
+        Read lines from a file using the virtual name provided by the agent.
 
         Args:
             file_path: Virtual path to the file
-            offset: Starting position (default: 0)
-            limit: Maximum bytes to read (default: read_size_limit)
+            start_line: 1-indexed first line to read (default: 1)
+            end_line: 1-indexed last line to read (default: end of file)
+            include_line_numbers: Prefix each line with its line number
+                (default: false; allowed only for writable files)
 
         Returns:
-            ToolResult with content on success, or ToolFailure on policy or
-            parameter violations.
+            ToolResult with the (optionally line-numbered) content on success,
+            or ToolFailure on policy or parameter violations.
 
         Stubbing semantics:
-            stub_previous is True if the read region overlaps with any previous
-            non-stubbed read region for the same file.
+            stub_previous is True if the read line range overlaps any previous
+            non-stubbed read line range for the same file.
+
+        Note:
+            The result's note reports how many lines were read, the file's
+            line count, how many remain, and the next start_line.
         """
         ...
 
     def write_file(self, file_path: VirtualName, content: str) -> ToolCallOutcome:
         """
-        Write content to a file using the virtual name provided by the agent.
+        Create a new file with content, using the virtual name provided by the
+        agent. Fails when the file already exists — modifying an existing file
+        must go through edit_file or replace_lines.
 
         Args:
             file_path: Virtual path to the file
-            content: Content to write (overwrites existing file)
+            content: Content to write (must be non-empty)
 
         Returns:
-            ToolResult on success, or ToolFailure on policy or argument violations.
+            ToolResult on success, or ToolFailure on policy or argument
+            violations (including an existing file).
 
         Stubbing semantics:
             stub_previous is always True (unconditional stubbing).
             Sets write_occurred flag.
+
+        Note:
+            Returns a minimal structured result (success/message); no file
+            content is echoed.
         """
         ...
 
-    def search_files(self, path: VirtualName, pattern: str) -> ToolCallOutcome:
+    def edit_file(self, file_path: VirtualName, old_str: str, new_str: str,
+                  expect_multiple: bool = False) -> ToolCallOutcome:
+        """
+        Replace text in a file (content-based search and replace).
+
+        Replaces exactly one occurrence of old_str with new_str; fails when
+        old_str is absent or matches more than once unless expect_multiple=True,
+        which replaces all occurrences.
+
+        Args:
+            file_path: Virtual path to the file
+            old_str: Exact text to find (must be non-empty)
+            new_str: Replacement text
+            expect_multiple: If True, replace all occurrences of old_str
+
+        Returns:
+            ToolResult on success, or ToolFailure on policy or argument
+            violations (including when the file does not exist).
+
+        Stubbing semantics:
+            A file write: stub_previous is always True (unconditional stubbing).
+            Sets write_occurred flag.
+
+        Note:
+            Returns a minimal structured result (success/matches_found/message);
+            no file content is echoed.
+        """
+        ...
+
+    def replace_lines(self, file_path: VirtualName, start_line: int, end_line: int,
+                      new_content: str) -> ToolCallOutcome:
+        """
+        Replace, delete, or insert lines by 1-indexed line range.
+
+        Replaces lines start_line..end_line (inclusive) with new_content;
+        start_line > end_line inserts new_content before start_line; empty
+        new_content deletes the range.
+
+        Args:
+            file_path: Virtual path to the file
+            start_line: 1-indexed start line (inclusive), 1..len(file)+1
+            end_line: 1-indexed end line (inclusive), 0..len(file)
+            new_content: Replacement content
+
+        Returns:
+            ToolResult on success, or ToolFailure on policy or argument
+            violations (including when the file does not exist or the range is
+            not visible in context).
+
+        Stubbing semantics:
+            A file write: stub_previous is always True (unconditional stubbing).
+            Sets write_occurred flag.
+
+        Note:
+            Returns a minimal structured result (success/lines_replaced or
+            lines_deleted or inserted_before/message); no file content is
+            echoed.
+        """
+        ...
+
+    def search_files(self, path: VirtualName, pattern: str,
+                     offset: Optional[int] = None,
+                     limit: Optional[int] = None) -> ToolCallOutcome:
         """
         Search for a pattern in files using the virtual path provided by the agent.
 
         Args:
             path: Virtual path to search (recursive)
             pattern: Regex pattern to search for
+            offset: Match offset to start from (default: 0)
+            limit: Maximum matches to return (must not exceed the search result
+                limit); if omitted, returns all matches, which fails when more
+                than the search result limit exist.
 
         Returns:
             ToolResult with search results in content on success, or ToolFailure
-            on policy or pattern violations.
+            on policy, parameter, or pattern violations.
 
         Stubbing semantics:
-            stub_previous is True if the same path and pattern were previously searched.
+            stub_previous is True if the same path, pattern, offset, and limit
+            were previously searched.
+
+        Note:
+            The result's note reports how many matches remain and the offset
+            to continue from.
         """
         ...
 
@@ -172,6 +261,10 @@ class Sandbox(Protocol):
             All replacements apply atomically.
             Sets write_occurred flag.
 
+        Note:
+            Returns a minimal structured result (success/chunks_replaced/message);
+            no file content is echoed.
+
         Preconditions:
             Python files must be accessible.
             file_path must be a Python file.
@@ -180,28 +273,48 @@ class Sandbox(Protocol):
 
     def verify(self) -> ToolCallOutcome:
         """
-        Run the verification callback.
+        Report the run's file changes and run the verification callback when configured.
+
+        Always reports the diff of each changed file vs. its content at run
+        start, truncated when it exceeds the diff size limit. When a
+        verification callback is configured, its output and exit code are
+        additionally reported (the diff is reported either way).
 
         Returns:
-            ToolResult with verification result in content, or ToolFailure if
-            the callback fails.
+            ToolResult on success, or ToolFailure on callback error.
 
         Stubbing semantics:
             stub_previous is always True (unconditional stubbing).
 
-        Preconditions:
-            Verification callback must be non-null.
+        Note:
+            The outcome records whether the callback succeeded (exit 0);
+            succeed() is gated on this state when a callback is configured.
         """
         ...
 
-    def succeed(self) -> ToolCallOutcome:
+    def succeed(self, changes: list[dict[str, str]] = []) -> ToolCallOutcome:
         """
-        Signal successful termination.
+        Signal successful termination, carrying the agent's change summary.
+
+        Args:
+            changes: One entry per changed file — {"file": <virtual path>,
+                "summary": one short sentence on what changed in the file, not
+                how it was done}. Broadcast to reverse dependencies. Required
+                when the run changed files; succeed() without it fails with
+                the list of changed files and the required shape.
 
         Returns:
             TerminateAgentWithSuccess carrying a TerminateSuccessResult
             (the implementation forms the result — no change, or change if
             the run modified the workspace). content_id is None (never stubbed).
+
+        Preconditions:
+            When a verification callback is configured, verify() must have
+            been called and its last outcome must have succeeded; otherwise
+            this signals a ToolFailure (never terminating) advising the agent
+            to verify, fail, or blame. When the run changed files, every
+            changed file must appear in `changes` with a non-empty, bounded
+            summary; violations signal a ToolFailure (never terminating).
         """
         ...
 

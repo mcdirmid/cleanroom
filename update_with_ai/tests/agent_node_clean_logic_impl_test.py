@@ -157,7 +157,24 @@ class MockSandbox(Sandbox):
     def write_file(self, file_path: str, content: str) -> ToolCallOutcome:
         self._record("write_file", {"file_path": file_path, "content": content})
         self._write_occurred = True
-        return ToolResult(content="", content_id=file_path, stub_previous=True)
+        return ToolResult(
+            content='{"success": true, "message": "File written successfully"}',
+            content_id=file_path,
+            stub_previous=True,
+        )
+
+    def replace_lines(self, file_path: str, start_line: int, end_line: int,
+                      new_content: str) -> ToolCallOutcome:
+        self._record(
+            "replace_lines",
+            {"file_path": file_path, "start_line": start_line,
+             "end_line": end_line, "new_content": new_content},
+        )
+        return ToolResult(
+            content='{"success": true, "lines_replaced": 1, "message": "Replaced"}',
+            content_id=file_path,
+            stub_previous=True,
+        )
 
     def search_files(self, path: str, pattern: str) -> ToolCallOutcome:
         self._record("search_files", {"path": path, "pattern": pattern})
@@ -465,6 +482,41 @@ class TestToolExecutor(unittest.TestCase):
         self.assertIsInstance(outcome, ToolFailure)
         assert isinstance(outcome, ToolFailure)
         self.assertIn("no_such_tool", outcome.value)
+        self.assertEqual(sandbox.calls, [])
+
+    def test_wrong_parameter_name_lists_valid_parameters(self):
+        """A parameter-name slip (e.g. 'new_str' instead of 'new_content')
+        becomes a ToolFailure naming the tool's valid parameters."""
+        defs: List[ToolDefinition] = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "replace_lines",
+                    "description": "replace lines by range",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "file_path": {"type": "string"},
+                            "start_line": {"type": "integer"},
+                            "end_line": {"type": "integer"},
+                            "new_content": {"type": "string"},
+                        },
+                    },
+                },
+            }
+        ]
+        node_def = _make_node_def()
+        sandbox = MockSandbox(tool_defs=defs)
+        executor = self._capture_executor(node_def, sandbox)
+        outcome = executor(
+            "replace_lines",
+            {"file_path": "foo.txt", "start_line": 1, "end_line": 1, "new_str": "x"},
+        )
+        self.assertIsInstance(outcome, ToolFailure)
+        assert isinstance(outcome, ToolFailure)
+        self.assertIn("valid parameters", outcome.value)
+        self.assertIn("new_content", outcome.value)
+        self.assertIn("new_str", outcome.value)
         self.assertEqual(sandbox.calls, [])
 
 

@@ -1,6 +1,5 @@
 <!-- Dependencies (md files to read alongside this one):
   - bazel_agent_config-low.md
-  - bazel_agent_config-high.md
 -->
 
 # Implementation LLS: bazel_agent_config_impl
@@ -11,7 +10,7 @@
 from bazel_agent_config import AgentConfig, ConfigNotFoundError, ApiKeyNotFoundError
 from agent_loop import AgentLoopConfig
 
-class BazelAgentConfigImpl: ...
+class BazelAgentConfigImpl(BazelAgentConfig): ...
 ```
 
 `BazelAgentConfigImpl` implements the `BazelAgentConfig` Protocol (see

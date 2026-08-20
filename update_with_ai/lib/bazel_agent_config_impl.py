@@ -42,6 +42,20 @@ from update_with_ai.lib.bazel_agent_config import (
 _CONFIG_MODULE_SUFFIX = "_config.py"
 
 
+def _main_repo_names() -> List[str]:
+    """Names the main repository may appear under in the runfiles tree.
+
+    Bzlmod exposes the main repository as "_main"; legacy workspaces use the
+    workspace name, which `bazel test` exposes via TEST_WORKSPACE. No literal
+    workspace name is assumed.
+    """
+    names = ["_main"]
+    workspace = os.environ.get("TEST_WORKSPACE")
+    if workspace:
+        names.append(workspace)
+    return names
+
+
 def _runfiles_candidates(package: str, name: str) -> List[str]:
     """Candidate paths for the generated module inside the runfiles tree."""
     relative = os.path.join(package, name + _CONFIG_MODULE_SUFFIX)
@@ -50,8 +64,8 @@ def _runfiles_candidates(package: str, name: str) -> List[str]:
         if not base:
             continue
         candidates.append(os.path.join(base, relative))
-        candidates.append(os.path.join(base, "_main", relative))
-        candidates.append(os.path.join(base, "cleanroom", relative))
+        for repo in _main_repo_names():
+            candidates.append(os.path.join(base, repo, relative))
     return candidates
 
 
@@ -66,7 +80,7 @@ def _bazel_bin_roots(workspace_root: Optional[str]) -> List[str]:
     return roots
 
 
-class BazelAgentConfigImpl:
+class BazelAgentConfigImpl(BazelAgentConfig):
     """
     Implements BazelAgentConfig for agent_config targets in the Bazel workspace.
 

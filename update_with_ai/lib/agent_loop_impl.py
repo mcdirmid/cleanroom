@@ -44,6 +44,14 @@ from .tool_provider import (
     ToolFailure,
 )
 
+# Pinned default continuation prompt (specs/agent_loop_impl-low.md,
+# Non-Concerns): appended as a user message when a response is truncated at
+# the generation limit and no continuation_prompt is configured.
+DEFAULT_CONTINUATION_PROMPT = (
+    "Your previous response was cut off because it exceeded the output limit. "
+    "Continue from where you left off."
+)
+
 
 class AgentLoopImpl(AgentLoop):
     """
@@ -68,6 +76,13 @@ class AgentLoopImpl(AgentLoop):
             api_key=config.api_key,
             timeout=config.timeout,
         )
+        # Per-run loop-repetition state (reset at each run_agent; no state
+        # persists between runs): consecutive identical tool calls (same name
+        # and arguments) trigger a reminder so the agent cannot spin forever
+        # on the same call.
+        self._loop_last_signature: Optional[Tuple[str, str]] = None
+        self._loop_repeat_count = 0
+        self._loop_reminder_injected = False
 
     def _convert_tool_call_to_dict(self, tc: ChatCompletionMessageFunctionToolCall) -> ToolCall:
         """Convert an OpenAI function tool call to our ToolCall dict format."""
@@ -119,10 +134,17 @@ class AgentLoopImpl(AgentLoop):
                     ]
             return assistant_msg
         elif role == "tool":
+            # The tool result's note (e.g. remaining-length guidance) is
+            # rendered into the model-visible content so the agent always
+            # sees it during model execution.
+            content = clean_msg.get("content", "")
+            note = msg.get("_note", "")
+            if note:
+                content = content + ("\n" if content else "") + note
             return cast(ChatCompletionToolMessageParam, {
                 "role": "tool",
                 "tool_call_id": clean_msg.get("tool_call_id", ""),
-                "content": clean_msg.get("content", ""),
+                "content": content,
             })
         elif role == "system":
             return cast(ChatCompletionSystemMessageParam, {"role": "system", "content": clean_msg.get("content")})
@@ -237,6 +259,7 @@ class AgentLoopImpl(AgentLoop):
             "_arguments": arguments,
             "_content_id": content_id,
             "_stub_previous": stub_previous,
+            "_note": result.note,
         }
         
         # If content_id is None, append unconditionally (opt-out)
@@ -281,6 +304,21 @@ class AgentLoopImpl(AgentLoop):
         
         usage = self._extract_usage(response)
         self._invoke_logger(logger, "api_response", {"usage": usage})
+
+    def _log_response_truncated(
+        self,
+        logger: Optional[LoggerCallback],
+        message: HistoryEntry,
+        usage: Usage,
+    ) -> None:
+        """Log a truncated response (the model stopped at the generation limit)."""
+        if logger is None:
+            return
+        
+        self._invoke_logger(logger, "response_truncated", {
+            "message": message,
+            "usage": usage,
+        })
 
     def _log_final_answer(
         self, 
@@ -357,6 +395,27 @@ class AgentLoopImpl(AgentLoop):
         
         self._invoke_logger(logger, "error", data)
 
+    def _inject_loop_reminder(
+        self,
+        messages: List[HistoryEntry],
+        logger: Optional[LoggerCallback],
+        tool_name: str,
+        count: int,
+    ) -> None:
+        """Inject a reminder when the same tool call repeats without progress."""
+        reminder = (
+            f"You have called '{tool_name}' with the same arguments {count} "
+            f"times in a row. Review the latest tool results and make progress: "
+            f"change the file (edit_file/replace_lines/write_file) or finish "
+            f"the run with succeed(), fail(), or blame()."
+        )
+        reminder_message: HistoryEntry = {"role": "user", "content": reminder}
+        messages.append(reminder_message)
+        # The reminder is appended to the conversation like any other message:
+        # report the append via message_added in addition to the reminder event.
+        self._invoke_logger(logger, "message_added", {"message": reminder_message})
+        self._log_reminder_injected(logger, reminder)
+
     def _inject_termination_reminder(
         self,
         messages: List[HistoryEntry],
@@ -415,6 +474,19 @@ class AgentLoopImpl(AgentLoop):
                 arguments = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
             except Exception:
                 arguments = {}
+
+            # Loop-repetition detection: consecutive identical tool calls
+            # (same name and arguments) inject a reminder once per run, so the
+            # agent cannot spin forever on the same call.
+            signature = (name, json.dumps(arguments, sort_keys=True))
+            if signature == self._loop_last_signature:
+                self._loop_repeat_count += 1
+            else:
+                self._loop_last_signature = signature
+                self._loop_repeat_count = 1
+            if self._loop_repeat_count >= 4 and not self._loop_reminder_injected:
+                self._loop_reminder_injected = True
+                self._inject_loop_reminder(messages, logger, name, self._loop_repeat_count)
 
             try:
                 outcome = tool_executor(name, arguments)
@@ -540,6 +612,10 @@ class AgentLoopImpl(AgentLoop):
             "request_count": 0,
         }
         reminder_injected = False
+        # Reset per-run loop-repetition state (no state persists between runs).
+        self._loop_last_signature = None
+        self._loop_repeat_count = 0
+        self._loop_reminder_injected = False
 
         while iterations < self._config.max_iterations:
             iterations += 1
@@ -584,10 +660,44 @@ class AgentLoopImpl(AgentLoop):
             choice = response.choices[0]
             message = choice.message
 
-            assistant_message = self._convert_openai_message_to_dict(message)
-            self._append_message(messages, assistant_message, logger)
-
             finish_reason = choice.finish_reason
+            assistant_message = self._convert_openai_message_to_dict(message)
+
+            if finish_reason == "length":
+                # Truncated response: the model stopped at the generation
+                # limit, not because it completed naturally. It is not a
+                # final answer. Any tool calls in the truncated response are
+                # omitted from the appended assistant message: they may be
+                # malformed or incomplete and are never executed or retried.
+                # Generation resumes with a follow-up request after the
+                # continuation prompt is appended (per the interface LLS).
+                truncated_message = dict(assistant_message)
+                truncated_message.pop("tool_calls", None)
+                content = truncated_message.get("content")
+                # Degenerate truncated response: non-empty content whose
+                # characters are all identical (a single character repeated).
+                # Resuming would feed the degenerate loop, so the run signals
+                # failure instead; nothing is appended (per the impl LLS).
+                if isinstance(content, str) and len(content) > 0 and len(set(content)) == 1:
+                    error_msg = "Degenerate truncated response: single character repeated"
+                    self._log_error(logger, error_msg, last_usage, cumulative_usage)
+                    return (error_msg, messages)
+                if content is not None:
+                    self._append_message(messages, truncated_message, logger)
+                self._log_response_truncated(logger, truncated_message, usage)
+
+                continuation = (
+                    self._config.continuation_prompt or DEFAULT_CONTINUATION_PROMPT
+                )
+                continuation_message: HistoryEntry = {
+                    "role": "user",
+                    "content": continuation,
+                }
+                messages.append(continuation_message)
+                self._invoke_logger(logger, "message_added", {"message": continuation_message})
+                continue
+
+            self._append_message(messages, assistant_message, logger)
 
             if finish_reason == "stop":
                 # Model provided a final answer
@@ -636,7 +746,7 @@ class AgentLoopImpl(AgentLoop):
                 # most once per run, per the implementation spec).
                 continue
 
-            if finish_reason in ("length", "content_filter"):
+            if finish_reason == "content_filter":
                 error_msg = f"Incomplete response: {finish_reason}"
                 self._log_error(logger, error_msg, last_usage, cumulative_usage)
                 return (error_msg, messages)

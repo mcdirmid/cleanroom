@@ -33,6 +33,8 @@ ToolDefinition = dict[str, Any]
 
 A tool definition describes a tool's name, parameters, and purpose, in the tool-calling JSON Schema dialect accepted by the language model.
 
+Tool-result content is intentionally heterogeneous: each tool defines its own content type (file text, structured JSON, diffs), so there is no single pass-through type variable to bind; the interface passes content through without inspection, and each tool pins its content type in its operation spec.
+
 ```python
 ToolResultContent = Any
 ```
@@ -43,10 +45,11 @@ class ToolResult:
     content: ToolResultContent
     content_id: ContentId | None
     stub_previous: bool
+    note: str = ""
     type: Literal["tool_result"] = "tool_result"
 ```
 
-`content_id` is `None` if the result is never stubbed. `stub_previous` `True` stubs all previous non-stubbed results with the same `content_id`.
+`content_id` is `None` if the result is never stubbed. `stub_previous` `True` stubs all previous non-stubbed results with the same `content_id`. `note` carries producer-generated guidance for the model (e.g., how much content remains and how to continue reading); it is rendered into the model-visible message by the consuming agent loop, and does not replace `content`.
 
 ```python
 class TerminateSuccessResult(Protocol):

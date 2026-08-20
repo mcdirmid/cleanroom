@@ -1,5 +1,5 @@
 # specs/BUILD.bazel
-# High-level specification files, linted by //bin:spec_lint_test.
+# High-level specification files, linted by //bin:hls_lint_test.
 
 filegroup(
     name = "high_specs",

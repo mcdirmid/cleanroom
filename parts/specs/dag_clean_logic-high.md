@@ -20,7 +20,7 @@ Provides the logic that processes pending messages during cleaning: decides when
 ## Observable dataflow
 
 - Input: cleaning invoked on a node with its pending messages; a dirtiness query for a node.
-- Output: on success, zero or more messages for delivery; on failure, no messages are delivered.
+- Output: on success, zero or more messages for delivery; on failure, no messages and the pending messages unchanged.
 - A node produces either change messages or feedback messages during a single cleaning, not both. Producing a feedback message indicates a dependency must be fixed; the current node is cleaned again after the dependency sends a change message.
 - All pending messages of the node are processed; success is signaled only after all are processed.
 - A successful cleaning result (change, feedback, or no-change) is a termination result per tool_provider: a successful termination signal may carry it.

@@ -37,6 +37,14 @@ from update_with_ai.lib.tool_provider import (
     ToolResult,
 )
 
+# Pinned default continuation prompt (specs/agent_loop_impl-low.md,
+# Non-Concerns): appended as a user message when a response is truncated at
+# the generation limit and no continuation_prompt is configured.
+DEFAULT_CONTINUATION_PROMPT = (
+    "Your previous response was cut off because it exceeded the output limit. "
+    "Continue from where you left off."
+)
+
 
 def make_config(**overrides: Any) -> AgentLoopConfig:
     """Default AgentLoopConfig for tests; per-test overrides via kwargs."""
@@ -118,6 +126,77 @@ class TestAgentLoopImpl(unittest.TestCase):
     # ---------------------------------------------------------------
     # Normal outcomes
     # ---------------------------------------------------------------
+
+    def test_repeated_identical_tool_call_injects_reminder(self) -> None:
+        """
+        LLS: when the same tool call (name and arguments) repeats 4
+        consecutive times, a reminder is injected once per run and the loop
+        continues to a FinalAnswer.
+        """
+        tool_call = make_tool_call("verify", "call_loop", {})
+        responses = [
+            make_response(content=None, tool_calls=[tool_call], finish_reason="tool_calls")
+        ] * 5
+        responses.append(make_response(content="done", finish_reason="stop"))
+        self.mock_client.chat.completions.create.side_effect = responses
+
+        events: List[Tuple[str, Dict[str, Any]]] = []
+
+        def logger(event: str, data: Dict[str, Any]) -> None:
+            events.append((event, data))
+
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+            return ToolResult(
+                content="no files changed", content_id=None, stub_previous=False
+            )
+
+        agent = AgentLoopImpl(make_config(max_iterations=10))
+        result = agent.run_agent(
+            prompt="update the spec",
+            tools=make_tool_definitions(),
+            tool_executor=executor,
+            logger=logger,
+        )
+        self.assertIsInstance(result, FinalAnswer)
+        reminders = [d for e, d in events if e == "reminder_injected"]
+        self.assertEqual(len(reminders), 1)
+        self.assertIn("verify", reminders[0]["message"])
+        # The reminder text is present in the conversation history.
+        history_text = " ".join(str(m.get("content", "")) for m in result.history)
+        self.assertIn("times in a row", history_text)
+    def test_loop_reminder_not_injected_for_distinct_calls(self) -> None:
+        """
+        LLS: a reminder is injected only for repeated identical calls;
+        distinct calls reset the repetition counter.
+        """
+        call_a = make_tool_call("read_file", "call_a", {"file_path": "f"})
+        call_b = make_tool_call("read_file", "call_b", {"file_path": "g"})
+        responses = [
+            make_response(content=None, tool_calls=[call_a], finish_reason="tool_calls"),
+            make_response(content=None, tool_calls=[call_b], finish_reason="tool_calls"),
+            make_response(content=None, tool_calls=[call_a], finish_reason="tool_calls"),
+            make_response(content="done", finish_reason="stop"),
+        ]
+        self.mock_client.chat.completions.create.side_effect = responses
+
+        events: List[Tuple[str, Dict[str, Any]]] = []
+
+        def logger(event: str, data: Dict[str, Any]) -> None:
+            events.append((event, data))
+
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+            return ToolResult(content="ok", content_id=None, stub_previous=False)
+
+        agent = AgentLoopImpl(make_config(max_iterations=10))
+        result = agent.run_agent(
+            prompt="do it",
+            tools=make_tool_definitions(),
+            tool_executor=executor,
+            logger=logger,
+        )
+        self.assertIsInstance(result, FinalAnswer)
+        reminders = [d for e, d in events if e == "reminder_injected"]
+        self.assertEqual(reminders, [])
 
     def test_final_answer_when_model_stops_with_content(self) -> None:
         """
@@ -276,7 +355,9 @@ class TestAgentLoopImpl(unittest.TestCase):
         """
         LLS: returns (error, history) when the API returns a malformed
         response: empty choices, stop-without-content, tool_calls-without-calls,
-        and unknown finish_reason (plus length/content_filter truncation).
+        content_filter truncation, and unknown finish_reason. A truncated
+        response (finish_reason 'length') is not malformed: it resumes
+        generation (see the truncation tests).
         """
         cases: List[Tuple[Any, str]] = [
             (make_response(choices=[]), "API returned empty response"),
@@ -289,8 +370,8 @@ class TestAgentLoopImpl(unittest.TestCase):
                 "API indicated tool_calls but no tool_calls present",
             ),
             (
-                make_response(content="x", finish_reason="length"),
-                "Incomplete response: length",
+                make_response(content="x", finish_reason="content_filter"),
+                "Incomplete response: content_filter",
             ),
             (
                 make_response(content="x", finish_reason="bogus"),
@@ -310,6 +391,274 @@ class TestAgentLoopImpl(unittest.TestCase):
                 assert isinstance(error, str)
                 assert error == expected_error
                 assert isinstance(history, list)
+
+    # ---------------------------------------------------------------
+    # Truncated responses (finish_reason 'length')
+    # ---------------------------------------------------------------
+
+    def test_truncated_response_continues_to_final_answer(self) -> None:
+        """
+        LLS: a response truncated at the generation limit is not treated as
+        a final answer; the default continuation prompt is appended and the
+        loop resumes with a follow-up API call.
+        """
+        self.mock_client.chat.completions.create.side_effect = [
+            make_response(content="Let me think...", finish_reason="length"),
+            make_response(content="The final answer.", finish_reason="stop"),
+        ]
+
+        result = self.agent.run_agent(
+            prompt="Solve it",
+            tools=[],
+            tool_executor=lambda name, arguments: Continue(),
+        )
+
+        assert isinstance(result, FinalAnswer)
+        assert result.answer == "The final answer."
+        assert self.mock_client.chat.completions.create.call_count == 2
+
+        history = result.history
+        # The truncated assistant content is present, followed by the default
+        # continuation prompt (pinned in the impl LLS).
+        truncated = [
+            m
+            for m in history
+            if m.get("role") == "assistant" and m.get("content") == "Let me think..."
+        ]
+        assert len(truncated) == 1
+        continuation = [
+            m
+            for m in history
+            if m.get("role") == "user" and m.get("content") == DEFAULT_CONTINUATION_PROMPT
+        ]
+        assert len(continuation) == 1
+        assert history.index(truncated[0]) < history.index(continuation[0])
+
+        # The continuation prompt is included in the follow-up API call.
+        second_messages = self.mock_client.chat.completions.create.call_args_list[1].kwargs[
+            "messages"
+        ]
+        assert any(
+            m.get("role") == "user" and m.get("content") == DEFAULT_CONTINUATION_PROMPT
+            for m in second_messages
+        )
+
+    def test_truncated_response_tool_calls_never_executed(self) -> None:
+        """
+        LLS: tool calls present in a truncated response are not executed and
+        not retried; the assistant message appended from the truncated
+        response omits them.
+        """
+        tool_call = make_tool_call("get_weather", "call_1", {"location": "SF"})
+        self.mock_client.chat.completions.create.side_effect = [
+            make_response(
+                content="Let me check the weather...",
+                tool_calls=[tool_call],
+                finish_reason="length",
+            ),
+            make_response(content="It is sunny.", finish_reason="stop"),
+        ]
+
+        invocations: List[Tuple[str, Dict[str, Any]]] = []
+
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+            invocations.append((name, arguments))
+            return ToolResult(content="x", content_id=None, stub_previous=False)
+
+        result = self.agent.run_agent(
+            prompt="Weather?",
+            tools=make_tool_definitions(),
+            tool_executor=executor,
+        )
+
+        assert isinstance(result, FinalAnswer)
+        assert result.answer == "It is sunny."
+        # The truncated tool call is never executed and never retried.
+        assert invocations == []
+
+        # The appended assistant message omits the tool calls.
+        truncated_assistant = [
+            m
+            for m in result.history
+            if m.get("role") == "assistant"
+            and m.get("content") == "Let me check the weather..."
+        ]
+        assert len(truncated_assistant) == 1
+        assert "tool_calls" not in truncated_assistant[0]
+
+        # No tool calls from the truncated response reach any API request.
+        for call in self.mock_client.chat.completions.create.call_args_list:
+            for msg in call.kwargs["messages"]:
+                assert not msg.get("tool_calls")
+
+    def test_truncated_response_without_content_appends_only_continuation(self) -> None:
+        """
+        LLS: a truncated response with neither content nor tool calls is not
+        appended; only the continuation prompt follows.
+        """
+        self.mock_client.chat.completions.create.side_effect = [
+            make_response(content=None, tool_calls=None, finish_reason="length"),
+            make_response(content="Done.", finish_reason="stop"),
+        ]
+
+        result = self.agent.run_agent(
+            prompt="Go",
+            tools=[],
+            tool_executor=lambda name, arguments: Continue(),
+        )
+
+        assert isinstance(result, FinalAnswer)
+        assert result.answer == "Done."
+        assistant_messages = [m for m in result.history if m.get("role") == "assistant"]
+        assert len(assistant_messages) == 1  # only the final answer's assistant message
+        assert assistant_messages[0]["content"] == "Done."
+
+    def test_degenerate_truncated_response_signals_failure(self) -> None:
+        """
+        LLS: a truncated response whose content is a single character
+        repeated (all characters identical) is not resumed; the run returns
+        (error, history) with the pinned error text, and neither the
+        truncated response nor the continuation prompt is appended.
+        """
+        self.mock_client.chat.completions.create.return_value = make_response(
+            content="!" * 4096, finish_reason="length"
+        )
+
+        result = self.agent.run_agent(
+            prompt="Go",
+            tools=[],
+            tool_executor=lambda name, arguments: Continue(),
+        )
+
+        assert isinstance(result, tuple)
+        error, history = result
+        assert isinstance(error, str)
+        # Pinned in the impl LLS (Error Handling).
+        assert error == "Degenerate truncated response: single character repeated"
+        # Nothing appended for the degenerate turn: only the user prompt.
+        assert [m["role"] for m in history] == ["user"]
+        assert not any(
+            m.get("content") == DEFAULT_CONTINUATION_PROMPT for m in history
+        )
+        # No continuation, no follow-up request.
+        assert self.mock_client.chat.completions.create.call_count == 1
+
+    def test_single_character_truncated_response_signals_failure(self) -> None:
+        """
+        LLS: a truncated response of a single character is degenerate (all
+        characters identical) and signals failure.
+        """
+        self.mock_client.chat.completions.create.return_value = make_response(
+            content="!", finish_reason="length"
+        )
+
+        result = self.agent.run_agent(
+            prompt="Go",
+            tools=[],
+            tool_executor=lambda name, arguments: Continue(),
+        )
+
+        assert isinstance(result, tuple)
+        error, history = result
+        assert isinstance(error, str)
+        assert error == "Degenerate truncated response: single character repeated"
+        assert [m["role"] for m in history] == ["user"]
+
+    def test_truncated_response_uses_custom_continuation_prompt(self) -> None:
+        """
+        LLS: when continuation_prompt is configured, it is appended instead
+        of the default.
+        """
+        agent = AgentLoopImpl(make_config(continuation_prompt="Keep going!"))
+        self.mock_client.chat.completions.create.side_effect = [
+            make_response(content="Partial.", finish_reason="length"),
+            make_response(content="Done.", finish_reason="stop"),
+        ]
+
+        result = agent.run_agent(
+            prompt="Go",
+            tools=[],
+            tool_executor=lambda name, arguments: Continue(),
+        )
+
+        assert isinstance(result, FinalAnswer)
+        assert result.answer == "Done."
+        assert any(
+            m.get("role") == "user" and m.get("content") == "Keep going!"
+            for m in result.history
+        )
+        assert not any(
+            m.get("role") == "user" and m.get("content") == DEFAULT_CONTINUATION_PROMPT
+            for m in result.history
+        )
+
+    def test_truncation_until_max_iterations_fails(self) -> None:
+        """
+        LLS: each follow-up request counts toward the iteration limit; a run
+        that truncates until the limit is exceeded signals failure.
+        """
+        agent = AgentLoopImpl(make_config(max_iterations=2))
+        self.mock_client.chat.completions.create.return_value = make_response(
+            content="Still going...", finish_reason="length"
+        )
+
+        result = agent.run_agent(
+            prompt="Go",
+            tools=[],
+            tool_executor=lambda name, arguments: Continue(),
+        )
+
+        assert isinstance(result, tuple)
+        error, history = result
+        assert isinstance(error, str)
+        assert "Maximum iterations" in error
+        assert self.mock_client.chat.completions.create.call_count == 2
+        # Each truncated response contributed an assistant message and a
+        # continuation prompt.
+        assert len([m for m in history if m.get("role") == "assistant"]) == 2
+        assert (
+            len([m for m in history if m.get("content") == DEFAULT_CONTINUATION_PROMPT])
+            == 2
+        )
+
+    def test_response_truncated_logger_event(self) -> None:
+        """
+        LLS: a response_truncated event is emitted when the model response
+        stops at the generation limit, with the truncated message and usage.
+        """
+        events: List[Tuple[str, Dict[str, Any]]] = []
+
+        def logger(event: LogEvent, data: Dict[str, Any]) -> None:
+            events.append((event, data))
+
+        self.mock_client.chat.completions.create.side_effect = [
+            make_response(content="Partial.", finish_reason="length"),
+            make_response(content="Done.", finish_reason="stop"),
+        ]
+
+        result = self.agent.run_agent(
+            prompt="Go",
+            tools=[],
+            tool_executor=lambda name, arguments: Continue(),
+            logger=logger,
+        )
+
+        assert isinstance(result, FinalAnswer)
+        truncated_events = [e for e in events if e[0] == "response_truncated"]
+        assert len(truncated_events) == 1
+        assert truncated_events[0][1]["message"]["content"] == "Partial."
+        assert truncated_events[0][1]["usage"] == {
+            "prompt_tokens": 10,
+            "completion_tokens": 20,
+            "total_tokens": 30,
+        }
+        # The continuation prompt append is reported via message_added after
+        # the response_truncated event.
+        assert any(
+            e[0] == "message_added"
+            and e[1]["message"].get("content") == DEFAULT_CONTINUATION_PROMPT
+            for e in events
+        )
 
     def test_tool_executor_exception_returns_error(self) -> None:
         """
@@ -645,6 +994,50 @@ class TestAgentLoopImpl(unittest.TestCase):
         assert tool_msg["tool_call_id"] == "call_1"
         assert tool_msg["content"] == "file data"
 
+    def test_tool_result_note_rendered_into_model_visible_content(self) -> None:
+        """
+        LLS: a ToolResult's note is consumed by the agent's model execution:
+        it is carried as internal metadata (_note) and rendered into the
+        model-visible tool message content, which is otherwise pure file data.
+        """
+        tool_call = make_tool_call("read_file", "call_1", {"path": "/tmp/f.txt"})
+        self.mock_client.chat.completions.create.side_effect = [
+            make_response(content=None, tool_calls=[tool_call], finish_reason="tool_calls"),
+            make_response(content="Done.", finish_reason="stop"),
+        ]
+
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+            return ToolResult(
+                content="file data",
+                content_id="cid",
+                stub_previous=False,
+                note="Read lines 1-2 (2 lines); file has 4 lines; 2 lines remain; continue with start_line=3",
+            )
+
+        result = self.agent.run_agent(
+            prompt="Read the file",
+            tools=make_tool_definitions(),
+            tool_executor=executor,
+        )
+
+        assert isinstance(result, FinalAnswer)
+
+        # The internal history message carries the note as metadata.
+        tool_msg = next(m for m in result.history if m.get("role") == "tool")
+        assert tool_msg["content"] == "file data"
+        assert tool_msg["_note"] == "Read lines 1-2 (2 lines); file has 4 lines; 2 lines remain; continue with start_line=3"
+
+        # The API message renders the note into the content and strips the
+        # internal _note key.
+        second_messages = self.mock_client.chat.completions.create.call_args_list[1].kwargs[
+            "messages"
+        ]
+        api_tool = next(m for m in second_messages if m.get("role") == "tool")
+        assert api_tool["content"] == (
+            "file data\nRead lines 1-2 (2 lines); file has 4 lines; 2 lines remain; continue with start_line=3"
+        )
+        assert "_note" not in api_tool
+
     def test_logger_invoked_after_each_history_update(self) -> None:
         """
         LLS: the logger is invoked after each history update, in
@@ -759,6 +1152,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         assert config.timeout == 60.0
         assert config.max_tokens is None
         assert config.termination_reminder_generator is None
+        assert config.continuation_prompt is None
 
     # ---------------------------------------------------------------
     # Invariants

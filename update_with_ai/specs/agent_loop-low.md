@@ -63,6 +63,7 @@ LogEvent = Literal[
     "tool_called",
     "tool_result",
     "api_response",
+    "response_truncated",
     "reminder_injected",
     "final_answer",
     "run_terminated",
@@ -89,6 +90,7 @@ class AgentLoopConfig:
     timeout: float = 60.0
     max_tokens: int | None = None
     termination_reminder_generator: TerminationReminderGenerator | None = None
+    continuation_prompt: str | None = None
 ```
 
 The client-supplied configuration for the agent loop: connection and processing parameters for the language model service, an optional maximum number of loop iterations, and an optional termination reminder generator. Field meanings:
@@ -101,6 +103,7 @@ The client-supplied configuration for the agent loop: connection and processing 
 - `timeout`: Request timeout in seconds (default: 60.0)
 - `max_tokens`: Maximum tokens to generate (default: None, service default)
 - `termination_reminder_generator`: Optional generator for termination reminders
+- `continuation_prompt`: Prompt appended to resume generation when the model response is truncated (default: None, implementation default used)
 
 ```python
 class AgentLoop(Protocol):
@@ -131,6 +134,11 @@ def run_agent(self, prompt: str, tools: list[ToolDefinition], tool_executor: Too
 - On error, returns `(error, history)` (a loop failure); state unchanged
 - Termination values pass through unchanged from the `Signal[T_tool]` produced by `tool_executor`
 - Final termination is terminal—no further processing (no API calls, no tool executions)
+- A response that stops at the generation limit (a truncated response) is not treated as a final answer
+- On a truncated response, the continuation prompt is appended to the conversation and the loop continues with a follow-up API call
+- A degenerate truncated response (content is a single character repeated) is not resumed; the run signals failure
+- Tool calls present in a truncated response are not executed and not retried; the assistant message appended from the truncated response omits them
+- Each follow-up request counts toward the iteration limit
 - Tool result stubbing follows `tool_provider` semantics exactly:
   - If `content_id` is `None`: result appended unconditionally
   - If `stub_previous` is `True`: all previous non-stubbed results with same `content_id` have their content replaced with a stub; new result appended
@@ -139,10 +147,12 @@ def run_agent(self, prompt: str, tools: list[ToolDefinition], tool_executor: Too
 - Chronological order maintained
 - No state persists between runs
 - `content_id` and `stub_previous` fields stripped before API calls
+- A tool result's `note` is rendered into the model-visible tool message content (appended to the result's content), and the `_note` metadata field is stripped before API calls
 - Logger callback invoked after data appended to history
 - If `tool_executor` returns `Continue`, the loop continues with the model processing the tool results.
 - If `tool_executor` returns `TerminateAgentWithSuccess`, the loop stops and returns `(TerminateAgentWithSuccess, history)`; if it returns `TerminateAgentWithFailure[T_tool]`, the loop stops and returns `(TerminateAgentWithFailure[T_tool], history)`.
 - If `tool_executor` returns `ToolFailure[T_tool]` (a tool failure — the agent misused a tool as specified by the tool provider): the failure message (e.g., the sandbox's reminder of what the agent can do) is appended to the conversation and the loop continues with the model making its next move. Tool failures are recoverable: no session reset, no history clearing, and no agent failure.
+- When the same tool call (name and arguments) is repeated 4 consecutive times, a reminder is injected into the conversation once per run — urging the agent to make progress (change a file with `edit_file`/`replace_lines`/`write_file`, or finish with `succeed`/`fail`/`blame`) — and the loop continues. The repetition counter resets when the call changes or a new run starts.
 - If `tool_executor` raises an exception (an unhandled error by the tool_executor): the agent_loop catches it and returns `(error, history)` (state unchanged).
 
 **Failure Handling:**
@@ -151,6 +161,8 @@ def run_agent(self, prompt: str, tools: list[ToolDefinition], tool_executor: Too
   - API returns malformed response (expected by agent_loop)
   - Tool executor raises exception (tool_executor's unhandled error, caught by agent_loop)
   - Maximum iterations exceeded (expected by agent_loop)
+- A truncated response is not a failure condition: the loop resumes generation (see Postconditions)
+- A degenerate truncated response returns `(error, history)` (a loop failure); the truncated response and the continuation prompt are not appended
 - State unchanged on failure
 - Logger callback exceptions caught and ignored
 
@@ -163,6 +175,7 @@ def run_agent(self, prompt: str, tools: list[ToolDefinition], tool_executor: Too
 | `tool_called` | Model requests tools | `tool_calls`: list[ToolCall] |
 | `tool_result` | Tool results received | `results`: list[ToolResult] |
 | `api_response` | API response received | `usage`: Usage |
+| `response_truncated` | Response truncated at generation limit | `message`: HistoryEntry, `usage`: Usage |
 | `reminder_injected` | Reminder injected | `message`: str |
 | `final_answer` | Final answer produced | `answer`: str, `usage`: Usage, `cumulative_usage`: CumulativeUsage, `final_context_size`: int |
 | `run_terminated` | Termination signaled | `termination_value`: the termination signal's value, `usage`: Usage, `cumulative_usage`: CumulativeUsage, `final_context_size`: int |

@@ -44,6 +44,10 @@ targets, runfiles, bazel-bin).
 
 ## Contract
 
+**The client may:**
+
+- Select an agent configuration by providing a config target label (via a command-line flag, an environment variable, or a build setting), or rely on the default configuration when none is provided.
+
 **The component assumes:**
 
 - A config target, when provided, is a canonical main-repo Bazel label.

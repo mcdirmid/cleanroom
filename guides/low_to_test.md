@@ -1,64 +1,51 @@
 # Guide: Converting an LLS to Tests (without reading the implementation)
 
----
-
-## Overview
+## Purpose
 
 Tests are written from the LLS alone. The implementation Python file is **deliberately not consulted**: the LLS is the contract, and tests written independently of the implementation catch implementation drift. If a test written from the LLS fails, the implementation is wrong — unless the test misread the LLS.
 
-The authoritative reference for the LLS side is `low_level_spec.md`. This guide is the conversion procedure from an implementation LLS (plus the interface LLS and dependency LLSs listed in its dependency comment) to a test module in `tests/` and its BUILD entry. For the implementation side of the same contract, see `low_to_impl.md`; both sides are written from the same LLS and pass when both conform.
+The authoritative reference is `low_level_spec.md`. This guide is the conversion procedure from an implementation LLS (plus the interface and dependency LLSs in its dependency comment) to a test module in `tests/` and its BUILD entry. For the implementation side of the same contract, see `low_to_impl.md`; both sides are written from the same LLS and pass when both conform.
 
-**Test only what the LLS requires.** The LLS requires: postconditions, invariants, and expected failures (the failure signals it names). It does not require internal mechanisms, exact message wording, unspecified ordering, or behavior outside the contract. Testing anything the LLS does not require tests the implementation rather than the contract — it couples the tests to code the LLS leaves free. When in doubt, do not test it. Non-concerns and unexpected failures that are not explicitly listed as concerns are **extremely discouraged** and require an explicit, documented reason.
+**Test only what the LLS requires:** postconditions, invariants, and expected failures (the failure signals it names). It does not require internal mechanisms, exact message wording, unspecified ordering, or behavior outside the contract — testing any of those tests the implementation rather than the contract and couples the tests to code the LLS leaves free. When in doubt, do not test it. Non-concerns and unexpected failures not explicitly listed as concerns are extremely discouraged and require an explicit, documented reason.
 
 ## Reading the LLS
 
-Read the implementation LLS and the full **transitive closure of its dependencies**: every LLS in its dependency comment, every LLS in *their* dependency comments, and so on until no new LLS files remain. The closure matters because dependency mocks must implement the dependency interfaces exactly (signatures, defaults, failure signals) from their own LLSs, and those dependencies may themselves depend on further interfaces.
+Read the implementation LLS and the full **transitive closure of its dependencies**: every LLS in its dependency comment, every LLS in *their* dependency comments, until no new files remain. The closure matters because dependency mocks must implement the dependency interfaces exactly (signatures, defaults, failure signals) from their own LLSs.
 
 Extract the testable claims:
 
-| LLS section | What to test |
-|---|---|
-| Data Types | Construction, field names/types/order, defaults, `Literal` discriminators |
-| Config | Field presence, defaults, wiring of dependency mocks |
-| Behavioral Description | Each bullet → one or more outcome tests |
-| Failure Handling | Each **expected** failure signal → a test |
-| Invariants | Sequence-of-operations tests |
-| Non-Concerns | Pinned choices (test the pin); open choices (do not test — extremely discouraged) |
-| Preconditions | Not tested directly — verified through the mocks, which enforce them (see Mocks) |
+- **Data Types** — construction; field names/types/order; defaults; `Literal` discriminators.
+- **Config** — field presence, defaults, wiring of dependency mocks.
+- **Behavioral Description** — each bullet → one or more outcome tests.
+- **Failure Handling** — each **expected** failure signal → a test.
+- **Invariants** — sequence-of-operations tests.
+- **Non-Concerns** — pinned choices (test the pin); open choices (do not test).
+- **Preconditions** — not tested directly; verified through the mocks, which enforce them (see Mocks).
 
 Do not read the implementation Python file. Do not read the HLS: the LLS is self-contained and is the only contract tests need.
 
 ## Test Module Layout
 
-One test module per implementation LLS, named `<name>_test.py` in `tests/`:
-
-- `specs/csv_inventory_impl-low.md` → `tests/csv_inventory_impl_test.py`
-
-Use `unittest` with `if __name__ == "__main__": unittest.main()` at the end. Group tests into classes by concern (success routing, failure handling, invariants, config).
+One test module per implementation LLS, named `<name>_test.py` in `tests/` (`specs/csv_inventory_impl-low.md` → `tests/csv_inventory_impl_test.py`). Use `unittest` with `if __name__ == "__main__": unittest.main()` at the end. Group tests into classes by concern (success routing, failure handling, invariants, config).
 
 ## What to Test, Section by Section
 
 ### Data Types
 
-- Construct each dataclass with the LLS's fields; assert field values, types, and defaults.
-- Assert `Literal` discriminators where the LLS declares them — they are part of the interface.
-- Exercise values through the interface's Protocol type, not through implementation-only attributes.
+Construct each dataclass with the LLS's fields; assert field values, types, and defaults. Assert `Literal` discriminators where the LLS declares them — they are part of the interface. Exercise values through the interface's Protocol type, not implementation-only attributes.
 
 ### Config
 
-- Construct the implementation with the LLS's Config dataclass; assert the documented defaults.
-- Wire dependency mocks through Config and assert they are actually used (see Mocks).
+Construct the implementation with the LLS's Config dataclass; assert the documented defaults. Wire dependency mocks through Config and assert they are actually used (see Mocks).
 
 ### Behavioral Description
 
 Convert each bullet into assertions:
 
-| LLS outcome statement | Test assertion |
-|---|---|
-| "Provides the current stock level (zero if none)" | Call with a missing/empty SKU; assert the return value |
-| "Adds the given quantity and persists" | Call; assert the return and the observable state (re-read through a fresh instance) |
-| "A write that fails before the replacement leaves the previous file unchanged" | Force the failure (read-only directory, or a patched replace step); assert the previous state is intact |
-| "Is atomic" | Make one step fail; assert no partial state |
+- "Provides the current stock level (zero if none)" → call with a missing/empty SKU; assert the return value.
+- "Adds the given quantity and persists" → call; assert the return and the observable state (re-read through a fresh instance).
+- "A write that fails before the replacement leaves the previous file unchanged" → force the failure (read-only directory, or a patched replace step); assert the previous state is intact.
+- "Is atomic" → make one step fail; assert no partial state.
 
 For stateful behavior, prefer asserting through the public operations (or a fresh instance) over poking internals.
 
@@ -67,8 +54,8 @@ For stateful behavior, prefer asserting through the public operations (or a fres
 Test only the **expected failures** — the failure signals the LLS names. Each named signal gets a test that triggers its condition and asserts the signal:
 
 - Expected failures (policy violations, validation failures) → assert the return signal (`None`, `False`, a failure result).
-- Unexpected failures (precondition violations, filesystem errors, state corruption) are **not listed as concerns and are not tested**. If the implementation LLS documents a violation response (e.g., "unknown SKUs raise an error"), asserting it is permitted — but it is documentation of a violation, not a requirement; do not go looking for more.
-- Error-message wording: assert wording only when the LLS pins the string for testing (concrete strings live in implementation LLSs); otherwise assert only the signal type.
+- Unexpected failures (precondition violations, filesystem errors, state corruption) are not listed as concerns and are not tested. If the implementation LLS documents a violation response (e.g., "unknown SKUs raise an error"), asserting it is permitted — but it is documentation of a violation, not a requirement; do not go looking for more.
+- Error-message wording: assert only when the LLS pins the string for testing; otherwise assert only the signal type.
 
 ### Invariants
 
@@ -76,16 +63,15 @@ Test invariants as properties across sequences of operations:
 
 - "No state persists between runs" → a fresh instance behaves freshly.
 - "Errors leave the filesystem unchanged" → snapshot state before a failing operation; assert it is unchanged after.
-- "All operations use resolved paths" → assert the observable effect of the resolution (a file created at the mapped location, not the virtual name).
+- "All operations use resolved paths" → assert the observable effect of resolution (a file created at the mapped location, not the virtual name).
 
 ### Non-Concerns
 
-- Pinned non-concerns (e.g., "the fallback text is pinned to ...") → assert the pin; it is now part of the contract.
-- Open non-concerns → **do not test, extremely discouraged.** No assertions about unspecified ordering, algorithm choice, representation, format, or mechanism — the LLS explicitly leaves these free, and a test that pins one rewrites the contract. If a test for an open non-concern seems necessary, the resolution is to pin the aspect in the LLS first, not to test it silently.
+Pinned non-concerns (e.g., "the fallback text is pinned to ...") are asserted — the pin is part of the contract. Open non-concerns are **not tested**: no assertions about unspecified ordering, algorithm choice, representation, format, or mechanism. If a test for an open non-concern seems necessary, pin the aspect in the LLS first — never test it silently.
 
 ## Mocks
 
-Implement the **dependency interfaces** as mocks, from their LLSs (the transitive closure read above) — never mock the system under test. The implementation LLS's dependency comment lists the interfaces it uses; each becomes a small stub that records calls, returns scripted results, and **enforces the interface's preconditions**:
+Implement the **dependency interfaces** as mocks, from their LLSs (the transitive closure read above) — never mock the system under test. Each dependency becomes a small stub that records calls, returns scripted results, and **enforces the interface's preconditions**:
 
 ```python
 class FakeInventory(Inventory):
@@ -108,11 +94,11 @@ class FakeInventory(Inventory):
         self._stock.pop(sku, None)
 ```
 
-**Preconditions are enforced by the mocks, not tested directly.** A mock implements its interface's preconditions from the interface LLS and raises when the component under test violates one. A test that drives the component through a valid scenario then fails if the component ever calls a dependency with invalid input — the raise surfaces the misuse. This verifies the component uses its dependencies correctly without writing a separate precondition test (precondition violations are unexpected failures and are themselves not to be tested directly).
+**Preconditions are enforced by the mocks, not tested directly.** A mock implements its interface's preconditions from the interface LLS and raises when the component under test violates one; a test that drives the component through a valid scenario then fails if the component ever calls a dependency with invalid input. This verifies correct dependency use without a separate precondition test (precondition violations are unexpected failures, themselves not to be tested directly).
 
-Use the mocks to assert both outcomes **and** interaction: which dependency operations were called, in what order, with what arguments. Recording calls is how ordering and routing guarantees get tested.
+Use the mocks to assert both outcomes **and** interaction: which dependency operations were called, in what order, with what arguments — recording calls is how ordering and routing guarantees get tested.
 
-For external systems (e.g., a payment gateway), mock the boundary with realistic fixtures — patch the client constructor the implementation uses, and script responses whose shapes match the types the interface LLS declares (charges, receipts, settlement records). Enforce the boundary's preconditions the same way: raise when the component sends input the interface contract does not allow.
+For external systems (e.g., a payment gateway), mock the boundary with realistic fixtures: patch the client constructor the implementation uses, and script responses whose shapes match the types the interface LLS declares (charges, receipts, settlement records). Enforce the boundary's preconditions the same way — raise when the component sends input the interface contract does not allow.
 
 ## The Bias Rule
 
@@ -121,7 +107,7 @@ Tests verify that the implementation satisfies the LLS — they are not written 
 - If a test fails, first re-read the LLS to confirm the assertion is correct. If the LLS supports it, the implementation is wrong: fix the implementation (per `low_to_impl.md`), not the test.
 - Do not weaken assertions to match observed behavior; that silently rewrites the contract.
 - Do not write tests by reading the implementation and transcribing its behavior; write from the LLS and let the implementation conform.
-- The only legitimate test-side fixes are misreadings of the LLS: wrong signal, wrong precondition, or testing something the LLS does not require (an open non-concern or an unexpected failure).
+- The only legitimate test-side fixes are misreadings of the LLS: wrong signal, wrong precondition, or testing something the LLS does not require.
 
 ## The BUILD File for Tests
 
@@ -152,8 +138,8 @@ pyright_test(
 
 ## What NOT to Test
 
-- **Open non-concerns** — anything the LLS explicitly leaves unspecified: ordering, algorithm choice, representation, log/text format, message wording, chunk boundaries. Extremely discouraged.
-- **Unexpected failures** not explicitly listed as concerns — precondition violations, filesystem errors, state corruption. The LLS names the failures it handles; everything else is outside the contract.
+- **Open non-concerns** — anything the LLS leaves unspecified: ordering, algorithm choice, representation, log/text format, message wording, chunk boundaries.
+- **Unexpected failures** not explicitly listed as concerns — precondition violations, filesystem errors, state corruption.
 - **Internal mechanisms** the LLS does not state (cache internals, temporary-file write steps) — unless pinned in a Non-Concern.
 - **Exact error-message wording** — unless the LLS pins the string for testing.
 - **The HLS** — the LLS is the contract; the HLS carries no testable detail the LLS omits.

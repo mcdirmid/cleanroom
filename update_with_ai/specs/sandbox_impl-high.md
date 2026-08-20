@@ -11,8 +11,8 @@ terms (from tool_provider): tool failure
 ### Behavior
 
 - Uses the filesystem directly for all operations; verification is delegated to the injected callback when provided.
-- Provides the following tools, each as a fixed function: file operations (reading, writing, searching); Python chunk operations (reading and replacing semantic chunks); verification (running the injected callback); termination (success, failure, blame).
-- Tools are conditionally included: chunking tools only if Python files are accessible; the verification tool only if the verification callback is non-null; the blame tool only if blame targets are non-empty.
+- Provides the following tools, each as a fixed function: file operations (reading, writing, content-based editing, line-range editing, searching); Python chunk operations (reading and replacing semantic chunks); verification (reporting the diff of the run's changes and, when configured, running the injected callback); termination (success, failure, blame).
+- Tools are conditionally included: chunking tools only if Python files are accessible; the blame tool only if blame targets are non-empty. The verification tool is always included.
 
 ### Ordering
 
