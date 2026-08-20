@@ -52,6 +52,8 @@ agent_config(
     temperature = "0.7",
     timeout_seconds = "100.0",
     api_key_env = "OPENAI_API_KEY",
+    # so spiraling is detected quickly.
+    max_tokens = 1024,
 )
 
 # All configs bundled into every *_clean binary's runfiles so any of them can
