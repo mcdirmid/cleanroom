@@ -23,7 +23,6 @@ from .agent_loop import (
     AgentLoop,
     AgentLoopConfig,
     AgentResult,
-    FinalAnswer,
     LoggerCallback,
     LogEvent,
 )
@@ -76,10 +75,9 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
 
         Postconditions:
         - Returns CleanResult mapping the agent run outcome per the HLS contract
-        - ChangeResult if FinalAnswer and write_occurred
-        - FeedbackResult if the termination value is a FeedbackResult and targets are valid dependencies
-        - NoChangeResult otherwise
-        - FailureResult on agent failure
+        - ChangeResult/NoChangeResult/FeedbackResult from the termination signal's value
+        - FailureResult on agent failure (including a loop failure: there is no
+          free-text final answer — a run completes only via a termination tool)
 
         Failure Handling:
         - Agent failures signal failure per the dag_clean_logic contract,
@@ -114,7 +112,7 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
                 return method()
             except TypeError as e:
                 # A parameter-name slip (e.g. "new_str" instead of
-                # "new_content"): tell the agent which parameters the tool
+                # "new_str"): tell the agent which parameters the tool
                 # actually accepts so it can retry without re-reading.
                 params = "unknown"
                 for td in tools:
@@ -129,12 +127,12 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
             except Exception as e:
                 return ToolFailure[str](str(e))
 
-        context: List[dict] = [
-            {"role": "user", "content": msg} for msg in messages
-        ]
-
-        # The initial instructions name the files the agent may read and
-        # write (bare names; the sandbox resolves them to real paths).
+        # Prompt composition (per the impl LLS): the run's system prompt is the
+        # node's prompt augmented with lines naming the readable and writable
+        # files (bare names; the sandbox resolves them to real paths); the
+        # run's user prompt is the node's pending messages joined by newlines
+        # (empty when there are no pending messages), so feedback delivered
+        # via a *_feedback target is actually acted on during cleaning.
         readable = sorted(set(node_def.sandbox_config.readable_paths))
         writable = sorted(set(node_def.sandbox_config.writable_paths))
         file_lines: List[str] = []
@@ -143,17 +141,10 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
         if writable:
             file_lines.append(f"Files you can write: {', '.join(writable)}")
 
-        prompt = node_def.prompt
+        system_prompt = node_def.prompt
         if file_lines:
-            prompt = f"{prompt}\n\n" + "\n".join(file_lines)
-
-        # Pending messages (change/feedback received from other nodes) are
-        # surfaced to the agent as context on top of the node's prompt, so
-        # feedback delivered via a *_feedback target is actually acted on
-        # during cleaning.
-        if context:
-            feedback_text = "\n".join(f"- {m}" for m in messages)
-            prompt = f"{prompt}\n\nFeedback from dependents:\n{feedback_text}"
+            system_prompt = f"{system_prompt}\n\n" + "\n".join(file_lines)
+        prompt = "\n".join(messages)
 
         # Wrap the configured logger with the node id so consumers (stdout
         # printer, transcript file) can attribute events to the cleaned node.
@@ -169,11 +160,11 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
             prompt=prompt,
             tools=tools,
             tool_executor=_tool_executor,
+            system_prompt=system_prompt,
             logger=logger,
         )
 
-        write_occurred = sandbox.get_write_occurred()
-        return self._map_result(agent_result, node_id, write_occurred)
+        return self._map_result(agent_result, node_id)
 
     def is_dirty(self, node_id: NodeId, pending_messages: List[NodeMessage]) -> bool:
         """
@@ -199,14 +190,13 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
         self,
         result: AgentResult,
         node_id: NodeId,
-        write_occurred: bool,
     ) -> CleanResult:
-        """Map the agent run outcome to a CleanResult per the HLS contract."""
-        if isinstance(result, FinalAnswer):
-            if write_occurred:
-                return ChangeResult(messages=[str(result.answer)])
-            return NoChangeResult()
+        """Map the agent run outcome to a CleanResult per the HLS contract.
 
+        There is no free-text final answer: a run either terminates via a
+        termination tool (succeed/fail/blame) or fails in the loop, so the
+        change message is always the sandbox's bounded change summary.
+        """
         if isinstance(result, tuple):
             # Termination outcomes pair the tool-provider termination signal
             # with the conversation history; a loop failure pairs an error

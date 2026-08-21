@@ -9,22 +9,27 @@ Checks (E = error, exits nonzero; W = warning, does not affect exit code):
   E  filename/header mismatch
   E  unknown front-matter key
   E  `terms (owned)` in an implementation spec (terms are owned by interfaces)
-  E  `terms (owned)` without an `## Owned definitions` section, or vice versa
+  E  `terms (owned)` without a `## Terms` section, or vice versa
   E  `terms (from X)` where X has no spec, or the term is not owned by X
+  E  `terms (refined)` in an interface spec (only implementations refine)
   E  `terms (refined)` term not owned by the fulfilled interface or a listed owner
-  E  refined term without a refinement detail (impl: `### Refined terms`; interface: mentioned in Owned definitions / Observable dataflow)
+  E  refined term without a `[refines]` Deltas line with its concrete definition
   E  multi-word term used in the body without being owned, referenced, or refined
-  E  table in a file without a sanctioned table (agent_loop logger events, agent_node_clean_logic_impl outcome mapping)
+  E  table in a file without a sanctioned table (agent_loop events, agent_node_clean_logic_impl outcome mapping)
   E  non-rectangular table (row column count differs from the header)
   E  "client" appears in an implementation spec
   E  "returns" appears anywhere (prohibited; use provides/signals/delegates)
-  E  Observable dataflow line states preservation ("unchanged", "as declared", "as stored", "the declared/recorded X", "exactly as")
-  E  old-format markers (HTML dependency comments, "## Interface:", exports/imports sections, "does not restate")
+  E  unknown section (section inventory is closed: Purpose/Terms/Contract/Non-concerns for interfaces; Deltas/Non-concerns for implementations)
+  E  `###` sub-heading (use a Contract block or a Deltas tag)
+  E  old-format markers (Observable dataflow, Owned definitions, impl sub-sections, "**The client ...", Deltas beyond the)
   E  backticked import that is not an existing spec
-  E  interface spec without `## Contract`; implementation spec without `## Deltas beyond the`
+  E  interface spec without `## Contract`; implementation spec without `## Deltas`
   E  interface spec (filename without "impl") containing `fulfills:`; implementation spec (`*_impl*` filename) missing `fulfills:`
   E  `fulfills:` or `imports:` referencing the file itself (self-dependency)
   E  section order deviates from the canonical order for the spec kind
+  E  Deltas line with an unknown tag (allowed: ordering, boundary, state, external, failure, refines)
+  E  Deltas line restating the fulfilled contract ("per the <interface> contract")
+  E  Contract missing a required block (**Operations**, **Guarantees**, **Assumptions**)
   W  `## Unported` section present (unported knowledge remains)
   W  no `## Non-concerns` section
 """
@@ -44,24 +49,19 @@ SANCTIONED_TABLES = {"agent_loop-high.md", "agent_node_clean_logic_impl-high.md"
 # Single-word terms distinctive enough to enforce like multi-word terms.
 STRONG_TERMS = {"blame", "dirty", "cleaning", "stub"}
 
-# Preservation phrases prohibited in the Observable dataflow section (guide:
-# "no mention means no change"); the Contract may assert fidelity.
-_DATAFLOW_PRESERVATION_RE = re.compile(
-    r"\b(?:as declared|as stored|unchanged|the declared|the recorded|exactly as)\b",
-    re.IGNORECASE,
-)
 # "run" (agent_loop) is checked only in nominal usage: verbs like "run a cleaning
 # pass" are ordinary English and must not be flagged.
 RUN_PATTERN = re.compile(r"\b(?:a|an|the|agent|this|that|each|every|one|a single)\s+run\b", re.I)
+
+# Deltas line tags (guide: Deltas Tags). Untagged lines are behavior deltas.
+DELTAS_TAGS = {"ordering", "boundary", "state", "external", "failure", "refines"}
 
 FRONT_MATTER_KEY = re.compile(
     r"^(fulfills|imports|terms \(owned\)|terms \(refined\)|terms \(from [\w]+\)):"
 )
 TERMS_FROM = re.compile(r"^terms \(from ([\w]+)\): (.*)$")
-CANONICAL_INTERFACE_SECTIONS = [
-    "Purpose", "Owned definitions", "Observable dataflow", "Contract", "Non-concerns",
-]
-CANONICAL_IMPL_SECTIONS = ["Deltas beyond the", "Non-concerns"]
+CANONICAL_INTERFACE_SECTIONS = ["Purpose", "Terms", "Contract", "Non-concerns"]
+CANONICAL_IMPL_SECTIONS = ["Deltas", "Non-concerns"]
 OLD_FORMAT_MARKERS = [
     "<!-- Dependencies",
     "## Interface:",
@@ -69,6 +69,18 @@ OLD_FORMAT_MARKERS = [
     "**This implementation exports:**",
     "**This implementation imports:**",
     "does not restate it here",
+    "## Observable dataflow",
+    "## Owned definitions",
+    "### Behavior",
+    "### Ordering",
+    "### State Management",
+    "### External Dependencies",
+    "### Error Handling",
+    "### Operation Boundaries",
+    "### Refined terms",
+    "**The client",
+    "**For each",
+    "Deltas beyond the",
 ]
 
 errors: list[str] = []
@@ -141,8 +153,8 @@ def read_all_owned(files: list[Path] | None = None) -> dict[str, str]:
 
 
 def parse_refined(value: str) -> set[str]:
-    """Parse 'a -> desc, b -> desc' into term names {a, b}."""
-    return {t.strip() for t in re.findall(r"([\w ]+?) ->", value)}
+    """Parse 'a, b' (names only; details live in [refines] Deltas lines)."""
+    return {t.strip() for t in value.split(",") if t.strip()}
 
 
 def term_in_text(term: str, text: str) -> bool:
@@ -184,16 +196,16 @@ def check_terms(f: Path, text: str, owned: set[str], terms_from: dict[str, set[s
     if is_impl and owned:
         err(f, f"implementation spec declares `terms (owned)`; terms are owned by interfaces: {sorted(owned)}")
 
-    has_defs = "## Owned definitions" in text
+    has_defs = "## Terms" in text
     if owned and not has_defs:
-        err(f, "`terms (owned)` present but no `## Owned definitions` section")
+        err(f, "`terms (owned)` present but no `## Terms` section")
     if has_defs and not owned:
-        err(f, "`## Owned definitions` present but no `terms (owned)` front-matter line")
+        err(f, "`## Terms` present but no `terms (owned)` front-matter line")
     if owned and has_defs:
-        defs_text = get_section(split_front_matter(text)[1], "Owned definitions") or ""
+        defs_text = get_section(split_front_matter(text)[1], "Terms") or ""
         for term in owned:
             if not re.search(rf"^-\s*\**{re.escape(term)}\**\s*:", defs_text, re.M | re.I):
-                err(f, f"owned term '{term}' has no definition line in `## Owned definitions`")
+                err(f, f"owned term '{term}' has no definition line in `## Terms`")
 
     for owner, terms in terms_from.items():
         if owner not in names:
@@ -215,18 +227,16 @@ def check_terms(f: Path, text: str, owned: set[str], terms_from: dict[str, set[s
             continue
         if owned_by[term] not in allowed_owners and owned_by[term] != stem_of(f):
             err(f, f"refined term '{term}' is owned by {owned_by[term]}, not by the fulfilled interface or a listed owner")
-    if refined:
-        if is_impl:
-            if "### Refined terms" not in text:
-                err(f, "`terms (refined)` present but no `### Refined terms` section in the Deltas")
-        else:
-            detail = (get_section(body, "Owned definitions") or "") + (get_section(body, "Observable dataflow") or "")
-            for term in refined:
-                if not term_in_text(term, detail):
-                    err(f, f"refined term '{term}' not detailed in Owned definitions or Observable dataflow")
+    if refined and not is_impl:
+        err(f, "interface spec declares `terms (refined)`; only implementations refine terms")
+    if refined and is_impl:
+        deltas = get_section(body, "Deltas") or ""
+        for term in refined:
+            if not re.search(rf"\[refines\]\s*{re.escape(term)}\s*->", deltas):
+                err(f, f"refined term '{term}' has no `[refines]` Deltas line with its concrete definition")
 
     allowed = owned | {t for ts in terms_from.values() for t in ts} | refined
-    body_without_defs = "\n".join(txt for h, txt in sections(body) if h != "Owned definitions")
+    body_without_defs = "\n".join(txt for h, txt in sections(body) if h != "Terms")
     for term, owner in owned_by.items():
         if owner == stem_of(f) or term in allowed:
             continue
@@ -269,22 +279,29 @@ def check_structure(f: Path, text: str, files: list[Path] | None = None) -> tupl
                 err(f, f"fulfills: spec cannot fulfill itself ('{target}')")
         if "## Contract" in body:
             err(f, "implementation spec contains `## Contract`; the contract is inherited from the fulfilled interface")
-        if "## Deltas beyond the" not in body:
-            err(f, "implementation spec missing `## Deltas beyond the <interface> contract`")
+        if "## Deltas" not in body:
+            err(f, "implementation spec missing `## Deltas`")
     else:
         if m is not None:
             err(f, "interface spec contains `fulfills:`; only implementation specs (named *_impl*) fulfill an interface")
         if "## Contract" not in body:
             err(f, "interface spec missing `## Contract`")
-        if "## Deltas beyond the" in body:
+        if "## Deltas" in body:
             err(f, "interface spec contains a Deltas section")
 
     canon = CANONICAL_IMPL_SECTIONS if is_impl else CANONICAL_INTERFACE_SECTIONS
     heads = [h for h, _ in sections(body)]
+    for h in heads:
+        if h not in canon:
+            err(f, f"unknown section '## {h}'; the section inventory is closed: {', '.join(canon)}")
     present = [c for c in canon if any(h.startswith(c) for h in heads)]
     actual = [next(c for c in canon if h.startswith(c)) for h in heads if any(h.startswith(c) for c in canon)]
     if actual != present:
         err(f, f"section order {actual} deviates from canonical {present}")
+
+    for line in body.splitlines():
+        if re.match(r"^#{3,4} ", line):
+            err(f, f"sub-heading {line.strip()!r} is not allowed; use a Contract block or a Deltas tag")
 
     if "## Unported" in [h for h, _ in sections(body)]:
         warn(f, "`## Unported` section present (unported knowledge remains)")
@@ -296,20 +313,28 @@ def check_structure(f: Path, text: str, files: list[Path] | None = None) -> tupl
     return is_impl, body
 
 
-def check_dataflow(f: Path, body: str) -> None:
-    """Flag preservation/echo lines in the Observable dataflow section.
+def check_deltas(f: Path, body: str) -> None:
+    """Validate implementation Deltas: tags and delta-only lines.
 
-    Guide: each dataflow line states one change; preservation lines
-    ("unchanged", "as declared", "as stored", "the declared/recorded X",
-    "exactly as") are prohibited — no mention means no change. The Contract
-    may assert fidelity; this check is scoped to the dataflow section only.
+    Guide: Deltas is a flat list; a line's dominant concern is named by an
+    optional tag (ordering/boundary/state/external/failure/refines); a line
+    that restates the fulfilled contract ("per the <interface> contract")
+    is a restatement and is prohibited.
     """
-    dataflow = get_section(body, "Observable dataflow")
-    if not dataflow:
-        return
-    for line in dataflow.splitlines():
-        if _DATAFLOW_PRESERVATION_RE.search(line):
-            err(f, f"Observable dataflow preservation line (prohibited): {line.strip()}")
+    deltas = get_section(body, "Deltas")
+    if deltas is None:
+        return  # a missing Deltas is reported by check_structure
+    for line in deltas.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        m = re.match(r"^-\s*\[([^\]]*)\]", stripped)
+        if m:
+            tag = m.group(1)
+            if tag not in DELTAS_TAGS:
+                err(f, f"unknown Deltas tag [{tag}]; allowed: {sorted(DELTAS_TAGS)} — {stripped[:70]}")
+        if not stripped.startswith("|") and re.search(r"per the .*contract", stripped, re.I):
+            err(f, f"Deltas line restates the fulfilled contract; deltas only: {stripped[:80]}")
 
 
 def check_language(f: Path, text: str) -> None:
@@ -388,21 +413,21 @@ def _stem_from_spec_path(path: str) -> str:
     return Path(path).stem.removesuffix("-high")
 
 
-def check_contract_subsections(f: Path, text: str, is_impl: bool) -> None:
-    """Interface specs' ## Contract must contain its core sub-sections.
+def check_contract_blocks(f: Path, text: str, is_impl: bool) -> None:
+    """Interface specs' ## Contract must contain its core blocks.
 
-    The guide's Document Structure requires Contract sub-sections for client
-    actions, guarantees, and assumptions; a missing sub-section (e.g. a
-    trimmed `component guarantees`) is a structure error.
+    Guide: the Contract is a set of labeled blocks; Operations, Guarantees,
+    and Assumptions are standard (Inputs and named blocks are optional). A
+    missing block (e.g. a trimmed guarantees block) is a structure error.
     """
     if is_impl:
         return
     contract = get_section(text, "Contract")
     if contract is None:
         return  # a missing Contract is reported by check_structure
-    for sub in ("**The client may:**", "**The component guarantees:**", "**The component assumes:**"):
-        if sub not in contract:
-            err(f, f"## Contract is missing its '{sub}' sub-section")
+    for block in ("**Operations**", "**Guarantees**", "**Assumptions**"):
+        if block not in contract:
+            err(f, f"## Contract is missing its '{block}' block")
 
 
 def check_sync(f: Path, fm: str, deps: list[str]) -> None:
@@ -456,10 +481,10 @@ def main(argv: list[str]) -> int:
         is_impl, body = check_structure(f, text, all_files)
         check_terms(f, text, owned, terms_from, refined, is_impl, all_files)
         check_language(f, text)
-        check_dataflow(f, body)
+        check_deltas(f, body)
         check_imports(f, fm, all_files)
         check_tables(f, text)
-        check_contract_subsections(f, text, is_impl)
+        check_contract_blocks(f, text, is_impl)
         if deps:
             check_sync(f, fm, deps)
         if not body.strip():

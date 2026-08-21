@@ -15,9 +15,10 @@ pyright_test(
     name = "agent_loop_impl_test",
     srcs = ["agent_loop_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:tool_provider", 
-        "//update_with_ai/lib:agent_loop", 
-        "//update_with_ai/lib:agent_loop_impl", 
+        "//update_with_ai/lib:tool_provider",
+        "//update_with_ai/lib:agent_loop",
+        "//update_with_ai/lib:agent_loop_impl",
+        "//update_with_ai/lib:dag_clean_logic",
     ],
 )
 

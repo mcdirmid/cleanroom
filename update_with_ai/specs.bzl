@@ -237,7 +237,9 @@ def update_spec_with_ai(name, spec_deps, visibility = None):
             "Convert the high-level specification (HLS) for %s (in %s-high.md) into the " +
             "low-level specification (LLS) for %s (in %s-low.md); if the LLS already exists, " +
             "update it rather than create it. The LLS must be aligned with the HLS according to " +
-            "high_to_low.md."
+            "high_to_low.md. Make targeted edits only for substantive issues; do not chase " +
+            "formatting nits; re-read the file (read_file with include_line_numbers=True) " +
+            "before each replace_lines edit."
         ) % (name, name, name, name),
         srcs = [name + "-low.md"],
         deps = ["//guides:high_to_low"],

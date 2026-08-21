@@ -7,18 +7,13 @@
 # Implementation LLS: bazel_node_loader_impl
 
 ## Data Types
-
 ```python
 from bazel_node_loader import BazelNodeLoader, BazNode
 from tool_provider import ToolProvider, ToolExecutor
 from agent_loop import AgentResult
-```
 
-```python
 class BazNodeImpl(BazNode): ...
-```
 
-```python
 class BazelNodeLoaderImpl(BazelNodeLoader): ...
 ```
 
@@ -37,11 +32,7 @@ class BazelNodeLoaderImpl(BazelNodeLoader): ...
 
 **Deps expansion**: when a manifest's `feedback_deps` include a label not already in its `deps`, the loaded node's `deps` gain that label (deduplicated), so a node's deps always include its feedback deps even when the manifest was produced without the macro's own expansion.
 
-## Config
-
-None — the implementation bundles no imported capabilities via Config (BazNode instances are constructed by the implementation); the agent loop used for prompt running is set externally on each node after construction (see Internal state).
-
-**HLS Justification:** The implementation bundles no imported capabilities; the agent loop is externally configured.
+Constructed with no configuration (`BazNode` instances are constructed by the implementation); the agent loop used for prompt running is set externally on each node after construction (see Internal state).
 
 ## Behavioral Description
 

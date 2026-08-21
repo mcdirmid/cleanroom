@@ -4,7 +4,7 @@ lib/tool_provider.py
 Interface definitions for the LLS Tool Provider.
 """
 
-from typing import Any, Callable, Literal, Protocol, Union, TypeVar, Generic, Dict, List, Optional
+from typing import Any, Callable, Literal, Protocol, Union, TypeVar, Generic, Dict, List
 from dataclasses import dataclass
 
 # Type definitions
@@ -12,24 +12,34 @@ T_tool = TypeVar("T_tool")
 """
 The opaque value type passed through from tool execution to the tool call
 outcome. Each ToolProvider[T_tool] implementation resolves T_tool to a
-concrete type (typically str). The provider does not inspect, transform, or
-interpret values of this type.
+concrete type. The provider does not inspect, transform, or interpret values
+of this type.
 """
 
 ToolName = str
 ToolArguments = Dict[str, Any]
-ContentId = str
 ToolDefinition = Dict[str, Any]  # JSON schema format
 ToolResultContent = Any
 
+
 @dataclass
 class ToolResult:
-    """The result produced by a tool execution."""
+    """The result produced by a tool execution.
+
+    `supersedes` is True when the result supersedes the earlier non-stubbed
+    result for the same file or tool command — the producing component's
+    declaration; the consuming agent loop stubs that result (at most one)
+    before rendering the new one. `supersedes` is False for results that
+    never supersede an earlier result. `content` is rendered into the agent
+    conversation. `note` carries producer-generated guidance for the model
+    (e.g., the status of an operation); it is rendered into the model-visible
+    message by the consuming agent loop, and does not replace `content`.
+    """
     content: ToolResultContent
-    content_id: Optional[ContentId]
-    stub_previous: bool
+    supersedes: bool
     note: str = ""
     type: Literal["tool_result"] = "tool_result"
+
 
 class TerminateSuccessResult(Protocol):
     """
@@ -70,7 +80,8 @@ class ToolFailure(Generic[T_tool]):
     A tool failure is not a termination and does not end the session: the
     failure value guides the agent and the loop continues. It is distinct
     from an agent-initiated termination (TerminateAgentWith*), which ends
-    the session.
+    the session. A tool failure never carries the stub text and never
+    supersedes an earlier result.
     """
     value: T_tool
     type: Literal["tool_failure"] = "tool_failure"
@@ -130,5 +141,10 @@ class ToolProvider(Protocol[T_tool]):
             - If invalid: returns ToolFailure, state unchanged
             - Termination signals are atomic and final
             - Tool failures are not terminations; the session continues
+            - A result with supersedes set supersedes the earlier non-stubbed
+              result for the same file or tool command (at most one); the
+              consumer stubs it before rendering the new result
+            - A result with supersedes unset supersedes nothing; a result
+              never carries the stub text
         """
         ...

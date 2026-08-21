@@ -6,52 +6,40 @@
 # Interface LLS: bazel_graph_storage
 
 ## Data Types
-
 ```python
 from dataclasses import dataclass
 from dag_storage import DagStorage, NodeId
 from sandbox import SandboxConfig
-from typing import Protocol
-```
+from typing import Protocol, TypeAlias
 
-```python
-GraphSource = str
-```
+GraphSource: TypeAlias = str
 
-A label identifying the configured source of graph data — either a precomputed graph artifact path or a workspace root directory. The actual resolution mechanism is unspecified; the implementation determines how to read the graph from the source.
-
-```python
 @dataclass
 class GraphConfig:
     graph_source: GraphSource | None = None
     workspace_root: str | None = None
-```
 
-The client-supplied configuration, as listed in the `bazel_graph_storage` interface contract: either a graph source or a workspace root. At least one of `graph_source` or `workspace_root` must be provided; when only the workspace root is provided, the graph is derived from it.
+PackageDirectory: TypeAlias = str
 
-```python
-PackageDirectory = str
-```
-
-The directory containing a node's BUILD file; also where the node's messages are stored.
-
-```python
 @dataclass
 class NodeDefinition:
     prompt: str
     sandbox_config: SandboxConfig
-```
 
-The agent prompt and sandbox configuration declared by a node's target. The sandbox configuration is a `sandbox.SandboxConfig`.
-
-```python
 class BazelGraphStorage(DagStorage, Protocol):
     def resolve_node_definition(self, node_id: NodeId) -> NodeDefinition: ...
     def resolve_package_directory(self, node_id: NodeId) -> PackageDirectory: ...
 ```
 
-`BazelGraphStorage` fulfills the `DagStorage` Protocol — pending messages, node dependencies, and known reverse dependencies per `dag_storage-low.md` — and additionally resolves node definitions and package directories.
+A label identifying the configured source of graph data — either a precomputed graph artifact path or a workspace root directory. The actual resolution mechanism is unspecified; the implementation determines how to read the graph from the source.
 
+The client-supplied configuration, as listed in the `bazel_graph_storage` interface contract: either a graph source or a workspace root. At least one of `graph_source` or `workspace_root` must be provided; when only the workspace root is provided, the graph is derived from it.
+
+The directory containing a node's BUILD file; also where the node's messages are stored.
+
+The agent prompt and sandbox configuration declared by a node's target. The sandbox configuration is a `sandbox.SandboxConfig`.
+
+`BazelGraphStorage` fulfills the `DagStorage` Protocol — pending messages, node dependencies, and known reverse dependencies per `dag_storage-low.md` — and additionally resolves node definitions and package directories.
 ## Component-Provided Operations
 
 ### `resolve_node_definition`

@@ -4,37 +4,39 @@ terms (owned): node, message, pending message, dependency, propagating dependenc
 
 ## Purpose
 
-Provides storage for messages addressed to nodes and access to graph topology: a node's dependencies and its known reverse dependencies.
+Provides persistent storage for messages addressed to nodes and access to graph topology: a node's dependencies and its known reverse dependencies. State persists across component restarts, and storage operations are atomic per node.
 
-## Owned definitions
+## Terms
 
-- Node: an opaque vertex in the graph.
+- Node: a vertex in the graph; messages are addressed to nodes.
 - Message: a string addressed to a node.
-- Pending message: a message present at a node since its last read.
-- Dependency: a node depends on another node; the depended-upon node is the dependency, distinguished by the relationship not by its identity.
-- Propagating dependency: a dependency whose changes propagate to the depending node; or custom conditions hold.
-- Reverse dependency: a node that depends on another node; the component may provide reverse dependencies for nodes that do not depend on the requesting node, and for nodes whose dependencies include the requesting node; the exact set of nodes the component tracks is unspecified, and the component does not expose which nodes it tracks.
-- Subgraph: a target node (included) plus all nodes reachable through its dependencies.
-
-## Observable dataflow
-
-A message enters a node.
-A message is removed from a node.
+- Pending message: a message delivered to a node and not cleaned since delivery.
+- Dependency: A depends on B -> A has an outgoing edge to B.
+- Propagating dependency: a dependency whose changes propagate to the depending node; retrieving a node's dependencies records the node as a reverse dependency of each of its propagating dependencies, and of no other dependency.
+- Reverse dependency: a node recorded as depending on another; recording happens when a node retrieves a dependency, at most once per dependency, and only for its propagating dependencies (repeated retrievals add no duplicates).
+- Subgraph: a target node (included) plus all nodes reachable through its direct and indirect dependencies.
 
 ## Contract
 
-**The client may:**
+**Operations**
 
-**The component guarantees:**
+- Read pending messages for a node.
+- Add messages to a node's pending set.
+- Delete a node's data (its pending messages and its known reverse dependencies).
+- Retrieve a node's dependencies.
+- Retrieve a node's known reverse dependencies.
 
-- Messages are provided exactly as stored.
-- Dependencies are provided as the component knows them.
-- Reverse dependencies are provided as the component knows them.
-- A node's dependencies, when retrieved, are added to each of its propagating dependencies' reverse dependency sets, at most once per dependency.
+**Guarantees**
 
-**The component assumes:**
+- Messages and reverse dependencies persist across restarts.
+- Read, write, and delete operations are atomic per node.
+- Messages are provided exactly as stored; dependencies as declared; reverse dependencies exactly as recorded.
+- Retrieving a node's dependencies records the node as a reverse dependency of each of its propagating dependencies, at most once per dependency.
+
+**Assumptions**
+
 - A node exists in the graph before its messages, dependencies, or reverse dependencies are accessed.
 
 ## Non-concerns
 
-- The component's internal implementation, data structures, and performance characteristics.
+- Storage failures: assumed not to occur; if they do, behavior is undefined.

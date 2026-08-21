@@ -4,25 +4,22 @@
   - dag_clean_logic-low.md
   - agent_loop-low.md
   - bazel_node_loader-low.md
+  - bazel_agent_config-low.md
 -->
 
 # Interface LLS: bazel_runner
 
 ## Data Types
-
 ```python
 from typing import Protocol, List
 from dag_storage import NodeId
 from dag import CleaningResult
 from dag_clean_logic import CleanResult, ChangeResult, FeedbackResult, NoChangeResult, FailureResult
-```
 
-```python
 class BazRunner(Protocol):
     def run_dag(self, root_node: NodeId, workspace_root: str, config_target: Optional[str] = None) -> CleaningResult: ...
     def inject_feedback(self, node_id: NodeId, workspace_root: str, messages: List[str]) -> CleaningResult: ...
 ```
-
 ## Component-Provided Operations
 
 ### `run_dag`
@@ -53,7 +50,7 @@ def run_dag(self, root_node: NodeId, workspace_root: str, config_target: Optiona
 **Failure Handling:**
 - All expected failures from the underlying DAG cleaning propagate as `(False, CleanResult)`.
 - Logging continues regardless of success or failure (the log file is always written). The log file is created after component assembly; a failure during assembly (e.g., graph construction) propagates without a log file.
-- Log output includes compact one-line event summaries to stdout (covering `tool_called`, `api_response`, `final_answer`, `run_terminated`, `error` events) and a verbose full transcript to a log file.
+- Log output includes compact one-line event summaries to stdout (covering `tool_called`, `api_response`, `run_terminated`, `error` events) and a verbose full transcript to a log file; the transcript records each request's conversation state.
 - Log file path is determined by (in priority order): 1) The `CLEANROOM_AGENT_LOG` environment variable (absolute path or a name relative to the log base directory), 2) `agent_loop.log` in the log base directory.
 - The log base directory is the Bazel workspace directory (`BUILD_WORKSPACE_DIRECTORY`, else `BUILD_WORKING_DIRECTORY`) when present, otherwise the current working directory.
 

@@ -19,7 +19,6 @@ from update_with_ai.lib.agent_loop import (
     AgentLoop,
     AgentLoopConfig,
     AgentResult,
-    FinalAnswer,
     LoggerCallback,
     ToolDefinition,
     ToolExecutor,
@@ -67,7 +66,6 @@ def _make_node_def(
             readable_paths=readable_paths or [],
             writable_paths=writable_paths or [],
             blame_targets=blame_targets or [],
-            read_size_limit=100,
             search_result_limit=10,
         ),
     )
@@ -143,79 +141,41 @@ class MockSandbox(Sandbox):
     def read_file(
         self,
         file_path: str,
-        offset: Optional[int] = None,
-        limit: Optional[int] = None,
+        include_line_numbers: bool = False,
     ) -> ToolCallOutcome:
         self._record(
             "read_file",
-            {"file_path": file_path, "offset": offset, "limit": limit},
+            {"file_path": file_path, "include_line_numbers": include_line_numbers},
         )
-        return ToolResult(
-            content="file contents", content_id=file_path, stub_previous=False
-        )
+        return ToolResult(content="file contents", supersedes=False)
 
     def write_file(self, file_path: str, content: str) -> ToolCallOutcome:
         self._record("write_file", {"file_path": file_path, "content": content})
         self._write_occurred = True
         return ToolResult(
-            content='{"success": true, "message": "File written successfully"}',
-            content_id=file_path,
-            stub_previous=True,
+            content=f"Created {file_path}",
+            supersedes=True,
         )
 
     def replace_lines(self, file_path: str, start_line: int, end_line: int,
-                      new_content: str) -> ToolCallOutcome:
+                      new_str: str) -> ToolCallOutcome:
         self._record(
             "replace_lines",
             {"file_path": file_path, "start_line": start_line,
-             "end_line": end_line, "new_content": new_content},
+             "end_line": end_line, "new_str": new_str},
         )
         return ToolResult(
-            content='{"success": true, "lines_replaced": 1, "message": "Replaced"}',
-            content_id=file_path,
-            stub_previous=True,
+            content=f"Replaced lines {start_line}-{end_line} in {file_path}",
+            supersedes=True,
         )
 
     def search_files(self, path: str, pattern: str) -> ToolCallOutcome:
         self._record("search_files", {"path": path, "pattern": pattern})
-        return ToolResult(content="[]", content_id=path, stub_previous=False)
-
-    def read_chunks(
-        self,
-        file_path: str,
-        chunk_indices: Optional[List[int]] = None,
-        include_adjacent: bool = False,
-    ) -> ToolCallOutcome:
-        self._record(
-            "read_chunks",
-            {
-                "file_path": file_path,
-                "chunk_indices": chunk_indices,
-                "include_adjacent": include_adjacent,
-            },
-        )
-        return ToolResult(content="chunks", content_id=file_path, stub_previous=False)
-
-    def replace_chunks(
-        self,
-        file_path: str,
-        replacements: List[Dict],
-        encoding: Optional[str] = None,
-    ) -> ToolCallOutcome:
-        self._record(
-            "replace_chunks",
-            {
-                "file_path": file_path,
-                "replacements": replacements,
-                "encoding": encoding,
-            },
-        )
-        self._write_occurred = True
-        return ToolResult(content="", content_id=file_path, stub_previous=True)
+        return ToolResult(content="[]", supersedes=False)
 
     def verify(self) -> ToolCallOutcome:
         self._record("verify", {})
-        return ToolResult(content="verified", content_id="verify", stub_previous=True)
+        return ToolResult(content="verified", supersedes=True)
 
     def succeed(self) -> ToolCallOutcome:
         self._record("succeed", {})
@@ -243,17 +203,19 @@ class MockAgentLoop(AgentLoop):
         prompt: str,
         tools: List[ToolDefinition],
         tool_executor: ToolExecutor,
+        system_prompt: Optional[str] = None,
         logger: Optional[LoggerCallback] = None,
     ) -> AgentResult:
         self.run_count += 1
         self.last_run = {
             "prompt": prompt,
+            "system_prompt": system_prompt,
             "tools": tools,
             "tool_executor": tool_executor,
             "logger": logger,
         }
         if self._result is None:
-            return FinalAnswer(answer="")
+            return (TerminateAgentWithSuccess(NoChangeResult()), [])
         return self._result
 
 
@@ -276,34 +238,6 @@ class TestCleanOutcomeMapping(unittest.TestCase):
                 make_agent_loop=lambda cfg: agent_loop,
             )
         )
-
-    def test_final_answer_with_write_occurs_change_result(self):
-        """FinalAnswer with write_occurred -> ChangeResult([str(answer)])."""
-        sandbox = MockSandbox(write_occurred=True)
-        agent_loop = MockAgentLoop(result=FinalAnswer(answer="output"))
-        result = self._impl(sandbox, agent_loop).clean("a", ["msg"])
-        self.assertIsInstance(result, ChangeResult)
-        assert isinstance(result, ChangeResult)
-        self.assertEqual(result.type, "change")
-        self.assertEqual(result.messages, ["output"])
-
-    def test_final_answer_answer_converted_to_string(self):
-        """ChangeResult messages hold str(result.answer) per the LLS."""
-        answer: Any = 42  # not a str: exercises the explicit str() conversion
-        sandbox = MockSandbox(write_occurred=True)
-        agent_loop = MockAgentLoop(result=FinalAnswer(answer=answer))
-        result = self._impl(sandbox, agent_loop).clean("a", [])
-        self.assertIsInstance(result, ChangeResult)
-        assert isinstance(result, ChangeResult)
-        self.assertEqual(result.messages, ["42"])
-
-    def test_final_answer_without_write_is_no_change(self):
-        """FinalAnswer without write_occurred -> NoChangeResult()."""
-        sandbox = MockSandbox(write_occurred=False)
-        agent_loop = MockAgentLoop(result=FinalAnswer(answer="output"))
-        result = self._impl(sandbox, agent_loop).clean("a", ["msg"])
-        self.assertIsInstance(result, NoChangeResult)
-        self.assertEqual(result.type, "no_change")
 
     def test_terminate_success_feedback_result_adopted(self):
         """(TerminateAgentWithSuccess(FeedbackResult), history) is adopted as-is,
@@ -410,7 +344,7 @@ class TestToolExecutor(unittest.TestCase):
     with blame-target dependency validation first."""
 
     def _capture_executor(self, node_def: NodeDefinition, sandbox: MockSandbox):
-        agent_loop = MockAgentLoop(result=FinalAnswer(answer="done"))
+        agent_loop = MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), []))
         graph = MockBazelGraphStorage(
             definitions={"a": node_def}, dependencies={"a": ["b"]}
         )
@@ -460,7 +394,7 @@ class TestToolExecutor(unittest.TestCase):
         sandbox = MockSandbox()
         executor = self._capture_executor(node_def, sandbox)
         outcome = executor(
-            "read_file", {"file_path": "foo.txt", "offset": 0, "limit": 10}
+            "read_file", {"file_path": "foo.txt", "include_line_numbers": True}
         )
         self.assertIsInstance(outcome, ToolResult)
         self.assertEqual(
@@ -468,7 +402,7 @@ class TestToolExecutor(unittest.TestCase):
             [
                 (
                     "read_file",
-                    {"file_path": "foo.txt", "offset": 0, "limit": 10},
+                    {"file_path": "foo.txt", "include_line_numbers": True},
                 )
             ],
         )
@@ -485,7 +419,7 @@ class TestToolExecutor(unittest.TestCase):
         self.assertEqual(sandbox.calls, [])
 
     def test_wrong_parameter_name_lists_valid_parameters(self):
-        """A parameter-name slip (e.g. 'new_str' instead of 'new_content')
+        """A parameter-name slip (e.g. 'content' instead of 'new_str')
         becomes a ToolFailure naming the tool's valid parameters."""
         defs: List[ToolDefinition] = [
             {
@@ -499,7 +433,7 @@ class TestToolExecutor(unittest.TestCase):
                             "file_path": {"type": "string"},
                             "start_line": {"type": "integer"},
                             "end_line": {"type": "integer"},
-                            "new_content": {"type": "string"},
+                            "new_str": {"type": "string"},
                         },
                     },
                 },
@@ -510,13 +444,13 @@ class TestToolExecutor(unittest.TestCase):
         executor = self._capture_executor(node_def, sandbox)
         outcome = executor(
             "replace_lines",
-            {"file_path": "foo.txt", "start_line": 1, "end_line": 1, "new_str": "x"},
+            {"file_path": "foo.txt", "start_line": 1, "end_line": 1, "content": "x"},
         )
         self.assertIsInstance(outcome, ToolFailure)
         assert isinstance(outcome, ToolFailure)
         self.assertIn("valid parameters", outcome.value)
-        self.assertIn("new_content", outcome.value)
         self.assertIn("new_str", outcome.value)
+        self.assertIn("content", outcome.value)
         self.assertEqual(sandbox.calls, [])
 
 
@@ -541,7 +475,7 @@ class TestRunStructure(unittest.TestCase):
                 graph=graph,
                 agent_loop_config=_agent_loop_config(),
                 make_sandbox=make_sandbox,
-                make_agent_loop=lambda cfg: MockAgentLoop(result=FinalAnswer(answer="ok")),
+                make_agent_loop=lambda cfg: MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), [])),
             )
         )
         impl.clean("a", [])
@@ -560,7 +494,7 @@ class TestRunStructure(unittest.TestCase):
         loops: List[MockAgentLoop] = []
 
         def make_agent_loop(cfg: AgentLoopConfig) -> MockAgentLoop:
-            loop = MockAgentLoop(result=FinalAnswer(answer="ok"))
+            loop = MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), []))
             loops.append(loop)
             return loop
 
@@ -578,16 +512,17 @@ class TestRunStructure(unittest.TestCase):
         self.assertEqual(loops[0].run_count, 1)
         self.assertEqual(loops[1].run_count, 1)
 
-    def test_prompt_names_files_and_feedback_context(self):
-        """The prompt is the node prompt augmented with readable/writable file
-        lines and the pending messages as feedback from dependents."""
+    def test_prompt_composition_system_and_user_prompt(self):
+        """The run's system prompt is the node prompt augmented with
+        readable/writable file lines; the user prompt is the pending messages
+        joined by newlines."""
         node_def = _make_node_def(
             prompt="Work on the files",
             readable_paths=["foo.txt", "bar.txt"],
             writable_paths=["bar.txt"],
         )
         graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
-        agent_loop = MockAgentLoop(result=FinalAnswer(answer="ok"))
+        agent_loop = MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), []))
         impl = AgentNodeCleanLogicImpl(
             Config(
                 graph=graph,
@@ -598,13 +533,30 @@ class TestRunStructure(unittest.TestCase):
         )
         impl.clean("a", ["fix this", "and this"])
         assert agent_loop.last_run is not None
-        prompt = agent_loop.last_run["prompt"]
-        self.assertTrue(prompt.startswith("Work on the files"))
-        self.assertIn("Files you can read: bar.txt, foo.txt", prompt)
-        self.assertIn("Files you can write: bar.txt", prompt)
-        self.assertIn("Feedback from dependents:", prompt)
-        self.assertIn("- fix this", prompt)
-        self.assertIn("- and this", prompt)
+        system_prompt = agent_loop.last_run["system_prompt"]
+        self.assertTrue(system_prompt.startswith("Work on the files"))
+        self.assertIn("Files you can read: bar.txt, foo.txt", system_prompt)
+        self.assertIn("Files you can write: bar.txt", system_prompt)
+        # The pending messages become the user prompt (joined by newlines).
+        self.assertEqual(agent_loop.last_run["prompt"], "fix this\nand this")
+
+    def test_prompt_empty_when_no_pending_messages(self):
+        """With no pending messages, the user prompt is empty."""
+        node_def = _make_node_def(prompt="Work on the files")
+        graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+        agent_loop = MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), []))
+        impl = AgentNodeCleanLogicImpl(
+            Config(
+                graph=graph,
+                agent_loop_config=_agent_loop_config(),
+                make_sandbox=lambda sc: MockSandbox(),
+                make_agent_loop=lambda cfg: agent_loop,
+            )
+        )
+        impl.clean("a", [])
+        assert agent_loop.last_run is not None
+        self.assertEqual(agent_loop.last_run["prompt"], "")
+        self.assertTrue(agent_loop.last_run["system_prompt"].startswith("Work on the files"))
 
     def test_passes_sandbox_tool_definitions_and_executor(self):
         """run_agent receives the sandbox's ToolDefinitions and a callable
@@ -622,7 +574,7 @@ class TestRunStructure(unittest.TestCase):
         node_def = _make_node_def()
         graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
         sandbox = MockSandbox(tool_defs=tool_defs)
-        agent_loop = MockAgentLoop(result=FinalAnswer(answer="ok"))
+        agent_loop = MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), []))
         impl = AgentNodeCleanLogicImpl(
             Config(
                 graph=graph,
@@ -647,7 +599,7 @@ class TestRunStructure(unittest.TestCase):
         node_def = _make_node_def()
         graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
         sandbox = MockSandbox()
-        agent_loop = MockAgentLoop(result=FinalAnswer(answer="ok"))
+        agent_loop = MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), []))
         impl = AgentNodeCleanLogicImpl(
             Config(
                 graph=graph,
@@ -671,7 +623,7 @@ class TestRunStructure(unittest.TestCase):
         """Config(logger=None) is accepted; run_agent receives logger=None."""
         node_def = _make_node_def()
         graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
-        agent_loop = MockAgentLoop(result=FinalAnswer(answer="ok"))
+        agent_loop = MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), []))
         impl = AgentNodeCleanLogicImpl(
             Config(
                 graph=graph,

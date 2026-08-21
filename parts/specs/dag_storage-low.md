@@ -1,127 +1,115 @@
-# dag_storage (LLS)
+# dag_storage
+## Dependencies: none (self-contained)
 
 ## Data Types
 
-```python
-from typing import Protocol, AbstractSet, FrozenSet, Iterator, TypeVar
+from typing import FrozenSet, Protocol, TypeVar
 
-T = TypeVar("T")
-NodeId = str  # opaque node identifier; the component does not inspect or transform it
-Message = str  # a string addressed to a node
+T_Node = TypeVar("T_Node")
 
-class Subgraph(AbstractSet[NodeId]):
-    """A target node (included) plus all nodes reachable through its dependencies."""
+NodeMessage = str
 
-class DagStorage(Protocol):
-    def store_message(self, target_node: NodeId, message: Message) -> None
-    def read_message(self, target_node: NodeId) -> Message
-    def get_dependencies(self, target_node: NodeId) -> AbstractSet[NodeId]
-    def get_reverse_dependencies(self, target_node: NodeId) -> AbstractSet[NodeId]
-    def get_subgraph(self, target_node: NodeId) -> Subgraph
-```
+PendingNodeMessage = NodeMessage
+
+ReverseDependencyNode = T_Node
+Dependency = T_Node
+
+PropagatingDependency = T_Node
+
+Subgraph = FrozenSet[T_Node]
+
+## Term Definitions
+
+- **Pending message:** a message delivered to a node and not cleaned since delivery (HLS: "a message delivered to a node and not cleaned since delivery.")
+- **Dependency:** A depends on B → A has an outgoing edge to B (HLS: "A depends on B -> A has an outgoing edge to B.").
+- **Propagating dependency:** a dependency whose changes propagate to the depending node; retrieving a node's dependencies records the node as a reverse dependency of each of its propagating dependencies, and of no other dependency (HLS: "a dependency whose changes propagate to the depending node; retrieving a node's dependencies records the node as a reverse dependency of each of its propagating dependencies, and of no other dependency.").
+- **Reverse dependency:** a node recorded as depending on another; recording happens when a node retrieves a dependency, at most once per dependency, and only for its propagating dependencies (repeated retrievals add no duplicates) (HLS: "a node recorded as depending on another; recording happens when a node retrieves a dependency, at most once per dependency, and only for its propagating dependencies (repeated retrievals add no duplicates).").
+- **Subgraph:** a target node (included) plus all nodes reachable through its direct and indirect dependencies (HLS: "a target node (included) plus all nodes reachable through its direct and indirect dependencies.").
 
 ## Component-Provided Operations
+class DagStorage(Protocol[T_Node]):
 
-### `store_message`
+    def read_pending_messages(self, node: T_Node) -> FrozenSet[PendingNodeMessage]: ...
+    def add_messages(self, node: T_Node, messages: FrozenSet[NodeMessage]) -> None: ...
+    def delete_node(self, node: T_Node) -> None: ...
+    def retrieve_dependencies(self, node: T_Node) -> FrozenSet[T_Node]: ...
+    def retrieve_reverse_dependencies(self, node: T_Node) -> FrozenSet[T_Node]: ...
 
-```python
-def store_message(self, target_node: NodeId, message: Message) -> None
-```
+### `read_pending_messages`
 
-**Purpose:** Add a message to a node's message set.
+def read_pending_messages(self, node: T_Node) -> FrozenSet[PendingNodeMessage]
 
-**Preconditions:** The target node exists in the graph.
+**Purpose:** Read pending messages for a node.
 
-**Postconditions:** The message is added to the target node's message set.
+**Preconditions:** A node exists in the graph before its messages are accessed.
 
-**Failure Handling:** None.
+**Postconditions:** The pending messages for the node are returned.
 
-**HLS Justification:** "A message enters a node" (Observable dataflow).
+**Failure Handling:** No expected failures.
 
-### `read_message`
+**HLS Justification:** Contract: "The client may: Read pending messages for a node." Observable dataflow: "Messages delivered to a node appear in its pending set."
 
-```python
-def read_message(self, target_node: NodeId) -> Message
-```
+### `add_messages`
 
-**Purpose:** Remove a pending message from a node and return it.
+def add_messages(self, node: T_Node, messages: FrozenSet[NodeMessage]) -> None
 
-**Preconditions:** The target node exists in the graph and has at least one pending message.
+**Purpose:** Add messages to a node's pending set.
 
-**Postconditions:** A pending message is removed from the target node's message set and returned.
+**Preconditions:** A node exists in the graph.
 
-**Failure Handling:** None.
+**Postconditions:** The messages appear in the node's pending set.
 
-**HLS Justification:** "A message is removed from a node" (Observable dataflow).
+**Failure Handling:** No expected failures.
 
-### `get_dependencies`
+**HLS Justification:** Contract: "The client may: Add messages to a node's pending set." Observable dataflow: "Messages delivered to a node appear in its pending set."
 
-```python
-def get_dependencies(self, target_node: NodeId) -> AbstractSet[NodeId]
-```
+### `delete_node`
 
-**Purpose:** Return the dependencies of the target node.
+def delete_node(self, node: T_Node) -> None
 
-**Preconditions:** The target node exists in the graph.
+**Purpose:** Delete a node's data (its pending messages and its known reverse dependencies).
 
-**Postconditions:** The dependencies of the target node are returned as known by the component.
+**Preconditions:** A node exists in the graph.
 
-**Failure Handling:** None.
+**Postconditions:** The node's pending messages and known reverse dependencies are removed.
 
-**HLS Justification:** "Dependencies are provided as the component knows them" (Contract).
+**Failure Handling:** No expected failures.
 
-### `get_reverse_dependencies`
+**HLS Justification:** Contract: "The client may: Delete a node's data (its pending messages and its known reverse dependencies)." Observable dataflow: "Deleting a node removes its pending messages and its known reverse dependencies."
 
-```python
-def get_reverse_dependencies(self, target_node: NodeId) -> AbstractSet[NodeId]
-```
+### `retrieve_dependencies`
 
-**Purpose:** Return the reverse dependencies of the target node.
+def retrieve_dependencies(self, node: T_Node) -> FrozenSet[T_Node]
 
-**Preconditions:** The target node exists in the graph.
+**Purpose:** Retrieve a node's dependencies.
 
-**Postconditions:** The reverse dependencies of the target node are returned as known by the component.
+**Preconditions:** A node exists in the graph.
 
-**Failure Handling:** None.
+**Postconditions:** The node's dependencies are returned. For each propagating dependency of the node, the node is recorded as a reverse dependency of that dependency, at most once per dependency. For non-propagating dependencies, the node is not recorded as a reverse dependency.
 
-**HLS Justification:** "Reverse dependencies are provided as the component knows them" (Contract).
+**Failure Handling:** No expected failures.
 
-### `get_subgraph`
+**HLS Justification:** Contract: "The component guarantees: Retrieving a node's dependencies records the node as a reverse dependency of each of its propagating dependencies, at most once per dependency." Observable dataflow: "Retrieving a node's dependencies records the node as a reverse dependency of each of its propagating dependencies."
 
-```python
-def get_subgraph(self, target_node: NodeId) -> Subgraph
-```
+### `retrieve_reverse_dependencies`
 
-**Purpose:** Return a subgraph rooted at the target node.
+def retrieve_reverse_dependencies(self, node: T_Node) -> FrozenSet[ReverseDependencyNode]
 
-**Preconditions:** The target node exists in the graph.
+**Purpose:** Retrieve a node's known reverse dependencies.
 
-**Postconditions:** A subgraph is returned, consisting of the target node (included) plus all nodes reachable through its dependencies.
+**Preconditions:** A node exists in the graph.
 
-**Failure Handling:** None.
+**Postconditions:** The node's known reverse dependencies are returned.
 
-**HLS Justification:** "A subgraph is provided" (Contract).
+**Failure Handling:** No expected failures.
 
-### `propagate_subgraph`
-
-```python
-def propagate_subgraph(self, target_node: NodeId) -> None
-```
-
-**Purpose:** When the dependencies of a node are retrieved, propagate changes to each of its propagating dependencies' reverse dependency sets, at most once per dependency.
-
-**Preconditions:** The target node exists in the graph.
-
-**Postconditions:** The target node's dependencies, when retrieved, are added to each of their propagating dependencies' reverse dependency sets, at most once per dependency.
-
-**Failure Handling:** None.
-
-**HLS Justification:** "A node's dependencies, when retrieved, are added to each of its propagating dependencies' reverse dependency sets, at most once per dependency" (Contract).
-
-## Invariants
-
-- A message, once read, is no longer a pending message at the target node.
+**HLS Justification:** Contract: "Retrieve a node's known reverse dependencies." Guarantees: "reverse dependencies exactly as recorded."
 
 ## Non-Concerns
 
-- The component's internal implementation, data structures, and performance characteristics.
+- **Storage failures:** assumed not to occur; behavior is undefined if they do. (HLS Justification: Non-concerns: "Storage failures: assumed not to occur; if they do, behavior is undefined.")
+## Invariants
+
+- **Persistence:** Messages and reverse dependencies persist across component restarts. (HLS Justification: Contract: "The component guarantees: Messages and reverse dependencies persist across restarts.")
+- **Atomicity:** Read, write, and delete operations are atomic per node. (HLS Justification: Contract: "The component guarantees: Read, write, and delete operations are atomic per node.")
+- **Fidelity:** Messages are provided exactly as stored; dependencies as declared; reverse dependencies exactly as recorded. (HLS Justification: Contract: "The component guarantees: Messages are provided exactly as stored; dependencies as declared; reverse dependencies exactly as recorded.")

@@ -7,28 +7,16 @@
 # Implementation LLS: dag_impl
 
 ## Data Types
-
 ```python
-from dataclasses import dataclass
 from dag_storage import DagStorage, NodeId, NodeMessage, PendingMessages
 from dag_clean_logic import DagCleanLogic, CleanResult
 from dag import Dag, CleaningResult
+
+class DagImpl(Dag):
+    def __init__(self, storage: DagStorage, clean_logic: DagCleanLogic): ...
 ```
 
-```python
-class DagImpl(Dag): ...
-```
-
-## Config
-
-```python
-@dataclass
-class Config:
-    storage: DagStorage
-    clean_logic: DagCleanLogic
-```
-
-**HLS Justification:** The `dag_impl` implementation is configured with `dag_storage` (message persistence and graph access) and `dag_clean_logic` (message processing and dirtiness determination).
+Constructed with `dag_storage` (message persistence and graph access) and `dag_clean_logic` (message processing and dirtiness determination).
 
 ## Behavioral Description
 
@@ -44,6 +32,7 @@ class Config:
 ## Invariants
 
 - No caching; all state reads and writes, including graph access, go through `dag_storage`.
+- Subgraph cleaning as a whole is not atomic: successfully cleaned nodes retain their changes even if a later node fails.
 - On failure, processing halts immediately; no recovery or retry.
 - Cleaning always terminates; the total-cleans bound is `len(subgraph_nodes) * (len(subgraph_nodes) + 1)`.
 - Feedback messages are routed only to nodes within the subgraph.

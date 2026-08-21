@@ -8,9 +8,7 @@
 # Implementation LLS: bazel_graph_storage_impl
 
 ## Data Types
-
 ```python
-from dataclasses import dataclass
 from bazel_graph_storage import (
     BazelGraphStorage,
     NodeDefinition,
@@ -20,25 +18,14 @@ from bazel_graph_storage import (
 )
 from dag_storage import NodeMessage, PendingMessages, NodeDependencies, KnownReverseDependencies
 from sandbox import SandboxConfig
-```
 
-```python
-class BaseBazelGraphStorageImpl(BazelGraphStorage): ...
-```
+class BaseBazelGraphStorageImpl(BazelGraphStorage):
+    def __init__(self, config: GraphConfig): ...
 
-```python
 class BazelGraphStorageFileImpl(BaseBazelGraphStorageImpl): ...
 ```
 
-## Config
-
-```python
-Config = GraphConfig
-```
-
-The implementation is constructed with the `bazel_graph_storage` interface's `GraphConfig` (see Interface LLS Data Types). It bundles no imported capabilities. The interface contract guarantees that `GraphConfig` provides at least one of `graph_source` or `workspace_root`.
-
-**HLS Justification:** Configured with a workspace root or graph source (per the `bazel_graph_storage` interface contract).
+Constructed with the `bazel_graph_storage` interface's `GraphConfig` (see Interface LLS Data Types); it bundles no imported capabilities. The interface contract guarantees that `GraphConfig` provides at least one of `graph_source` or `workspace_root`.
 
 ## Behavioral Description
 
@@ -75,8 +62,7 @@ Persistence: a single JSON file named `.update_with_ai.json` per package directo
 - `readable_paths`: the node's own `srcs` plus its deps' `srcs` and the `srcs` of every node in its star deps' transitive closure (deps include feedback deps and star deps; neither the node's own `silent_srcs` nor the deps' `silent_srcs` are readable, silent deps' `srcs` are not readable, and star-closure traversal never follows `silent_deps`)
 - `writable_paths`: the node's own `srcs` + `silent_srcs`
 - `blame_targets`: the manifest's `feedback_deps` (only feedback deps may receive feedback from the node)
-- `read_size_limit`: pinned to the `READ_SIZE_LIMIT` constant (20,000 bytes) exported by `sandbox_impl` — the maximum content a single read or chunk read may return
-- `search_result_limit`: pinned to 10 — the maximum matches a single search may return
+- `search_result_limit`: pinned to 10 — the maximum rendered matches a single search may return
 - `verification_callback`: built from the manifest's `verify` field (a shell command string); `_build_verify_callback` runs the command via `subprocess` and returns `(success, output)` where `success` is `True` when the command exits 0. The success flag gates `succeed` (see sandbox specs).
 
 **HLS Justification:** Reads node manifests and constructs NodeDefinition objects from manifest fields.
@@ -84,12 +70,14 @@ Persistence: a single JSON file named `.update_with_ai.json` per package directo
 ## Invariants
 
 - Storage operations are atomic per node
+- Messages are appended to a node's pending set in the order delivered
 - Messages and known reverse dependencies persist across component restarts (JSON file on disk)
 - The message file is the sole state for messages and known reverse dependencies; the component maintains no in-memory state for them
 - Resolved lookups (definitions, package directories, dependencies) are served from data built when the component is initialized; cached values are never stale relative to the configured graph source
 - Queries are read-only; no workspace modification occurs (except during `__init__` of the subclass)
 - Each query provides a consistent view of the graph
 - Graph-source failures signal failure without side effects (the graph is unmodified)
+- Unknown labels raise an error for all queries (a precondition violation; no exception is required)
 - Storage failures are unexpected (filesystem errors) and unhandled by the implementation
 - The implementation never invokes Bazel tooling (`bazel query`, `cquery`, aspects) during processing; those are at most offline extraction tools used outside the component
 

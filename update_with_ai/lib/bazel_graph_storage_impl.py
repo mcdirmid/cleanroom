@@ -34,7 +34,6 @@ from .sandbox import (
     WritablePaths,
     BlameTargets,
 )
-from .sandbox_impl import READ_SIZE_LIMIT
 
 # The implementation is constructed with the interface's GraphConfig (see
 # bazel_graph_storage-low.md); the Config alias names it per the implementation spec.
@@ -380,7 +379,6 @@ def _build_sandbox_config(
         readable_paths=readable_paths,
         writable_paths=writable_paths,
         blame_targets=list(manifest.get("feedback_deps", [])),  # pyright: ignore[reportArgumentType]
-        read_size_limit=READ_SIZE_LIMIT,
         search_result_limit=10,
         verification_callback=_build_verify_callback(
             str(manifest.get("verify") or "")  # pyright: ignore[reportArgumentType]
@@ -426,7 +424,6 @@ def _synthesized_definition() -> NodeDefinition:
             readable_paths=[],
             writable_paths=[],
             blame_targets=[],
-            read_size_limit=READ_SIZE_LIMIT,
             search_result_limit=10,
             verification_callback=None,
         ),

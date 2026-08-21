@@ -5,7 +5,6 @@
 # Implementation LLS: bazel_agent_config_impl
 
 ## Data Types
-
 ```python
 from bazel_agent_config import AgentConfig, ConfigNotFoundError, ApiKeyNotFoundError
 from agent_loop import AgentLoopConfig
@@ -14,16 +13,8 @@ class BazelAgentConfigImpl(BazelAgentConfig): ...
 ```
 
 `BazelAgentConfigImpl` implements the `BazelAgentConfig` Protocol (see
-`bazel_agent_config` Interface LLS).
-
-## Config
-
-None — the implementation bundles no imported capabilities; the config target
-and workspace root are per-call parameters of the class methods (see
-`bazel_agent_config` Interface LLS).
-
-**HLS Justification:** The interface specifies a config target and workspace
-root per call; the implementation imports no configuration.
+`bazel_agent_config` Interface LLS). Constructed with no configuration: the
+config target and workspace root are per-call parameters of the class methods.
 
 ## Behavioral Description
 

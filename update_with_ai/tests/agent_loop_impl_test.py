@@ -22,13 +22,13 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
 
 from update_with_ai.lib.agent_loop import (
     AgentLoopConfig,
-    FinalAnswer,
     HistoryEntry,
     LogEvent,
     LoggerCallback,
     ToolDefinition,
 )
 from update_with_ai.lib.agent_loop_impl import AgentLoopImpl
+from update_with_ai.lib.dag_clean_logic import NoChangeResult
 from update_with_ai.lib.tool_provider import (
     Continue,
     TerminateAgentWithFailure,
@@ -44,6 +44,10 @@ DEFAULT_CONTINUATION_PROMPT = (
     "Your previous response was cut off because it exceeded the output limit. "
     "Continue from where you left off."
 )
+
+# Pinned stub text (specs/agent_loop_impl-low.md, Non-Concerns): the content
+# replacing a superseded tool result in place; a stub is static once set.
+STUB_TEXT = "Content removed because newer version is available."
 
 
 def make_config(**overrides: Any) -> AgentLoopConfig:
@@ -113,6 +117,15 @@ def make_response(
     return mock_response
 
 
+def make_succeed_response() -> Any:
+    """A response whose tool call terminates the run via succeed()."""
+    return make_response(
+        content=None,
+        tool_calls=[make_tool_call("succeed", "call_finish", {"summary": "done"})],
+        finish_reason="tool_calls",
+    )
+
+
 class TestAgentLoopImpl(unittest.TestCase):
     """AgentLoopImpl behavior against the agent_loop_impl LLS."""
 
@@ -122,6 +135,26 @@ class TestAgentLoopImpl(unittest.TestCase):
         self.addCleanup(self.openai_patcher.stop)
         self.mock_client = self.mock_openai_class.return_value
         self.agent = AgentLoopImpl(make_config())
+
+    def inline_result(self, content: Any, note: str = "") -> ToolResult:
+        """A result that never supersedes an earlier result."""
+        return ToolResult(content=content, supersedes=False, note=note)
+
+    def assert_success(self, result: Any) -> List[HistoryEntry]:
+        """Assert a successful termination result (the loop's only completion)."""
+        assert isinstance(result, tuple)
+        signal, history = result
+        assert isinstance(signal, TerminateAgentWithSuccess)
+        return history
+
+    def succeed_branch(self) -> None:
+        """Insert a succeed branch into the calling test's executor."""
+        raise AssertionError("unused")
+
+    def stub_result(self, content: Any, note: str = "") -> ToolResult:
+        """A result that supersedes the earlier result for the same file or
+        tool command (the agent loop stubs it)."""
+        return ToolResult(content=content, supersedes=True, note=note)
 
     # ---------------------------------------------------------------
     # Normal outcomes
@@ -137,7 +170,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         responses = [
             make_response(content=None, tool_calls=[tool_call], finish_reason="tool_calls")
         ] * 5
-        responses.append(make_response(content="done", finish_reason="stop"))
+        responses.append(make_succeed_response())
         self.mock_client.chat.completions.create.side_effect = responses
 
         events: List[Tuple[str, Dict[str, Any]]] = []
@@ -146,9 +179,9 @@ class TestAgentLoopImpl(unittest.TestCase):
             events.append((event, data))
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
-            return ToolResult(
-                content="no files changed", content_id=None, stub_previous=False
-            )
+            if name == "succeed":
+                return TerminateAgentWithSuccess(NoChangeResult())
+            return self.inline_result("no files changed")
 
         agent = AgentLoopImpl(make_config(max_iterations=10))
         result = agent.run_agent(
@@ -157,13 +190,161 @@ class TestAgentLoopImpl(unittest.TestCase):
             tool_executor=executor,
             logger=logger,
         )
-        self.assertIsInstance(result, FinalAnswer)
+        history = self.assert_success(result)
         reminders = [d for e, d in events if e == "reminder_injected"]
         self.assertEqual(len(reminders), 1)
         self.assertIn("verify", reminders[0]["message"])
         # The reminder text is present in the conversation history.
-        history_text = " ".join(str(m.get("content", "")) for m in result.history)
+        history_text = " ".join(str(m.get("content", "")) for m in history)
         self.assertIn("times in a row", history_text)
+
+    def test_same_range_replace_lines_injects_reminder(self) -> None:
+        """
+        LLS: replace_lines targeting the same file and line range 4
+        consecutive times (even with different new_str) injects a
+        range-specific reminder once per run; the loop continues.
+        """
+        # Each call differs (different new_str), so the identical-call
+        # detector does not fire; the same-range detector must.
+        calls = [
+            make_tool_call("replace_lines", f"call_{i}", {
+                "file_path": "dag_storage-low.md",
+                "start_line": 96,
+                "end_line": 100,
+                "new_str": "content version %d" % i,
+            })
+            for i in range(4)
+        ]
+        responses = [
+            make_response(content=None, tool_calls=[calls[i]], finish_reason="tool_calls")
+            for i in range(4)
+        ]
+        responses.append(make_succeed_response())
+        self.mock_client.chat.completions.create.side_effect = responses
+
+        events: List[Tuple[str, Dict[str, Any]]] = []
+
+        def logger(event: str, data: Dict[str, Any]) -> None:
+            events.append((event, data))
+
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+            if name == "succeed":
+                return TerminateAgentWithSuccess(NoChangeResult())
+            return self.stub_result("updated")
+
+        agent = AgentLoopImpl(make_config(max_iterations=10))
+        result = agent.run_agent(
+            prompt="update the spec",
+            tools=make_tool_definitions(),
+            tool_executor=executor,
+            logger=logger,
+        )
+        history = self.assert_success(result)
+        reminders = [d for e, d in events if e == "reminder_injected"]
+        self.assertEqual(len(reminders), 1)
+        self.assertIn("96-100", reminders[0]["message"])
+        self.assertIn("dag_storage-low.md", reminders[0]["message"])
+        self.assertIn("include_line_numbers=True", reminders[0]["message"])
+        history_text = " ".join(str(m.get("content", "")) for m in history)
+        self.assertIn("edited lines 96-100", history_text)
+
+    def test_repeated_identical_tool_call_fails_run(self) -> None:
+        """
+        LLS: when the same tool call (name and arguments) repeats 8
+        consecutive times, the run signals failure (a degenerate loop) with
+        the pinned error text, instead of spinning to the iteration limit.
+        """
+        tool_call = make_tool_call("verify", "call_loop", {})
+        responses = [
+            make_response(content=None, tool_calls=[tool_call], finish_reason="tool_calls")
+        ] * 8
+        self.mock_client.chat.completions.create.side_effect = responses
+
+        events: List[Tuple[str, Dict[str, Any]]] = []
+
+        def logger(event: str, data: Dict[str, Any]) -> None:
+            events.append((event, data))
+
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+            return self.inline_result("no files changed")
+
+        agent = AgentLoopImpl(make_config(max_iterations=20))
+        result = agent.run_agent(
+            prompt="update the spec",
+            tools=make_tool_definitions(),
+            tool_executor=executor,
+            logger=logger,
+        )
+
+        assert isinstance(result, tuple)
+        error, history = result
+        assert isinstance(error, str)
+        self.assertEqual(
+            error, "Degenerate loop: same tool call repeated 8 consecutive times"
+        )
+        assert isinstance(history, list)
+        # The reminder fired once at 4 repetitions; the run failed at 8.
+        reminders = [d for e, d in events if e == "reminder_injected"]
+        self.assertEqual(len(reminders), 1)
+        self.assertIn("verify", reminders[0]["message"])
+        # The run ended at the 8th identical call.
+        self.assertEqual(self.mock_client.chat.completions.create.call_count, 8)
+        # The failure is logged as an error event.
+        error_events = [d for e, d in events if e == "error"]
+        self.assertEqual(len(error_events), 1)
+        self.assertIn("Degenerate loop", error_events[0]["error"])
+
+    def test_same_range_replace_lines_fails_run(self) -> None:
+        """
+        LLS: replace_lines targeting the same file and line range 8
+        consecutive times (even with different new_str) fails the run with
+        the pinned error text.
+        """
+        calls = [
+            make_tool_call("replace_lines", f"call_{i}", {
+                "file_path": "dag_storage-low.md",
+                "start_line": 96,
+                "end_line": 100,
+                "new_str": "content version %d" % i,
+            })
+            for i in range(8)
+        ]
+        responses = [
+            make_response(content=None, tool_calls=[calls[i]], finish_reason="tool_calls")
+            for i in range(8)
+        ]
+        self.mock_client.chat.completions.create.side_effect = responses
+
+        events: List[Tuple[str, Dict[str, Any]]] = []
+
+        def logger(event: str, data: Dict[str, Any]) -> None:
+            events.append((event, data))
+
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+            return self.stub_result("updated")
+
+        agent = AgentLoopImpl(make_config(max_iterations=20))
+        result = agent.run_agent(
+            prompt="update the spec",
+            tools=make_tool_definitions(),
+            tool_executor=executor,
+            logger=logger,
+        )
+
+        assert isinstance(result, tuple)
+        error, history = result
+        assert isinstance(error, str)
+        self.assertEqual(
+            error,
+            "Degenerate loop: replace_lines targeted the same file and line range 8 consecutive times",
+        )
+        assert isinstance(history, list)
+        # The range-specific reminder fired once at 4; the run failed at 8.
+        reminders = [d for e, d in events if e == "reminder_injected"]
+        self.assertEqual(len(reminders), 1)
+        self.assertIn("96-100", reminders[0]["message"])
+        self.assertEqual(self.mock_client.chat.completions.create.call_count, 8)
+
     def test_loop_reminder_not_injected_for_distinct_calls(self) -> None:
         """
         LLS: a reminder is injected only for repeated identical calls;
@@ -175,7 +356,7 @@ class TestAgentLoopImpl(unittest.TestCase):
             make_response(content=None, tool_calls=[call_a], finish_reason="tool_calls"),
             make_response(content=None, tool_calls=[call_b], finish_reason="tool_calls"),
             make_response(content=None, tool_calls=[call_a], finish_reason="tool_calls"),
-            make_response(content="done", finish_reason="stop"),
+            make_succeed_response(),
         ]
         self.mock_client.chat.completions.create.side_effect = responses
 
@@ -185,7 +366,9 @@ class TestAgentLoopImpl(unittest.TestCase):
             events.append((event, data))
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
-            return ToolResult(content="ok", content_id=None, stub_previous=False)
+            if name == "succeed":
+                return TerminateAgentWithSuccess(NoChangeResult())
+            return self.inline_result("ok")
 
         agent = AgentLoopImpl(make_config(max_iterations=10))
         result = agent.run_agent(
@@ -194,15 +377,22 @@ class TestAgentLoopImpl(unittest.TestCase):
             tool_executor=executor,
             logger=logger,
         )
-        self.assertIsInstance(result, FinalAnswer)
+        history = self.assert_success(result)
         reminders = [d for e, d in events if e == "reminder_injected"]
         self.assertEqual(reminders, [])
 
-    def test_final_answer_when_model_stops_with_content(self) -> None:
+    def test_stop_with_content_injects_termination_reminder(self) -> None:
         """
-        LLS: FinalAnswer is returned when the model produces an answer
-        (no tool calls).
+        LLS: there is no free-text final answer. A model response that stops
+        with content (no tool calls) injects the termination reminder (the
+        pinned default) and continues; the run fails via the iteration limit
+        if the model never signals termination.
         """
+        events: List[Tuple[str, Dict[str, Any]]] = []
+
+        def logger(event: LogEvent, data: Dict[str, Any]) -> None:
+            events.append((event, data))
+
         self.mock_client.chat.completions.create.return_value = make_response(
             content="The capital of France is Paris.", finish_reason="stop"
         )
@@ -210,19 +400,28 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="What is the capital of France?",
             tools=[],
-            tool_executor=lambda name, arguments: ToolResult(
-                content="unused", content_id=None, stub_previous=False
-            ),
+            tool_executor=lambda name, arguments: self.inline_result("unused"),
+            logger=logger,
         )
 
-        assert isinstance(result, FinalAnswer)
-        assert result.answer == "The capital of France is Paris."
-        assert result.history[0] == {
+        assert isinstance(result, tuple)
+        error, history = result
+        assert isinstance(error, str)  # max iterations exceeded: never terminated
+        # Every stop injects the reminder: 3 stops under max_iterations=3.
+        reminders = [d for e, d in events if e == "reminder_injected"]
+        assert len(reminders) == 3
+        assert (
+            "You must signal termination by calling succeed(), fail(), or "
+            "blame() to end the run." == reminders[0]["message"]
+        )
+        assert any(
+            str(m.get("content", "")) == "The capital of France is Paris."
+            for m in history
+        )
+        assert history[0] == {
             "role": "user",
             "content": "What is the capital of France?",
         }
-        assert result.history[1]["role"] == "assistant"
-        assert result.history[1]["content"] == "The capital of France is Paris."
 
         kwargs = self.mock_client.chat.completions.create.call_args.kwargs
         assert kwargs["model"] == "test-model"
@@ -232,22 +431,23 @@ class TestAgentLoopImpl(unittest.TestCase):
     def test_tool_result_then_final_answer(self) -> None:
         """
         LLS: tool calls are delegated to tool_executor once per tool call
-        with (name, arguments); the ToolResult is appended and the loop
-        continues to a FinalAnswer.
+        with (name, arguments); the inline ToolResult is appended and the
+        loop continues to a FinalAnswer.
         """
         tool_call = make_tool_call("get_weather", "call_123", {"location": "San Francisco"})
         self.mock_client.chat.completions.create.side_effect = [
             make_response(content=None, tool_calls=[tool_call], finish_reason="tool_calls"),
             make_response(content="It is sunny in San Francisco.", finish_reason="stop"),
+            make_succeed_response(),
         ]
 
         calls: List[Tuple[str, Dict[str, Any]]] = []
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+            if name == "succeed":
+                return TerminateAgentWithSuccess(NoChangeResult())
             calls.append((name, arguments))
-            return ToolResult(
-                content='{"weather": "Sunny"}', content_id=None, stub_previous=False
-            )
+            return self.inline_result('{"weather": "Sunny"}')
 
         result = self.agent.run_agent(
             prompt="What's the weather in San Francisco?",
@@ -255,13 +455,13 @@ class TestAgentLoopImpl(unittest.TestCase):
             tool_executor=executor,
         )
 
-        assert isinstance(result, FinalAnswer)
-        assert result.answer == "It is sunny in San Francisco."
+        history = self.assert_success(result)
+        assert any(str(m.get("content", "")) == "It is sunny in San Francisco." for m in history)
         # Once per tool call, with the parsed arguments and the tool name.
         assert calls == [("get_weather", {"location": "San Francisco"})]
 
         # Tool result immediately follows the tool call in chronological order.
-        history = result.history
+        history = history
         tool_messages = [m for m in history if m.get("role") == "tool"]
         assert len(tool_messages) == 1
         assert tool_messages[0]["tool_call_id"] == "call_123"
@@ -270,7 +470,7 @@ class TestAgentLoopImpl(unittest.TestCase):
             i for i, m in enumerate(history) if m.get("role") == "assistant"
         )
         assert history.index(tool_messages[0]) > assistant_index
-        assert self.mock_client.chat.completions.create.call_count == 2
+        assert self.mock_client.chat.completions.create.call_count == 3
 
     def test_terminate_agent_with_success_stops_loop(self) -> None:
         """
@@ -287,6 +487,8 @@ class TestAgentLoopImpl(unittest.TestCase):
         term_signal = TerminateAgentWithSuccess(value=term_value)
 
         def executor(name: str, arguments: Dict[str, Any]) -> TerminateAgentWithSuccess:
+            if name == "succeed":
+                return TerminateAgentWithSuccess(NoChangeResult())
             return term_signal
 
         result = self.agent.run_agent(
@@ -314,6 +516,8 @@ class TestAgentLoopImpl(unittest.TestCase):
         )
 
         def executor(name: str, arguments: Dict[str, Any]) -> TerminateAgentWithFailure[str]:
+            if name == "succeed":
+                return TerminateAgentWithSuccess(NoChangeResult())
             return TerminateAgentWithFailure(value="agent cannot complete this task")
 
         result = self.agent.run_agent(
@@ -342,7 +546,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Hello",
             tools=[],
-            tool_executor=lambda name, arguments: Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
         )
 
         assert isinstance(result, tuple)
@@ -384,7 +588,7 @@ class TestAgentLoopImpl(unittest.TestCase):
                 result = self.agent.run_agent(
                     prompt="Hello",
                     tools=[],
-                    tool_executor=lambda name, arguments: Continue(),
+                    tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
                 )
                 assert isinstance(result, tuple)
                 error, history = result
@@ -399,25 +603,26 @@ class TestAgentLoopImpl(unittest.TestCase):
     def test_truncated_response_continues_to_final_answer(self) -> None:
         """
         LLS: a response truncated at the generation limit is not treated as
-        a final answer; the default continuation prompt is appended and the
-        loop resumes with a follow-up API call.
+        complete; the default continuation prompt is appended and the loop
+        resumes with a follow-up API call.
         """
         self.mock_client.chat.completions.create.side_effect = [
             make_response(content="Let me think...", finish_reason="length"),
-            make_response(content="The final answer.", finish_reason="stop"),
+            make_succeed_response(),
         ]
 
         result = self.agent.run_agent(
             prompt="Solve it",
             tools=[],
-            tool_executor=lambda name, arguments: Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
         )
 
-        assert isinstance(result, FinalAnswer)
-        assert result.answer == "The final answer."
+        history = self.assert_success(result)
+        assert any(
+            m.get("content") == "Let me think..." for m in history
+        )
+        assert any(m.get("content") == DEFAULT_CONTINUATION_PROMPT for m in history)
         assert self.mock_client.chat.completions.create.call_count == 2
-
-        history = result.history
         # The truncated assistant content is present, followed by the default
         # continuation prompt (pinned in the impl LLS).
         truncated = [
@@ -456,14 +661,16 @@ class TestAgentLoopImpl(unittest.TestCase):
                 tool_calls=[tool_call],
                 finish_reason="length",
             ),
-            make_response(content="It is sunny.", finish_reason="stop"),
+            make_succeed_response(),
         ]
 
         invocations: List[Tuple[str, Dict[str, Any]]] = []
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+            if name == "succeed":
+                return TerminateAgentWithSuccess(NoChangeResult())
             invocations.append((name, arguments))
-            return ToolResult(content="x", content_id=None, stub_previous=False)
+            return self.inline_result("x")
 
         result = self.agent.run_agent(
             prompt="Weather?",
@@ -471,15 +678,14 @@ class TestAgentLoopImpl(unittest.TestCase):
             tool_executor=executor,
         )
 
-        assert isinstance(result, FinalAnswer)
-        assert result.answer == "It is sunny."
+        history = self.assert_success(result)
         # The truncated tool call is never executed and never retried.
         assert invocations == []
 
         # The appended assistant message omits the tool calls.
         truncated_assistant = [
             m
-            for m in result.history
+            for m in history
             if m.get("role") == "assistant"
             and m.get("content") == "Let me check the weather..."
         ]
@@ -498,20 +704,25 @@ class TestAgentLoopImpl(unittest.TestCase):
         """
         self.mock_client.chat.completions.create.side_effect = [
             make_response(content=None, tool_calls=None, finish_reason="length"),
-            make_response(content="Done.", finish_reason="stop"),
+            make_succeed_response(),
         ]
 
         result = self.agent.run_agent(
             prompt="Go",
             tools=[],
-            tool_executor=lambda name, arguments: Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
         )
 
-        assert isinstance(result, FinalAnswer)
-        assert result.answer == "Done."
-        assistant_messages = [m for m in result.history if m.get("role") == "assistant"]
-        assert len(assistant_messages) == 1  # only the final answer's assistant message
-        assert assistant_messages[0]["content"] == "Done."
+        history = self.assert_success(result)
+        assistant_messages = [m for m in history if m.get("role") == "assistant"]
+        # Only the succeed tool-call assistant message: the empty truncated
+        # response was not appended.
+        assert len(assistant_messages) == 1
+        assert assistant_messages[0]["content"] is None
+        assert any(
+            m.get("role") == "user" and m.get("content") == DEFAULT_CONTINUATION_PROMPT
+            for m in history
+        )
 
     def test_degenerate_truncated_response_signals_failure(self) -> None:
         """
@@ -527,7 +738,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Go",
             tools=[],
-            tool_executor=lambda name, arguments: Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
         )
 
         assert isinstance(result, tuple)
@@ -555,7 +766,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Go",
             tools=[],
-            tool_executor=lambda name, arguments: Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
         )
 
         assert isinstance(result, tuple)
@@ -573,23 +784,24 @@ class TestAgentLoopImpl(unittest.TestCase):
         self.mock_client.chat.completions.create.side_effect = [
             make_response(content="Partial.", finish_reason="length"),
             make_response(content="Done.", finish_reason="stop"),
+            make_succeed_response(),
         ]
 
         result = agent.run_agent(
             prompt="Go",
             tools=[],
-            tool_executor=lambda name, arguments: Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
         )
 
-        assert isinstance(result, FinalAnswer)
-        assert result.answer == "Done."
+        history = self.assert_success(result)
+        assert any(str(m.get("content", "")) == "Done." for m in history)
         assert any(
             m.get("role") == "user" and m.get("content") == "Keep going!"
-            for m in result.history
+            for m in history
         )
         assert not any(
             m.get("role") == "user" and m.get("content") == DEFAULT_CONTINUATION_PROMPT
-            for m in result.history
+            for m in history
         )
 
     def test_truncation_until_max_iterations_fails(self) -> None:
@@ -605,7 +817,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = agent.run_agent(
             prompt="Go",
             tools=[],
-            tool_executor=lambda name, arguments: Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
         )
 
         assert isinstance(result, tuple)
@@ -633,17 +845,17 @@ class TestAgentLoopImpl(unittest.TestCase):
 
         self.mock_client.chat.completions.create.side_effect = [
             make_response(content="Partial.", finish_reason="length"),
-            make_response(content="Done.", finish_reason="stop"),
+            make_succeed_response(),
         ]
 
         result = self.agent.run_agent(
             prompt="Go",
             tools=[],
-            tool_executor=lambda name, arguments: Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
             logger=logger,
         )
 
-        assert isinstance(result, FinalAnswer)
+        history = self.assert_success(result)
         truncated_events = [e for e in events if e[0] == "response_truncated"]
         assert len(truncated_events) == 1
         assert truncated_events[0][1]["message"]["content"] == "Partial."
@@ -671,6 +883,8 @@ class TestAgentLoopImpl(unittest.TestCase):
         )
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+            if name == "succeed":
+                return TerminateAgentWithSuccess(NoChangeResult())
             raise RuntimeError("boom")
 
         result = self.agent.run_agent(
@@ -696,7 +910,9 @@ class TestAgentLoopImpl(unittest.TestCase):
         )
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
-            return ToolResult(content="42", content_id=None, stub_previous=False)
+            if name == "succeed":
+                return TerminateAgentWithSuccess(NoChangeResult())
+            return self.inline_result("42")
 
         result = agent.run_agent(
             prompt="What's the weather?",
@@ -724,9 +940,12 @@ class TestAgentLoopImpl(unittest.TestCase):
         self.mock_client.chat.completions.create.side_effect = [
             make_response(content=None, tool_calls=[tool_call], finish_reason="tool_calls"),
             make_response(content="Let me retry with valid arguments.", finish_reason="stop"),
+            make_succeed_response(),
         ]
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolFailure[str]:
+            if name == "succeed":
+                return TerminateAgentWithSuccess(NoChangeResult())
             return ToolFailure(value="Invalid arguments: location is required")
 
         result = self.agent.run_agent(
@@ -735,15 +954,73 @@ class TestAgentLoopImpl(unittest.TestCase):
             tool_executor=executor,
         )
 
-        assert isinstance(result, FinalAnswer)
-        assert result.answer == "Let me retry with valid arguments."
-        tool_messages = [m for m in result.history if m.get("role") == "tool"]
+        history = self.assert_success(result)
+        assert any(str(m.get("content", "")) == "Let me retry with valid arguments." for m in history)
+        tool_messages = [m for m in history if m.get("role") == "tool"]
         assert len(tool_messages) == 1
-        # The failure message becomes the tool result content; no stub by default.
+        # The failure message becomes the tool result content.
         assert tool_messages[0]["content"] == "Invalid arguments: location is required"
-        assert tool_messages[0]["_content_id"] is None
-        assert tool_messages[0]["_stub_previous"] is False
-        assert self.mock_client.chat.completions.create.call_count == 2
+        # No stubbing metadata exists (a tool failure never supersedes).
+        assert "_stub_key" not in tool_messages[0]
+        assert self.mock_client.chat.completions.create.call_count == 3
+
+    def test_tool_failure_never_supersedes(self) -> None:
+        """
+        LLS: a ToolFailure is appended to the conversation as a tool result
+        and the loop continues (recoverable); it never supersedes an earlier
+        result — an earlier read of the same file stays live (not stubbed).
+        """
+        agent = AgentLoopImpl(make_config(max_iterations=4))
+        read_call = make_tool_call("read_file", "call_1", {"path": "foo.txt"})
+        edit_call = make_tool_call("replace_lines", "call_2", {"path": "foo.txt"})
+        agent._client.chat.completions.create.side_effect = [
+            make_response(content=None, tool_calls=[read_call], finish_reason="tool_calls"),
+            make_response(content=None, tool_calls=[edit_call], finish_reason="tool_calls"),
+            make_succeed_response(),
+        ]
+
+        def executor(name: str, arguments: Dict[str, Any]) -> Any:
+            if name == "succeed":
+                return TerminateAgentWithSuccess(NoChangeResult())
+            if name == "replace_lines":
+                return ToolFailure(
+                    value=(
+                        "replace_lines requires the line-numbered view: call "
+                        "read_file('foo.txt', include_line_numbers=True)"
+                    )
+                )
+            # read_file: a writable-file read supersedes the earlier result
+            # for the file.
+            return ToolResult(
+                content="line1\nline2",
+                supersedes=True,
+                note="Read 2 lines (line-numbered)",
+            )
+
+        events: List[Tuple[str, Dict[str, Any]]] = []
+
+        def logger(event: str, data: Dict[str, Any]) -> None:
+            events.append((event, data))
+
+        result = agent.run_agent(
+            prompt="Edit foo.txt",
+            tools=make_tool_definitions(),
+            tool_executor=executor,
+            logger=logger,
+        )
+
+        history = self.assert_success(result)
+        tool_messages = [m for m in history if m.get("role") == "tool"]
+        # Read, failure: two tool messages.
+        assert len(tool_messages) == 2
+        # The failure message is appended as a tool result (a reminder).
+        assert "include_line_numbers=True" in tool_messages[1]["content"]
+        # The earlier read is NOT stubbed by the failure: its content is live.
+        assert tool_messages[0]["content"] == "line1\nline2"
+        # A tool failure carries no close_buffer (no buffers to close).
+        assert not hasattr(ToolFailure(value="x"), "close_buffer")
+        # No message_stubbed event was emitted for the failure.
+        assert all(e != "message_stubbed" for e, _ in events)
 
     def test_continue_signal_produces_no_tool_result(self) -> None:
         """
@@ -753,12 +1030,14 @@ class TestAgentLoopImpl(unittest.TestCase):
         tool_call = make_tool_call("get_weather", "call_1", {})
         self.mock_client.chat.completions.create.side_effect = [
             make_response(content=None, tool_calls=[tool_call], finish_reason="tool_calls"),
-            make_response(content="Done.", finish_reason="stop"),
+            make_succeed_response(),
         ]
 
         invocations: List[str] = []
 
         def executor(name: str, arguments: Dict[str, Any]) -> Continue:
+            if name == "succeed":
+                return TerminateAgentWithSuccess(NoChangeResult())
             invocations.append(name)
             return Continue()
 
@@ -768,128 +1047,255 @@ class TestAgentLoopImpl(unittest.TestCase):
             tool_executor=executor,
         )
 
-        assert isinstance(result, FinalAnswer)
-        assert result.answer == "Done."
+        history = self.assert_success(result)
         assert invocations == ["get_weather"]
-        assert [m for m in result.history if m.get("role") == "tool"] == []
+        assert [m for m in history if m.get("role") == "tool"] == []
         assert self.mock_client.chat.completions.create.call_count == 2
 
     # ---------------------------------------------------------------
-    # content_id-based stubbing
+    # Stubbing: supersedes flag -> in-place stub of the earlier result
     # ---------------------------------------------------------------
 
-    def test_stub_previous_stubs_earlier_results_and_retains_position(self) -> None:
+    def test_non_superseding_result_appended_without_stubbing(self) -> None:
         """
-        LLS: with stub_previous=True, all previous non-stubbed results with
-        the same content_id are stubbed and the new result is appended;
-        stubbed messages retain their position.
+        LLS: a result with the supersedes flag unset is appended to the
+        conversation; nothing is stubbed, no matter how many arrive.
         """
-        tc1 = make_tool_call("read_file", "call_1", {"path": "/tmp/f.txt"})
-        tc2 = make_tool_call("read_file", "call_2", {"path": "/tmp/f.txt"})
+        tc1 = make_tool_call("read_file", "call_1", {"file_path": "ro.txt"})
+        tc2 = make_tool_call("read_file", "call_2", {"file_path": "ro.txt"})
         self.mock_client.chat.completions.create.side_effect = [
             make_response(content=None, tool_calls=[tc1], finish_reason="tool_calls"),
             make_response(content=None, tool_calls=[tc2], finish_reason="tool_calls"),
-            make_response(content="Final.", finish_reason="stop"),
+            make_succeed_response(),
         ]
+
+        events: List[Tuple[str, Dict[str, Any]]] = []
+
+        def logger(event: LogEvent, data: Dict[str, Any]) -> None:
+            events.append((event, data))
+
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+            if name == "succeed":
+                return TerminateAgentWithSuccess(NoChangeResult())
+            return self.inline_result("raw data")
+
+        result = self.agent.run_agent(
+            prompt="Read the file twice",
+            tools=make_tool_definitions(),
+            tool_executor=executor,
+            logger=logger,
+        )
+
+        history = self.assert_success(result)
+        tool_messages = [m for m in history if m.get("role") == "tool"]
+        assert len(tool_messages) == 2
+        for msg in tool_messages:
+            assert msg["content"] == "raw data"
+            assert STUB_TEXT not in msg["content"]
+        # No stubbing occurred.
+        assert all(e != "message_stubbed" for e, _ in events)
+
+    def test_superseding_result_stubs_earlier_result(self) -> None:
+        """
+        LLS: a result with the supersedes flag set stubs the earlier
+        non-stubbed result for the same file (here: the file's virtual name
+        in the tool call's file_path argument) in place — the stubbed message
+        keeps its position and its content is replaced by the pinned static
+        stub text — the message_stubbed event is emitted with the stubbed
+        message and the replacement message, and the new result becomes the
+        live result for that file.
+        """
+        tc1 = make_tool_call("read_file", "call_1", {"file_path": "foo.txt"})
+        tc2 = make_tool_call("read_file", "call_2", {"file_path": "foo.txt"})
+        self.mock_client.chat.completions.create.side_effect = [
+            make_response(content=None, tool_calls=[tc1], finish_reason="tool_calls"),
+            make_response(content=None, tool_calls=[tc2], finish_reason="tool_calls"),
+            make_succeed_response(),
+        ]
+
+        events: List[Tuple[str, Dict[str, Any]]] = []
+
+        def logger(event: LogEvent, data: Dict[str, Any]) -> None:
+            events.append((event, data))
 
         counter: Dict[str, int] = {"n": 0}
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+            if name == "succeed":
+                return TerminateAgentWithSuccess(NoChangeResult())
             counter["n"] += 1
             return ToolResult(
-                content=f"version {counter['n']}", content_id="file_content", stub_previous=True
+                content=f"version {counter['n']}",
+                supersedes=True,
+                note="Read 2 lines (plain)",
             )
 
         result = self.agent.run_agent(
-            prompt="Read the file",
+            prompt="Read foo.txt twice",
             tools=make_tool_definitions(),
             tool_executor=executor,
+            logger=logger,
         )
 
-        assert isinstance(result, FinalAnswer)
-        history = result.history
+        history = self.assert_success(result)
+        # Two tool messages, both keeping their positions (append-only except
+        # for in-place stubbing).
         tool_messages = [m for m in history if m.get("role") == "tool"]
         assert len(tool_messages) == 2
-        # First result stubbed in place, metadata retained.
-        assert tool_messages[0]["_stubbed"] is True
-        assert tool_messages[0]["_content_id"] == "file_content"
-        assert tool_messages[0]["content"] == "Content removed because newer version is available"
-        # New result appended with full content, not stubbed.
+        # The first is stubbed in place with the pinned static stub text.
+        assert tool_messages[0]["content"] == STUB_TEXT
+        # The second is the live result for the file.
         assert tool_messages[1]["content"] == "version 2"
-        assert tool_messages[1].get("_stubbed") is not True
-        # The stubbed message retains its original position (before the second
-        # assistant turn); the new result is appended at the end.
-        assistant_indices = [i for i, m in enumerate(history) if m.get("role") == "assistant"]
-        assert history.index(tool_messages[0]) < assistant_indices[1]
-        assert history.index(tool_messages[1]) == len(history) - 2
+        assert tool_messages[1].get("note", "") == ""
 
-    def test_content_id_none_appends_unconditionally(self) -> None:
+        # The message_stubbed event carries the stubbed message and the
+        # replacement message.
+        stubbed_events = [d for e, d in events if e == "message_stubbed"]
+        assert len(stubbed_events) == 1
+        assert stubbed_events[0]["stubbed_message"]["content"] == STUB_TEXT
+        assert stubbed_events[0]["replacement_message"]["content"] == "version 2"
+
+        # The follow-up request shows the stub in the first tool message's
+        # position and the live content (with its note appended, per the LLS)
+        # at the end — the prefix up to the most recent live result is
+        # preserved.
+        third_messages = self.mock_client.chat.completions.create.call_args_list[2].kwargs[
+            "messages"
+        ]
+        tool_contents = [
+            m.get("content", "")
+            for m in third_messages
+            if m.get("role") == "tool"
+        ]
+        assert tool_contents[0] == STUB_TEXT
+        assert tool_contents[1] == "version 2\nRead 2 lines (plain)"
+
+    def test_different_files_do_not_stub_each_other(self) -> None:
         """
-        LLS: with content_id=None the result is appended unconditionally
-        (never stubbed), even for repeated tool calls.
+        LLS: a result supersedes the earlier result for the SAME file or tool
+        command only; results for different files do not affect each other.
         """
-        tc1 = make_tool_call("read_file", "call_1", {})
-        tc2 = make_tool_call("read_file", "call_2", {})
+        tc1 = make_tool_call("read_file", "call_1", {"file_path": "a.txt"})
+        tc2 = make_tool_call("read_file", "call_2", {"file_path": "b.txt"})
         self.mock_client.chat.completions.create.side_effect = [
             make_response(content=None, tool_calls=[tc1], finish_reason="tool_calls"),
             make_response(content=None, tool_calls=[tc2], finish_reason="tool_calls"),
-            make_response(content="Final.", finish_reason="stop"),
+            make_succeed_response(),
         ]
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
-            return ToolResult(content="raw data", content_id=None, stub_previous=False)
+            if name == "succeed":
+                return TerminateAgentWithSuccess(NoChangeResult())
+            return self.stub_result("content for " + arguments.get("file_path", "?"))
 
         result = self.agent.run_agent(
-            prompt="Read the file twice",
+            prompt="Read both files",
             tools=make_tool_definitions(),
             tool_executor=executor,
         )
 
-        assert isinstance(result, FinalAnswer)
-        tool_messages = [m for m in result.history if m.get("role") == "tool"]
+        history = self.assert_success(result)
+        tool_messages = [m for m in history if m.get("role") == "tool"]
         assert len(tool_messages) == 2
-        for msg in tool_messages:
-            assert msg["content"] == "raw data"
-            assert msg.get("_stubbed") is not True
+        # Both live: each is the first result for its own file.
+        assert tool_messages[0]["content"] == "content for a.txt"
+        assert tool_messages[1]["content"] == "content for b.txt"
 
-    def test_stub_previous_false_keeps_previous_results(self) -> None:
+    def test_verify_result_stubs_earlier_verify_result(self) -> None:
         """
-        LLS: with stub_previous=False, previous results with the same
-        content_id remain unchanged.
+        LLS: a verification result supersedes the earlier non-stubbed
+        verification result — keyed by the tool command itself (verify has
+        no file_path argument).
         """
-        tc1 = make_tool_call("read_file", "call_1", {})
-        tc2 = make_tool_call("read_file", "call_2", {})
+        tc1 = make_tool_call("verify", "call_1", {})
+        tc2 = make_tool_call("verify", "call_2", {})
         self.mock_client.chat.completions.create.side_effect = [
             make_response(content=None, tool_calls=[tc1], finish_reason="tool_calls"),
             make_response(content=None, tool_calls=[tc2], finish_reason="tool_calls"),
-            make_response(content="Final.", finish_reason="stop"),
+            make_succeed_response(),
         ]
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
-            return ToolResult(content="same id data", content_id="cid", stub_previous=False)
+            if name == "succeed":
+                return TerminateAgentWithSuccess(NoChangeResult())
+            return self.stub_result("verification report")
 
         result = self.agent.run_agent(
-            prompt="Read the file twice",
+            prompt="Verify twice",
             tools=make_tool_definitions(),
             tool_executor=executor,
         )
 
-        assert isinstance(result, FinalAnswer)
-        tool_messages = [m for m in result.history if m.get("role") == "tool"]
+        history = self.assert_success(result)
+        tool_messages = [m for m in history if m.get("role") == "tool"]
         assert len(tool_messages) == 2
-        for msg in tool_messages:
-            assert msg["content"] == "same id data"
-            assert msg.get("_stubbed") is not True
+        assert tool_messages[0]["content"] == STUB_TEXT
+        assert tool_messages[1]["content"] == "verification report"
+
+    # ---------------------------------------------------------------
+    # System prompt
+    # ---------------------------------------------------------------
+
+    def test_system_prompt_sent_first_not_in_history(self) -> None:
+        """
+        LLS: the conversation context is organized as the system prompt, then
+        the agent conversation; the system prompt is not part of the
+        conversation history.
+        """
+        self.mock_client.chat.completions.create.side_effect = [
+            make_response(content="Done.", finish_reason="stop"),
+            make_succeed_response(),
+        ]
+
+        result = self.agent.run_agent(
+            prompt="Build it",
+            tools=[],
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
+            system_prompt="You are a builder.",
+        )
+
+        history = self.assert_success(result)
+        # The system prompt opens the API request.
+        messages = self.mock_client.chat.completions.create.call_args_list[0].kwargs["messages"]
+        assert messages[0] == {"role": "system", "content": "You are a builder."}
+        # The history contains only conversation messages (no system message;
+        # the termination reminder is a user message).
+        assert all(m.get("role") != "system" for m in history)
+
+    def test_empty_prompt_sends_no_user_message(self) -> None:
+        """
+        LLS: an empty prompt sends no user message.
+        """
+        self.mock_client.chat.completions.create.side_effect = [
+            make_response(content="I will act.", finish_reason="stop"),
+            make_succeed_response(),
+        ]
+
+        result = self.agent.run_agent(
+            prompt="",
+            tools=[],
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
+            system_prompt="Act on the files.",
+        )
+
+        history = self.assert_success(result)
+        messages = self.mock_client.chat.completions.create.call_args_list[0].kwargs["messages"]
+        assert messages[0] == {"role": "system", "content": "Act on the files."}
+        assert not any(m.get("role") == "user" for m in messages)
+        # History starts with the assistant message (empty prompt: no user
+        # message; the termination reminder and tool results follow later).
+        assert history[0]["role"] == "assistant"
 
     # ---------------------------------------------------------------
     # Termination reminder
     # ---------------------------------------------------------------
 
-    def test_reminder_injected_at_most_once_and_loop_continues(self) -> None:
+    def test_termination_reminder_injected_on_every_stop(self) -> None:
         """
-        LLS: at most one reminder is injected per run on the stop path; the
-        reminder is appended as a message (message_added), the reminder
-        event is emitted, and the loop continues.
+        LLS: there is no free-text final answer. When the model stops with
+        free text, the termination reminder is injected on EVERY stop (using
+        the configured generator's message when present) and the loop
+        continues until a termination signal.
         """
         events: List[Tuple[str, Dict[str, Any]]] = []
 
@@ -902,33 +1308,35 @@ class TestAgentLoopImpl(unittest.TestCase):
         self.mock_client.chat.completions.create.side_effect = [
             make_response(content="I think I'm done.", finish_reason="stop"),
             make_response(content="OK, I will use the tool.", finish_reason="stop"),
+            make_succeed_response(),
         ]
 
         result = agent.run_agent(
             prompt="Do something",
             tools=[],
-            tool_executor=lambda name, arguments: Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
             logger=logger,
         )
 
-        assert isinstance(result, FinalAnswer)
-        assert result.answer == "OK, I will use the tool."
-        assert self.mock_client.chat.completions.create.call_count == 2
+        history = self.assert_success(result)
+        assert self.mock_client.chat.completions.create.call_count == 3
 
-        # Exactly one reminder message in the history.
+        # Every stop injected the generator's message into the conversation.
         reminder_messages = [
             m
-            for m in result.history
+            for m in history
             if m.get("role") == "user" and m.get("content") == "You must use a tool to finish."
         ]
-        assert len(reminder_messages) == 1
+        assert len(reminder_messages) == 2
 
-        # Exactly one reminder_injected event.
+        # One reminder_injected event per stop, using the generator's message.
         reminder_events = [e for e in events if e[0] == "reminder_injected"]
-        assert len(reminder_events) == 1
-        assert reminder_events[0][1]["message"] == "You must use a tool to finish."
+        assert len(reminder_events) == 2
+        assert all(
+            e[1]["message"] == "You must use a tool to finish." for e in reminder_events
+        )
 
-        # The appended reminder was reported via message_added, before the
+        # Each appended reminder was reported via message_added, before the
         # reminder_injected event (logger invoked after each history update).
         reminder_added = [
             e
@@ -936,17 +1344,19 @@ class TestAgentLoopImpl(unittest.TestCase):
             if e[0] == "message_added"
             and e[1]["message"].get("content") == "You must use a tool to finish."
         ]
-        assert len(reminder_added) == 1
+        assert len(reminder_added) == 2
         assert events.index(reminder_added[0]) < events.index(reminder_events[0])
 
-        # The reminder is included in the follow-up API call.
-        second_messages = self.mock_client.chat.completions.create.call_args_list[1].kwargs[
-            "messages"
-        ]
-        assert any(
-            m.get("role") == "user" and m.get("content") == "You must use a tool to finish."
-            for m in second_messages
-        )
+        # Each reminder is included in the follow-up API call.
+        for i in (1, 2):
+            messages = self.mock_client.chat.completions.create.call_args_list[i].kwargs[
+                "messages"
+            ]
+            assert any(
+                m.get("role") == "user"
+                and m.get("content") == "You must use a tool to finish."
+                for m in messages
+            )
 
     # ---------------------------------------------------------------
     # Message hygiene and logging
@@ -960,11 +1370,13 @@ class TestAgentLoopImpl(unittest.TestCase):
         tool_call = make_tool_call("read_file", "call_1", {"path": "/tmp/f.txt"})
         self.mock_client.chat.completions.create.side_effect = [
             make_response(content=None, tool_calls=[tool_call], finish_reason="tool_calls"),
-            make_response(content="Done.", finish_reason="stop"),
+            make_succeed_response(),
         ]
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
-            return ToolResult(content="file data", content_id="cid", stub_previous=True)
+            if name == "succeed":
+                return TerminateAgentWithSuccess(NoChangeResult())
+            return self.inline_result("file data")
 
         result = self.agent.run_agent(
             prompt="Read the file",
@@ -972,7 +1384,7 @@ class TestAgentLoopImpl(unittest.TestCase):
             tool_executor=executor,
         )
 
-        assert isinstance(result, FinalAnswer)
+        history = self.assert_success(result)
 
         # No _-prefixed keys in any message sent to the API on any call.
         for call in self.mock_client.chat.completions.create.call_args_list:
@@ -1003,15 +1415,15 @@ class TestAgentLoopImpl(unittest.TestCase):
         tool_call = make_tool_call("read_file", "call_1", {"path": "/tmp/f.txt"})
         self.mock_client.chat.completions.create.side_effect = [
             make_response(content=None, tool_calls=[tool_call], finish_reason="tool_calls"),
-            make_response(content="Done.", finish_reason="stop"),
+            make_succeed_response(),
         ]
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
-            return ToolResult(
-                content="file data",
-                content_id="cid",
-                stub_previous=False,
-                note="Read lines 1-2 (2 lines); file has 4 lines; 2 lines remain; continue with start_line=3",
+            if name == "succeed":
+                return TerminateAgentWithSuccess(NoChangeResult())
+            return self.inline_result(
+                "file data",
+                note="Read 4 lines (plain)",
             )
 
         result = self.agent.run_agent(
@@ -1020,12 +1432,12 @@ class TestAgentLoopImpl(unittest.TestCase):
             tool_executor=executor,
         )
 
-        assert isinstance(result, FinalAnswer)
+        history = self.assert_success(result)
 
         # The internal history message carries the note as metadata.
-        tool_msg = next(m for m in result.history if m.get("role") == "tool")
+        tool_msg = next(m for m in history if m.get("role") == "tool")
         assert tool_msg["content"] == "file data"
-        assert tool_msg["_note"] == "Read lines 1-2 (2 lines); file has 4 lines; 2 lines remain; continue with start_line=3"
+        assert tool_msg["_note"] == "Read 4 lines (plain)"
 
         # The API message renders the note into the content and strips the
         # internal _note key.
@@ -1033,9 +1445,7 @@ class TestAgentLoopImpl(unittest.TestCase):
             "messages"
         ]
         api_tool = next(m for m in second_messages if m.get("role") == "tool")
-        assert api_tool["content"] == (
-            "file data\nRead lines 1-2 (2 lines); file has 4 lines; 2 lines remain; continue with start_line=3"
-        )
+        assert api_tool["content"] == "file data\nRead 4 lines (plain)"
         assert "_note" not in api_tool
 
     def test_logger_invoked_after_each_history_update(self) -> None:
@@ -1048,21 +1458,36 @@ class TestAgentLoopImpl(unittest.TestCase):
         def logger(event: LogEvent, data: Dict[str, Any]) -> None:
             events.append(event)
 
-        self.mock_client.chat.completions.create.return_value = make_response(
-            content="Hello back.", finish_reason="stop"
-        )
+        self.mock_client.chat.completions.create.side_effect = [
+            make_response(content="Hello back.", finish_reason="stop"),
+            make_succeed_response(),
+        ]
 
         result = self.agent.run_agent(
             prompt="Hi",
             tools=[],
-            tool_executor=lambda name, arguments: Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
             logger=logger,
         )
 
-        assert isinstance(result, FinalAnswer)
-        # message_added for the user prompt and the assistant reply, each
-        # fired after the corresponding history append, in order.
-        assert events == ["message_added", "api_response", "message_added", "final_answer"]
+        history = self.assert_success(result)
+        # Each history append fires message_added after the append; reminders
+        # fire message_added then reminder_injected; the run ends with
+        # tool_called/run_terminated in chronological order. No tool_result
+        # event fires for the termination signal: a termination signal is not
+        # a ToolResult (LLS logger table: "tool_result | Tool results
+        # received"), so no tool result is received on this path.
+        assert events == [
+            "message_added",  # user prompt
+            "api_response",   # stop response
+            "message_added",  # assistant "Hello back." message appended
+            "message_added",  # termination reminder appended
+            "reminder_injected",
+            "api_response",   # succeed response
+            "message_added",  # assistant tool-call message appended
+            "tool_called",
+            "run_terminated",
+        ]
 
     def test_logger_exceptions_ignored(self) -> None:
         """
@@ -1072,19 +1497,20 @@ class TestAgentLoopImpl(unittest.TestCase):
         def logger(event: LogEvent, data: Dict[str, Any]) -> None:
             raise RuntimeError("logger exploded")
 
-        self.mock_client.chat.completions.create.return_value = make_response(
-            content="Still works.", finish_reason="stop"
-        )
+        self.mock_client.chat.completions.create.side_effect = [
+            make_response(content="Still works.", finish_reason="stop"),
+            make_succeed_response(),
+        ]
 
         result = self.agent.run_agent(
             prompt="Hi",
             tools=[],
-            tool_executor=lambda name, arguments: Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
             logger=logger,
         )
 
-        assert isinstance(result, FinalAnswer)
-        assert result.answer == "Still works."
+        history = self.assert_success(result)
+        assert any(str(m.get("content", "")) == "Still works." for m in history)
 
     # ---------------------------------------------------------------
     # Usage and configuration
@@ -1109,6 +1535,7 @@ class TestAgentLoopImpl(unittest.TestCase):
                 finish_reason="stop",
                 usage={"prompt_tokens": 5, "completion_tokens": 7, "total_tokens": 12},
             ),
+            make_succeed_response(),
         ]
 
         events: List[Tuple[str, Dict[str, Any]]] = []
@@ -1117,7 +1544,9 @@ class TestAgentLoopImpl(unittest.TestCase):
             events.append((event, data))
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
-            return ToolResult(content="x", content_id=None, stub_previous=False)
+            if name == "succeed":
+                return TerminateAgentWithSuccess(NoChangeResult())
+            return self.inline_result("x")
 
         result = self.agent.run_agent(
             prompt="Weather?",
@@ -1126,19 +1555,20 @@ class TestAgentLoopImpl(unittest.TestCase):
             logger=logger,
         )
 
-        assert isinstance(result, FinalAnswer)
-        final_events = [e for e in events if e[0] == "final_answer"]
+        history = self.assert_success(result)
+        final_events = [e for e in events if e[0] == "run_terminated"]
         assert len(final_events) == 1
         assert final_events[0][1]["cumulative_usage"] == {
-            "prompt_tokens": 15,
-            "completion_tokens": 27,
-            "total_tokens": 42,
-            "request_count": 2,
+            "prompt_tokens": 25,
+            "completion_tokens": 47,
+            "total_tokens": 72,
+            "request_count": 3,
         }
         api_events = [e for e in events if e[0] == "api_response"]
         assert [e[1]["usage"] for e in api_events] == [
             {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
             {"prompt_tokens": 5, "completion_tokens": 7, "total_tokens": 12},
+            {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
         ]
 
     def test_agent_loop_config_defaults(self) -> None:
@@ -1161,15 +1591,17 @@ class TestAgentLoopImpl(unittest.TestCase):
     def test_no_state_persists_between_runs(self) -> None:
         """
         LLS invariant: no state persists between calls; each run starts a
-        fresh conversation.
+        fresh conversation and fresh stubbing state.
         """
+        # Each run stops with content, so each injects termination reminders
+        # and fails via the iteration limit (default max_iterations=3).
         self.mock_client.chat.completions.create.return_value = make_response(
             content="First answer.", finish_reason="stop"
         )
         first = self.agent.run_agent(
             prompt="Question one",
             tools=[],
-            tool_executor=lambda name, arguments: Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
         )
 
         self.mock_client.chat.completions.create.return_value = make_response(
@@ -1178,17 +1610,23 @@ class TestAgentLoopImpl(unittest.TestCase):
         second = self.agent.run_agent(
             prompt="Question two",
             tools=[],
-            tool_executor=lambda name, arguments: Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
         )
 
-        assert isinstance(first, FinalAnswer)
-        assert isinstance(second, FinalAnswer)
-        assert first.history[0] == {"role": "user", "content": "Question one"}
-        assert second.history[0] == {"role": "user", "content": "Question two"}
-        # No leftovers from the first run in the second run's history.
-        assert [m for m in second.history if m.get("role") == "user"] == [
-            {"role": "user", "content": "Question two"}
-        ]
+        assert isinstance(first, tuple)
+        first_error, first_history = first
+        assert isinstance(first_error, str)
+        assert isinstance(second, tuple)
+        second_error, second_history = second
+        assert isinstance(second_error, str)
+        assert first_history[0] == {"role": "user", "content": "Question one"}
+        assert second_history[0] == {"role": "user", "content": "Question two"}
+        # No leftovers from the first run in the second run's history: the
+        # second run's user messages are its prompt followed by termination
+        # reminders (no trace of the first run).
+        second_user_messages = [m for m in second_history if m.get("role") == "user"]
+        assert second_user_messages[0] == {"role": "user", "content": "Question two"}
+        assert all(m.get("content") != "Question one" for m in second_user_messages)
 
 
 if __name__ == "__main__":

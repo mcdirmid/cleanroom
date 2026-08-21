@@ -69,7 +69,7 @@ class ToolProviderA:
 
     def execute_tool(self, name, arguments):
         if name == "tool_a":
-            return ToolResult(content="result from a", content_id=None, stub_previous=False)
+            return ToolResult(content="result from a", supersedes=False)
         return None
 """ % (PROVIDER_A_DEFINITION,)
 
@@ -83,7 +83,7 @@ class ToolProviderB:
 
     def execute_tool(self, name, arguments):
         if name == "tool_b":
-            return ToolResult(content="result from b", content_id=None, stub_previous=False)
+            return ToolResult(content="result from b", supersedes=False)
         return None
 """ % (PROVIDER_B_DEFINITION,)
 

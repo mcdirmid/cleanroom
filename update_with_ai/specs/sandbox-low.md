@@ -8,96 +8,54 @@
 # Interface LLS: sandbox
 
 ## Data Types
-
 ```python
-from typing import Any, Callable, Protocol, TypeVar, Generic
+from typing import Any, Callable, Protocol, TypeVar, Generic, TypeAlias
 from dataclasses import dataclass
 from tool_provider import ToolDefinition, ToolResult, Signal, TerminateAgentWithSuccess, TerminateAgentWithFailure, TerminateSuccessResult, ToolFailure, ToolCallOutcome, T_tool
-```
 
-```python
-VirtualName = str
-```
+VirtualName: TypeAlias = str
 
-```python
-FilePath = str
-```
+FilePath: TypeAlias = str
 
-```python
-FileMapping = dict[VirtualName, FilePath]
-```
+FileMapping: TypeAlias = dict[VirtualName, FilePath]
 
-```python
-ReadablePaths = list[VirtualName]
-```
+ReadablePaths: TypeAlias = list[VirtualName]
 
-```python
-WritablePaths = list[VirtualName]
-```
+WritablePaths: TypeAlias = list[VirtualName]
 
-```python
-BlameTargets = list[str]
-```
+BlameTargets: TypeAlias = list[str]
 
-```python
-BlameTarget = str
-```
+BlameTarget: TypeAlias = str
 
-```python
-Feedback = str
-```
+Feedback: TypeAlias = str
 
-```python
-Blame = tuple[BlameTarget, Feedback]
-```
+Blame: TypeAlias = tuple[BlameTarget, Feedback]
 
-`BlameTarget` identifies a node the agent may blame (a dependency of the current run). `Feedback` is the correction feedback on how to correct the blamed node's output. Each `Blame` pair corresponds to one feedback message to its target.
+SearchResultLimit: TypeAlias = int
 
-```python
-ReadSizeLimit = int
-```
+DiffSizeLimit: TypeAlias = int
 
-```python
-SearchResultLimit = int
-```
+VerificationCallback: TypeAlias = Callable[[], tuple[bool, str]] | None
 
-```python
-DiffSizeLimit = int
-```
-
-```python
-VerificationCallback = Callable[[], tuple[bool, str]] | None
-```
-
-```python
 @dataclass
 class SandboxConfig:
     file_mappings: FileMapping
     readable_paths: ReadablePaths
     writable_paths: WritablePaths
     blame_targets: BlameTargets
-    read_size_limit: ReadSizeLimit
     search_result_limit: SearchResultLimit
     diff_size_limit: DiffSizeLimit | None = None
     verification_callback: VerificationCallback = None
-```
 
-The client-supplied configuration for a sandbox: file mappings, readable and writable paths, blame targets, read size, search result, and diff size limits, and an optional verification callback.
+WriteOccurred: TypeAlias = bool
 
-```python
-WriteOccurred = bool
-```
-
-```python
 class Sandbox(Protocol):
     def get_tool_definitions(self) -> list[ToolDefinition]: ...
-    def read_file(self, file_path: VirtualName, start_line: int = 1, end_line: int | None = None, include_line_numbers: bool = False) -> ToolCallOutcome: ...
+    def read_file(self, file_path: VirtualName, include_line_numbers: bool = False) -> ToolCallOutcome: ...
     def write_file(self, file_path: VirtualName, content: str) -> ToolCallOutcome: ...
     def edit_file(self, file_path: VirtualName, old_str: str, new_str: str, expect_multiple: bool = False) -> ToolCallOutcome: ...
-    def replace_lines(self, file_path: VirtualName, start_line: int, end_line: int, new_content: str) -> ToolCallOutcome: ...
+    def replace_lines(self, file_path: VirtualName, start_line: int, end_line: int, new_str: str) -> ToolCallOutcome: ...
     def search_files(self, path: VirtualName, pattern: str, offset: int | None = None, limit: int | None = None) -> ToolCallOutcome: ...
-    def read_chunks(self, file_path: VirtualName, chunk_indices: list[int] | None = None, include_adjacent: bool = False) -> ToolCallOutcome: ...
-    def replace_chunks(self, file_path: VirtualName, replacements: list[dict], encoding: str | None = None) -> ToolCallOutcome: ...
     def verify(self) -> ToolCallOutcome: ...
     def succeed(self, changes: list[dict[str, str]] = []) -> ToolCallOutcome: ...
     def fail(self) -> ToolCallOutcome: ...
@@ -105,18 +63,23 @@ class Sandbox(Protocol):
     def get_write_occurred(self) -> WriteOccurred: ...
 ```
 
-## Stubbing Semantics (term definition)
+`BlameTarget` identifies a node the agent may blame (a dependency of the current run). `Feedback` is the correction feedback on how to correct the blamed node's output. Each `Blame` pair corresponds to one feedback message to its target.
 
-These rules apply to all sandbox operations that produce a `ToolResult` (i.e., when the `ToolCallOutcome` is a `ToolResult`).
+The client-supplied configuration for a sandbox: file mappings, readable and writable paths, blame targets, the search result limit and the diff size limit, and an optional verification callback.
+## Stubbing (term definition)
 
-- Read-file region overlap (read_file): A read region is the line range actually read: from `start_line` through the last line returned (a read truncated at end-of-file records the region ending at the last line of the file, not the requested end). Two regions overlap if they share any line. A read always returns the requested content; overlap never stubs the read itself. `stub_previous` is `True` if the current region overlaps with any previous non-stubbed region for the same file, stubbing the previous instances of the file's content in the conversation. A line-numbered read (`include_line_numbers=True`) sets `stub_previous` only for overlap with previous line-numbered reads, never with plain reads: the numbered view is distinct (it carries line numbers) and must remain obtainable so line-range edits can be grounded.
-- Chunk overlap (read_chunks): a chunk read always returns the requested chunk content; `stub_previous` is `True` if the chunk indices whose content is returned (the requested indices plus any adjacent context included via `include_adjacent`) overlap with any previous non-stubbed chunk reads for the same file, stubbing the previous instances.
-- Search dedup (search_files): `stub_previous` is `True` if the same `path`, `pattern`, `offset`, and `limit` were previously searched (paging through results with a new offset is a distinct search); the search itself always provides its results.
-- A tool result never carries the stub text: stubbing (`stub_previous`) replaces previous tool results in the conversation; a tool call either succeeds with content or fails with an informative tool failure — never a stub.
-- Unconditional stubbing: `write_file`, `edit_file`, `replace_lines`, `replace_chunks`, and `verify` always set `stub_previous=True`. Termination tools (`succeed`, `fail`, `blame`) never stub (`content_id` is `None`).
-- Stub replacement text: stubbed content is replaced with a placeholder that clearly indicates removal (the exact placeholder text is pinned in the implementation spec). Stubbed messages retain their original position in the conversation.
-- Notes: every successful read carries a `note` reporting how much content remains and how to continue (`start_line` for files, unread chunk indices for chunks, `offset` for searches). Reads and searches never provide the stub text; overlap only stubs the previous instances.
-- Write-side effects on stubbing state: `write_file`, `edit_file`, `replace_lines`, and `replace_chunks` clear the per-file stubbing state (read regions, chunk indices, search dedup records) after a successful write.
+These rules apply to all sandbox operations that produce a `ToolResult`.
+
+- A `ToolResult`'s `supersedes` flag is set on the results of operations on writable files and on verification results; it is not set on reads of files that are not writable, on `search_files`, or on termination tools' results.
+- A `read_file` of a writable file sets the flag: it supersedes the earlier non-stubbed result for that file, and always provides the file's entire content.
+- A `write_file`, `edit_file`, or `replace_lines` result sets the flag: it supersedes the earlier non-stubbed result for that file; the result's content is the operation's status, never a file-content echo.
+- A `verify` result sets the flag: it supersedes the earlier non-stubbed verification result.
+- The superseded result is identified by the file's virtual name (file operations) or the verification tool's name (`"verify"`) — the name the operation itself carries; no separate identity is introduced. At most one non-stubbed result exists per file or per the verification command at any time, so a result supersedes at most one earlier result.
+- A file's view: each writable file has a view for the run — plain or line-numbered. A writable file that already exists on disk is only readable in the line-numbered view (a plain read fails advising the line-numbered view), so its view is line-numbered from its first successful read; a new file's results render plain until the agent reads it in the line-numbered view. A write resets the view to plain — the line numbers are invalidated by the write — so a line-range edit after a write requires a fresh numbered read (a read with `include_line_numbers=True` re-enables the view).
+- After a successful `write_file`, `edit_file`, or `replace_lines`, the file's earlier results are superseded (stubbed by the consuming agent loop), so the file's current content is not visible in the conversation until the agent reads the file again.
+- A `replace_lines` failure for a file whose view is not line-numbered returns `ToolFailure[T_tool]` with a message advising `read_file(file_path, include_line_numbers=True)`; the failure supersedes nothing and removes nothing.
+- Search suppression: `search_files` renders matches only for files that are not writable; matches in writable files are reported as counts without content, so search results never become stale.
+- Notes: every successful read and search carries a note reporting what was returned; write and edit notes report the operation's status; the verification note reports only whether verification succeeded or failed (or that no verification tool is configured), never the failure details themselves, which live in the result's content. A tool result never carries the stub text.
 
 ## Component-Provided Operations
 
@@ -132,7 +95,6 @@ def get_tool_definitions(self) -> list[ToolDefinition]
 
 **Postconditions:** Returns a list of tool definitions. Each definition follows the JSON schema format expected by the model (as defined in `tool_provider`). The following tools are included:
 - `read_file`, `write_file`, `edit_file`, `replace_lines`, `search_files`, `verify` (always)
-- `read_chunks`, `replace_chunks` only if Python files are accessible
 - `succeed`, `fail` (always)
 - `blame` only if blame targets are non-empty
 
@@ -144,34 +106,31 @@ def get_tool_definitions(self) -> list[ToolDefinition]
 ### `read_file`
 
 ```python
-def read_file(self, file_path: VirtualName, start_line: int = 1, end_line: int | None = None,
-              include_line_numbers: bool = False) -> ToolCallOutcome
+def read_file(self, file_path: VirtualName, include_line_numbers: bool = False) -> ToolCallOutcome
 ```
 
-**Purpose:** Read lines from a file using the virtual name provided by the agent.
+**Purpose:** Read a file's entire content using the virtual name provided by the agent.
 
 **Preconditions:**
 - `file_path` must exist in `file_mappings` and be in `readable_paths`
-- `start_line` must be a positive integer (1-indexed)
-- If `end_line` provided, it must be an integer >= `start_line`
 - `include_line_numbers` may be `True` only when `file_path` is in `writable_paths` (line numbers serve `replace_lines` edits)
+- `include_line_numbers` must be `True` when `file_path` is in `writable_paths` and the file already exists on disk (a plain read of an existing writable file is rejected; line numbers are metadata, not file content)
 
 **Postconditions:**
-- Returns lines `start_line` through `end_line` (or the end of the file when `end_line` is omitted) as string in `content`
-- When `include_line_numbers` is `True`, each line is prefixed with its 1-indexed line number (`"N \u2502 line"`); when `False`, lines are returned without prefixes
-- A line-numbered read records its range as visible for line-range edits; any write clears all visible ranges for the file. Line-number mode is sticky: once a file is read with `include_line_numbers=True`, a plain read of it is a tool failure, ever.
-- The read succeeds only when the returned content fits within the read size limit; otherwise the call fails
-- `content_id` is the virtual file path
-- `stub_previous` per stubbing semantics (read-file line-range overlap)
-- The result's `note` reports how many lines were read, the file's line count, how many remain, and the next `start_line`; a stubbed read's note reports which region was already read and the next `start_line`
+- Returns the file's entire content as a string in `content`; reads are not paginated and are not bounded by a size limit
+- When `include_line_numbers` is `True`: each line is prefixed with its 1-indexed line number (`"N \u2502 line"`); the file's view for the run becomes line-numbered
+- When `include_line_numbers` is `False` (a non-writable file): lines are returned without prefixes
+- `supersedes` is `True` when `file_path` is in `writable_paths` (the result supersedes the earlier result for that file) and `False` when `file_path` is not in `writable_paths`
+- `content` is the file's content in the file's current view
+- The result's `note` reports the file's line count and view
 
 **Failure Handling:**
 - Policy violation (file_path not in readable_paths or file_mappings) → Return `ToolFailure[T_tool]` with the error message identifying the violated policy.
-- Invalid parameters (non-positive `start_line`, `end_line` below `start_line`, `include_line_numbers` requested for a non-writable file, or a read whose content would exceed the read size limit) → Return `ToolFailure[T_tool]` with the error message describing the parameter error and advising a smaller line range.
-- Plain read after a line-numbered read of the same file (sticky line-number mode) → Return `ToolFailure[T_tool]` stating that the file was read with `include_line_numbers=true` and that plain reads of it are not allowed, ever — this is a tool failure, never a stub.
+- Invalid parameters (`include_line_numbers` requested for a non-writable file) → Return `ToolFailure[T_tool]` with the error message describing the parameter error.
+- Writable file already exists and `include_line_numbers` is `False` → Return `ToolFailure[T_tool]` advising the agent to call `read_file` with `include_line_numbers=True` (line numbers are metadata, never file content).
 - Filesystem errors are unhandled (no contract specified in this interface spec).
 
-**HLS Justification:** read_file signals stubbing on read line-range overlap for the same file.
+**HLS Justification:** read_file reads the entire file; a writable-file read supersedes the file's earlier result, keeping the conversation current.
 
 
 ### `write_file`
@@ -190,10 +149,8 @@ def write_file(self, file_path: VirtualName, content: str) -> ToolCallOutcome
 **Postconditions:**
 - File is created at the resolved path
 - `write_occurred` flag set to `True`
-- `content_id` is the virtual file path
-- `stub_previous` is `True` (unconditional stubbing per stubbing semantics)
-- Per-file stubbing state (read regions, chunk indices, search dedup records) for this file is cleared, so subsequent reads of the file will not be stubbed based on pre-write reads.
-- The result is minimal: a structured success message (with counts where relevant); no file content is echoed
+- The outcome is a `ToolResult` with `supersedes` set to `True` (it supersedes the earlier result for that file)
+- The result's `content` and `note` are minimal: a structured success message (with counts where relevant); no file content is echoed in the conversation
 
 **Failure Handling:**
 - Policy violation (file_path not in writable_paths or file_mappings) → Return `ToolFailure[T_tool]` with the error message identifying the violated policy.
@@ -201,7 +158,7 @@ def write_file(self, file_path: VirtualName, content: str) -> ToolCallOutcome
 - File already exists → Return `ToolFailure[T_tool]` stating that write_file is only for creating new files and advising `edit_file` (content-based) or `replace_lines` (line-based).
 - Filesystem errors are unhandled (no contract specified in this interface spec).
 
-**HLS Justification:** write_file signals stubbing unconditionally for the file.
+**HLS Justification:** write_file is a file write: it modifies the filesystem and supersedes the file's earlier results.
 
 
 ### `edit_file`
@@ -215,58 +172,54 @@ def edit_file(self, file_path: VirtualName, old_str: str, new_str: str,
 
 **Preconditions:**
 - `file_path` must exist in `file_mappings` and be in `writable_paths`
-- `old_str` must be non-empty
+- `old_str` must be non-empty and at most 100 characters; `new_str` must be at most 100 characters (edit_file is for short search/replace pairs; whole-file and large edits go through `replace_lines`)
 - The file must exist on disk (edits modify existing files; use `write_file` to create new ones)
 
 **Postconditions:**
 - When `expect_multiple` is `False`: exactly one occurrence of `old_str` is replaced with `new_str`; when `True`: every occurrence is replaced
 - The file is written with the replacement applied; `write_occurred` flag set to `True`
-- `content_id` is the virtual file path
-- `stub_previous` is `True` (unconditional stubbing per stubbing semantics)
-- Per-file stubbing state (read regions, chunk indices, search dedup records) for this file is cleared, so subsequent reads of the file will not be stubbed based on pre-write reads.
-- The result is minimal: a structured success message (with counts where relevant); no file content is echoed
+- The outcome is a `ToolResult` with `supersedes` set to `True` (it supersedes the earlier result for that file)
+- The result's `content` and `note` are minimal: a structured success message (with counts where relevant); no file content is echoed in the conversation
 
 **Failure Handling:**
 - Policy violation (file_path not in writable_paths or file_mappings) → Return `ToolFailure[T_tool]` with the error message identifying the violated policy.
-- Invalid arguments (empty `old_str`; `old_str` identical to `new_str` — the edit would change nothing) → Return `ToolFailure[T_tool]` with the error message describing the argument error.
+- Invalid arguments (empty `old_str`; `old_str` identical to `new_str` — the edit would change nothing; `old_str` or `new_str` exceeding 100 characters) → Return `ToolFailure[T_tool]` with the error message describing the argument error; an over-length string error advises `replace_lines` (which requires the line-numbered view).
 - `old_str` absent from the file → Return `ToolFailure[T_tool]` stating it was not found.
 - More than one match with `expect_multiple` `False` → Return `ToolFailure[T_tool]` stating the match count and advising `expect_multiple=True` or a narrower `old_str`.
 - Filesystem errors are unhandled (no contract specified in this interface spec).
 
-**HLS Justification:** edit_file is a file write: it signals stubbing unconditionally for the file and modifies the filesystem.
+**HLS Justification:** edit_file is a file write: it modifies the filesystem and supersedes the file's earlier results.
 
 
 ### `replace_lines`
 
 ```python
 def replace_lines(self, file_path: VirtualName, start_line: int, end_line: int,
-                  new_content: str) -> ToolCallOutcome
+                  new_str: str) -> ToolCallOutcome
 ```
 
-**Purpose:** Replace, delete, or insert lines in a file by 1-indexed line range.
+**Purpose:** Replace, delete, or insert lines in a file by 1-indexed line range. The tool definition for this operation marks all four parameters (`file_path`, `start_line`, `end_line`, `new_str`) as required in its JSON schema (`required` list).
 
 **Preconditions:**
 - `file_path` must exist in `file_mappings` and be in `writable_paths`
 - `start_line` must be between 1 and `len(file) + 1`; `end_line` must be between 0 and `len(file)`
 - `start_line` and `end_line` must be integers
 - The file must exist on disk (edits modify existing files; use `write_file` to create new ones)
-- The edited line range must be currently visible in context: covered by `read_file` calls with `include_line_numbers=True` since the file's last write (any write clears what is visible)
+- The file's current view must be line-numbered, and the file must have been read in the line-numbered view since the last write (a write resets the view to plain; see Result Routing)
 
 **Postconditions:**
-- Lines `start_line` through `end_line` (inclusive) are replaced with `new_content`; `start_line > end_line` inserts `new_content` before line `start_line` (no lines removed); empty `new_content` deletes the range; a trailing newline is preserved when the file had one and lines remain
+- Lines `start_line` through `end_line` (inclusive) are replaced with `new_str`; `start_line > end_line` inserts `new_str` before line `start_line` (no lines removed); empty `new_str` deletes the range; a trailing newline is preserved when the file had one and lines remain
 - The file is written with the change applied; `write_occurred` flag set to `True`
-- `content_id` is the virtual file path
-- `stub_previous` is `True` (unconditional stubbing per stubbing semantics)
-- Per-file stubbing state (read regions, chunk indices, search dedup records) for this file is cleared, so subsequent reads of the file will not be stubbed based on pre-write reads.
-- The result is minimal: a structured success message (with counts where relevant); no file content is echoed
+- The outcome is a `ToolResult` with `supersedes` set to `True` (it supersedes the earlier result for that file)
+- The result's `content` and `note` are minimal: a structured success message (with counts where relevant); no file content is echoed in the conversation
 
 **Failure Handling:**
 - Policy violation (file_path not in writable_paths or file_mappings) → Return `ToolFailure[T_tool]` with the error message identifying the violated policy.
-- Range not visible in context → Return `ToolFailure[T_tool]` advising `read_file(file_path, include_line_numbers=True, start_line=..., end_line=...)` of the range before editing.
+- The file's current view is not line-numbered → Return `ToolFailure[T_tool]` advising `read_file(file_path, include_line_numbers=True)` before editing and noting that a write invalidated the line numbers when the view became plain due to a write; the failure supersedes nothing and removes nothing.
 - Invalid arguments (non-integer line numbers, or `start_line`/`end_line` out of bounds) → Return `ToolFailure[T_tool]` with the error message describing the argument error and the file's line count.
 - Filesystem errors are unhandled (no contract specified in this interface spec).
 
-**HLS Justification:** replace_lines is a file write: it signals stubbing unconditionally for the file and modifies the filesystem.
+**HLS Justification:** replace_lines is a file write: it requires the line-numbered view and supersedes the file's earlier results.
 
 
 ### `search_files`
@@ -286,80 +239,19 @@ def search_files(self, path: VirtualName, pattern: str,
 - If `limit` provided, must be positive and must not exceed the search result limit
 
 **Postconditions:**
-- Returns up to `limit` matches (or all matches when `limit` is omitted and the total fits within the search result limit) as string in `content`, paged from `offset`
+- Returns up to `limit` rendered matches (or all rendered matches when `limit` is omitted and the total fits within the search result limit) as string in `content`, paged from `offset`
+- Rendered matches are matches found in files that are not writable; matches found in writable files are never rendered
 - Searches recursively within the specified path
-- `content_id` is the virtual path
-- `stub_previous` per stubbing semantics (search dedup per path, pattern, offset, and limit)
-- The result's `note` reports the total matches, how many remain after this page, and the offset to continue from
+- `supersedes` is `False` (search results never supersede an earlier result)
+- The result's `note` reports the total rendered matches, how many remain after this page, the offset to continue from, and the count of suppressed matches in writable files
 
 **Failure Handling:**
 - Policy violation (path not in readable_paths) → Return `ToolFailure[T_tool]` with the error message identifying the violated policy.
 - Invalid pattern (not a valid regex) → Return `ToolFailure[T_tool]` with the error message describing the pattern error.
-- Invalid parameters (negative offset, zero limit, limit above the search result limit, or an omitted limit whose total matches exceed the search result limit) → Return `ToolFailure[T_tool]` with the error message describing the parameter error and advising offset/limit pagination.
+- Invalid parameters (negative offset, zero limit, limit above the search result limit, or an omitted limit whose rendered matches exceed the search result limit) → Return `ToolFailure[T_tool]` with the error message describing the parameter error and advising offset/limit pagination.
 - Filesystem errors are unhandled (no contract specified in this interface spec).
 
-**HLS Justification:** search_files signals stubbing on duplicate search for the same path, pattern, offset, and limit.
-
-
-### `read_chunks`
-
-```python
-def read_chunks(self, file_path: VirtualName, chunk_indices: list[int] | None = None, include_adjacent: bool = False) -> ToolCallOutcome
-```
-
-**Purpose:** Read semantic chunks from a Python file.
-
-**Preconditions:**
-- Python files must be accessible
-- `file_path` must exist in `file_mappings` and be in `readable_paths`
-- `file_path` must be a Python file
-- `chunk_indices` if provided must contain valid non-negative indices
-
-**Postconditions:**
-- Returns chunk content with context in `content`
-- If `chunk_indices` is `None`, returns all chunks (succeeds only when their total content fits within the read size limit, otherwise the call fails)
-- `include_adjacent` includes neighboring chunks for context (adds the index of each requested chunk plus the indices of its immediate neighbors before and after)
-- `content_id` is the virtual file path
-- `stub_previous` per stubbing semantics (chunk overlap)
-- The result's `note` reports which chunks were read, how many chunks remain, and the total content bytes
-
-**Failure Handling:**
-- Policy violation (path not a Python file, or not in readable_paths/file_mappings) → Return `ToolFailure[T_tool]` with the error message identifying the violated policy.
-- Invalid parameters (non-negative chunk indices, or requested chunks whose total content exceeds the read size limit) → Return `ToolFailure[T_tool]` with the error message describing the parameter error and advising chunk_indices pagination.
-- Filesystem errors are unhandled (no contract specified in this interface spec).
-
-**HLS Justification:** read_chunks signals stubbing on chunk overlap for the same file.
-
-
-### `replace_chunks`
-
-```python
-def replace_chunks(self, file_path: VirtualName, replacements: list[dict], encoding: str | None = None) -> ToolCallOutcome
-```
-
-**Purpose:** Replace multiple chunks in a Python file atomically.
-
-**Preconditions:**
-- Python files must be accessible
-- `file_path` must exist in `file_mappings` and be in `writable_paths`
-- `file_path` must be a Python file
-- `replacements` must be a list of dicts, each containing `index: int` and `new_content: str`
-
-**Postconditions:**
-- All replacements apply atomically (all or nothing)
-- File written with all replacements applied
-- `write_occurred` flag set to `True`
-- `content_id` is the virtual file path
-- `stub_previous` is `True` (unconditional stubbing per stubbing semantics)
-- Per-file stubbing state (read regions, chunk indices, search dedup records) for this file is cleared, so subsequent reads of the file will not be stubbed based on pre-write reads.
-- The result is minimal: a structured success message (with counts where relevant); no file content is echoed
-
-**Failure Handling:**
-- Policy violation (path not a Python file, or not in writable_paths/file_mappings) → Return `ToolFailure[T_tool]` with the error message identifying the violated policy.
-- Invalid arguments (each replacement dict must have `index` and `new_content`) → Return `ToolFailure[T_tool]` with the error message describing the argument error.
-- Filesystem errors are unhandled (no contract specified in this interface spec).
-
-**HLS Justification:** replace_chunks signals stubbing unconditionally for the file.
+**HLS Justification:** search_files renders matches only for files that are not writable, so its results never become stale.
 
 
 ### `verify`
@@ -374,16 +266,16 @@ def verify(self) -> ToolCallOutcome
 - None
 
 **Postconditions:**
-- Returns in `content` the diff of each changed file vs. its content at run start (per-file unified diffs), truncated when it exceeds the diff size limit; a truncated diff reports the truncated size and the full change counts
-- When a verification callback is configured: additionally returns the callback's output string in `content`, followed by a note stating that `succeed` may now be called when the callback succeeded (exit 0), or that the reported issues must be fixed by changing files (`edit_file`/`replace_lines`/`write_file`) and then verifying again, or the agent may call `blame` or `fail` to end the run, when it failed; records the callback's success flag (this state gates `succeed`)
-- When no verification callback is configured: appends a statement that no verification tool is present to validate the output and that `succeed` may now be called (verify has been called); records verify as called, satisfying the `succeed` gate
-- `content_id` identifies the verification tool (e.g., "verify")
-- `stub_previous` is `True` (unconditional stubbing per stubbing semantics)
+- The outcome is a `ToolResult` with `supersedes` set to `True` (it supersedes the earlier non-stubbed verification result)
+- `content` holds the verification report; the result's `note` reports only whether verification succeeded or failed (or that no verification tool is configured) and never carries the failure details, which live in `content`
+- The verification report contains the diff of each changed file vs. its content at run start (per-file unified diffs), truncated when it exceeds the diff size limit; a truncated diff reports the truncated size and the full change counts
+- When a verification callback is configured: the report additionally contains the callback's output string, followed by a statement that `succeed` may now be called when the callback succeeded (exit 0), or that the reported issues must be fixed by changing files (`edit_file`/`replace_lines`/`write_file`) and then verifying again, or the agent may call `blame` or `fail` to end the run, when it failed; the callback's success flag is recorded (this state gates `succeed`)
+- When no verification callback is configured: the report states that no verification tool is present to validate the output and that `succeed` may now be called (verify has been called); verify is recorded as called, satisfying the `succeed` gate
 
 **Failure Handling:**
 - Callback throws exception → Callback error is unhandled (no contract specified in this interface spec).
 
-**HLS Justification:** verify is always offered, signals stubbing unconditionally, reports the run's changes (diff, truncated at the diff size limit), and records the verification outcome that gates `succeed`.
+**HLS Justification:** verify is always offered, supersedes the earlier verification result, reports the run's changes (diff, truncated at the diff size limit), and records the verification outcome that gates `succeed`.
 
 
 ### `succeed`
@@ -395,20 +287,23 @@ def succeed(self, changes: list[dict[str, str]] = []) -> ToolCallOutcome
 **Purpose:** Signal successful termination, carrying the agent's change summary. The agent calls this when it considers its task complete.
 
 **Preconditions:**
-- When the run changed files, `changes` must list one entry per changed file — `{"file": <virtual path>, "summary": <one short sentence on what changed, not how>}` — covering every changed file, each summary non-empty and within the summary length bound; the entries are broadcast to reverse dependencies to bring the next agent's attention to the changes
+- A file counts as changed only when its current content differs from its content at run start (a write that nets out to no change — e.g., an edit later undone — is not changed)
+- When the run changed files, `changes` must list one entry per changed file — `{"file": <virtual path>, "summary": <one short sentence naming the parts of the file that changed, so the next reader knows what to pay attention to when updating further artifacts; not the task performed, not how it was done>}` — covering every changed file, each summary non-empty and within the hard length bound; the entries are broadcast to reverse dependencies to bring the next reader's attention to the changes
+- A summary within the soft length bound is accepted; a summary within the hard length bound is accepted once the soft-limit grace has been exhausted; the grace counts rejections per run (the soft-limit grace and the hard-limit grace are independent)
 - When the run changed files, `verify` must have been called; when a verification callback is configured, its last outcome must have succeeded (exit 0); otherwise `succeed` signals a `ToolFailure` (the session continues)
 
 **Postconditions:**
-- Returns `TerminateAgentWithSuccess` (a `Signal[T_tool]` variant) carrying a `TerminateSuccessResult` describing the session outcome: no change if the run did not modify the workspace, or a change whose messages are built from `changes` (`"<file>: <summary>"` per entry) if it did
-- No stubbing occurs (termination tools do not produce `ToolResult`)
+- Returns `TerminateAgentWithSuccess` (a `Signal[T_tool]` variant) carrying a `TerminateSuccessResult` describing the session outcome: no change when no file's current content differs from its run-start content (writes may have occurred but net out), or a change whose messages are built from `changes` (`"<file>: <summary>"` per entry) when files changed
+- Termination tools produce no `ToolResult` and never supersede an earlier result
 
 **Failure Handling:**
 - Verification gate unmet (run changed files and verify not called; or a callback is configured and verify not called or the last verify failed) → Return `ToolFailure[T_tool]` with a message distinguishing "verify() has not been called" from "the last verify() call failed" and advising the agent to verify (fixing any issues) or to call `fail`/`blame` to end the run.
 - Run changed files and `changes` empty → Return `ToolFailure[T_tool]` listing the changed files and instructing the agent to call `succeed` again with one `{file, summary}` entry per changed file (one short sentence on what changed, not how) or to call `fail`/`blame` to end the run.
 - An entry with a missing/empty `file` or `summary` → `ToolFailure[T_tool]` requiring both fields.
 - An entry naming a file the run did not change → `ToolFailure[T_tool]` naming the changed files.
-- A claimed change that does not appear in the diff — the file's current content equals its content at run start (rewritten with identical content) → `ToolFailure[T_tool]` stating the file is unchanged and advising the agent to report no change.
-- A summary exceeding the length bound → `ToolFailure[T_tool]` asking for one short sentence.
+- A claimed change for a run whose writes all net out to no change (every written file's current content equals its run-start content) → `ToolFailure[T_tool]` stating the run net-changed nothing and directing `succeed()` with no changes to report no change.
+- A summary exceeding the soft length bound (within the hard bound) before the soft-limit grace is exhausted → `ToolFailure[T_tool]` directing the agent to shorten the summary to at most the soft bound: one short sentence naming the parts of the file that changed for the next reader, dropping how it was done, then call `succeed` again; once the soft-limit grace (4 rejections per run) is exhausted, such a summary is accepted.
+- A summary exceeding the hard length bound before the hard-limit grace is exhausted → `ToolFailure[T_tool]` naming the hard bound and directing the agent to shorten the summary to at most the hard bound; once the hard-limit grace (4 rejections per run) is exhausted, a summary still exceeding the hard bound turns `succeed` into a hard failure: return `TerminateAgentWithFailure[T_tool]` ending the run in failure.
 - A changed file with no entry → `ToolFailure[T_tool]` listing the uncovered files.
 
 **HLS Justification:** Termination tools signal termination when invoked correctly: the success operation signals successful termination carrying the agent's per-file change summary, gated on verify() having been called when the run changed files (and passed when a callback is configured), and requiring a change summary when the run changed files.
@@ -425,7 +320,7 @@ def fail(self) -> ToolCallOutcome
 **Postconditions:**
 - Returns `TerminateAgentWithFailure[T_tool]` (a `Signal[T_tool]` variant); the session terminates in failure.
 - A correctly-invoked `fail` is not a `ToolFailure` — `ToolFailure` signals a failed call.
-- No stubbing occurs (termination tools do not produce `ToolResult`)
+- Termination tools produce no `ToolResult` and never supersede an earlier result
 
 **HLS Justification:** Termination tools signal termination when invoked correctly: the failure operation ends the session in failure.
 
@@ -446,7 +341,7 @@ def blame(self, blames: list[Blame]) -> ToolCallOutcome
 - If all pairs are valid: returns `TerminateAgentWithSuccess` (a `Signal[T_tool]` variant) carrying a `TerminateSuccessResult` that describes feedback to dependencies (one (target, feedback) pair per blamed dependency)
 - If any pair's target is not in `blame_targets`: returns `ToolFailure[T_tool]` (a `Signal[T_tool]` variant)
 - Each pair corresponds to one feedback message to its target
-- No stubbing occurs (termination tools do not produce `ToolResult`)
+- Termination tools produce no `ToolResult` and never supersede an earlier result
 
 **Failure Handling:**
 - Invalid pairs (targets not in `blame_targets`): Return `ToolFailure[T_tool]` (a `Signal[T_tool]` variant) with an error message identifying the invalid pair.
@@ -470,13 +365,17 @@ def get_write_occurred(self) -> WriteOccurred
 
 ## Invariants
 
+- The run begins when the sandbox is configured and ends when the agent signals termination
 - No state persists across runs
 - Write-occurred flag is monotonic (once `True`, never `False`)
 - All policy checks occur before any filesystem mutation
-- `read_chunks` and `replace_chunks` operate only on Python files
 - `verify` callback has no filesystem side effects
 - Errors leave the filesystem unchanged
-- Results with `content_id` `None` are never stubbed
-- Stubbing preserves original message positions
-- Termination tools never signal stubbing
-- Successful writes clear per-file stubbing state (read regions, chunk indices, search dedup records), ensuring that subsequent reads of the written file are not stubbed based on pre-write reads
+- A result with `supersedes` set supersedes the earlier non-stubbed result for the same file or tool command; a result with `supersedes` unset supersedes nothing
+- A result supersedes at most one earlier result (at most one non-stubbed result exists per file or per the verification command at any time)
+- A write or edit supersedes the file's earlier results, so the file's current content is not visible until the agent reads the file again
+- An edit's replacement applies atomically (all or nothing): a replacement is never partially applied
+- `replace_lines` requires the line-numbered view
+- Termination tools never produce `ToolResult` and never supersede an earlier result
+- Search results never render matches from writable files
+- A tool result never carries the stub text

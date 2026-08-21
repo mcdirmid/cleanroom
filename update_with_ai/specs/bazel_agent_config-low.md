@@ -5,7 +5,6 @@
 # Interface LLS: bazel_agent_config
 
 ## Data Types
-
 ```python
 from dataclasses import dataclass
 from typing import Optional, Protocol
@@ -29,6 +28,9 @@ class AgentConfig:
 
 class ConfigNotFoundError(ValueError): ...
 class ApiKeyNotFoundError(ValueError): ...
+
+class BazelAgentConfig(Protocol):
+    def build_agent_loop_config(self, config_target: Optional[str] = None, workspace_root: Optional[str] = None) -> AgentLoopConfig: ...
 ```
 
 `AgentConfig` mirrors the generated module's `AGENT_CONFIG` dict (see
@@ -36,12 +38,6 @@ class ApiKeyNotFoundError(ValueError): ...
 variable holding the API key (empty means the plain `AGENT_API_KEY`
 variable applies). The two exception types signal unexpected failures (see
 Failure Handling below).
-
-```python
-class BazelAgentConfig(Protocol):
-    def build_agent_loop_config(self, config_target: Optional[str] = None, workspace_root: Optional[str] = None) -> AgentLoopConfig: ...
-```
-
 ## Component-Provided Operations
 
 ### `build_agent_loop_config`

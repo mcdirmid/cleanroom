@@ -6,24 +6,18 @@
 # Interface LLS: dag
 
 ## Data Types
-
 ```python
-from typing import Protocol
+from typing import Protocol, TypeAlias
 from dag_storage import NodeId
 from dag_clean_logic import CleanResult
-```
 
-```python
-CleaningResult = tuple[bool, CleanResult]
-```
+CleaningResult: TypeAlias = tuple[bool, CleanResult]
 
-Represents the outcome of cleaning: `(True, success)`, `(True, change_result)`, `(True, feedback_result)`, or `(False, failure_result)`.
-
-```python
 class Dag(Protocol):
     def clean_subgraph(self, target_node: NodeId) -> CleaningResult: ...
 ```
 
+Represents the outcome of cleaning: `(True, success)`, `(True, change_result)`, `(True, feedback_result)`, or `(False, failure_result)`.
 ## Component-Provided Operations
 
 ### `clean_subgraph`

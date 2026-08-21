@@ -5,14 +5,11 @@
 # Interface LLS: bazel_node_loader
 
 ## Data Types
-
 ```python
 from dataclasses import dataclass
 from typing import Protocol
 from tool_provider import ToolProvider
-```
 
-```python
 @dataclass
 class BazNode(ToolProvider):
     label: str
@@ -23,19 +20,16 @@ class BazNode(ToolProvider):
     srcs: list[str]
     silent_srcs: list[str]
     feedback_deps: list[str] = field(default_factory=list)
-```
 
-A data class Protocol that bundles static node metadata with the `ToolProvider` interface. `deps` holds the node's dependency node labels, including its feedback deps; `feedback_deps` holds the labels that can receive feedback from the node (a subset of `deps`); `silent_deps` holds dependencies whose output is not readable. Internal state fields (e.g., `_dependency_nodes`, `_agent_loop`) are implementation-specific and defined in the implementation spec. A loaded node resolves tool definitions and tool execution from the tool providers declared in its manifest; a tool call that no declared provider handles signals a tool failure.
-
-**HLS Justification:** "Designates a runtime representation of a Bazel node."
-
-```python
 class BazelNodeLoader(Protocol):
     def load_node(self, label: str) -> BazNode | None: ...
     def load_graph(self, root_label: str) -> dict[str, BazNode]: ...
     def get_node_prompt(self, node_label: str) -> str | None: ...
 ```
 
+A data class Protocol that bundles static node metadata with the `ToolProvider` interface. `deps` holds the node's dependency node labels, including its feedback deps; `feedback_deps` holds the labels that can receive feedback from the node (a subset of `deps`); `silent_deps` holds dependencies whose output is not readable. Internal state fields (e.g., `_dependency_nodes`, `_agent_loop`) are implementation-specific and defined in the implementation spec. A loaded node resolves tool definitions and tool execution from the tool providers declared in its manifest; a tool call that no declared provider handles signals a tool failure.
+
+**HLS Justification:** "Designates a runtime representation of a Bazel node."
 ## Component-Provided Operations
 
 ### `load_node`
@@ -88,6 +82,8 @@ def get_node_prompt(self, node_label: str) -> str | None
 ## Invariants
 
 - Nodes are cached by label; repeated loads of the same label return the cached instance.
+- Nodes load lazily from manifests, resolved relative to a configured runfiles directory; a node's manifest is read when the node is first loaded.
+- Manifests are never modified; loading reads them only.
 - Partial loads do not populate the cache; a node is cached only after successful deserialization.
 - Manifest file paths are derived deterministically from labels.
 

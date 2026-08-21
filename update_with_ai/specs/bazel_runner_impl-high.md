@@ -7,33 +7,18 @@ terms (from dag_clean_logic): cleaning, feedback message
 terms (from bazel_agent_config): agent configuration, config target, API key
 terms (from bazel_runner): result
 
-## Deltas beyond the bazel_runner contract
-
-### Behavior
+## Deltas
 
 - Assembles the cleanroom system internally — a Bazel graph storage, an agent loop, and a DAG clean logic — and runs a topological cleaning pass over the target node's subgraph.
-- Configures the agent loop from an agent configuration declared as an agent_config target (config target), resolving the API key from the environment; the config target is a per-call parameter of `run_dag` and is never hardcoded.
+- Configures the agent loop from an agent configuration declared as an agent_config target (config target), resolving the API key from the environment; the config target is a per-call parameter of the cleaning operation and is never hardcoded.
 - Delivers injected feedback to a node's message store.
-
-### Operation Boundaries
-
-- All components (graph storage, agent loop, DAG) are created internally per call; the cleaning pass's atomicity is per the bazel_runner interface contract.
-- The agent configuration is resolved per call: the explicit config target (when provided), then the AGENT_CONFIG_TARGET environment variable, then the //agent_configs:default convention.
-
-### State Management
-
-- No persistent state is held across calls.
-- Feedback injection constructs a graph separately from the graph used by a cleaning pass.
-
-### External Dependencies
-
-- The assembled components (graph, message store, agent loop, DAG clean logic), the language model service, and the generated module of the selected agent_config target (config target).
-
-### Error Handling
-
-- Expected failures are provided as values per the bazel_runner interface contract (a result); the log file is always written, regardless of the result.
-- Unexpected failures — configuration failures (missing config target module, missing API key) signaled by the bazel_agent_config component, a missing manifest, or log-file failure — are signaled as exceptions and are outside the value contract.
-- Configuration failures are signaled by the bazel_agent_config component before the cleaning pass starts.
+- [boundary] All components (graph storage, agent loop, DAG) are created internally per call.
+- [state] No persistent state is held across calls.
+- [state] Feedback injection constructs a graph separately from the graph used by a cleaning pass.
+- [external] The assembled components (graph, message store, agent loop, DAG clean logic), the language model service, and the generated module of the selected agent_config target (config target).
+- [failure] Expected failures are provided as values (a result); the log file is always written, regardless of the result.
+- [failure] Unexpected failures — configuration failures (missing config target module, missing API key) signaled by the bazel_agent_config component, a missing manifest, or log-file failure — are signaled as exceptions and are outside the value contract.
+- [failure] Configuration failures are signaled by the bazel_agent_config component before the cleaning pass starts.
 
 ## Non-concerns
 

@@ -1,38 +1,19 @@
 # Interface LLS: dag_storage
 
 ## Data Types
-
 ```python
-from typing import Protocol
-```
+from typing import Protocol, TypeAlias
 
-```python
-NodeId = str
-```
+NodeId: TypeAlias = str
 
-```python
-NodeMessage = str
-```
+NodeMessage: TypeAlias = str
 
-A message stored in the DAG message store: a string assigned to a node by another node during cleaning. Produced by `dag_clean_logic`, consumed by `dag_storage`.
+PendingMessages: TypeAlias = list[NodeMessage]
 
-```python
-PendingMessages = list[NodeMessage]
-```
+NodeDependencies: TypeAlias = list[NodeId]
 
-```python
-NodeDependencies = list[NodeId]
-```
+KnownReverseDependencies: TypeAlias = list[NodeId]
 
-The direct dependencies of a node.
-
-```python
-KnownReverseDependencies = list[NodeId]
-```
-
-The nodes recorded as depending on this node.
-
-```python
 class DagStorage(Protocol):
     def get_pending_messages(self, node_id: NodeId) -> PendingMessages: ...
     def add_messages(self, node_id: NodeId, messages: list[NodeMessage]) -> None: ...
@@ -41,6 +22,9 @@ class DagStorage(Protocol):
     def get_known_reverse_dependencies(self, node_id: NodeId) -> KnownReverseDependencies: ...
 ```
 
+- `NodeMessage`: a message stored in the DAG message store — a string assigned to a node by another node during cleaning. Produced by `dag_clean_logic`, consumed by `dag_storage`.
+- `NodeDependencies`: the direct dependencies of a node.
+- `KnownReverseDependencies`: the nodes recorded as depending on this node.
 ## Term definitions
 
 - **Subgraph**: A target node (included) and all nodes reachable through its direct and indirect dependencies. The subgraph rooted at a node is that node and its transitive dependencies.

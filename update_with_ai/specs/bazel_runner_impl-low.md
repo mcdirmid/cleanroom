@@ -6,28 +6,22 @@
   - bazel_graph_storage-low.md
   - agent_loop-low.md
   - sandbox-low.md
+  - bazel_agent_config-low.md
 -->
 
 # Implementation LLS: bazel_runner_impl
 
 ## Data Types
-
 ```python
 from bazel_runner import BazRunner
 from dag_storage import NodeId
 from dag import CleaningResult
 from dag_clean_logic import CleanResult, ChangeResult, FeedbackResult, NoChangeResult, FailureResult
-```
 
-```python
 class BazRunnerImpl(BazRunner): ...
 ```
 
-## Config
-
-None — the implementation bundles no imported capabilities; `workspace_root` and the optional `config_target` are per-call parameters of the interface (see `bazel_runner` Interface LLS). The agent/model configuration itself is loaded per call from an `agent_config` target by the `bazel_agent_config` component (see `bazel_agent_config` Interface LLS): the explicit `config_target` argument, then the `AGENT_CONFIG_TARGET` environment variable, then the `//agent_configs:default` convention; the API key is resolved from the environment (the config's pinned API-key environment variable when one is named, otherwise `AGENT_API_KEY`).
-
-**HLS Justification:** The `bazel_runner` interface specifies a root node, workspace root, and optional config target per call; the implementation imports no configuration.
+Constructed with no configuration; `workspace_root` and the optional `config_target` are per-call parameters of the interface (see `bazel_runner` Interface LLS). The agent/model configuration itself is loaded per call from an `agent_config` target by the `bazel_agent_config` component.
 
 ## Composition
 
@@ -45,7 +39,7 @@ The implementation is an assembler: it wires together these concrete implementat
 
 `BazRunnerImpl` implements the `BazRunner` Protocol by assembling and running all cleanroom components internally per call.
 
-- **`run_dag`** — Returns the `CleaningResult` produced by the DAG cleaning pass: `(True, CleanResult)` on successful cleaning (a `ChangeResult`, `FeedbackResult`, or `NoChangeResult` per `dag_clean_logic`) or `(False, CleanResult)` on failure (a `FailureResult`). Assembles the components (graph storage, agent loop, DAG clean logic), runs the DAG cleaning pass, and writes a log file regardless of outcome. The agent loop is configured from the resolved agent configuration (config target argument, then `AGENT_CONFIG_TARGET`, then `//agent_configs:default`) with the API key resolved from the environment; configuration failures are unexpected failures signaled by the `bazel_agent_config` component before the cleaning pass starts. Subgraph traversal is a private detail of the DAG cleaning pass. Emits compact one-line event summaries to stdout for tool-called, API-response, final-answer, run-terminated, and error events (per the `bazel_runner` interface contract).
+- **`run_dag`** — Returns the `CleaningResult` produced by the DAG cleaning pass: `(True, CleanResult)` on successful cleaning (a `ChangeResult`, `FeedbackResult`, or `NoChangeResult` per `dag_clean_logic`) or `(False, CleanResult)` on failure (a `FailureResult`). Assembles the components (graph storage, agent loop, DAG clean logic), runs the DAG cleaning pass, and writes a log file regardless of outcome. The agent loop is configured from the resolved agent configuration (config target argument, then `AGENT_CONFIG_TARGET`, then `//agent_configs:default`) with the API key resolved from the environment; configuration failures are unexpected failures signaled by the `bazel_agent_config` component before the cleaning pass starts. Subgraph traversal is a private detail of the DAG cleaning pass. Emits compact one-line event summaries to stdout for tool-called, API-response, run-terminated, and error events (per the `bazel_runner` interface contract). Each event line is flushed to the log file immediately after it is written (log writes are unbuffered), so the transcript reflects the run in real time.
 
 - **`inject_feedback`** — Delivers the given messages to the node's pending message store, marking the node dirty for a subsequent cleaning pass. Returns `(True, CleanResult)` on success (a `NoChangeResult` per `dag_clean_logic`) or `(False, CleanResult)` on failure (a `FailureResult`) if the node does not exist.
 

@@ -22,11 +22,11 @@ dag_clean_logic-low.md, agent_loop-low.md):
   (no hardcoded model/URL/key in the runner). The component itself is tested
   separately in bazel_agent_config_impl_test.
 - _format_compact_log emits one-line summaries exactly for tool_called,
-  api_response, final_answer, run_terminated, and error events and None for
-  all other events.
+  api_response, run_terminated, and error events and None for all other
+  events.
 - _format_full_log produces a verbose line for every agent_loop LogEvent
   (message_added, message_stubbed, tool_called, tool_result, api_response,
-  reminder_injected, final_answer, run_terminated, error).
+  reminder_injected, run_terminated, error).
 """
 
 import contextlib
@@ -48,9 +48,9 @@ from update_with_ai.lib.bazel_runner_impl import (
 from update_with_ai.lib.bazel_agent_config_impl import BazelAgentConfigImpl
 from update_with_ai.lib.bazel_graph_storage import GraphConfig
 from update_with_ai.lib.bazel_graph_storage_impl import BazelGraphStorageFileImpl
-from update_with_ai.lib.agent_loop import AgentLoopConfig, FinalAnswer
+from update_with_ai.lib.agent_loop import AgentLoopConfig
 from update_with_ai.lib.dag_clean_logic import NoChangeResult, FailureResult
-from update_with_ai.lib.tool_provider import ToolResult
+from update_with_ai.lib.tool_provider import ToolResult, TerminateAgentWithSuccess
 
 NODE_LABEL = "//tests/example:sample_node_1"
 UNKNOWN_LABEL = "//nope:missing"
@@ -138,7 +138,7 @@ def _patch_agent_config() -> Any:
 class _StubAgentLoop:
     """
     Stand-in for AgentLoopImpl: records instances, emits logger events, and
-    returns a FinalAnswer (so the clean maps to a NoChangeResult).
+    returns a termination result (so the clean maps to a NoChangeResult).
     """
 
     instances: List["_StubAgentLoop"] = []
@@ -148,7 +148,7 @@ class _StubAgentLoop:
         self.run_count = 0
         _StubAgentLoop.instances.append(self)
 
-    def run_agent(self, prompt, tools, tool_executor, logger=None):
+    def run_agent(self, prompt, tools, tool_executor, system_prompt=None, logger=None):
         self.run_count += 1
         if logger is not None:
             logger("message_added", {"message": {"role": "user", "content": prompt}})
@@ -165,21 +165,11 @@ class _StubAgentLoop:
                 "api_response",
                 {"usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}},
             )
-            logger(
-                "final_answer",
-                {
-                    "answer": "done",
-                    "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
-                    "cumulative_usage": {
-                        "prompt_tokens": 10,
-                        "completion_tokens": 5,
-                        "total_tokens": 15,
-                        "request_count": 1,
-                    },
-                    "final_context_size": 10,
-                },
-            )
-        return FinalAnswer(answer="done", history=[])
+            # A realistic run that stops with content injects the termination
+            # reminder (agent_loop-low.md logger table: reminder_injected);
+            # the transcript must record it.
+            logger("reminder_injected", {"message": "You must signal termination to end the run."})
+        return (TerminateAgentWithSuccess(NoChangeResult()), [])
 
 
 class TestLogFormatters(unittest.TestCase):
@@ -224,16 +214,6 @@ class TestLogFormatters(unittest.TestCase):
         self.assertIn("completion 5", line)
         self.assertIn("total 15", line)
 
-    def test_compact_final_answer(self) -> None:
-        """final_answer gets a one-line summary with cumulative usage."""
-        line = _format_compact_log(
-            "final_answer", {"node_id": self.NODE, "cumulative_usage": self.CUMULATIVE}
-        )
-        assert line is not None
-        self.assertNotIn("\n", line)
-        self.assertIn("final answer", line)
-        self.assertIn("total 150", line)
-        self.assertIn("3 requests", line)
 
     def test_compact_run_terminated(self) -> None:
         """run_terminated gets a one-line summary with the termination value."""
@@ -283,19 +263,33 @@ class TestLogFormatters(unittest.TestCase):
         self.assertIn("read_file", line)
 
     def test_full_message_stubbed(self) -> None:
+        """message_stubbed gets a transcript line showing the stub content."""
         line = _format_full_log(
             "message_stubbed",
             {
                 "node_id": self.NODE,
-                "content_id": "foo.txt",
-                "stubbed_message": {"content": "old content"},
-                "replacement_message": {"content": "new content"},
+                "stubbed_message": {"role": "tool", "content": "Content removed because newer version is available."},
             },
         )
-        self.assertIn("message_stubbed", line)
-        self.assertIn("foo.txt", line)
-        self.assertIn("old content", line)
-        self.assertIn("new content", line)
+        self.assertEqual(
+            line,
+            f"[{self.NODE}] message_stubbed: "
+            "content='Content removed because newer version is available.'",
+        )
+
+    def test_full_tool_result(self) -> None:
+        line = _format_full_log(
+            "tool_result",
+            {
+                "node_id": self.NODE,
+                "results": [
+                    ToolResult(content="ok", supersedes=True)
+                ],
+            },
+        )
+        self.assertIn("tool_result", line)
+        self.assertIn("ok", line)
+        self.assertIn("supersedes=True", line)
 
     def test_full_tool_called(self) -> None:
         line = _format_full_log(
@@ -307,18 +301,6 @@ class TestLogFormatters(unittest.TestCase):
         )
         self.assertIn("tool_called", line)
         self.assertIn("write_file", line)
-
-    def test_full_tool_result(self) -> None:
-        line = _format_full_log(
-            "tool_result",
-            {
-                "node_id": self.NODE,
-                "results": [ToolResult(content="ok", content_id="foo.txt", stub_previous=True)],
-            },
-        )
-        self.assertIn("tool_result", line)
-        self.assertIn("foo.txt", line)
-        self.assertIn("ok", line)
 
     def test_full_api_response(self) -> None:
         line = _format_full_log("api_response", {"node_id": self.NODE, "usage": self.USAGE})
@@ -332,23 +314,6 @@ class TestLogFormatters(unittest.TestCase):
         )
         self.assertIn("reminder_injected", line)
         self.assertIn("please finish", line)
-
-    def test_full_final_answer(self) -> None:
-        line = _format_full_log(
-            "final_answer",
-            {
-                "node_id": self.NODE,
-                "answer": "done",
-                "usage": self.USAGE,
-                "cumulative_usage": self.CUMULATIVE,
-                "final_context_size": 10,
-            },
-        )
-        self.assertIn("final_answer", line)
-        self.assertIn("done", line)
-        self.assertIn("total 150", line)
-        self.assertIn("3 requests", line)
-        self.assertIn("context 10", line)
 
     def test_full_run_terminated(self) -> None:
         line = _format_full_log(
@@ -535,7 +500,7 @@ class TestRunDag(unittest.TestCase):
         log_file = Path(log_path)
         self.assertTrue(log_file.exists())
         content = log_file.read_text(encoding="utf-8")
-        for fragment in ("message_added", "tool_called", "api_response", "final_answer"):
+        for fragment in ("message_added", "tool_called", "api_response", "reminder_injected"):
             self.assertIn(fragment, content)
 
         # The log file (a write-mode handle opened by the runner) is closed.
@@ -544,6 +509,63 @@ class TestRunDag(unittest.TestCase):
 
         # The clean pass consumed the node's pending messages.
         self.assertEqual(_read_pending(self._tmp, NODE_LABEL), [])
+
+    def test_log_writes_are_flushed_immediately(self) -> None:
+        """
+        LLS (bazel_runner_impl-low.md): each event line is flushed to the log
+        file immediately after it is written (log writes are unbuffered), so
+        the transcript reflects the run in real time.
+        """
+        self._write_workspace()
+        calls: List[Tuple[str, Any]] = []
+
+        class _FakeLogFile:
+            def __init__(self) -> None:
+                self.closed = False
+                self.name = "fake.log"
+
+            def write(self, s: str) -> int:
+                calls.append(("write", s))
+                return len(s)
+
+            def flush(self) -> None:
+                calls.append(("flush", None))
+
+            def close(self) -> None:
+                self.closed = True
+
+        fake = _FakeLogFile()
+        real_open = open
+
+        def _fake_open(*args: Any, **kwargs: Any) -> Any:
+            mode = kwargs.get("mode", args[1] if len(args) > 1 else "r")
+            # The runner's log open is the only write-mode open with an
+            # explicit encoding (open(log_path, "w", encoding="utf-8"));
+            # intercept it, pass everything else through to the real open.
+            if "w" in str(mode) and "encoding" in kwargs:
+                return fake
+            return real_open(*args, **kwargs)
+
+        with _patch_env(CLEANROOM_AGENT_LOG="fake.log"), patch(
+            "update_with_ai.lib.bazel_runner_impl.AgentLoopImpl", _StubAgentLoop
+        ), patch("builtins.open", side_effect=_fake_open), _patch_agent_config():
+            _seed_pending(self._tmp, NODE_LABEL, ["pending change"])
+            success, result = self._runner.run_dag(NODE_LABEL, self._tmp)
+
+        self.assertTrue(success)
+        self.assertIsInstance(result, NoChangeResult)
+        writes = [c for c in calls if c[0] == "write"]
+        flushes = [c for c in calls if c[0] == "flush"]
+        # One line per stub-emitted event (message_added, tool_called,
+        # api_response) plus the compact summaries are printed, not written.
+        self.assertGreaterEqual(len(writes), 3)
+        self.assertEqual(len(flushes), len(writes))
+        # Every write is immediately followed by a flush (real-time log).
+        for i, (kind, _) in enumerate(calls):
+            if kind == "write":
+                self.assertLess(i + 1, len(calls))
+                self.assertEqual(calls[i + 1][0], "flush")
+        self.assertTrue(fake.closed)
 
     def test_log_relative_name_resolved_against_workspace_dir(self) -> None:
         """
@@ -569,7 +591,7 @@ class TestRunDag(unittest.TestCase):
         self.assertIsInstance(result, NoChangeResult)
         log_file = base / "my_agent.log"
         self.assertTrue(log_file.exists())
-        self.assertIn("final_answer", log_file.read_text(encoding="utf-8"))
+        self.assertIn("reminder_injected", log_file.read_text(encoding="utf-8"))
 
     def test_log_defaults_to_workspace_dir_when_env_var_set(self) -> None:
         """Without CLEANROOM_AGENT_LOG, the log lands in BUILD_WORKSPACE_DIRECTORY."""
@@ -590,7 +612,7 @@ class TestRunDag(unittest.TestCase):
         self.assertIsInstance(result, NoChangeResult)
         log_file = base / "agent_loop.log"
         self.assertTrue(log_file.exists())
-        self.assertIn("final_answer", log_file.read_text(encoding="utf-8"))
+        self.assertIn("reminder_injected", log_file.read_text(encoding="utf-8"))
 
     def test_log_falls_back_to_working_directory_env_var(self) -> None:
         """BUILD_WORKING_DIRECTORY is the log base when BUILD_WORKSPACE_DIRECTORY is unset."""
@@ -610,7 +632,7 @@ class TestRunDag(unittest.TestCase):
         self.assertIsInstance(result, NoChangeResult)
         log_file = base / "agent_loop.log"
         self.assertTrue(log_file.exists())
-        self.assertIn("final_answer", log_file.read_text(encoding="utf-8"))
+        self.assertIn("reminder_injected", log_file.read_text(encoding="utf-8"))
 
     def test_run_dag_raises_when_root_node_has_no_manifest(self) -> None:
         """

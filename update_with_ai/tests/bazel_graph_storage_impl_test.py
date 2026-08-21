@@ -47,7 +47,6 @@ def _make_definition(prompt: str) -> NodeDefinition:
             readable_paths=[],
             writable_paths=[],
             blame_targets=[],
-            read_size_limit=100,
             search_result_limit=10,
         ),
     )

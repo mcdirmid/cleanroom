@@ -51,15 +51,6 @@ def _format_compact_log(event: LogEvent, data: Dict[str, Any]) -> Optional[str]:
             f"total {usage.get('total_tokens', 0)}"
         )
 
-    if event == "final_answer":
-        cumulative = data.get("cumulative_usage", {})
-        return (
-            f"[agent {node}] final answer; cumulative: "
-            f"prompt {cumulative.get('prompt_tokens', 0)} | "
-            f"completion {cumulative.get('completion_tokens', 0)} | "
-            f"total {cumulative.get('total_tokens', 0)} "
-            f"({cumulative.get('request_count', 0)} requests)"
-        )
 
     if event == "run_terminated":
         cumulative = data.get("cumulative_usage", {})
@@ -97,15 +88,17 @@ def _format_full_log(event: LogEvent, data: Dict[str, Any]) -> str:
         return f"[{node}] message_added ({role}): (no content)"
 
     if event == "message_stubbed":
-        content_id = data.get("content_id", "unknown")
         stubbed = data.get("stubbed_message", {})
-        replacement = data.get("replacement_message", {})
-        stub_preview = str(stubbed.get("content", "")).replace("\n", "\\n")[:80]
-        repl_preview = str(replacement.get("content", "")).replace("\n", "\\n")[:80]
-        return (
-            f"[{node}] message_stubbed: content_id='{content_id}' "
-            f"stubbed={stub_preview!r} replacement={repl_preview!r}"
-        )
+        content = str(stubbed.get("content", "")).replace("\n", "\\n")[:80]
+        return f"[{node}] message_stubbed: content={content!r}"
+
+    if event == "tool_result":
+        parts = []
+        for r in data.get("results", []):
+            supersedes = getattr(r, "supersedes", False)
+            content = str(getattr(r, "content", "")).replace("\n", "\\n")[:80]
+            parts.append(f"supersedes={supersedes!r} content={content!r}")
+        return f"[{node}] tool_result ({len(parts)}): {'; '.join(parts)}"
 
     if event == "tool_called":
         parts = []
@@ -114,15 +107,6 @@ def _format_full_log(event: LogEvent, data: Dict[str, Any]) -> str:
             args = tc.get("function", {}).get("arguments", "{}")
             parts.append(f"{name}({str(args)[:100]})")
         return f"[{node}] tool_called: {'; '.join(parts)}"
-
-    if event == "tool_result":
-        parts = []
-        for r in data.get("results", []):
-            cid = getattr(r, "content_id", None)
-            stub = getattr(r, "stub_previous", False)
-            content = str(getattr(r, "content", "")).replace("\n", "\\n")[:80]
-            parts.append(f"content_id={cid!r} stub_previous={stub} content={content!r}")
-        return f"[{node}] tool_result ({len(parts)}): {'; '.join(parts)}"
 
     if event == "api_response":
         usage = data.get("usage", {})
@@ -135,20 +119,6 @@ def _format_full_log(event: LogEvent, data: Dict[str, Any]) -> str:
     if event == "reminder_injected":
         return f"[{node}] reminder_injected: {data.get('message', '')}"
 
-    if event == "final_answer":
-        answer = str(data.get("answer", "")).replace("\n", "\\n")
-        preview = answer if len(answer) <= 200 else answer[:200] + "..."
-        usage = data.get("usage", {})
-        cumulative = data.get("cumulative_usage", {})
-        return (
-            f"[{node}] final_answer: {preview} | "
-            f"request: prompt {usage.get('prompt_tokens', 0)} completion {usage.get('completion_tokens', 0)} | "
-            f"cumulative: prompt {cumulative.get('prompt_tokens', 0)} "
-            f"completion {cumulative.get('completion_tokens', 0)} "
-            f"total {cumulative.get('total_tokens', 0)} "
-            f"({cumulative.get('request_count', 0)} requests) "
-            f"context {data.get('final_context_size', 0)}"
-        )
 
     if event == "run_terminated":
         cumulative = data.get("cumulative_usage", {})
@@ -241,6 +211,10 @@ class BazRunnerImpl(BazRunner):
             if line is not None:
                 print(line)
             log_file.write(_format_full_log(event, data) + "\n")
+            # Flush each line immediately so the transcript reflects the run
+            # in real time (specs/bazel_runner_impl-low.md: log writes are
+            # unbuffered).
+            log_file.flush()
 
         # Step 4: Clean logic with sandbox factory
         clean_logic = AgentNodeCleanLogicImpl(

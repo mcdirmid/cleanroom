@@ -63,23 +63,14 @@ Cumulative token usage across all API calls in the run:
 }
 """
 
-@dataclass
-class FinalAnswer:
-    """Successful completion with a final answer."""
-    type: Literal["final_answer"] = "final_answer"
-    answer: str = ""
-    history: List[HistoryEntry] = field(default_factory=list)
-
-
 AgentResult = Union[
-    FinalAnswer,
     Tuple[TerminateAgentWithSuccess, List[HistoryEntry]],
     Tuple[TerminateAgentWithFailure[T_tool], List[HistoryEntry]],
     Tuple[str, List[HistoryEntry]],
 ]
 """
-Result of an agent run.
-- FinalAnswer: Normal completion with final answer and full history
+Result of an agent run. There is no free-text final answer: the run completes
+only when a tool signals termination or the loop fails.
 - (TerminateAgentWithSuccess, history): Tool-initiated successful termination;
   the signal carries the termination result
 - (TerminateAgentWithFailure[T_tool], history): Tool-initiated failure
@@ -96,20 +87,20 @@ LogEvent = Literal[
     "api_response",
     "response_truncated",
     "reminder_injected",
-    "final_answer",
     "run_terminated",
     "error",
 ]
 """
 The type of log event being reported:
 - message_added: Message appended to the conversation
-- message_stubbed: Tool result stubbed due to newer result with same content_id
+- message_stubbed: A tool result was stubbed (its content replaced in place
+  by the static stub because a newer result for the same file or tool
+  command superseded it)
 - tool_called: Model requested tool execution
 - tool_result: Tool execution results received
 - api_response: API response received (includes per-request token usage)
 - response_truncated: Model response stopped at the generation limit
 - reminder_injected: Termination reminder injected into conversation
-- final_answer: Final answer produced (normal completion)
 - run_terminated: Tool signaled termination
 - error: Failure occurred
 """
@@ -123,22 +114,24 @@ the component catches it and continues execution.
 
 Event data fields:
 - message_added: {"message": HistoryEntry}
-- message_stubbed: {"content_id": str, "stubbed_message": HistoryEntry, "replacement_message": HistoryEntry}
+- message_stubbed: {"stubbed_message": HistoryEntry, "replacement_message": HistoryEntry}
 - tool_called: {"tool_calls": List[ToolCall]}
 - tool_result: {"results": List[ToolResult]}
 - api_response: {"usage": Usage}
 - response_truncated: {"message": HistoryEntry, "usage": Usage}
 - reminder_injected: {"message": str}
-- final_answer: {"answer": str, "usage": Usage, "cumulative_usage": CumulativeUsage, "final_context_size": int}
 - run_terminated: {"termination_value": <the termination signal's value>, "usage": Usage, "cumulative_usage": CumulativeUsage, "final_context_size": int}
 - error: {"error": str, "usage": Usage | None, "cumulative_usage": CumulativeUsage | None, "last_context_size": int | None}
 """
 
 TerminationReminderGenerator = Callable[[], str]
 """
-Client-provided function that generates a reminder message. The reminder is
-injected at most once per run, and the loop continues after injection. It is
-not triggered by tool failures (see ToolFailure in tool_provider).
+Client-provided function that generates the termination-reminder message.
+When the model stops with free text without signaling termination, the loop
+injects the reminder (this generator's message, or a default when none is
+configured) and continues prompting; the run completes only via a termination
+signal or the iteration limit. The reminder is not triggered by tool
+failures (see ToolFailure in tool_provider).
 """
 
 @dataclass
@@ -158,8 +151,13 @@ class AgentLoop(Protocol):
     """
     Interface for the LLS Agent Loop.
 
-    Runs the agent loop to answer a user prompt: completes when the model
-    produces a final answer, a tool signals termination, or a failure occurs.
+    Runs the agent loop to answer a user prompt: completes when a tool
+    signals termination, or a failure occurs. There is no free-text final
+    answer: when the model stops with text without signaling termination, the
+    loop injects a termination reminder and keeps prompting. The conversation
+    is append-only except for stubbing: a result whose supersedes flag is set
+    stubs the earlier non-stubbed result for the same file or tool command,
+    in place with a static stub, before the new result is appended.
     """
 
     def run_agent(
@@ -167,28 +165,35 @@ class AgentLoop(Protocol):
         prompt: str,
         tools: List[ToolDefinition],
         tool_executor: ToolExecutor[T_tool],
+        system_prompt: Optional[str] = None,
         logger: Optional[LoggerCallback] = None,
     ) -> AgentResult:
         """
         Run the agent loop to answer a user prompt.
 
-        Completes when the model produces a final answer, a tool signals
-        termination, or a failure occurs.
+        Completes when a tool signals termination, or a failure occurs. When
+        the model stops with free text without signaling termination, the loop
+        injects a termination reminder and continues prompting (there is no
+        final answer).
 
         Args:
-            prompt: The user's question or instruction (non-empty string).
+            prompt: The user's question or instruction (may be empty; an empty
+                prompt sends no user message).
             tools: List of tool definitions describing available tools to the LLM.
             tool_executor: Per-tool executor (see tool_provider.ToolExecutor):
                 called once per tool call with (name, arguments), returning a
                 ToolCallOutcome (a ToolResult or a Signal).
+            system_prompt: Static opening section of the conversation context;
+                never modified during the run (default: None).
             logger: Optional callback for real-time execution monitoring.
 
         Returns:
-            AgentResult: FinalAnswer, a (signal, history) termination tuple, or
-            an (error, history) loop-failure tuple.
+            AgentResult: a (signal, history) termination tuple, or an
+            (error, history) loop-failure tuple.
 
         Preconditions:
-            - prompt is non-empty string
+            - prompt is a string (may be empty)
+            - system_prompt when provided is a string
             - tools is a list of valid tool_provider-compatible tool definitions
             - tool_executor is callable and handles all tools in tools
             - tool_executor returns results in the tool_provider format
@@ -196,22 +201,32 @@ class AgentLoop(Protocol):
             - Component configured with connection params and optional termination_reminder_generator
 
         Postconditions:
-            - Returns FinalAnswer on normal completion
             - On termination, returns (TerminateAgentWithSuccess, history) or
               (TerminateAgentWithFailure[T_tool], history) — the tool-provider
               termination signal paired with the conversation history
             - On error, returns (error, history) (a loop failure); state unchanged
             - Termination values pass through unchanged from the Signal[T_tool] produced by tool_executor
             - Final termination is terminal—no further processing (no API calls, no tool executions)
-            - Tool result stubbing follows tool_provider semantics exactly:
-              - If content_id is None: result appended unconditionally
-              - If stub_previous is True: all previous non-stubbed results with same content_id
-                have their content replaced with a stub; new result appended
-              - If stub_previous is False: new result appended without stubbing
-              - Stubbing preserves original message positions
+            - The system prompt is never modified during the run
+            - The agent conversation is append-only except for stubbing: no message
+              is removed or reordered; a stubbed message keeps its position and its
+              content is replaced by the static stub
+            - A tool result's content is appended to the conversation (rendered into
+              the model-visible tool message, with the note appended)
+            - When a tool result's supersedes flag is set, the earlier non-stubbed
+              result for the same file or tool command has its content replaced in
+              place with the static stub before the new result is appended; the
+              stubbed message keeps its position, and the new result becomes the
+              live result for that file or tool command
+            - A result with the supersedes flag unset supersedes nothing; at most one
+              earlier result is superseded per result
+            - A stub is static once set: a stubbed message's content never changes
+              for the remainder of the run
+            - Stubbing preserves the conversation prefix: the conversation up to the
+              most recent live result for a file or tool command is identical from
+              one request to the next except for appended messages
             - Chronological order maintained
             - No state persists between runs
-            - content_id and stub_previous fields stripped before API calls
             - Logger callback invoked after data appended to history
             - If tool_executor returns Continue, the loop continues with the model processing the tool results
             - If tool_executor returns TerminateAgentWithSuccess, the loop stops and
@@ -238,7 +253,12 @@ class AgentLoop(Protocol):
             - No state persists between runs.
             - Termination values never inspected, transformed, or interpreted.
             - At most one reminder injected per run.
-            - tool_provider semantics for stubbing are preserved exactly.
+            - A result with the supersedes flag set stubs the earlier
+              non-stubbed result for the same file or tool command; stubbed
+              messages keep their positions.
+            - A stub is static once set: a stubbed message's content never
+              changes for the remainder of the run.
+            - A tool failure never supersedes an earlier result.
         """
         ...
 
@@ -257,7 +277,6 @@ __all__ = [
     "AgentLoop",
     "Usage",
     "CumulativeUsage",
-    "FinalAnswer",
     "AgentResult",
     "LogEvent",
     "LoggerCallback",

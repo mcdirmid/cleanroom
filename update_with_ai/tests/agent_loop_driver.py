@@ -18,8 +18,8 @@ from update_with_ai.lib.agent_loop import (
     LogEvent,
     Usage,
     CumulativeUsage,
-    FinalAnswer,
 )
+from update_with_ai.lib.dag_clean_logic import ChangeResult
 from update_with_ai.lib.tool_provider import (
     ToolResult,
     ToolCallOutcome,
@@ -95,12 +95,58 @@ def get_time_tool() -> ToolDefinition:
     })
 
 
+def succeed_tool() -> ToolDefinition:
+    """Define the termination tool: the session ends only via succeed()/fail()."""
+    return cast(ToolDefinition, {
+        "type": "function",
+        "function": {
+            "name": "succeed",
+            "description": (
+                "Signal successful termination, carrying the change message "
+                "for the next reader (one short sentence on what changed; "
+                "there is no free-text final answer — you must call succeed() "
+                "or fail() to end the run)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "summary": {
+                        "type": "string",
+                        "description": "One short sentence on the answer or what changed",
+                    },
+                },
+                "required": ["summary"],
+            },
+        },
+    })
+
+
+def fail_tool() -> ToolDefinition:
+    """Define the failure termination tool."""
+    return cast(ToolDefinition, {
+        "type": "function",
+        "function": {
+            "name": "fail",
+            "description": "Signal failure and end the run.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    })
+
+
 # ============================================================
 # Tool Executor
 # ============================================================
 
 def tool_executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
-    """Execute a single tool call and return a ToolResult (per-call ToolExecutor)."""
+    """Execute a single tool call and return a ToolResult (per-call ToolExecutor).
+
+    Weather lookups never supersede (read-only observations). Time lookups
+    supersede the earlier time result, so re-querying stubs the previous
+    result instead of accumulating copies in the conversation.
+    """
     if name == "get_weather":
         location = arguments.get("location", "unknown")
         unit = arguments.get("unit", "celsius")
@@ -113,22 +159,30 @@ def tool_executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
         result = f"Weather in {location}: {temp}{unit_str}, partly cloudy"
         return ToolResult(
             content=json.dumps({"weather": result}),
-            content_id=f"weather_{location.lower()}",
-            stub_previous=True,
+            supersedes=False,
+            note=f"Weather lookup for {location}",
         )
 
     if name == "get_current_time":
         current_time = datetime.datetime.now().isoformat()
         return ToolResult(
             content=json.dumps({"time": current_time}),
-            content_id="current_time",
-            stub_previous=True,
+            supersedes=True,
+            note="Current time",
         )
+
+    if name == "succeed":
+        # There is no free-text final answer: the session ends only via a
+        # termination tool. The change message is the only completion artifact.
+        summary = arguments.get("summary", "Answered the prompt")
+        return TerminateAgentWithSuccess(ChangeResult(messages=[summary]))
+
+    if name == "fail":
+        return TerminateAgentWithFailure[str]("Task failed")
 
     return ToolResult(
         content=json.dumps({"error": f"Unknown tool: {name}"}),
-        content_id=None,
-        stub_previous=False,
+        supersedes=False,
     )
 
 
@@ -155,12 +209,10 @@ def logger_callback(event: LogEvent, data: dict[str, Any]) -> None:
                 print(f"  [LOG] Message ({role}): (no content)")
 
     elif event == "message_stubbed":
-        content_id = data.get("content_id", "unknown")
         stubbed = data.get("stubbed_message", {})
-        replacement = data.get("replacement_message", {})
-        print(f"  [LOG] Tool result stubbed: content_id='{content_id}'")
-        print(f"       Stubbed: {stubbed.get('content', '')[:50]}...")
-        print(f"       Replacement: {replacement.get('content', '')[:50]}...")
+        content = str(stubbed.get("content", ""))
+        preview = content[:60] + "..." if len(content) > 60 else content
+        print(f"  [LOG] Message stubbed: {preview!r}")
 
     elif event == "tool_called":
         tool_calls = data.get("tool_calls", [])
@@ -174,9 +226,8 @@ def logger_callback(event: LogEvent, data: dict[str, Any]) -> None:
         results = data.get("results", [])
         print(f"  [LOG] Tool result(s): {len(results)} returned")
         for r in results:
-            content_id = getattr(r, 'content_id', 'None')
-            stub_previous = getattr(r, 'stub_previous', False)
-            print(f"       content_id='{content_id}', stub_previous={stub_previous}")
+            supersedes = getattr(r, 'supersedes', False)
+            print(f"       supersedes={supersedes}")
 
     elif event == "api_response":
         usage = data.get("usage", {})
@@ -188,23 +239,6 @@ def logger_callback(event: LogEvent, data: dict[str, Any]) -> None:
     elif event == "reminder_injected":
         message = data.get("message", "")
         print(f"  [LOG] Reminder injected: {message}")
-
-    elif event == "final_answer":
-        answer = data.get("answer", "")
-        usage = data.get("usage", {})
-        cumulative = data.get("cumulative_usage", {})
-        final_context = data.get("final_context_size", 0)
-
-        preview = answer[:100] + "..." if len(answer) > 100 else answer
-        print(f"  [LOG] Final answer: {preview}")
-        print(f"  [TOKENS] Final context size: {final_context:,} tokens")
-        print(f"  [TOKENS] Total spent: {cumulative.get('total_tokens', 0):,} tokens")
-        print(f"  [TOKENS]   - Prompt tokens: {cumulative.get('prompt_tokens', 0):,}")
-        print(f"  [TOKENS]   - Completion tokens: {cumulative.get('completion_tokens', 0):,}")
-        print(f"  [TOKENS]   - API calls: {cumulative.get('request_count', 0)}")
-
-        if final_context > 100000:
-            print(f"  WARNING: Context approaching 128K limit!")
 
     elif event == "run_terminated":
         termination_value = data.get("termination_value", "unknown")
@@ -240,6 +274,15 @@ def logger_callback(event: LogEvent, data: dict[str, Any]) -> None:
 def main():
     agent = AgentLoopImpl(config=config)
 
+    system_prompt = (
+        "You are a helpful assistant with tools for weather and time lookups. "
+        "A new time lookup replaces the earlier time result in the "
+        "conversation; weather lookups are never replaced. Line numbers are "
+        "metadata, not content. There is no free-text final answer: when you "
+        "have answered, call succeed() (with a one-sentence summary) or "
+        "fail() to end the run."
+    )
+
     prompts = [
         "What's the weather in San Francisco?",
         "What's the current time?",
@@ -252,16 +295,17 @@ def main():
     tools: List[ToolDefinition] = [
         get_weather_tool(),
         get_time_tool(),
+        succeed_tool(),
+        fail_tool(),
     ]
 
     print("\n" + "=" * 70)
-    print("AGENT LOOP DEMO WITH STUBBING & TOKEN TRACKING")
+    print("AGENT LOOP DEMO WITH STATIC STUBBING & TOKEN TRACKING")
     print("=" * 70)
-    print("\nNOTE: Stubbing is by content_id with stub_previous.")
-    print("  - Weather: content_id = weather_{location}")
-    print("  - Time: content_id = current_time")
-    print("  - Same content_id with stub_previous=True -> previous result stubbed")
-    print("  - content_id=None -> opt-out of stubbing")
+    print("\nNOTE: Results supersede per the tool's declaration.")
+    print("  - Weather: never supersedes (appended to the conversation)")
+    print("  - Time: supersedes the earlier time result; the earlier result")
+    print("    is stubbed in place with a static placeholder")
 
     for i, prompt in enumerate(prompts, 1):
         print(f"\n{'=' * 70}")
@@ -273,17 +317,15 @@ def main():
             prompt=prompt,
             tools=tools,
             tool_executor=tool_executor,
+            system_prompt=system_prompt,
             logger=logger_callback,
         )
 
         print('-' * 70)
 
-        # Handle result: FinalAnswer, (signal, history) tuples (termination
-        # success / failure), or (error, history) loop failures.
-        if isinstance(result, FinalAnswer):
-            print(f"Success!\nAnswer: {result.answer}")
-            history = result.history
-        elif isinstance(result, tuple):
+        # Handle result: (signal, history) termination tuples, or
+        # (error, history) loop failures. There is no free-text final answer.
+        if isinstance(result, tuple):
             signal, history = result
             if isinstance(signal, TerminateAgentWithSuccess):
                 print(f"Terminated (success)!\nValue: {signal.value}")
@@ -301,11 +343,8 @@ def main():
         if tool_msgs:
             print(f"   Tool messages: {len(tool_msgs)}")
             for m in tool_msgs:
-                content_id = m.get("_content_id", "None")
-                stubbed = m.get("_stubbed", False)
-                content_preview = str(m.get("content", ""))[:50]
-                status = "STUBBED" if stubbed else "active"
-                print(f"     [{status}] content_id='{content_id}': {content_preview}...")
+                content_preview = str(m.get("content", ""))[:60]
+                print(f"     {content_preview}...")
         print('=' * 70)
 
     print("\n" + "=" * 70)

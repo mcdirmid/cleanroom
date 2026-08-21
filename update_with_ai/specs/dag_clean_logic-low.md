@@ -6,15 +6,12 @@
 # Interface LLS: dag_clean_logic
 
 ## Data Types
-
 ```python
 from dag_storage import NodeId, PendingMessages, NodeMessage
 from tool_provider import TerminateSuccessResult
-from typing import Protocol, Union, Literal
+from typing import Protocol, Union, Literal, TypeAlias
 from dataclasses import dataclass
-```
 
-```python
 @dataclass
 class ChangeResult(TerminateSuccessResult):
     messages: list[NodeMessage]
@@ -33,7 +30,11 @@ class NoChangeResult(TerminateSuccessResult):
 class FailureResult:
     type: Literal["failure"] = "failure"
 
-CleanResult = Union[ChangeResult, FeedbackResult, NoChangeResult, FailureResult]
+CleanResult: TypeAlias = Union[ChangeResult, FeedbackResult, NoChangeResult, FailureResult]
+
+class DagCleanLogic(Protocol):
+    def clean(self, node_id: NodeId, messages: PendingMessages) -> CleanResult: ...
+    def is_dirty(self, node_id: NodeId, pending_messages: PendingMessages) -> bool: ...
 ```
 
 - `ChangeResult` (change): messages to broadcast to all reverse dependencies (nodes that depend on this node)
@@ -42,13 +43,6 @@ CleanResult = Union[ChangeResult, FeedbackResult, NoChangeResult, FailureResult]
 - `FailureResult` (failure): cleaning failed, no messages produced
 
 `ChangeResult`, `FeedbackResult`, and `NoChangeResult` extend the `TerminateSuccessResult` protocol from `tool_provider`, so a successful termination signal can carry a clean result directly.
-
-```python
-class DagCleanLogic(Protocol):
-    def clean(self, node_id: NodeId, messages: PendingMessages) -> CleanResult: ...
-    def is_dirty(self, node_id: NodeId, pending_messages: PendingMessages) -> bool: ...
-```
-
 ## Component-Provided Operations
 
 ### `clean`
