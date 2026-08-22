@@ -36,6 +36,7 @@ from .agent_loop import (
 from .tool_provider import (
     ToolDefinition,
     ToolResult,
+    PresentedToolResult,
     ToolExecutor,
     Continue,
     TerminateAgentWithSuccess,
@@ -101,6 +102,12 @@ class AgentLoopImpl(AgentLoop):
         # per file or per tool command at any time, so a superseding result
         # stubs at most one earlier result.
         self._stub_live: Dict[Tuple[str, str], int] = {}
+
+        # Per-run counter for synthetic tool-call ids (reset at each
+        # run_agent): ids assigned by the loop to tool calls the model did
+        # not make (a PresentedToolResult's call), so the call is unique
+        # within the run.
+        self._synthetic_call_counter = 0
 
     def _convert_tool_call_to_dict(self, tc: ChatCompletionMessageFunctionToolCall) -> ToolCall:
         """Convert an OpenAI function tool call to our ToolCall dict format."""
@@ -254,7 +261,7 @@ class AgentLoopImpl(AgentLoop):
     def _add_tool_result(
         self,
         messages: List[HistoryEntry],
-        tool_call: ToolCall,
+        tool_call: Optional[ToolCall],
         result: ToolResult,
         logger: Optional[LoggerCallback]
     ) -> None:
@@ -272,7 +279,35 @@ class AgentLoopImpl(AgentLoop):
           the message_stubbed logger event is emitted; the new result becomes
           the live result for that file or tool command. At most one earlier
           result is superseded per result.
+        - PresentedToolResult: the result is presented with the tool call the
+          producing component provided (the model did not make this call):
+          the loop assigns the call a fresh id, appends the call message
+          immediately before the result, and renders the result per the
+          rules above.
         """
+        if isinstance(result, PresentedToolResult):
+            call_id = f"call_auto_{self._synthetic_call_counter}"
+            self._synthetic_call_counter += 1
+            synthetic_call: ToolCall = {
+                "id": call_id,
+                "type": "function",
+                "function": {
+                    "name": result.name,
+                    "arguments": json.dumps(result.arguments),
+                },
+            }
+            self._append_message(
+                messages,
+                {"role": "assistant", "tool_calls": [synthetic_call]},
+                logger,
+            )
+            tool_call = synthetic_call
+            result = result.result
+
+        # A PresentedToolResult always carries its call; a model-call result
+        # is always passed with the model's call (the session-start path
+        # supplies only PresentedToolResult values).
+        assert tool_call is not None
         tool_name = tool_call["function"]["name"]
         arguments = tool_call["function"]["arguments"]
 
@@ -427,8 +462,7 @@ class AgentLoopImpl(AgentLoop):
             f"You have edited lines {start_line}-{end_line} of '{file_path}' "
             f"{count} times in a row without progress. Re-read the file "
             f"(read_file('{file_path}', include_line_numbers=True)) and "
-            f"reassess — the line numbers are stale after a write — or "
-            f"finish the run with succeed(), fail(), or blame()."
+            f"reassess, or finish the run with succeed(), fail(), or blame()."
         )
         reminder_message: HistoryEntry = {"role": "user", "content": reminder}
         messages.append(reminder_message)
@@ -481,8 +515,10 @@ class AgentLoopImpl(AgentLoop):
         self._invoke_logger(logger, "tool_called", {"tool_calls": tool_calls})
 
         # The tool executor is per-call (tool_provider.ToolExecutor): invoked
-        # once per tool call with (name, arguments), returning a ToolCallOutcome.
-        outcomes: List[Tuple[ToolCall, Optional[ToolResult]]] = []
+        # once per tool call with (name, arguments), returning a
+        # ToolCallOutcome — a sequence of one or more results (ToolResult or
+        # PresentedToolResult values) or a signal.
+        outcomes: List[Tuple[ToolCall, Optional[Union[ToolResult, PresentedToolResult]]]] = []
 
         for tool_call in tool_calls:
             name = tool_call["function"]["name"]
@@ -561,8 +597,13 @@ class AgentLoopImpl(AgentLoop):
                 self._log_error(logger, error_msg, last_usage, cumulative_usage)
                 return (True, (error_msg, messages))
 
-            if isinstance(outcome, ToolResult):
-                outcomes.append((tool_call, outcome))
+            if isinstance(outcome, list):
+                # A sequence of one or more results (ToolResult or
+                # PresentedToolResult values): each is appended, in the order
+                # produced, presenting a PresentedToolResult with the call it
+                # carries (the model did not make that call).
+                for item in outcome:
+                    outcomes.append((tool_call, item))
             elif isinstance(outcome, Continue):
                 # Continue signal - no tool result for this call
                 continue
@@ -595,7 +636,16 @@ class AgentLoopImpl(AgentLoop):
                 return (True, (error_msg, messages))
 
         if outcomes:
-            self._invoke_logger(logger, "tool_result", {"results": [r for _, r in outcomes]})
+            # The tool_result event carries the results in tool_provider
+            # format: a PresentedToolResult is reported by its underlying
+            # ToolResult (the LLS logger table types the event as
+            # list[ToolResult]).
+            self._invoke_logger(logger, "tool_result", {
+                "results": [
+                    r.result if isinstance(r, PresentedToolResult) else r
+                    for _, r in outcomes
+                ]
+            })
             # Append each result to the conversation, applying stubbing.
             for tool_call, tool_result in outcomes:
                 if tool_result is not None:
@@ -609,6 +659,7 @@ class AgentLoopImpl(AgentLoop):
         tools: List[ToolDefinition],
         tool_executor: ToolExecutor,
         system_prompt: Optional[str] = None,
+        session_start_results: Optional[List[PresentedToolResult]] = None,
         logger: Optional[LoggerCallback] = None,
     ) -> AgentResult:
         """
@@ -683,6 +734,14 @@ class AgentLoopImpl(AgentLoop):
             messages.append({"role": "user", "content": prompt})
             self._invoke_logger(logger, "message_added", {"message": messages[0]})
 
+        # Session-start tool results are rendered immediately after the user
+        # prompt (or at the start of the conversation when the prompt is
+        # empty), before the model's first request, each presented with the
+        # tool call it carries (per the agent_loop interface contract).
+        if session_start_results:
+            for result in session_start_results:
+                self._add_tool_result(messages, None, result, logger)
+
         iterations = 0
         last_usage: Optional[Usage] = None
         cumulative_usage: CumulativeUsage = {
@@ -699,6 +758,7 @@ class AgentLoopImpl(AgentLoop):
         self._loop_range_count = 0
         self._loop_reminder_injected = False
         self._stub_live = {}
+        self._synthetic_call_counter = 0
 
         while iterations < self._config.max_iterations:
             iterations += 1

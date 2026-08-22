@@ -13,6 +13,7 @@ the repository:
         max_iterations = 100,
         temperature = "0.7",       # float written as a string
         timeout_seconds = "100.0", # float written as a string (attr name avoids Bazel's reserved `timeout`)
+        session_start_reads = True,  # optional; defaults to enabled
         # No api_key attribute: API keys are never stored in Bazel or in
         # version control. api_key_env (optional) names the exact environment
         # variable holding this config's API key, e.g. "OPENAI_API_KEY" for a
@@ -79,12 +80,14 @@ def _agent_config_impl(ctx):
         "temperature": float(ctx.attr.temperature),
         "timeout": float(ctx.attr.timeout_seconds),
         "max_tokens": max_tokens,
+        "session_start_reads": ctx.attr.session_start_reads,
     }
 
     # Python module: json-encoded strings are valid Python string literals.
     entries = []
     for key in ("label", "name", "model", "base_url", "api_key_env",
-                "max_iterations", "temperature", "timeout", "max_tokens"):
+                "max_iterations", "temperature", "timeout", "max_tokens",
+                "session_start_reads"):
         entries.append('    "{}": {},'.format(key, _py_literal(config[key])))
 
     py_content = "\n".join(
@@ -128,6 +131,12 @@ _agent_config = rule(
         "max_iterations": attr.int(
             default = 100,
             doc = "Maximum agent-loop iterations per node.",
+        ),
+        "session_start_reads": attr.bool(
+            default = True,
+            doc = "Whether the run's sandbox provides session-start reads of the "
+                + "read-only files (rendered at the beginning of the run before "
+                + "the model's first turn). Defaults to enabled.",
         ),
         "temperature": attr.string(
             default = "0.0",

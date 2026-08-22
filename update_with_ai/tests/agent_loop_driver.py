@@ -141,7 +141,8 @@ def fail_tool() -> ToolDefinition:
 # ============================================================
 
 def tool_executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
-    """Execute a single tool call and return a ToolResult (per-call ToolExecutor).
+    """Execute a single tool call and return a sequence of results or a
+    signal (per-call ToolExecutor).
 
     Weather lookups never supersede (read-only observations). Time lookups
     supersede the earlier time result, so re-querying stubs the previous
@@ -157,19 +158,19 @@ def tool_executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
             temp = 72
             unit_str = "°F"
         result = f"Weather in {location}: {temp}{unit_str}, partly cloudy"
-        return ToolResult(
+        return [ToolResult(
             content=json.dumps({"weather": result}),
             supersedes=False,
             note=f"Weather lookup for {location}",
-        )
+        )]
 
     if name == "get_current_time":
         current_time = datetime.datetime.now().isoformat()
-        return ToolResult(
+        return [ToolResult(
             content=json.dumps({"time": current_time}),
             supersedes=True,
             note="Current time",
-        )
+        )]
 
     if name == "succeed":
         # There is no free-text final answer: the session ends only via a
@@ -180,10 +181,10 @@ def tool_executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
     if name == "fail":
         return TerminateAgentWithFailure[str]("Task failed")
 
-    return ToolResult(
+    return [ToolResult(
         content=json.dumps({"error": f"Unknown tool: {name}"}),
         supersedes=False,
-    )
+    )]
 
 
 # ============================================================

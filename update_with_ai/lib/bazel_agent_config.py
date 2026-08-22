@@ -56,6 +56,7 @@ class AgentConfig:
     temperature: float = 0.0
     timeout: float = 60.0
     max_tokens: Optional[int] = None
+    session_start_reads: bool = True
 
     def to_agent_loop_config(self, api_key: str) -> AgentLoopConfig:
         """Combine with a runtime API key into an AgentLoopConfig."""

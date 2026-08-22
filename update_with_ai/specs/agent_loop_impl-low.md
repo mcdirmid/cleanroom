@@ -21,6 +21,7 @@ from agent_loop import (
 from tool_provider import (
     ToolDefinition,
     ToolResult,
+    PresentedToolResult,
     ToolExecutor,
     Signal,
     Continue,
@@ -51,7 +52,10 @@ The implementation produces one of the outcomes specified by the `agent_loop` in
 
 **Tool-result stubbing:**
 
-- A tool result is appended to the conversation: the model-visible tool message content is the result's `content` with the result's `note` appended.
+- Every result a tool call produces is appended in the order produced: the model-visible tool message content is the result's `content` with the result's `note` appended.
+- A result whose tool call the model did not make (a `PresentedToolResult`) is presented with the call it carries immediately before the result: the loop assigns the call a fresh id, appends the call message, then appends the result's tool message, so the conversation contains no tool result without its preceding call.
+- Stubbing is applied per a result's `supersedes` flag before the next result of the same call is appended.
+- Session-start tool results are rendered immediately after the user prompt (or at the start of the conversation when the prompt is empty), before the model's first request; each result is presented with the tool call it carries (per the `agent_loop` interface contract).
 - When the result's `supersedes` flag is set, the earlier non-stubbed result for the same file or tool command is located via the stubbing state; its content is replaced in place with the pinned stub text (see Non-Concerns), the message keeps its position, the `message_stubbed` logger event is emitted (data: the stubbed message and the replacement message), and the new result becomes the live result for that file or tool command.
 - A result with the `supersedes` flag unset is appended without stubbing; at most one earlier result is superseded per result.
 - A stub is static once set: a stubbed message's content never changes for the remainder of the run. Stubbed messages keep their positions, so the conversation up to the most recent live result for a file or tool command is byte-identical across requests, preserving the model service's prefix caching.
@@ -91,5 +95,5 @@ Returns `(error, history)` on any failure. Logger callback exceptions are caught
 - **Default continuation prompt:** Pinned to `Your previous response was cut off because it exceeded the output limit. Continue from where you left off.` — used when `continuation_prompt` is `None`; tests may assert it.
 - **Default termination reminder:** Pinned to `You must signal termination by calling succeed(), fail(), or blame() to end the run.` — used when `termination_reminder_generator` is `None`; tests may assert it.
 - **Stub text:** Pinned to `Content removed because newer version is available.` — the content replacing a superseded result in place; tests may assert it.
-- **Same-range reminder text:** Pinned to `You have edited lines {start}-{end} of '{file}' {count} times in a row without progress. Re-read the file (read_file('{file}', include_line_numbers=True)) and reassess — the line numbers are stale after a write — or finish the run with succeed(), fail(), or blame().` — tests may assert its substance (the range, the file, `include_line_numbers=True`, and the finish-the-run option).
+- **Same-range reminder text:** Pinned to `You have edited lines {start}-{end} of '{file}' {count} times in a row without progress. Re-read the file (read_file('{file}', include_line_numbers=True)) and reassess, or finish the run with succeed(), fail(), or blame().` — tests may assert its substance (the range, the file, `include_line_numbers=True`, and the finish-the-run option).
 - **Degenerate-loop error texts:** Pinned to `Degenerate loop: same tool call repeated 8 consecutive times` (the identical-call detector) and `Degenerate loop: replace_lines targeted the same file and line range 8 consecutive times` (the same-range detector) — tests may assert them.

@@ -520,11 +520,12 @@ class BazelGraphStorageFileImpl(BaseBazelGraphStorageImpl):
                     dep_srcs.setdefault(s, dep_pkg)
 
             # Star deps' transitive closure is readable: every node reachable
-            # from a star dep through deps and star deps (never silent deps)
+            # from a star dep through star deps (never deps or silent deps)
             # contributes its declared sources, exactly like a direct dep.
             # The closure is computed from the loaded manifests at
             # initialization, so a node can read the sources of its spec
-            # deps' whole dependency graph.
+            # deps' whole star-dep graph. A star dep's regular deps (e.g. a
+            # guide dep) are never followed.
             closure: List[NodeId] = []
             closure_seen: set = set()
             queue: List[NodeId] = list(star_deps)
@@ -537,13 +538,7 @@ class BazelGraphStorageFileImpl(BaseBazelGraphStorageImpl):
                 dep_manifest = raw.get(label)
                 if dep_manifest is None:
                     continue  # star dep manifest not in this graph's runfiles
-                follow: List[NodeId] = list(dep_manifest.get("deps", []))
-                for sd in dep_manifest.get("star_deps", []):
-                    if sd not in follow:
-                        follow.append(sd)
-                for fd in dep_manifest.get("feedback_deps", []):
-                    if fd not in follow:
-                        follow.append(fd)
+                follow: List[NodeId] = list(dep_manifest.get("star_deps", []))
                 queue.extend(follow)
             for label in closure:
                 dep_manifest = raw.get(label)

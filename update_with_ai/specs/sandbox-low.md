@@ -11,7 +11,7 @@
 ```python
 from typing import Any, Callable, Protocol, TypeVar, Generic, TypeAlias
 from dataclasses import dataclass
-from tool_provider import ToolDefinition, ToolResult, Signal, TerminateAgentWithSuccess, TerminateAgentWithFailure, TerminateSuccessResult, ToolFailure, ToolCallOutcome, T_tool
+from tool_provider import ToolDefinition, ToolResult, PresentedToolResult, Signal, TerminateAgentWithSuccess, TerminateAgentWithFailure, TerminateSuccessResult, ToolFailure, ToolCallOutcome, T_tool
 
 VirtualName: TypeAlias = str
 
@@ -45,12 +45,14 @@ class SandboxConfig:
     blame_targets: BlameTargets
     search_result_limit: SearchResultLimit
     diff_size_limit: DiffSizeLimit | None = None
+    session_start_reads_enabled: bool = True
     verification_callback: VerificationCallback = None
 
 WriteOccurred: TypeAlias = bool
 
 class Sandbox(Protocol):
     def get_tool_definitions(self) -> list[ToolDefinition]: ...
+    def get_session_start_reads(self) -> list[PresentedToolResult]: ...
     def read_file(self, file_path: VirtualName, include_line_numbers: bool = False) -> ToolCallOutcome: ...
     def write_file(self, file_path: VirtualName, content: str) -> ToolCallOutcome: ...
     def edit_file(self, file_path: VirtualName, old_str: str, new_str: str, expect_multiple: bool = False) -> ToolCallOutcome: ...
@@ -65,21 +67,43 @@ class Sandbox(Protocol):
 
 `BlameTarget` identifies a node the agent may blame (a dependency of the current run). `Feedback` is the correction feedback on how to correct the blamed node's output. Each `Blame` pair corresponds to one feedback message to its target.
 
-The client-supplied configuration for a sandbox: file mappings, readable and writable paths, blame targets, the search result limit and the diff size limit, and an optional verification callback.
+The client-supplied configuration for a sandbox: file mappings, readable and writable paths, blame targets, the search result limit and the diff size limit, whether session-start reads are enabled (default: enabled), and an optional verification callback.
 ## Stubbing (term definition)
 
 These rules apply to all sandbox operations that produce a `ToolResult`.
 
 - A `ToolResult`'s `supersedes` flag is set on the results of operations on writable files and on verification results; it is not set on reads of files that are not writable, on `search_files`, or on termination tools' results.
 - A `read_file` of a writable file sets the flag: it supersedes the earlier non-stubbed result for that file, and always provides the file's entire content.
-- A `write_file`, `edit_file`, or `replace_lines` result sets the flag: it supersedes the earlier non-stubbed result for that file; the result's content is the operation's status, never a file-content echo.
+- A `write_file`, `edit_file`, or `replace_lines` write confirmation sets the flag: it supersedes the earlier non-stubbed result for that file; the confirmation's content is the operation's status, never a file-content echo.
 - A `verify` result sets the flag: it supersedes the earlier non-stubbed verification result.
 - The superseded result is identified by the file's virtual name (file operations) or the verification tool's name (`"verify"`) — the name the operation itself carries; no separate identity is introduced. At most one non-stubbed result exists per file or per the verification command at any time, so a result supersedes at most one earlier result.
-- A file's view: each writable file has a view for the run — plain or line-numbered. A writable file that already exists on disk is only readable in the line-numbered view (a plain read fails advising the line-numbered view), so its view is line-numbered from its first successful read; a new file's results render plain until the agent reads it in the line-numbered view. A write resets the view to plain — the line numbers are invalidated by the write — so a line-range edit after a write requires a fresh numbered read (a read with `include_line_numbers=True` re-enables the view).
-- After a successful `write_file`, `edit_file`, or `replace_lines`, the file's earlier results are superseded (stubbed by the consuming agent loop), so the file's current content is not visible in the conversation until the agent reads the file again.
+- A file's view: each writable file has a view for the run — plain or line-numbered. A writable file that already exists on disk is only readable in the line-numbered view (a plain read fails advising the line-numbered view), so its view is line-numbered from its first successful read; a new file's results render plain until the agent reads it in the line-numbered view. A write resets the view to plain — the line numbers are invalidated by the write — and the injected read that follows the write re-enables the line-numbered view, so a line-range edit may follow a write without a further read (a read with `include_line_numbers=True` also re-enables the view).
+- After a successful `write_file`, `edit_file`, or `replace_lines`, the write confirmation supersedes the file's earlier read result (stubbed by the consuming agent loop) and the injected read supersedes the write confirmation, so the file's current content is visible in the conversation immediately after the write.
 - A `replace_lines` failure for a file whose view is not line-numbered returns `ToolFailure[T_tool]` with a message advising `read_file(file_path, include_line_numbers=True)`; the failure supersedes nothing and removes nothing.
 - Search suppression: `search_files` renders matches only for files that are not writable; matches in writable files are reported as counts without content, so search results never become stale.
 - Notes: every successful read and search carries a note reporting what was returned; write and edit notes report the operation's status; the verification note reports only whether verification succeeded or failed (or that no verification tool is configured), never the failure details themselves, which live in the result's content. A tool result never carries the stub text.
+
+## Auto re-read (term definition)
+
+These rules apply to the outcome of a successful `write_file`, `edit_file`, or `replace_lines`.
+
+- The outcome is a sequence of two results in order: the write confirmation (a `ToolResult` with `supersedes` set; its `content` and `note` are a minimal structured success message) and the injected read (a `PresentedToolResult` pairing the `read_file` call with its result).
+- The injected read's call is `read_file` with arguments `{"file_path": <the file's virtual name>, "include_line_numbers": true}`; the consuming agent loop assigns the call's id and presents the call immediately before the result.
+- The injected read's result carries the file's full current content rendered in the line-numbered view, with `supersedes` set.
+- The injected read is a read of a writable file: it supersedes the earlier non-stubbed result for the file (the write confirmation) and is itself superseded by the next write or read for the file, per the Stubbing rules.
+- The injected read appears in the conversation immediately after the write confirmation, before any subsequent messages; the read result is present before the agent's next turn.
+- The agent did not request the injected read; to the agent it appears as a numbered read it requested.
+- A write that fails provides no injected read.
+
+## Session-start reads (term definition)
+
+These rules apply to the reads provided at the beginning of a run.
+
+- When `session_start_reads_enabled` is set, the session-start reads are the reads of every file in `readable_paths` that is not in `writable_paths` and exists as a regular file on disk; when unset, no session-start reads are provided.
+- Session-start reads are provided in a deterministic order (sorted by virtual name).
+- Each session-start read is a `PresentedToolResult` pairing the `read_file` call (arguments `{"file_path": <the file's virtual name>}`, no line numbers) with its result.
+- A session-start read's result renders the file's content plain, with `supersedes` unset: reads of files that are not writable never supersede an earlier result.
+- A session-start read is never stubbed: no file write targets a file that is not writable, and a read of a file that is not writable never supersedes an earlier result.
 
 ## Component-Provided Operations
 
@@ -101,6 +125,27 @@ def get_tool_definitions(self) -> list[ToolDefinition]
 **Failure Handling:** No failure conditions.
 
 **HLS Justification:** "The sandbox provides tool definitions that the agent loop can pass to the model."
+
+
+### `get_session_start_reads`
+
+```python
+def get_session_start_reads(self) -> list[PresentedToolResult]
+```
+
+**Purpose:** Return the session-start reads: the plain reads of the read-only files, for rendering at the beginning of a run before the model's first turn.
+
+**Preconditions:** None.
+
+**Postconditions:**
+- When `session_start_reads_enabled` is set: returns a session-start read (per the Session-start reads rules) for every file in `readable_paths` that is not in `writable_paths` and exists as a regular file on disk, sorted by virtual name
+- When `session_start_reads_enabled` is unset: returns an empty list
+- Each session-start read is a `PresentedToolResult` pairing the `read_file` call with its plain read result; each result's `supersedes` is unset
+- Requesting the session-start reads changes no sandbox state: the write-occurred flag, the per-file view modes, and the pre-write snapshots are unchanged
+
+**Failure Handling:** Always succeeds; filesystem errors reading a readable file are unhandled.
+
+**HLS Justification:** "The client may: Request the session-start reads."
 
 
 ### `read_file`
@@ -149,8 +194,8 @@ def write_file(self, file_path: VirtualName, content: str) -> ToolCallOutcome
 **Postconditions:**
 - File is created at the resolved path
 - `write_occurred` flag set to `True`
-- The outcome is a `ToolResult` with `supersedes` set to `True` (it supersedes the earlier result for that file)
-- The result's `content` and `note` are minimal: a structured success message (with counts where relevant); no file content is echoed in the conversation
+- The outcome is a sequence of two results, per the Auto re-read rules: a write confirmation (a `ToolResult` with `supersedes` set to `True`; it supersedes the earlier result for that file) and an injected read
+- The write confirmation's `content` and `note` are minimal: a structured success message (with counts where relevant); no file content is echoed in it
 
 **Failure Handling:**
 - Policy violation (file_path not in writable_paths or file_mappings) → Return `ToolFailure[T_tool]` with the error message identifying the violated policy.
@@ -158,7 +203,7 @@ def write_file(self, file_path: VirtualName, content: str) -> ToolCallOutcome
 - File already exists → Return `ToolFailure[T_tool]` stating that write_file is only for creating new files and advising `edit_file` (content-based) or `replace_lines` (line-based).
 - Filesystem errors are unhandled (no contract specified in this interface spec).
 
-**HLS Justification:** write_file is a file write: it modifies the filesystem and supersedes the file's earlier results.
+**HLS Justification:** write_file is a file write: it modifies the filesystem, supersedes the file's earlier results, and provides an injected read.
 
 
 ### `edit_file`
@@ -178,8 +223,8 @@ def edit_file(self, file_path: VirtualName, old_str: str, new_str: str,
 **Postconditions:**
 - When `expect_multiple` is `False`: exactly one occurrence of `old_str` is replaced with `new_str`; when `True`: every occurrence is replaced
 - The file is written with the replacement applied; `write_occurred` flag set to `True`
-- The outcome is a `ToolResult` with `supersedes` set to `True` (it supersedes the earlier result for that file)
-- The result's `content` and `note` are minimal: a structured success message (with counts where relevant); no file content is echoed in the conversation
+- The outcome is a sequence of two results, per the Auto re-read rules: a write confirmation (a `ToolResult` with `supersedes` set to `True`; it supersedes the earlier result for that file) and an injected read
+- The write confirmation's `content` and `note` are minimal: a structured success message (with counts where relevant); no file content is echoed in it
 
 **Failure Handling:**
 - Policy violation (file_path not in writable_paths or file_mappings) → Return `ToolFailure[T_tool]` with the error message identifying the violated policy.
@@ -188,7 +233,7 @@ def edit_file(self, file_path: VirtualName, old_str: str, new_str: str,
 - More than one match with `expect_multiple` `False` → Return `ToolFailure[T_tool]` stating the match count and advising `expect_multiple=True` or a narrower `old_str`.
 - Filesystem errors are unhandled (no contract specified in this interface spec).
 
-**HLS Justification:** edit_file is a file write: it modifies the filesystem and supersedes the file's earlier results.
+**HLS Justification:** edit_file is a file write: it modifies the filesystem, supersedes the file's earlier results, and provides an injected read.
 
 
 ### `replace_lines`
@@ -205,13 +250,13 @@ def replace_lines(self, file_path: VirtualName, start_line: int, end_line: int,
 - `start_line` must be between 1 and `len(file) + 1`; `end_line` must be between 0 and `len(file)`
 - `start_line` and `end_line` must be integers
 - The file must exist on disk (edits modify existing files; use `write_file` to create new ones)
-- The file's current view must be line-numbered, and the file must have been read in the line-numbered view since the last write (a write resets the view to plain; see Result Routing)
+- The file's current view must be line-numbered (a write resets the view to plain; the injected read after a write re-enables the line-numbered view, so a `replace_lines` may follow a write without a further read)
 
 **Postconditions:**
 - Lines `start_line` through `end_line` (inclusive) are replaced with `new_str`; `start_line > end_line` inserts `new_str` before line `start_line` (no lines removed); empty `new_str` deletes the range; a trailing newline is preserved when the file had one and lines remain
 - The file is written with the change applied; `write_occurred` flag set to `True`
-- The outcome is a `ToolResult` with `supersedes` set to `True` (it supersedes the earlier result for that file)
-- The result's `content` and `note` are minimal: a structured success message (with counts where relevant); no file content is echoed in the conversation
+- The outcome is a sequence of two results, per the Auto re-read rules: a write confirmation (a `ToolResult` with `supersedes` set to `True`; it supersedes the earlier result for that file) and an injected read
+- The write confirmation's `content` and `note` are minimal: a structured success message (with counts where relevant); no file content is echoed in it
 
 **Failure Handling:**
 - Policy violation (file_path not in writable_paths or file_mappings) → Return `ToolFailure[T_tool]` with the error message identifying the violated policy.
@@ -219,7 +264,7 @@ def replace_lines(self, file_path: VirtualName, start_line: int, end_line: int,
 - Invalid arguments (non-integer line numbers, or `start_line`/`end_line` out of bounds) → Return `ToolFailure[T_tool]` with the error message describing the argument error and the file's line count.
 - Filesystem errors are unhandled (no contract specified in this interface spec).
 
-**HLS Justification:** replace_lines is a file write: it requires the line-numbered view and supersedes the file's earlier results.
+**HLS Justification:** replace_lines is a file write: it requires the line-numbered view, supersedes the file's earlier results, and provides an injected read.
 
 
 ### `search_files`
@@ -373,7 +418,7 @@ def get_write_occurred(self) -> WriteOccurred
 - Errors leave the filesystem unchanged
 - A result with `supersedes` set supersedes the earlier non-stubbed result for the same file or tool command; a result with `supersedes` unset supersedes nothing
 - A result supersedes at most one earlier result (at most one non-stubbed result exists per file or per the verification command at any time)
-- A write or edit supersedes the file's earlier results, so the file's current content is not visible until the agent reads the file again
+- A write or edit supersedes the file's earlier read result; the injected read provides the file's current content in the conversation
 - An edit's replacement applies atomically (all or nothing): a replacement is never partially applied
 - `replace_lines` requires the line-numbered view
 - Termination tools never produce `ToolResult` and never supersede an earlier result

@@ -9,33 +9,32 @@ from typing import Protocol, TypeAlias
 
 Node: TypeAlias = str
 Message: TypeAlias = str
-PendingMessage: TypeAlias = str
-Dependency: TypeAlias = str
-PropagatingDependency: TypeAlias = Dependency
-ReverseDependency: TypeAlias = str
-Subgraph: TypeAlias = set[Node]
+Dependency: TypeAlias = Node
+Subgraph: TypeAlias = tuple[Node, frozenset[Node]]
+PendingMessage: TypeAlias = Message
+PropagatingDependency: TypeAlias = Node
+ReverseDependency: TypeAlias = Node
 
 class DagStorage(Protocol):
-    def read_pending_messages(self, node: Node) -> tuple[PendingMessage, ...]: ...
+    def read_pending_messages(self, node: Node) -> tuple[Message, ...]: ...
     def add_messages(self, node: Node, messages: list[Message]) -> None: ...
     def delete_node(self, node: Node) -> None: ...
-    def retrieve_dependencies(self, node: Node) -> tuple[Dependency, ...]: ...
-    def retrieve_reverse_dependencies(self, node: Node) -> tuple[ReverseDependency, ...]: ...
+    def retrieve_dependencies(self, node: Node) -> tuple[Node, ...]: ...
+    def retrieve_reverse_dependencies(self, node: Node) -> tuple[Node, ...]: ...
 ```
 
-- `Node`: A vertex in the graph; messages are addressed to nodes.
-- `Message`: A string addressed to a node.
-- `PendingMessage`: A message delivered to a node and not cleaned since delivery.
-- `Dependency`: A node that the current node depends on; A depends on B means A has an outgoing edge to B.
-- `PropagatingDependency`: A dependency whose changes propagate to the depending node.
-- `ReverseDependency`: A node recorded as depending on another.
-- `Subgraph`: A target node (included) plus all nodes reachable through its direct and indirect dependencies.
+## Term Definitions
+
+- **pending message:** A message delivered to a node and not cleaned since delivery.
+- **dependency:** For nodes A and B, A depends on B means A has an outgoing edge to B.
+- **reverse dependency:** A node recorded as depending on another node; recording happens when a node retrieves a dependency, at most once per dependency, and only for its propagating dependencies (repeated retrievals add no duplicates).
+- **subgraph:** A target node (included) plus all nodes reachable through its direct and indirect dependencies.
 
 ## Component-Provided Operations
 
 ### `read_pending_messages`
 
-    def read_pending_messages(self, node: Node) -> tuple[PendingMessage, ...]:
+    def read_pending_messages(self, node: Node) -> tuple[Message, ...]:
 
 **Purpose:** Read the pending messages for a node.
 **Preconditions:** The node exists in the graph before its messages are accessed.
@@ -62,7 +61,7 @@ class DagStorage(Protocol):
 
 ### `retrieve_dependencies`
 
-    def retrieve_dependencies(self, node: Node) -> tuple[Dependency, ...]:
+    def retrieve_dependencies(self, node: Node) -> tuple[Node, ...]:
 
 **Purpose:** Retrieve a node's dependencies.
 **Preconditions:** The node exists in the graph before its dependencies are accessed.
@@ -71,7 +70,7 @@ class DagStorage(Protocol):
 
 ### `retrieve_reverse_dependencies`
 
-    def retrieve_reverse_dependencies(self, node: Node) -> tuple[ReverseDependency, ...]:
+    def retrieve_reverse_dependencies(self, node: Node) -> tuple[Node, ...]:
 
 **Purpose:** Retrieve a node's known reverse dependencies.
 **Preconditions:** The node exists in the graph before its reverse dependencies are accessed.

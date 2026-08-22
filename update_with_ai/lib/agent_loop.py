@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from .tool_provider import (
     ToolDefinition,
     ToolResult,
+    PresentedToolResult,
     Signal,
     Continue,
     TerminateAgentWithSuccess,
@@ -166,6 +167,7 @@ class AgentLoop(Protocol):
         tools: List[ToolDefinition],
         tool_executor: ToolExecutor[T_tool],
         system_prompt: Optional[str] = None,
+        session_start_results: Optional[List[PresentedToolResult]] = None,
         logger: Optional[LoggerCallback] = None,
     ) -> AgentResult:
         """
@@ -182,9 +184,15 @@ class AgentLoop(Protocol):
             tools: List of tool definitions describing available tools to the LLM.
             tool_executor: Per-tool executor (see tool_provider.ToolExecutor):
                 called once per tool call with (name, arguments), returning a
-                ToolCallOutcome (a ToolResult or a Signal).
+                ToolCallOutcome (a sequence of one or more tool results or a
+                Signal).
             system_prompt: Static opening section of the conversation context;
                 never modified during the run (default: None).
+            session_start_results: Optional tool results (PresentedToolResult
+                values, each carrying its tool call) rendered at the beginning
+                of the run, immediately after the user prompt (or at the start
+                of the conversation when the prompt is empty), before the
+                model's first turn (default: None).
             logger: Optional callback for real-time execution monitoring.
 
         Returns:

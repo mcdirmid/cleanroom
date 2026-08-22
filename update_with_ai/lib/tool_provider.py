@@ -41,6 +41,21 @@ class ToolResult:
     type: Literal["tool_result"] = "tool_result"
 
 
+@dataclass
+class PresentedToolResult:
+    """A tool result presented with a tool call the model did not make.
+
+    The producing component pairs the result with the call (name and
+    arguments) it is presented with; the consuming agent loop assigns the
+    call's id and presents the call immediately before the result, so the
+    conversation contains no tool result without its preceding call.
+    """
+    name: ToolName
+    arguments: ToolArguments
+    result: ToolResult
+    type: Literal["presented_tool_result"] = "presented_tool_result"
+
+
 class TerminateSuccessResult(Protocol):
     """
     Abstract result carried by a successful termination signal.
@@ -93,7 +108,12 @@ Signal = Union[
     TerminateAgentWithFailure[T_tool],
     ToolFailure[T_tool],
 ]
-ToolCallOutcome = Union[ToolResult, Signal[T_tool]]
+# A tool call produces either a sequence of one or more results (ToolResult
+# or PresentedToolResult values) or a signal, never both.
+ToolCallOutcome = Union[
+    List[Union[ToolResult, PresentedToolResult]],
+    Signal[T_tool],
+]
 
 # Executes a single tool call (per-tool, one call at a time, not in batches).
 ToolExecutor = Callable[[ToolName, ToolArguments], ToolCallOutcome[T_tool]]
@@ -121,15 +141,17 @@ class ToolProvider(Protocol[T_tool]):
 
     def execute_tool(self, name: ToolName, arguments: ToolArguments) -> ToolCallOutcome[T_tool]:
         """
-        Executes a tool call and produces either a tool result or a signal.
+        Executes a tool call and produces either a sequence of tool results
+        or a signal.
 
         Args:
             name: The name of the tool to execute
             arguments: The arguments to pass to the tool
 
         Returns:
-            Either a ToolResult or a Signal (Continue, a TerminateAgentWith*
-            signal, or ToolFailure).
+            Either a sequence of one or more tool results (ToolResult or
+            PresentedToolResult values) or a Signal (Continue, a
+            TerminateAgentWith* signal, or ToolFailure).
 
         Preconditions:
             - Tool name must be valid

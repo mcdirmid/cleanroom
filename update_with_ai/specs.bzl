@@ -238,8 +238,8 @@ def update_spec_with_ai(name, spec_deps, visibility = None):
             "low-level specification (LLS) for %s (in %s-low.md); if the LLS already exists, " +
             "update it rather than create it. The LLS must be aligned with the HLS according to " +
             "high_to_low.md. Make targeted edits only for substantive issues; do not chase " +
-            "formatting nits; re-read the file (read_file with include_line_numbers=True) " +
-            "before each replace_lines edit."
+            "formatting nits. A write is followed by an automatic re-read with line numbers, " +
+            "so a line-range edit (replace_lines) may follow a write without a further read."
         ) % (name, name, name, name),
         srcs = [name + "-low.md"],
         deps = ["//guides:high_to_low"],

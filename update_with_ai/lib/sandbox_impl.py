@@ -13,6 +13,7 @@ from .sandbox import (
 from .tool_provider import (
     ToolDefinition,
     ToolResult,
+    PresentedToolResult,
     ToolCallOutcome,
     TerminateAgentWithSuccess,
     TerminateAgentWithFailure,
@@ -102,7 +103,7 @@ class SandboxImpl(Sandbox):
             ),
             self._create_tool_definition(
                 "write_file",
-                "Create a NEW file with the given content. Fails if the file already exists — use edit_file (content-based) or replace_lines (line-based) to modify existing files. Empty content is rejected. After a write the file's earlier content is no longer visible until you read the file again.",
+                "Create a NEW file with the given content. Fails if the file already exists — use edit_file (content-based) or replace_lines (line-based) to modify existing files. Empty content is rejected. After a write the file is automatically re-read, so the file's updated content (with line numbers) appears in the conversation immediately after the write.",
                 {
                     "file_path": {"type": "string", "description": "Virtual path to the file"},
                     "content": {"type": "string", "description": "Content to write"}
@@ -110,7 +111,7 @@ class SandboxImpl(Sandbox):
             ),
             self._create_tool_definition(
                 "edit_file",
-                "Replace text in a file (content-based search and replace): replaces exactly one occurrence of old_str with new_str; fails when old_str is absent or matches more than once unless expect_multiple=True (then replaces all occurrences). old_str and new_str are limited to 100 characters each — use replace_lines for larger changes (requires the line-numbered view). After an edit the file's earlier content is no longer visible until you read the file again.",
+                "Replace text in a file (content-based search and replace): replaces exactly one occurrence of old_str with new_str; fails when old_str is absent or matches more than once unless expect_multiple=True (then replaces all occurrences). old_str and new_str are limited to 100 characters each — use replace_lines for larger changes (requires the line-numbered view). After an edit the file is automatically re-read, so the file's updated content (with line numbers) appears in the conversation immediately after the edit.",
                 {
                     "file_path": {"type": "string", "description": "Virtual path to the file"},
                     "old_str": {"type": "string", "description": "Exact text to find"},
@@ -120,7 +121,7 @@ class SandboxImpl(Sandbox):
             ),
             self._create_tool_definition(
                 "replace_lines",
-                "Replace, delete, or insert lines by 1-indexed line range: replaces lines start_line..end_line with new_str; start_line > end_line inserts new_str before start_line; empty new_str deletes the range. Requires the line-numbered view: call read_file(file_path, include_line_numbers=true) first. Line numbers are 1-indexed and current only in the most recent read.",
+                "Replace, delete, or insert lines by 1-indexed line range: replaces lines start_line..end_line with new_str; start_line > end_line inserts new_str before start_line; empty new_str deletes the range. Requires the line-numbered view: call read_file(file_path, include_line_numbers=true) first; after a write the automatic re-read provides the line-numbered view. Line numbers are 1-indexed and current only in the most recent read.",
                 {
                     "file_path": {"type": "string", "description": "Virtual path to the file"},
                     "start_line": {"type": "integer", "description": "1-indexed start line (inclusive); between 1 and len(file)+1"},
@@ -201,6 +202,43 @@ class SandboxImpl(Sandbox):
 
         return definitions
 
+    def get_session_start_reads(self) -> List[PresentedToolResult]:
+        """The session-start reads: plain reads of the read-only files.
+
+        When session-start reads are enabled, provides a session-start read
+        for every file that is readable but not writable and exists as a
+        regular file on disk, sorted by virtual name: a PresentedToolResult
+        pairing the read_file call with the file's plain read result (never
+        superseding — reads of files that are not writable never supersede).
+        When disabled, provides no reads. Requesting the reads changes no
+        sandbox state; filesystem errors reading a readable file are
+        unhandled (propagate).
+        """
+        if not self.config.session_start_reads_enabled:
+            return []
+        reads: List[PresentedToolResult] = []
+        read_only = sorted(
+            set(self.config.readable_paths) - set(self.config.writable_paths)
+        )
+        for file_path in read_only:
+            real_path = self.config.file_mappings.get(file_path, file_path)
+            if not os.path.isfile(real_path):
+                continue
+            with open(real_path, 'r', encoding='utf-8') as f:
+                lines = f.read().splitlines()
+            content = self._render_lines(lines, False)
+            n = len(lines)
+            reads.append(PresentedToolResult(
+                name="read_file",
+                arguments={"file_path": file_path},
+                result=ToolResult(
+                    content=content,
+                    supersedes=False,
+                    note=f"Read {n} lines (plain)",
+                ),
+            ))
+        return reads
+
     def read_file(self, file_path: VirtualName,
                   include_line_numbers: bool = False) -> ToolCallOutcome:
         """Read a file's entire content, optionally in the line-numbered view."""
@@ -272,12 +310,12 @@ class SandboxImpl(Sandbox):
         # supersedes an earlier result — reads of readable files are not
         # stubbed.
         if file_path in self.config.writable_paths:
-            return ToolResult(
+            return [ToolResult(
                 content=content,
                 supersedes=True,
                 note=note,
-            )
-        return ToolResult(content=content, supersedes=False, note=note)
+            )]
+        return [ToolResult(content=content, supersedes=False, note=note)]
 
     def write_file(self, file_path: VirtualName, content: str) -> ToolCallOutcome:
         """Create a new file; its result supersedes the file's earlier results."""
@@ -331,15 +369,14 @@ class SandboxImpl(Sandbox):
         if file_path not in self._changed_files:
             self._changed_files.append(file_path)
 
-        # The result is minimal: a structured success message, never a
-        # file-content echo. supersedes is set so the agent loop stubs the
-        # file's earlier results (the file's content is not visible until the
-        # agent reads the file again).
+        # The outcome is a sequence of two results: the write confirmation
+        # (a minimal structured success message, never a file-content echo;
+        # supersedes is set so the agent loop stubs the file's earlier
+        # results) and the injected read (the automatic re-read with the
+        # file's full numbered content, which re-enables the line-numbered
+        # view so a line-range edit may follow without a further read).
         n = len(content.splitlines())
-        return ToolResult(
-            content=f"Created {file_path}; {n} lines",
-            supersedes=True,
-        )
+        return self._write_outcome(file_path, f"Created {file_path}; {n} lines")
 
     def _snapshot(self, file_path: VirtualName, real_path: str) -> None:
         """Capture a file's pre-write content on the run's first write of it."""
@@ -369,18 +406,18 @@ class SandboxImpl(Sandbox):
 
         Shared by the editing tools (edit_file, replace_lines): a successful
         edit is a file write — it sets the write-occurred flag and records the
-        changed file. The ToolResult's content is the operation's status (a
-        structured success message), never a file-content echo; supersedes is
-        set so the agent loop stubs the file's earlier results (the file's
-        current content is not visible until the agent reads the file again).
-        A write invalidates the line-numbered view: the file's view resets to
-        plain, so the agent must re-read with include_line_numbers=True
-        before the next line-range edit (replace_lines) — line numbers are
-        stale after the write.
+        changed file. The outcome is a sequence of two results: the write
+        confirmation (a `ToolResult` whose content is the operation's status,
+        a structured success message, never a file-content echo; supersedes
+        is set so the agent loop stubs the file's earlier read) and the
+        injected read (the automatic re-read, per the sandbox contract).
+        A write invalidates the line-numbered view; the injected read that
+        follows re-enables it, so a line-range edit may follow a write
+        without a further read.
         """
         self._snapshot(file_path, real_path)
         # The write changes the line structure: reset the view to plain so
-        # replace_lines re-validates against a fresh numbered read.
+        # the injected read re-establishes fresh line numbers.
         self._file_views[file_path] = False
 
         try:
@@ -393,9 +430,50 @@ class SandboxImpl(Sandbox):
         if file_path not in self._changed_files:
             self._changed_files.append(file_path)
 
-        return ToolResult(
-            content=status,
-            supersedes=True,
+        return self._write_outcome(file_path, status)
+
+    def _write_outcome(self, file_path: VirtualName, status: str) -> ToolCallOutcome:
+        """The two-result outcome of a successful file write, in order.
+
+        Per the sandbox contract's Auto re-read rules: the write confirmation
+        (a `ToolResult` with `supersedes` set, its content a minimal status)
+        and the injected read (a `PresentedToolResult` pairing the `read_file`
+        call with its numbered result, `supersedes` set). The injected read
+        supersedes the write confirmation, so the file's most recent
+        non-stubbed result is a read; the next write or read for the file
+        supersedes it, per the Stubbing rules.
+        """
+        return [
+            ToolResult(content=status, supersedes=True),
+            self._injected_read(file_path),
+        ]
+
+    def _injected_read(self, file_path: VirtualName) -> PresentedToolResult:
+        """The auto re-read after a file write: a numbered read of the file.
+
+        The injected read carries the file's full current content rendered in
+        the line-numbered view with `supersedes` set, and re-enables the
+        file's line-numbered view (a write reset it to plain). It is
+        presented as `read_file(file_path, include_line_numbers=True)`; the
+        consuming agent loop assigns the call's id and presents the call
+        immediately before the result.
+        """
+        real_path = self.config.file_mappings[file_path]
+        with open(real_path, 'r', encoding='utf-8') as f:
+            lines = f.read().splitlines()
+        # A file just written is expected to be readable; a read failure here
+        # is a filesystem error, which is unhandled per the sandbox contract.
+        self._file_views[file_path] = True
+        content = self._render_lines(lines, True)
+        n = len(lines)
+        return PresentedToolResult(
+            name="read_file",
+            arguments={"file_path": file_path, "include_line_numbers": True},
+            result=ToolResult(
+                content=content,
+                supersedes=True,
+                note=f"Read {n} lines (line-numbered)",
+            ),
         )
 
     @staticmethod
@@ -623,7 +701,7 @@ class SandboxImpl(Sandbox):
 
         # Search results never supersede an earlier result (matches in
         # writable files are never rendered, so they never become stale).
-        return ToolResult(content=content, supersedes=False, note=note)
+        return [ToolResult(content=content, supersedes=False, note=note)]
 
     def verify(self) -> ToolCallOutcome:
         """Report the run's changes (diff vs. run start); run the verification callback when configured."""
@@ -635,11 +713,11 @@ class SandboxImpl(Sandbox):
                 "succeed() may now be called (verify has been called)."
             )
             self._verify_passed = True
-            return ToolResult(
+            return [ToolResult(
                 content=output,
                 supersedes=True,
                 note="No verification tool configured.",
-            )
+            )]
 
         try:
             success, output = self.config.verification_callback()
@@ -662,11 +740,11 @@ class SandboxImpl(Sandbox):
         # verification result (the agent loop stubs it). The note reports
         # only the status (pinned in specs/sandbox_impl-low.md); the failure
         # details live in the content, never in the note.
-        return ToolResult(
+        return [ToolResult(
             content=content,
             supersedes=True,
             note=note,
-        )
+        )]
 
     def _diff_report(self) -> str:
         """Diff of each changed file vs. its content at run start, truncated.

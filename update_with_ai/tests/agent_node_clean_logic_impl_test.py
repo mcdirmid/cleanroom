@@ -34,6 +34,7 @@ from update_with_ai.lib.dag_clean_logic import (
 from update_with_ai.lib.dag_storage import NodeId, NodeMessage, PendingMessages
 from update_with_ai.lib.sandbox import Blame, Sandbox, SandboxConfig
 from update_with_ai.lib.tool_provider import (
+    PresentedToolResult,
     TerminateAgentWithFailure,
     TerminateAgentWithSuccess,
     ToolCallOutcome,
@@ -121,19 +122,26 @@ class MockSandbox(Sandbox):
         tool_defs: Optional[List[ToolDefinition]] = None,
         write_occurred: bool = False,
         blame_outcome: Optional[ToolCallOutcome] = None,
+        session_start_reads: Optional[List[PresentedToolResult]] = None,
     ) -> None:
         self._tool_defs = tool_defs if tool_defs is not None else []
         self._write_occurred = write_occurred
         self._blame_outcome = blame_outcome or TerminateAgentWithSuccess(
             FeedbackResult(messages=[("b", "fix it")])
         )
+        self._session_start_reads = session_start_reads or []
         self.calls: List[Tuple[str, Dict[str, Any]]] = []
+        self.session_start_reads_requested = False
 
     def _record(self, name: str, arguments: Dict[str, Any]) -> None:
         self.calls.append((name, arguments))
 
     def get_tool_definitions(self) -> List[ToolDefinition]:
         return self._tool_defs
+
+    def get_session_start_reads(self) -> List[PresentedToolResult]:
+        self.session_start_reads_requested = True
+        return list(self._session_start_reads)
 
     def get_write_occurred(self) -> bool:
         return self._write_occurred
@@ -204,12 +212,14 @@ class MockAgentLoop(AgentLoop):
         tools: List[ToolDefinition],
         tool_executor: ToolExecutor,
         system_prompt: Optional[str] = None,
+        session_start_results: Optional[List[PresentedToolResult]] = None,
         logger: Optional[LoggerCallback] = None,
     ) -> AgentResult:
         self.run_count += 1
         self.last_run = {
             "prompt": prompt,
             "system_prompt": system_prompt,
+            "session_start_results": session_start_results,
             "tools": tools,
             "tool_executor": tool_executor,
             "logger": logger,
@@ -272,6 +282,23 @@ class TestCleanOutcomeMapping(unittest.TestCase):
         result = self._impl(sandbox, agent_loop).clean("a", [])
         self.assertIs(result, no_change)
         self.assertEqual(result.type, "no_change")
+
+    def test_clean_passes_session_start_reads_to_the_run(self):
+        """The sandbox's session-start reads are provided as the run's
+        session-start tool results (LLS: clean requests the sandbox's
+        session-start reads and runs the agent loop with them)."""
+        session_read = PresentedToolResult(
+            name="read_file",
+            arguments={"file_path": "guide.md"},
+            result=ToolResult(content="guide content", supersedes=False),
+        )
+        sandbox = MockSandbox(session_start_reads=[session_read])
+        agent_loop = MockAgentLoop()
+        result = self._impl(sandbox, agent_loop).clean("a", [])
+        self.assertEqual(result.type, "no_change")
+        # The sandbox's session-start reads were requested and passed through.
+        self.assertTrue(sandbox.session_start_reads_requested)
+        self.assertEqual(agent_loop.last_run["session_start_results"], [session_read])
 
     def test_terminate_failure_is_failure(self):
         """(TerminateAgentWithFailure, history) -> FailureResult()."""

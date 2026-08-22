@@ -475,8 +475,10 @@ class _Workspace:
       //pkg_c:c  srcs=["shared.txt", "c_only.txt"]
       //pkg_d:d  feedback_deps=["//pkg_a:a"], srcs=["d1.txt"]
       //pkg_e:e  star_deps=["//pkg_a:a"], srcs=["e1.txt", "shared.txt"]
-                 (star dep a's closure covers c: c's srcs are readable by e;
-                 e's own "shared.txt" wins over c's on name collision)
+                 (a's regular dep c is NOT followed: the star closure
+                  traverses star deps only, so c's srcs are not readable by e)
+      //pkg_f:f  star_deps=["//pkg_e:e"], srcs=["f1.txt"]
+                 (star-over-star: f's closure covers e and a, never c)
     """
 
     def __init__(self) -> None:
@@ -563,6 +565,14 @@ class _Workspace:
             "prompt for e",
             srcs=["e1.txt", "shared.txt"],
             star_deps=["//pkg_a:a"],
+        )
+        self.write_manifest(
+            "pkg_f",
+            "f",
+            "//pkg_f:f",
+            "prompt for f",
+            srcs=["f1.txt"],
+            star_deps=["//pkg_e:e"],
         )
 
     def close(self) -> None:
@@ -668,16 +678,22 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
             self.assertEqual(graph.get_node_dependencies("//pkg_d:d"), ["//pkg_a:a"])
 
     def test_star_deps_transitive_closure_srcs_are_readable(self):
-        """A star dep's closure is readable: e's star dep a depends on c, so
-        e can read a's and c's srcs (plus its own)."""
+        """A star dep's closure over star deps is readable: e's star dep a
+        has no star deps of its own, so e reads a's srcs but NOT c's — a
+        regular dep of a star dep is never followed (the closure traverses
+        star deps only)."""
         with self._workspace() as ws:
             graph = self._build_graph(ws)
             e_readable = graph.resolve_node_definition(
                 "//pkg_e:e"
             ).sandbox_config.readable_paths
             self.assertCountEqual(
-                e_readable, ["e1.txt", "shared.txt", "a1.txt", "c_only.txt"]
+                e_readable, ["e1.txt", "shared.txt", "a1.txt"]
             )
+            self.assertNotIn("c_only.txt", e_readable)
+            # Star-dep srcs map to their package directories; the node's own
+            # src wins on a name collision; closure nodes' silent_srcs are
+            # not readable.
             e_mappings = graph.resolve_node_definition(
                 "//pkg_e:e"
             ).sandbox_config.file_mappings
@@ -685,19 +701,27 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
                 e_mappings["a1.txt"], str(ws.root / "pkg_a" / "a1.txt")
             )
             self.assertEqual(
-                e_mappings["c_only.txt"], str(ws.root / "pkg_c" / "c_only.txt")
-            )
-            # e's own src wins on name collision with closure src (c's shared.txt).
-            self.assertEqual(
                 e_mappings["shared.txt"], str(ws.root / "pkg_e" / "shared.txt")
             )
-            # silent_srcs of closure nodes are not readable.
             self.assertNotIn("a_priv.txt", e_readable)
-            # writable set is unchanged: only own srcs + own silent_srcs.
+            # Writable set is unchanged: only own srcs + own silent_srcs.
             e_writable = graph.resolve_node_definition(
                 "//pkg_e:e"
             ).sandbox_config.writable_paths
             self.assertCountEqual(e_writable, ["e1.txt", "shared.txt"])
+
+    def test_star_deps_close_over_star_deps_not_deps(self):
+        """Star-over-star traversal: f's star dep e has star dep a, so f
+        reads e's and a's srcs; a's regular dep c is still never followed."""
+        with self._workspace() as ws:
+            graph = self._build_graph(ws)
+            f_readable = graph.resolve_node_definition(
+                "//pkg_f:f"
+            ).sandbox_config.readable_paths
+            self.assertCountEqual(
+                f_readable, ["f1.txt", "e1.txt", "shared.txt", "a1.txt"]
+            )
+            self.assertNotIn("c_only.txt", f_readable)
 
     def test_star_deps_are_included_in_deps(self):
         """A star dep is automatically a dep: e declares only star_deps
@@ -711,10 +735,10 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
                 graph.get_known_reverse_dependencies("//pkg_a:a"), ["//pkg_e:e"]
             )
 
-    def test_star_closure_skips_silent_deps(self):
-        """Silent deps inside a star closure are cleaned but their srcs are
-        not readable: r stars s (deps=[t], silent_deps=[u]); t's srcs are
-        readable, u's are not."""
+    def test_star_closure_follows_star_deps_only(self):
+        """A star closure traverses star deps only: r stars s (s has
+        deps=[t] and silent_deps=[u]); neither t's nor u's srcs are readable
+        — regular and silent deps of a star dep are never followed."""
         ws = _Workspace()
         try:
             ws.write_manifest("pkg_t", "t", "//pkg_t:t", "pt", srcs=["t1.txt"])
@@ -740,7 +764,8 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
             r_readable = graph.resolve_node_definition(
                 "//pkg_r:r"
             ).sandbox_config.readable_paths
-            self.assertCountEqual(r_readable, ["r1.txt", "s1.txt", "t1.txt"])
+            self.assertCountEqual(r_readable, ["r1.txt", "s1.txt"])
+            self.assertNotIn("t1.txt", r_readable)
             self.assertNotIn("u1.txt", r_readable)
         finally:
             ws.close()

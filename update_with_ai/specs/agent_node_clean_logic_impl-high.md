@@ -5,7 +5,7 @@ imports: bazel_graph_storage (node definitions), dag_storage (messages), agent_l
 terms (from dag_clean_logic): dirty, cleaning, change message, feedback message
 terms (from dag_storage): node, dependency, pending message
 terms (from agent_loop): run, system prompt
-terms (from sandbox): blame, blame target, file write
+terms (from sandbox): blame, blame target, file write, session-start read
 terms (from tool_provider): tool definition, tool failure
 terms (refined): dirty, cleaning
 
@@ -14,6 +14,7 @@ terms (refined): dirty, cleaning
 - Cleaning a node builds a sandbox from the node's sandbox configuration (via bazel_graph_storage), then runs the agent loop with the sandbox's tool definitions, delegating tool execution to the sandbox.
 - The node's prompt, augmented with lines naming the readable and writable files, is provided as the run's system prompt.
 - The node's pending messages are provided as the run's user prompt, so the agent can respond to change and feedback from its dependencies.
+- Cleaning a node requests the sandbox's session-start reads and provides them as the run's session-start tool results, so the read-only files' content is in the conversation before the agent's first turn.
 - The node's sandbox configuration may omit the verification callback; in that case the verification tool is not provided.
 
 | Run outcome | Cleaning result |

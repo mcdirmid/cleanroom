@@ -24,7 +24,7 @@ Answers a user prompt through an iterative process of LLM processing and tool ex
 **Inputs**
 
 - Configured: connection and processing parameters for the language model service; an optional maximum number of loop iterations (default ten); an optional termination reminder generator (the message source for the termination reminder; a default message is used when not configured); an optional continuation prompt (a default is used when omitted); a default sampling temperature of 0.0 and a default request timeout of 60 seconds.
-- Per run: a system prompt, a user prompt, tool definitions and tool execution logic, as defined by tool_provider; an optional logger callback.
+- Per run: a system prompt, a user prompt, tool definitions and tool execution logic, as defined by tool_provider; optional session-start tool results (rendered at the beginning of the run, before the model's first turn); an optional logger callback.
 
 **Operations**
 
@@ -36,6 +36,9 @@ Answers a user prompt through an iterative process of LLM processing and tool ex
 - Signals failure, leaving state unchanged, when the run fails, the language model service fails, the response is malformed, tool execution raises an exception, or a truncated response is degenerate.
 - Signals failure, leaving state unchanged, when the run exceeds the configured maximum number of loop iterations.
 - Maintains chronological conversation order and processes tool results per tool_provider semantics, rendering each tool result's note into the model-visible message.
+- Appends every tool result a tool call produces, in the order produced.
+- Each tool result appears in the conversation with its tool call immediately before it.
+- Renders the session-start tool results at the beginning of the run, immediately after the user prompt (or at the start of the conversation when the prompt is empty), before the model's first turn.
 - The conversation is append-only except for stubbing; never modifies the system prompt; rewrites prior conversation messages only by stubbing, per tool_provider semantics.
 - Stubs the earlier result for the same file or tool command when a result's supersession flag is set.
 - Appends tool failures to the conversation and continues the loop; no session reset, no history clearing.

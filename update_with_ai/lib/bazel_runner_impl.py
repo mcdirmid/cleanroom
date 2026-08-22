@@ -31,6 +31,7 @@ from update_with_ai.lib.sandbox import Sandbox
 from update_with_ai.lib.sandbox_impl import SandboxImpl
 from update_with_ai.lib.bazel_runner import BazRunner
 from typing import Any, Dict, List, Optional
+import dataclasses
 import os
 import sys
 
@@ -184,10 +185,14 @@ class BazRunnerImpl(BazRunner):
         # part of the config target: it is resolved from the environment by
         # the BazelAgentConfig component (the config's pinned API-key
         # environment variable, or AGENT_API_KEY — an unexpected failure,
-        # see bazel_agent_config).
-        agent_loop = AgentLoopImpl(
-            config=BazelAgentConfigImpl().build_agent_loop_config(config_target, workspace_root),
-        )
+        # see bazel_agent_config). The raw agent configuration also carries
+        # the session-start-reads gate, which the sandbox factory applies to
+        # each node's sandbox configuration below.
+        agent_config_impl = BazelAgentConfigImpl()
+        config_target = agent_config_impl.resolve_config_target(config_target)
+        agent_config = agent_config_impl.load_config(config_target, workspace_root)
+        api_key = agent_config_impl.resolve_api_key(agent_config.api_key_env)
+        agent_loop = AgentLoopImpl(config=agent_config.to_agent_loop_config(api_key))
 
         # Step 3: Agent logging — compact events on stdout, full transcript
         # to a file in the directory where bazel was invoked (override with
@@ -216,7 +221,10 @@ class BazRunnerImpl(BazRunner):
             # unbuffered).
             log_file.flush()
 
-        # Step 4: Clean logic with sandbox factory
+        # Step 4: Clean logic with sandbox factory. The session-start-reads
+        # gate from the agent configuration applies to every node's sandbox
+        # (the agent_config is the run-level configuration; it overrides the
+        # per-node sandbox config's default).
         clean_logic = AgentNodeCleanLogicImpl(
             config=CleanLogicConfig(
                 graph=graph,
@@ -225,7 +233,12 @@ class BazRunnerImpl(BazRunner):
                     api_key=agent_loop._config.api_key,
                     model=agent_loop._config.model,
                 ),
-                make_sandbox=lambda cfg: SandboxImpl(config=cfg),
+                make_sandbox=lambda cfg: SandboxImpl(
+                    config=dataclasses.replace(
+                        cfg,
+                        session_start_reads_enabled=agent_config.session_start_reads,
+                    )
+                ),
                 make_agent_loop=lambda cfg=None: agent_loop,
                 logger=_agent_logger,
             )

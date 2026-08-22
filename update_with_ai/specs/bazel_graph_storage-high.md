@@ -14,7 +14,7 @@ Provides Bazel-workspace-backed storage and graph access for the agent build: no
 - Node definition: the agent prompt and sandbox configuration declared by a node's target — file mappings, readable and writable paths, blame targets, and the search result limit.
 - Package directory: the directory containing a node's BUILD file; also where the node's messages are stored.
 - Silent dependency: a dependency a node declares as silent; a silent dependency is a dependency (cleaned before the declaring node) whose changes do not propagate to the declaring node.
-- Star dependency: a dependency a node declares as a star dependency; a star dependency is a dependency (cleaned before the declaring node) whose declared sources, and the declared sources of every node reachable from it through dependencies excluding silent dependencies, are readable by the declaring node.
+- Star dependency: a dependency a node declares as a star dependency; a star dependency is a dependency (cleaned before the declaring node) whose declared sources, and the declared sources of every node reachable from it through star dependencies (never through non-star dependencies or silent dependencies), are readable by the declaring node.
 
 ## Contract
 

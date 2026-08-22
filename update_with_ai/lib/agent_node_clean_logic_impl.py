@@ -161,6 +161,7 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
             tools=tools,
             tool_executor=_tool_executor,
             system_prompt=system_prompt,
+            session_start_results=sandbox.get_session_start_reads(),
             logger=logger,
         )
 

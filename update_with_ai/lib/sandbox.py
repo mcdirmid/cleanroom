@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from .tool_provider import (
     ToolDefinition,
     ToolResult,
+    PresentedToolResult,
     Signal,
     Continue,
     TerminateAgentWithSuccess,
@@ -37,13 +38,14 @@ VerificationCallback = Optional[Callable[[], Tuple[bool, str]]]
 
 @dataclass
 class SandboxConfig:
-    """Client-supplied configuration for the sandbox: file mappings, readable and writable paths, blame targets, limits, and an optional verification callback."""
+    """Client-supplied configuration for the sandbox: file mappings, readable and writable paths, blame targets, limits, whether session-start reads are enabled, and an optional verification callback."""
     file_mappings: FileMapping
     readable_paths: ReadablePaths
     writable_paths: WritablePaths
     blame_targets: BlameTargets
     search_result_limit: SearchResultLimit
     diff_size_limit: Optional[DiffSizeLimit] = None
+    session_start_reads_enabled: bool = True
     verification_callback: VerificationCallback = None
 
 WriteOccurred = bool
@@ -61,8 +63,12 @@ class Sandbox(Protocol):
     termination results never supersede an earlier result. The consuming
     agent loop stubs the superseded result.
 
-    Each tool operation produces a ToolCallOutcome: a ToolResult on success,
-    or a Signal (Continue, a TerminateAgentWith* signal, or ToolFailure).
+    Each tool operation produces a ToolCallOutcome: a sequence of one or
+    more tool results (ToolResult or PresentedToolResult values) on success,
+    or a Signal (Continue, a TerminateAgentWith* signal, or ToolFailure). A
+    successful file write provides two results in order: the write
+    confirmation and the injected read (the automatic re-read with the
+    file's full numbered content, presented as a read the agent requested).
     """
 
     def get_tool_definitions(self) -> List[ToolDefinition]:
@@ -81,6 +87,21 @@ class Sandbox(Protocol):
         """
         ...
 
+    def get_session_start_reads(self) -> List[PresentedToolResult]:
+        """
+        Return the session-start reads: the plain reads of the read-only
+        files, for rendering at the beginning of a run before the model's
+        first turn.
+
+        When session-start reads are enabled, returns a session-start read
+        for every file that is readable but not writable and exists as a
+        regular file on disk, sorted by virtual name; each is a
+        PresentedToolResult pairing the read_file call with its plain read
+        result (never superseding). When disabled, returns an empty list.
+        Requesting the session-start reads changes no sandbox state.
+        """
+        ...
+
     def read_file(self, file_path: VirtualName,
                   include_line_numbers: bool = False) -> ToolCallOutcome:
         """
@@ -96,8 +117,9 @@ class Sandbox(Protocol):
                 not file content). Allowed only for writable files.
 
         Returns:
-            ToolResult with the (optionally line-numbered) content on success,
-            or ToolFailure on policy or parameter violations.
+            A one-result sequence: a ToolResult with the (optionally
+            line-numbered) content on success, or ToolFailure on policy or
+            parameter violations.
 
         Routing:
             supersedes is True when the file is writable (the read supersedes
@@ -121,16 +143,21 @@ class Sandbox(Protocol):
             content: Content to write (must be non-empty)
 
         Returns:
-            ToolResult on success, or ToolFailure on policy or argument
-            violations (including an existing file).
+            A sequence of two results on success — the write confirmation (a
+            ToolResult with supersedes set) and the injected read (a
+            PresentedToolResult with the file's full numbered content) — or
+            ToolFailure on policy or argument violations (including an
+            existing file).
 
         Routing:
-            supersedes is True (the write supersedes the earlier result for
-            the file). Sets write_occurred flag.
+            supersedes is True (the write confirmation supersedes the earlier
+            result for the file; the injected read supersedes the write
+            confirmation and re-enables the line-numbered view). Sets
+            write_occurred flag.
 
         Note:
-            The content and note are a minimal structured status; no file
-            content is echoed in the conversation.
+            The write confirmation's content and note are a minimal structured
+            status; no file content is echoed in it.
         """
         ...
 
@@ -151,17 +178,21 @@ class Sandbox(Protocol):
             expect_multiple: If True, replace all occurrences of old_str
 
         Returns:
-            ToolResult on success, or ToolFailure on policy or argument
-            violations (including when the file does not exist or either
-            string exceeds the length limit).
+            A sequence of two results on success — the write confirmation (a
+            ToolResult with supersedes set) and the injected read (a
+            PresentedToolResult with the file's full numbered content) — or
+            ToolFailure on policy or argument violations (including when the
+            file does not exist or either string exceeds the length limit).
 
         Routing:
-            A file write: supersedes is True (the edit supersedes the earlier
-            result for the file). Sets write_occurred flag.
+            A file write: supersedes is True (the write confirmation
+            supersedes the earlier result for the file; the injected read
+            supersedes the write confirmation and re-enables the line-numbered
+            view). Sets write_occurred flag.
 
         Note:
-            The content and note are a minimal structured status; no file
-            content is echoed in the conversation.
+            The write confirmation's content and note are a minimal structured
+            status; no file content is echoed in it.
         """
         ...
 
@@ -181,17 +212,22 @@ class Sandbox(Protocol):
             new_str: Replacement content
 
         Returns:
-            ToolResult on success, or ToolFailure on policy or argument
-            violations (including when the file does not exist or the file's
-            current view is not line-numbered).
+            A sequence of two results on success — the write confirmation (a
+            ToolResult with supersedes set) and the injected read (a
+            PresentedToolResult with the file's full numbered content) — or
+            ToolFailure on policy or argument violations (including when the
+            file does not exist or the file's current view is not
+            line-numbered).
 
         Routing:
-            A file write: supersedes is True (the edit supersedes the earlier
-            result for the file). Sets write_occurred flag.
+            A file write: supersedes is True (the write confirmation
+            supersedes the earlier result for the file; the injected read
+            supersedes the write confirmation and re-enables the line-numbered
+            view). Sets write_occurred flag.
 
         Note:
-            The content and note are a minimal structured status; no file
-            content is echoed in the conversation.
+            The write confirmation's content and note are a minimal structured
+            status; no file content is echoed in it.
         """
         ...
 

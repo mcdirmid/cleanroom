@@ -3,7 +3,7 @@
 fulfills: agent_loop
 imports: tool_provider (tool results, signals)
 terms (from agent_loop): run, termination value, conversation, system prompt, truncated response, degenerate response
-terms (from tool_provider): tool failure, supersession flag, stub
+terms (from tool_provider): tool failure, supersession flag, stub, tool result
 terms (refined): continuation prompt
 
 ## Deltas
@@ -20,6 +20,9 @@ terms (refined): continuation prompt
 - Token usage is extracted from each API response and included in logger events.
 - [ordering] Logger callbacks are invoked after data is appended to history.
 - [ordering] Stubbing is applied when a result with the supersession flag set is processed, before the next request is sent; a stub set by a result is reflected in the request that follows it.
+- [ordering] The results a tool call produces are appended in the order produced; stubbing is applied per a result's flag before the next result of the same call is appended.
+- [ordering] A tool result whose tool call the model did not make is presented with its tool call immediately before the result, so the conversation contains no tool result without its preceding call.
+- [ordering] Session-start tool results are rendered immediately after the user prompt (or at the start of the conversation when the prompt is empty), before the model's first request; each result is presented with the tool call it carries.
 - [state] No persistence or caching; the conversation history is provided in the result and not retained; the mapping between results and the file or tool command they concern exists only for the duration of the run.
 - [external] The OpenAI API (external language model service).
 - [failure] A truncated response does not halt the run; generation resumes via the continuation prompt.

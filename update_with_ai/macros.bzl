@@ -125,7 +125,7 @@ _update_with_ai_rule = rule(
             doc = "List of dependency node targets that can receive feedback; these nodes are automatically included in deps",
         ),
         "star_deps": attr.label_list(
-            doc = "List of dependency node targets whose transitive closure over deps/star deps is readable; these nodes are automatically included in deps",
+            doc = "List of dependency node targets whose transitive closure over star deps is readable; these nodes are automatically included in deps",
         ),
         "srcs": attr.string_list(
             doc = "File paths the agent can write (these files need not pre-exist)",
@@ -205,7 +205,7 @@ def update_with_ai(
         feedback_deps: List of dependency node targets that can receive
             feedback; these nodes are automatically included in deps
         star_deps: List of dependency node targets whose transitive closure
-            over deps/star deps is readable; these nodes are automatically
+            over star deps is readable; these nodes are automatically
             included in deps (cleaned before run)
         srcs: Files agent can write that are readable by deps
         silent_srcs: Files agent can write that are NOT readable by deps

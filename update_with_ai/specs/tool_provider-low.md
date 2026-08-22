@@ -26,6 +26,13 @@ class ToolResult:
     note: str = ""
     type: Literal["tool_result"] = "tool_result"
 
+@dataclass
+class PresentedToolResult:
+    name: ToolName
+    arguments: ToolArguments
+    result: ToolResult
+    type: Literal["presented_tool_result"] = "presented_tool_result"
+
 class TerminateSuccessResult(Protocol):
     pass
 
@@ -55,7 +62,7 @@ Signal: TypeAlias = Union[
     ToolFailure[T_tool],
 ]
 
-ToolCallOutcome: TypeAlias = Union[ToolResult, Signal[T_tool]]
+ToolCallOutcome: TypeAlias = Union[list[ToolResult | PresentedToolResult], Signal[T_tool]]
 
 ToolExecutor: TypeAlias = Callable[[ToolName, ToolArguments], ToolCallOutcome[T_tool]]
 
@@ -78,9 +85,9 @@ Abstract result carried by a successful termination signal. Concrete results des
 
 `TerminateAgentWithSuccess` and `TerminateAgentWithFailure[T_tool]` are termination signals. Termination is terminal: once a provider session produces a termination signal, that session produces no further tool results. `ToolFailure[T_tool]` is a **tool failure** — a failed tool call caused by a contract violation (e.g., invalid arguments, a policy violation, or a termination tool invoked incorrectly). A tool failure is not a termination and does not end the session: the failure value guides the agent and the loop continues. It is distinct from a run-level agent failure, which is the loop's concern, not the provider's. A correctly-invoked termination tool is not a `ToolFailure`: the termination tool produces a termination signal with the appropriate result.
 
-A tool call produces either a `ToolResult` or a `Signal[T_tool]`, never both.
+A tool call produces either a sequence of one or more results (`ToolResult` or `PresentedToolResult` values) or a `Signal[T_tool]`, never both. A `PresentedToolResult` pairs a result with the tool call it is presented with when the model did not make that call: the producing component provides the call's name and arguments, and the consuming agent loop assigns the call's id. Results are rendered in the order produced.
 
-Executes a single tool call and returns a `ToolResult` or a `Signal[T_tool]`. The executor operates per-tool (one call at a time), not in batches.
+Executes a single tool call and returns a sequence of one or more tool results or a `Signal[T_tool]`. The executor operates per-tool (one call at a time), not in batches.
 ## Component-Provided Operations
 
 ### `get_tool_definitions`
@@ -110,7 +117,7 @@ def get_tool_definitions(self) -> list[ToolDefinition]
 def execute_tool(self, name: ToolName, arguments: ToolArguments) -> ToolCallOutcome[T_tool]
 ```
 
-**Purpose:** Executes a single tool call and produces either a tool result or a termination signal.
+**Purpose:** Executes a single tool call and produces either a sequence of tool results or a signal.
 
 **Preconditions:**
 - The tool name must correspond to a definition returned by `get_tool_definitions()`
@@ -120,14 +127,15 @@ def execute_tool(self, name: ToolName, arguments: ToolArguments) -> ToolCallOutc
 **Postconditions:**
 - If the tool call is valid and executes successfully:
   - Produces exactly one `ToolCallOutcome[T_tool]`
-  - The outcome is either a `ToolResult` or a `Signal[T_tool]` (`Continue`, `TerminateAgentWithSuccess`, `TerminateAgentWithFailure[T_tool]`, or `ToolFailure[T_tool]`)
-  - If the outcome is a `ToolResult`:
+  - The outcome is either a sequence of one or more results (`ToolResult` or `PresentedToolResult` values) or a `Signal[T_tool]` (`Continue`, `TerminateAgentWithSuccess`, `TerminateAgentWithFailure[T_tool]`, or `ToolFailure[T_tool]`)
+  - If the outcome is a sequence of results, each result:
     - Contains the content produced by the tool
     - Contains a `supersedes` flag: `True` when the result supersedes the earlier non-stubbed result for the same file or tool command (the producing component's declaration), `False` otherwise
     - Contains a note (possibly empty)
     - When `supersedes` is `True`: the earlier non-stubbed result for the same file or tool command is stubbed by the consuming agent loop before the new result is rendered; at most one earlier result is superseded per result
     - When `supersedes` is `False`: no earlier result is superseded
     - The result never carries the stub text; the stub text appears only when the consuming agent loop replaces an earlier result
+  - The sequence is rendered in the order produced; a `PresentedToolResult` is rendered with the tool call it carries (its name and arguments) immediately before its result
   - If the outcome is a `Signal[T_tool]`:
     - `Continue` indicates execution should continue
     - `TerminateAgentWithSuccess` indicates successful termination carrying a `TerminateSuccessResult`; `TerminateAgentWithFailure[T_tool]` indicates failure termination with a value of type `T_tool`

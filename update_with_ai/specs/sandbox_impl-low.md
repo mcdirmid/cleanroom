@@ -19,6 +19,7 @@ from sandbox import (
 from tool_provider import (
     ToolDefinition,
     ToolResult,
+    PresentedToolResult,
     ToolCallOutcome,
     TerminateAgentWithSuccess,
     TerminateAgentWithFailure,
@@ -44,12 +45,16 @@ The implementation:
 - Uses the filesystem for all read/write operations
 - Delegates verification to the injected `verification_callback` when non-null. The callback may perform arbitrary actions (including running shell commands) but must not depend on external state or modify the sandbox's filesystem; guaranteeing this is the assembler's responsibility.
 - Conditionally includes tools based on configuration (the blame tool only). The verify tool is always emitted.
-- Provides `edit_file` (content-based search-and-replace: one occurrence, or all when `expect_multiple` is set) and `replace_lines` (line-range replace, delete, or insert) as file writes: each sets the write-occurred flag, records the changed file, and produces a result with `supersedes` set (the file's earlier results are stubbed by the agent loop). `edit_file` rejects identical `old_str`/`new_str` (a no-op edit) as an invalid argument, and rejects `old_str`/`new_str` longer than 100 characters with a message advising `replace_lines` (which requires the line-numbered view).
+- Provides `edit_file` (content-based search-and-replace: one occurrence, or all when `expect_multiple` is set) and `replace_lines` (line-range replace, delete, or insert) as file writes: each sets the write-occurred flag, records the changed file, and produces an outcome of two results — a write confirmation with `supersedes` set and an injected read (a `PresentedToolResult` pairing `read_file(file_path, include_line_numbers=True)` with the file's numbered content, `supersedes` set); the agent loop applies the stubbing. `edit_file` rejects identical `old_str`/`new_str` (a no-op edit) as an invalid argument, and rejects `old_str`/`new_str` longer than 100 characters with a message advising `replace_lines` (which requires the line-numbered view).
 - `write_file` creates new files only: it fails when the file already exists, advising `edit_file` or `replace_lines` for modifications.
 - `edit_file` and `replace_lines` fail cleanly when the file does not exist, advising `write_file` for creation.
 - `read_file` returns the file's entire content, prefixed with line numbers (`"N \u2502 line"`) only when `include_line_numbers` is set (default: off) and the file is writable; a writable file that already exists on disk is only readable in the line-numbered view — a plain read fails with a message advising `read_file(file_path, include_line_numbers=True)`; a read of a file that is not writable produces a plain inline result.
-- `replace_lines` may edit only when the file's current view is line-numbered and the file was read in the line-numbered view since the last write; otherwise it fails advising a numbered read (`read_file(file_path, include_line_numbers=True)`); the failure supersedes nothing and removes nothing.
-- After a successful `write_file`, `edit_file`, or `replace_lines`, the file's view mode resets to plain (the write invalidates the line numbers); the result carries the operation's status with `supersedes` set, so the file's earlier results are stubbed by the agent loop and the file's current content is not visible until the agent reads the file again.
+- Provides the session-start reads: when `session_start_reads_enabled` is set, a plain read (never superseding) of every configured file that is readable but not writable and exists as a regular file on disk, sorted by virtual name; each is a `PresentedToolResult` pairing `read_file(file_path)` with the plain read result (the session-start reads change no sandbox state).
+- `replace_lines` may edit only when the file's current view is line-numbered (a write resets the view to plain; the injected read after a write re-enables the line-numbered view); otherwise it fails advising a numbered read (`read_file(file_path, include_line_numbers=True)`); the failure supersedes nothing and removes nothing.
+- After a successful `write_file`, `edit_file`, or `replace_lines`, the file's view mode resets to plain (the write invalidates the line numbers) and the injected read that follows re-enables the line-numbered view; the write confirmation carries the operation's status with `supersedes` set and the injected read carries the file's numbered content, so the file's current content is visible in the conversation immediately after the write.
+- The injected read follows the write confirmation immediately; both precede the results of any subsequent tool call.
+- The injected read is rendered from the file's post-write content in the line-numbered view, restoring the file's line-numbered view state; no additional per-run state is required.
+- A write that fails provides no injected read.
 - `search_files` renders matches only for files that are not writable; matches in writable files are counted and reported in the note without content; pagination (`offset`/`limit`) pages over rendered matches only.
 - Processes operations sequentially
 - Captures each file's content at run start on its first write of the run; `verify` with no callback diffs the run's changed files against those snapshots and states that no verification tool is present. `verify` with a callback runs the callback and reports its output and success flag.
@@ -80,7 +85,7 @@ The implementation:
 
 ## Non-Concerns
 
-- **View mode default:** A new writable file's results render plain until the agent reads it with `include_line_numbers=True`; an existing writable file is only readable in the line-numbered view, so its view mode is line-numbered from the first successful read; a write resets the view mode to plain (line numbers invalidated until the next numbered read).
+- **View mode default:** A new writable file's results render plain until the agent reads it with `include_line_numbers=True`; an existing writable file is only readable in the line-numbered view, so its view mode is line-numbered from the first successful read; a write resets the view mode to plain, and the injected read that follows the write re-enables the line-numbered view.
 - **Edit length limit:** `edit_file` rejects `old_str`/`new_str` exceeding 100 characters, per the `sandbox` interface contract.
 - **Change summary length bounds:** Soft bound pinned to 200 characters, hard bound pinned to 500 characters, grace pinned to 4 rejections per run for each bound; tests may assert the soft/hard rejection messages and the grace transitions (a summary within the hard bound accepted on the succeed call after 4 soft-limit rejections; a summary over the hard bound turning `succeed` into `TerminateAgentWithFailure` on the succeed call after 4 hard-limit rejections).
 - **Diff size limit default:** Pinned to 1000 characters when `diff_size_limit` is `None`; tests may assert the truncation footer.

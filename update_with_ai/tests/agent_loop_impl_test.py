@@ -31,8 +31,10 @@ from update_with_ai.lib.agent_loop_impl import AgentLoopImpl
 from update_with_ai.lib.dag_clean_logic import NoChangeResult
 from update_with_ai.lib.tool_provider import (
     Continue,
+    PresentedToolResult,
     TerminateAgentWithFailure,
     TerminateAgentWithSuccess,
+    ToolCallOutcome,
     ToolFailure,
     ToolResult,
 )
@@ -136,9 +138,9 @@ class TestAgentLoopImpl(unittest.TestCase):
         self.mock_client = self.mock_openai_class.return_value
         self.agent = AgentLoopImpl(make_config())
 
-    def inline_result(self, content: Any, note: str = "") -> ToolResult:
-        """A result that never supersedes an earlier result."""
-        return ToolResult(content=content, supersedes=False, note=note)
+    def inline_result(self, content: Any, note: str = "") -> List[ToolResult]:
+        """A one-result sequence whose result never supersedes an earlier result."""
+        return [ToolResult(content=content, supersedes=False, note=note)]
 
     def assert_success(self, result: Any) -> List[HistoryEntry]:
         """Assert a successful termination result (the loop's only completion)."""
@@ -151,10 +153,10 @@ class TestAgentLoopImpl(unittest.TestCase):
         """Insert a succeed branch into the calling test's executor."""
         raise AssertionError("unused")
 
-    def stub_result(self, content: Any, note: str = "") -> ToolResult:
-        """A result that supersedes the earlier result for the same file or
-        tool command (the agent loop stubs it)."""
-        return ToolResult(content=content, supersedes=True, note=note)
+    def stub_result(self, content: Any, note: str = "") -> List[ToolResult]:
+        """A one-result sequence whose result supersedes the earlier result
+        for the same file or tool command (the agent loop stubs it)."""
+        return [ToolResult(content=content, supersedes=True, note=note)]
 
     # ---------------------------------------------------------------
     # Normal outcomes
@@ -178,7 +180,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         def logger(event: str, data: Dict[str, Any]) -> None:
             events.append((event, data))
 
-        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
             if name == "succeed":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return self.inline_result("no files changed")
@@ -227,7 +229,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         def logger(event: str, data: Dict[str, Any]) -> None:
             events.append((event, data))
 
-        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
             if name == "succeed":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return self.stub_result("updated")
@@ -265,7 +267,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         def logger(event: str, data: Dict[str, Any]) -> None:
             events.append((event, data))
 
-        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
             return self.inline_result("no files changed")
 
         agent = AgentLoopImpl(make_config(max_iterations=20))
@@ -320,7 +322,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         def logger(event: str, data: Dict[str, Any]) -> None:
             events.append((event, data))
 
-        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
             return self.stub_result("updated")
 
         agent = AgentLoopImpl(make_config(max_iterations=20))
@@ -365,7 +367,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         def logger(event: str, data: Dict[str, Any]) -> None:
             events.append((event, data))
 
-        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
             if name == "succeed":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return self.inline_result("ok")
@@ -443,7 +445,7 @@ class TestAgentLoopImpl(unittest.TestCase):
 
         calls: List[Tuple[str, Dict[str, Any]]] = []
 
-        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
             if name == "succeed":
                 return TerminateAgentWithSuccess(NoChangeResult())
             calls.append((name, arguments))
@@ -666,7 +668,7 @@ class TestAgentLoopImpl(unittest.TestCase):
 
         invocations: List[Tuple[str, Dict[str, Any]]] = []
 
-        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
             if name == "succeed":
                 return TerminateAgentWithSuccess(NoChangeResult())
             invocations.append((name, arguments))
@@ -882,7 +884,7 @@ class TestAgentLoopImpl(unittest.TestCase):
             content=None, tool_calls=[tool_call], finish_reason="tool_calls"
         )
 
-        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
             if name == "succeed":
                 return TerminateAgentWithSuccess(NoChangeResult())
             raise RuntimeError("boom")
@@ -909,7 +911,7 @@ class TestAgentLoopImpl(unittest.TestCase):
             content=None, tool_calls=[tool_call], finish_reason="tool_calls"
         )
 
-        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
             if name == "succeed":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return self.inline_result("42")
@@ -991,11 +993,11 @@ class TestAgentLoopImpl(unittest.TestCase):
                 )
             # read_file: a writable-file read supersedes the earlier result
             # for the file.
-            return ToolResult(
+            return [ToolResult(
                 content="line1\nline2",
                 supersedes=True,
                 note="Read 2 lines (line-numbered)",
-            )
+            )]
 
         events: List[Tuple[str, Dict[str, Any]]] = []
 
@@ -1074,7 +1076,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         def logger(event: LogEvent, data: Dict[str, Any]) -> None:
             events.append((event, data))
 
-        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
             if name == "succeed":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return self.inline_result("raw data")
@@ -1120,15 +1122,15 @@ class TestAgentLoopImpl(unittest.TestCase):
 
         counter: Dict[str, int] = {"n": 0}
 
-        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
             if name == "succeed":
                 return TerminateAgentWithSuccess(NoChangeResult())
             counter["n"] += 1
-            return ToolResult(
+            return [ToolResult(
                 content=f"version {counter['n']}",
                 supersedes=True,
                 note="Read 2 lines (plain)",
-            )
+            )]
 
         result = self.agent.run_agent(
             prompt="Read foo.txt twice",
@@ -1183,7 +1185,7 @@ class TestAgentLoopImpl(unittest.TestCase):
             make_succeed_response(),
         ]
 
-        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
             if name == "succeed":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return self.stub_result("content for " + arguments.get("file_path", "?"))
@@ -1215,7 +1217,7 @@ class TestAgentLoopImpl(unittest.TestCase):
             make_succeed_response(),
         ]
 
-        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
             if name == "succeed":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return self.stub_result("verification report")
@@ -1231,6 +1233,183 @@ class TestAgentLoopImpl(unittest.TestCase):
         assert len(tool_messages) == 2
         assert tool_messages[0]["content"] == STUB_TEXT
         assert tool_messages[1]["content"] == "verification report"
+
+    def test_presented_result_appears_with_its_call_immediately_before(self) -> None:
+        """
+        LLS (agent_loop-low + tool_provider-low): a PresentedToolResult — a
+        result whose tool call the model did not make (the producing
+        component provides the call's name and arguments) — is presented with
+        the call immediately before the result: the loop assigns the call a
+        fresh id, appends the call message, then appends the result's tool
+        message, so no tool result appears without its preceding call. This
+        is the injected read after a file write (the sandbox's Auto re-read).
+        """
+        write_call = make_tool_call("replace_lines", "call_write", {
+            "file_path": "foo.txt",
+            "start_line": 1,
+            "end_line": 1,
+            "new_str": "line 1: changed",
+        })
+        self.mock_client.chat.completions.create.side_effect = [
+            make_response(content=None, tool_calls=[write_call], finish_reason="tool_calls"),
+            make_succeed_response(),
+        ]
+
+        events: List[Tuple[str, Dict[str, Any]]] = []
+
+        def logger(event: LogEvent, data: Dict[str, Any]) -> None:
+            events.append((event, data))
+
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
+            if name == "succeed":
+                return TerminateAgentWithSuccess(NoChangeResult())
+            # A write's outcome: the write confirmation and the injected read
+            # (a PresentedToolResult pairing read_file with its numbered
+            # result).
+            return [
+                ToolResult(content="Replaced lines 1-1 in foo.txt", supersedes=True),
+                PresentedToolResult(
+                    name="read_file",
+                    arguments={"file_path": "foo.txt", "include_line_numbers": True},
+                    result=ToolResult(
+                        content="1 \u2502 line 1: changed",
+                        supersedes=True,
+                        note="Read 1 lines (line-numbered)",
+                    ),
+                ),
+            ]
+
+        result = self.agent.run_agent(
+            prompt="Edit foo.txt",
+            tools=make_tool_definitions(),
+            tool_executor=executor,
+            logger=logger,
+        )
+
+        history = self.assert_success(result)
+        # Roles in order: user, assistant (the model's write call), tool (the
+        # write confirmation), assistant (the synthetic read call), tool (the
+        # injected read), assistant (the succeed call).
+        roles = [m["role"] for m in history]
+        assert roles == [
+            "user",
+            "assistant",
+            "tool",
+            "assistant",
+            "tool",
+            "assistant",
+        ]
+
+        # The injected read's call is presented immediately before its
+        # result: a read_file call with the producing component's name and
+        # arguments and a loop-assigned fresh id.
+        injected_call = history[3]
+        assert injected_call["tool_calls"][0]["function"]["name"] == "read_file"
+        assert json.loads(injected_call["tool_calls"][0]["function"]["arguments"]) == {
+            "file_path": "foo.txt",
+            "include_line_numbers": True,
+        }
+        synthetic_id = injected_call["tool_calls"][0]["id"]
+        assert synthetic_id  # the loop assigns the call a fresh id
+
+        # The injected read's tool message references the synthetic call and
+        # carries the numbered content with the note carried as metadata.
+        injected_result = history[4]
+        assert injected_result["tool_call_id"] == synthetic_id
+        assert injected_result["content"] == "1 \u2502 line 1: changed"
+        assert injected_result["_note"] == "Read 1 lines (line-numbered)"
+
+        # Stubbing per the sandbox Stubbing rules: the write confirmation
+        # (supersedes, file key) is stubbed by the injected read (supersedes,
+        # same file key) — the confirmation is replaced in place with the
+        # static stub and the injected read becomes the live result.
+        tool_messages = [m for m in history if m.get("role") == "tool"]
+        assert tool_messages[0]["content"] == STUB_TEXT
+        assert tool_messages[1]["content"] == "1 \u2502 line 1: changed"
+        stubbed_events = [d for e, d in events if e == "message_stubbed"]
+        assert len(stubbed_events) == 1
+        assert stubbed_events[0]["replacement_message"]["content"] == "1 \u2502 line 1: changed"
+
+        # The follow-up API request shows the synthetic call and the injected
+        # read's content (with its note appended), and no dangling tool result.
+        # (The succeed assistant message is appended only after this request.)
+        succeed_messages = self.mock_client.chat.completions.create.call_args_list[1].kwargs[
+            "messages"
+        ]
+        api_roles = [m.get("role") for m in succeed_messages]
+        assert api_roles == ["user", "assistant", "tool", "assistant", "tool"]
+        api_injected = succeed_messages[4]
+        assert api_injected["content"] == "1 \u2502 line 1: changed\nRead 1 lines (line-numbered)"
+        assert api_injected["tool_call_id"] == synthetic_id
+
+    def test_session_start_results_rendered_before_first_turn(self) -> None:
+        """
+        LLS (agent_loop-low): session-start tool results are rendered at the
+        beginning of the run, immediately after the user prompt (or at the
+        start of the conversation when the prompt is empty), before the
+        model's first turn, each with its tool call immediately before it.
+        """
+        session_read = PresentedToolResult(
+            name="read_file",
+            arguments={"file_path": "guide.md"},
+            result=ToolResult(
+                content="guide content",
+                supersedes=False,
+                note="Read 1 lines (plain)",
+            ),
+        )
+        self.mock_client.chat.completions.create.side_effect = [
+            make_response(content="I will read.", finish_reason="stop"),
+            make_succeed_response(),
+        ]
+
+        events: List[Tuple[str, Dict[str, Any]]] = []
+
+        def logger(event: LogEvent, data: Dict[str, Any]) -> None:
+            events.append((event, data))
+
+        result = self.agent.run_agent(
+            prompt="Go",
+            tools=make_tool_definitions(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
+            session_start_results=[session_read],
+            logger=logger,
+        )
+
+        history = self.assert_success(result)
+        # Conversation order: user prompt, assistant (the session-start read's
+        # synthetic call), tool (the read result), then the model's turns.
+        roles = [m["role"] for m in history]
+        assert roles[0] == "user"
+        assert roles[1] == "assistant"
+        assert roles[2] == "tool"
+        injected_call = history[1]
+        assert injected_call["tool_calls"][0]["function"]["name"] == "read_file"
+        assert json.loads(injected_call["tool_calls"][0]["function"]["arguments"]) == {
+            "file_path": "guide.md"
+        }
+        synthetic_id = injected_call["tool_calls"][0]["id"]
+        assert history[2]["tool_call_id"] == synthetic_id
+        assert history[2]["content"] == "guide content"
+        assert history[2]["_note"] == "Read 1 lines (plain)"
+        # The session-start result precedes the model's first turn.
+        model_turn = next(
+            i
+            for i, m in enumerate(history)
+            if m.get("role") == "assistant" and m.get("content") is not None
+        )
+        assert model_turn > 2
+
+        # The first API request carries the session-start call and result
+        # (the read result's note rendered into the model-visible content).
+        first_messages = self.mock_client.chat.completions.create.call_args_list[0].kwargs[
+            "messages"
+        ]
+        api_roles = [m.get("role") for m in first_messages]
+        assert api_roles[:3] == ["user", "assistant", "tool"]
+        api_tool = first_messages[2]
+        assert api_tool["content"] == "guide content\nRead 1 lines (plain)"
+        assert api_tool["tool_call_id"] == synthetic_id
 
     # ---------------------------------------------------------------
     # System prompt
@@ -1373,7 +1552,7 @@ class TestAgentLoopImpl(unittest.TestCase):
             make_succeed_response(),
         ]
 
-        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
             if name == "succeed":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return self.inline_result("file data")
@@ -1418,7 +1597,7 @@ class TestAgentLoopImpl(unittest.TestCase):
             make_succeed_response(),
         ]
 
-        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
             if name == "succeed":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return self.inline_result(
@@ -1543,7 +1722,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         def logger(event: LogEvent, data: Dict[str, Any]) -> None:
             events.append((event, data))
 
-        def executor(name: str, arguments: Dict[str, Any]) -> ToolResult:
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
             if name == "succeed":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return self.inline_result("x")

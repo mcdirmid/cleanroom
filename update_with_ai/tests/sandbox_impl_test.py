@@ -5,8 +5,11 @@ Written from the LLS (specs/sandbox_impl-low.md, specs/sandbox-low.md,
 specs/tool_provider-low.md, specs/dag_clean_logic-low.md): the sandbox's
 Stubbing rules, operation postconditions, and expected failure signals.
 
-The API returns a single ToolCallOutcome per tool call: a ToolResult or a
-Signal (ToolFailure, TerminateAgentWithSuccess, TerminateAgentWithFailure).
+The API returns a ToolCallOutcome per tool call: a sequence of one or more
+results (ToolResult or PresentedToolResult values) or a Signal (ToolFailure,
+TerminateAgentWithSuccess, TerminateAgentWithFailure). A successful file
+write returns a two-result sequence: the write confirmation and the injected
+read (the automatic re-read, per the sandbox's Auto re-read rules).
 
 Stubbing (sandbox-low.md, Stubbing): a ToolResult's `supersedes` flag is set
 on the results of operations on writable files and on verification results;
@@ -24,6 +27,7 @@ from typing import Any, Tuple
 from update_with_ai.lib.sandbox import SandboxConfig
 from update_with_ai.lib.sandbox_impl import SandboxImpl
 from update_with_ai.lib.tool_provider import (
+    PresentedToolResult,
     ToolResult,
     ToolFailure,
     TerminateAgentWithSuccess,
@@ -79,8 +83,29 @@ class TestSandboxImpl(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def as_tool_result(self, outcome: Any) -> ToolResult:
+        """Unwrap a result sequence: its first result (for a write outcome,
+        the write confirmation)."""
+        if isinstance(outcome, list):
+            assert len(outcome) >= 1, f"Expected a result sequence, got {outcome!r}"
+            outcome = outcome[0]
         assert isinstance(outcome, ToolResult), f"Expected ToolResult, got {outcome!r}"
         return outcome
+
+    def as_write_outcome(self, outcome: Any) -> Tuple[ToolResult, PresentedToolResult]:
+        """A file write's outcome per the Auto re-read rules: the write
+        confirmation and the injected read, in that order."""
+        assert isinstance(outcome, list) and len(outcome) == 2, (
+            f"Expected a two-result sequence, got {outcome!r}"
+        )
+        confirmation = outcome[0]
+        injected = outcome[1]
+        assert isinstance(confirmation, ToolResult), (
+            f"Expected ToolResult, got {confirmation!r}"
+        )
+        assert isinstance(injected, PresentedToolResult), (
+            f"Expected PresentedToolResult, got {injected!r}"
+        )
+        return confirmation, injected
 
     def as_tool_failure(self, outcome: Any) -> ToolFailure:
         assert isinstance(outcome, ToolFailure), f"Expected ToolFailure, got {outcome!r}"
@@ -283,60 +308,142 @@ class TestSandboxImpl(unittest.TestCase):
         self.assertIn("not readable", failure.value)
 
     # ------------------------------------------------------------------
+    # get_session_start_reads
+    # ------------------------------------------------------------------
+
+    def test_get_session_start_reads_reads_only_files(self) -> None:
+        # LLS (sandbox-low.md Session-start reads): when enabled (the default),
+        # returns a session-start read for every file that is readable but not
+        # writable and exists as a regular file on disk; each is a
+        # PresentedToolResult pairing read_file with the plain read result
+        # (never superseding); requesting the reads changes no sandbox state.
+        reads = self.sandbox.get_session_start_reads()
+        # ro.txt is the only readable-but-not-writable existing regular file
+        # (test.txt and new.txt are writable; new.txt does not exist).
+        self.assertEqual(len(reads), 1)
+        read = reads[0]
+        self.assertIsInstance(read, PresentedToolResult)
+        self.assertEqual(read.name, "read_file")
+        self.assertEqual(read.arguments, {"file_path": "ro.txt"})
+        self.assertIn("Line 1: Hello World", read.result.content)
+        self.assertNotIn("\u2502", read.result.content)  # plain: no line numbers
+        self.assertFalse(read.result.supersedes)
+        self.assertIn("plain", read.result.note)
+        self.assertFalse(self.sandbox.get_write_occurred())
+
+    def test_get_session_start_reads_sorted_by_virtual_name(self) -> None:
+        # Session-start reads are provided in a deterministic order (sorted
+        # by virtual name), not the config's path order.
+        ro2 = os.path.join(self.temp_dir, "ro2.txt")
+        with open(ro2, "w", encoding="utf-8") as f:
+            f.write("second\n")
+        config = SandboxConfig(
+            file_mappings={"a.txt": self.test_file_path, "b.txt": ro2},
+            readable_paths=["b.txt", "a.txt"],
+            writable_paths=[],
+            blame_targets=[],
+            search_result_limit=5,
+            verification_callback=None,
+        )
+        reads = SandboxImpl(config).get_session_start_reads()
+        self.assertEqual([r.arguments["file_path"] for r in reads], ["a.txt", "b.txt"])
+
+    def test_get_session_start_reads_skips_missing_and_directories(self) -> None:
+        # Files that do not exist and directories are not provided (only
+        # files that exist as regular files on disk).
+        missing = os.path.join(self.temp_dir, "missing.txt")
+        config = SandboxConfig(
+            file_mappings={
+                "exists.txt": self.test_file_path,
+                "missing.txt": missing,
+                "dir": self.temp_dir,
+            },
+            readable_paths=["exists.txt", "missing.txt", "dir"],
+            writable_paths=[],
+            blame_targets=[],
+            search_result_limit=5,
+            verification_callback=None,
+        )
+        reads = SandboxImpl(config).get_session_start_reads()
+        self.assertEqual([r.arguments["file_path"] for r in reads], ["exists.txt"])
+
+    def test_get_session_start_reads_disabled_returns_empty(self) -> None:
+        # When session-start reads are disabled, no session-start reads are
+        # provided.
+        config = SandboxConfig(
+            file_mappings=self.file_mappings,
+            readable_paths=self.readable_paths,
+            writable_paths=self.writable_paths,
+            blame_targets=self.blame_targets,
+            search_result_limit=5,
+            session_start_reads_enabled=False,
+            verification_callback=None,
+        )
+        self.assertEqual(SandboxImpl(config).get_session_start_reads(), [])
+
+    # ------------------------------------------------------------------
     # write_file
     # ------------------------------------------------------------------
 
     def test_write_file_success_supersedes(self) -> None:
-        # LLS (sandbox-low.md write_file): the result carries a minimal
-        # structured status — never a file-content echo — and supersedes the
-        # earlier result for the file (the agent loop stubs it).
-        result = self.assert_supersedes(self.sandbox.write_file("new.txt", "hello\nworld"), True)
-        self.assertEqual(result.content, "Created new.txt; 2 lines")
-        self.assertEqual(result.note, "")
+        # LLS (sandbox-low.md write_file + Auto re-read): the outcome is a
+        # sequence of two results — the write confirmation (a minimal
+        # structured status, never a file-content echo, supersedes set) and
+        # the injected read (the automatic re-read with the file's full
+        # numbered content, supersedes set, presented as read_file with line
+        # numbers).
+        confirmation, injected = self.as_write_outcome(
+            self.sandbox.write_file("new.txt", "hello\nworld")
+        )
+        self.assertEqual(confirmation.content, "Created new.txt; 2 lines")
+        self.assertEqual(confirmation.note, "")
+        self.assertTrue(confirmation.supersedes)
+        self.assertEqual(injected.name, "read_file")
+        self.assertEqual(
+            injected.arguments,
+            {"file_path": "new.txt", "include_line_numbers": True},
+        )
+        self.assertEqual(injected.result.content, "1 \u2502 hello\n2 \u2502 world")
+        self.assertTrue(injected.result.supersedes)
+        self.assertIn("(line-numbered)", injected.result.note)
         self.assertTrue(self.sandbox.get_write_occurred())
         with open(self.new_file_path, "r", encoding="utf-8") as f:
             self.assertEqual(f.read(), "hello\nworld")
 
-    def test_write_result_is_status_and_resets_view(self) -> None:
-        # A write/edit result carries the operation's status (never a
+    def test_write_result_is_status_and_injected_read_reenables_view(self) -> None:
+        # A write/edit's confirmation carries the operation's status (never a
         # file-content echo) and supersedes the file's earlier results; the
-        # write resets the view to plain (a write invalidates the line
-        # numbers), so a line-range edit requires a fresh numbered read.
+        # injected read that follows re-enables the line-numbered view (a
+        # write resets it to plain), so a line-range edit may follow a write
+        # without a further read (LLS Auto re-read + Views).
         self.assert_supersedes(
             self.sandbox.read_file("test.txt", include_line_numbers=True), True
         )
-        edited = self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
+        confirmation, injected = self.as_write_outcome(
+            self.sandbox.edit_file("test.txt", "This is a test", "New content")
         )
-        self.assertEqual(edited.content, "Replaced 1 occurrence in test.txt")
-        self.assertEqual(edited.note, "")
-        # The change is on disk; the result never echoes file content.
+        self.assertEqual(confirmation.content, "Replaced 1 occurrence in test.txt")
+        self.assertEqual(confirmation.note, "")
+        self.assertIn("2 \u2502 Line 2: New content", injected.result.content)
+        # The change is on disk; the confirmation never echoes file content.
         with open(self.test_file_path, "r", encoding="utf-8") as f:
             self.assertIn("Line 2: New content", f.read())
 
-        new_result = self.assert_supersedes(
-            self.sandbox.write_file("new.txt", "one\ntwo"), True
+        new_conf, new_injected = self.as_write_outcome(
+            self.sandbox.write_file("new.txt", "one\ntwo")
         )
-        self.assertEqual(new_result.content, "Created new.txt; 2 lines")
+        self.assertEqual(new_conf.content, "Created new.txt; 2 lines")
+        self.assertEqual(new_injected.result.content, "1 \u2502 one\n2 \u2502 two")
 
-    def test_replace_lines_after_write_requires_fresh_numbered_read(self) -> None:
-        # A write invalidates the line-numbered view: replace_lines after a
-        # write fails with a reminder, and succeeds only after re-reading
-        # numbered (the read->edit->re-read discipline).
+    def test_replace_lines_after_write_succeeds_without_further_read(self) -> None:
+        # LLS (sandbox-low.md Views + Auto re-read): a write resets the view
+        # to plain, but the injected read that follows re-enables the
+        # line-numbered view, so a line-range edit may follow a write without
+        # a further read (the read->edit->re-read discipline is gone).
         self._numbered_read()
-        self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
+        self.as_write_outcome(
+            self.sandbox.edit_file("test.txt", "This is a test", "New content")
         )
-        failure = self.as_tool_failure(
-            self.sandbox.replace_lines("test.txt", 2, 2, "Line 2: replaced")
-        )
-        self.assertIn("invalidated", failure.value)
-        self.assertIn("include_line_numbers=True", failure.value)
-        # LLS: the failure supersedes nothing and removes nothing; there are
-        # no buffers to close.
-        self.assertFalse(hasattr(failure, "close_buffer"))
-
-        self._numbered_read()
         result = self.assert_supersedes(
             self.sandbox.replace_lines("test.txt", 2, 2, "Line 2: replaced"), True
         )
@@ -355,22 +462,29 @@ class TestSandboxImpl(unittest.TestCase):
         self.assertFalse(hasattr(failure, "close_buffer"))
         self.assertIn("include_line_numbers=True", failure.value)
 
-        # A numbered read restores the view; replace_lines then succeeds (the
-        # write resets the view to plain), so the next line edit fails again
-        # with the same advice.
+        # A numbered read restores the view; replace_lines then succeeds, and
+        # the injected read that follows re-enables the line-numbered view,
+        # so the next line edit also succeeds without a further read.
         self._numbered_read()
         self.assert_supersedes(
             self.sandbox.replace_lines("test.txt", 1, 1, "Line 1: replaced"), True
         )
-        failure2 = self.as_tool_failure(
-            self.sandbox.replace_lines("test.txt", 2, 2, "Line 2: replaced")
+        self.assert_supersedes(
+            self.sandbox.replace_lines("test.txt", 2, 2, "Line 2: replaced"), True
         )
-        self.assertFalse(hasattr(failure2, "close_buffer"))
-        self.assertIn("include_line_numbers=True", failure2.value)
 
     def test_write_file_rejects_existing_file(self) -> None:
         failure = self.as_tool_failure(self.sandbox.write_file("test.txt", "x"))
         self.assertIn("already exists", failure.value)
+        self.assertFalse(self.sandbox.get_write_occurred())
+
+    def test_failed_write_provides_no_injected_read(self) -> None:
+        # LLS (sandbox-low.md Auto re-read): a write that fails provides no
+        # injected read — the outcome is a ToolFailure signal, never a
+        # two-result sequence, and no write is recorded.
+        outcome = self.sandbox.write_file("test.txt", "x")  # already exists
+        self.as_tool_failure(outcome)
+        self.assertFalse(isinstance(outcome, list))
         self.assertFalse(self.sandbox.get_write_occurred())
 
     def test_write_file_empty_content_rejected(self) -> None:

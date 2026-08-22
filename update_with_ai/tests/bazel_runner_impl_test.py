@@ -37,7 +37,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from update_with_ai.lib import bazel_runner_impl
 from update_with_ai.lib.bazel_runner_impl import (
@@ -46,6 +46,7 @@ from update_with_ai.lib.bazel_runner_impl import (
     _format_full_log,
 )
 from update_with_ai.lib.bazel_agent_config_impl import BazelAgentConfigImpl
+from update_with_ai.lib.bazel_agent_config import AgentConfig
 from update_with_ai.lib.bazel_graph_storage import GraphConfig
 from update_with_ai.lib.bazel_graph_storage_impl import BazelGraphStorageFileImpl
 from update_with_ai.lib.agent_loop import AgentLoopConfig
@@ -121,17 +122,22 @@ def _patch_agent_config() -> Any:
     Bazel agent_config targets. (The component itself is tested separately in
     bazel_agent_config_impl_test.py.)
     """
-    return patch.object(
+    return patch.multiple(
         BazelAgentConfigImpl,
-        "build_agent_loop_config",
-        return_value=AgentLoopConfig(
-            base_url="http://test.local/v1",
-            api_key="test-key",
-            model="test-model",
-            max_iterations=10,
-            temperature=0.0,
-            timeout=60.0,
+        load_config=MagicMock(
+            return_value=AgentConfig(
+                label="//agent_configs:default",
+                name="default",
+                base_url="http://test.local/v1",
+                model="test-model",
+                api_key_env="",
+                max_iterations=10,
+                temperature=0.0,
+                timeout=60.0,
+                session_start_reads=True,
+            )
         ),
+        resolve_api_key=MagicMock(return_value="test-key"),
     )
 
 
@@ -148,7 +154,7 @@ class _StubAgentLoop:
         self.run_count = 0
         _StubAgentLoop.instances.append(self)
 
-    def run_agent(self, prompt, tools, tool_executor, system_prompt=None, logger=None):
+    def run_agent(self, prompt, tools, tool_executor, system_prompt=None, session_start_results=None, logger=None):
         self.run_count += 1
         if logger is not None:
             logger("message_added", {"message": {"role": "user", "content": prompt}})
@@ -657,20 +663,25 @@ class TestRunDag(unittest.TestCase):
         self._write_workspace()
         captured: Dict[str, Any] = {}
 
-        def _fake_build(config_target: Optional[str], workspace_root: str) -> AgentLoopConfig:
+        def _fake_load(config_target: str, workspace_root: Optional[str]) -> AgentConfig:
             captured["target"] = config_target
             captured["root"] = workspace_root
-            return AgentLoopConfig(
+            return AgentConfig(
+                label=config_target,
+                name="custom",
                 base_url="http://resolved/v1",
-                api_key="resolved-key",
                 model="resolved-model",
+                api_key_env="",
                 max_iterations=5,
                 temperature=0.4,
                 timeout=30.0,
+                session_start_reads=True,
             )
 
         with _patch_env(CLEANROOM_AGENT_LOG=str(self._root / "agent_loop.log")), patch.object(
-            BazelAgentConfigImpl, "build_agent_loop_config", side_effect=_fake_build
+            BazelAgentConfigImpl, "load_config", side_effect=_fake_load
+        ), patch.object(
+            BazelAgentConfigImpl, "resolve_api_key", return_value="resolved-key"
         ), patch("update_with_ai.lib.bazel_runner_impl.AgentLoopImpl", _StubAgentLoop):
             success, result = self._runner.run_dag(
                 NODE_LABEL, self._tmp, config_target="//agent_configs:custom"

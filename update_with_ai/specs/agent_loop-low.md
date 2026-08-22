@@ -8,7 +8,7 @@
 ```python
 from typing import Any, Callable, Literal, Union, Protocol, TypeAlias
 from dataclasses import dataclass, field
-from tool_provider import ToolDefinition, ToolResult, Signal, Continue, TerminateAgentWithSuccess, TerminateAgentWithFailure, ToolFailure, ToolExecutor, T_tool
+from tool_provider import ToolDefinition, ToolResult, PresentedToolResult, Signal, Continue, TerminateAgentWithSuccess, TerminateAgentWithFailure, ToolFailure, ToolExecutor, T_tool
 
 ToolCall: TypeAlias = dict[str, Any]
 
@@ -51,7 +51,7 @@ class AgentLoopConfig:
     continuation_prompt: str | None = None
 
 class AgentLoop(Protocol):
-    def run_agent(self, prompt: str, tools: list[ToolDefinition], tool_executor: ToolExecutor[T_tool], system_prompt: str | None = None, logger: LoggerCallback | None = None) -> AgentResult: ...
+    def run_agent(self, prompt: str, tools: list[ToolDefinition], tool_executor: ToolExecutor[T_tool], system_prompt: str | None = None, session_start_results: list[PresentedToolResult] | None = None, logger: LoggerCallback | None = None) -> AgentResult: ...
 ```
 
 The failure value type `T_tool` is imported from `tool_provider` and reused for the same role: the loop does not inspect, transform, or interpret values of this type.
@@ -89,7 +89,7 @@ The client-supplied configuration for the agent loop: connection and processing 
 ### `run_agent`
 
 ```python
-def run_agent(self, prompt: str, tools: list[ToolDefinition], tool_executor: ToolExecutor[T_tool], system_prompt: str | None = None, logger: LoggerCallback | None = None) -> AgentResult
+def run_agent(self, prompt: str, tools: list[ToolDefinition], tool_executor: ToolExecutor[T_tool], system_prompt: str | None = None, session_start_results: list[PresentedToolResult] | None = None, logger: LoggerCallback | None = None) -> AgentResult
 ```
 
 **Purpose:** Run the agent loop. Completes when a tool signals termination or a failure occurs; there is no free-text final answer — when the model stops with free text without signaling termination, the loop injects a termination reminder and continues.
@@ -100,6 +100,7 @@ def run_agent(self, prompt: str, tools: list[ToolDefinition], tool_executor: Too
 - `tools` is a list of valid `tool_provider`-compatible tool definitions
 - `tool_executor` is callable and handles all tools in `tools`
 - `tool_executor` returns results in the `tool_provider` format
+- `session_start_results` when provided is a list of `PresentedToolResult` values, each carrying the tool call it is presented with (a result the model did not request)
 - `logger` if provided is callable accepting `(LogEvent, dict)` and returning `None`
 - Component configured with connection params and optional `termination_reminder_generator`
 
@@ -111,7 +112,10 @@ def run_agent(self, prompt: str, tools: list[ToolDefinition], tool_executor: Too
 - Final termination is terminal—no further processing (no API calls, no tool executions)
 - The system prompt is never modified during the run
 - The agent conversation is append-only except for stubbing: no message is removed or reordered; a stubbed message keeps its position and its content is replaced by the static stub
+- Every tool result a tool call produces is appended, in the order produced
+- Session-start tool results, when provided, are rendered at the beginning of the run, immediately after the user prompt (or at the start of the conversation when the prompt is empty), before the model's first turn; each appears with its tool call immediately before it
 - A tool result's content is appended to the conversation (rendered into the model-visible tool message, with the note appended)
+- Each tool result appears in the conversation with its tool call immediately before it: a result of the model's own call appears after that call, and a `PresentedToolResult` appears after the call it carries (the call's id assigned by the loop); no tool result appears without its preceding call
 - When a tool result's `supersedes` flag is set, the earlier non-stubbed result for the same file or tool command has its content replaced in place with the static stub before the new result is appended; the stubbed message keeps its position, and the new result becomes the live result for that file or tool command
 - A result with the `supersedes` flag unset supersedes nothing; at most one earlier result is superseded per result
 - A stub is static once set: a stubbed message's content never changes for the remainder of the run
@@ -129,7 +133,7 @@ def run_agent(self, prompt: str, tools: list[ToolDefinition], tool_executor: Too
 - If `tool_executor` returns `TerminateAgentWithSuccess`, the loop stops and returns `(TerminateAgentWithSuccess, history)`; if it returns `TerminateAgentWithFailure[T_tool]`, the loop stops and returns `(TerminateAgentWithFailure[T_tool], history)`.
 - If `tool_executor` returns `ToolFailure[T_tool]` (a tool failure — the agent misused a tool as specified by the tool provider): the failure message (e.g., the sandbox's reminder of what the agent can do) is appended to the conversation and the loop continues with the model making its next move. Tool failures are recoverable: no session reset, no history clearing, and no agent failure. A tool failure never supersedes an earlier result.
 - When the same tool call (name and arguments) is repeated 4 consecutive times, a reminder is injected into the conversation once per run — urging the agent to make progress (change a file with `edit_file`/`replace_lines`/`write_file`, or finish with `succeed`/`fail`/`blame`) — and the loop continues. The repetition counter resets when the call changes or a new run starts.
-- When `replace_lines` targets the same file and line range 4 consecutive times (even when the content differs), a range-specific reminder is injected into the conversation once per run — noting the range edited, urging a fresh numbered read (`read_file(file_path, include_line_numbers=True)`, since a write invalidates the line numbers), and offering to finish the run — and the loop continues. The range counter resets when the range changes or a new run starts; at most one reminder is injected per run across both repetition detectors.
+- When `replace_lines` targets the same file and line range 4 consecutive times (even when the content differs), a range-specific reminder is injected into the conversation once per run — noting the range edited, urging a fresh numbered read (`read_file(file_path, include_line_numbers=True)`) to reassess, and offering to finish the run — and the loop continues. The range counter resets when the range changes or a new run starts; at most one reminder is injected per run across both repetition detectors.
 - The run signals failure when the same tool call (name and arguments) repeats 8 consecutive times, or when `replace_lines` targets the same file and line range 8 consecutive times (even when the content differs) — a degenerate loop ends the run instead of spinning to the iteration limit; the failure is a loop failure paired with the conversation history.
 - If `tool_executor` raises an exception (an unhandled error by the tool_executor): the agent_loop catches it and returns `(error, history)` (state unchanged).
 

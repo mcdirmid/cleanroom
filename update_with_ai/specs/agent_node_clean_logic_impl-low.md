@@ -36,7 +36,7 @@ The implementation creates `AgentNodeCleanLogicImpl`, which fulfills the `DagCle
 
 `AgentNodeCleanLogicImpl` fulfills the `DagCleanLogic` interface from `dag_clean_logic-low.md`:
 
-- `clean` — for a node: resolves the node's definition (prompt and sandbox configuration) via the configured `bazel_graph_storage`; constructs a sandbox from the node's sandbox configuration; runs the agent loop with the node's prompt as the system prompt, the pending messages as the user prompt, the sandbox's `ToolDefinition`s, and `ToolExecutor` execution delegated to the sandbox; maps the run outcome to a `CleanResult`:
+- `clean` — for a node: resolves the node's definition (prompt and sandbox configuration) via the configured `bazel_graph_storage`; constructs a sandbox from the node's sandbox configuration; requests the sandbox's session-start reads and runs the agent loop with the node's prompt as the system prompt, the pending messages as the user prompt, the session-start reads as the run's session-start tool results, the sandbox's `ToolDefinition`s, and `ToolExecutor` execution delegated to the sandbox; maps the run outcome to a `CleanResult`:
   - `(TerminateAgentWithSuccess, history)` — the termination value is the `TerminateSuccessResult` formed by the sandbox's termination tool (`succeed`/`blame`) and adopted as the result: a `FeedbackResult`, a `ChangeResult`, or a `NoChangeResult`
   - `(TerminateAgentWithFailure[T_tool], history)` — `failure`, leaving pending messages unchanged (per the `dag_clean_logic` contract)
   - `(error, history)` (a loop failure) — `failure`, leaving pending messages unchanged (per the `dag_clean_logic` contract)

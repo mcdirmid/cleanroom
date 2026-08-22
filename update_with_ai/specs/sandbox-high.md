@@ -5,7 +5,7 @@ terms (from tool_provider): tool definition, tool result, supersession flag, stu
 terms (from agent_loop): run
 terms (from dag_storage): dependency
 terms (from dag_clean_logic): change message, feedback message
-terms (owned): virtual name, file write, line-numbered view, blame, blame target, soft length bound, hard length bound
+terms (owned): virtual name, file write, line-numbered view, injected read, session-start read, blame, blame target, soft length bound, hard length bound
 
 ## Purpose
 
@@ -16,6 +16,8 @@ Provides a controlled environment for agents to read, write, search, and modify 
 - Virtual name: the name the agent uses to refer to a file; the sandbox resolves it to a full filesystem path.
 - File write: any successful operation that modifies the filesystem.
 - Line-numbered view: a rendering of a file's content with each line prefixed by its 1-indexed line number; the line numbers are metadata, never file content.
+- Injected read: the read provided for a file immediately after a successful file write of that file, presenting a read request with line numbers and the read result carrying the file's full current content; the agent did not request it, and to the agent it appears as a numbered read it requested.
+- Session-start read: a read of a file the agent can read but not write, provided at the beginning of a run for rendering before the agent's first turn; it renders the file's content plain, never supersedes an earlier result, and is never stubbed.
 - Blame: a termination outcome that attributes the task's incompleteness to one or more dependencies and provides feedback on how to correct their outputs; blame is not failure.
 - Blame target: a dependency the agent may blame.
 - Soft length bound: the preferred maximum length of a change summary; a summary exceeding it is rejected with shortening guidance up to a grace count, then accepted when within the hard length bound.
@@ -25,7 +27,7 @@ Provides a controlled environment for agents to read, write, search, and modify 
 
 **Inputs**
 
-- Configured: file mappings (virtual name to full path); readable and writable virtual paths; blame targets (may be empty); the search result limit (the maximum matches a single search may render) and the diff size limit (the maximum characters a verification diff may report); an optional verification callback.
+- Configured: file mappings (virtual name to full path); readable and writable virtual paths; blame targets (may be empty); the search result limit (the maximum matches a single search may render) and the diff size limit (the maximum characters a verification diff may report); whether session-start reads are enabled; an optional verification callback.
 - Per call: a tool call (tool name and arguments, per tool_provider).
 
 **Operations**
@@ -33,6 +35,7 @@ Provides a controlled environment for agents to read, write, search, and modify 
 - Request tool definitions (per tool_provider).
 - Execute a tool call.
 - Query whether the run has modified the filesystem.
+- Request the session-start reads.
 
 **Guarantees**
 
@@ -42,7 +45,7 @@ Provides a controlled environment for agents to read, write, search, and modify 
 - A read provides the file's entire content; reads are not paginated and are not bounded by a size limit.
 - Search results beyond the search result limit signal a tool failure advising offset/limit pagination; the limit bounds rendered matches only.
 - Search results render matches only for files that are not writable; matches in writable files are reported as counts without content.
-- Each tool call produces exactly one outcome: a tool result, continue, terminate with success, terminate with failure, or tool failure.
+- Each tool call produces exactly one outcome: one or more tool results, or a signal — continue, terminate with success, terminate with failure, or tool failure.
 - Tool results contain the content, the supersession flag, and the note, per tool_provider.
 - An edit's replacement applies atomically (all or nothing).
 - Error messages identify the violated policy or the failing operation; errors leave the filesystem unchanged.
@@ -63,11 +66,11 @@ Provides a controlled environment for agents to read, write, search, and modify 
 **Views**
 
 - A read of a non-writable file renders plain; a read of a writable file renders the line-numbered view only — a plain read of an existing writable file is rejected.
-- A file's view is plain until the agent reads the file in the line-numbered view; a read sets the file's view — plain or line-numbered — for the run; a write resets the file's view to plain, invalidating the line numbers (a numbered read re-enables them).
-- Line-range edits may target any 1-indexed line range within the file's current bounds, and require the line-numbered view — a write invalidates the line numbers, so a line-range edit after a write requires a fresh numbered read.
+- A file's view is plain until a read renders the line-numbered view; a read sets the file's view — plain or line-numbered — for the run; a write resets the file's view to plain, invalidating the line numbers, and the injected read that follows the write re-enables the line-numbered view.
+- Line-range edits may target any 1-indexed line range within the file's current bounds, and require the line-numbered view; the injected read after a write provides the line-numbered view, so a line-range edit may follow a write without a further read.
 - A line-range edit attempted without the line-numbered view signals a tool failure advising a numbered read; the file is left unchanged.
 - A read renders the file's content in the file's current view; a write or edit renders the operation's status, never a file-content echo; verification renders the diff report.
-- The file's content in the conversation is the content of its most recent non-stubbed result; after a write or edit the file's current content is not visible until the agent reads the file again.
+- The file's content in the conversation is the content of its most recent non-stubbed result; after a write or edit the injected read provides the file's current content.
 
 **Stubbing**
 
@@ -76,6 +79,25 @@ Provides a controlled environment for agents to read, write, search, and modify 
 - A write, a content-based edit, and a line-range edit set the flag: they supersede the earlier result for that file.
 - A verification sets the flag: it supersedes the earlier verification result.
 - The superseded result is identified by the file's virtual name or the verification command — the name the operation itself carries; no separate identity is introduced.
+
+**Auto re-read**
+
+- Every file write provides a write confirmation and an injected read for the written file, in that order.
+- The injected read includes a read request for the file with line numbers and the read result, which provides the file's full current content.
+- The injected read appears in the conversation immediately after the write confirmation, before any subsequent messages.
+- The read result is present in the conversation before the agent's next turn.
+- The agent did not request the injected read; to the agent it appears as a numbered read it requested.
+- The injected read is a read of a writable file: it supersedes the file's earlier result and is itself superseded by the next write or read for the file, per the Stubbing rules.
+- A write that fails provides no injected read.
+
+**Session-start reads**
+
+- When session-start reads are enabled, the session-start reads are the reads of every file that is readable but not writable and exists as a regular file on disk; when disabled, no session-start reads are provided.
+- Session-start reads are provided in a deterministic order (sorted by virtual name).
+- A session-start read includes a read request for the file and the read result, presented as a read the agent requested.
+- A session-start read renders the file's content plain.
+- A session-start read does not set the supersession flag.
+- A session-start read is never stubbed: no file write targets a file that is not writable, and a read of a file that is not writable never supersedes an earlier result.
 
 **Verification**
 
@@ -94,3 +116,4 @@ Provides a controlled environment for agents to read, write, search, and modify 
 ## Non-concerns
 
 - Error message wording: error messages identify the violated policy or failing operation; their exact wording is unspecified.
+- Session-start read size: session-start reads inherit the unbounded-read rule; the read-only files are assumed to be reasonably sized, so no separate size bound is introduced for session-start reads.
