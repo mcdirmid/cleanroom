@@ -13,7 +13,7 @@
 load("//update_with_ai:macros.bzl", "update_with_ai")
 
 update_with_ai(
-    srcs = ["animals.txt"],
+    src = "animals.txt",
     name = "consumer_node",
     prompt = "for each animal in foo.txt, list it in animals.txt along with its typical habitat.",
     deps = ["//update_with_ai/tests/example:sample_node_1"],

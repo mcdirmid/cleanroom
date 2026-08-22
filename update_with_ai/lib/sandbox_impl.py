@@ -77,6 +77,26 @@ class SandboxImpl(Sandbox):
         # when no verification callback is configured.
         self._pre_write_snapshots: Dict[VirtualName, Optional[str]] = {}
 
+        # Template initialization (per the sandbox contract): a writable file
+        # with a configured template that does not exist on disk is created
+        # with the template's content at run start, before any tool call; an
+        # existing writable file is never modified. Initialization is part of
+        # the sandbox's configuration, not a run write: it does not set the
+        # write-occurred flag and does not record the file as changed (the
+        # file's first write of the run snapshots the template content as the
+        # run-start baseline for advance()'s diff).
+        for virtual, content in self.config.templates.items():
+            real_path = self.config.file_mappings.get(virtual)
+            if real_path is None:
+                continue
+            if os.path.exists(real_path):
+                continue
+            parent_dir = os.path.dirname(real_path)
+            if parent_dir:
+                os.makedirs(parent_dir, exist_ok=True)
+            with open(real_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+
     def get_tool_definitions(self) -> List[ToolDefinition]:
         """Return tool definitions based on configuration."""
         definitions = []

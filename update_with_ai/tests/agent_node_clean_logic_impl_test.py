@@ -58,6 +58,7 @@ def _make_node_def(
     writable_paths: Optional[List[str]] = None,
     file_mappings: Optional[Dict[str, str]] = None,
     blame_targets: Optional[List[str]] = None,
+    templates: Optional[Dict[str, str]] = None,
 ) -> NodeDefinition:
     """Build a NodeDefinition with the given sandbox configuration."""
     return NodeDefinition(
@@ -68,6 +69,7 @@ def _make_node_def(
             writable_paths=writable_paths or [],
             blame_targets=blame_targets or [],
             search_result_limit=10,
+            templates=templates or {},
         ),
     )
 
@@ -347,19 +349,116 @@ class TestIsDirty(unittest.TestCase):
 
     def test_dirty_when_writable_file_missing_on_disk(self):
         """A writable output file missing on disk (resolved via file_mappings)
-        makes the node dirty even with no pending messages."""
+        makes the node dirty even with no pending messages; the template-update
+        feedback is delivered to the node's pending set."""
         with tempfile.TemporaryDirectory() as tmp:
             missing_path = os.path.join(tmp, "missing.txt")
             node_def = _make_node_def(
                 writable_paths=["out.txt"],
                 file_mappings={"out.txt": missing_path},
             )
-            impl = self._impl(node_def)
+            graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+            impl = AgentNodeCleanLogicImpl(
+                Config(
+                    graph=graph,
+                    agent_loop_config=_agent_loop_config(),
+                    make_sandbox=lambda sc: MockSandbox(),
+                    make_agent_loop=lambda cfg: MockAgentLoop(),
+                )
+            )
             self.assertTrue(impl.is_dirty("a", []))
+            self.assertEqual(
+                graph.get_pending_messages("a"), ["update target file from template"]
+            )
             # Once the file exists on disk, the node is clean without messages.
             with open(missing_path, "w") as f:
                 f.write("x")
             self.assertFalse(impl.is_dirty("a", []))
+
+    def test_dirty_when_file_holds_exactly_its_template_content(self):
+        """A writable file with a configured template that holds exactly its
+        template's content makes the node dirty (eligible for re-cleaning) and
+        delivers the template-update feedback to the pending set."""
+        with tempfile.TemporaryDirectory() as tmp:
+            out_path = os.path.join(tmp, "out.txt")
+            with open(out_path, "w") as f:
+                f.write("# template\nTODO: fill me in\n")
+            node_def = _make_node_def(
+                writable_paths=["out.txt"],
+                file_mappings={"out.txt": out_path},
+                templates={"out.txt": "# template\nTODO: fill me in\n"},
+            )
+            graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+            impl = AgentNodeCleanLogicImpl(
+                Config(
+                    graph=graph,
+                    agent_loop_config=_agent_loop_config(),
+                    make_sandbox=lambda sc: MockSandbox(),
+                    make_agent_loop=lambda cfg: MockAgentLoop(),
+                )
+            )
+            self.assertTrue(impl.is_dirty("a", []))
+            self.assertEqual(
+                graph.get_pending_messages("a"), ["update target file from template"]
+            )
+            # Once transformed, the node is clean without messages.
+            with open(out_path, "w") as f:
+                f.write("transformed content\n")
+            self.assertFalse(impl.is_dirty("a", []))
+
+    def test_feedback_delivered_at_most_once_per_pending_set(self):
+        """The template-update feedback is never duplicated: when the passed
+        pending messages already hold it (a failed cleaning left it pending),
+        is_dirty does not add another copy."""
+        with tempfile.TemporaryDirectory() as tmp:
+            out_path = os.path.join(tmp, "out.txt")
+            with open(out_path, "w") as f:
+                f.write("# template\n")
+            node_def = _make_node_def(
+                writable_paths=["out.txt"],
+                file_mappings={"out.txt": out_path},
+                templates={"out.txt": "# template\n"},
+            )
+            graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+            impl = AgentNodeCleanLogicImpl(
+                Config(
+                    graph=graph,
+                    agent_loop_config=_agent_loop_config(),
+                    make_sandbox=lambda sc: MockSandbox(),
+                    make_agent_loop=lambda cfg: MockAgentLoop(),
+                )
+            )
+            # A prior failed cleaning left the feedback pending.
+            graph.add_messages("a", ["update target file from template"])
+            self.assertTrue(
+                impl.is_dirty("a", ["update target file from template"])
+            )
+            self.assertEqual(
+                graph.get_pending_messages("a"), ["update target file from template"]
+            )
+
+    def test_no_feedback_for_pending_messages_alone(self):
+        """A node dirty only for pending messages (files exist and are not in
+        template state) receives no template-update feedback."""
+        with tempfile.TemporaryDirectory() as tmp:
+            out_path = os.path.join(tmp, "out.txt")
+            with open(out_path, "w") as f:
+                f.write("final content")
+            node_def = _make_node_def(
+                writable_paths=["out.txt"],
+                file_mappings={"out.txt": out_path},
+            )
+            graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+            impl = AgentNodeCleanLogicImpl(
+                Config(
+                    graph=graph,
+                    agent_loop_config=_agent_loop_config(),
+                    make_sandbox=lambda sc: MockSandbox(),
+                    make_agent_loop=lambda cfg: MockAgentLoop(),
+                )
+            )
+            self.assertTrue(impl.is_dirty("a", ["a real message"]))
+            self.assertEqual(graph.get_pending_messages("a"), [])
 
 
 class TestToolExecutor(unittest.TestCase):

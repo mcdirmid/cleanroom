@@ -5,7 +5,7 @@ terms (from tool_provider): tool definition, tool result, supersession flag, stu
 terms (from agent_loop): run
 terms (from dag_storage): dependency
 terms (from dag_clean_logic): change message, feedback message
-terms (owned): virtual name, file write, line-numbered view, injected read, session-start read, blame, blame target, soft length bound, hard length bound
+terms (owned): virtual name, file write, line-numbered view, injected read, session-start read, blame, blame target, soft length bound, hard length bound, template
 
 ## Purpose
 
@@ -18,6 +18,7 @@ Provides a controlled environment for agents to read, write, search, and modify 
 - Line-numbered view: a rendering of a file's content with each line prefixed by its 1-indexed line number; the line numbers are metadata, never file content.
 - Injected read: the read provided for a file immediately after a successful file write of that file, presenting a read request with line numbers and the read result carrying the file's full current content; the agent did not request it, and to the agent it appears as a numbered read it requested.
 - Session-start read: a read of a file the agent can read but not write, provided at the beginning of a run for rendering before the agent's first turn; it renders the file's content plain, never supersedes an earlier result, and is never stubbed.
+- Template: a writable file's initial content, configured for the file; when the file does not exist when the sandbox is configured, the file is created with the template's content at run start; a file that exists when the sandbox is configured is never modified by its template.
 - Blame: a termination outcome that attributes the task's incompleteness to one or more dependencies and provides feedback on how to correct their outputs; blame is not failure.
 - Blame target: a dependency the agent may blame.
 - Soft length bound: the preferred maximum length of a change summary; a summary exceeding it is rejected with shortening guidance up to a grace count, then accepted when within the hard length bound.
@@ -27,7 +28,7 @@ Provides a controlled environment for agents to read, write, search, and modify 
 
 **Inputs**
 
-- Configured: file mappings (virtual name to full path); readable and writable virtual paths; blame targets (may be empty); the search result limit (the maximum matches a single search may render) and the diff size limit (the maximum characters a verification diff may report); whether session-start reads are enabled; an optional verification callback.
+- Configured: file mappings (virtual name to full path); readable and writable virtual paths; blame targets (may be empty); the search result limit (the maximum matches a single search may render) and the diff size limit (the maximum characters a verification diff may report); whether session-start reads are enabled; the templates (a mapping from writable virtual names to their template content; may be empty); an optional verification callback.
 - Per call: a tool call (tool name and arguments, per tool_provider).
 
 **Operations**
@@ -99,6 +100,13 @@ Provides a controlled environment for agents to read, write, search, and modify 
 - A session-start read does not set the supersession flag.
 - A session-start read is never stubbed: no file write targets a file that is not writable, and a read of a file that is not writable never supersedes an earlier result.
 
+**Template initialization**
+
+- A writable file with a configured template exists on disk at run start, its content exactly the template's content, when the file did not exist when the sandbox was configured.
+- A writable file that exists when the sandbox is configured is never modified by its template.
+- Template initialization is part of the sandbox's configuration, not an operation of the run: it never signals that the run modified the filesystem and is never a changed file.
+- The run's diff for a file initialized from its template compares the file's content during the run to the template's content at run start.
+
 **Verification**
 
 - Verification runs automatically as part of the advance operation: advance computes the diff of the run's file changes (truncated when it exceeds the diff size limit, reporting the truncated size and the full change counts) and, when a verification callback is configured, delegates validation to it, otherwise treating verification as passed.
@@ -118,4 +126,5 @@ Provides a controlled environment for agents to read, write, search, and modify 
 
 - Error message wording: error messages identify the violated policy or failing operation; their exact wording is unspecified.
 - Session-start read size: session-start reads inherit the unbounded-read rule; the read-only files are assumed to be reasonably sized, so no separate size bound is introduced for session-start reads.
+- Template size: templates are assumed to be reasonably sized, so no separate size bound is introduced for template content.
 - Advance tool description: the advance tool's description wording is unspecified; the tool's contract is defined by the Verification and Termination rules.

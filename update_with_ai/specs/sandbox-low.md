@@ -10,7 +10,7 @@
 ## Data Types
 ```python
 from typing import Any, Callable, Protocol, TypeVar, Generic, TypeAlias
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from tool_provider import ToolDefinition, ToolResult, PresentedToolResult, Signal, TerminateAgentWithSuccess, TerminateAgentWithFailure, TerminateSuccessResult, ToolFailure, ToolCallOutcome, T_tool
 
 VirtualName: TypeAlias = str
@@ -35,6 +35,8 @@ SearchResultLimit: TypeAlias = int
 
 DiffSizeLimit: TypeAlias = int
 
+TemplateMapping: TypeAlias = dict[VirtualName, str]
+
 VerificationCallback: TypeAlias = Callable[[], tuple[bool, str]] | None
 
 @dataclass
@@ -46,6 +48,7 @@ class SandboxConfig:
     search_result_limit: SearchResultLimit
     diff_size_limit: DiffSizeLimit | None = None
     session_start_reads_enabled: bool = True
+    templates: TemplateMapping = field(default_factory=dict)
     verification_callback: VerificationCallback = None
 
 WriteOccurred: TypeAlias = bool
@@ -66,7 +69,7 @@ class Sandbox(Protocol):
 
 `BlameTarget` identifies a node the agent may blame (a dependency of the current run). `Feedback` is the correction feedback on how to correct the blamed node's output. Each `Blame` pair corresponds to one feedback message to its target.
 
-The client-supplied configuration for a sandbox: file mappings, readable and writable paths, blame targets, the search result limit and the diff size limit, whether session-start reads are enabled (default: enabled), and an optional verification callback.
+The client-supplied configuration for a sandbox: file mappings, readable and writable paths, blame targets, the search result limit and the diff size limit, whether session-start reads are enabled (default: enabled), the templates (default: empty), and an optional verification callback.
 ## Stubbing (term definition)
 
 These rules apply to all sandbox operations that produce a `ToolResult`.
@@ -103,6 +106,16 @@ These rules apply to the reads provided at the beginning of a run.
 - Each session-start read is a `PresentedToolResult` pairing the `read_file` call (arguments `{"file_path": <the file's virtual name>}`, no line numbers) with its result.
 - A session-start read's result renders the file's content plain, with `supersedes` unset: reads of files that are not writable never supersede an earlier result.
 - A session-start read is never stubbed: no file write targets a file that is not writable, and a read of a file that is not writable never supersedes an earlier result.
+
+## Template initialization (term definition)
+
+These rules apply to the files created from configured templates at the beginning of a run.
+
+- `templates` maps a writable file's virtual name to its template content: the initial content configured for the file.
+- When `templates` has an entry for a writable file that does not exist on disk when the sandbox is configured, the sandbox creates the file with exactly the template's content; the file exists at run start.
+- A writable file that exists when the sandbox is configured is never modified by its template.
+- Template initialization is part of the sandbox's configuration, not an operation of the run: it never sets the write-occurred flag and never records the file as changed.
+- A file initialized from its template has the template's content as its run-start content: `advance` counts it as changed only when its current content differs from the template's content.
 
 ## Component-Provided Operations
 
@@ -387,6 +400,7 @@ def get_write_occurred(self) -> WriteOccurred
 ## Invariants
 
 - The run begins when the sandbox is configured and ends when the agent signals termination
+- Every `templates` entry names a writable file (a virtual name in `writable_paths`)
 - No state persists across runs
 - Write-occurred flag is monotonic (once `True`, never `False`)
 - All policy checks occur before any filesystem mutation

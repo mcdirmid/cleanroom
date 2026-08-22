@@ -85,7 +85,8 @@ def _update_with_ai_impl(ctx):
         "silent_deps": [str(dep.label) for dep in ctx.attr.silent_deps],
         "feedback_deps": [str(dep.label) for dep in ctx.attr.feedback_deps],
         "star_deps": [str(dep.label) for dep in ctx.attr.star_deps],
-        "srcs": [str(s) for s in ctx.attr.srcs],
+        "src": ctx.attr.src,
+        "template": ctx.file.template.short_path if ctx.file.template else None,
         "silent_srcs": [str(s) for s in ctx.attr.silent_srcs],
         "verify": ctx.attr.verify if ctx.attr.verify else None,
         "dependency_paths": deps_data,
@@ -127,8 +128,12 @@ _update_with_ai_rule = rule(
         "star_deps": attr.label_list(
             doc = "List of dependency node targets whose transitive closure over star deps is readable; these nodes are automatically included in deps",
         ),
-        "srcs": attr.string_list(
-            doc = "File paths the agent can write (these files need not pre-exist)",
+        "src": attr.string(
+            doc = "The node's declared source file path: the single file the agent can write that deps can read (the file need not pre-exist; when a template is configured and the file is missing on disk, the template's content initializes it at run start)",
+        ),
+        "template": attr.label(
+            allow_single_file = True,
+            doc = "Optional file label whose content initializes the declared source file at run start when the file does not exist on disk; the manifest stores the template file's repo-relative path and the runtime reads its content",
         ),
         "silent_srcs": attr.label_list(
             doc = "Files agent can write that are NOT readable by deps",
@@ -153,7 +158,8 @@ def update_with_ai(
         silent_deps = [],
         feedback_deps = [],
         star_deps = [],
-        srcs = [],
+        src = "",
+        template = None,
         silent_srcs = [],
         verify = "",
         config = None,
@@ -207,7 +213,11 @@ def update_with_ai(
         star_deps: List of dependency node targets whose transitive closure
             over star deps is readable; these nodes are automatically
             included in deps (cleaned before run)
-        srcs: Files agent can write that are readable by deps
+        src: The node's declared source file (writable, readable by deps); when a
+            template is configured and this file does not exist on disk, the
+            template's content initializes it at run start
+        template: Optional file label whose content initializes src at run start
+            when src does not exist on disk
         silent_srcs: Files agent can write that are NOT readable by deps
         verify: Shell command to run when the agent calls verify()
             (default: empty = no verify tool)
@@ -242,7 +252,8 @@ def update_with_ai(
         silent_deps = silent_deps,
         feedback_deps = feedback_deps,
         star_deps = star_deps,
-        srcs = srcs,
+        src = src,
+        template = template,
         silent_srcs = silent_srcs,
         verify = verify,
         **_rule_kwargs

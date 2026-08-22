@@ -40,7 +40,7 @@ The implementation creates `AgentNodeCleanLogicImpl`, which fulfills the `DagCle
   - `(TerminateAgentWithSuccess, history)` — the termination value is the `TerminateSuccessResult` formed by the sandbox's termination tool (`advance`/`blame`) and adopted as the result: a `FeedbackResult`, a `ChangeResult`, or a `NoChangeResult`
   - `(TerminateAgentWithFailure[T_tool], history)` — `failure`, leaving pending messages unchanged (per the `dag_clean_logic` contract)
   - `(error, history)` (a loop failure) — `failure`, leaving pending messages unchanged (per the `dag_clean_logic` contract)
-- `is_dirty` — signals dirtiness when the node has pending messages or has writable output files that do not exist on disk
+- `is_dirty` — signals dirtiness when the node has pending messages, a writable output file does not exist on disk, or a writable output file with a configured template (an entry in the sandbox configuration's `templates`) holds exactly its template's content. When the file-based condition holds, delivers a template-update feedback message to the node's pending set via the graph's `add_messages` — the message content pinned to `update target file from template` — only when the `pending_messages` passed to `is_dirty` does not already contain it (at most once per pending set); the message is present before the node's cleaning and persists across failed cleanings, so the node remains dirty until a cleaning succeeds.
 
 **Prompt composition:** The run's system prompt is the node's prompt augmented with lines naming the readable and writable files (from the sandbox configuration's `readable_paths` and `writable_paths`); the run's user prompt is the node's pending messages joined by newlines, so the agent can act on change and feedback from other nodes. When the node has no pending messages, the user prompt is empty.
 
@@ -55,6 +55,7 @@ The implementation creates `AgentNodeCleanLogicImpl`, which fulfills the `DagCle
 ## Invariants
 
 - Each cleaning runs exactly one agent run; the run provides messages or signals failure, never both
+- The template-update feedback message is delivered at most once per pending set (never duplicated)
 - Cleaning is sequential per node; the consuming dag component does not invoke cleaning concurrently
 - The sandbox's per-run state (including the write-occurred flag) is reset for each cleaning
 - Blame targets are validated to be dependencies of the node (handoff from sandbox's blame_targets validation)
@@ -63,6 +64,7 @@ The implementation creates `AgentNodeCleanLogicImpl`, which fulfills the `DagCle
 ## Non-Concerns
 
 - **Change-message content:** The exact content of change messages (e.g., the summary of produced artifacts) is unspecified.
+- **Template-feedback wording:** Pinned to `update target file from template`; tests may assert it.
 - **Sandbox construction caching:** Whether sandboxes are cached across cleanings is unspecified.
 - **Agent-loop retry behavior:** Per the `agent_loop` contract.
 

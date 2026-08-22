@@ -22,7 +22,8 @@ class TestBazelMacros(unittest.TestCase):
             "silent_deps": ["//pkg:silent_dep"],
             "feedback_deps": ["//pkg:fdep"],
             "star_deps": ["//pkg:star_dep"],
-            "srcs": [":src1"],
+            "src": "src1.txt",
+            "template": "//parts/templates:lls",
             "silent_srcs": [":silent_src1"],
             "dependency_paths": [],
         }
@@ -35,7 +36,8 @@ class TestBazelMacros(unittest.TestCase):
         self.assertIn("silent_deps", manifest)
         self.assertIn("feedback_deps", manifest)
         self.assertIn("star_deps", manifest)
-        self.assertIn("srcs", manifest)
+        self.assertIn("src", manifest)
+        self.assertIn("template", manifest)
         self.assertIn("silent_srcs", manifest)
         
         # Verify types
@@ -44,7 +46,8 @@ class TestBazelMacros(unittest.TestCase):
         self.assertIsInstance(manifest["silent_deps"], list)
         self.assertIsInstance(manifest["feedback_deps"], list)
         self.assertIsInstance(manifest["star_deps"], list)
-        self.assertIsInstance(manifest["srcs"], list)
+        self.assertIsInstance(manifest["src"], str)
+        self.assertIsInstance(manifest["template"], str)
         self.assertIsInstance(manifest["silent_srcs"], list)
     
     def test_graph_structure(self):
@@ -72,7 +75,7 @@ class TestBazelMacros(unittest.TestCase):
         # Simulate BazNode with new fields
         class MockNode:
             def __init__(self):
-                self.srcs = [":output.txt"]
+                self.src = ":output.txt"
                 self.silent_srcs = [":private.log"]
                 self.deps = ["//pkg:dep"]
                 self.silent_deps = ["//pkg:silent_dep"]
@@ -80,8 +83,8 @@ class TestBazelMacros(unittest.TestCase):
         node = MockNode()
         
         # Verify sandbox config can be derived
-        writable_paths = list(node.srcs) + list(node.silent_srcs)
-        readable_paths = list(node.srcs)
+        writable_paths = ([node.src] if node.src else []) + list(node.silent_srcs)
+        readable_paths = [node.src] if node.src else []
         
         self.assertEqual(writable_paths, [":output.txt", ":private.log"])
         self.assertEqual(readable_paths, [":output.txt"])
@@ -105,7 +108,7 @@ class TestBazelMacrosIntegration(unittest.TestCase):
         
         # Verify new attributes are used
         self.assertIn("silent_deps", content)
-        self.assertIn("srcs", content)
+        self.assertIn("src", content)
         self.assertIn("silent_srcs", content)
 
 

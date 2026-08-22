@@ -145,7 +145,8 @@ class _TempRunfilesTestCase(unittest.TestCase):
         deps: Optional[List[str]] = None,
         silent_deps: Optional[List[str]] = None,
         feedback_deps: Optional[List[str]] = None,
-        srcs: Optional[List[str]] = None,
+        src: str = "",
+        template: Optional[str] = None,
         silent_srcs: Optional[List[str]] = None,
     ) -> Path:
         """Write <runfiles>/<pkg>/<name>_manifest.json for label //pkg:name."""
@@ -158,7 +159,8 @@ class _TempRunfilesTestCase(unittest.TestCase):
             "deps": deps if deps is not None else [],
             "silent_deps": silent_deps if silent_deps is not None else [],
             "feedback_deps": feedback_deps if feedback_deps is not None else [],
-            "srcs": srcs if srcs is not None else [],
+            "src": src,
+            "template": template,
             "silent_srcs": silent_srcs if silent_srcs is not None else [],
         }
         path = pkg_dir / (name + "_manifest.json")
@@ -188,7 +190,8 @@ class TestLoadNode(_TempRunfilesTestCase):
             deps=["//pkg:dep"],
             silent_deps=["//pkg:silent_dep"],
             feedback_deps=["//pkg:fdep"],
-            srcs=["foo.txt"],
+            src="foo.txt",
+            template="templates/lls_template.md",
             silent_srcs=["private.log"],
         )
         node = self.load_impl("//pkg:target")
@@ -199,7 +202,8 @@ class TestLoadNode(_TempRunfilesTestCase):
         self.assertEqual(node.deps, ["//pkg:dep", "//pkg:fdep"])
         self.assertEqual(node.silent_deps, ["//pkg:silent_dep"])
         self.assertEqual(node.feedback_deps, ["//pkg:fdep"])
-        self.assertEqual(node.srcs, ["foo.txt"])
+        self.assertEqual(node.src, "foo.txt")
+        self.assertEqual(node.template, "templates/lls_template.md")
         self.assertEqual(node.silent_srcs, ["private.log"])
 
     def test_load_node_includes_feedback_deps_in_deps(self):
@@ -352,7 +356,7 @@ class TestBazNodeImplToolProviders(unittest.TestCase):
             tools=tools,
             deps=[],
             silent_deps=[],
-            srcs=[],
+            src="",
             silent_srcs=[],
         )
 
@@ -429,7 +433,7 @@ class TestRunPrompt(unittest.TestCase):
             tools=[],
             deps=[],
             silent_deps=[],
-            srcs=[],
+            src="",
             silent_srcs=[],
         )
 

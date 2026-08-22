@@ -2,7 +2,7 @@
 
 imports: dag_storage (contract fulfilled with Bazel workspace data), sandbox (node definitions)
 terms (from dag_storage): node, message, pending message, dependency, propagating dependency, reverse dependency, subgraph
-terms (from sandbox): blame target
+terms (from sandbox): blame target, template
 terms (owned): node definition, package directory, silent dependency, star dependency
 
 ## Purpose
@@ -11,10 +11,10 @@ Provides Bazel-workspace-backed storage and graph access for the agent build: no
 
 ## Terms
 
-- Node definition: the agent prompt and sandbox configuration declared by a node's target — file mappings, readable and writable paths, blame targets, and the search result limit.
+- Node definition: the agent prompt and sandbox configuration declared by a node's target — file mappings, readable and writable paths, blame targets, the search result limit, and the templates.
 - Package directory: the directory containing a node's BUILD file; also where the node's messages are stored.
 - Silent dependency: a dependency a node declares as silent; a silent dependency is a dependency (cleaned before the declaring node) whose changes do not propagate to the declaring node.
-- Star dependency: a dependency a node declares as a star dependency; a star dependency is a dependency (cleaned before the declaring node) whose declared sources, and the declared sources of every node reachable from it through star dependencies (never through non-star dependencies or silent dependencies), are readable by the declaring node.
+- Star dependency: a dependency a node declares as a star dependency; a star dependency is a dependency (cleaned before the declaring node) whose declared source, and the declared source of every node reachable from it through star dependencies (never through non-star dependencies or silent dependencies), are readable by the declaring node.
 
 ## Contract
 

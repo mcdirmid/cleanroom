@@ -86,7 +86,8 @@ def _hls_lint_impl(ctx):
             "        continue\n" +
             "    with open(mpath) as f:\n" +
             "        m = json.load(f)\n" +
-            "    for s in m.get('srcs', []):\n" +
+            "    s = m.get('src')\n" +
+            "    if s:\n" +
             "        out.append(os.path.dirname(p) + '/' + s)\n" +
             "    follow = list(m.get('deps', []))\n" +
             "    for sd in m.get('star_deps', []):\n" +
@@ -157,7 +158,7 @@ _hls_lint_test = rule(
 # Macro: update_hls_with_ai (high-level specification nodes)
 # ============================================================================
 
-def _update_spec_with_ai(name, prompt, srcs, deps, spec_deps, verify = "", visibility = None):
+def _update_spec_with_ai(name, prompt, src, deps, spec_deps, template = None, verify = "", visibility = None):
     """Create a spec node by delegating to update_with_ai.
 
     The single common spec-node entry: forwards the spec-specific arguments
@@ -170,9 +171,11 @@ def _update_spec_with_ai(name, prompt, srcs, deps, spec_deps, verify = "", visib
     Args:
         name: Target name.
         prompt: The agent prompt for the spec node.
-        srcs: Spec file paths the agent writes.
+        src: The spec file path the agent writes.
         deps: Declared readable dependency node labels (e.g. the guide).
         spec_deps: spec targets the current spec depends on (must be _update_spec_with_ai targets).
+        template: Optional template file label whose content initializes the
+            spec file at run start when the file does not exist on disk.
         verify: Shell command to run when the agent calls verify()
             (default: empty = no verify tool).
         visibility: Optional visibility applied to all generated targets;
@@ -190,7 +193,8 @@ def _update_spec_with_ai(name, prompt, srcs, deps, spec_deps, verify = "", visib
     update_with_ai(
         name = name,
         prompt = prompt,
-        srcs = srcs,
+        src = src,
+        template = template,
         deps = deps,
         star_deps = spec_deps,
         verify = verify,
@@ -214,8 +218,16 @@ def update_spec_with_ai(name, spec_deps, visibility = None):
     hls_spec_deps = [dep + "_high" for dep in spec_deps]
     _update_spec_with_ai(
         name = name + "_high",
-        prompt = "Updates the high-level specification for %s (in file %s-high.md), the HLS must conform to high-level-spec.md" % (name, name),
-        srcs = [name + "-high.md"],
+        prompt = (
+            "Updates the high-level specification for %s (in %s-high.md). The file " +
+            "exists with a template structure and placeholder content (TODO markers); " +
+            "fill it in section by section so the HLS conforms to high-level-spec.md, " +
+            "correcting any structure that deviates from the guide. A write is " +
+            "followed by an automatic re-read with line numbers, so a line-range " +
+            "edit (replace_lines) may follow a write without a further read."
+        ) % (name, name),
+        src = name + "-high.md",
+        template = "//templates:hls",
         deps = ["//guides:high_level_spec"],
         spec_deps = hls_spec_deps,
         verify = "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{}:{}_high_lint --test_output=errors 2>&1".format(
@@ -235,13 +247,16 @@ def update_spec_with_ai(name, spec_deps, visibility = None):
         name = name + "_low",
         prompt = (
             "Convert the high-level specification (HLS) for %s (in %s-high.md) into the " +
-            "low-level specification (LLS) for %s (in %s-low.md); if the LLS already exists, " +
-            "update it rather than create it. The LLS must be aligned with the HLS according to " +
-            "high_to_low.md. Make targeted edits only for substantive issues; do not chase " +
-            "formatting nits. A write is followed by an automatic re-read with line numbers, " +
-            "so a line-range edit (replace_lines) may follow a write without a further read."
+            "low-level specification (LLS) for %s (in %s-low.md). The LLS file exists as a " +
+            "template with placeholder content (TODO markers); fill it in section by section " +
+            "so the LLS is aligned with the HLS according to high_to_low.md, correcting any " +
+            "structure that deviates from the guide. Make targeted edits only for substantive " +
+            "issues; do not chase formatting nits. A write is followed by an automatic re-read " +
+            "with line numbers, so a line-range edit (replace_lines) may follow a write " +
+            "without a further read."
         ) % (name, name, name, name),
-        srcs = [name + "-low.md"],
+        src = name + "-low.md",
+        template = "//templates:lls",
         deps = ["//guides:high_to_low"],
         spec_deps = lls_spec_deps + [":" + name + "_high"],
         visibility = visibility,

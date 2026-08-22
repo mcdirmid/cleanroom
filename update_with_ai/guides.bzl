@@ -7,19 +7,19 @@ per the display name given.
 
 load("//update_with_ai:macros.bzl", "update_with_ai")
 
-def update_guide_with_ai(name, srcs, deps, display_name):
+def update_guide_with_ai(name, src, deps, display_name):
     """Create a guide node whose agent updates the guide file.
 
     Args:
         name: Target name.
-        srcs: Guide file paths the agent updates (e.g. ["high_level_spec.md"]).
+        src: The guide file path the agent updates (e.g. "high_level_spec.md").
         deps: Dependency node targets readable by the guide's agent.
         display_name: Human-readable description of what the guide is.
     """
     update_with_ai(
         name = name,
-        srcs = srcs,
+        src = src,
         deps = deps,
-        prompt = "Update %s, which is a %s." % (srcs[0], display_name),
+        prompt = "Update %s, which is a %s." % (src, display_name),
         visibility = ["//visibility:public"],
     )

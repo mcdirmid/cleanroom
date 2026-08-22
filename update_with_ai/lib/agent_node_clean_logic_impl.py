@@ -174,18 +174,46 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
         Operation Implemented: dag_clean_logic.is_dirty
 
         Postconditions:
-        - Returns True if the node has pending messages, or if any writable
-          output file (declared via srcs) does not exist on disk.
+        - Returns True if the node has pending messages, if a writable output
+          file does not exist on disk, or if a writable output file with a
+          configured template holds exactly its template's content.
+        - When the file-based condition holds, delivers the template-update
+          feedback message (pinned to "update target file from template") to
+          the node's pending set via the graph's add_messages, at most once
+          per pending set (only when the passed pending_messages lacks it), so
+          the node remains dirty until a cleaning succeeds.
         """
         node_def = self._graph.resolve_node_definition(node_id)
         config = node_def.sandbox_config
+
+        # The file-based dirty condition: a writable output file missing on
+        # disk, or (when a template is configured for it) holding exactly its
+        # template's content. writable_paths are virtual names; resolve to the
+        # real on-disk location via file_mappings before checking.
+        file_dirty = False
         for path in config.writable_paths:
-            # writable_paths are virtual names; resolve to the real on-disk
-            # location via file_mappings before checking existence.
             real_path = config.file_mappings.get(path, path)
             if not os.path.exists(real_path):
-                return True
-        return len(pending_messages) > 0
+                file_dirty = True
+                break
+            template_content = config.templates.get(path)
+            if template_content is not None:
+                try:
+                    with open(real_path, "r", encoding="utf-8") as f:
+                        if f.read() == template_content:
+                            file_dirty = True
+                            break
+                except OSError:
+                    continue  # unreadable file: not a template-state signal
+
+        # The template-update feedback keeps the node in a dirty state until a
+        # cleaning succeeds: a failed cleaning leaves it pending (per the
+        # dag_clean_logic contract), and a successful cleaning consumes the
+        # node's pending messages. Delivered at most once per pending set.
+        if file_dirty and "update target file from template" not in pending_messages:
+            self._graph.add_messages(node_id, ["update target file from template"])
+
+        return len(pending_messages) > 0 or file_dirty
 
     def _map_result(
         self,

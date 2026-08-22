@@ -1083,5 +1083,100 @@ class TestSandboxImpl(unittest.TestCase):
         self.assertTrue(self.sandbox.get_write_occurred())
 
 
+class TestTemplateInitialization(unittest.TestCase):
+    """Template initialization (sandbox-low.md, Template initialization):
+    a writable file with a configured template that does not exist on disk is
+    created with the template's content at run start, before any tool call;
+    an existing writable file is never modified; initialization is not a run
+    write and the template content is the run-start baseline for advance."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.mkdtemp()
+
+        self.templated_path = os.path.join(self.temp_dir, "artifact.md")
+        self.existing_path = os.path.join(self.temp_dir, "existing.md")
+        with open(self.existing_path, "w", encoding="utf-8") as f:
+            f.write("existing content\n")
+
+        self.file_mappings = {
+            "artifact.md": self.templated_path,
+            "existing.md": self.existing_path,
+        }
+        self.readable_paths = ["artifact.md", "existing.md"]
+        self.writable_paths = ["artifact.md", "existing.md"]
+        self.template_content = "# artifact\nTODO: fill me in\n"
+
+    def _sandbox(self, templates) -> SandboxImpl:
+        return SandboxImpl(
+            SandboxConfig(
+                file_mappings=self.file_mappings,
+                readable_paths=self.readable_paths,
+                writable_paths=self.writable_paths,
+                blame_targets=[],
+                search_result_limit=5,
+                templates=templates,
+                verification_callback=None,
+            )
+        )
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.temp_dir)
+
+    def test_template_initializes_missing_file_with_exact_content(self) -> None:
+        """A writable file with a template that does not exist on disk exists
+        at run start with exactly the template's content."""
+        self.assertFalse(os.path.exists(self.templated_path))
+        self._sandbox({"artifact.md": self.template_content})
+        self.assertTrue(os.path.exists(self.templated_path))
+        with open(self.templated_path, "r", encoding="utf-8") as f:
+            self.assertEqual(f.read(), self.template_content)
+
+    def test_template_never_modifies_existing_file(self) -> None:
+        """A writable file that exists at configuration is never modified by
+        its template."""
+        self._sandbox({"existing.md": "template would overwrite"})
+        with open(self.existing_path, "r", encoding="utf-8") as f:
+            self.assertEqual(f.read(), "existing content\n")
+
+    def test_template_initialization_is_not_a_run_write(self) -> None:
+        """Initialization is part of the sandbox's configuration, not an
+        operation of the run: the write-occurred flag stays unset and advance
+        reports no change."""
+        sandbox = self._sandbox({"artifact.md": self.template_content})
+        self.assertFalse(sandbox.get_write_occurred())
+        outcome = sandbox.advance()
+        self.assertIsInstance(outcome, TerminateAgentWithSuccess)
+        self.assertIsInstance(outcome.value, NoChangeResult)
+
+    def test_template_content_is_the_diff_baseline(self) -> None:
+        """A file initialized from its template has the template's content as
+        its run-start content: an agent edit shows the template->final
+        transformation in advance's empty-change-message diff."""
+        sandbox = self._sandbox({"artifact.md": self.template_content})
+        # The agent edits the materialized file (read numbered, then replace).
+        sandbox.read_file("artifact.md", include_line_numbers=True)
+        sandbox.replace_lines("artifact.md", 2, 2, "Filled in.")
+        outcome = sandbox.advance()
+        self.assertIsInstance(outcome, ToolFailure)
+        self.assertIn("artifact.md", outcome.value)
+        self.assertIn("-TODO: fill me in", outcome.value)
+        self.assertIn("+Filled in.", outcome.value)
+
+    def test_materialized_file_is_readable_numbered_and_writable(self) -> None:
+        """The materialized file is a writable file: read requires line
+        numbers and editing works through the line-range tool."""
+        sandbox = self._sandbox({"artifact.md": self.template_content})
+        result = self._first(sandbox.read_file("artifact.md", include_line_numbers=True))
+        self.assertTrue(result.supersedes)
+        self.assertIn("1 \u2502 # artifact", result.content)
+        # A plain read of the existing writable file is rejected.
+        plain = sandbox.read_file("artifact.md", include_line_numbers=False)
+        self.assertIsInstance(plain, ToolFailure)
+
+    def _first(self, outcome: Any) -> ToolResult:
+        assert isinstance(outcome, list) and outcome, f"expected a result sequence, got {outcome!r}"
+        return outcome[0]
+
+
 if __name__ == "__main__":
     unittest.main()

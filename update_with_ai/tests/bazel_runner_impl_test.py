@@ -57,7 +57,7 @@ NODE_LABEL = "//tests/example:sample_node_1"
 UNKNOWN_LABEL = "//nope:missing"
 
 
-def _write_manifest(pkg_dir: Path, label: str, srcs: Optional[List[str]] = None) -> None:
+def _write_manifest(pkg_dir: Path, label: str, src: Optional[str] = None) -> None:
     """Write a minimal node manifest to pkg_dir (current manifest format)."""
     pkg_dir.mkdir(parents=True, exist_ok=True)
     name = label.split(":")[-1]
@@ -68,7 +68,8 @@ def _write_manifest(pkg_dir: Path, label: str, srcs: Optional[List[str]] = None)
         "tools": [],
         "deps": [],
         "silent_deps": [],
-        "srcs": srcs or [],
+        "src": src or "",
+        "template": None,
         "silent_srcs": [],
         "verify": None,
     }
@@ -464,9 +465,9 @@ class TestRunDag(unittest.TestCase):
     def tearDown(self) -> None:
         shutil.rmtree(self._tmp, ignore_errors=True)
 
-    def _write_workspace(self, srcs: Optional[List[str]] = None,
+    def _write_workspace(self, src: Optional[str] = None,
                          seed_messages: bool = False) -> None:
-        _write_manifest(self._root / "tests" / "example", NODE_LABEL, srcs=srcs)
+        _write_manifest(self._root / "tests" / "example", NODE_LABEL, src=src)
         if seed_messages:
             _seed_pending(str(self._root), NODE_LABEL, ["pending change"])
 

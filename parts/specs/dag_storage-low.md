@@ -1,86 +1,104 @@
 # Interface LLS: dag_storage
 
-<!-- dependencies: (none) -->
-
 ## Data Types
 
 ```python
-from typing import Protocol, TypeAlias
+from typing import TypeAlias
 
 Node: TypeAlias = str
 Message: TypeAlias = str
+PendingMessage: TypeAlias = Message
+Dependency: TypeAlias = Node
+PropagatingDependency: TypeAlias = Node
+ReverseDependency: TypeAlias = Node
+Subgraph: TypeAlias = frozenset[Node]
 
-
-class DagStorage(Protocol):
-    def read_pending_messages(self, node: Node) -> tuple[Message, ...]: ...
-    def add_messages(self, node: Node, messages: list[Message]) -> None: ...
-    def delete_node(self, node: Node) -> None: ...
-    def retrieve_dependencies(self, node: Node) -> tuple[Node, ...]: ...
-    def retrieve_reverse_dependencies(self, node: Node) -> tuple[Node, ...]: ...
+class dag_storage(Protocol):
+    def read_pending_messages(self, node: Node) -> set[Message]: ...
+    def add_message(self, node: Node, message: Message) -> None: ...
+    def delete_node_data(self, node: Node) -> None: ...
+    def get_dependencies(self, node: Node) -> set[Node]: ...
+    def get_reverse_dependencies(self, node: Node) -> set[Node]: ...
 ```
 
-- **pending message:** A message delivered to a node and not cleaned since delivery.
-- **dependency:** For nodes A and B, A depends on B means A has an outgoing edge to B.
-- **propagating dependency:** A dependency whose changes propagate to the depending node; only propagating dependencies trigger recording of the depending node as a reverse dependency, and of no other dependency.
-- **reverse dependency:** A node recorded as depending on another node; recording happens when a node retrieves a node's dependencies, at most once per dependency, and only for its propagating dependencies (repeated retrievals add no duplicates).
+`Node` is a vertex identifier in the graph (a string). `Message` is a string addressed to a node. `PendingMessage` is a message delivered to a node and not cleaned since delivery (an alias for `Message`). `Dependency` is the declared set of nodes on which a node depends (a set of `Node` identifiers). `PropagatingDependency` is a subset of dependencies whose changes propagate to the depending node (a set of `Node` identifiers). `ReverseDependency` is the set of nodes recorded as depending on another node (a set of `Node` identifiers). `Subgraph` is a target node (included) plus all nodes reachable through its direct and indirect dependencies (a set of `Node` identifiers).
 
 ## Component-Provided Operations
 
 ### `read_pending_messages`
 
-    def read_pending_messages(self, node: Node) -> tuple[Message, ...]:
+```python
+def read_pending_messages(self, node: Node) -> set[Message]: ...
+```
 
-**Purpose:** Read the pending messages for a node.
-**Preconditions:** The node exists in the graph before its messages are accessed.
-**Postconditions:** Provides the pending messages currently associated with `node`, exactly as stored; provides an empty tuple when none are pending. Read-only: the call changes no state.
-**HLS Justification:** Operations — read pending messages for a node; Guarantees — messages provided exactly as stored.
+**Purpose:** Read all pending messages for a node.
 
-### `add_messages`
+**Preconditions:** The node exists in the graph before calling.
 
-    def add_messages(self, node: Node, messages: list[Message]) -> None:
+**Postconditions:** Returns the set of messages currently pending for the node, as stored.
+**HLS Justification:** Contract → Operations: "Read pending messages for a node."
 
-**Purpose:** Add messages to a node's pending set.
-**Preconditions:** The node exists in the graph before its messages are accessed.
-**Postconditions:** After the call, every message in `messages` is pending on `node`, exactly as stored. The addition persists across restarts.
-**HLS Justification:** Operations — add messages to a node's pending set; Guarantees — messages provided exactly as stored; messages persist.
+### `add_message`
 
-### `delete_node`
+```python
+def add_message(self, node: Node, message: Message) -> None: ...
+```
 
-    def delete_node(self, node: Node) -> None:
+**Purpose:** Add a message to a node's pending set.
 
-**Purpose:** Delete a node's data (its pending messages and its known reverse dependencies).
-**Preconditions:** The node exists in the graph before its messages, dependencies, or reverse dependencies are accessed.
-**Postconditions:** After the call, `node`'s pending messages and its known reverse dependencies are removed.
-**HLS Justification:** Operations — delete a node's data (its pending messages and its known reverse dependencies); Guarantees — messages and reverse dependencies persist.
+**Preconditions:** The node exists in the graph before calling.
 
-### `retrieve_dependencies`
+**Postconditions:** The message is added to the node's pending set. The operation is atomic with respect to other operations on the same node.
+**HLS Justification:** Contract → Operations: "Add messages to a node's pending set."
 
-    def retrieve_dependencies(self, node: Node) -> tuple[Node, ...]:
+### `delete_node_data`
 
-**Purpose:** Retrieve a node's dependencies.
-**Preconditions:** The node exists in the graph before its dependencies are accessed.
-**Postconditions:** Provides the dependencies declared for `node`, exactly as declared. For each propagating dependency `d` of `node`, `node` is recorded as a reverse dependency of `d` after the call, at most once per `d` — repeated retrievals add no duplicates. Retrieval records `node` as a reverse dependency of none of its non-propagating dependencies.
-**HLS Justification:** Operations — retrieve a node's dependencies; Guarantees — dependencies provided as declared; retrieval records the node as a reverse dependency of each propagating dependency, at most once per dependency.
+```python
+def delete_node_data(self, node: Node) -> None: ...
+```
 
-### `retrieve_reverse_dependencies`
+**Purpose:** Delete all data associated with a node: its pending messages and its known reverse dependencies.
 
-    def retrieve_reverse_dependencies(self, node: Node) -> tuple[Node, ...]:
+**Preconditions:** The node exists in the graph before calling.
 
-**Purpose:** Retrieve a node's known reverse dependencies.
-**Preconditions:** The node exists in the graph before its reverse dependencies are accessed.
-**Postconditions:** Provides the nodes currently recorded as reverse dependencies of `node`, exactly as recorded. Read-only: the call changes no state.
-**HLS Justification:** Operations — retrieve a node's known reverse dependencies; Guarantees — reverse dependencies provided exactly as recorded.
+**Postconditions:** All pending messages and all known reverse dependencies for the node are removed. The operation is atomic with respect to other operations on the same node.
+
+
+**HLS Justification:** Contract → Operations: "Delete a node's data (its pending messages and its known reverse dependencies)."
+
+### `get_dependencies`
+
+```python
+def get_dependencies(self, node: Node) -> set[Node]: ...
+```
+
+**Purpose:** Retrieve a node's declared dependencies.
+
+**Preconditions:** The node exists in the graph before calling.
+
+**Postconditions:** Returns the set of nodes on which the node depends (its outgoing dependency edges). Calling this operation records the node as a reverse dependency of each of its propagating dependencies, at most once per dependency. The operation is atomic with respect to other operations on the same node.
+
+### `get_reverse_dependencies`
+
+```python
+def get_reverse_dependencies(self, node: Node) -> set[Node]: ...
+```
+
+**Purpose:** Retrieve all nodes that have recorded this node as a reverse dependency.
+
+**Preconditions:** The node exists in the graph before calling.
+
+**Postconditions:** Returns the set of nodes recorded as depending on (i.e., having this node as a reverse dependency). The operation is atomic with respect to other operations on the same node.
+
+
+**HLS Justification:** Contract → Operations: "Retrieve a node's known reverse dependencies."
 
 ## Invariants
 
-- Messages and reverse dependencies persist across component restarts.
-- Read, write, and delete operations are atomic per node.
+- **Persistence:** Messages and reverse dependencies persist across component restarts.
+- **Atomicity:** Read, write, and delete operations are atomic per node.
+- **Exact semantics:** Messages are provided exactly as stored; dependencies as declared; reverse dependencies exactly as recorded.
 
-## Non-concerns
+## Non-Concerns
 
-- **Storage failures:** Assumed not to occur; if they do, behavior is undefined — no error handling defined.
-- **Graph topology management:** The graph is assumed to exist before access; creating or modifying nodes and their declared dependencies is out of scope for this component.
-- **Subgraph computation:** The `Subgraph` concept is defined for use by consumers; computing subgraphs is not an operation of this component.
-- **Message ordering within the pending set:** Not specified; clients may not rely on ordering.
-- **Cleanup of pending messages:** Not specified; out of scope for this component.
-
+- **Storage failures:** Assumed not to occur; if they do, behavior is undefined.

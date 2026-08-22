@@ -467,17 +467,17 @@ class _Workspace:
 
     Node graph (labels and manifest contents):
 
-      //pkg_a:a  deps=["//pkg_c:c"], srcs=["a1.txt"],
+      //pkg_a:a  deps=["//pkg_c:c"], src="a1.txt",
                  silent_srcs=["a_priv.txt"], verify="echo verification-output"
       //pkg_b:b  deps=["//pkg_a:a"], silent_deps=["//pkg_c:c"],
                  feedback_deps=["//pkg_a:a"],
-                 srcs=["b1.txt", "shared.txt"], silent_srcs=["b_priv.txt"]
-      //pkg_c:c  srcs=["shared.txt", "c_only.txt"]
-      //pkg_d:d  feedback_deps=["//pkg_a:a"], srcs=["d1.txt"]
-      //pkg_e:e  star_deps=["//pkg_a:a"], srcs=["e1.txt", "shared.txt"]
+                 src="b1.txt", silent_srcs=["b_priv.txt"]
+      //pkg_c:c  src="c_only.txt"
+      //pkg_d:d  feedback_deps=["//pkg_a:a"], src="d1.txt"
+      //pkg_e:e  star_deps=["//pkg_a:a"], src="e1.txt"
                  (a's regular dep c is NOT followed: the star closure
-                  traverses star deps only, so c's srcs are not readable by e)
-      //pkg_f:f  star_deps=["//pkg_e:e"], srcs=["f1.txt"]
+                  traverses star deps only, so c's src is not readable by e)
+      //pkg_f:f  star_deps=["//pkg_e:e"], src="f1.txt"
                  (star-over-star: f's closure covers e and a, never c)
     """
 
@@ -491,16 +491,27 @@ class _Workspace:
         name: str,
         label: str,
         prompt: str,
-        srcs: Optional[List[str]] = None,
+        src: str = "",
         silent_srcs: Optional[List[str]] = None,
         deps: Optional[List[str]] = None,
         silent_deps: Optional[List[str]] = None,
         feedback_deps: Optional[List[str]] = None,
         star_deps: Optional[List[str]] = None,
         verify: Optional[str] = None,
+        template: Optional[str] = None,
     ) -> None:
         pkg_dir = self.root / pkg
         pkg_dir.mkdir(parents=True, exist_ok=True)
+        # When a template is given, write the template file under the
+        # workspace's templates/ dir and store its workspace-relative path in
+        # the manifest (resolved at runtime against the workspace root).
+        template_rel: Optional[str] = None
+        if template is not None:
+            template_dir = self.root / "templates"
+            template_dir.mkdir(parents=True, exist_ok=True)
+            template_file = template_dir / f"{name}_template.md"
+            template_file.write_text(template, encoding="utf-8")
+            template_rel = f"templates/{name}_template.md"
         manifest = {
             "label": label,
             "name": name,
@@ -510,15 +521,18 @@ class _Workspace:
             "silent_deps": silent_deps or [],
             "feedback_deps": feedback_deps or [],
             "star_deps": star_deps or [],
-            "srcs": srcs or [],
+            "src": src,
+            "template": template_rel,
             "silent_srcs": silent_srcs or [],
             "verify": verify,
         }
         (pkg_dir / f"{name}_manifest.json").write_text(
             json.dumps(manifest), encoding="utf-8"
         )
-        for src in (srcs or []) + (silent_srcs or []):
+        if src:
             (pkg_dir / src).touch()
+        for silent_src in silent_srcs or []:
+            (pkg_dir / silent_src).touch()
 
     def populate(self) -> None:
         """Write the manifest graph described in the class docstring."""
@@ -527,7 +541,7 @@ class _Workspace:
             "a",
             "//pkg_a:a",
             "prompt for a",
-            srcs=["a1.txt"],
+            src="a1.txt",
             silent_srcs=["a_priv.txt"],
             deps=["//pkg_c:c"],
             verify="echo verification-output",
@@ -537,7 +551,7 @@ class _Workspace:
             "b",
             "//pkg_b:b",
             "prompt for b",
-            srcs=["b1.txt", "shared.txt"],
+            src="b1.txt",
             silent_srcs=["b_priv.txt"],
             deps=["//pkg_a:a"],
             silent_deps=["//pkg_c:c"],
@@ -548,14 +562,14 @@ class _Workspace:
             "c",
             "//pkg_c:c",
             "prompt for c",
-            srcs=["shared.txt", "c_only.txt"],
+            src="c_only.txt",
         )
         self.write_manifest(
             "pkg_d",
             "d",
             "//pkg_d:d",
             "prompt for d",
-            srcs=["d1.txt"],
+            src="d1.txt",
             feedback_deps=["//pkg_a:a"],
         )
         self.write_manifest(
@@ -563,7 +577,7 @@ class _Workspace:
             "e",
             "//pkg_e:e",
             "prompt for e",
-            srcs=["e1.txt", "shared.txt"],
+            src="e1.txt",
             star_deps=["//pkg_a:a"],
         )
         self.write_manifest(
@@ -571,7 +585,7 @@ class _Workspace:
             "f",
             "//pkg_f:f",
             "prompt for f",
-            srcs=["f1.txt"],
+            src="f1.txt",
             star_deps=["//pkg_e:e"],
         )
 
@@ -621,20 +635,19 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
                 graph.resolve_node_definition("//pkg_b:b").prompt, "prompt for b"
             )
 
-    def test_readable_paths_are_own_srcs_plus_dep_srcs(self):
+    def test_readable_paths_are_own_src_plus_dep_srcs(self):
         with self._workspace() as ws:
             graph = self._build_graph(ws)
-            # b's readable: own srcs (b1, shared) + deps' srcs (a's a1). c is a
-            # silent dep of b: its "shared.txt" collides with b's own src and is
-            # not duplicated, and "c_only.txt" is not readable at all.
+            # b's readable: own src (b1) + deps' srcs (a's a1). c is b's silent
+            # dep: its src (c_only) is not readable at all.
             self.assertCountEqual(
                 graph.resolve_node_definition("//pkg_b:b").sandbox_config.readable_paths,
-                ["b1.txt", "shared.txt", "a1.txt"],
+                ["b1.txt", "a1.txt"],
             )
-            # a's readable: own srcs (a1) + deps' srcs (c's shared, c_only).
+            # a's readable: own src (a1) + deps' srcs (c's c_only).
             self.assertCountEqual(
                 graph.resolve_node_definition("//pkg_a:a").sandbox_config.readable_paths,
-                ["a1.txt", "shared.txt", "c_only.txt"],
+                ["a1.txt", "c_only.txt"],
             )
 
     def test_readable_paths_exclude_silent_dep_srcs(self):
@@ -677,9 +690,9 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
             self.assertCountEqual(d_readable, ["d1.txt", "a1.txt"])
             self.assertEqual(graph.get_node_dependencies("//pkg_d:d"), ["//pkg_a:a"])
 
-    def test_star_deps_transitive_closure_srcs_are_readable(self):
+    def test_star_deps_transitive_closure_src_are_readable(self):
         """A star dep's closure over star deps is readable: e's star dep a
-        has no star deps of its own, so e reads a's srcs but NOT c's — a
+        has no star deps of its own, so e reads a's src but NOT c's — a
         regular dep of a star dep is never followed (the closure traverses
         star deps only)."""
         with self._workspace() as ws:
@@ -687,28 +700,22 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
             e_readable = graph.resolve_node_definition(
                 "//pkg_e:e"
             ).sandbox_config.readable_paths
-            self.assertCountEqual(
-                e_readable, ["e1.txt", "shared.txt", "a1.txt"]
-            )
+            self.assertCountEqual(e_readable, ["e1.txt", "a1.txt"])
             self.assertNotIn("c_only.txt", e_readable)
-            # Star-dep srcs map to their package directories; the node's own
-            # src wins on a name collision; closure nodes' silent_srcs are
-            # not readable.
+            # Star-dep srcs map to their package directories; closure nodes'
+            # silent_srcs are not readable.
             e_mappings = graph.resolve_node_definition(
                 "//pkg_e:e"
             ).sandbox_config.file_mappings
             self.assertEqual(
                 e_mappings["a1.txt"], str(ws.root / "pkg_a" / "a1.txt")
             )
-            self.assertEqual(
-                e_mappings["shared.txt"], str(ws.root / "pkg_e" / "shared.txt")
-            )
             self.assertNotIn("a_priv.txt", e_readable)
-            # Writable set is unchanged: only own srcs + own silent_srcs.
+            # Writable set is unchanged: only own src + own silent_srcs.
             e_writable = graph.resolve_node_definition(
                 "//pkg_e:e"
             ).sandbox_config.writable_paths
-            self.assertCountEqual(e_writable, ["e1.txt", "shared.txt"])
+            self.assertCountEqual(e_writable, ["e1.txt"])
 
     def test_star_deps_close_over_star_deps_not_deps(self):
         """Star-over-star traversal: f's star dep e has star dep a, so f
@@ -719,7 +726,7 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
                 "//pkg_f:f"
             ).sandbox_config.readable_paths
             self.assertCountEqual(
-                f_readable, ["f1.txt", "e1.txt", "shared.txt", "a1.txt"]
+                f_readable, ["f1.txt", "e1.txt", "a1.txt"]
             )
             self.assertNotIn("c_only.txt", f_readable)
 
@@ -741,14 +748,14 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
         — regular and silent deps of a star dep are never followed."""
         ws = _Workspace()
         try:
-            ws.write_manifest("pkg_t", "t", "//pkg_t:t", "pt", srcs=["t1.txt"])
-            ws.write_manifest("pkg_u", "u", "//pkg_u:u", "pu", srcs=["u1.txt"])
+            ws.write_manifest("pkg_t", "t", "//pkg_t:t", "pt", src="t1.txt")
+            ws.write_manifest("pkg_u", "u", "//pkg_u:u", "pu", src="u1.txt")
             ws.write_manifest(
                 "pkg_s",
                 "s",
                 "//pkg_s:s",
                 "ps",
-                srcs=["s1.txt"],
+                src="s1.txt",
                 deps=["//pkg_t:t"],
                 silent_deps=["//pkg_u:u"],
             )
@@ -757,7 +764,7 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
                 "r",
                 "//pkg_r:r",
                 "pr",
-                srcs=["r1.txt"],
+                src="r1.txt",
                 star_deps=["//pkg_s:s"],
             )
             graph = self._build_graph(ws)
@@ -775,13 +782,13 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
         srcs are not readable. v deps=[s]; t (s's dep) is not readable."""
         ws = _Workspace()
         try:
-            ws.write_manifest("pkg_t", "t", "//pkg_t:t", "pt", srcs=["t1.txt"])
+            ws.write_manifest("pkg_t", "t", "//pkg_t:t", "pt", src="t1.txt")
             ws.write_manifest(
                 "pkg_s",
                 "s",
                 "//pkg_s:s",
                 "ps",
-                srcs=["s1.txt"],
+                src="s1.txt",
                 deps=["//pkg_t:t"],
             )
             ws.write_manifest(
@@ -789,7 +796,7 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
                 "v",
                 "//pkg_v:v",
                 "pv",
-                srcs=["v1.txt"],
+                src="v1.txt",
                 deps=["//pkg_s:s"],
             )
             graph = self._build_graph(ws)
@@ -810,7 +817,7 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
                 "f",
                 "//pkg_f:f",
                 "pf",
-                srcs=["f1.txt"],
+                src="f1.txt",
                 star_deps=["//missing:m"],
             )
             graph = self._build_graph(ws)
@@ -830,7 +837,7 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
             b_writable = graph.resolve_node_definition(
                 "//pkg_b:b"
             ).sandbox_config.writable_paths
-            self.assertCountEqual(b_writable, ["b1.txt", "shared.txt", "b_priv.txt"])
+            self.assertCountEqual(b_writable, ["b1.txt", "b_priv.txt"])
             # Deps' srcs (and deps' silent_srcs) are not writable.
             self.assertNotIn("a1.txt", b_writable)
             self.assertNotIn("a_priv.txt", b_writable)
@@ -838,7 +845,7 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
                 "//pkg_a:a"
             ).sandbox_config.writable_paths
             self.assertCountEqual(a_writable, ["a1.txt", "a_priv.txt"])
-            self.assertNotIn("shared.txt", a_writable)  # c's src, not writable
+            self.assertNotIn("c_only.txt", a_writable)  # c's src, not writable
 
     def test_blame_targets_are_feedback_deps(self):
         """Only feedback deps may receive feedback: b's blame targets are its
@@ -879,26 +886,82 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
             self.assertEqual(
                 b_mappings["a1.txt"], str(ws.root / "pkg_a" / "a1.txt")
             )
-            # b's silent dep c's srcs are not mapped (not readable).
+            # b's silent dep c's src is not mapped (not readable).
             self.assertNotIn("c_only.txt", b_mappings)
             # a's dep src maps into its own package dir
             a_mappings = graph.resolve_node_definition(
                 "//pkg_a:a"
             ).sandbox_config.file_mappings
             self.assertEqual(
-                a_mappings["shared.txt"], str(ws.root / "pkg_c" / "shared.txt")
+                a_mappings["c_only.txt"], str(ws.root / "pkg_c" / "c_only.txt")
             )
 
     def test_file_mappings_own_files_win_on_name_collision(self):
-        """b's own shared.txt wins over dep c's shared.txt."""
-        with self._workspace() as ws:
+        """x's own src wins over its dep y's src on a name collision."""
+        ws = _Workspace()
+        try:
+            ws.write_manifest("pkg_y", "y", "//pkg_y:y", "py", src="dup.txt")
+            ws.write_manifest(
+                "pkg_x",
+                "x",
+                "//pkg_x:x",
+                "px",
+                src="dup.txt",
+                deps=["//pkg_y:y"],
+            )
             graph = self._build_graph(ws)
-            b_mappings = graph.resolve_node_definition(
-                "//pkg_b:b"
+            x_mappings = graph.resolve_node_definition(
+                "//pkg_x:x"
             ).sandbox_config.file_mappings
             self.assertEqual(
-                b_mappings["shared.txt"], str(ws.root / "pkg_b" / "shared.txt")
+                x_mappings["dup.txt"], str(ws.root / "pkg_x" / "dup.txt")
             )
+            # y itself still maps its own src into its own package dir.
+            y_mappings = graph.resolve_node_definition(
+                "//pkg_y:y"
+            ).sandbox_config.file_mappings
+            self.assertEqual(
+                y_mappings["dup.txt"], str(ws.root / "pkg_y" / "dup.txt")
+            )
+        finally:
+            ws.close()
+
+    def test_template_content_lands_in_sandbox_config(self):
+        """A manifest-declared template is read at initialization: the node's
+        sandbox config maps its declared src to the template file's content."""
+        ws = _Workspace()
+        try:
+            ws.write_manifest(
+                "pkg_g",
+                "g",
+                "//pkg_g:g",
+                "pg",
+                src="g1.txt",
+                template="# g1 placeholder\nTODO: fill me in\n",
+            )
+            ws.write_manifest(
+                "pkg_h",
+                "h",
+                "//pkg_h:h",
+                "ph",
+                src="h1.txt",
+            )
+            graph = self._build_graph(ws)
+            templates = graph.resolve_node_definition(
+                "//pkg_g:g"
+            ).sandbox_config.templates
+            self.assertEqual(
+                templates, {"g1.txt": "# g1 placeholder\nTODO: fill me in\n"}
+            )
+            # A node without a template has an empty templates mapping.
+            self.assertEqual(
+                graph.resolve_node_definition(
+                    "//pkg_h:h"
+                ).sandbox_config.templates,
+                {},
+            )
+        finally:
+            ws.close()
 
     def test_get_node_dependencies_returns_deps_plus_silent_deps(self):
         with self._workspace() as ws:

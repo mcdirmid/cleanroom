@@ -28,6 +28,14 @@ Do not read the implementation Python file. Do not read the HLS: the LLS is self
 
 One test module per implementation LLS, named `<name>_test.py` in `tests/` (`specs/csv_inventory_impl-low.md` → `tests/csv_inventory_impl_test.py`). Use `unittest` with `if __name__ == "__main__": unittest.main()` at the end. Group tests into classes by concern (success routing, failure handling, invariants, config).
 
+## Working From a Template
+
+The test module exists as a template before testing: it carries the unittest skeleton — the imports, the test-class stubs, the `unittest.main()` tail — with placeholder content (TODO markers) where the tests go.
+
+- Fill the template in; never create the module from scratch and never decide its structure.
+- Fill in the test classes per this guide and the LLS closure; keep the template's imports, class layout, and `unittest.main()` tail.
+- Keep the template's structure; correct any stub that deviates from the required layout.
+
 ## What to Test, Section by Section
 
 ### Data Types
@@ -149,6 +157,7 @@ When a test appears to need one of these, the LLS-first response is to pin the b
 ## Validation Checklist
 
 - [ ] Test module per implementation LLS; named `<name>_test.py` in `tests/`
+- [ ] Filled from the template: the test module keeps the template's unittest skeleton; tests written per the LLS
 - [ ] Full transitive dependency closure read (no LLS dependency skipped)
 - [ ] Written from the LLS only; the implementation Python file was not read
 - [ ] Dataclass construction plus field/default/`Literal`-discriminator assertions from Data Types

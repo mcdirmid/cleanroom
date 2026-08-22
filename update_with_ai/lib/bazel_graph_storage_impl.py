@@ -372,6 +372,7 @@ def _build_sandbox_config(
     file_mappings: FileMapping,  # pyright: ignore[reportArgumentType]
     readable_paths: List[str],  # pyright: ignore[reportArgumentType]
     writable_paths: List[str],  # pyright: ignore[reportArgumentType]
+    templates: Dict[str, str],  # pyright: ignore[reportArgumentType]
 ) -> SandboxConfig:  # pyright: ignore[reportReturnType]
     """Build a SandboxConfig from a manifest dict. (pyright: ignore[reportArgumentType])"""
     return SandboxConfig(
@@ -380,6 +381,7 @@ def _build_sandbox_config(
         writable_paths=writable_paths,
         blame_targets=list(manifest.get("feedback_deps", [])),  # pyright: ignore[reportArgumentType]
         search_result_limit=10,
+        templates=templates,
         verification_callback=_build_verify_callback(
             str(manifest.get("verify") or "")  # pyright: ignore[reportArgumentType]
         ),
@@ -408,7 +410,8 @@ def _synthesized_manifest(label: str) -> Dict[str, Any]:
         "silent_deps": [],
         "feedback_deps": [],
         "star_deps": [],
-        "srcs": [],
+        "src": "",
+        "template": None,
         "silent_srcs": [],
         "verify": None,
         "dependency_paths": [],
@@ -508,16 +511,16 @@ class BazelGraphStorageFileImpl(BaseBazelGraphStorageImpl):
                     deps.append(sd)
 
             # Collect dependency srcs (bare names) -> their package directories.
-            # Only deps' srcs are readable; silent_deps' srcs are not.
+            # Only deps' declared source is readable; silent_deps' srcs are not.
             dep_srcs: Dict[str, str] = {}
             for dep in deps:
                 dep_manifest = raw.get(dep)
                 if dep_manifest is None:
                     continue  # dep manifest not in this graph's runfiles
                 dep_pkg = pkg_dirs[dep]
-                for src in dep_manifest.get("srcs", []):
-                    s = str(src)
-                    dep_srcs.setdefault(s, dep_pkg)
+                dep_src: str = str(dep_manifest.get("src") or "")
+                if dep_src:
+                    dep_srcs.setdefault(dep_src, dep_pkg)
 
             # Star deps' transitive closure is readable: every node reachable
             # from a star dep through star deps (never deps or silent deps)
@@ -547,11 +550,11 @@ class BazelGraphStorageFileImpl(BaseBazelGraphStorageImpl):
                 dep_pkg = pkg_dirs.get(label)
                 if dep_pkg is None:
                     continue
-                for src in dep_manifest.get("srcs", []):
-                    s = str(src)
-                    dep_srcs.setdefault(s, dep_pkg)
+                dep_src: str = str(dep_manifest.get("src") or "")
+                if dep_src:
+                    dep_srcs.setdefault(dep_src, dep_pkg)
 
-            own_srcs: List[str] = [str(s) for s in manifest.get("srcs", [])]
+            own_src: str = str(manifest.get("src") or "")
             own_silent_srcs: List[str] = [str(s) for s in manifest.get("silent_srcs", [])]
             pkg_dir = pkg_dirs[node_id]
 
@@ -560,11 +563,25 @@ class BazelGraphStorageFileImpl(BaseBazelGraphStorageImpl):
             file_mappings: FileMapping = {
                 s: os.path.join(d, s) for s, d in dep_srcs.items()
             }
-            for s in own_srcs + own_silent_srcs:
+            if own_src:
+                file_mappings[own_src] = os.path.join(pkg_dir, own_src)
+            for s in own_silent_srcs:
                 file_mappings[s] = os.path.join(pkg_dir, s)
 
-            readable_paths = own_srcs + [s for s in dep_srcs if s not in own_srcs]
-            writable_paths = own_srcs + own_silent_srcs
+            readable_paths = ([own_src] if own_src else []) + [
+                s for s in dep_srcs if s != own_src
+            ]
+            writable_paths = ([own_src] if own_src else []) + own_silent_srcs
+
+            # Template content for the node's declared source file: the
+            # manifest carries the template file's repo-relative path; the
+            # content is read at initialization from the real source tree.
+            templates: Dict[str, str] = {}
+            template_rel = manifest.get("template")
+            if template_rel and own_src:
+                template_path = self._real_root / str(template_rel)
+                with open(template_path, "r", encoding="utf-8") as f:
+                    templates[own_src] = f.read()
 
             self._definitions[node_id] = NodeDefinition(
                 prompt=manifest["prompt"],
@@ -573,6 +590,7 @@ class BazelGraphStorageFileImpl(BaseBazelGraphStorageImpl):
                     file_mappings=file_mappings,
                     readable_paths=readable_paths,
                     writable_paths=writable_paths,
+                    templates=templates,
                 ),
             )
 

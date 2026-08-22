@@ -30,8 +30,9 @@ class BazNode(ToolProvider):
     tools: List[str]          # Tool target labels
     deps: List[str]           # Dependency node labels (incl. feedback deps)
     silent_deps: List[str]    # Silent deps (cleaned before run; output not readable; changes do not propagate)
-    srcs: List[str]           # Files the agent can write that deps can read
-    silent_srcs: List[str]    # Files the agent can write that deps cannot read
+    src: str = ""             # Declared source file (the artifact the agent writes)
+    template: Optional[str] = None  # Declared source file's template (repo-relative path; initializes src at run start when missing)
+    silent_srcs: List[str] = field(default_factory=list)  # Files the agent can write that deps cannot read
     feedback_deps: List[str] = field(default_factory=list)  # Deps that can receive feedback; included in deps
 
 

@@ -1,0 +1,33 @@
+# templates/BUILD.bazel
+#
+# Template files for template-based artifact initialization. Each template
+# carries the required structure of its artifact type (an HLS document, an
+# LLS document, a Python lib module, or a Python test module) with obvious
+# placeholder content (TODO markers) where the real content goes. Spec-node
+# BUILD files reference a template via update_with_ai's `template` attribute;
+# at run start, a node's declared source file that does not exist on disk is
+# initialized from its template's content.
+
+filegroup(
+    name = "hls",
+    srcs = ["hls_template.md"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "lls",
+    srcs = ["lls_template.md"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "lib",
+    srcs = ["lib_template.py"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "test",
+    srcs = ["test_template.py"],
+    visibility = ["//visibility:public"],
+)

@@ -43,7 +43,7 @@ load("//update_with_ai:macros.bzl", "update_with_ai")
 # run its *_clean / *_feedback binaries. Omit it for Bazel's default
 # package-private visibility.
 update_with_ai(
-    srcs = ["foo.txt"],
+    src = "foo.txt",
     name = "sample_node_1",
     prompt = "select 5 animals to list in foo.txt on their own lines, create foo.txt if it does not exist",
     visibility = ["//visibility:public"],
@@ -53,7 +53,7 @@ update_with_ai(
 # (feedback deps are automatically included in deps) and it can blame
 # sample_node_1 (deliver feedback to it) when its output is unsatisfactory.
 update_with_ai(
-    srcs = ["bar.txt"],
+    src = "bar.txt",
     name = "sample_node_2",
     prompt = "for each animal in foo.txt, bar.txt should list how a different specific person would describe that animal.",
     feedback_deps = [":sample_node_1"],
@@ -63,7 +63,7 @@ update_with_ai(
 # cleaned first, but its srcs output (foo.txt, bar.txt) is NOT readable, so
 # this prompt must not reference them.
 update_with_ai(
-    srcs = ["baz.txt"],
+    src = "baz.txt",
     name = "sample_node_3",
     prompt = "for each line in bar.txt, guess the employer of the person involved.",
     silent_deps = [":sample_node_2"],

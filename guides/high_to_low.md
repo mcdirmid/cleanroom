@@ -4,9 +4,16 @@
 
 Starting from an HLS, produce an LLS by adding the concrete types, signatures, and behaviors the HLS intentionally omits. The HLS specifies *what* a component does; the LLS specifies the types, signatures, preconditions, postconditions, and failure signals that realize those guarantees in code — detailed enough that tests and an implementation can be written from it independently and pass when both conform.
 
-The relationship is elaboration, not transformation: the HLS states a guarantee ("termination values pass through unchanged"); the LLS gives it form ("`run_request(...) -> RequestResult[T]` returns a `Termination[T]`").
+Authoritative references: `high_level_spec.md` (source format) and `low_level_spec.md` (target format).
 
-Authoritative references: `high_level_spec.md` (source format) and `low_level_spec.md` (target format). This guide is the conversion procedure between them.
+## Working From a Template
+
+The LLS file exists as a template with the required structure — sections, the Data Types block, the operation blocks — and placeholder content (TODO markers, missing or incorrect content).
+
+- Fill the template in; never create the document or decide its structure.
+- Replace placeholders section by section with content from the HLS closure and this guide.
+- Keep the template's required structure; never delete a required section as redundant.
+- Correct any template structure that deviates from this guide's required skeleton.
 
 ## Conversion Reading
 
@@ -15,7 +22,7 @@ The HLS you convert is a set, not just a file: its effective constraint set is i
 1. Read the HLS file for the component.
 2. Read the transitive closure: every spec named in the HLS front matter (`imports:`, `fulfills:`, `terms (from X):`), recursively.
 3. Read the LLS of every component in that closure — the LLS depends only on LLS files.
-4. Write the LLS as a stand-alone document; readers use it without the HLS.
+4. Fill the LLS from the template; readers use it without the HLS.
 
 **Dependency comment = HLS front matter mirrored.** The LLS dependency comment (first line of the file) lists the LLS of every interface named in the converted HLS's front matter — `imports:`, `fulfills:`, `terms (from X):` — whether or not a type is imported; a prose-only concept reference is still a dependency. Add any component named in LLS prose not in the HLS front matter; an entry is spurious only when it is neither imported, nor referenced, nor named in the front matter.
 
@@ -25,7 +32,7 @@ The HLS you convert is a set, not just a file: its effective constraint set is i
 
 **Key difference from the HLS:** the HLS is organized by concern (Purpose, Terms, Contract, Non-concerns; the Contract is a set of labeled blocks); the LLS is organized by **operation**, collecting ALL rules that apply to it — preconditions, postconditions, error conditions, ordering, failure semantics, routing — even across HLS sections, blocks, and specs of the closure.
 
-**Note on "Returns":** the HLS prohibits "returns"; the LLS accepts it in signatures and prose.
+**Note on "Returns":** the HLS prohibits "returns"; the LLS accepts it.
 
 
 ## Core Rules
@@ -57,11 +64,9 @@ The HLS you convert is a set, not just a file: its effective constraint set is i
    - Non-Concerns records pinned choices (optional).
    - The implementation HLS's Deltas are the semantic source: each line is a delta (untagged behavior, or tagged `[ordering]`, `[boundary]`, `[state]`, `[external]`, `[failure]`) mapping onto the implementation LLS sections; `[refines]` lines name the withheld precision to make concrete.
 
-8. **Describe outcomes, not mechanisms.** "Iterates until..." → "Completes when..."; "Calls X then Y" → "X occurs before Y". Implementation details belong in the Behavioral Description, not in preconditions or postconditions.
+8. **Describe outcomes, not mechanisms.** "Iterates until..." → "Completes when...". Implementation details belong in the Behavioral Description, not in preconditions or postconditions.
 
 9. **Interface granularity.** Split interfaces when responsibilities differ (persistence vs. logic vs. orchestration).
-
-10. **HLS justification format.** Keep justifications to one sentence or a brief phrase, consistent with the HLS — they need not quote it.
 
 ## Named Contract Blocks
 
@@ -72,8 +77,6 @@ The HLS Contract's named blocks (`**Logging**`, `**Events**`, `**Stubbing**`, `*
 - **File operations / Verification / Termination** — a block describing client-invoked behaviors is a source of component-provided operations alongside the **Operations** block: the tools become operations, their facts becoming preconditions, postconditions, and failure handling.
 - **Unexpected failures** — becomes the Failure Handling of the affected operations; concrete exception classes and strings are pinned in the implementation LLS.
 
-A named block's facts appear in exactly one LLS location.
-
 ## Failure Handling: Expected vs. Unexpected
 
 Translate each semantic HLS failure condition into a concrete code-level signal:
@@ -83,7 +86,7 @@ Translate each semantic HLS failure condition into a concrete code-level signal:
 - **Concrete strings** (error messages, fallback text) are pinned in implementation specs, not interface specs; wording is stated only when a test must assert it. An interface may pin the **absence** of error detail when a test must assert it (Non-Concerns), and may defer a detail with "pinned in the implementation spec" only when the named implementation LLS actually states it — an unbacked deferral is an error.
 - **Terminology:** distinguish termination, channel failure, and run failure (see `low_level_spec.md`).
 
-Every HLS statement — guarantee, ordering constraint, or failure condition — is represented in the LLS: as a precondition, postcondition, invariant, term definition, or return-value signal. An HLS fact the LLS cannot express is a conversion error; a fact implied but never stated is a traceability gap.
+An HLS fact the LLS cannot express is a conversion error; a fact implied but never stated is a traceability gap.
 
 ## Configuration Ownership
 
@@ -95,7 +98,7 @@ Configuration comes in two kinds, each in exactly one place, decided by **who su
 
 ## LLS Structure
 
-Per `low_level_spec.md`: each LLS file declares `# Interface LLS: <name>` sections (Data Types, Component-Provided Operations, Invariants) and, when an implementation HLS exists, `# Implementation LLS: <name>` sections (Data Types, Composition, Behavioral Description, Invariants, Non-Concerns). Subsections use `##`; operations use `### `name``. The skeleton is a shape, never content — do not write it into the file. Term definitions (cross-cutting rules such as stubbing) go between Data Types and Operations. Non-Concerns is optional.
+Per `low_level_spec.md`: each LLS file declares `# Interface LLS: <name>` sections (Data Types, Component-Provided Operations, Invariants) and, when an implementation HLS exists, `# Implementation LLS: <name>` sections (Data Types, Composition, Behavioral Description, Invariants, Non-Concerns). Subsections use `##`; operations use `### `name``. The template provides the skeleton; fill it with content, never restructure it. Term definitions (cross-cutting rules such as stubbing) go between Data Types and Operations. Non-Concerns is optional.
 
 ## Operation Documentation Template
 
@@ -154,7 +157,8 @@ Per `low_level_spec.md`: each LLS file declares `# Interface LLS: <name>` sectio
 - [ ] Error handling only for explicit HLS failure conditions; expected failures are return-value signals; unexpected failures (precondition violations) not in interface specs; no Failure Handling clause for an HLS assumption (assumptions are Preconditions only)
 - [ ] Concrete strings pinned in implementation specs; wording stated only when a test must assert it
 - [ ] Interface deferrals ("pinned in the implementation spec") backed by the named implementation LLS; error-detail-absence pins only when a test must assert them
-- [ ] Subsections use `##` headings (Data Types, Component-Provided Operations, Invariants, ...); operations use `### `name``; no skeleton text in the file
+- [ ] Subsections use `##` headings (Data Types, Component-Provided Operations, Invariants, ...); operations use `### `name``; the template's skeleton is filled, never restructured
+- [ ] Filled from the template: the document keeps the template's required structure, replaces placeholders, and corrects deviations
 - [ ] Implementation LLS exists only if an implementation HLS exists (`fulfills:` an interface)
 - [ ] Implementation class declared as `class FooImpl(Foo): ...`; name matches the interface only when exactly one implementation will ever exist; abstract bases named distinctly (`BaseFoo`)
 - [ ] Implementation sections never mention "client" (reference the interface contract instead)

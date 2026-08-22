@@ -6,6 +6,15 @@ An LLS is written to be implemented: it declares the exact types, signatures, pr
 
 The LLS is the contract: an implementation conforms when every operation satisfies its preconditions, postconditions, and failure handling, and every invariant holds. Tests are written from the same LLS (see `low_to_test.md`) **without reading the implementation**, so implementation and tests agree exactly when both conform.
 
+## Working From a Template
+
+The Python module exists as a template before implementation: it carries the module layout — the imports, the class stubs, the method signatures — with placeholder content (TODO markers) where the implementation goes.
+
+- Fill the template in; never create the module from scratch and never decide its structure.
+- Implement each stub per the LLS: keep the template's imports, class layout, and signatures; replace placeholder content with LLS-conformant behavior.
+- Keep the template's structure; correct any stub that deviates from the LLS.
+- The BUILD entry is added per the BUILD File section below; it is not part of the module template.
+
 ## Reading the LLS
 
 Read the LLS file and the full **transitive closure of its dependencies**: every LLS in its dependency comment, every LLS in *their* dependency comments, until no new files remain. The closure matters because types are owned once by the defining interface and imported elsewhere; honoring a dependency's preconditions and failure signals requires reading the interface that owns the types you use.
@@ -109,6 +118,7 @@ Pitfall — Example — Fix.
 ## Validation Checklist
 
 - [ ] One module per LLS file; module name matches the spec name
+- [ ] Filled from the template: the module keeps the template's layout and stubs; placeholders replaced per the LLS
 - [ ] Full transitive dependency closure read (no LLS dependency skipped)
 - [ ] Implementation subclasses the interface's Protocol (`class CsvInventoryImpl(Inventory): ...`)
 - [ ] Dataclass fields, types, order, defaults, and `Literal` discriminators match the LLS exactly

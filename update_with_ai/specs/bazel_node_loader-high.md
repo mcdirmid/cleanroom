@@ -1,7 +1,8 @@
 # bazel_node_loader
 
-imports: tool_provider (tool definitions and execution)
+imports: tool_provider (tool definitions and execution), sandbox (template)
 terms (from tool_provider): tool definition, tool result, signal, tool failure
+terms (from sandbox): template
 terms (owned): manifest, loaded node, node prompt, dependency node, tool provider, feedback deps
 
 ## Purpose
@@ -10,8 +11,8 @@ Provides runtime loading of node manifests (produced at build time by update_wit
 
 ## Terms
 
-- Manifest: a build-time file produced for a node, containing the node's label, prompt, declared tools, declared dependencies, silent dependencies, feedback deps, declared and silent source files, and an optional verification command. The exact file format is unspecified.
-- Loaded node: a runtime representation of a Bazel target — its manifest data (label, prompt, tools, dependencies, source files) — providing tool definitions and tool execution resolved at runtime from its declared tools.
+- Manifest: a build-time file produced for a node, containing the node's label, prompt, declared tools, declared dependencies, silent dependencies, feedback deps, the declared source file, the silent source files, the declared source file's template (when configured), and an optional verification command. The exact file format is unspecified.
+- Loaded node: a runtime representation of a Bazel target — its manifest data (label, prompt, tools, dependencies, the declared source file, its template, the silent source files) — providing tool definitions and tool execution resolved at runtime from its declared tools.
 - Node prompt: the agent prompt string associated with a loaded node.
 - Dependency node: a loaded node resolved from a manifest, representing a declared dependency of this node.
 - Feedback deps: dependency node targets that can receive feedback from the node; feedback deps are also declared dependencies of the node.

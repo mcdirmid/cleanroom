@@ -4,7 +4,7 @@ Interface definitions for the LLS Sandbox.
 """
 
 from typing import Callable, Dict, List, Optional, Protocol, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from .tool_provider import (
     ToolDefinition,
     ToolResult,
@@ -31,6 +31,10 @@ Feedback = str
 Blame = Tuple[BlameTarget, Feedback]
 SearchResultLimit = int
 DiffSizeLimit = int
+# Template content keyed by the writable file's virtual name: the initial
+# content the sandbox gives a writable file that does not exist on disk when
+# the sandbox is configured (see sandbox-high.md / sandbox-low.md).
+TemplateMapping = Dict[VirtualName, str]
 # A verification callback runs a shell command and returns (success, output):
 # success is True when the command exited 0. The sandbox uses the success flag
 # to gate advance()'s termination (see sandbox-high.md / sandbox-low.md).
@@ -38,7 +42,7 @@ VerificationCallback = Optional[Callable[[], Tuple[bool, str]]]
 
 @dataclass
 class SandboxConfig:
-    """Client-supplied configuration for the sandbox: file mappings, readable and writable paths, blame targets, limits, whether session-start reads are enabled, and an optional verification callback."""
+    """Client-supplied configuration for the sandbox: file mappings, readable and writable paths, blame targets, limits, whether session-start reads are enabled, the templates (default: empty), and an optional verification callback."""
     file_mappings: FileMapping
     readable_paths: ReadablePaths
     writable_paths: WritablePaths
@@ -46,6 +50,7 @@ class SandboxConfig:
     search_result_limit: SearchResultLimit
     diff_size_limit: Optional[DiffSizeLimit] = None
     session_start_reads_enabled: bool = True
+    templates: TemplateMapping = field(default_factory=dict)
     verification_callback: VerificationCallback = None
 
 WriteOccurred = bool
