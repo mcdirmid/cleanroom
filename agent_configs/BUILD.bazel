@@ -45,7 +45,7 @@ package(default_visibility = ["//visibility:public"])
 # The shared default: mirrors the original hardcoded development setup, minus
 # the API key.
 agent_config(
-    name = "default",
+    name = "stamsam",
     model = "stamsam-Qwen3.6-35B-A3B-Q4",
     base_url = "http://localhost:8000/v1",
     max_iterations = 100,
@@ -56,10 +56,49 @@ agent_config(
     max_tokens = 2048,
 )
 
+agent_config(
+    name = "coder-next-reap",
+    model = "Coder-Next-REAP-48B-A3B-Q4",
+    base_url = "http://localhost:8000/v1",
+    max_iterations = 100,
+    temperature = "0.7",
+    timeout_seconds = "100.0",
+    api_key_env = "OPENAI_API_KEY",
+    # so spiraling is detected quickly.
+    max_tokens = 2048,
+)
+
+agent_config(
+    name = "coder-next",
+    model = "Qwen3-Coder-Next-4bit",
+    base_url = "http://localhost:8000/v1",
+    max_iterations = 100,
+    temperature = "0.7",
+    timeout_seconds = "100.0",
+    api_key_env = "OPENAI_API_KEY",
+    # so spiraling is detected quickly.
+    max_tokens = 2048,
+)
+
+agent_config(
+    name = "fcmeyer",
+    model = "Qwen3.8-27B-MLX-oQ4e-mtp",
+    base_url = "http://localhost:8000/v1",
+    max_iterations = 100,
+    temperature = "0.7",
+    timeout_seconds = "100.0",
+    api_key_env = "OPENAI_API_KEY",
+    # so spiraling is detected quickly.
+    max_tokens = 2048,
+)
+
+
+
+
 # All configs bundled into every *_clean binary's runfiles so any of them can
 # be selected at run time. Add personal configs to this list.
 filegroup(
     name = "all_configs",
-    srcs = [":default"],
+    srcs = [":stamsam", ":coder-next-reap", ":coder-next", ":fcmeyer"],
     visibility = ["//visibility:public"],
 )

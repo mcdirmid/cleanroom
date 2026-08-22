@@ -15,4 +15,4 @@
 # (Add the :sean target to //agent_configs:all_configs so it is bundled into
 # every *_clean binary's runfiles; otherwise build it once and it is resolved
 # from bazel-bin. Command-line --define beats ~/.bazelrc beats this file.)
-build --define=AGENT_CONFIG=//agent_configs:default
+build --define=AGENT_CONFIG=//agent_configs:stamsam

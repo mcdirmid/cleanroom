@@ -2,7 +2,7 @@
 
 ## Purpose
 
-An LLS specifies *how* a component's interface and implementation are realized: concrete types, signatures, preconditions, postconditions, and failure signals. It is detailed enough that tests and an implementation can be written from it independently and pass when both conform — the HLS elaborated, never replaced.
+An LLS specifies *how* a component's interface and implementation are realized: concrete types, signatures, preconditions, postconditions, and failure signals — detailed enough that tests and an implementation can be written from it independently and pass when both conform; the HLS elaborated, never replaced.
 
 ## Structure
 
@@ -26,6 +26,7 @@ Term definitions (cross-cutting behavioral rules) appear between Data Types and 
 ### Naming
 
 - Section headings are exactly `# Interface LLS: <name>` and `# Implementation LLS: <name>`.
+- Subsections use `##`: `## Data Types`, `## Component-Provided Operations`, `## Invariants`, `## Non-Concerns` (implementation LLS: `## Composition`, `## Behavioral Description`); operations use `### `name``. Never write the structure skeleton into the file — it is a shape, not content.
 - The implementation name matches the interface name only when the interface is single-implementation by nature (`pricing` / `pricing_impl`) — not merely because one implementation exists today. Multi-implementation interfaces use distinct identifying names (`csv_inventory_impl`, `memory_inventory_impl`).
 - The implementation class is `class FooImpl(Foo): ...` (in the implementation's Data Types); multi-implementation classes use a distinguishing prefix (`CsvInventoryImpl(InventoryImpl)`).
 - A file may declare any number of interface and implementation sections.
@@ -33,8 +34,8 @@ Term definitions (cross-cutting behavioral rules) appear between Data Types and 
 
 ## Dependency Rules
 
-- LLS files depend only on other LLS files — never HLS files, never implementation LLS files. Dependencies are expressed through interfaces: an implementation depends on the interface it implements and on any other interfaces whose types it uses — including interfaces the implemented interface depends on, when the implementation handles those types directly. An imported type counts as used when it appears in a signature, in prose, or as part of the fulfilled contract; do not delete such imports merely because they don't appear in a signature. A Composition section may name concrete implementations without making them dependencies.
-- The markdown comment at the top of the file (its first line) lists the specs to read alongside it. Every entry must correspond to an actual import or direct reference; spurious entries are removed. This comment is the LLS's only front matter: no `terms (owned):` or `terms (from X):` section. Concepts the interface owns are type aliases in Data Types; concepts used from other specs are imports from those specs' LLS files, listed in the comment (see `high_to_low.md`).
+- LLS files depend only on other LLS files — never HLS files, never implementation LLS files. Dependencies are expressed through interfaces: an implementation depends on the interface it implements and on any other interfaces whose types it uses. An imported type counts as used when it appears in a signature, in prose, or as part of the fulfilled contract. A Composition section may name concrete implementations without making them dependencies.
+- The markdown comment at the top of the file (its first line) lists the specs to read alongside it. Every entry must correspond to an actual import or direct reference; spurious entries are removed. This comment is the LLS's only front matter: no `terms (owned):` or `terms (from X):` section. Owned concepts are type aliases in Data Types; used concepts are imports from those specs' LLS files, listed in the comment (see `high_to_low.md`).
 - Each LLS is a stand-alone document; readers use it without the HLS. The HLS/LLS boundary is crossed only during conversion (see `high_to_low.md`).
 - **Traceability.** Every LLS statement traces to the HLS; the LLS cannot add behavior not implied by it. If you cannot answer "where does the HLS say this?", remove it. Implementation details may be added only as necessary to fulfill HLS guarantees.
 
@@ -56,7 +57,7 @@ A run recovers from a channel failure by continuing: the failure value is append
 - **Naming.** Descriptive, domain-specific names; never generic `Message`, `Result`, `Status`, `Data` (use `NodeMessage`, `CleanResult`, `HistoryEntry`). Distinct purposes get distinct names.
 - **Type variables.** Prefer type variables over `Any` for values that pass through unchanged; use `Any` only when truly unconstrained. Each type variable has one well-defined, documented role; distinct roles get distinct names; reuse imported type variables for the same role. Interface specs never resolve a type variable to a concrete type — including in prose (`Outcome[T]`, not `Outcome[str]`); the implementation spec resolves it.
 - **Discriminated unions.** Encode mutually exclusive outcomes as discriminated unions with `Literal` discriminators; never approximate variants with a dataclass of optional fields.
-- **Protocol classes.** When an interface has an implementation, declare the interface as a `Protocol` class whose methods are the operations — never free functions. A Protocol may be a dataclass combining static data fields with interface methods.
+- **Protocol classes.** Every interface declares its `Protocol` class whose methods are the operations — never free functions, even when no implementation exists yet. A Protocol may be a dataclass combining static data fields with interface methods.
 - **Imports and shared ownership.** Define a type once, in the interface that owns the concept; all other specs import it, never redefine it. Import each type from its owner's LLS — importing through a re-exporting interface is an error. Use the dependency's types directly; define a new type only when no existing type is workable, adding a bridging type to the dependency spec. Adaptation between interfaces' types happens in implementation specs, not interface specs. Pre-constrained interfaces are referenced, not re-documented.
 
 ### Operations
@@ -94,7 +95,7 @@ Each operation is documented under a `### `operation_name`` heading and is fully
 
 ### Term Definitions
 
-When a cross-cutting behavioral rule (stubbing semantics, etc.) applies to multiple operations and cannot be factored into a shared interface, define it as a term and have each operation reference it by name: short definitions appear as inline prose before `## Data Types`; longer definitions use a heading (e.g., `## Stubbing Semantics (term definition)`) between `## Data Types` and `## Component-Provided Operations`.
+When a cross-cutting behavioral rule (stubbing semantics, etc.) applies to multiple operations and cannot be factored into a shared interface, define it as a term and have each operation reference it by name: short definitions appear as inline prose before `## Data Types`; longer ones use a heading (e.g., `## Stubbing Semantics (term definition)`) between Data Types and Operations.
 
 ### Implementation LLS
 
@@ -230,7 +231,7 @@ Keep to one sentence or a brief phrase, consistent with the HLS — need not quo
 - [ ] Mutually exclusive outcomes encoded as discriminated unions with `Literal` discriminators
 - [ ] Pass-through values use type variables; roles documented; distinct roles get distinct names
 - [ ] Interface specs never resolve type variables to concrete types, including in prose
-- [ ] Interfaces with implementations declare Protocol classes; operations are methods, never free functions
+- [ ] Every interface declares its Protocol class in Data Types (even without an implementation); operations are methods, never free functions
 
 ### Operations
 
