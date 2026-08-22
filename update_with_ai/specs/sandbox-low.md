@@ -58,8 +58,7 @@ class Sandbox(Protocol):
     def edit_file(self, file_path: VirtualName, old_str: str, new_str: str, expect_multiple: bool = False) -> ToolCallOutcome: ...
     def replace_lines(self, file_path: VirtualName, start_line: int, end_line: int, new_str: str) -> ToolCallOutcome: ...
     def search_files(self, path: VirtualName, pattern: str, offset: int | None = None, limit: int | None = None) -> ToolCallOutcome: ...
-    def verify(self) -> ToolCallOutcome: ...
-    def succeed(self, changes: list[dict[str, str]] = []) -> ToolCallOutcome: ...
+    def advance(self, changes: list[dict[str, str]] = []) -> ToolCallOutcome: ...
     def fail(self) -> ToolCallOutcome: ...
     def blame(self, blames: list[Blame]) -> ToolCallOutcome: ...
     def get_write_occurred(self) -> WriteOccurred: ...
@@ -75,13 +74,13 @@ These rules apply to all sandbox operations that produce a `ToolResult`.
 - A `ToolResult`'s `supersedes` flag is set on the results of operations on writable files and on verification results; it is not set on reads of files that are not writable, on `search_files`, or on termination tools' results.
 - A `read_file` of a writable file sets the flag: it supersedes the earlier non-stubbed result for that file, and always provides the file's entire content.
 - A `write_file`, `edit_file`, or `replace_lines` write confirmation sets the flag: it supersedes the earlier non-stubbed result for that file; the confirmation's content is the operation's status, never a file-content echo.
-- A `verify` result sets the flag: it supersedes the earlier non-stubbed verification result.
-- The superseded result is identified by the file's virtual name (file operations) or the verification tool's name (`"verify"`) — the name the operation itself carries; no separate identity is introduced. At most one non-stubbed result exists per file or per the verification command at any time, so a result supersedes at most one earlier result.
+- Advance's feedback on a failing verification sets the flag: it supersedes the earlier non-stubbed verification result (an earlier advance feedback); advance's termination outcome is a termination result and never sets the flag.
+- The superseded result is identified by the file's virtual name (file operations) or the advance operation's name (`"advance"`) — the name the operation itself carries; no separate identity is introduced. At most one non-stubbed result exists per file or per the advance feedback at any time, so a result supersedes at most one earlier result.
 - A file's view: each writable file has a view for the run — plain or line-numbered. A writable file that already exists on disk is only readable in the line-numbered view (a plain read fails advising the line-numbered view), so its view is line-numbered from its first successful read; a new file's results render plain until the agent reads it in the line-numbered view. A write resets the view to plain — the line numbers are invalidated by the write — and the injected read that follows the write re-enables the line-numbered view, so a line-range edit may follow a write without a further read (a read with `include_line_numbers=True` also re-enables the view).
 - After a successful `write_file`, `edit_file`, or `replace_lines`, the write confirmation supersedes the file's earlier read result (stubbed by the consuming agent loop) and the injected read supersedes the write confirmation, so the file's current content is visible in the conversation immediately after the write.
 - A `replace_lines` failure for a file whose view is not line-numbered returns `ToolFailure[T_tool]` with a message advising `read_file(file_path, include_line_numbers=True)`; the failure supersedes nothing and removes nothing.
 - Search suppression: `search_files` renders matches only for files that are not writable; matches in writable files are reported as counts without content, so search results never become stale.
-- Notes: every successful read and search carries a note reporting what was returned; write and edit notes report the operation's status; the verification note reports only whether verification succeeded or failed (or that no verification tool is configured), never the failure details themselves, which live in the result's content. A tool result never carries the stub text.
+- Notes: every successful read and search carries a note reporting what was returned; write and edit notes report the operation's status; advance's verification feedback note reports only whether verification succeeded or failed (or that no verification tool is configured), never the failure details themselves, which live in the result's content. A tool result never carries the stub text.
 
 ## Auto re-read (term definition)
 
@@ -118,8 +117,8 @@ def get_tool_definitions(self) -> list[ToolDefinition]
 **Preconditions:** The sandbox has been configured with file mappings, readable/writable paths, and optional verification callback.
 
 **Postconditions:** Returns a list of tool definitions. Each definition follows the JSON schema format expected by the model (as defined in `tool_provider`). The following tools are included:
-- `read_file`, `write_file`, `edit_file`, `replace_lines`, `search_files`, `verify` (always)
-- `succeed`, `fail` (always)
+- `read_file`, `write_file`, `edit_file`, `replace_lines`, `search_files`, `advance` (always)
+- `fail` (always)
 - `blame` only if blame targets are non-empty
 
 **Failure Handling:** No failure conditions.
@@ -299,59 +298,36 @@ def search_files(self, path: VirtualName, pattern: str,
 **HLS Justification:** search_files renders matches only for files that are not writable, so its results never become stale.
 
 
-### `verify`
+### `advance`
 
 ```python
-def verify(self) -> ToolCallOutcome
+def advance(self, changes: list[dict[str, str]] = []) -> ToolCallOutcome
 ```
 
-**Purpose:** Report the run's file changes (diff vs. their state at run start); run the verification callback when one is configured and report its outcome.
-
-**Preconditions:**
-- None
-
-**Postconditions:**
-- The outcome is a `ToolResult` with `supersedes` set to `True` (it supersedes the earlier non-stubbed verification result)
-- `content` holds the verification report; the result's `note` reports only whether verification succeeded or failed (or that no verification tool is configured) and never carries the failure details, which live in `content`
-- The verification report contains the diff of each changed file vs. its content at run start (per-file unified diffs), truncated when it exceeds the diff size limit; a truncated diff reports the truncated size and the full change counts
-- When a verification callback is configured: the report additionally contains the callback's output string, followed by a statement that `succeed` may now be called when the callback succeeded (exit 0), or that the reported issues must be fixed by changing files (`edit_file`/`replace_lines`/`write_file`) and then verifying again, or the agent may call `blame` or `fail` to end the run, when it failed; the callback's success flag is recorded (this state gates `succeed`)
-- When no verification callback is configured: the report states that no verification tool is present to validate the output and that `succeed` may now be called (verify has been called); verify is recorded as called, satisfying the `succeed` gate
-
-**Failure Handling:**
-- Callback throws exception → Callback error is unhandled (no contract specified in this interface spec).
-
-**HLS Justification:** verify is always offered, supersedes the earlier verification result, reports the run's changes (diff, truncated at the diff size limit), and records the verification outcome that gates `succeed`.
-
-
-### `succeed`
-
-```python
-def succeed(self, changes: list[dict[str, str]] = []) -> ToolCallOutcome
-```
-
-**Purpose:** Signal successful termination, carrying the agent's change summary. The agent calls this when it considers its task complete.
+**Purpose:** Signal the run's completion: advance verifies the run and then signals successful termination, or provides feedback on a failing verification. The agent calls this when it has nothing more to do or considers its task complete.
 
 **Preconditions:**
 - A file counts as changed only when its current content differs from its content at run start (a write that nets out to no change — e.g., an edit later undone — is not changed)
 - When the run changed files, `changes` must list one entry per changed file — `{"file": <virtual path>, "summary": <one short sentence naming the parts of the file that changed, so the next reader knows what to pay attention to when updating further artifacts; not the task performed, not how it was done>}` — covering every changed file, each summary non-empty and within the hard length bound; the entries are broadcast to reverse dependencies to bring the next reader's attention to the changes
 - A summary within the soft length bound is accepted; a summary within the hard length bound is accepted once the soft-limit grace has been exhausted; the grace counts rejections per run (the soft-limit grace and the hard-limit grace are independent)
-- When the run changed files, `verify` must have been called; when a verification callback is configured, its last outcome must have succeeded (exit 0); otherwise `succeed` signals a `ToolFailure` (the session continues)
 
 **Postconditions:**
-- Returns `TerminateAgentWithSuccess` (a `Signal[T_tool]` variant) carrying a `TerminateSuccessResult` describing the session outcome: no change when no file's current content differs from its run-start content (writes may have occurred but net out), or a change whose messages are built from `changes` (`"<file>: <summary>"` per entry) when files changed
-- Termination tools produce no `ToolResult` and never supersede an earlier result
+- Verifies the run automatically: computes the diff of each changed file vs. its content at run start (per-file unified diffs), truncated when it exceeds the diff size limit (reporting the truncated size and the full change counts), and runs the verification callback when one is configured; when no callback is configured, verification is treated as passed
+- On a failing verification: returns a `ToolResult` with `supersedes` set (it supersedes the earlier non-stubbed verification result); `content` holds the verification failure details and guidance — change files and call `advance` again, or call `blame` or `fail` to end the run — never the run's diff; the `note` reports only that verification failed, never the failure details; the session continues and advance never terminates on a failing verification
+- On a passing verification (or no callback): returns `TerminateAgentWithSuccess` (a `Signal[T_tool]` variant) carrying a `TerminateSuccessResult` describing the session outcome: no change when no file's current content differs from its run-start content (writes may have occurred but net out), or a change whose messages are built from `changes` (`"<file>: <summary>"` per entry) when files changed
+- Termination tools produce no `ToolResult` and never supersede an earlier result; advance's termination outcome is never a tool failure
 
 **Failure Handling:**
-- Verification gate unmet (run changed files and verify not called; or a callback is configured and verify not called or the last verify failed) → Return `ToolFailure[T_tool]` with a message distinguishing "verify() has not been called" from "the last verify() call failed" and advising the agent to verify (fixing any issues) or to call `fail`/`blame` to end the run.
-- Run changed files and `changes` empty → Return `ToolFailure[T_tool]` listing the changed files and instructing the agent to call `succeed` again with one `{file, summary}` entry per changed file (one short sentence on what changed, not how) or to call `fail`/`blame` to end the run.
+- Run changed files and `changes` empty → Return `ToolFailure[T_tool]` listing the changed files, showing the run's diff, and instructing the agent to call `advance` again with one `{file, summary}` entry per changed file (one short sentence on what changed, not how) or to call `fail`/`blame` to end the run.
 - An entry with a missing/empty `file` or `summary` → `ToolFailure[T_tool]` requiring both fields.
 - An entry naming a file the run did not change → `ToolFailure[T_tool]` naming the changed files.
-- A claimed change for a run whose writes all net out to no change (every written file's current content equals its run-start content) → `ToolFailure[T_tool]` stating the run net-changed nothing and directing `succeed()` with no changes to report no change.
-- A summary exceeding the soft length bound (within the hard bound) before the soft-limit grace is exhausted → `ToolFailure[T_tool]` directing the agent to shorten the summary to at most the soft bound: one short sentence naming the parts of the file that changed for the next reader, dropping how it was done, then call `succeed` again; once the soft-limit grace (4 rejections per run) is exhausted, such a summary is accepted.
-- A summary exceeding the hard length bound before the hard-limit grace is exhausted → `ToolFailure[T_tool]` naming the hard bound and directing the agent to shorten the summary to at most the hard bound; once the hard-limit grace (4 rejections per run) is exhausted, a summary still exceeding the hard bound turns `succeed` into a hard failure: return `TerminateAgentWithFailure[T_tool]` ending the run in failure.
+- A claimed change for a run whose writes all net out to no change (every written file's current content equals its run-start content) → `ToolFailure[T_tool]` stating the run net-changed nothing and directing `advance()` with no changes to report no change.
+- A summary exceeding the soft length bound (within the hard bound) before the soft-limit grace is exhausted → `ToolFailure[T_tool]` directing the agent to shorten the summary to at most the soft bound: one short sentence naming the parts of the file that changed for the next reader, dropping how it was done, then call `advance` again; once the soft-limit grace (4 rejections per run) is exhausted, such a summary is accepted.
+- A summary exceeding the hard length bound before the hard-limit grace is exhausted → `ToolFailure[T_tool]` naming the hard bound and directing the agent to shorten the summary to at most the hard bound; once the hard-limit grace (4 rejections per run) is exhausted, a summary still exceeding the hard bound turns `advance` into a hard failure: return `TerminateAgentWithFailure[T_tool]` ending the run in failure.
 - A changed file with no entry → `ToolFailure[T_tool]` listing the uncovered files.
+- Verification callback throws exception → Callback error is unhandled (no contract specified in this interface spec).
 
-**HLS Justification:** Termination tools signal termination when invoked correctly: the success operation signals successful termination carrying the agent's per-file change summary, gated on verify() having been called when the run changed files (and passed when a callback is configured), and requiring a change summary when the run changed files.
+**HLS Justification:** Termination tools signal termination when invoked correctly: advance verifies the run and then signals successful termination carrying the agent's per-file change summary, provides feedback (never a tool failure) on a failing verification, and requires a change summary when the run changed files.
 
 
 ### `fail`
@@ -417,7 +393,7 @@ def get_write_occurred(self) -> WriteOccurred
 - `verify` callback has no filesystem side effects
 - Errors leave the filesystem unchanged
 - A result with `supersedes` set supersedes the earlier non-stubbed result for the same file or tool command; a result with `supersedes` unset supersedes nothing
-- A result supersedes at most one earlier result (at most one non-stubbed result exists per file or per the verification command at any time)
+- A result supersedes at most one earlier result (at most one non-stubbed result exists per file or per the advance feedback at any time)
 - A write or edit supersedes the file's earlier read result; the injected read provides the file's current content in the conversation
 - An edit's replacement applies atomically (all or nothing): a replacement is never partially applied
 - `replace_lines` requires the line-numbered view

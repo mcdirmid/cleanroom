@@ -181,12 +181,8 @@ class MockSandbox(Sandbox):
         self._record("search_files", {"path": path, "pattern": pattern})
         return ToolResult(content="[]", supersedes=False)
 
-    def verify(self) -> ToolCallOutcome:
-        self._record("verify", {})
-        return ToolResult(content="verified", supersedes=True)
-
-    def succeed(self) -> ToolCallOutcome:
-        self._record("succeed", {})
+    def advance(self, changes: Optional[List[Dict[str, Any]]] = None) -> ToolCallOutcome:
+        self._record("advance", {"changes": changes})
         return TerminateAgentWithSuccess(NoChangeResult())
 
     def fail(self) -> ToolCallOutcome:

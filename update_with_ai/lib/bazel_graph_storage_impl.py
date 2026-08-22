@@ -356,7 +356,7 @@ def _build_verify_callback(verify_cmd: str) -> Optional[VerificationCallback]:
 
     Returns (success, output): success is True when the command exits 0.
     The exit code (not the output text) is what the sandbox uses to gate
-    succeed() — see sandbox-high.md / sandbox-low.md.
+    advance() — see sandbox-high.md / sandbox-low.md.
     """
     if not verify_cmd:
         return None

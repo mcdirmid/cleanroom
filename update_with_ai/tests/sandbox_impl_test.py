@@ -144,7 +144,7 @@ class TestSandboxImpl(unittest.TestCase):
     def test_get_tool_definitions_always_includes_core_tools(self) -> None:
         names = [d["function"]["name"] for d in self.sandbox.get_tool_definitions()]
         for expected in ("read_file", "write_file", "edit_file", "replace_lines",
-                         "search_files", "verify", "succeed", "fail"):
+                         "search_files", "advance", "fail"):
             self.assertIn(expected, names)
 
     def test_get_tool_definitions_follow_json_schema_shape(self) -> None:
@@ -182,9 +182,11 @@ class TestSandboxImpl(unittest.TestCase):
         for param in ("file_path", "start_line", "end_line", "new_str"):
             self.assertIn(param, schema["properties"])
 
-    def test_get_tool_definitions_verify_always_present(self) -> None:
+    def test_get_tool_definitions_advance_always_present(self) -> None:
         names = [d["function"]["name"] for d in self.sandbox.get_tool_definitions()]
-        self.assertIn("verify", names)
+        self.assertIn("advance", names)
+        self.assertNotIn("verify", names)
+        self.assertNotIn("succeed", names)
 
     def test_get_tool_definitions_blame_conditional(self) -> None:
         with_targets = [d["function"]["name"] for d in self.sandbox.get_tool_definitions()]
@@ -781,236 +783,45 @@ class TestSandboxImpl(unittest.TestCase):
         self.assertIn("search result limit", failure.value)
 
     # ------------------------------------------------------------------
-    # verify
+    # advance (verification + termination)
     # ------------------------------------------------------------------
 
-    def test_verify_no_callback_reports_no_changes(self) -> None:
-        result = self.assert_supersedes(self.sandbox.verify(), True)
-        self.assertIn("No files were changed", result.content)
-        self.assertIn("No verification tool is configured", result.content)
-        self.assertIn("succeed() may now be called", result.content)
-        # The note reports only the status (pinned in sandbox_impl-low.md),
-        # never the failure details (which live in the content).
-        self.assertEqual(result.note, "No verification tool configured.")
-
-    def test_verify_no_callback_reports_diff_after_write(self) -> None:
-        self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        result = self.assert_supersedes(self.sandbox.verify(), True)
-        self.assertIn("### diff for test.txt", result.content)
-        self.assertIn("-Line 2: This is a test", result.content)
-        self.assertIn("+Line 2: New content", result.content)
-        self.assertIn("succeed() may now be called", result.content)
-
-    def test_verify_success(self) -> None:
-        def callback() -> Tuple[bool, str]:
-            return (True, "Verification passed")
-
-        config = SandboxConfig(
-            file_mappings=self.file_mappings,
-            readable_paths=self.readable_paths,
-            writable_paths=self.writable_paths,
-            blame_targets=self.blame_targets,
-            search_result_limit=5,
-            verification_callback=callback,
-        )
-        result = self.assert_supersedes(SandboxImpl(config).verify(), True)
-        self.assertIn("No files were changed in this run.", result.content)
-        self.assertIn("Verification passed", result.content)
-        self.assertIn("succeed() may now be called", result.content)
-        self.assertEqual(result.note, "Verification passed.")
-
-    def test_verify_failure_records_failed_state(self) -> None:
-        def callback() -> Tuple[bool, str]:
-            return (False, "lint errors found")
-
-        config = SandboxConfig(
-            file_mappings=self.file_mappings,
-            readable_paths=self.readable_paths,
-            writable_paths=self.writable_paths,
-            blame_targets=self.blame_targets,
-            search_result_limit=5,
-            verification_callback=callback,
-        )
-        result = self.assert_supersedes(SandboxImpl(config).verify(), True)
-        self.assertIn("lint errors found", result.content)
-        self.assertIn("Verification failed", result.content)
-        self.assertIn("verify() again", result.content)
-        self.assertEqual(result.note, "Verification failed.")
-
-    def test_verify_diff_truncated_when_large(self) -> None:
-        config = SandboxConfig(
-            file_mappings=self.file_mappings,
-            readable_paths=self.readable_paths,
-            writable_paths=self.writable_paths,
-            blame_targets=self.blame_targets,
-            search_result_limit=5,
-            diff_size_limit=40,
-            verification_callback=None,
-        )
-        sandbox = SandboxImpl(config)
-        self.assert_supersedes(
-            sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        result = self.assert_supersedes(sandbox.verify(), True)
-        self.assertIn("diff truncated", result.content)
-        self.assertIn("showing 40 of", result.content)
-
-    def test_verify_callback_exception(self) -> None:
-        def callback() -> Tuple[bool, str]:
-            raise RuntimeError("callback blew up")
-
-        config = SandboxConfig(
-            file_mappings=self.file_mappings,
-            readable_paths=self.readable_paths,
-            writable_paths=self.writable_paths,
-            blame_targets=self.blame_targets,
-            search_result_limit=5,
-            verification_callback=callback,
-        )
-        failure = self.as_tool_failure(SandboxImpl(config).verify())
-        self.assertIn("Verification error", failure.value)
-
-    def test_verify_reexecution_reports_new_diff(self) -> None:
-        # A second verify after a write reports the new diff; the result
-        # supersedes the earlier verification result (per the Stubbing
-        # rules, a verification sets the flag).
-        first = self.assert_supersedes(self.sandbox.verify(), True)
-        self.assertIn("No files were changed", first.content)
-        self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        second = self.assert_supersedes(self.sandbox.verify(), True)
-        self.assertIn("### diff for test.txt", second.content)
-
-    # ------------------------------------------------------------------
-    # succeed / fail / blame
-    # ------------------------------------------------------------------
-
-    def test_succeed_no_change_when_no_write(self) -> None:
-        result = self.as_success(self.sandbox.succeed())
+    def test_advance_no_callback_no_changes_terminates_no_change(self) -> None:
+        # No callback, no writes: advance verifies (treated as passed) and
+        # signals successful termination with no change.
+        result = self.as_success(self.sandbox.advance())
         self.assertEqual(result.value.type, "no_change")
 
-    def test_succeed_change_result_when_write_occurred(self) -> None:
+    def test_advance_no_callback_changed_files_empty_message_shows_diff(self) -> None:
+        # Files changed and the change message is empty: a tool failure that
+        # lists the changed files and shows the run's diff (per the sandbox
+        # contract, the diff is shown only in this case).
         self.assert_supersedes(
             self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
         )
-        self.assert_supersedes(self.sandbox.verify(), True)
-        result = self.as_success(self.sandbox.succeed(
-            changes=[{"file": "test.txt", "summary": "Updated the test line"}]
-        ))
-        self.assertEqual(result.value.type, "change")
-        self.assertEqual(result.value.messages, ["test.txt: Updated the test line"])
-
-    def test_succeed_bare_after_write_lists_changed_files(self) -> None:
-        self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        self.assert_supersedes(self.sandbox.verify(), True)
-        failure = self.as_tool_failure(self.sandbox.succeed())
+        failure = self.as_tool_failure(self.sandbox.advance())
         self.assertIn("test.txt", failure.value)
+        self.assertIn("### diff for test.txt", failure.value)
+        self.assertIn("-Line 2: This is a test", failure.value)
+        self.assertIn("+Line 2: New content", failure.value)
+        self.assertIn("advance(changes=", failure.value)
 
-    def test_succeed_unknown_file_in_changes_fails(self) -> None:
-        self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        self.assert_supersedes(self.sandbox.verify(), True)
-        failure = self.as_tool_failure(self.sandbox.succeed(
-            changes=[{"file": "nope.txt", "summary": "changed"}]
-        ))
-        self.assertIn("nope.txt", failure.value)
+    def test_advance_callback_passing_terminates_no_change(self) -> None:
+        def callback() -> Tuple[bool, str]:
+            return (True, "ok")
 
-    def test_succeed_overlong_summary_fails(self) -> None:
-        self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
+        config = SandboxConfig(
+            file_mappings=self.file_mappings,
+            readable_paths=self.readable_paths,
+            writable_paths=self.writable_paths,
+            blame_targets=self.blame_targets,
+            search_result_limit=5,
+            verification_callback=callback,
         )
-        self.assert_supersedes(self.sandbox.verify(), True)
-        failure = self.as_tool_failure(self.sandbox.succeed(
-            changes=[{"file": "test.txt", "summary": "x" * 201}]
-        ))
-        # First soft-limit rejection: directs shortening to the soft bound
-        # (200), naming the parts of the file that changed (substance pinned
-        # in sandbox-low.md; exact phrasing not pinned).
-        self.assertIn("short sentence", failure.value)
-        self.assertIn("200", failure.value)
-        self.assertIn("parts of the file that changed", failure.value)
+        result = self.as_success(SandboxImpl(config).advance())
+        self.assertEqual(result.value.type, "no_change")
 
-    def test_succeed_soft_grace_accepts_within_hard_limit(self) -> None:
-        # A summary over the soft bound (200) is rejected up to 4 times, then
-        # accepted on the next succeed call when within the hard bound (500).
-        self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        self.assert_supersedes(self.sandbox.verify(), True)
-        for _ in range(4):
-            self.as_tool_failure(self.sandbox.succeed(
-                changes=[{"file": "test.txt", "summary": "x" * 201}]
-            ))
-        outcome = self.sandbox.succeed(
-            changes=[{"file": "test.txt", "summary": "y" * 480}]
-        )
-        self.assertIsInstance(outcome, TerminateAgentWithSuccess)
-        assert isinstance(outcome, TerminateAgentWithSuccess)
-        self.assertIsInstance(outcome.value, ChangeResult)
-        self.assertEqual(outcome.value.messages, ["test.txt: " + "y" * 480])
-
-    def test_succeed_hard_grace_turns_succeed_into_failure(self) -> None:
-        # A summary over the hard bound (500) is rejected up to 4 times, then
-        # succeed() turns into a hard failure (TerminateAgentWithFailure).
-        self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        self.assert_supersedes(self.sandbox.verify(), True)
-        for _ in range(4):
-            failure = self.as_tool_failure(self.sandbox.succeed(
-                changes=[{"file": "test.txt", "summary": "x" * 600}]
-            ))
-            self.assertIn("500", failure.value)
-        outcome = self.sandbox.succeed(
-            changes=[{"file": "test.txt", "summary": "x" * 600}]
-        )
-        self.assertIsInstance(outcome, TerminateAgentWithFailure)
-
-    def test_succeed_missing_changed_file_fails(self) -> None:
-        self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        self.assert_supersedes(self.sandbox.write_file("new.txt", "x"), True)
-        self.assert_supersedes(self.sandbox.verify(), True)
-        failure = self.as_tool_failure(self.sandbox.succeed(
-            changes=[{"file": "test.txt", "summary": "changed"}]
-        ))
-        self.assertIn("new.txt", failure.value)
-
-    def test_succeed_fabricated_change_rejected(self) -> None:
-        # A claimed change that does not appear in the diff (file rewritten
-        # back to identical content) is rejected, and the run is directed to
-        # report no change: succeed() with no changes resolves the deadlock
-        # (writes net out to no change -> NoChangeResult).
-        self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "New content", "This is a test"), True
-        )
-        self.assert_supersedes(self.sandbox.verify(), True)
-        failure = self.as_tool_failure(self.sandbox.succeed(
-            changes=[{"file": "test.txt", "summary": "I changed it"}]
-        ))
-        self.assertIn("net-changed nothing", failure.value)
-        self.assertIn("with no changes", failure.value)
-
-        outcome = self.sandbox.succeed()
-        self.assertIsInstance(outcome, TerminateAgentWithSuccess)
-        assert isinstance(outcome, TerminateAgentWithSuccess)
-        self.assertIsInstance(outcome.value, NoChangeResult)
-
-    def test_fail(self) -> None:
-        result = self.as_terminate_failure(self.sandbox.fail())
-        self.assertEqual(result.value, "Task failed")
-
-    def test_succeed_blocked_when_verify_not_called(self) -> None:
+    def test_advance_callback_passing_changed_files_requires_change_message(self) -> None:
         def callback() -> Tuple[bool, str]:
             return (True, "ok")
 
@@ -1026,12 +837,37 @@ class TestSandboxImpl(unittest.TestCase):
         self.assert_supersedes(
             sandbox.edit_file("test.txt", "This is a test", "New content"), True
         )
-        failure = self.as_tool_failure(sandbox.succeed(
-            changes=[{"file": "test.txt", "summary": "changed"}]
+        result = self.as_success(sandbox.advance(
+            changes=[{"file": "test.txt", "summary": "Updated the test line"}]
         ))
-        self.assertIn("verify() has not been called", failure.value)
+        self.assertEqual(result.value.type, "change")
+        self.assertEqual(result.value.messages, ["test.txt: Updated the test line"])
 
-    def test_succeed_blocked_when_last_verify_failed(self) -> None:
+    def test_advance_callback_failing_provides_feedback(self) -> None:
+        # A failing verification provides feedback (never a tool failure,
+        # never termination): the failure details and guidance, note pinned
+        # to "Verification failed.", and the session continues.
+        def callback() -> Tuple[bool, str]:
+            return (False, "lint errors found")
+
+        config = SandboxConfig(
+            file_mappings=self.file_mappings,
+            readable_paths=self.readable_paths,
+            writable_paths=self.writable_paths,
+            blame_targets=self.blame_targets,
+            search_result_limit=5,
+            verification_callback=callback,
+        )
+        result = self.assert_supersedes(SandboxImpl(config).advance(), True)
+        self.assertIn("lint errors found", result.content)
+        self.assertIn("Verification failed", result.content)
+        self.assertIn("advance() again", result.content)
+        self.assertIn("blame() or fail()", result.content)
+        self.assertEqual(result.note, "Verification failed.")
+
+    def test_advance_callback_failing_feedback_has_no_diff(self) -> None:
+        # The run's diff is never shown in a failing verification's
+        # feedback (per the sandbox contract).
         def callback() -> Tuple[bool, str]:
             return (False, "bad")
 
@@ -1047,15 +883,14 @@ class TestSandboxImpl(unittest.TestCase):
         self.assert_supersedes(
             sandbox.edit_file("test.txt", "This is a test", "New content"), True
         )
-        self.assert_supersedes(sandbox.verify(), True)
-        failure = self.as_tool_failure(sandbox.succeed(
-            changes=[{"file": "test.txt", "summary": "changed"}]
-        ))
-        self.assertIn("last verify() call failed", failure.value)
+        result = self.assert_supersedes(sandbox.advance(), True)
+        self.assertNotIn("### diff", result.content)
 
-    def test_succeed_allowed_after_verify_passes(self) -> None:
+    def test_advance_callback_failing_supersedes_earlier_feedback(self) -> None:
+        # The feedback supersedes the earlier non-stubbed verification
+        # result (an earlier advance feedback), per the Stubbing rules.
         def callback() -> Tuple[bool, str]:
-            return (True, "ok")
+            return (False, "bad")
 
         config = SandboxConfig(
             file_mappings=self.file_mappings,
@@ -1066,16 +901,144 @@ class TestSandboxImpl(unittest.TestCase):
             verification_callback=callback,
         )
         sandbox = SandboxImpl(config)
+        first = self.assert_supersedes(sandbox.advance(), True)
+        self.assertIn("bad", first.content)
+        second = self.assert_supersedes(sandbox.advance(), True)
+        self.assertIn("bad", second.content)
+
+    def test_advance_diff_truncated_when_large_in_empty_message_failure(self) -> None:
+        config = SandboxConfig(
+            file_mappings=self.file_mappings,
+            readable_paths=self.readable_paths,
+            writable_paths=self.writable_paths,
+            blame_targets=self.blame_targets,
+            search_result_limit=5,
+            diff_size_limit=40,
+            verification_callback=None,
+        )
+        sandbox = SandboxImpl(config)
         self.assert_supersedes(
             sandbox.edit_file("test.txt", "This is a test", "New content"), True
         )
-        self.assert_supersedes(sandbox.verify(), True)
-        result = self.as_success(sandbox.succeed(
+        failure = self.as_tool_failure(sandbox.advance())
+        self.assertIn("diff truncated", failure.value)
+        self.assertIn("showing 40 of", failure.value)
+
+    def test_advance_callback_exception(self) -> None:
+        def callback() -> Tuple[bool, str]:
+            raise RuntimeError("callback blew up")
+
+        config = SandboxConfig(
+            file_mappings=self.file_mappings,
+            readable_paths=self.readable_paths,
+            writable_paths=self.writable_paths,
+            blame_targets=self.blame_targets,
+            search_result_limit=5,
+            verification_callback=callback,
+        )
+        failure = self.as_tool_failure(SandboxImpl(config).advance())
+        self.assertIn("Verification error", failure.value)
+
+    def test_advance_unknown_file_in_changes_fails(self) -> None:
+        self.assert_supersedes(
+            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
+        )
+        failure = self.as_tool_failure(self.sandbox.advance(
+            changes=[{"file": "nope.txt", "summary": "changed"}]
+        ))
+        self.assertIn("nope.txt", failure.value)
+
+    def test_advance_overlong_summary_fails(self) -> None:
+        self.assert_supersedes(
+            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
+        )
+        failure = self.as_tool_failure(self.sandbox.advance(
+            changes=[{"file": "test.txt", "summary": "x" * 201}]
+        ))
+        # First soft-limit rejection: directs shortening to the soft bound
+        # (200), naming the parts of the file that changed (substance pinned
+        # in sandbox-low.md; exact phrasing not pinned).
+        self.assertIn("short sentence", failure.value)
+        self.assertIn("200", failure.value)
+        self.assertIn("parts of the file that changed", failure.value)
+
+    def test_advance_soft_grace_accepts_within_hard_limit(self) -> None:
+        # A summary over the soft bound (200) is rejected up to 4 times, then
+        # accepted on the next advance call when within the hard bound (500).
+        self.assert_supersedes(
+            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
+        )
+        for _ in range(4):
+            self.as_tool_failure(self.sandbox.advance(
+                changes=[{"file": "test.txt", "summary": "x" * 201}]
+            ))
+        outcome = self.sandbox.advance(
+            changes=[{"file": "test.txt", "summary": "y" * 480}]
+        )
+        self.assertIsInstance(outcome, TerminateAgentWithSuccess)
+        assert isinstance(outcome, TerminateAgentWithSuccess)
+        self.assertIsInstance(outcome.value, ChangeResult)
+        self.assertEqual(outcome.value.messages, ["test.txt: " + "y" * 480])
+
+    def test_advance_hard_grace_turns_advance_into_failure(self) -> None:
+        # A summary over the hard bound (500) is rejected up to 4 times, then
+        # advance() turns into a hard failure (TerminateAgentWithFailure).
+        self.assert_supersedes(
+            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
+        )
+        for _ in range(4):
+            failure = self.as_tool_failure(self.sandbox.advance(
+                changes=[{"file": "test.txt", "summary": "x" * 600}]
+            ))
+            self.assertIn("500", failure.value)
+        outcome = self.sandbox.advance(
+            changes=[{"file": "test.txt", "summary": "x" * 600}]
+        )
+        self.assertIsInstance(outcome, TerminateAgentWithFailure)
+
+    def test_advance_missing_changed_file_fails(self) -> None:
+        self.assert_supersedes(
+            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
+        )
+        self.assert_supersedes(self.sandbox.write_file("new.txt", "x"), True)
+        failure = self.as_tool_failure(self.sandbox.advance(
             changes=[{"file": "test.txt", "summary": "changed"}]
         ))
-        self.assertEqual(result.value.type, "change")
+        self.assertIn("new.txt", failure.value)
 
-    def test_fail_allowed_even_when_verify_gate_blocked(self) -> None:
+    def test_advance_fabricated_change_rejected(self) -> None:
+        # A claimed change that does not appear in the diff (file rewritten
+        # back to identical content) is rejected, and the run is directed to
+        # report no change: advance() with no changes resolves the deadlock
+        # (writes net out to no change -> NoChangeResult).
+        self.assert_supersedes(
+            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
+        )
+        self.assert_supersedes(
+            self.sandbox.edit_file("test.txt", "New content", "This is a test"), True
+        )
+        failure = self.as_tool_failure(self.sandbox.advance(
+            changes=[{"file": "test.txt", "summary": "I changed it"}]
+        ))
+        self.assertIn("net-changed nothing", failure.value)
+        self.assertIn("with no changes", failure.value)
+
+        outcome = self.sandbox.advance()
+        self.assertIsInstance(outcome, TerminateAgentWithSuccess)
+        assert isinstance(outcome, TerminateAgentWithSuccess)
+        self.assertIsInstance(outcome.value, NoChangeResult)
+
+    # ------------------------------------------------------------------
+    # fail / blame
+    # ------------------------------------------------------------------
+
+    def test_fail(self) -> None:
+        result = self.as_terminate_failure(self.sandbox.fail())
+        self.assertEqual(result.value, "Task failed")
+
+    def test_fail_never_gated(self) -> None:
+        # fail is never gated: it ends the session in failure regardless of
+        # verification or change-message state.
         result = self.as_terminate_failure(self.sandbox.fail())
         self.assertEqual(result.value, "Task failed")
 

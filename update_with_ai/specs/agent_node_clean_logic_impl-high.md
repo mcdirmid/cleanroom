@@ -15,13 +15,13 @@ terms (refined): dirty, cleaning
 - The node's prompt, augmented with lines naming the readable and writable files, is provided as the run's system prompt.
 - The node's pending messages are provided as the run's user prompt, so the agent can respond to change and feedback from its dependencies.
 - Cleaning a node requests the sandbox's session-start reads and provides them as the run's session-start tool results, so the read-only files' content is in the conversation before the agent's first turn.
-- The node's sandbox configuration may omit the verification callback; in that case the verification tool is not provided.
+- The node's sandbox configuration may omit the verification callback; in that case advance's verification passes without a callback.
 
 | Run outcome | Cleaning result |
 |---|---|
 | feedback result (the sandbox's blame tool) | feedback messages — one (target, feedback) pair per blamed dependency; each target is validated to be a dependency of the node; a blame with an invalid target signals a tool failure (not an agent failure) |
-| change result (the sandbox's success tool when the run modified the workspace) | change messages |
-| no-change result (the sandbox's success tool) | no change (no messages) |
+| change result (the sandbox's advance tool when the run modified the workspace) | change messages |
+| no-change result (the sandbox's advance tool) | no change (no messages) |
 | run fails | failure (cleaning halts) |
 
 - [boundary] Each cleaning runs exactly one agent run.

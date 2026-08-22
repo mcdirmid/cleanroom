@@ -9,11 +9,7 @@ from typing import Protocol, TypeAlias
 
 Node: TypeAlias = str
 Message: TypeAlias = str
-Dependency: TypeAlias = Node
-Subgraph: TypeAlias = tuple[Node, frozenset[Node]]
-PendingMessage: TypeAlias = Message
-PropagatingDependency: TypeAlias = Node
-ReverseDependency: TypeAlias = Node
+
 
 class DagStorage(Protocol):
     def read_pending_messages(self, node: Node) -> tuple[Message, ...]: ...
@@ -23,12 +19,10 @@ class DagStorage(Protocol):
     def retrieve_reverse_dependencies(self, node: Node) -> tuple[Node, ...]: ...
 ```
 
-## Term Definitions
-
 - **pending message:** A message delivered to a node and not cleaned since delivery.
 - **dependency:** For nodes A and B, A depends on B means A has an outgoing edge to B.
-- **reverse dependency:** A node recorded as depending on another node; recording happens when a node retrieves a dependency, at most once per dependency, and only for its propagating dependencies (repeated retrievals add no duplicates).
-- **subgraph:** A target node (included) plus all nodes reachable through its direct and indirect dependencies.
+- **propagating dependency:** A dependency whose changes propagate to the depending node; only propagating dependencies trigger recording of the depending node as a reverse dependency, and of no other dependency.
+- **reverse dependency:** A node recorded as depending on another node; recording happens when a node retrieves a node's dependencies, at most once per dependency, and only for its propagating dependencies (repeated retrievals add no duplicates).
 
 ## Component-Provided Operations
 
@@ -47,8 +41,8 @@ class DagStorage(Protocol):
 
 **Purpose:** Add messages to a node's pending set.
 **Preconditions:** The node exists in the graph before its messages are accessed.
-**Postconditions:** After the call, every message in `messages` is pending on `node`, exactly as stored. The addition persists across restarts and the operation is atomic per node.
-**HLS Justification:** Operations — add messages to a node's pending set; Guarantees — messages provided exactly as stored; messages persist; operations atomic per node.
+**Postconditions:** After the call, every message in `messages` is pending on `node`, exactly as stored. The addition persists across restarts.
+**HLS Justification:** Operations — add messages to a node's pending set; Guarantees — messages provided exactly as stored; messages persist.
 
 ### `delete_node`
 
@@ -56,8 +50,8 @@ class DagStorage(Protocol):
 
 **Purpose:** Delete a node's data (its pending messages and its known reverse dependencies).
 **Preconditions:** The node exists in the graph before its messages, dependencies, or reverse dependencies are accessed.
-**Postconditions:** After the call, `node`'s pending messages and its known reverse dependencies are removed, persistently across restarts. The operation is atomic per node.
-**HLS Justification:** Operations — delete a node's data (its pending messages and its known reverse dependencies); Guarantees — messages and reverse dependencies persist; operations atomic per node.
+**Postconditions:** After the call, `node`'s pending messages and its known reverse dependencies are removed.
+**HLS Justification:** Operations — delete a node's data (its pending messages and its known reverse dependencies); Guarantees — messages and reverse dependencies persist.
 
 ### `retrieve_dependencies`
 

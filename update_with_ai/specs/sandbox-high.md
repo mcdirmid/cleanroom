@@ -77,8 +77,8 @@ Provides a controlled environment for agents to read, write, search, and modify 
 - The supersession flag is set on the results of operations on writable files and on verification results; it is not set on reads of files that are not writable, on searches, or on termination results.
 - A read of a writable file sets the flag: it supersedes the earlier result for that file.
 - A write, a content-based edit, and a line-range edit set the flag: they supersede the earlier result for that file.
-- A verification sets the flag: it supersedes the earlier verification result.
-- The superseded result is identified by the file's virtual name or the verification command — the name the operation itself carries; no separate identity is introduced.
+- Advance's feedback on a failing verification sets the flag: it supersedes the earlier verification result.
+- The superseded result is identified by the file's virtual name or the advance operation — the name the operation itself carries; no separate identity is introduced.
 
 **Auto re-read**
 
@@ -101,19 +101,21 @@ Provides a controlled environment for agents to read, write, search, and modify 
 
 **Verification**
 
-- Verification is always offered; it reports the diff of the run's file changes (truncated when it exceeds the diff size limit, reporting the truncated size and the full change counts) and, when a verification callback is configured, delegates validation to it, otherwise stating that no verification tool is present.
-- The verification result states whether the success termination tool may now be called: after a passing callback or a no-callback verify, success is permitted; after a failing callback, the agent must change files to fix the reported issues and verify again, or call blame or fail to end the run — never re-verify without changes.
-- The success termination tool signals termination only after verify has been called when the run changed files (a file write occurred); when a verification callback is configured, it signals termination only after verify has been called and passed (exit 0). An unmet gate signals a tool failure advising the agent to verify (fixing any issues) or to call fail or blame to end the run. Termination failure tools are never gated.
+- Verification runs automatically as part of the advance operation: advance computes the diff of the run's file changes (truncated when it exceeds the diff size limit, reporting the truncated size and the full change counts) and, when a verification callback is configured, delegates validation to it, otherwise treating verification as passed.
+- A failing verification provides feedback — the verification failure details and guidance to change files and call advance again, or call blame or fail to end the run — and the session continues; advance never terminates on a failing verification.
+- The run's diff is shown to the agent only as part of the tool failure that requests the change message: when advance's verification passed, the run changed files, and the change message is empty; a failing verification's feedback does not include the diff.
 
 **Termination**
 
-- Termination tools: success, failure, and blame. The success operation and a valid blame signal successful termination; the failure operation ends the session in failure. Termination tools signal termination when invoked correctly.
+- Termination tools: advance, failure, and blame. Advance verifies the run and then signals successful termination; a valid blame signals successful termination; the failure operation ends the session in failure. Termination tools signal termination when invoked correctly.
 - Blame is offered only when blame targets are configured; each (target, feedback) pair is delivered as a feedback message to the blamed node, which is re-cleaned so the blaming node can run again.
 - Termination is at the agent's judgment: the agent signals termination when it considers its task complete, or when it cannot be completed.
-- The success termination tool carries the agent's change summary — naming the parts of each changed file that changed, so the next reader knows what to pay attention to when updating further artifacts (not the task performed, not how it was done) — broadcast to reverse dependencies to bring the next agent's attention to the changes; when the run changed files, a missing, malformed, or incomplete summary signals a tool failure that lists the changed files and the required shape.
-- Change summaries are bounded by a soft length bound and a hard length bound: a summary within the soft bound is accepted; a summary exceeding the soft bound but within the hard bound is rejected with guidance up to a number of attempts and then accepted; a summary exceeding the hard bound is rejected with guidance up to a number of attempts and then fails the run (success turns into failure).
+- Advance signals termination only when its internal verification passes (or no verification callback is configured); when the run changed no files, advance signals successful termination without a change message.
+- Advance carries the agent's change summary — naming the parts of each changed file that changed, so the next reader knows what to pay attention to when updating further artifacts (not the task performed, not how it was done) — broadcast to reverse dependencies to bring the next agent's attention to the changes; when the run changed files, a missing, malformed, or incomplete summary signals a tool failure (per the tool failure policy) that lists the changed files and asks for the change message in the required shape.
+- Change summaries are bounded by a soft length bound and a hard length bound: a summary within the soft bound is accepted; a summary exceeding the soft bound but within the hard bound is rejected with guidance up to a number of attempts and then accepted; a summary exceeding the hard bound is rejected with guidance up to a number of attempts and then fails the run (advance turns into failure).
 
 ## Non-concerns
 
 - Error message wording: error messages identify the violated policy or failing operation; their exact wording is unspecified.
 - Session-start read size: session-start reads inherit the unbounded-read rule; the read-only files are assumed to be reasonably sized, so no separate size bound is introduced for session-start reads.
+- Advance tool description: the advance tool's description wording is unspecified; the tool's contract is defined by the Verification and Termination rules.

@@ -33,7 +33,7 @@ SearchResultLimit = int
 DiffSizeLimit = int
 # A verification callback runs a shell command and returns (success, output):
 # success is True when the command exited 0. The sandbox uses the success flag
-# to gate succeed() (see sandbox-high.md / sandbox-low.md).
+# to gate advance()'s termination (see sandbox-high.md / sandbox-low.md).
 VerificationCallback = Optional[Callable[[], Tuple[bool, str]]]
 
 @dataclass
@@ -77,7 +77,7 @@ class Sandbox(Protocol):
 
         Tools are conditionally included based on configuration:
         - Always: read_file, write_file, edit_file, replace_lines,
-          search_files, verify, succeed, fail
+          search_files, advance, fail
         - Conditional: blame (if blame targets non-empty)
 
         Returns:
@@ -264,55 +264,46 @@ class Sandbox(Protocol):
         """
         ...
 
-    def verify(self) -> ToolCallOutcome:
+    def advance(self, changes: list[dict[str, str]] = []) -> ToolCallOutcome:
         """
-        Report the run's file changes and run the verification callback when configured.
+        Signal the run's completion: verify the run and then signal
+        successful termination, or provide feedback on a failing verification.
 
-        Always reports the diff of each changed file vs. its content at run
-        start, truncated when it exceeds the diff size limit. When a
-        verification callback is configured, its output and exit code are
-        additionally reported (the diff is reported either way).
-
-        Returns:
-            ToolResult on success, or ToolFailure on callback error.
-
-        Routing:
-            supersedes is True (the verification result supersedes the earlier
-            non-stubbed verification result).
-
-        Note:
-            The note reports only whether verification succeeded or failed (or
-            that no verification tool is configured), never the failure
-            details, which live in the content. The outcome records whether
-            the callback succeeded (exit 0); succeed() is gated on this state
-            when a callback is configured.
-        """
-        ...
-
-    def succeed(self, changes: list[dict[str, str]] = []) -> ToolCallOutcome:
-        """
-        Signal successful termination, carrying the agent's change summary.
+        Verifies the run automatically: computes the diff of each changed
+        file vs. its content at run start (truncated when it exceeds the diff
+        size limit) and runs the verification callback when one is
+        configured; when no callback is configured, verification is treated
+        as passed. On a failing verification, provides feedback (a ToolResult
+        carrying the failure details and guidance, never the run's diff; not
+        a tool failure) and the session continues. On a passing verification,
+        signals successful termination.
 
         Args:
             changes: One entry per changed file — {"file": <virtual path>,
                 "summary": one short sentence on what changed in the file, not
                 how it was done}. Broadcast to reverse dependencies. Required
-                when the run changed files; succeed() without it fails with
-                the list of changed files and the required shape.
+                when the run changed files; advance() without it fails with
+                the list of changed files, the run's diff, and the required
+                shape.
 
         Returns:
-            TerminateAgentWithSuccess carrying a TerminateSuccessResult
-            (the implementation forms the result — no change, or change if
-            the run modified the workspace). Termination tools produce no
-            ToolResult and never supersede an earlier result.
+            On a failing verification: a ToolResult with the feedback (the
+            session continues). On a passing verification:
+            TerminateAgentWithSuccess carrying a TerminateSuccessResult (the
+            implementation forms the result — no change, or change when the
+            run changed files). Termination tools produce no ToolResult and
+            never supersede an earlier result; a change message that is
+            missing, malformed, or out of bounds signals a ToolFailure
+            (never terminating).
 
-        Preconditions:
-            When a verification callback is configured, verify() must have
-            been called and its last outcome must have succeeded; otherwise
-            this signals a ToolFailure (never terminating) advising the agent
-            to verify, fail, or blame. When the run changed files, every
-            changed file must appear in `changes` with a non-empty, bounded
-            summary; violations signal a ToolFailure (never terminating).
+        Routing:
+            The failing-verification feedback sets supersedes: it supersedes
+            the earlier non-stubbed verification result (an earlier advance
+            feedback); advance's termination outcome never sets the flag.
+
+        Note:
+            The feedback's note reports only that verification failed, never
+            the failure details, which live in the content.
         """
         ...
 

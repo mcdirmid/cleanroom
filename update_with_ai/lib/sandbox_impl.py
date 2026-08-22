@@ -46,7 +46,7 @@ class SandboxImpl(Sandbox):
         # Per-run change-summary rejection counters (soft/hard length bounds):
         # a summary over the soft bound is rejected up to a grace count, then
         # accepted within the hard bound; a summary over the hard bound after
-        # its grace turns succeed() into a hard failure. Reset on any accepted
+        # its grace turns advance() into a hard failure. Reset on any accepted
         # summary; per-run state only (fresh sandbox per run).
         self._summary_soft_rejections: int = 0
         self._summary_hard_rejections: int = 0
@@ -68,17 +68,12 @@ class SandboxImpl(Sandbox):
         # plain (the line numbers are invalidated).
         self._file_views: Dict[VirtualName, bool] = {}
 
-        # Verify gate state: None = verify() not yet called; True/False = the
-        # last verify() outcome. When a verification callback is configured,
-        # succeed() requires this to be True (see sandbox-high.md).
-        self._verify_passed: Optional[bool] = None
-
         # Files written by the run (virtual names, deduped, in write order).
-        # succeed() reports these when called without a change message.
+        # advance() reports these when called without a change message.
         self._changed_files: List[str] = []
 
         # Pre-write content snapshots: each file's content at run start (before
-        # this run's first write of that file), used by verify()'s diff report
+        # this run's first write of that file), used by advance()'s diff report
         # when no verification callback is configured.
         self._pre_write_snapshots: Dict[VirtualName, Optional[str]] = {}
 
@@ -141,8 +136,8 @@ class SandboxImpl(Sandbox):
                 }
             ),
             self._create_tool_definition(
-                "succeed",
-                "Signal successful termination",
+                "advance",
+                "Call advance when you have nothing more to do or think you are done. Advance verifies the run's changes (running the verification callback when configured) and, when verification passes, signals successful termination — requiring a change message naming the parts of each changed file when files changed. A failing verification returns feedback: fix the reported issues and call advance() again, or call fail() or blame() to end the run.",
                 {
                     "changes": {
                         "type": "array",
@@ -165,16 +160,6 @@ class SandboxImpl(Sandbox):
                 {}
             )
         ])
-
-        # Always: verify — reports the diff of the run's changes; runs the
-        # configured verification callback when one exists.
-        definitions.append(
-            self._create_tool_definition(
-                "verify",
-                "Report the diff of the run's file changes vs. their state at run start. When a verification callback is configured, run it and report whether the output passed. When the run changed files, succeed() requires verify() to have been called. Re-running verify replaces the earlier verification report in the conversation.",
-                {}
-            )
-        )
 
         # Conditional: blame
         if self.config.blame_targets:
@@ -703,48 +688,167 @@ class SandboxImpl(Sandbox):
         # writable files are never rendered, so they never become stale).
         return [ToolResult(content=content, supersedes=False, note=note)]
 
-    def verify(self) -> ToolCallOutcome:
-        """Report the run's changes (diff vs. run start); run the verification callback when configured."""
-        diff = self._diff_report()
-        if self.config.verification_callback is None:
-            output = (
-                diff
-                + "\nNo verification tool is configured to validate the output; "
-                "succeed() may now be called (verify has been called)."
-            )
-            self._verify_passed = True
-            return [ToolResult(
-                content=output,
-                supersedes=True,
-                note="No verification tool configured.",
-            )]
+    def advance(self, changes: Optional[List[Dict[str, str]]] = None) -> ToolCallOutcome:
+        """Signal the run's completion: verify the run and then signal
+        successful termination, or provide feedback on a failing verification.
 
-        try:
-            success, output = self.config.verification_callback()
-        except Exception as e:
-            return ToolFailure[str](f"Verification error: {str(e)}")
+        Verifies the run automatically: computes the diff of the run's
+        changes and, when a verification callback is configured, runs it. A
+        failing verification provides feedback (never a tool failure, never
+        termination) and the session continues. On a passing verification (or
+        no callback), requires the change message when the run changed files
+        and signals successful termination. A file counts as changed only
+        when its current content differs from its run-start snapshot; a run
+        whose writes all net out to no change reports no change.
+        """
+        changes = changes or []
 
-        self._verify_passed = success
-        content = diff if not output else diff + "\n\n" + output
-        if success:
-            content += "\nVerification passed; succeed() may now be called."
-            note = "Verification passed."
-        else:
-            content += (
-                "\nVerification failed; fix the reported issues by changing "
-                "files (edit_file/replace_lines/write_file) and then call "
-                "verify() again, or call blame() or fail() to end the run."
-            )
-            note = "Verification failed."
-        # The verification result supersedes the earlier non-stubbed
-        # verification result (the agent loop stubs it). The note reports
-        # only the status (pinned in specs/sandbox_impl-low.md); the failure
-        # details live in the content, never in the note.
-        return [ToolResult(
-            content=content,
-            supersedes=True,
-            note=note,
-        )]
+        # Verification runs automatically as part of advance: run the
+        # configured callback (when present). A failing verification provides
+        # feedback — the failure details and guidance, never the run's diff —
+        # and the session continues.
+        if self.config.verification_callback is not None:
+            try:
+                success, output = self.config.verification_callback()
+            except Exception as e:
+                return ToolFailure[str](f"Verification error: {str(e)}")
+            if not success:
+                content = (
+                    (output + "\n\n" if output else "")
+                    + "Verification failed; fix the reported issues by "
+                    "changing files (edit_file/replace_lines/write_file) "
+                    "and then call advance() again, or call blame() or "
+                    "fail() to end the run."
+                )
+                # The feedback supersedes the earlier non-stubbed verification
+                # result (an earlier advance feedback, stubbed by the agent
+                # loop); the note reports only the status (pinned in
+                # specs/sandbox_impl-low.md), never the failure details.
+                return [ToolResult(
+                    content=content,
+                    supersedes=True,
+                    note="Verification failed.",
+                )]
+
+        # Verification passed (or no callback): require the change message
+        # when the run changed files, then signal successful termination.
+        # A write may net out to no change (e.g., an edit undone by a later
+        # edit): only files whose current content differs from their run-start
+        # snapshot count as changed for advance's requirements and result. A
+        # claimed change for a net-unchanged file is fabricated and rejected.
+        effectively_changed: List[str] = []
+        for file_path in self._changed_files:
+            real_path = self.config.file_mappings[file_path]
+            try:
+                with open(real_path, "r", encoding="utf-8") as f:
+                    current = f.read()
+            except Exception:
+                current = None
+            if current != self._pre_write_snapshots.get(file_path):
+                effectively_changed.append(file_path)
+
+        if not effectively_changed:
+            if changes:
+                return ToolFailure[str](
+                    "Cannot advance: the run wrote files but net-changed "
+                    "nothing — each file's current content equals its content "
+                    "at run start. Call advance() with no changes to report "
+                    "no change."
+                )
+            return TerminateAgentWithSuccess(NoChangeResult())
+
+        if not changes:
+            # The run's diff is shown only here (per the sandbox contract):
+            # advance's verification passed, files changed, and the change
+            # message is empty, so the agent sees what changed and can write
+            # the change message.
+            failure_message = (
+                "Cannot advance: the run changed files ({changed}). Call "
+                "advance(changes=[{{file, summary}}, ...]) with one entry "
+                "per changed file — each summary one short sentence on "
+                "what changed in that file (not how it was done) — so the "
+                "next agent knows what changed, or call fail() or blame() "
+                "to end the run.\n\nThe run's diff:\n{diff}"
+            ).format(changed=", ".join(effectively_changed), diff=self._diff_report())
+            return ToolFailure[str](failure_message)
+
+        changed_set = set(effectively_changed)
+        mentioned: set = set()
+        messages: List[str] = []
+        for entry in changes:
+            file_name = (entry or {}).get("file")
+            summary = (entry or {}).get("summary")
+            if not file_name or not summary or not summary.strip():
+                return ToolFailure[str](
+                    "Cannot advance: each change entry must have a "
+                    "non-empty 'file' and a non-empty one-sentence "
+                    "'summary' of what changed in that file."
+                )
+            if file_name not in changed_set:
+                unknown_message = (
+                    "Cannot advance: '{file}' was not changed by this run; "
+                    "report only the changed files ({changed})."
+                ).format(file=file_name, changed=", ".join(effectively_changed))
+                return ToolFailure[str](unknown_message)
+            summary_text = summary.strip()
+            summary_length = len(summary_text)
+            if summary_length > self.HARD_CHANGE_SUMMARY_LENGTH:
+                if self._summary_hard_rejections >= self.SUMMARY_LENGTH_GRACE:
+                    # The hard-limit grace is exhausted: advance() turns into
+                    # a hard failure ending the run.
+                    return TerminateAgentWithFailure[str](
+                        f"Task failed: the change summary for '{file_name}' "
+                        f"could not be shortened to the hard limit "
+                        f"({self.HARD_CHANGE_SUMMARY_LENGTH} characters) "
+                        f"after repeated attempts."
+                    )
+                self._summary_hard_rejections += 1
+                return ToolFailure[str](
+                    "Cannot advance: the summary for '{file}' is {length} "
+                    "characters (max {max} — the hard limit). Shorten it to "
+                    "at most {max} characters: name the parts of the file "
+                    "that changed in one short sentence, dropping how it was "
+                    "done, then call advance() again with the shortened "
+                    "summary.".format(
+                        file=file_name,
+                        length=summary_length,
+                        max=self.HARD_CHANGE_SUMMARY_LENGTH,
+                    )
+                )
+            if summary_length > self.SOFT_CHANGE_SUMMARY_LENGTH:
+                if self._summary_soft_rejections < self.SUMMARY_LENGTH_GRACE:
+                    self._summary_soft_rejections += 1
+                    return ToolFailure[str](
+                        "Cannot advance: the summary for '{file}' is {length} "
+                        "characters (aim for at most {soft}). Shorten it to "
+                        "at most {soft} characters: name the parts of the "
+                        "file that changed in one short sentence, so the next "
+                        "agent knows what to pay attention to when updating "
+                        "further artifacts, dropping how it was done, then "
+                        "call advance() again with the shortened summary."
+                        .format(
+                            file=file_name,
+                            length=summary_length,
+                            soft=self.SOFT_CHANGE_SUMMARY_LENGTH,
+                        )
+                    )
+                # The soft-limit grace is exhausted: accept the summary when
+                # it is within the hard bound.
+            # An accepted summary resets the rejection counters.
+            self._summary_soft_rejections = 0
+            self._summary_hard_rejections = 0
+            mentioned.add(file_name)
+            messages.append("{}: {}".format(file_name, summary_text))
+
+        missing = changed_set - mentioned
+        if missing:
+            missing_message = (
+                "Cannot advance: changed files not covered by the change "
+                "summary ({missing}). Add one entry per changed file."
+            ).format(missing=", ".join(sorted(missing)))
+            return ToolFailure[str](missing_message)
+
+        return TerminateAgentWithSuccess(ChangeResult(messages=messages))
 
     def _diff_report(self) -> str:
         """Diff of each changed file vs. its content at run start, truncated.
@@ -795,10 +899,10 @@ class SandboxImpl(Sandbox):
 
     # Change summaries must stay bounded so the change messages broadcast to
     # dependents stay concise. A soft bound nudges one short sentence; a hard
-    # bound caps the message. succeed() rejects a summary over the soft bound
-    # (with shortening guidance) up to a grace count, then accepts it when
-    # within the hard bound; a summary still over the hard bound after its
-    # grace count turns succeed() into a hard failure.
+    # bound caps the message. advance() rejects a change message over the
+    # soft bound (with shortening guidance) up to a grace count, then accepts
+    # it when within the hard bound; a change message still over the hard
+    # bound after its grace count turns advance() into a hard failure.
     SOFT_CHANGE_SUMMARY_LENGTH = 200
     HARD_CHANGE_SUMMARY_LENGTH = 500
     SUMMARY_LENGTH_GRACE = 4
@@ -806,150 +910,6 @@ class SandboxImpl(Sandbox):
     # edit_file supports only short search/replace strings: a whole-file swap
     # must go through replace_lines (which requires the line-numbered view).
     MAX_EDIT_LENGTH = 100
-
-    def succeed(self, changes: Optional[List[Dict[str, str]]] = None) -> ToolCallOutcome:
-        """Signal successful termination, carrying the agent's change summary.
-
-        Gated on verification first: when a verification callback is
-        configured, succeed() may only be called after verify() has succeeded
-        (exit 0). Then, when the run changed files, `changes` must list one
-        entry per changed file — {file, summary} — each summary a single
-        short sentence on what changed (not how). A file counts as changed
-        only when its current content differs from its run-start snapshot; a
-        run whose writes all net out to no change reports no change.
-        """
-        changes = changes or []
-        if self.config.verification_callback is not None and self._verify_passed is not True:
-            if self._verify_passed is None:
-                return ToolFailure[str](
-                    "Cannot succeed: verify() has not been called. Call "
-                    "verify() and fix any reported issues before succeeding, "
-                    "or call fail() or blame() to end the run."
-                )
-            return ToolFailure[str](
-                "Cannot succeed: the last verify() call failed. Fix the "
-                "reported issues and call verify() again before succeeding, "
-                "or call fail() or blame() to end the run."
-            )
-        if self._changed_files and self._verify_passed is None:
-            return ToolFailure[str](
-                "Cannot succeed: verify() has not been called. Call verify() "
-                "to report the diff of the run's changes before succeeding, "
-                "or call fail() or blame() to end the run."
-            )
-        # A write may net out to no change (e.g., an edit undone by a later
-        # edit): only files whose current content differs from their run-start
-        # snapshot count as changed for succeed()'s requirements and result.
-        # A claimed change for a net-unchanged file is fabricated and rejected.
-        effectively_changed: List[str] = []
-        for file_path in self._changed_files:
-            real_path = self.config.file_mappings[file_path]
-            try:
-                with open(real_path, "r", encoding="utf-8") as f:
-                    current = f.read()
-            except Exception:
-                current = None
-            if current != self._pre_write_snapshots.get(file_path):
-                effectively_changed.append(file_path)
-
-        if not effectively_changed:
-            if changes:
-                return ToolFailure[str](
-                    "Cannot succeed: the run wrote files but net-changed "
-                    "nothing — each file's current content equals its content "
-                    "at run start. Call succeed() with no changes to report "
-                    "no change."
-                )
-            return TerminateAgentWithSuccess(NoChangeResult())
-
-        if not changes:
-            failure_message = (
-                "Cannot succeed: the run changed files ({changed}). Call "
-                "succeed(changes=[{{file, summary}}, ...]) with one entry "
-                "per changed file — each summary one short sentence on "
-                "what changed in that file (not how it was done) — so the "
-                "next agent knows what changed, or call fail() or blame() "
-                "to end the run."
-            ).format(changed=", ".join(effectively_changed))
-            return ToolFailure[str](failure_message)
-
-        changed_set = set(effectively_changed)
-        mentioned: set = set()
-        messages: List[str] = []
-        for entry in changes:
-            file_name = (entry or {}).get("file")
-            summary = (entry or {}).get("summary")
-            if not file_name or not summary or not summary.strip():
-                return ToolFailure[str](
-                    "Cannot succeed: each change entry must have a "
-                    "non-empty 'file' and a non-empty one-sentence "
-                    "'summary' of what changed in that file."
-                )
-            if file_name not in changed_set:
-                unknown_message = (
-                    "Cannot succeed: '{file}' was not changed by this run; "
-                    "report only the changed files ({changed})."
-                ).format(file=file_name, changed=", ".join(effectively_changed))
-                return ToolFailure[str](unknown_message)
-            summary_text = summary.strip()
-            summary_length = len(summary_text)
-            if summary_length > self.HARD_CHANGE_SUMMARY_LENGTH:
-                if self._summary_hard_rejections >= self.SUMMARY_LENGTH_GRACE:
-                    # The hard-limit grace is exhausted: succeed() turns into
-                    # a hard failure ending the run.
-                    return TerminateAgentWithFailure[str](
-                        f"Task failed: the change summary for '{file_name}' "
-                        f"could not be shortened to the hard limit "
-                        f"({self.HARD_CHANGE_SUMMARY_LENGTH} characters) "
-                        f"after repeated attempts."
-                    )
-                self._summary_hard_rejections += 1
-                return ToolFailure[str](
-                    "Cannot succeed: the summary for '{file}' is {length} "
-                    "characters (max {max} — the hard limit). Shorten it to "
-                    "at most {max} characters: name the parts of the file "
-                    "that changed in one short sentence, dropping how it was "
-                    "done, then call succeed() again with the shortened "
-                    "summary.".format(
-                        file=file_name,
-                        length=summary_length,
-                        max=self.HARD_CHANGE_SUMMARY_LENGTH,
-                    )
-                )
-            if summary_length > self.SOFT_CHANGE_SUMMARY_LENGTH:
-                if self._summary_soft_rejections < self.SUMMARY_LENGTH_GRACE:
-                    self._summary_soft_rejections += 1
-                    return ToolFailure[str](
-                        "Cannot succeed: the summary for '{file}' is {length} "
-                        "characters (aim for at most {soft}). Shorten it to "
-                        "at most {soft} characters: name the parts of the "
-                        "file that changed in one short sentence, so the next "
-                        "agent knows what to pay attention to when updating "
-                        "further artifacts, dropping how it was done, then "
-                        "call succeed() again with the shortened summary."
-                        .format(
-                            file=file_name,
-                            length=summary_length,
-                            soft=self.SOFT_CHANGE_SUMMARY_LENGTH,
-                        )
-                    )
-                # The soft-limit grace is exhausted: accept the summary when
-                # it is within the hard bound.
-            # An accepted summary resets the rejection counters.
-            self._summary_soft_rejections = 0
-            self._summary_hard_rejections = 0
-            mentioned.add(file_name)
-            messages.append("{}: {}".format(file_name, summary_text))
-
-        missing = changed_set - mentioned
-        if missing:
-            missing_message = (
-                "Cannot succeed: changed files not covered by the change "
-                "summary ({missing}). Add one entry per changed file."
-            ).format(missing=", ".join(sorted(missing)))
-            return ToolFailure[str](missing_message)
-
-        return TerminateAgentWithSuccess(ChangeResult(messages=messages))
 
     def fail(self) -> ToolCallOutcome:
         """End the session in failure (agent failure)."""

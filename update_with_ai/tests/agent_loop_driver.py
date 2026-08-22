@@ -95,17 +95,18 @@ def get_time_tool() -> ToolDefinition:
     })
 
 
-def succeed_tool() -> ToolDefinition:
-    """Define the termination tool: the session ends only via succeed()/fail()."""
+def advance_tool() -> ToolDefinition:
+    """Define the termination tool: the session ends only via advance()/fail()."""
     return cast(ToolDefinition, {
         "type": "function",
         "function": {
-            "name": "succeed",
+            "name": "advance",
             "description": (
-                "Signal successful termination, carrying the change message "
-                "for the next reader (one short sentence on what changed; "
-                "there is no free-text final answer — you must call succeed() "
-                "or fail() to end the run)."
+                "Call advance when you have nothing more to do or think you "
+                "are done. Signal successful termination, carrying the change "
+                "message for the next reader (one short sentence on what "
+                "changed; there is no free-text final answer — you must call "
+                "advance() or fail() to end the run)."
             ),
             "parameters": {
                 "type": "object",
@@ -172,7 +173,7 @@ def tool_executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
             note="Current time",
         )]
 
-    if name == "succeed":
+    if name == "advance":
         # There is no free-text final answer: the session ends only via a
         # termination tool. The change message is the only completion artifact.
         summary = arguments.get("summary", "Answered the prompt")
@@ -280,7 +281,7 @@ def main():
         "A new time lookup replaces the earlier time result in the "
         "conversation; weather lookups are never replaced. Line numbers are "
         "metadata, not content. There is no free-text final answer: when you "
-        "have answered, call succeed() (with a one-sentence summary) or "
+        "have answered, call advance() (with a one-sentence summary) or "
         "fail() to end the run."
     )
 
@@ -296,7 +297,7 @@ def main():
     tools: List[ToolDefinition] = [
         get_weather_tool(),
         get_time_tool(),
-        succeed_tool(),
+        advance_tool(),
         fail_tool(),
     ]
 

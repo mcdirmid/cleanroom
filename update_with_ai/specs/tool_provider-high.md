@@ -14,7 +14,7 @@ Provides tool definitions and executes tool calls, standardizing how tools are d
 - Stub: replacing a superseded tool result's content with a static placeholder, preserving the result's position in the conversation; once a result is stubbed, its placeholder never changes for the remainder of the session.
 - Signal: the indicator of whether execution continues, terminates, or fails; the signals are continue, terminate the run with success, terminate the run with failure, and tool failure.
 - Termination result: the outcome of a successfully terminated session, carried by the successful termination signal: completed with no changes, completed with changes to propagate, or attributed to dependencies with feedback for correction.
-- Tool failure: an invalid tool call; the operation is not executed and the session continues.
+- Tool failure: a signal that a tool call could not do meaningful work — wrong arguments, wrong format, an unknown tool, a policy violation, or a termination tool invoked incorrectly; the operation is not executed and the session continues.
 - Session: the sequence of tool calls and outcomes of a single run, continuing until a termination signal is produced.
 
 ## Contract
@@ -40,6 +40,7 @@ Provides tool definitions and executes tool calls, standardizing how tools are d
 - A successful termination signal always carries a termination result; a failure termination signal carries a value describing the failure.
 - Termination is atomic: once a termination signal is produced, no further tool results are produced.
 - All inputs are validated against the tool's schema before execution; an invalid tool call signals tool failure without executing the operation.
+- A tool failure signals an immediate problem that prevented the tool from doing meaningful work (wrong arguments, wrong format, an unknown tool, a policy violation, or a termination tool invoked incorrectly); a check that failed or a result rejected with feedback is a tool result carrying the feedback, never a tool failure.
 - Errors leave the provider's state unchanged; stubbing preserves the original position of messages in the conversation.
 - The flag unset stubs nothing.
 - A result supersedes at most one earlier result.

@@ -63,7 +63,7 @@ Persistence: a single JSON file named `.update_with_ai.json` per package directo
 - `writable_paths`: the node's own `srcs` + `silent_srcs`
 - `blame_targets`: the manifest's `feedback_deps` (only feedback deps may receive feedback from the node)
 - `search_result_limit`: pinned to 10 — the maximum rendered matches a single search may return
-- `verification_callback`: built from the manifest's `verify` field (a shell command string); `_build_verify_callback` runs the command via `subprocess` and returns `(success, output)` where `success` is `True` when the command exits 0. The success flag gates `succeed` (see sandbox specs).
+- `verification_callback`: built from the manifest's `verify` field (a shell command string); `_build_verify_callback` runs the command via `subprocess` and returns `(success, output)` where `success` is `True` when the command exits 0. The success flag gates `advance` (see sandbox specs).
 
 **HLS Justification:** Reads node manifests and constructs NodeDefinition objects from manifest fields.
 

@@ -195,7 +195,7 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
         """Map the agent run outcome to a CleanResult per the HLS contract.
 
         There is no free-text final answer: a run either terminates via a
-        termination tool (succeed/fail/blame) or fails in the loop, so the
+        termination tool (advance/fail/blame) or fails in the loop, so the
         change message is always the sandbox's bounded change summary.
         """
         if isinstance(result, tuple):

@@ -215,12 +215,12 @@ class AgentLoopImpl(AgentLoop):
     def _stub_key_for(tool_call: ToolCall, arguments: Any) -> Tuple[str, str]:
         """The file or tool command a result concerns, per the sandbox
         contract (specs/sandbox-low.md, Stubbing): the file's virtual name
-        for file operations, or the tool command itself (e.g. "verify").
+        for file operations, or the tool command itself (e.g. "advance").
         File operations name the file via the `file_path` argument; the
-        verification command carries no arguments and is keyed by its tool
-        name. A tuple prefix keeps a file named like a command from
-        colliding with the command itself. Arguments may arrive as a parsed
-        dict or as the raw JSON string from the tool call.
+        advance feedback carries no file and is keyed by its tool name. A
+        tuple prefix keeps a file named like a command from colliding with
+        the command itself. Arguments may arrive as a parsed dict or as the
+        raw JSON string from the tool call.
         """
         if isinstance(arguments, str):
             try:
@@ -439,7 +439,7 @@ class AgentLoopImpl(AgentLoop):
             f"You have called '{tool_name}' with the same arguments {count} "
             f"times in a row. Review the latest tool results and make progress: "
             f"change the file (edit_file/replace_lines/write_file) or finish "
-            f"the run with succeed(), fail(), or blame()."
+            f"the run with advance(), fail(), or blame()."
         )
         reminder_message: HistoryEntry = {"role": "user", "content": reminder}
         messages.append(reminder_message)
@@ -462,7 +462,7 @@ class AgentLoopImpl(AgentLoop):
             f"You have edited lines {start_line}-{end_line} of '{file_path}' "
             f"{count} times in a row without progress. Re-read the file "
             f"(read_file('{file_path}', include_line_numbers=True)) and "
-            f"reassess, or finish the run with succeed(), fail(), or blame()."
+            f"reassess, or finish the run with advance(), fail(), or blame()."
         )
         reminder_message: HistoryEntry = {"role": "user", "content": reminder}
         messages.append(reminder_message)
@@ -476,7 +476,7 @@ class AgentLoopImpl(AgentLoop):
     ) -> None:
         """
         Inject the termination reminder: prompt the model to signal
-        termination with succeed()/fail()/blame(). Uses the configured
+        termination with advance()/fail()/blame(). Uses the configured
         generator's message when present, a default otherwise. Called on every
         stop-with-content — the run completes only via a termination signal or
         the iteration limit; there is no final answer.
@@ -485,7 +485,7 @@ class AgentLoopImpl(AgentLoop):
             reminder = self._config.termination_reminder_generator()
         else:
             reminder = (
-                "You must signal termination by calling succeed(), fail(), "
+                "You must signal termination by calling advance(), fail(), "
                 "or blame() to end the run."
             )
         reminder_message: HistoryEntry = {"role": "user", "content": reminder}
@@ -847,7 +847,7 @@ class AgentLoopImpl(AgentLoop):
 
             if finish_reason == "stop":
                 # The model stopped without signaling termination: there is no
-                # final answer. Keep prompting it to call succeed()/fail()/
+                # final answer. Keep prompting it to call advance()/fail()/
                 # blame() so the run completes via a termination signal (the
                 # change message is the only completion artifact); the run
                 # fails via the iteration limit if it never does.

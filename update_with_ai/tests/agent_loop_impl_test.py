@@ -120,10 +120,10 @@ def make_response(
 
 
 def make_succeed_response() -> Any:
-    """A response whose tool call terminates the run via succeed()."""
+    """A response whose tool call terminates the run via advance()."""
     return make_response(
         content=None,
-        tool_calls=[make_tool_call("succeed", "call_finish", {"summary": "done"})],
+        tool_calls=[make_tool_call("advance", "call_finish", {"summary": "done"})],
         finish_reason="tool_calls",
     )
 
@@ -150,7 +150,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         return history
 
     def succeed_branch(self) -> None:
-        """Insert a succeed branch into the calling test's executor."""
+        """Insert a advance branch into the calling test's executor."""
         raise AssertionError("unused")
 
     def stub_result(self, content: Any, note: str = "") -> List[ToolResult]:
@@ -181,7 +181,7 @@ class TestAgentLoopImpl(unittest.TestCase):
             events.append((event, data))
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
-            if name == "succeed":
+            if name == "advance":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return self.inline_result("no files changed")
 
@@ -230,7 +230,7 @@ class TestAgentLoopImpl(unittest.TestCase):
             events.append((event, data))
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
-            if name == "succeed":
+            if name == "advance":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return self.stub_result("updated")
 
@@ -368,7 +368,7 @@ class TestAgentLoopImpl(unittest.TestCase):
             events.append((event, data))
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
-            if name == "succeed":
+            if name == "advance":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return self.inline_result("ok")
 
@@ -413,7 +413,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         reminders = [d for e, d in events if e == "reminder_injected"]
         assert len(reminders) == 3
         assert (
-            "You must signal termination by calling succeed(), fail(), or "
+            "You must signal termination by calling advance(), fail(), or "
             "blame() to end the run." == reminders[0]["message"]
         )
         assert any(
@@ -446,7 +446,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         calls: List[Tuple[str, Dict[str, Any]]] = []
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
-            if name == "succeed":
+            if name == "advance":
                 return TerminateAgentWithSuccess(NoChangeResult())
             calls.append((name, arguments))
             return self.inline_result('{"weather": "Sunny"}')
@@ -489,7 +489,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         term_signal = TerminateAgentWithSuccess(value=term_value)
 
         def executor(name: str, arguments: Dict[str, Any]) -> TerminateAgentWithSuccess:
-            if name == "succeed":
+            if name == "advance":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return term_signal
 
@@ -518,7 +518,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         )
 
         def executor(name: str, arguments: Dict[str, Any]) -> TerminateAgentWithFailure[str]:
-            if name == "succeed":
+            if name == "advance":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return TerminateAgentWithFailure(value="agent cannot complete this task")
 
@@ -548,7 +548,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Hello",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
         )
 
         assert isinstance(result, tuple)
@@ -590,7 +590,7 @@ class TestAgentLoopImpl(unittest.TestCase):
                 result = self.agent.run_agent(
                     prompt="Hello",
                     tools=[],
-                    tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
+                    tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
                 )
                 assert isinstance(result, tuple)
                 error, history = result
@@ -616,7 +616,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Solve it",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
         )
 
         history = self.assert_success(result)
@@ -669,7 +669,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         invocations: List[Tuple[str, Dict[str, Any]]] = []
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
-            if name == "succeed":
+            if name == "advance":
                 return TerminateAgentWithSuccess(NoChangeResult())
             invocations.append((name, arguments))
             return self.inline_result("x")
@@ -712,12 +712,12 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Go",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
         )
 
         history = self.assert_success(result)
         assistant_messages = [m for m in history if m.get("role") == "assistant"]
-        # Only the succeed tool-call assistant message: the empty truncated
+        # Only the advance tool-call assistant message: the empty truncated
         # response was not appended.
         assert len(assistant_messages) == 1
         assert assistant_messages[0]["content"] is None
@@ -740,7 +740,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Go",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
         )
 
         assert isinstance(result, tuple)
@@ -768,7 +768,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Go",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
         )
 
         assert isinstance(result, tuple)
@@ -792,7 +792,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = agent.run_agent(
             prompt="Go",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
         )
 
         history = self.assert_success(result)
@@ -819,7 +819,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = agent.run_agent(
             prompt="Go",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
         )
 
         assert isinstance(result, tuple)
@@ -853,7 +853,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Go",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
             logger=logger,
         )
 
@@ -885,7 +885,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         )
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
-            if name == "succeed":
+            if name == "advance":
                 return TerminateAgentWithSuccess(NoChangeResult())
             raise RuntimeError("boom")
 
@@ -912,7 +912,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         )
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
-            if name == "succeed":
+            if name == "advance":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return self.inline_result("42")
 
@@ -946,7 +946,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         ]
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolFailure[str]:
-            if name == "succeed":
+            if name == "advance":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return ToolFailure(value="Invalid arguments: location is required")
 
@@ -982,7 +982,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         ]
 
         def executor(name: str, arguments: Dict[str, Any]) -> Any:
-            if name == "succeed":
+            if name == "advance":
                 return TerminateAgentWithSuccess(NoChangeResult())
             if name == "replace_lines":
                 return ToolFailure(
@@ -1038,7 +1038,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         invocations: List[str] = []
 
         def executor(name: str, arguments: Dict[str, Any]) -> Continue:
-            if name == "succeed":
+            if name == "advance":
                 return TerminateAgentWithSuccess(NoChangeResult())
             invocations.append(name)
             return Continue()
@@ -1077,7 +1077,7 @@ class TestAgentLoopImpl(unittest.TestCase):
             events.append((event, data))
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
-            if name == "succeed":
+            if name == "advance":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return self.inline_result("raw data")
 
@@ -1123,7 +1123,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         counter: Dict[str, int] = {"n": 0}
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
-            if name == "succeed":
+            if name == "advance":
                 return TerminateAgentWithSuccess(NoChangeResult())
             counter["n"] += 1
             return [ToolResult(
@@ -1186,7 +1186,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         ]
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
-            if name == "succeed":
+            if name == "advance":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return self.stub_result("content for " + arguments.get("file_path", "?"))
 
@@ -1218,7 +1218,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         ]
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
-            if name == "succeed":
+            if name == "advance":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return self.stub_result("verification report")
 
@@ -1261,7 +1261,7 @@ class TestAgentLoopImpl(unittest.TestCase):
             events.append((event, data))
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
-            if name == "succeed":
+            if name == "advance":
                 return TerminateAgentWithSuccess(NoChangeResult())
             # A write's outcome: the write confirmation and the injected read
             # (a PresentedToolResult pairing read_file with its numbered
@@ -1289,7 +1289,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         history = self.assert_success(result)
         # Roles in order: user, assistant (the model's write call), tool (the
         # write confirmation), assistant (the synthetic read call), tool (the
-        # injected read), assistant (the succeed call).
+        # injected read), assistant (the advance call).
         roles = [m["role"] for m in history]
         assert roles == [
             "user",
@@ -1332,7 +1332,7 @@ class TestAgentLoopImpl(unittest.TestCase):
 
         # The follow-up API request shows the synthetic call and the injected
         # read's content (with its note appended), and no dangling tool result.
-        # (The succeed assistant message is appended only after this request.)
+        # (The advance assistant message is appended only after this request.)
         succeed_messages = self.mock_client.chat.completions.create.call_args_list[1].kwargs[
             "messages"
         ]
@@ -1371,7 +1371,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Go",
             tools=make_tool_definitions(),
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
             session_start_results=[session_read],
             logger=logger,
         )
@@ -1429,7 +1429,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Build it",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
             system_prompt="You are a builder.",
         )
 
@@ -1453,7 +1453,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
             system_prompt="Act on the files.",
         )
 
@@ -1493,7 +1493,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = agent.run_agent(
             prompt="Do something",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
             logger=logger,
         )
 
@@ -1553,7 +1553,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         ]
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
-            if name == "succeed":
+            if name == "advance":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return self.inline_result("file data")
 
@@ -1598,7 +1598,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         ]
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
-            if name == "succeed":
+            if name == "advance":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return self.inline_result(
                 "file data",
@@ -1645,7 +1645,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Hi",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
             logger=logger,
         )
 
@@ -1662,7 +1662,7 @@ class TestAgentLoopImpl(unittest.TestCase):
             "message_added",  # assistant "Hello back." message appended
             "message_added",  # termination reminder appended
             "reminder_injected",
-            "api_response",   # succeed response
+            "api_response",   # advance response
             "message_added",  # assistant tool-call message appended
             "tool_called",
             "run_terminated",
@@ -1684,7 +1684,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Hi",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
             logger=logger,
         )
 
@@ -1723,7 +1723,7 @@ class TestAgentLoopImpl(unittest.TestCase):
             events.append((event, data))
 
         def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
-            if name == "succeed":
+            if name == "advance":
                 return TerminateAgentWithSuccess(NoChangeResult())
             return self.inline_result("x")
 
@@ -1780,7 +1780,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         first = self.agent.run_agent(
             prompt="Question one",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
         )
 
         self.mock_client.chat.completions.create.return_value = make_response(
@@ -1789,7 +1789,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         second = self.agent.run_agent(
             prompt="Question two",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "succeed" else Continue(),
+            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
         )
 
         assert isinstance(first, tuple)
