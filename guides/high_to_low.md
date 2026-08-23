@@ -1,168 +1,121 @@
 # Guide: Converting a High-Level Specification to a Low-Level Specification
 
-## Purpose
+## Summary
 
-Starting from an HLS, produce an LLS by adding the concrete types, signatures, and behaviors the HLS intentionally omits. The HLS specifies *what* a component does; the LLS specifies the types, signatures, preconditions, postconditions, and failure signals that realize those guarantees in code — detailed enough that tests and an implementation can be written from it independently and pass when both conform.
+The artifact is the LLS for a component: it conforms to the LLS structure this guide states, and it aligns with the component's HLS — the HLS and its closure. The LLS adds the concrete types, signatures, preconditions, postconditions, and failure signals the HLS intentionally omits; it is the HLS elaborated, never replaced. A file that is a template is filled in.
 
-Authoritative references: `high_level_spec.md` (source format) and `low_level_spec.md` (target format).
+The HLS is a set, not just a file: its effective constraint set is its own lines plus the transitive closure of every spec it references (`imports:` and `fulfills:`, and their references in turn). The LLS inlines the entire closure; what the HLS withholds — opaque values, open contents, hooks — is exactly what the LLS pins. Reading: the HLS file for the component; the transitive closure of its front matter (`imports:`, `fulfills:`, `terms (from X):`), recursively; and the LLS of every component in that closure (the LLS depends only on LLS files).
 
-## Working From a Template
+The artifact declares one or more sections, in order:
 
-The LLS file exists as a template with the required structure — sections, the Data Types block, the operation blocks — and placeholder content (TODO markers, missing or incorrect content).
+- `# Interface LLS: <name>` — repeatable: `## Data Types`, `## Component-Provided Operations`, `## Invariants`
+- `# Implementation LLS: <name>` — only when the HLS defines an implementation: `## Data Types`, `## Composition`, `## Behavioral Description`, `## Invariants`, `## Non-Concerns`
 
-- Fill the template in; never create the document or decide its structure.
-- Replace placeholders section by section with content from the HLS closure and this guide.
-- Keep the template's required structure; never delete a required section as redundant.
-- Correct any template structure that deviates from this guide's required skeleton.
+Term definitions (cross-cutting behavioral rules such as stubbing) appear between Data Types and Component-Provided Operations. Non-Concerns is optional in both kinds. The HLS is organized by concern; the LLS is organized by operation, collecting all rules that apply to it — preconditions, postconditions, error conditions, ordering, failure semantics, routing — across HLS sections, blocks, and specs of the closure.
 
-## Conversion Reading
+## Structure
 
-The HLS you convert is a set, not just a file: its effective constraint set is its own lines plus the transitive closure of every spec it references (`imports:` and `fulfills:`, and their references in turn). The LLS must inline the entire closure; what the HLS withholds — opaque values, open contents, hooks — is exactly what the LLS pins.
+- [ ] Section headings are exactly `# Interface LLS: <name>` and `# Implementation LLS: <name>`; operations use `### `name``
+- [ ] Interface subsections are `## Data Types`, `## Component-Provided Operations`, `## Invariants`; implementation subsections are `## Data Types`, `## Composition`, `## Behavioral Description`, `## Invariants`, `## Non-Concerns`
+- [ ] A file may declare any number of interface and implementation sections; an implementation LLS exists only when the HLS defines an implementation (`fulfills:` an interface); the interface LLS stands alone otherwise
+- [ ] The required structure is present in the final artifact: no required section is deleted as redundant, and no structure skeleton is written into the file as scaffolding
+- [ ] The LLS's only front matter is its dependency comment (first line): no `terms (owned):` or `terms (from X):` section; the HLS's `terms (owned):` becomes type aliases, a `terms (from X):` entry becomes a dependency-comment entry and imports of X's types
+- [ ] Filenames use underscores except the `-low` / `-high` suffix; no hyphens elsewhere
+- [ ] The implementation class is `class FooImpl(Foo): ...`; the name matches the interface only when exactly one implementation will ever exist; multi-implementation interfaces use distinct names; abstract bases are named distinctly (`BaseFoo`)
+- [ ] The LLS is a stand-alone document; readers use it without the HLS
 
-1. Read the HLS file for the component.
-2. Read the transitive closure: every spec named in the HLS front matter (`imports:`, `fulfills:`, `terms (from X):`), recursively.
-3. Read the LLS of every component in that closure — the LLS depends only on LLS files.
-4. Fill the LLS from the template; readers use it without the HLS.
+## Dependencies
 
-**Dependency comment = HLS front matter mirrored.** The LLS dependency comment (first line of the file) lists the LLS of every interface named in the converted HLS's front matter — `imports:`, `fulfills:`, `terms (from X):` — whether or not a type is imported; a prose-only concept reference is still a dependency. Add any component named in LLS prose not in the HLS front matter; an entry is spurious only when it is neither imported, nor referenced, nor named in the front matter.
+- [ ] LLS files depend only on other LLS files — never HLS files, never implementation LLS files; dependencies are expressed through interfaces
+- [ ] The dependency comment (first line) lists the LLS of every interface named in the converted HLS's front matter — `imports:`, `fulfills:`, `terms (from X):` — whether or not a type is imported; a prose-only concept reference is still a dependency
+- [ ] A component named in LLS prose but not in the HLS front matter is added to the comment; an entry is spurious only when it is neither imported, nor referenced, nor named in the front matter
+- [ ] Type-level imports stay inside the converted HLS's closure; a type-level dependency outside it is a traceability violation — the HLS is amended first, then the conversion proceeds
+- [ ] An imported type counts as used when it appears in a signature, in prose, or as part of the fulfilled contract; a Composition section may name concrete implementations without making them dependencies
+- [ ] A type is imported from its owner's LLS; importing through a re-exporting interface is an error
 
+## Traceability and alignment
 
+- [ ] Every LLS statement traces to the HLS's effective constraint set (own lines plus closure); the LLS adds no behavior the closure does not imply
+- [ ] The LLS adds the details the HLS omits (types, signatures, constants, parameter values, error strings) as long as the behavior is implied; implementation details appear only as necessary to fulfill HLS guarantees
+- [ ] HLS withholdings are resolved: an opaque term becomes a type variable or a concrete type the interface does not inspect; an open term becomes a concrete type with named fields; a hook becomes the concrete condition in the implementation or an explicit signal in the interface
+- [ ] The implementation's `[refines]` Deltas lines name the withheld precision the implementation LLS makes concrete
+- [ ] An HLS fact the LLS cannot express is a conversion error; a fact implied but never stated is a traceability gap
+- [ ] HLS ambiguity is never resolved silently: two observably different readings are resolved by amending the HLS first; a narrowing that bounds a guarantee's scope is recorded under Failure Handling or in Non-Concerns with a justification
+- [ ] Absence-of-behavior statements have a home: a statement of absence is an invariant or postcondition note when a test could check it, otherwise it lives in the owning component's spec; neither testable nor owned elsewhere is a dangling fact
 
-**The LLS has no terms front matter.** The dependency comment is the LLS's *only* front matter: no `terms (owned):` or `terms (from X):` section. The HLS's `terms (owned):` becomes type aliases; a `terms (from X):` entry becomes a dependency-comment entry and imports of X's types; never restate the HLS's term list.
+## Data Types
 
-**Key difference from the HLS:** the HLS is organized by concern (Purpose, Terms, Contract, Non-concerns; the Contract is a set of labeled blocks); the LLS is organized by **operation**, collecting ALL rules that apply to it — preconditions, postconditions, error conditions, ordering, failure semantics, routing — even across HLS sections, blocks, and specs of the closure.
+- [ ] Data Types opens with exactly one Python code block containing all imports, type aliases, and classes; the interface's Protocol class is last, declaring only its fresh (non-inherited) methods
+- [ ] Every type alias is `X: TypeAlias = ...` (from `typing`); never a bare `X = ...` except string constants and `TypeVar` declarations; no comments in code; prose explaining each type follows the block
+- [ ] Names are descriptive and domain-specific; never generic `Message`, `Result`, `Status`, `Data`
+- [ ] Mutually exclusive outcomes are discriminated unions with `Literal` discriminators
+- [ ] Pass-through values use type variables with documented roles; interface specs never resolve a type variable in prose (`Outcome[T]`, never `Outcome[str]`)
+- [ ] Shared types are imported from their owner's LLS, never redefined (`ToolDefinition` from `tool_provider`, not `agent_loop`)
+- [ ] An HLS-owned term never in the HLS **Operations** block is a type alias, not an operation (a `Subgraph` term yields a `Subgraph` type, never a `get_subgraph` operation)
+- [ ] Every interface declares its Protocol class in Data Types, even when no implementation exists in the closure; every operation signature is a method of it, never a free function
+- [ ] Interface-owned configuration is typed in the Interface LLS Data Types with a descriptive name (`InventoryConfig`, never `Config`)
 
-**Note on "Returns":** the HLS prohibits "returns"; the LLS accepts it.
+## Operations
 
+- [ ] Each operation is documented under a `### `operation_name`` heading and is fully self-contained: preconditions, postconditions, failure handling, ordering, and routing rules all appear under the operation
+- [ ] Component-provided operations exist for client-initiated behaviors only; internal behaviors (propagation, persistence, validation) are postconditions, not operations
+- [ ] An operation derives from the HLS Contract's **Operations** block or a named block describing client-invoked behaviors (e.g., **File operations**, **Verification**, **Termination**); no operation without a direct line from that block
+- [ ] No operations named `propagate_*`, `persist_*`, `validate_*`, `track_*`, `notify_*`, or `sync_*`
+- [ ] Operations are at the level of individual actions; clients never read or write more than they need
+- [ ] Client-visible operation boundaries (atomicity, all-or-nothing) are postcondition guarantees ("Signals failure for the entire operation if any step fails")
+- [ ] Content the client provides is imported at initialization; behavior the client initiates is a component-provided operation
+- [ ] Each operation documents **Purpose**, **Preconditions**, **Postconditions**, **Failure Handling**, and **HLS Justification**
+- [ ] Postconditions describe outcomes, not mechanisms ("Completes when...", never "Iterates until..."); implementation details belong in the Behavioral Description, not in preconditions or postconditions
+- [ ] The LLS accepts "returns" in signatures and prose (the HLS prohibits it)
+- [ ] Split interfaces when responsibilities differ (persistence vs. logic vs. orchestration)
 
-## Core Rules
+## Failure Handling
 
-1. **Traceability.** Every LLS statement traces to the HLS's effective constraint set (own lines plus closure). The LLS cannot add behavior not implied by the closure; it can and must add details the HLS omits (types, signatures, constants, parameter values, error strings) as long as the behavior is implied. Implementation details may be added only as necessary to fulfill HLS guarantees.
-   - **Type-level links stay inside the closure.** The LLS imports only from interfaces in the converted HLS's closure. A type-level dependency outside it is a traceability violation: amend the HLS first (declare the relationship with `imports:` / `terms (from X):`), then convert.
-   - **Never resolve HLS ambiguity silently.** When an HLS statement admits two observably different readings, amend the HLS to the intended reading first; a narrowing that bounds a guarantee's scope is recorded under Failure Handling or in Non-Concerns with a justification.
-   - **Absence-of-behavior statements have a home.** A statement of absence ("the component does not prevent X") is recorded as an invariant or postcondition note when a test could check it; otherwise it lives in the owning component's spec; neither testable nor owned elsewhere is a dangling fact — cut it from the HLS.
+- [ ] "Failure" always names one of three distinct signals: termination, channel failure, or run failure — termination is a channel action that ends the session (a session that produces a termination signal produces no further channel results); channel failure is a failed channel action (invalid arguments, a policy violation, a termination channel invoked incorrectly) after which the session continues; run failure is a run-level failure of the request itself (service failure, malformed response, exceeded iteration limit)
+- [ ] Error handling exists only for explicit HLS failure conditions anywhere in the closure; assumptions are not error conditions
+- [ ] Expected failures — conditions the contract handles during normal use (validation failures, policy violations) — are return-value signals documented in the interface spec; never exceptions for expected conditions
+- [ ] Unexpected failures — precondition violations, filesystem errors, state corruption — are exceptions or undefined behavior, never documented in interface specs; preconditions are caller obligations, not failure signals
+- [ ] An HLS assumption is a precondition, never a failure condition: it appears under **Preconditions** and produces no Failure Handling clause
+- [ ] Concrete strings (error messages, fallback text) are pinned in implementation specs, not interface specs; wording is stated only when a test must assert it
+- [ ] An interface deferral ("pinned in the implementation spec") is backed by the named implementation LLS actually stating it; an unbacked deferral is an error; error-detail-absence pins appear only when a test must assert them
+- [ ] Dependency failure signals are honored and re-exported; a uniform return-signal contract is never converted to exceptions; unexpected dependency errors are the dependency's exceptions, optionally caught and re-exported as a failure signal
 
-2. **Don't invent failures.** Include error handling only for explicit HLS failure conditions anywhere in the closure; assumptions are not error conditions. Expected failures become return-value signals; unexpected failures are not documented in interface specs.
+## Configuration
 
-3. **Don't overprescribe non-concerns.** Aspects intentionally unspecified because they do not affect correctness (ordering, algorithm choice, representation, unhandled failure modes, caller constraints) are listed in the LLS Non-Concerns as `- **[Aspect]:** [Choice] — [Justification].` Non-Concerns is optional; an LLS that pins a choice for an open aspect records it there with a justification.
+- [ ] Configuration comes in two kinds, each in exactly one place, decided by who supplies it: the client of the interface, or the assembler
+- [ ] Interface-owned configuration — supplied by the interface's client (the HLS **Inputs** block, items marked "configured:") — is typed in the Interface LLS Data Types with a descriptive name (`InventoryConfig`, not `Config`) and passed to the implementation as a single `config` parameter
+- [ ] Implementation-owned configuration — capability bundling known only to the assembler — becomes the implementation class's `__init__` parameters in the Implementation LLS Data Types (`fulfillment_impl.__init__(self, inventory: Inventory, pricing: Pricing)`); in the HLS this is the implementation's `imports:` front matter and `[external]` Deltas lines
+- [ ] No capabilities to bundle: no `__init__` is declared
+- [ ] There is no Config section
 
-4. **Granularity and signatures.** (Type rules per `low_level_spec.md` → Writing Rules; summary:)
-   - Define operations at the level of individual actions; do not force clients to read or write more than they need.
-   - Data Types opens with exactly one Python code block: all imports, type aliases, and classes — the interface's Protocol class last, declaring only its fresh (non-inherited) methods. Every interface declares its Protocol class, even when no implementation exists in the closure; the `### operation` signature blocks mirror its methods. Every type alias is `X: TypeAlias = ...` (from `typing`); never a bare `X = ...` except string constants and `TypeVar` declarations. No comments in code; prose explaining each type follows the block.
-   - Encode mutually exclusive outcomes as discriminated unions with `Literal` discriminators; pass-through values use type variables (roles documented; interface specs never resolve them in prose); shared types are imported from their owner's LLS, never redefined (import from the owner — `ToolDefinition` from `tool_provider`, not `agent_loop`).
-   - Resolve the HLS's withholdings: an **opaque** term becomes a type variable or a concrete type the interface does not inspect; an **open** term becomes a concrete type with named fields; a **hook** becomes the concrete condition in the implementation or an explicit signal in the interface. The implementation's `[refines]` lines name the withheld precision the implementation LLS makes concrete.
+## Implementation LLS
 
-5. **Interface operations only.** Component-provided operations exist for client-initiated behaviors only. Internal behaviors (propagation, persistence, validation) are postconditions, not operations. "Client provides" → imported at initialization; "client initiates" → component-provided operation. In the HLS, client-initiated behaviors appear in the Contract's **Operations** block; if you cannot produce a direct line from that block justifying an operation, remove it. Never add operations named `propagate_*`, `persist_*`, `validate_*`, `track_*`, `notify_*`, or `sync_*`.
+- [ ] An Implementation LLS section exists only when the HLS defines an implementation (an `*_impl` spec with `fulfills: <interface>`); otherwise the interface LLS stands alone
+- [ ] The implementation is declared as `class FooImpl(Foo): ...` extending the interface's Protocol
+- [ ] The implementation name matches the interface only when exactly one implementation will ever exist; multi-implementation interfaces use distinct names; abstract bases are named distinctly (`BaseFoo`)
+- [ ] Implementation sections never mention "client" — they reference the interface contract instead ("per the `inventory` interface contract")
+- [ ] The implementation HLS's Deltas are the semantic source: untagged behavior lines and tagged (`[ordering]`, `[boundary]`, `[state]`, `[external]`, `[failure]`) lines map onto the Behavioral Description, Invariants, and Failure Handling; `[refines]` lines pin concrete conditions and values
+- [ ] Assembler implementations list the wired concrete implementations in a Composition section (names only — not dependencies; the dependency comment still lists interfaces only)
+- [ ] Behavioral Description states outcomes, not mechanisms; interactions with external systems may be described in the external protocol's terms
+- [ ] Invariants are component-wide guarantees that hold across all operations
+- [ ] Non-Concerns (optional) records pinned choices as `- **[Aspect]:** [Choice] — [Justification]`; aspects intentionally unspecified because they do not affect correctness: ordering, algorithm choice, representation, unhandled failure modes, caller constraints
 
-6. **Operations are self-contained.** Every operation's documentation collects ALL rules that apply to it — preconditions, postconditions, invariants, error conditions, ordering, failure semantics, routing — directly under that operation; the LLS inlines the whole closure under each operation.
+## Named Contract blocks
 
-7. **Implementation LLS only when the HLS defines one.** Produce an Implementation LLS section only if an implementation spec exists (`*_impl` file with `fulfills: <interface>`); otherwise the interface LLS stands alone. When one exists:
-   - Declare the implementation as `class FooImpl(Foo): ...` extending the interface's Protocol. The name matches the interface only when exactly one implementation will ever exist; multi-implementation interfaces use distinct names. Abstract bases are named distinctly (`BaseFoo`).
-   - Implementation sections never mention "client" — reference the interface contract instead ("per the `inventory` interface contract"). (The HLS forbids such pointers in its Deltas; the LLS may reference the contract.)
-   - Configuration is the implementation class's `__init__` (in Data Types): bundled capabilities as parameters, an interface-owned config type as a single `config` parameter, none as no `__init__`. There is no Config section.
-   - Behavioral Description states outcomes, not mechanisms; interactions with external systems may be described in terms of the external protocol.
-   - Non-Concerns records pinned choices (optional).
-   - The implementation HLS's Deltas are the semantic source: each line is a delta (untagged behavior, or tagged `[ordering]`, `[boundary]`, `[state]`, `[external]`, `[failure]`) mapping onto the implementation LLS sections; `[refines]` lines name the withheld precision to make concrete.
+- [ ] Each named block's facts land in exactly one LLS location, never duplicated
+- [ ] **Events / Logging** blocks: the event list becomes a `Literal` union or callback signature in Data Types; log and path rules become postconditions, failure-handling notes, or an Invariant
+- [ ] **Stubbing / Views / behavioral sub-contracts**: become a term definition (between Data Types and Operations) or an Invariant
+- [ ] **File operations / Verification / Termination** blocks (client-invoked behaviors): the tools become operations alongside the **Operations** block, their facts becoming preconditions, postconditions, and failure handling
+- [ ] **Unexpected failures**: becomes the Failure Handling of the affected operations; concrete exception classes and strings are pinned in the implementation LLS
 
-8. **Describe outcomes, not mechanisms.** "Iterates until..." → "Completes when...". Implementation details belong in the Behavioral Description, not in preconditions or postconditions.
+## Common pitfalls
 
-9. **Interface granularity.** Split interfaces when responsibilities differ (persistence vs. logic vs. orchestration).
-
-## Named Contract Blocks
-
-The HLS Contract's named blocks (`**Logging**`, `**Events**`, `**Stubbing**`, `**Views**`, `**Verification**`, `**Termination**`, `**Unexpected failures**`, ...) are sub-contracts, each holding guarantees about one concern. Common mappings:
-
-- **Events / Logging** — the event list becomes a `Literal` union or callback signature in Data Types; log and path rules become postconditions, failure-handling notes, or an Invariant.
-- **Stubbing / Views / behavioral sub-contracts** — becomes a term definition (per `low_level_spec.md` → Term Definitions) or an Invariant.
-- **File operations / Verification / Termination** — a block describing client-invoked behaviors is a source of component-provided operations alongside the **Operations** block: the tools become operations, their facts becoming preconditions, postconditions, and failure handling.
-- **Unexpected failures** — becomes the Failure Handling of the affected operations; concrete exception classes and strings are pinned in the implementation LLS.
-
-## Failure Handling: Expected vs. Unexpected
-
-Translate each semantic HLS failure condition into a concrete code-level signal:
-
-- **Expected failures** — conditions the contract handles during normal use (validation failures, policy violations) — are return-value signals, documented in the interface spec. Never raise exceptions for expected conditions.
-- **Unexpected failures** — precondition violations, filesystem errors, state corruption — are exceptions or undefined behavior, not documented in interface specs. Preconditions are caller obligations, not failure signals; an implementation may document a violation response if useful, but none is required. An HLS assumption is a precondition, never a failure condition: it appears under **Preconditions** and produces no Failure Handling clause.
-- **Concrete strings** (error messages, fallback text) are pinned in implementation specs, not interface specs; wording is stated only when a test must assert it. An interface may pin the **absence** of error detail when a test must assert it (Non-Concerns), and may defer a detail with "pinned in the implementation spec" only when the named implementation LLS actually states it — an unbacked deferral is an error.
-- **Terminology:** distinguish termination, channel failure, and run failure (see `low_level_spec.md`).
-
-An HLS fact the LLS cannot express is a conversion error; a fact implied but never stated is a traceability gap.
-
-## Configuration Ownership
-
-Configuration comes in two kinds, each in exactly one place, decided by **who supplies it**: the client of the interface, or the assembler.
-
-- **Interface-owned configuration** — supplied by the interface's client (the HLS Contract's **Inputs** block, items marked "configured:"): typed in the Interface LLS Data Types with a descriptive name (`InventoryConfig`, not `Config`), passed to the implementation as a single `config` parameter.
-- **Implementation-owned configuration** — capability bundling known only to the assembler: becomes the implementation class's `__init__` parameters in the Implementation LLS Data Types (e.g., `fulfillment_impl.__init__(self, inventory: Inventory, pricing: Pricing)`); in the HLS this is the implementation's `imports:` front matter and `[external]` Deltas lines.
-- **No capabilities to bundle:** no `__init__` is declared.
-
-## LLS Structure
-
-Per `low_level_spec.md`: each LLS file declares `# Interface LLS: <name>` sections (Data Types, Component-Provided Operations, Invariants) and, when an implementation HLS exists, `# Implementation LLS: <name>` sections (Data Types, Composition, Behavioral Description, Invariants, Non-Concerns). Subsections use `##`; operations use `### `name``. The template provides the skeleton; fill it with content, never restructure it. Term definitions (cross-cutting rules such as stubbing) go between Data Types and Operations. Non-Concerns is optional.
-
-## Operation Documentation Template
-
-```
-### `operation_name`
-
-    def operation_name(self, param: Type) -> ReturnType
-
-**Purpose:** [What the operation does.]
-**Preconditions:** [Conditions that must be true before calling.]
-**Postconditions:** [State changes, return semantics, ordering, routing, guarantees — declarative.]
-**Failure Handling:** [Error conditions and signaling; expected failures as return values, unexpected failures not documented.]
-**HLS Justification:** [Brief phrase traceable to the HLS closure.]
-```
-
-## Step-by-Step Process
-
-### Interface LLS
-
-1. Identify component-provided operations from the HLS Contract's **Operations** block.
-2. Define type aliases for concepts owned by this interface (from the Terms section and the Contract's Inputs/Guarantees/Assumptions blocks); type the interface-owned configuration; declare the interface as a `Protocol` class whose methods are the operations — all in one Data Types code block. An HLS-owned term never in the **Operations** block is a type alias, not an operation (a `Subgraph` term yields a `Subgraph` type, never a `get_subgraph` operation).
-3. Import types as needed; list every dependency in the dependency comment (per Conversion Reading; remove spurious entries).
-4. Resolve the HLS's withholdings (per Core Rule 4); check the implementation's `[refines]` Deltas lines for the withheld precision it pins.
-5. For each operation, collect ALL rules from across the HLS closure: preconditions from Assumptions and Inputs; postconditions, routing, and ordering from Guarantees and named blocks; error handling from their failure semantics.
-6. Document each operation with the template; add term definitions for cross-cutting rules; define global invariants.
-
-### Implementation LLS (only if an implementation HLS exists)
-
-1. Identify dependencies: the fulfilled interface (from `fulfills:`), other interfaces in `imports:` / `terms (from X):`, plus any component named in prose; list them in the dependency comment (interfaces only).
-2. Declare `class FooImpl(Foo): ...` in Data Types.
-3. Express configuration as the implementation class's `__init__` in Data Types: bundled capabilities as parameters, an interface-owned config type as a single `config` parameter, none as no `__init__`.
-4. For assembler implementations, list the wired concrete implementations in a Composition section (names only).
-5. State which operations it implements; describe responsibilities declaratively. The implementation HLS's Deltas are the semantic source — untagged behavior lines and tagged (`[ordering]`, `[boundary]`, `[state]`, `[external]`, `[failure]`) lines map onto the Behavioral Description, Invariants, and Error Handling; `[refines]` lines pin concrete conditions and values.
-6. Define internal behavioral invariants.
-7. List Non-Concerns implementers might otherwise worry about (optional).
-
-## Validation Checklist
-
-- [ ] Every LLS statement traces to the HLS's effective constraint set (own lines + closure)
-- [ ] LLS dependency comment (first line) lists only LLS files; no HLS or implementation LLS dependencies
-- [ ] Dependency comment mirrors the HLS front matter plus any component named in prose; every entry imported or referenced; no spurious entries
-- [ ] Type-level LLS imports stay inside the converted HLS's closure; outside dependencies require an HLS amendment first
-- [ ] Each interface defines its own types in its own Data Types; owned types imported elsewhere, never redefined
-- [ ] HLS withholdings resolved: opaque → type variable or pass-through type; open → concrete type; hook → concrete condition or signal
-
-- [ ] Implementation HLS refinements (`terms (refined):` names; `[refines]` lines) made concrete in the implementation LLS
-- [ ] Data Types is one Python code block (imports, aliases, classes; Protocol last) followed by prose, no comments; every type alias is `X: TypeAlias = ...` (no bare `X = ...` type assignments); descriptive names (never generic `Message`/`Result`/`Status`/`Data`)
-- [ ] Mutually exclusive outcomes encoded as discriminated unions with `Literal` discriminators
-- [ ] Pass-through values use type variables with documented roles; interface specs never resolve them in prose
-- [ ] Interface LLS declares the Protocol class in Data Types (even when no implementation is in the closure); every operation signature is a method of it, never a free function
-- [ ] Every operation derives from the HLS **Operations** block or a named block describing client-invoked behaviors (e.g., **File operations**, **Verification**, **Termination**); each has a brief HLS justification and is self-contained
-- [ ] Every HLS guarantee, ordering constraint, and invariant is represented in the LLS (precondition, postcondition, invariant, term definition, or failure-handling note); no HLS fact dropped as implied
-- [ ] Named Contract blocks converted: each block's facts land in exactly one LLS location, never duplicated
-
-- [ ] No operations for internal behavior (propagation, persistence, validation); no monolithic read/write operations
-- [ ] Error handling only for explicit HLS failure conditions; expected failures are return-value signals; unexpected failures (precondition violations) not in interface specs; no Failure Handling clause for an HLS assumption (assumptions are Preconditions only)
-- [ ] Concrete strings pinned in implementation specs; wording stated only when a test must assert it
-- [ ] Interface deferrals ("pinned in the implementation spec") backed by the named implementation LLS; error-detail-absence pins only when a test must assert them
-- [ ] Subsections use `##` headings (Data Types, Component-Provided Operations, Invariants, ...); operations use `### `name``; the template's skeleton is filled, never restructured
-- [ ] Filled from the template: the document keeps the template's required structure, replaces placeholders, and corrects deviations
-- [ ] Implementation LLS exists only if an implementation HLS exists (`fulfills:` an interface)
-- [ ] Implementation class declared as `class FooImpl(Foo): ...`; name matches the interface only when exactly one implementation will ever exist; abstract bases named distinctly (`BaseFoo`)
-- [ ] Implementation sections never mention "client" (reference the interface contract instead)
-- [ ] Configuration expressed as `__init__` parameters on the implementation class (bundled capabilities; single `config` for an interface-owned type; none absent); interface-owned config typed in Interface LLS Data Types; no Config section
-- [ ] Postconditions describe outcomes, not mechanisms; external-system interactions excepted
-- [ ] Non-Concerns (optional) records pinned choices with justifications
-- [ ] LLS is detailed enough to write passing tests
+- [ ] No restated HLS constraints — each HLS fact appears in exactly one LLS location
+- [ ] No invented failures — error handling exists only for explicit HLS failure conditions
+- [ ] No unresolved withholdings — opaque, open, and hook terms are pinned in the LLS
+- [ ] No missing required structure — the full section inventory is present in the final artifact
+- [ ] No generic names — `Message`/`Result`/`Status`/`Data` become descriptive names
+- [ ] No type-level imports outside the HLS closure — the HLS is amended first
+- [ ] No mechanism in postconditions — outcomes, not steps
+- [ ] No operations for internal behavior — propagation, persistence, and validation are postconditions
+- [ ] No unbacked deferrals — "pinned in the implementation spec" only when the named implementation LLS states it

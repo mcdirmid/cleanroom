@@ -1,5 +1,4 @@
 # Interface LLS: dag_storage
-
 ## Data Types
 
 ```python
@@ -13,6 +12,7 @@ PropagatingDependency: TypeAlias = Node
 ReverseDependency: TypeAlias = Node
 Subgraph: TypeAlias = frozenset[Node]
 
+
 class dag_storage(Protocol):
     def read_pending_messages(self, node: Node) -> set[Message]: ...
     def add_message(self, node: Node, message: Message) -> None: ...
@@ -21,7 +21,7 @@ class dag_storage(Protocol):
     def get_reverse_dependencies(self, node: Node) -> set[Node]: ...
 ```
 
-`Node` is a vertex identifier in the graph (a string). `Message` is a string addressed to a node. `PendingMessage` is a message delivered to a node and not cleaned since delivery (an alias for `Message`). `Dependency` is the declared set of nodes on which a node depends (a set of `Node` identifiers). `PropagatingDependency` is a subset of dependencies whose changes propagate to the depending node (a set of `Node` identifiers). `ReverseDependency` is the set of nodes recorded as depending on another node (a set of `Node` identifiers). `Subgraph` is a target node (included) plus all nodes reachable through its direct and indirect dependencies (a set of `Node` identifiers).
+`Node` is a vertex identifier in the graph (a string). `Message` is a string addressed to a node. `PendingMessage` is a message delivered to a node and not cleaned since delivery (an alias for `Message`). `Dependency` is a node on which another node depends (a single `Node` identifier). `PropagatingDependency` is a dependency whose changes propagate to the depending node (a single `Node` identifier). `ReverseDependency` is a node recorded as depending on another node (a single `Node` identifier). `Subgraph` is a target node (included) plus all nodes reachable through its direct and indirect dependencies (a frozenset of `Node` identifiers).
 
 ## Component-Provided Operations
 
@@ -35,7 +35,8 @@ def read_pending_messages(self, node: Node) -> set[Message]: ...
 
 **Preconditions:** The node exists in the graph before calling.
 
-**Postconditions:** Returns the set of messages currently pending for the node, as stored.
+**Postconditions:** Returns the set of messages currently pending for the node, as stored. The operation is atomic with respect to other operations on the same node.
+
 **HLS Justification:** Contract → Operations: "Read pending messages for a node."
 
 ### `add_message`
@@ -49,6 +50,7 @@ def add_message(self, node: Node, message: Message) -> None: ...
 **Preconditions:** The node exists in the graph before calling.
 
 **Postconditions:** The message is added to the node's pending set. The operation is atomic with respect to other operations on the same node.
+
 **HLS Justification:** Contract → Operations: "Add messages to a node's pending set."
 
 ### `delete_node_data`
@@ -62,7 +64,6 @@ def delete_node_data(self, node: Node) -> None: ...
 **Preconditions:** The node exists in the graph before calling.
 
 **Postconditions:** All pending messages and all known reverse dependencies for the node are removed. The operation is atomic with respect to other operations on the same node.
-
 
 **HLS Justification:** Contract → Operations: "Delete a node's data (its pending messages and its known reverse dependencies)."
 
@@ -78,6 +79,8 @@ def get_dependencies(self, node: Node) -> set[Node]: ...
 
 **Postconditions:** Returns the set of nodes on which the node depends (its outgoing dependency edges). Calling this operation records the node as a reverse dependency of each of its propagating dependencies, at most once per dependency. The operation is atomic with respect to other operations on the same node.
 
+**HLS Justification:** Contract → Operations: "Retrieve a node's dependencies."
+
 ### `get_reverse_dependencies`
 
 ```python
@@ -89,7 +92,6 @@ def get_reverse_dependencies(self, node: Node) -> set[Node]: ...
 **Preconditions:** The node exists in the graph before calling.
 
 **Postconditions:** Returns the set of nodes recorded as depending on (i.e., having this node as a reverse dependency). The operation is atomic with respect to other operations on the same node.
-
 
 **HLS Justification:** Contract → Operations: "Retrieve a node's known reverse dependencies."
 

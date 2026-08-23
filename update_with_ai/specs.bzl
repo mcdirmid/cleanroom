@@ -219,12 +219,12 @@ def update_spec_with_ai(name, spec_deps, visibility = None):
     _update_spec_with_ai(
         name = name + "_high",
         prompt = (
-            "Updates the high-level specification for %s (in %s-high.md). The file " +
-            "exists with a template structure and placeholder content (TODO markers); " +
-            "fill it in section by section so the HLS conforms to high-level-spec.md, " +
-            "correcting any structure that deviates from the guide. A write is " +
-            "followed by an automatic re-read with line numbers, so a line-range " +
-            "edit (replace_lines) may follow a write without a further read."
+            "Ensure the high-level specification for %s (in %s-high.md) conforms to " +
+            "high_level_spec.md with minimal changes: make only the targeted edits " +
+            "needed to fix deviations, and leave conformant content untouched. If the " +
+            "file is a template, fill it in. A write is followed by an automatic " +
+            "re-read with line numbers, so a line-range edit (replace_lines) may " +
+            "follow a write without a further read."
         ) % (name, name),
         src = name + "-high.md",
         template = "//templates:hls",
@@ -246,14 +246,13 @@ def update_spec_with_ai(name, spec_deps, visibility = None):
     _update_spec_with_ai(
         name = name + "_low",
         prompt = (
-            "Convert the high-level specification (HLS) for %s (in %s-high.md) into the " +
-            "low-level specification (LLS) for %s (in %s-low.md). The LLS file exists as a " +
-            "template with placeholder content (TODO markers); fill it in section by section " +
-            "so the LLS is aligned with the HLS according to high_to_low.md, correcting any " +
-            "structure that deviates from the guide. Make targeted edits only for substantive " +
-            "issues; do not chase formatting nits. A write is followed by an automatic re-read " +
-            "with line numbers, so a line-range edit (replace_lines) may follow a write " +
-            "without a further read."
+            "Ensure the low-level specification (LLS) for %s (in %s-low.md) is aligned " +
+            "with the high-level specification (HLS) for %s (in %s-high.md) according to " +
+            "high_to_low.md, with minimal changes: make only the targeted edits needed to " +
+            "fix misalignments, and leave conformant content untouched. If the file is a " +
+            "template, fill it in. A write is followed by an automatic re-read with line " +
+            "numbers, so a line-range edit (replace_lines) may follow a write without a " +
+            "further read."
         ) % (name, name, name, name),
         src = name + "-low.md",
         template = "//templates:lls",
