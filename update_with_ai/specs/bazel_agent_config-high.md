@@ -9,7 +9,7 @@ Loads declarative agent/model configurations declared as Bazel targets (see upda
 
 ## Terms
 
-- Agent configuration: the full set of agent/model parameters — model identifier, base URL, iteration limit, temperature, timeout, and token limit — excluding the API key. An agent configuration may name the exact environment variable holding its API key (an API-key environment variable) and is identified by a config target.
+- Agent configuration: the full set of agent/model parameters — model identifier, base URL, iteration limit, temperature, timeout, and token limit — and the sandbox gates — whether session-start reads are enabled and whether step mode is enabled — excluding the API key. An agent configuration may name the exact environment variable holding its API key (an API-key environment variable) and is identified by a config target.
 - Config target: the Bazel label of an agent_config target whose generated module holds the agent configuration, in canonical form //pkg:name.
 - API key: a secret credential for the language model service. An API key is never part of an agent configuration or a config target; it is provided by the caller through the environment.
 

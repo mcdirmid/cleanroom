@@ -59,6 +59,8 @@ def _make_node_def(
     file_mappings: Optional[Dict[str, str]] = None,
     blame_targets: Optional[List[str]] = None,
     templates: Optional[Dict[str, str]] = None,
+    guide: Optional[str] = None,
+    step_sections: bool = True,
 ) -> NodeDefinition:
     """Build a NodeDefinition with the given sandbox configuration."""
     return NodeDefinition(
@@ -70,6 +72,8 @@ def _make_node_def(
             blame_targets=blame_targets or [],
             search_result_limit=10,
             templates=templates or {},
+            guide=guide,
+            step_sections_enabled=step_sections,
         ),
     )
 
@@ -280,6 +284,48 @@ class TestCleanOutcomeMapping(unittest.TestCase):
         result = self._impl(sandbox, agent_loop).clean("a", [])
         self.assertIs(result, no_change)
         self.assertEqual(result.type, "no_change")
+
+    def test_clean_includes_step_mode_protocol_when_enabled(self):
+        """When step mode is enabled (with a configured guide), the run's user
+        prompt includes the step-mode protocol (LLS: the guide arrives through
+        the advance operation — summary at run start, a section per passing
+        advance; call advance after each section)."""
+        node_def = _make_node_def(
+            writable_paths=["out.txt"],
+            file_mappings={"out.txt": os.path.join("tmp", "out.txt")},
+            guide="guide.md",
+            step_sections=True,
+        )
+        graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+        agent_loop = MockAgentLoop()
+        impl = AgentNodeCleanLogicImpl(
+            Config(
+                graph=graph,
+                agent_loop_config=_agent_loop_config(),
+                make_sandbox=lambda sc: MockSandbox(),
+                make_agent_loop=lambda cfg: agent_loop,
+            )
+        )
+        impl.clean("a", [])
+        self.assertIn("step", agent_loop.last_run["prompt"])
+        self.assertIn("advance", agent_loop.last_run["prompt"])
+        # Without a guide, no step-mode protocol.
+        node_def2 = _make_node_def(
+            writable_paths=["out.txt"],
+            file_mappings={"out.txt": os.path.join("tmp", "out.txt")},
+        )
+        graph2 = MockBazelGraphStorage(definitions={"a": node_def2}, dependencies={"a": []})
+        agent_loop2 = MockAgentLoop()
+        impl2 = AgentNodeCleanLogicImpl(
+            Config(
+                graph=graph2,
+                agent_loop_config=_agent_loop_config(),
+                make_sandbox=lambda sc: MockSandbox(),
+                make_agent_loop=lambda cfg: agent_loop2,
+            )
+        )
+        impl2.clean("a", [])
+        self.assertNotIn("The guide arrives", agent_loop2.last_run["prompt"])
 
     def test_clean_passes_session_start_reads_to_the_run(self):
         """The sandbox's session-start reads are provided as the run's

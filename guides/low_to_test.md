@@ -1,173 +1,61 @@
 # Guide: Converting an LLS to Tests (without reading the implementation)
 
-## Purpose
+## Summary
 
-Tests are written from the LLS alone. The implementation Python file is **deliberately not consulted**: the LLS is the contract, and tests written independently of the implementation catch implementation drift. If a test written from the LLS fails, the implementation is wrong — unless the test misread the LLS.
+The artifact is the test module for an implementation: `<component-name>_test.py` in `tests/`, written from the implementation LLS and its dependency closure alone — the implementation Python file is never consulted. Tests written from the LLS catch implementation drift: when a test fails, the implementation is wrong, unless the test misread the LLS. A file that is a template is filled in.
 
-The authoritative reference is `low_level_spec.md`. This guide is the conversion procedure from an implementation LLS (plus the interface and dependency LLSs in its dependency comment) to a test module in `tests/` and its BUILD entry. For the implementation side of the same contract, see `low_to_impl.md`; both sides are written from the same LLS and pass when both conform.
+The LLS is the only contract: the tests cover its postconditions, invariants, and expected failure signals, and nothing else — no internal mechanisms, no exact message wording, no unspecified ordering, no behavior outside the contract. When in doubt, do not test it. The HLS is not part of the test contract; the LLS is self-contained.
 
-**Test only what the LLS requires:** postconditions, invariants, and expected failures (the failure signals it names). It does not require internal mechanisms, exact message wording, unspecified ordering, or behavior outside the contract — testing any of those tests the implementation rather than the contract and couples the tests to code the LLS leaves free. When in doubt, do not test it. Non-concerns and unexpected failures not explicitly listed as concerns are extremely discouraged and require an explicit, documented reason.
+The test module's BUILD entry exists in `tests/BUILD.bazel`: one `pyright_test` per module, `pyright_deps` every package module the test imports — the implementation under test, its interface, and the dependency interfaces the mocks implement. A missing entry shows as an unresolved-import error in the type check.
 
-## Reading the LLS
+Read the implementation LLS and the transitive closure of its dependency comment: every LLS in the comment, every LLS in their comments, until no new files remain — dependency mocks implement the dependency interfaces exactly from their own LLSs. Extract the testable claims: Data Types (construction, fields, defaults, `Literal` discriminators); Config (fields, defaults, mock wiring); Behavioral Description (each bullet → outcome tests); Failure Handling (each expected failure signal → a test); Invariants (sequence tests); Non-Concerns (pinned only).
 
-Read the implementation LLS and the full **transitive closure of its dependencies**: every LLS in its dependency comment, every LLS in *their* dependency comments, until no new files remain. The closure matters because dependency mocks must implement the dependency interfaces exactly (signatures, defaults, failure signals) from their own LLSs.
+## Module layout
 
-Extract the testable claims:
+- [ ] One test module per implementation LLS: `specs/csv_inventory_impl-low.md` → `tests/csv_inventory_impl_test.py`
+- [ ] The module uses `unittest`, ending with `if __name__ == "__main__": unittest.main()`
+- [ ] Tests are grouped into classes by concern (success routing, failure handling, invariants, config)
 
-- **Data Types** — construction; field names/types/order; defaults; `Literal` discriminators.
-- **Config** — field presence, defaults, wiring of dependency mocks.
-- **Behavioral Description** — each bullet → one or more outcome tests.
-- **Failure Handling** — each **expected** failure signal → a test.
-- **Invariants** — sequence-of-operations tests.
-- **Non-Concerns** — pinned choices (test the pin); open choices (do not test).
-- **Preconditions** — not tested directly; verified through the mocks, which enforce them (see Mocks).
+## What to test
 
-Do not read the implementation Python file. Do not read the HLS: the LLS is self-contained and is the only contract tests need.
-
-## Test Module Layout
-
-One test module per implementation LLS, named `<name>_test.py` in `tests/` (`specs/csv_inventory_impl-low.md` → `tests/csv_inventory_impl_test.py`). Use `unittest` with `if __name__ == "__main__": unittest.main()` at the end. Group tests into classes by concern (success routing, failure handling, invariants, config).
-
-## Working From a Template
-
-The test module exists as a template before testing: it carries the unittest skeleton — the imports, the test-class stubs, the `unittest.main()` tail — with placeholder content (TODO markers) where the tests go.
-
-- Fill the template in; never create the module from scratch and never decide its structure.
-- Fill in the test classes per this guide and the LLS closure; keep the template's imports, class layout, and `unittest.main()` tail.
-- Keep the template's structure; correct any stub that deviates from the required layout.
-
-## What to Test, Section by Section
-
-### Data Types
-
-Construct each dataclass with the LLS's fields; assert field values, types, and defaults. Assert `Literal` discriminators where the LLS declares them — they are part of the interface. Exercise values through the interface's Protocol type, not implementation-only attributes.
-
-### Config
-
-Construct the implementation with the LLS's Config dataclass; assert the documented defaults. Wire dependency mocks through Config and assert they are actually used (see Mocks).
-
-### Behavioral Description
-
-Convert each bullet into assertions:
-
-- "Provides the current stock level (zero if none)" → call with a missing/empty SKU; assert the return value.
-- "Adds the given quantity and persists" → call; assert the return and the observable state (re-read through a fresh instance).
-- "A write that fails before the replacement leaves the previous file unchanged" → force the failure (read-only directory, or a patched replace step); assert the previous state is intact.
-- "Is atomic" → make one step fail; assert no partial state.
-
-For stateful behavior, prefer asserting through the public operations (or a fresh instance) over poking internals.
-
-### Failure Handling
-
-Test only the **expected failures** — the failure signals the LLS names. Each named signal gets a test that triggers its condition and asserts the signal:
-
-- Expected failures (policy violations, validation failures) → assert the return signal (`None`, `False`, a failure result).
-- Unexpected failures (precondition violations, filesystem errors, state corruption) are not listed as concerns and are not tested. If the implementation LLS documents a violation response (e.g., "unknown SKUs raise an error"), asserting it is permitted — but it is documentation of a violation, not a requirement; do not go looking for more.
-- Error-message wording: assert only when the LLS pins the string for testing; otherwise assert only the signal type.
-
-### Invariants
-
-Test invariants as properties across sequences of operations:
-
-- "No state persists between runs" → a fresh instance behaves freshly.
-- "Errors leave the filesystem unchanged" → snapshot state before a failing operation; assert it is unchanged after.
-- "All operations use resolved paths" → assert the observable effect of resolution (a file created at the mapped location, not the virtual name).
-
-### Non-Concerns
-
-Pinned non-concerns (e.g., "the fallback text is pinned to ...") are asserted — the pin is part of the contract. Open non-concerns are **not tested**: no assertions about unspecified ordering, algorithm choice, representation, format, or mechanism. If a test for an open non-concern seems necessary, pin the aspect in the LLS first — never test it silently.
+- [ ] Dataclasses constructed with the LLS's fields; field values, types, and defaults asserted; `Literal` discriminators asserted where the LLS declares them
+- [ ] Values exercised through the interface's Protocol type, never implementation-only attributes
+- [ ] The implementation constructed with the LLS's Config; documented defaults asserted; dependency mocks wired through Config and asserted actually used
+- [ ] Every Behavioral Description bullet has one or more outcome tests (return value; observable state through a fresh instance; a failure that leaves the previous state intact; atomicity)
+- [ ] Stateful behavior asserted through the public operations or a fresh instance, never through internals
+- [ ] Every expected failure signal named in the LLS has a test that triggers its condition and asserts the signal
+- [ ] Error-message wording asserted only when the LLS pins the string; otherwise only the signal type is asserted
+- [ ] Invariants tested across operation sequences (a fresh instance behaves freshly; state unchanged after a failing operation; resolved-path effects)
+- [ ] Pinned non-concerns asserted; open non-concerns never tested
 
 ## Mocks
 
-Implement the **dependency interfaces** as mocks, from their LLSs (the transitive closure read above) — never mock the system under test. Each dependency becomes a small stub that records calls, returns scripted results, and **enforces the interface's preconditions**:
+- [ ] Dependency interfaces are mocked from their LLSs (the closure), never the system under test
+- [ ] Each mock records calls, returns scripted results, and enforces the interface's preconditions (raises when the component under test violates one)
+- [ ] Preconditions are enforced by the mocks, never tested directly (precondition violations are unexpected failures)
+- [ ] Interaction is asserted through recorded calls: which dependency operations were called, in what order, with what arguments
+- [ ] External boundaries are mocked with fixtures aligned to the interface types the LLS declares; boundary preconditions enforced the same way
 
-```python
-class FakeInventory(Inventory):
-    def __init__(self) -> None:
-        self._stock: Dict[Sku, Quantity] = {}
-        self.calls: List[tuple] = []
+## The bias rule
 
-    def get_stock(self, sku: Sku) -> Quantity:
-        self.calls.append(("get", sku))
-        if sku not in self._stock:
-            raise ValueError(f"precondition violated: unknown SKU {sku}")
-        return self._stock[sku]
+- [ ] Tests verify that the implementation satisfies the LLS; they are never written to accommodate the implementation
+- [ ] A failing test is re-read against the LLS first; when the LLS supports the assertion, the implementation is fixed, not the test
+- [ ] Assertions are never weakened to match observed behavior; tests are never written by transcribing implementation behavior
+- [ ] The only legitimate test-side fixes are LLS misreadings: wrong signal, wrong precondition, or testing something the LLS does not require
 
-    def add_stock(self, sku: Sku, quantity: Quantity) -> None:
-        self.calls.append(("add", sku, quantity))
-        self._stock[sku] = self._stock.get(sku, 0) + quantity
+## What not to test
 
-    def remove_stock(self, sku: Sku) -> None:
-        self.calls.append(("del", sku))
-        self._stock.pop(sku, None)
-```
+- [ ] No tests for open non-concerns (ordering, algorithm choice, representation, log/text format, message wording, chunk boundaries)
+- [ ] No tests for unexpected failures not listed as concerns (precondition violations, filesystem errors, state corruption)
+- [ ] No tests for internal mechanisms the LLS does not state (cache internals, temporary-file steps) unless pinned in a Non-Concern
+- [ ] No exact error-message wording unless the LLS pins the string for testing
+- [ ] No tests of the HLS; the LLS is the contract
 
-**Preconditions are enforced by the mocks, not tested directly.** A mock implements its interface's preconditions from the interface LLS and raises when the component under test violates one; a test that drives the component through a valid scenario then fails if the component ever calls a dependency with invalid input. This verifies correct dependency use without a separate precondition test (precondition violations are unexpected failures, themselves not to be tested directly).
+## Common pitfalls
 
-Use the mocks to assert both outcomes **and** interaction: which dependency operations were called, in what order, with what arguments — recording calls is how ordering and routing guarantees get tested.
-
-For external systems (e.g., a payment gateway), mock the boundary with realistic fixtures: patch the client constructor the implementation uses, and script responses whose shapes match the types the interface LLS declares (charges, receipts, settlement records). Enforce the boundary's preconditions the same way — raise when the component sends input the interface contract does not allow.
-
-## The Bias Rule
-
-Tests verify that the implementation satisfies the LLS — they are not written to accommodate the implementation:
-
-- If a test fails, first re-read the LLS to confirm the assertion is correct. If the LLS supports it, the implementation is wrong: fix the implementation (per `low_to_impl.md`), not the test.
-- Do not weaken assertions to match observed behavior; that silently rewrites the contract.
-- Do not write tests by reading the implementation and transcribing its behavior; write from the LLS and let the implementation conform.
-- The only legitimate test-side fixes are misreadings of the LLS: wrong signal, wrong precondition, or testing something the LLS does not require.
-
-## The BUILD File for Tests
-
-Each test module gets a `pyright_test` target in `tests/BUILD.bazel` (macro from `//bin:pyright_library.bzl`) — the same shape as the `pyright_library` example in `low_to_impl.md`:
-
-```python
-load("//bin:pyright_library.bzl", "pyright_test")
-
-pyright_test(
-    name = "csv_inventory_impl_test",
-    srcs = ["csv_inventory_impl_test.py"],
-    pyright_deps = [
-        "//lib:inventory",
-        "//lib:csv_inventory_impl",
-        "//lib:pricing",
-    ],
-)
-```
-
-- `pyright_deps` — every package module the test imports: the implementation under test, its interface, and any dependency interfaces the mocks implement. Each entry must be a declared `pyright_library` / `pyright_test` target.
-- The macro generates `{name}_type_check` and `{name}_type_check_all` in addition to the runtime test. Missing `pyright_deps` entries appear as unresolved-import errors in the type check.
-
-## Verification Order
-
-1. **Type-check first**: `bazel test --test_timeout=120 //tests:<name>_type_check` — fix all pyright errors (missing imports usually mean a missing `pyright_deps` entry).
-2. **Run the test**: `bazel test --test_timeout=120 //tests:<name>_test` — fix failures per the Bias Rule.
-3. **Run the full suite**: `bazel test --test_timeout=120 //...` to catch cross-component regressions.
-
-## What NOT to Test
-
-- **Open non-concerns** — anything the LLS leaves unspecified: ordering, algorithm choice, representation, log/text format, message wording, chunk boundaries.
-- **Unexpected failures** not explicitly listed as concerns — precondition violations, filesystem errors, state corruption.
-- **Internal mechanisms** the LLS does not state (cache internals, temporary-file write steps) — unless pinned in a Non-Concern.
-- **Exact error-message wording** — unless the LLS pins the string for testing.
-- **The HLS** — the LLS is the contract; the HLS carries no testable detail the LLS omits.
-
-When a test appears to need one of these, the LLS-first response is to pin the behavior in the implementation LLS (making it a concern) or to drop the assertion — never to test unrequited behavior.
-
-## Validation Checklist
-
-- [ ] Test module per implementation LLS; named `<name>_test.py` in `tests/`
-- [ ] Filled from the template: the test module keeps the template's unittest skeleton; tests written per the LLS
-- [ ] Full transitive dependency closure read (no LLS dependency skipped)
-- [ ] Written from the LLS only; the implementation Python file was not read
-- [ ] Dataclass construction plus field/default/`Literal`-discriminator assertions from Data Types
-- [ ] Every Behavioral Description bullet has a test
-- [ ] Every expected failure signal (named in the LLS) has a test
-- [ ] Invariants tested across operation sequences
-- [ ] Pinned non-concerns asserted; open non-concerns not tested
-- [ ] No tests for unexpected failures the LLS does not list as concerns
-- [ ] Dependency interfaces mocked from their LLS; mocks enforce their preconditions (raise on violation) and record calls
-- [ ] External boundaries mocked with fixtures aligned to the interface types, preconditions enforced
-- [ ] No tests for internal mechanisms, formats, or message wording not pinned in the LLS
-- [ ] Type check passes before running; all tests pass
-- [ ] Failures resolved by fixing the implementation (or the LLS if it is wrong), never by weakening the tests
+- [ ] No tests that read the implementation and transcribe its behavior
+- [ ] No weakened assertions to match observed behavior
+- [ ] No mocks of the system under test
+- [ ] No precondition tests (preconditions are enforced by the mocks, not tested)
+- [ ] No open-non-concern tests (pin the aspect in the LLS first, or drop the assertion)
+- [ ] No missing `pyright_deps` entries (unresolved-import errors in the type check)

@@ -262,6 +262,7 @@ class BazelNodeLoaderImpl(BazelNodeLoader):
             feedback_deps=feedback_deps,
             src=str(data.get("src") or ""),
             template=data.get("template"),
+            guide=data.get("guide"),
             silent_srcs=data.get("silent_srcs", []),
         )
 

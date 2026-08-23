@@ -25,6 +25,8 @@ class AgentConfig:
     temperature: float
     timeout: float
     max_tokens: Optional[int]
+    session_start_reads: bool = True
+    step_sections: bool = True
 
 class ConfigNotFoundError(ValueError): ...
 class ApiKeyNotFoundError(ValueError): ...
@@ -36,8 +38,11 @@ class BazelAgentConfig(Protocol):
 `AgentConfig` mirrors the generated module's `AGENT_CONFIG` dict (see
 `bazel_agent_config-high.md`); `api_key_env` is the exact environment
 variable holding the API key (empty means the plain `AGENT_API_KEY`
-variable applies). The two exception types signal unexpected failures (see
-Failure Handling below).
+variable applies). `session_start_reads` and `step_sections` are the sandbox
+gates (per `bazel_agent_config-high.md`): whether the run's sandbox provides
+session-start reads and whether step mode is enabled (both default to
+enabled). The two exception types signal unexpected failures (see Failure
+Handling below).
 ## Component-Provided Operations
 
 ### `build_agent_loop_config`

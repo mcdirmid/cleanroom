@@ -1,7 +1,8 @@
 # agent_loop
 
-imports: tool_provider (tool definitions, results, signals)
+imports: tool_provider (tool definitions, results, signals), sandbox (step mode)
 terms (from tool_provider): tool definition, tool result, supersession flag, stub, signal, termination result, tool failure
+terms (from sandbox): step mode, step section
 terms (owned): run, termination value, conversation, conversation message, system prompt, truncated response, continuation prompt, degenerate response
 
 ## Purpose
@@ -43,8 +44,8 @@ Answers a user prompt through an iterative process of LLM processing and tool ex
 - Stubs the earlier result for the same file or tool command when a result's supersession flag is set.
 - Appends tool failures to the conversation and continues the loop; no session reset, no history clearing.
 - The termination reminder is not triggered by tool failures.
-- Injects a loop reminder at most once per run when the model repeats itself without progress: the same tool call (name and arguments) repeated 4 consecutive times, or replace_lines targeting the same file and line range 4 consecutive times (even with different content) — urging the agent to make progress (re-read the file or finish the run).
-- Signals failure, leaving state unchanged, when the same tool call (name and arguments) repeats 8 consecutive times, or when replace_lines targets the same file and line range 8 consecutive times (even with different content) — the run ends instead of spinning to the iteration limit.
+- Injects a loop reminder at most once per run when the model repeats itself without progress: the same tool call (name and arguments) repeated 4 consecutive times, or replace_lines targeting the same file and line range 4 consecutive times (even with different content) — urging the agent to make progress (re-read the file or finish the run). The advance tool is exempt: repeated advance calls are the run's progress in step mode (each passing advance provides the next step section), and an advance call resets the repetition tracking.
+- Signals failure, leaving state unchanged, when the same tool call (name and arguments) repeats 8 consecutive times, or when replace_lines targets the same file and line range 8 consecutive times (even with different content) — the run ends instead of spinning to the iteration limit. The advance tool is exempt from this limit as well.
 - Injects the termination reminder whenever the model stops with free text without signaling termination (the generator's message, or a default), and continues the loop; the run completes only via a termination signal or the iteration limit.
 - A truncated response is not treated as a complete answer.
 - When a response is truncated and is not degenerate, the component appends the continuation prompt and resumes generation with a follow-up request.
@@ -54,6 +55,7 @@ Answers a user prompt through an iterative process of LLM processing and tool ex
 - Stubbing preserves the conversation prefix: a stubbed result keeps its position and its stub is fixed once set, so the conversation up to the most recent live result is identical from one request to the next except for appended messages.
 - Each run is independent; no state persists.
 - Delegates tool execution to the provided logic.
+- Provides the current tool definitions with each request, re-requested from the tool execution logic; a tool's definition may change during a run (per tool_provider), so the conversation always carries the latest definitions.
 - If a logger callback is provided: invokes it chronologically for the events in the Events block; includes per-request and cumulative token usage in applicable events; catches and ignores logger callback exceptions.
 
 **Assumptions**

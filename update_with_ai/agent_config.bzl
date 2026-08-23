@@ -81,13 +81,14 @@ def _agent_config_impl(ctx):
         "timeout": float(ctx.attr.timeout_seconds),
         "max_tokens": max_tokens,
         "session_start_reads": ctx.attr.session_start_reads,
+        "step_sections": ctx.attr.step_sections,
     }
 
     # Python module: json-encoded strings are valid Python string literals.
     entries = []
     for key in ("label", "name", "model", "base_url", "api_key_env",
                 "max_iterations", "temperature", "timeout", "max_tokens",
-                "session_start_reads"):
+                "session_start_reads", "step_sections"):
         entries.append('    "{}": {},'.format(key, _py_literal(config[key])))
 
     py_content = "\n".join(
@@ -137,6 +138,14 @@ _agent_config = rule(
             doc = "Whether the run's sandbox provides session-start reads of the "
                 + "read-only files (rendered at the beginning of the run before "
                 + "the model's first turn). Defaults to enabled.",
+        ),
+        "step_sections": attr.bool(
+            default = True,
+            doc = "Whether the run's sandbox delivers the guide in step mode: the "
+                + "guide summary at run start and a checklist section after each "
+                + "advance that passed verification (the guide is then not readable "
+                + "and reaches the agent only through advance outputs). Defaults to "
+                + "enabled.",
         ),
         "temperature": attr.string(
             default = "0.0",

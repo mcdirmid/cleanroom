@@ -64,7 +64,9 @@ Signal: TypeAlias = Union[
 
 ToolCallOutcome: TypeAlias = Union[list[ToolResult | PresentedToolResult], Signal[T_tool]]
 
-ToolExecutor: TypeAlias = Callable[[ToolName, ToolArguments], ToolCallOutcome[T_tool]]
+class ToolExecutor(Protocol[T_tool]):
+    def __call__(self, name: ToolName, arguments: ToolArguments) -> ToolCallOutcome[T_tool]: ...
+    def get_tool_definitions(self) -> list[ToolDefinition]: ...
 
 class ToolProvider(Protocol[T_tool]):
     def get_tool_definitions(self) -> list[ToolDefinition]: ...

@@ -1,11 +1,12 @@
 # bazel_runner
 
-imports: dag (topological cleaning), dag_storage (messages), dag_clean_logic (change and feedback), bazel_agent_config (agent configuration)
+imports: dag (topological cleaning), dag_storage (messages), dag_clean_logic (change and feedback), bazel_agent_config (agent configuration), sandbox (step mode)
 terms (from dag_storage): node, pending message, subgraph
 terms (from dag_clean_logic): dirty, cleaning, change message, feedback message
 terms (from agent_loop): run
 terms (from bazel_node_loader): manifest
 terms (from bazel_agent_config): agent configuration, config target
+terms (from sandbox): step mode
 terms (owned): result
 
 ## Purpose
@@ -41,6 +42,7 @@ Orchestrates the full agent run pipeline — graph resolution, message persisten
   - the graph contains a cycle (the subgraph cannot be topologically ordered).
 - All output (changes and feedback) is delivered to the appropriate target nodes' message stores.
 - Assembles all components internally; the client provides no component instances; the runner owns the full lifecycle of the components it creates (graph, message store, agent loop, DAG).
+- Applies the agent configuration to each node's sandbox configuration: whether session-start reads are enabled and whether step mode is enabled.
 - Exposes only the cleaning and feedback operations, not component APIs.
 - A successful feedback injection adds each message to the target node's pending messages (marking the node dirty for a subsequent cleaning pass) and provides a no-change result.
 - A feedback injection for a node that does not exist in the graph signals failure, leaving state unchanged.

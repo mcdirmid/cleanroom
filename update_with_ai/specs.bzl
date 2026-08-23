@@ -158,7 +158,7 @@ _hls_lint_test = rule(
 # Macro: update_hls_with_ai (high-level specification nodes)
 # ============================================================================
 
-def _update_spec_with_ai(name, prompt, src, deps, spec_deps, template = None, verify = "", visibility = None):
+def _update_spec_with_ai(name, prompt, src, deps = [], spec_deps = [], template = None, guide = None, verify = "", visibility = None):
     """Create a spec node by delegating to update_with_ai.
 
     The single common spec-node entry: forwards the spec-specific arguments
@@ -195,6 +195,7 @@ def _update_spec_with_ai(name, prompt, src, deps, spec_deps, template = None, ve
         prompt = prompt,
         src = src,
         template = template,
+        guide = guide,
         deps = deps,
         star_deps = spec_deps,
         verify = verify,
@@ -228,7 +229,7 @@ def update_spec_with_ai(name, spec_deps, visibility = None):
         ) % (name, name),
         src = name + "-high.md",
         template = "//templates:hls",
-        deps = ["//guides:high_level_spec"],
+        guide = "//guides:high_level_spec",
         spec_deps = hls_spec_deps,
         verify = "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{}:{}_high_lint --test_output=errors 2>&1".format(
             native.package_name(),
@@ -256,7 +257,7 @@ def update_spec_with_ai(name, spec_deps, visibility = None):
         ) % (name, name, name, name),
         src = name + "-low.md",
         template = "//templates:lls",
-        deps = ["//guides:high_to_low"],
+        guide = "//guides:high_to_low",
         spec_deps = lls_spec_deps + [":" + name + "_high"],
         visibility = visibility,
     )

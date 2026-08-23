@@ -87,6 +87,7 @@ def _update_with_ai_impl(ctx):
         "star_deps": [str(dep.label) for dep in ctx.attr.star_deps],
         "src": ctx.attr.src,
         "template": ctx.file.template.short_path if ctx.file.template else None,
+        "guide": str(ctx.attr.guide.label) if ctx.attr.guide else None,
         "silent_srcs": [str(s) for s in ctx.attr.silent_srcs],
         "verify": ctx.attr.verify if ctx.attr.verify else None,
         "dependency_paths": deps_data,
@@ -135,6 +136,9 @@ _update_with_ai_rule = rule(
             allow_single_file = True,
             doc = "Optional file label whose content initializes the declared source file at run start when the file does not exist on disk; the manifest stores the template file's repo-relative path and the runtime reads its content",
         ),
+        "guide": attr.label(
+            doc = "Optional node target whose declared source is the run's guide: a readable file in the guide format (# Guide: ... ## Summary ...). The guide node is cleaned before this node; the guide's readable and delivery treatment follows the agent configuration's step-sections gate (when step mode is enabled the guide is not readable and its content reaches the agent only through advance outputs).",
+        ),
         "silent_srcs": attr.label_list(
             doc = "Files agent can write that are NOT readable by deps",
         ),
@@ -160,6 +164,7 @@ def update_with_ai(
         star_deps = [],
         src = "",
         template = None,
+        guide = None,
         silent_srcs = [],
         verify = "",
         config = None,
@@ -218,6 +223,10 @@ def update_with_ai(
             template's content initializes it at run start
         template: Optional file label whose content initializes src at run start
             when src does not exist on disk
+        guide: Optional node target whose declared source is the run's guide
+            (a readable file in the guide format); the guide node is cleaned
+            before this node, and the guide's readable/delivery treatment
+            follows the agent configuration's step-sections gate
         silent_srcs: Files agent can write that are NOT readable by deps
         verify: Shell command to run when the agent calls verify()
             (default: empty = no verify tool)
@@ -254,6 +263,7 @@ def update_with_ai(
         star_deps = star_deps,
         src = src,
         template = template,
+        guide = guide,
         silent_srcs = silent_srcs,
         verify = verify,
         **_rule_kwargs
@@ -270,6 +280,7 @@ def update_with_ai(
         # star_deps (explicit, so a star dep declared without a deps entry
         # is still resolvable, and its manifest reaches runfiles)
         deps = deps + silent_deps + feedback_deps + star_deps,
+        guide = guide,  # the guide node's manifest reaches runfiles
         config = config,  # optional agent_config default for this node
         **_rule_kwargs
     )
@@ -473,10 +484,15 @@ def _update_ai_node_clean_impl(ctx):
 
     # All transitive node manifests (via the manifest-collecting aspect), so
     # run-time graph loading can resolve the full star-dep closure: Bazel
-    # runfiles are explicit, not transitive.
+    # runfiles are explicit, not transitive. The guide node's manifest also
+    # reaches runfiles (the guide is declared separately from deps), so the
+    # graph storage can resolve the guide node and wire its file into the
+    # sandbox config.
     _manifest_depsets = [
         ctx.attr.node[OutputGroupInfo].manifests,
     ] + [dep[OutputGroupInfo].manifests for dep in ctx.attr.deps]
+    if ctx.attr.guide:
+        _manifest_depsets.append(ctx.attr.guide[OutputGroupInfo].manifests)
 
     _runfiles = ctx.runfiles(
         files = [
@@ -509,6 +525,11 @@ _update_ai_node_clean_rule = rule(
         "deps": attr.label_list(
             doc = "Dependency node targets whose manifests are needed for graph resolution",
             aspects = [_collect_manifests],
+        ),
+        "guide": attr.label(
+            aspects = [_collect_manifests],
+            doc = "Optional guide node target whose manifest must reach runfiles " +
+                  "for graph resolution (the guide is declared separately from deps).",
         ),
         "config": attr.label(
             providers = [DefaultInfo],

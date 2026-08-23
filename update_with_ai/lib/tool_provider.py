@@ -116,7 +116,22 @@ ToolCallOutcome = Union[
 ]
 
 # Executes a single tool call (per-tool, one call at a time, not in batches).
-ToolExecutor = Callable[[ToolName, ToolArguments], ToolCallOutcome[T_tool]]
+class ToolExecutor(Protocol[T_tool]):
+    """Executes tool calls and provides the current tool definitions.
+
+    The consuming agent loop re-requests the tool definitions before each
+    request, so a tool's definition may change during a run (per the
+    sandbox's step mode, the advance tool's definition gains the change
+    argument when the run reaches its final step).
+    """
+
+    def __call__(self, name: ToolName, arguments: ToolArguments) -> ToolCallOutcome[T_tool]:
+        """Execute a tool call by name and arguments."""
+        ...
+
+    def get_tool_definitions(self) -> List[ToolDefinition]:
+        """Return the current tool definitions."""
+        ...
 
 
 class ToolProvider(Protocol[T_tool]):

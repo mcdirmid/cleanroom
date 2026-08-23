@@ -42,7 +42,7 @@ VerificationCallback = Optional[Callable[[], Tuple[bool, str]]]
 
 @dataclass
 class SandboxConfig:
-    """Client-supplied configuration for the sandbox: file mappings, readable and writable paths, blame targets, limits, whether session-start reads are enabled, the templates (default: empty), and an optional verification callback."""
+    """Client-supplied configuration for the sandbox: file mappings, readable and writable paths, blame targets, limits, whether session-start reads are enabled, the guide and whether step mode is enabled, the templates (default: empty), and an optional verification callback."""
     file_mappings: FileMapping
     readable_paths: ReadablePaths
     writable_paths: WritablePaths
@@ -50,6 +50,8 @@ class SandboxConfig:
     search_result_limit: SearchResultLimit
     diff_size_limit: Optional[DiffSizeLimit] = None
     session_start_reads_enabled: bool = True
+    guide: Optional[VirtualName] = None
+    step_sections_enabled: bool = True
     templates: TemplateMapping = field(default_factory=dict)
     verification_callback: VerificationCallback = None
 

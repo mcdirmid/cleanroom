@@ -1178,5 +1178,162 @@ class TestTemplateInitialization(unittest.TestCase):
         return outcome[0]
 
 
+class TestStepMode(unittest.TestCase):
+    """Step mode (sandbox-low.md, Step mode): the guide is not readable and
+    its content reaches the agent only through advance — the guide summary
+    pre-injected at run start, then one step section per passing advance,
+    until the terminating advance (the change-message machinery)."""
+
+    GUIDE = (
+        "# Guide: Converting\n\n"
+        "## Summary\n\n"
+        "The artifact conforms to this guide.\n\n"
+        "## Checklist: Imports\n\n"
+        "- [ ] Imports come from the closure\n\n"
+        "## Checklist: Contracts\n\n"
+        "- [ ] Signatures match the LLS\n"
+    )
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.mkdtemp()
+        self.artifact_path = os.path.join(self.temp_dir, "artifact.md")
+        self.guide_path = os.path.join(self.temp_dir, "guide.md")
+        with open(self.guide_path, "w", encoding="utf-8") as f:
+            f.write(self.GUIDE)
+        self.file_mappings = {
+            "artifact.md": self.artifact_path,
+            "guide.md": self.guide_path,
+        }
+        self.readable_paths = ["artifact.md", "guide.md"]
+        self.writable_paths = ["artifact.md"]
+
+    def _sandbox(self, verification_callback=None, step_sections=True) -> SandboxImpl:
+        return SandboxImpl(
+            SandboxConfig(
+                file_mappings=self.file_mappings,
+                readable_paths=self.readable_paths,
+                writable_paths=self.writable_paths,
+                blame_targets=[],
+                search_result_limit=5,
+                guide="guide.md",
+                step_sections_enabled=step_sections,
+                verification_callback=verification_callback,
+            )
+        )
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.temp_dir)
+
+    def test_session_start_pre_injects_summary_and_excludes_guide(self):
+        """In step mode, the guide is not among the session-start reads; the
+        pre-injected advance provides the guide summary with the ensure
+        instruction (no step section)."""
+        sandbox = self._sandbox()
+        reads = sandbox.get_session_start_reads()
+        self.assertEqual([r.name for r in reads], ["advance"])
+        advance = reads[0]
+        self.assertIsInstance(advance, PresentedToolResult)
+        self.assertEqual(advance.arguments, {})
+        self.assertIn("The artifact conforms to this guide.", advance.result.content)
+        self.assertIn("Ensure the above before calling advance again.", advance.result.content)
+        self.assertNotIn("Checklist: Imports", advance.result.content)
+        self.assertTrue(advance.result.supersedes)
+
+    def test_advance_delivers_sections_then_terminates(self):
+        """On a passing verification, advance provides the next step section
+        (with the guide summary and the ensure instruction) and continues;
+        when no sections remain, advance proceeds to the termination
+        machinery."""
+        sandbox = self._sandbox()
+        sec1 = sandbox.advance()
+        self.assertIsInstance(sec1, list)
+        self.assertIsInstance(sec1[0], PresentedToolResult)
+        self.assertIn("Checklist: Imports", sec1[0].result.content)
+        self.assertIn("Ensure the following before calling advance again:", sec1[0].result.content)
+        self.assertIn("The artifact conforms to this guide.", sec1[0].result.content)
+        self.assertTrue(sec1[0].result.supersedes)
+        sec2 = sandbox.advance()
+        self.assertIn("Checklist: Contracts", sec2[0].result.content)
+        out3 = sandbox.advance()
+        self.assertIsInstance(out3, TerminateAgentWithSuccess)
+        self.assertIsInstance(out3.value, NoChangeResult)
+
+    def test_failing_verification_restates_summary_and_keeps_pointer(self):
+        """On a failing verification, advance provides the guide summary, the
+        reason, and an instruction to correct; the step-section pointer does
+        not advance (the next passing advance still delivers section 1)."""
+        results = iter([(False, "lint error here"), (True, "")])
+
+        def cb():
+            return next(results)
+
+        sandbox = self._sandbox(verification_callback=cb)
+        feedback = sandbox.advance()
+        self.assertIsInstance(feedback, list)
+        self.assertIsInstance(feedback[0], ToolResult)
+        self.assertIn("The artifact conforms to this guide.", feedback[0].content)
+        self.assertIn("lint error here", feedback[0].content)
+        self.assertIn("before calling advance", feedback[0].content)
+        self.assertTrue(feedback[0].supersedes)
+        out = sandbox.advance()
+        self.assertIn("Checklist: Imports", out[0].result.content)
+
+    def test_advance_tool_definition_omits_changes_until_final_step(self):
+        """The advance tool's definition omits the change argument while step
+        sections remain and includes it when no sections remain."""
+        sandbox = self._sandbox()
+
+        def adv_def():
+            defs = sandbox.get_tool_definitions()
+            return next(d for d in defs if d["function"]["name"] == "advance")
+
+        self.assertNotIn("changes", adv_def()["function"]["parameters"]["properties"])
+        sandbox.advance()
+        sandbox.advance()
+        self.assertIn("changes", adv_def()["function"]["parameters"]["properties"])
+
+    def test_guide_not_readable_in_step_mode(self):
+        """In step mode, the guide is not readable: reads and searches of it
+        fail identifying the violated policy."""
+        sandbox = self._sandbox()
+        failure = sandbox.read_file("guide.md")
+        self.assertIsInstance(failure, ToolFailure)
+        self.assertIn("step mode", failure.value)
+        search_failure = sandbox.search_files("guide.md", "pattern")
+        self.assertIsInstance(search_failure, ToolFailure)
+
+    def test_step_mode_disabled_guide_readable_at_session_start(self):
+        """When step mode is disabled, the guide is provided whole at run
+        start and is re-readable like other readable files."""
+        sandbox = self._sandbox(step_sections=False)
+        reads = sandbox.get_session_start_reads()
+        names = [r.name for r in reads]
+        self.assertIn("read_file", names)
+        self.assertNotIn("advance", names)
+        guide_read = next(
+            r for r in reads if r.arguments.get("file_path") == "guide.md"
+        )
+        self.assertIn("# Guide: Converting", guide_read.result.content)
+        self.assertFalse(guide_read.result.supersedes)
+        result = sandbox.read_file("guide.md")
+        self.assertIsInstance(result, list)
+        self.assertIsInstance(result[0], ToolResult)
+
+    def test_terminating_advance_change_message_machinery(self):
+        """The change-message machinery applies only to the terminating
+        advance: after the sections are exhausted, a changed run with an
+        empty change message signals a tool failure showing the diff."""
+        sandbox = self._sandbox()
+        # Create the artifact, then advance through both sections.
+        sandbox.write_file("artifact.md", "line 1\n")
+        sandbox.advance()
+        sandbox.advance()
+        sandbox.read_file("artifact.md", include_line_numbers=True)
+        sandbox.replace_lines("artifact.md", 1, 1, "changed")
+        outcome = sandbox.advance()
+        self.assertIsInstance(outcome, ToolFailure)
+        self.assertIn("artifact.md", outcome.value)
+
+
 if __name__ == "__main__":
     unittest.main()

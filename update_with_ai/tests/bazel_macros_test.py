@@ -23,7 +23,8 @@ class TestBazelMacros(unittest.TestCase):
             "feedback_deps": ["//pkg:fdep"],
             "star_deps": ["//pkg:star_dep"],
             "src": "src1.txt",
-            "template": "//parts/templates:lls",
+            "template": "//templates:lls",
+            "guide": "//guides:high_to_low",
             "silent_srcs": [":silent_src1"],
             "dependency_paths": [],
         }
@@ -38,6 +39,7 @@ class TestBazelMacros(unittest.TestCase):
         self.assertIn("star_deps", manifest)
         self.assertIn("src", manifest)
         self.assertIn("template", manifest)
+        self.assertIn("guide", manifest)
         self.assertIn("silent_srcs", manifest)
         
         # Verify types

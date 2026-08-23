@@ -237,6 +237,7 @@ class BazRunnerImpl(BazRunner):
                     config=dataclasses.replace(
                         cfg,
                         session_start_reads_enabled=agent_config.session_start_reads,
+                        step_sections_enabled=agent_config.step_sections,
                     )
                 ),
                 make_agent_loop=lambda cfg=None: agent_loop,

@@ -147,6 +147,7 @@ class _TempRunfilesTestCase(unittest.TestCase):
         feedback_deps: Optional[List[str]] = None,
         src: str = "",
         template: Optional[str] = None,
+        guide: Optional[str] = None,
         silent_srcs: Optional[List[str]] = None,
     ) -> Path:
         """Write <runfiles>/<pkg>/<name>_manifest.json for label //pkg:name."""
@@ -161,6 +162,7 @@ class _TempRunfilesTestCase(unittest.TestCase):
             "feedback_deps": feedback_deps if feedback_deps is not None else [],
             "src": src,
             "template": template,
+            "guide": guide,
             "silent_srcs": silent_srcs if silent_srcs is not None else [],
         }
         path = pkg_dir / (name + "_manifest.json")
@@ -192,6 +194,7 @@ class TestLoadNode(_TempRunfilesTestCase):
             feedback_deps=["//pkg:fdep"],
             src="foo.txt",
             template="templates/lls_template.md",
+            guide="//guides:high_to_low",
             silent_srcs=["private.log"],
         )
         node = self.load_impl("//pkg:target")
@@ -204,6 +207,7 @@ class TestLoadNode(_TempRunfilesTestCase):
         self.assertEqual(node.feedback_deps, ["//pkg:fdep"])
         self.assertEqual(node.src, "foo.txt")
         self.assertEqual(node.template, "templates/lls_template.md")
+        self.assertEqual(node.guide, "//guides:high_to_low")
         self.assertEqual(node.silent_srcs, ["private.log"])
 
     def test_load_node_includes_feedback_deps_in_deps(self):

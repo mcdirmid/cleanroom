@@ -5,7 +5,7 @@ terms (from tool_provider): tool definition, tool result, supersession flag, stu
 terms (from agent_loop): run
 terms (from dag_storage): dependency
 terms (from dag_clean_logic): change message, feedback message
-terms (owned): virtual name, file write, line-numbered view, injected read, session-start read, blame, blame target, soft length bound, hard length bound, template
+terms (owned): virtual name, file write, line-numbered view, injected read, session-start read, blame, blame target, soft length bound, hard length bound, template, guide, guide summary, step section, step mode
 
 ## Purpose
 
@@ -19,6 +19,10 @@ Provides a controlled environment for agents to read, write, search, and modify 
 - Injected read: the read provided for a file immediately after a successful file write of that file, presenting a read request with line numbers and the read result carrying the file's full current content; the agent did not request it, and to the agent it appears as a numbered read it requested.
 - Session-start read: a read of a file the agent can read but not write, provided at the beginning of a run for rendering before the agent's first turn; it renders the file's content plain, never supersedes an earlier result, and is never stubbed.
 - Template: a writable file's initial content, configured for the file; when the file does not exist when the sandbox is configured, the file is created with the template's content at run start; a file that exists when the sandbox is configured is never modified by its template.
+- Guide: the run's declared guide input — a readable file the node declares separately from its dependencies, at most one per run, in the guide format: its first line is `# Guide: <title>` and its first `##` heading is `## Summary`.
+- Guide summary: the guide's first part — the content from the guide's first line through the end of its `## Summary` section.
+- Step section: a checklist section of the guide — a part of the guide after the guide summary, delimited by `## <name>` headings, delivered after an advance that passed verification.
+- Step mode: a run configuration in which the guide is not readable and its content reaches the agent only through the advance operation: the guide summary at run start, then the step sections one at a time after successful advances.
 - Blame: a termination outcome that attributes the task's incompleteness to one or more dependencies and provides feedback on how to correct their outputs; blame is not failure.
 - Blame target: a dependency the agent may blame.
 - Soft length bound: the preferred maximum length of a change summary; a summary exceeding it is rejected with shortening guidance up to a grace count, then accepted when within the hard length bound.
@@ -28,7 +32,7 @@ Provides a controlled environment for agents to read, write, search, and modify 
 
 **Inputs**
 
-- Configured: file mappings (virtual name to full path); readable and writable virtual paths; blame targets (may be empty); the search result limit (the maximum matches a single search may render) and the diff size limit (the maximum characters a verification diff may report); whether session-start reads are enabled; the templates (a mapping from writable virtual names to their template content; may be empty); an optional verification callback.
+- Configured: file mappings (virtual name to full path); readable and writable virtual paths; blame targets (may be empty); the search result limit (the maximum matches a single search may render) and the diff size limit (the maximum characters a verification diff may report); whether session-start reads are enabled; the guide (the run's declared guide, at most one, may be absent); whether step mode is enabled; the templates (a mapping from writable virtual names to their template content; may be empty); an optional verification callback.
 - Per call: a tool call (tool name and arguments, per tool_provider).
 
 **Operations**
@@ -56,6 +60,7 @@ Provides a controlled environment for agents to read, write, search, and modify 
 
 - The agent loop handles free-text responses, routes termination signals, and stubs the earlier result when a result's flag is set, identifying it by the file's virtual name or the verification command.
 - The verification callback, if provided, has no side effects on the sandbox's filesystem.
+- A run declares at most one guide.
 
 **File operations**
 
@@ -78,6 +83,7 @@ Provides a controlled environment for agents to read, write, search, and modify 
 - The supersession flag is set on the results of operations on writable files and on verification results; it is not set on reads of files that are not writable, on searches, or on termination results.
 - A read of a writable file sets the flag: it supersedes the earlier result for that file.
 - A write, a content-based edit, and a line-range edit set the flag: they supersede the earlier result for that file.
+- Each advance output sets the flag: it supersedes the earlier advance output (in step mode, the previous step-mode output).
 - Advance's feedback on a failing verification sets the flag: it supersedes the earlier verification result.
 - The superseded result is identified by the file's virtual name or the advance operation — the name the operation itself carries; no separate identity is introduced.
 
@@ -100,6 +106,17 @@ Provides a controlled environment for agents to read, write, search, and modify 
 - A session-start read does not set the supersession flag.
 - A session-start read is never stubbed: no file write targets a file that is not writable, and a read of a file that is not writable never supersedes an earlier result.
 
+**Step mode**
+
+- When step mode is disabled, the guide is provided whole at run start and is re-readable like other readable files.
+- When step mode is enabled, the guide is not readable: its content reaches the agent only through the advance operation's outputs.
+- In step mode, the guide summary is part of every advance output while the run is in step mode, so the summary is always visible; the step sections slide — each advance output supersedes the previous advance output, so at most one step section is live alongside the summary.
+- In step mode, a call to advance is pre-injected at run start, providing the guide summary with an instruction directing the agent to ensure the summary's requirements before calling advance again.
+- In step mode, on a passing verification with step sections remaining, advance provides the next step section, in the guide's section order, together with the guide summary and an instruction directing the agent to ensure the step section's requirements before calling advance again; on a passing verification with no step sections remaining, advance proceeds to the termination machinery.
+- In step mode, on a failing verification, advance provides the guide summary, the reason verification failed, and an instruction directing the agent to correct before calling advance again; the step-section pointer does not advance.
+- In step mode, the advance tool's definition omits the change-message argument while step sections remain; when verification passes with no step sections remaining, the definition includes it.
+- A readable file that is not the guide is unaffected by step mode.
+
 **Template initialization**
 
 - A writable file with a configured template exists on disk at run start, its content exactly the template's content, when the file did not exist when the sandbox was configured.
@@ -116,6 +133,8 @@ Provides a controlled environment for agents to read, write, search, and modify 
 **Termination**
 
 - Termination tools: advance, failure, and blame. Advance verifies the run and then signals successful termination; a valid blame signals successful termination; the failure operation ends the session in failure. Termination tools signal termination when invoked correctly.
+- In step mode, advance does not terminate while step sections remain: on a passing verification it provides the next step section and the session continues; advance terminates only when verification passes with no step sections remaining.
+- The change summary applies only when advance terminates: in step mode, an advance with step sections remaining carries no change summary.
 - Blame is offered only when blame targets are configured; each (target, feedback) pair is delivered as a feedback message to the blamed node, which is re-cleaned so the blaming node can run again.
 - Termination is at the agent's judgment: the agent signals termination when it considers its task complete, or when it cannot be completed.
 - Advance signals termination only when its internal verification passes (or no verification callback is configured); when the run changed no files, advance signals successful termination without a change message.
@@ -127,4 +146,7 @@ Provides a controlled environment for agents to read, write, search, and modify 
 - Error message wording: error messages identify the violated policy or failing operation; their exact wording is unspecified.
 - Session-start read size: session-start reads inherit the unbounded-read rule; the read-only files are assumed to be reasonably sized, so no separate size bound is introduced for session-start reads.
 - Template size: templates are assumed to be reasonably sized, so no separate size bound is introduced for template content.
-- Advance tool description: the advance tool's description wording is unspecified; the tool's contract is defined by the Verification and Termination rules.
+- Step section size: step sections are parts of the guide file, which is assumed reasonably sized; no separate size bound is introduced for step sections.
+- Guide parsing: the exact rules for splitting the guide into its guide summary and step sections follow the guide format; section content is delivered in order without interpretation.
+- Step presentation: the exact wording of the ensure instruction and the formatting of the summary and step sections within an advance output are unspecified; the intent is conveyed by the Step mode rules.
+- Advance tool description: the advance tool's description wording is unspecified; the tool's contract is defined by the Verification, Termination, and Step mode rules.

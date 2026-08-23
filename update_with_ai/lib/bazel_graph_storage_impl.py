@@ -373,6 +373,7 @@ def _build_sandbox_config(
     readable_paths: List[str],  # pyright: ignore[reportArgumentType]
     writable_paths: List[str],  # pyright: ignore[reportArgumentType]
     templates: Dict[str, str],  # pyright: ignore[reportArgumentType]
+    guide: Optional[str] = None,  # pyright: ignore[reportArgumentType]
 ) -> SandboxConfig:  # pyright: ignore[reportReturnType]
     """Build a SandboxConfig from a manifest dict. (pyright: ignore[reportArgumentType])"""
     return SandboxConfig(
@@ -381,6 +382,7 @@ def _build_sandbox_config(
         writable_paths=writable_paths,
         blame_targets=list(manifest.get("feedback_deps", [])),  # pyright: ignore[reportArgumentType]
         search_result_limit=10,
+        guide=guide,
         templates=templates,
         verification_callback=_build_verify_callback(
             str(manifest.get("verify") or "")  # pyright: ignore[reportArgumentType]
@@ -583,6 +585,27 @@ class BazelGraphStorageFileImpl(BaseBazelGraphStorageImpl):
                 with open(template_path, "r", encoding="utf-8") as f:
                     templates[own_src] = f.read()
 
+            # The guide (per the sandbox contract): the manifest's guide is a
+            # node label declared separately from deps. The guide node is
+            # cleaned before this node (it joins the adjacency), and its
+            # declared source is mapped and readable, so the sandbox can read
+            # it and treat it per the step-mode flag (in step mode the guide
+            # is not readable and its content reaches the agent only through
+            # advance outputs).
+            guide_label: Optional[NodeId] = manifest.get("guide")  # pyright: ignore[reportArgumentType]
+            guide_src: Optional[str] = None
+            if guide_label:
+                guide_manifest = raw.get(guide_label)
+                guide_pkg = pkg_dirs.get(guide_label)
+                if guide_manifest is not None and guide_pkg is not None:
+                    guide_src = str(guide_manifest.get("src") or "")
+                    if guide_src:
+                        file_mappings.setdefault(
+                            guide_src, os.path.join(guide_pkg, guide_src)
+                        )
+                        if guide_src not in readable_paths:
+                            readable_paths.append(guide_src)
+
             self._definitions[node_id] = NodeDefinition(
                 prompt=manifest["prompt"],
                 sandbox_config=_build_sandbox_config(
@@ -591,13 +614,18 @@ class BazelGraphStorageFileImpl(BaseBazelGraphStorageImpl):
                     readable_paths=readable_paths,
                     writable_paths=writable_paths,
                     templates=templates,
+                    guide=guide_src,
                 ),
             )
 
             # Build adjacency: deps (including feedback deps) and silent_deps
-            # are the node's dependencies.
+            # are the node's dependencies; the guide node is a dependency too
+            # (cleaned before the node, so the guide file is current when the
+            # sandbox reads it) but its changes do not propagate to the node.
             silent_deps: List[NodeId] = list(manifest.get("silent_deps", []))
             all_deps: List[NodeId] = deps + silent_deps
+            if guide_label and guide_label not in all_deps:
+                all_deps.append(guide_label)
             self._adjacency[node_id] = all_deps
 
             # Propagating deps: only deps (including feedback deps) propagate
@@ -617,6 +645,9 @@ class BazelGraphStorageFileImpl(BaseBazelGraphStorageImpl):
             declared_deps.extend(manifest.get("deps", []))
             declared_deps.extend(manifest.get("silent_deps", []))
             declared_deps.extend(manifest.get("star_deps", []))
+            guide_label = manifest.get("guide")
+            if guide_label:
+                declared_deps.append(guide_label)
         for dep in declared_deps:
             if dep in raw:
                 continue

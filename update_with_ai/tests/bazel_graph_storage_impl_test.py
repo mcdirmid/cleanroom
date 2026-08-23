@@ -499,6 +499,7 @@ class _Workspace:
         star_deps: Optional[List[str]] = None,
         verify: Optional[str] = None,
         template: Optional[str] = None,
+        guide: Optional[str] = None,
     ) -> None:
         pkg_dir = self.root / pkg
         pkg_dir.mkdir(parents=True, exist_ok=True)
@@ -523,6 +524,7 @@ class _Workspace:
             "star_deps": star_deps or [],
             "src": src,
             "template": template_rel,
+            "guide": guide,
             "silent_srcs": silent_srcs or [],
             "verify": verify,
         }
@@ -959,6 +961,55 @@ class TestBazelGraphStorageFileImpl(unittest.TestCase):
                     "//pkg_h:h"
                 ).sandbox_config.templates,
                 {},
+            )
+        finally:
+            ws.close()
+
+    def test_guide_wired_into_sandbox_config_and_adjacency(self):
+        """A manifest-declared guide: the guide node is a dependency (cleaned
+        before the node), its declared source is mapped and readable, and the
+        sandbox config carries the guide's virtual name."""
+        ws = _Workspace()
+        try:
+            ws.write_manifest(
+                "pkg_g",
+                "g",
+                "//pkg_g:g",
+                "pg",
+                src="g1.txt",
+            )
+            ws.write_manifest(
+                "pkg_guide",
+                "the_guide",
+                "//pkg_guide:the_guide",
+                "guide prompt",
+                src="guide.md",
+            )
+            ws.write_manifest(
+                "pkg_h",
+                "h",
+                "//pkg_h:h",
+                "ph",
+                src="h1.txt",
+                guide="//pkg_guide:the_guide",
+            )
+            graph = self._build_graph(ws)
+            h_def = graph.resolve_node_definition("//pkg_h:h")
+            # The guide's source is mapped and readable; the config carries it.
+            self.assertEqual(h_def.sandbox_config.guide, "guide.md")
+            self.assertIn("guide.md", h_def.sandbox_config.readable_paths)
+            self.assertEqual(
+                h_def.sandbox_config.file_mappings["guide.md"],
+                str(ws.root / "pkg_guide" / "guide.md"),
+            )
+            # The guide node is a dependency of the node (cleaned before it).
+            self.assertEqual(
+                graph.get_node_dependencies("//pkg_h:h"),
+                ["//pkg_guide:the_guide"],
+            )
+            # A node without a guide has guide=None.
+            self.assertIsNone(
+                graph.resolve_node_definition("//pkg_g:g").sandbox_config.guide
             )
         finally:
             ws.close()

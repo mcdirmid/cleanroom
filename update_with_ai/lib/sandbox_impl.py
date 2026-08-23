@@ -97,6 +97,27 @@ class SandboxImpl(Sandbox):
             with open(real_path, 'w', encoding='utf-8') as f:
                 f.write(content)
 
+        # Step mode (per the sandbox contract): when step mode is enabled and
+        # a guide is configured, the guide is read at run start and split into
+        # its guide summary and step sections; the guide is then not readable
+        # and its content reaches the agent only through advance's outputs
+        # (the summary pre-injected at run start, then one section per passing
+        # advance). The step state is per-run state only.
+        self._step_mode: bool = bool(
+            self.config.step_sections_enabled and self.config.guide
+        )
+        self._step_summary: str = ""
+        self._step_sections: List[str] = []
+        self._step_pointer: int = 0
+        if self._step_mode:
+            guide_real = self.config.file_mappings.get(self.config.guide, "")
+            if guide_real and os.path.isfile(guide_real):
+                with open(guide_real, "r", encoding="utf-8") as f:
+                    guide_content = f.read()
+                summary, sections = self._split_guide(guide_content)
+                self._step_summary = summary
+                self._step_sections = sections
+
     def get_tool_definitions(self) -> List[ToolDefinition]:
         """Return tool definitions based on configuration."""
         definitions = []
@@ -157,22 +178,8 @@ class SandboxImpl(Sandbox):
             ),
             self._create_tool_definition(
                 "advance",
-                "Call advance when you have nothing more to do or think you are done. Advance verifies the run's changes (running the verification callback when configured) and, when verification passes, signals successful termination — requiring a change message naming the parts of each changed file when files changed. A failing verification returns feedback: fix the reported issues and call advance() again, or call fail() or blame() to end the run.",
-                {
-                    "changes": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "file": {"type": "string", "description": "A file changed by this run"},
-                                "summary": {"type": "string", "description": "One short sentence naming the parts of the file that changed, so the next agent knows what to pay attention to when updating further artifacts; not the task performed, not how it was done; aim for at most %d characters (hard limit %d)" % (SandboxImpl.SOFT_CHANGE_SUMMARY_LENGTH, SandboxImpl.HARD_CHANGE_SUMMARY_LENGTH)}
-                            },
-                            "required": ["file", "summary"],
-                            "additionalProperties": False
-                        },
-                        "description": "Required when the run changed files: one entry per changed file, each a short sentence naming the parts of that file that changed, so the next agent knows what to pay attention to when updating further artifacts"
-                    }
-                },
+                self._advance_tool_description(),
+                self._advance_tool_parameters(),
             ),
             self._create_tool_definition(
                 "fail",
@@ -207,6 +214,61 @@ class SandboxImpl(Sandbox):
 
         return definitions
 
+    def _advance_tool_description(self) -> str:
+        """The advance tool's description, per the current step state.
+
+        In step mode, while step sections remain, the description directs the
+        agent to the step-mode loop (call advance after each section); when
+        verification passed with no sections remaining (the terminating
+        advance), the description includes the change-message requirement.
+        """
+        if self._step_mode and self._step_pointer < len(self._step_sections):
+            return (
+                "Call advance when you have completed the current step's "
+                "requirements. Advance verifies the run's changes and, when "
+                "verification passes, provides the next step; when no steps "
+                "remain, it signals successful termination. A failing "
+                "verification returns feedback: fix the reported issues and "
+                "call advance() again, or call fail() or blame() to end the "
+                "run."
+            )
+        return (
+            "Call advance when you have nothing more to do or think you are "
+            "done. Advance verifies the run's changes (running the "
+            "verification callback when configured) and, when verification "
+            "passes, signals successful termination — requiring a change "
+            "message naming the parts of each changed file when files "
+            "changed. A failing verification returns feedback: fix the "
+            "reported issues and call advance() again, or call fail() or "
+            "blame() to end the run."
+        )
+
+    def _advance_tool_parameters(self) -> Dict[str, Any]:
+        """The advance tool's parameters, per the current step state.
+
+        In step mode, while step sections remain, the `changes` argument is
+        omitted from the definition (the change message applies only to the
+        terminating advance); when verification passed with no sections
+        remaining, the definition includes it.
+        """
+        if self._step_mode and self._step_pointer < len(self._step_sections):
+            return {}
+        return {
+            "changes": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "file": {"type": "string", "description": "A file changed by this run"},
+                        "summary": {"type": "string", "description": "One short sentence naming the parts of the file that changed, so the next agent knows what to pay attention to when updating further artifacts; not the task performed, not how it was done; aim for at most %d characters (hard limit %d)" % (SandboxImpl.SOFT_CHANGE_SUMMARY_LENGTH, SandboxImpl.HARD_CHANGE_SUMMARY_LENGTH)}
+                    },
+                    "required": ["file", "summary"],
+                    "additionalProperties": False
+                },
+                "description": "Required when the run changed files: one entry per changed file, each a short sentence naming the parts of that file that changed, so the next agent knows what to pay attention to when updating further artifacts"
+            }
+        }
+
     def get_session_start_reads(self) -> List[PresentedToolResult]:
         """The session-start reads: plain reads of the read-only files.
 
@@ -226,6 +288,11 @@ class SandboxImpl(Sandbox):
             set(self.config.readable_paths) - set(self.config.writable_paths)
         )
         for file_path in read_only:
+            if self._in_step_mode(file_path):
+                # The guide is not readable in step mode: its content reaches
+                # the agent only through advance's outputs (the pre-injected
+                # advance provides the guide summary instead).
+                continue
             real_path = self.config.file_mappings.get(file_path, file_path)
             if not os.path.isfile(real_path):
                 continue
@@ -242,7 +309,46 @@ class SandboxImpl(Sandbox):
                     note=f"Read {n} lines (plain)",
                 ),
             ))
+        if self._step_mode:
+            # Pre-inject the advance call: the guide summary with the ensure
+            # instruction, presented as the first advance output. The result
+            # supersedes the earlier advance output (the previous step-mode
+            # output), so the summary is always visible and the step sections
+            # slide; at run start there is nothing to stub yet.
+            reads.append(self._step_advance_output(include_section=False))
         return reads
+
+    def _step_advance_output(self, include_section: bool) -> PresentedToolResult:
+        """Compose a step-mode advance output.
+
+        The guide summary is part of every step-mode advance output, so the
+        summary is always visible; the step sections slide. When a step
+        section is presented, the output carries the summary, the ensure
+        instruction for the section, and the section itself; otherwise it
+        carries the summary and the ensure instruction for the summary only.
+        The output's result supersedes the earlier advance output (the
+        consuming agent loop stubs it), so at most one step section is live
+        alongside the summary.
+        """
+        parts: List[str] = [self._step_summary]
+        if include_section and self._step_pointer < len(self._step_sections):
+            parts.append(self._step_instruction(with_section=True))
+            parts.append(self._step_sections[self._step_pointer])
+        else:
+            parts.append(self._step_instruction(with_section=False))
+        return PresentedToolResult(
+            name="advance",
+            arguments={},
+            result=ToolResult(
+                content="\n\n".join(parts),
+                supersedes=True,
+                note=(
+                    f"Guide summary"
+                    if not include_section
+                    else f"Step {self._step_pointer + 1} of {len(self._step_sections)}"
+                ),
+            ),
+        )
 
     def read_file(self, file_path: VirtualName,
                   include_line_numbers: bool = False) -> ToolCallOutcome:
@@ -255,6 +361,11 @@ class SandboxImpl(Sandbox):
             )
 
         # Then check readability
+        if self._in_step_mode(file_path):
+            return self._error_response(
+                f"File path '{file_path}' is not readable in step mode: the "
+                f"guide's content reaches the agent only through advance outputs."
+            )
         if file_path not in self.config.readable_paths:
             return self._error_response(
                 f"File path '{file_path}' is not readable. "
@@ -492,6 +603,49 @@ class SandboxImpl(Sandbox):
             lines = lines[:-1]
         return lines, trailing
 
+    @staticmethod
+    def _split_guide(content: str) -> Tuple[str, List[str]]:
+        """Split a guide's content into its guide summary and step sections.
+
+        The guide summary is the content from the guide's first line through
+        the end of its `## Summary` section (the guide's first `##` heading);
+        each step section is a `## <name>`-delimited part of the guide after
+        the summary, in the guide's section order.
+        """
+        lines = content.split("\n")
+        headings = [
+            i for i, line in enumerate(lines) if line.startswith("## ")
+        ]
+        if not headings:
+            return content, []
+        summary_end = headings[1] if len(headings) > 1 else len(lines)
+        summary = "\n".join(lines[:summary_end])
+        sections: List[str] = []
+        for idx in range(1, len(headings)):
+            start = headings[idx]
+            end = headings[idx + 1] if idx + 1 < len(headings) else len(lines)
+            sections.append("\n".join(lines[start:end]))
+        return summary, sections
+
+    def _in_step_mode(self, file_path: VirtualName) -> bool:
+        """Whether a file is excluded by step mode: the guide is not readable."""
+        return self._step_mode and file_path == self.config.guide
+
+    def _step_instruction(self, with_section: bool) -> str:
+        """The ensure instruction for a step-mode advance output.
+
+        The exact wording is implementation-pinned (the sandbox contract
+        leaves it unspecified): when a step section is presented, direct the
+        agent to ensure that section's requirements before advancing; when
+        only the summary is presented, direct the agent to ensure the
+        summary's requirements before advancing.
+        """
+        if with_section:
+            return (
+                "Ensure the following before calling advance again:"
+            )
+        return "Ensure the above before calling advance again."
+
     def edit_file(self, file_path: VirtualName, old_str: str, new_str: str,
                   expect_multiple: bool = False) -> ToolCallOutcome:
         """Replace text in a file (content-based search and replace)."""
@@ -634,6 +788,11 @@ class SandboxImpl(Sandbox):
             )
 
         # Then check readability
+        if self._in_step_mode(path):
+            return self._error_response(
+                f"Path '{path}' is not readable in step mode: the "
+                f"guide's content reaches the agent only through advance outputs."
+            )
         if path not in self.config.readable_paths:
             return self._error_response(
                 f"Path '{path}' is not readable. "
@@ -733,13 +892,27 @@ class SandboxImpl(Sandbox):
             except Exception as e:
                 return ToolFailure[str](f"Verification error: {str(e)}")
             if not success:
-                content = (
-                    (output + "\n\n" if output else "")
-                    + "Verification failed; fix the reported issues by "
-                    "changing files (edit_file/replace_lines/write_file) "
-                    "and then call advance() again, or call blame() or "
-                    "fail() to end the run."
-                )
+                if self._step_mode:
+                    # In step mode, a failing verification restates the guide
+                    # summary with the reason and an instruction to correct
+                    # before calling advance again; the step-section pointer
+                    # does not advance.
+                    content = (
+                        self._step_summary
+                        + "\n\n"
+                        + (output + "\n\n" if output else "")
+                        + "Verification failed; correct the reported issues "
+                        "before calling advance() again, or call blame() or "
+                        "fail() to end the run."
+                    )
+                else:
+                    content = (
+                        (output + "\n\n" if output else "")
+                        + "Verification failed; fix the reported issues by "
+                        "changing files (edit_file/replace_lines/write_file) "
+                        "and then call advance() again, or call blame() or "
+                        "fail() to end the run."
+                    )
                 # The feedback supersedes the earlier non-stubbed verification
                 # result (an earlier advance feedback, stubbed by the agent
                 # loop); the note reports only the status (pinned in
@@ -749,6 +922,16 @@ class SandboxImpl(Sandbox):
                     supersedes=True,
                     note="Verification failed.",
                 )]
+
+        # Verification passed (or no callback). In step mode, while step
+        # sections remain, advance provides the next step section and the
+        # session continues (no termination, no change message): the output
+        # supersedes the previous advance output, so the guide summary stays
+        # visible and at most one step section is live.
+        if self._step_mode and self._step_pointer < len(self._step_sections):
+            output = self._step_advance_output(include_section=True)
+            self._step_pointer += 1
+            return [output]
 
         # Verification passed (or no callback): require the change message
         # when the run changed files, then signal successful termination.

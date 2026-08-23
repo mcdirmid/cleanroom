@@ -530,9 +530,16 @@ class AgentLoopImpl(AgentLoop):
 
             # Loop-repetition detection: consecutive identical tool calls
             # (same name and arguments) inject a reminder once per run, so the
-            # agent cannot spin forever on the same call.
+            # agent cannot spin forever on the same call. The advance tool is
+            # exempt and resets the tracking: in step mode, advance is called
+            # once per checklist section (the same arguments each time) and
+            # each call is the run's progress signal, not a spin; any advance
+            # call also breaks a run of repeated identical calls.
             signature = (name, json.dumps(arguments, sort_keys=True))
-            if signature == self._loop_last_signature:
+            if name == "advance":
+                self._loop_last_signature = None
+                self._loop_repeat_count = 0
+            elif signature == self._loop_last_signature:
                 self._loop_repeat_count += 1
             else:
                 self._loop_last_signature = signature
@@ -763,6 +770,17 @@ class AgentLoopImpl(AgentLoop):
         while iterations < self._config.max_iterations:
             iterations += 1
 
+            # The tool definitions are re-requested from the tool execution
+            # logic before each request (the `tools` run input provides the
+            # initial definitions), so a tool's definition may change during
+            # a run — e.g., the advance tool's definition gains the change
+            # argument when the run reaches its final step — and each request
+            # carries the latest definitions.
+            _getter = getattr(tool_executor, "get_tool_definitions", None)
+            current_tools: List[ToolDefinition] = (
+                _getter() if callable(_getter) else tools
+            )
+
             openai_messages = []
             if system_prompt:
                 openai_messages.append({"role": "system", "content": system_prompt})
@@ -779,8 +797,8 @@ class AgentLoopImpl(AgentLoop):
             }
 
             # Only include tools and tool_choice if tools are provided
-            if tools:
-                api_params["tools"] = cast(List[ChatCompletionToolParam], tools)
+            if current_tools:
+                api_params["tools"] = cast(List[ChatCompletionToolParam], current_tools)
                 api_params["tool_choice"] = "auto"
 
             try:

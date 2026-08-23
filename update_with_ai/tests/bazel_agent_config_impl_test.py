@@ -68,6 +68,7 @@ def _write_generated_config(
         '    "timeout": 12.5,',
         '    "max_tokens": None,',
         '    "session_start_reads": True,',
+        '    "step_sections": True,',
         "}",
         "",
     ]
@@ -191,6 +192,35 @@ class TestFindAndLoad(TestBazelAgentConfigImpl):
         self.assertEqual(config.temperature, 0.3)
         self.assertEqual(config.timeout, 12.5)
         self.assertIsNone(config.max_tokens)
+        self.assertTrue(config.session_start_reads)
+        self.assertTrue(config.step_sections)
+
+    def test_load_config_honors_step_sections_gate(self) -> None:
+        """A generated module with step_sections disabled loads as False
+        (the run-level gate is carried by the agent configuration)."""
+        pkg_dir = self._root / "bazel-bin" / PACKAGE
+        pkg_dir.mkdir(parents=True, exist_ok=True)
+        (pkg_dir / (NAME + "_config.py")).write_text(
+            "\n".join([
+                "AGENT_CONFIG = {",
+                '    "label": "//{}:{}",'.format(PACKAGE, NAME),
+                '    "name": "{}",'.format(NAME),
+                '    "model": "m",',
+                '    "base_url": "http://localhost:8000/v1",',
+                '    "api_key_env": "",',
+                '    "max_iterations": 7,',
+                '    "temperature": 0.3,',
+                '    "timeout": 12.5,',
+                '    "max_tokens": None,',
+                '    "session_start_reads": True,',
+                '    "step_sections": False,',
+                "}",
+                "",
+            ]),
+            encoding="utf-8",
+        )
+        config = self.impl.load_config("//agent_configs:default", workspace_root=str(self._root))
+        self.assertFalse(config.step_sections)
         self.assertTrue(config.session_start_reads)
 
     def test_load_config_honors_session_start_reads_gate(self) -> None:

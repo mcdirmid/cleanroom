@@ -296,6 +296,48 @@ class TestAgentLoopImpl(unittest.TestCase):
         self.assertEqual(len(error_events), 1)
         self.assertIn("Degenerate loop", error_events[0]["error"])
 
+    def test_repeated_advance_calls_are_exempt_from_degenerate_loop(self) -> None:
+        """
+        LLS: the advance tool is exempt from the same-call repetition
+        detection — in step mode, advance is called once per checklist
+        section (the same arguments each time), and each call is the run's
+        progress signal. Repeated advance calls neither inject a reminder
+        nor fail the run.
+        """
+        tool_call = make_tool_call("advance", "call_loop", {})
+        responses = [
+            make_response(content=None, tool_calls=[tool_call], finish_reason="tool_calls")
+        ] * 20
+        self.mock_client.chat.completions.create.side_effect = responses
+
+        events: List[Tuple[str, Dict[str, Any]]] = []
+
+        def logger(event: str, data: Dict[str, Any]) -> None:
+            events.append((event, data))
+
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
+            return self.inline_result("next step")
+
+        agent = AgentLoopImpl(make_config(max_iterations=20))
+        result = agent.run_agent(
+            prompt="update the spec",
+            tools=make_tool_definitions(),
+            tool_executor=executor,
+            logger=logger,
+        )
+
+        # The loop ran to the iteration limit, not a degenerate-loop failure.
+        self.assertEqual(self.mock_client.chat.completions.create.call_count, 20)
+        reminders = [d for e, d in events if e == "reminder_injected"]
+        self.assertEqual(len(reminders), 0)
+        error_events = [d for e, d in events if e == "error"]
+        self.assertNotIn(
+            "Degenerate loop", " ".join(str(d.get("error", "")) for d in error_events)
+        )
+        assert isinstance(result, tuple)
+        error, history = result
+        self.assertNotIn("Degenerate loop", str(error))
+
     def test_same_range_replace_lines_fails_run(self) -> None:
         """
         LLS: replace_lines targeting the same file and line range 8

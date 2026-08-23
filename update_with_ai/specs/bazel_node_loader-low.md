@@ -20,6 +20,7 @@ class BazNode(ToolProvider):
     silent_deps: list[str]
     src: str = ""
     template: str | None = None
+    guide: str | None = None
     silent_srcs: list[str] = field(default_factory=list)
     feedback_deps: list[str] = field(default_factory=list)
 
@@ -29,7 +30,7 @@ class BazelNodeLoader(Protocol):
     def get_node_prompt(self, node_label: str) -> str | None: ...
 ```
 
-A data class Protocol that bundles static node metadata with the `ToolProvider` interface. `deps` holds the node's dependency node labels, including its feedback deps; `feedback_deps` holds the labels that can receive feedback from the node (a subset of `deps`); `silent_deps` holds dependencies whose output is not readable. `src` is the node's declared source file (the artifact its agent writes; empty when the node declares none); `template` is the declared source file's template — its content initializes `src` at run start when `src` does not exist on disk (`None` when none is declared); `silent_srcs` holds the node's silent source files. Internal state fields (e.g., `_dependency_nodes`, `_agent_loop`) are implementation-specific and defined in the implementation spec. A loaded node resolves tool definitions and tool execution from the tool providers declared in its manifest; a tool call that no declared provider handles signals a tool failure.
+A data class Protocol that bundles static node metadata with the `ToolProvider` interface. `deps` holds the node's dependency node labels, including its feedback deps; `feedback_deps` holds the labels that can receive feedback from the node (a subset of `deps`); `silent_deps` holds dependencies whose output is not readable. `src` is the node's declared source file (the artifact its agent writes; empty when the node declares none); `template` is the declared source file's template — its content initializes `src` at run start when `src` does not exist on disk (`None` when none is declared); `guide` is the node's declared guide — the guide node label, declared separately from `deps`, whose file the run's sandbox reads and treats per the step-mode flag (`None` when none is declared); `silent_srcs` holds the node's silent source files. Internal state fields (e.g., `_dependency_nodes`, `_agent_loop`) are implementation-specific and defined in the implementation spec. A loaded node resolves tool definitions and tool execution from the tool providers declared in its manifest; a tool call that no declared provider handles signals a tool failure.
 
 **HLS Justification:** "Designates a runtime representation of a Bazel node."
 ## Component-Provided Operations

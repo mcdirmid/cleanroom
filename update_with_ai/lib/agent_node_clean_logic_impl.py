@@ -87,6 +87,14 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
         sandbox: Sandbox = self._make_sandbox(node_def.sandbox_config)
         tools: List[ToolDefinition] = sandbox.get_tool_definitions()
 
+        def _get_tool_definitions() -> List[ToolDefinition]:
+            """Current tool definitions (tool_provider.ToolExecutor): the
+            sandbox's definitions, re-requested before each agent-loop request
+            so a tool's definition may change during the run (per the
+            sandbox's step mode, the advance tool's definition gains the
+            change argument when the run reaches its final step)."""
+            return sandbox.get_tool_definitions()
+
         def _tool_executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome:
             """Per-call tool executor (tool_provider.ToolExecutor): dispatch a
             single tool call to the sandbox operation of the same name."""
@@ -127,6 +135,11 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
             except Exception as e:
                 return ToolFailure[str](str(e))
 
+        # Expose the current-definitions getter on the executor (per
+        # tool_provider.ToolExecutor): the agent loop re-requests the tool
+        # definitions before each request.
+        _tool_executor.get_tool_definitions = _get_tool_definitions  # type: ignore[attr-defined]
+
         # Prompt composition (per the impl LLS): the run's system prompt is the
         # node's prompt augmented with lines naming the readable and writable
         # files (bare names; the sandbox resolves them to real paths); the
@@ -145,6 +158,19 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
         if file_lines:
             system_prompt = f"{system_prompt}\n\n" + "\n".join(file_lines)
         prompt = "\n".join(messages)
+        if node_def.sandbox_config.step_sections_enabled and node_def.sandbox_config.guide:
+            # Step mode (per the impl LLS): the run's user prompt includes the
+            # step-mode protocol — the guide arrives through the advance
+            # operation (the guide summary at run start, then a step section
+            # after each advance that passed verification); call advance after
+            # each section.
+            step_protocol = (
+                "The guide arrives through the advance operation: the guide "
+                "summary is provided at run start, then a step section after "
+                "each advance that passed verification. Work through each "
+                "step's checklist before calling advance again."
+            )
+            prompt = f"{prompt}\n\n{step_protocol}" if prompt else step_protocol
 
         # Wrap the configured logger with the node id so consumers (stdout
         # printer, transcript file) can attribute events to the cleaned node.
