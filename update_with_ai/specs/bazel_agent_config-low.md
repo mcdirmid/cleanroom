@@ -28,9 +28,6 @@ class AgentConfig:
     session_start_reads: bool = True
     step_sections: bool = True
 
-class ConfigNotFoundError(ValueError): ...
-class ApiKeyNotFoundError(ValueError): ...
-
 class BazelAgentConfig(Protocol):
     def build_agent_loop_config(self, config_target: Optional[str] = None, workspace_root: Optional[str] = None) -> AgentLoopConfig: ...
 ```
@@ -41,8 +38,8 @@ variable holding the API key (empty means the plain `AGENT_API_KEY`
 variable applies). `session_start_reads` and `step_sections` are the sandbox
 gates (per `bazel_agent_config-high.md`): whether the run's sandbox provides
 session-start reads and whether step mode is enabled (both default to
-enabled). The two exception types signal unexpected failures (see Failure
-Handling below).
+enabled). All failures are unexpected failures, signaled as exceptions (see
+Failure Handling below).
 ## Component-Provided Operations
 
 ### `build_agent_loop_config`
@@ -74,12 +71,12 @@ the environment.
 
 **Failure Handling:**
 - All failures are unexpected failures (exceptions):
-  - `ConfigNotFoundError` — the config target label is malformed, or the
-    generated module is not found in runfiles or bazel-bin; the message
-    includes the `bazel build` command for the config target.
-  - `ApiKeyNotFoundError` — the config's pinned API-key environment variable
-    is unset (when one is named), or `AGENT_API_KEY` is unset (when none is
-    named); the message names the exact variables.
+  - The config target label is malformed, or the generated module is not
+    found in runfiles or bazel-bin; the failure message includes the
+    `bazel build` command for the config target.
+  - The config's pinned API-key environment variable is unset (when one is
+    named), or `AGENT_API_KEY` is unset (when none is named); the failure
+    message names the exact variables.
 
 **HLS Justification:** "Provides an agent-loop configuration whose parameters
 match the selected agent configuration exactly, with the API key resolved

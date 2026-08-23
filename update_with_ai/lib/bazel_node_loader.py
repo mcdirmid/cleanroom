@@ -4,9 +4,7 @@ Interface LLS: bazel_node_loader
 Runtime loader for update_with_ai manifests.
 
 Defines the BazNode data-class Protocol (static node metadata bundled with
-the ToolProvider interface) and the BazelNodeLoader interface. The runtime
-loader implementation (manifest resolution, caching) lives in
-bazel_node_loader_impl.
+the ToolProvider interface) and the BazelNodeLoader interface.
 """
 
 from __future__ import annotations

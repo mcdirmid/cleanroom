@@ -164,7 +164,7 @@ class _StubAgentLoop:
                 {
                     "tool_calls": [
                         {"id": "c1", "type": "function",
-                         "function": {"name": "write_file", "arguments": "{}"}}
+                         "function": {"name": "edit_file", "arguments": "{}"}}
                     ]
                 },
             )
@@ -201,7 +201,7 @@ class TestLogFormatters(unittest.TestCase):
             {
                 "node_id": self.NODE,
                 "tool_calls": [
-                    {"function": {"name": "write_file", "arguments": "{}"}},
+                    {"function": {"name": "edit_file", "arguments": "{}"}},
                     {"function": {"name": "read_file", "arguments": "{}"}},
                 ],
             },
@@ -209,7 +209,7 @@ class TestLogFormatters(unittest.TestCase):
         assert line is not None
         self.assertNotIn("\n", line)
         self.assertIn("sample_node_1", line)
-        self.assertIn("write_file", line)
+        self.assertIn("edit_file", line)
         self.assertIn("read_file", line)
 
     def test_compact_api_response(self) -> None:
@@ -303,11 +303,11 @@ class TestLogFormatters(unittest.TestCase):
             "tool_called",
             {
                 "node_id": self.NODE,
-                "tool_calls": [{"function": {"name": "write_file", "arguments": "{}"}}],
+                "tool_calls": [{"function": {"name": "edit_file", "arguments": "{}"}}],
             },
         )
         self.assertIn("tool_called", line)
-        self.assertIn("write_file", line)
+        self.assertIn("edit_file", line)
 
     def test_full_api_response(self) -> None:
         line = _format_full_log("api_response", {"node_id": self.NODE, "usage": self.USAGE})

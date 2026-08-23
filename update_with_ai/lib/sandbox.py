@@ -63,19 +63,18 @@ class Sandbox(Protocol):
     Interface for the LLS Sandbox.
 
     A component that provides secure file system operations and tool
-    definitions for agent interactions. Tool results carry a supersedes flag
-    per the Stubbing rules: reads of writable files, writes, edits, and
-    verification supersede the earlier result for the same file or the
-    verification command; reads of files that are not writable, searches, and
-    termination results never supersede an earlier result. The consuming
-    agent loop stubs the superseded result.
+    definitions for agent interactions. Stubbing follows tool_provider
+    semantics: when a result's supersedes flag is set, the earlier
+    non-stubbed result for the same file or tool command is replaced by a
+    placeholder, keeping the conversation focused on current state; a result
+    with the flag unset supersedes nothing, and at most one earlier result is
+    superseded per result.
 
     Each tool operation produces a ToolCallOutcome: a sequence of one or
     more tool results (ToolResult or PresentedToolResult values) on success,
-    or a Signal (Continue, a TerminateAgentWith* signal, or ToolFailure). A
-    successful file write provides two results in order: the write
-    confirmation and the injected read (the automatic re-read with the
-    file's full numbered content, presented as a read the agent requested).
+    or a Signal (Continue, a TerminateAgentWith* signal, or ToolFailure).
+    After a successful file write, the file's current content appears in the
+    conversation.
     """
 
     def get_tool_definitions(self) -> List[ToolDefinition]:
@@ -83,7 +82,7 @@ class Sandbox(Protocol):
         Return the list of tool definitions available in the current sandbox configuration.
 
         Tools are conditionally included based on configuration:
-        - Always: read_file, write_file, edit_file, replace_lines,
+        - Always: read_file, edit_file, replace_lines,
           search_files, advance, fail
         - Conditional: blame (if blame targets non-empty)
 
@@ -101,11 +100,11 @@ class Sandbox(Protocol):
         first turn.
 
         When session-start reads are enabled, returns a session-start read
-        for every file that is readable but not writable and exists as a
-        regular file on disk, sorted by virtual name; each is a
-        PresentedToolResult pairing the read_file call with its plain read
-        result (never superseding). When disabled, returns an empty list.
-        Requesting the session-start reads changes no sandbox state.
+        for every file that is readable but not writable, sorted by virtual
+        name; each is a PresentedToolResult pairing the read_file call with
+        its plain read result (supersedes unset). When disabled, returns an
+        empty list. Requesting the session-start reads changes no sandbox
+        state.
         """
         ...
 
@@ -136,35 +135,6 @@ class Sandbox(Protocol):
         Note:
             The result's note reports the file's line count and view.
             Reads are not paginated and are not bounded by a size limit.
-        """
-        ...
-
-    def write_file(self, file_path: VirtualName, content: str) -> ToolCallOutcome:
-        """
-        Create a new file with content, using the virtual name provided by the
-        agent. Fails when the file already exists — modifying an existing file
-        must go through edit_file or replace_lines.
-
-        Args:
-            file_path: Virtual path to the file
-            content: Content to write (must be non-empty)
-
-        Returns:
-            A sequence of two results on success — the write confirmation (a
-            ToolResult with supersedes set) and the injected read (a
-            PresentedToolResult with the file's full numbered content) — or
-            ToolFailure on policy or argument violations (including an
-            existing file).
-
-        Routing:
-            supersedes is True (the write confirmation supersedes the earlier
-            result for the file; the injected read supersedes the write
-            confirmation and re-enables the line-numbered view). Sets
-            write_occurred flag.
-
-        Note:
-            The write confirmation's content and note are a minimal structured
-            status; no file content is echoed in it.
         """
         ...
 
@@ -273,44 +243,34 @@ class Sandbox(Protocol):
 
     def advance(self, changes: list[dict[str, str]] = []) -> ToolCallOutcome:
         """
-        Signal the run's completion: verify the run and then signal
-        successful termination, or provide feedback on a failing verification.
+        Signal the run's completion: advance signals successful termination
+        when verification passes, or provides feedback on a failing
+        verification.
 
-        Verifies the run automatically: computes the diff of each changed
-        file vs. its content at run start (truncated when it exceeds the diff
-        size limit) and runs the verification callback when one is
+        Verifies the run: runs the verification callback when one is
         configured; when no callback is configured, verification is treated
         as passed. On a failing verification, provides feedback (a ToolResult
-        carrying the failure details and guidance, never the run's diff; not
-        a tool failure) and the session continues. On a passing verification,
-        signals successful termination.
+        with the failure details and guidance; not a tool failure) and the
+        session continues — advance never terminates on a failing
+        verification. On a passing verification, signals successful
+        termination.
 
         Args:
             changes: One entry per changed file — {"file": <virtual path>,
-                "summary": one short sentence on what changed in the file, not
-                how it was done}. Broadcast to reverse dependencies. Required
-                when the run changed files; advance() without it fails with
-                the list of changed files, the run's diff, and the required
-                shape.
+                "summary": one short sentence naming the parts of the file
+                that changed for the next reader; not the task performed, not
+                how it was done}. Required when the run changed files; a
+                missing, malformed, or incomplete summary signals a
+                ToolFailure.
 
         Returns:
             On a failing verification: a ToolResult with the feedback (the
             session continues). On a passing verification:
-            TerminateAgentWithSuccess carrying a TerminateSuccessResult (the
-            implementation forms the result — no change, or change when the
-            run changed files). Termination tools produce no ToolResult and
-            never supersede an earlier result; a change message that is
-            missing, malformed, or out of bounds signals a ToolFailure
-            (never terminating).
-
-        Routing:
-            The failing-verification feedback sets supersedes: it supersedes
-            the earlier non-stubbed verification result (an earlier advance
-            feedback); advance's termination outcome never sets the flag.
-
-        Note:
-            The feedback's note reports only that verification failed, never
-            the failure details, which live in the content.
+            TerminateAgentWithSuccess carrying a TerminateSuccessResult (no
+            change, or change when the run changed files). Termination tools
+            produce no ToolResult and never supersede an earlier result; the
+            change-message requirement applies only to the terminating
+            advance.
         """
         ...
 

@@ -32,7 +32,7 @@ Provides Bazel-workspace-backed storage and graph access for the agent build: no
 **Guarantees**
 
 - The dag_storage guarantees hold.
-- A node's dependencies are the targets it declares, plus the guide node (cleaned before the node, so the guide file is current when the sandbox reads it). The guide's readable and delivery treatment follows the step-mode flag: when step mode is disabled the guide is readable; when step mode is enabled the guide is not readable and its content reaches the agent only through the advance operation (per sandbox). The component does not execute builds; it provides the graph and storage as data.
+- A node's dependencies are the targets it declares, plus the guide node, which is cleaned before the node. The guide's readable and delivery treatment follows the step-mode flag: when step mode is disabled the guide is readable; when step mode is enabled the guide is not readable and its content reaches the agent only through the advance operation (per sandbox).
 - A node's propagating dependencies are its declared dependencies, excluding its silent dependencies; retrieving a node's dependencies records the node as a reverse dependency of each declared dependency that is not silent, and of no silent dependency.
 - Queries do not modify the workspace; each query provides a consistent view of the graph.
 - Queries signal failure without side effects when the graph source fails (the graph is unmodified).
@@ -48,3 +48,4 @@ Provides Bazel-workspace-backed storage and graph access for the agent build: no
 ## Non-concerns
 
 - Graph-source mechanism: how the graph is read from the configured source is unspecified.
+- Build execution: the component never executes builds; it provides the graph and storage as data.

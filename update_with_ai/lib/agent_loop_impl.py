@@ -438,7 +438,7 @@ class AgentLoopImpl(AgentLoop):
         reminder = (
             f"You have called '{tool_name}' with the same arguments {count} "
             f"times in a row. Review the latest tool results and make progress: "
-            f"change the file (edit_file/replace_lines/write_file) or finish "
+            f"change the file (edit_file/replace_lines) or finish "
             f"the run with advance(), fail(), or blame()."
         )
         reminder_message: HistoryEntry = {"role": "user", "content": reminder}
@@ -737,6 +737,18 @@ class AgentLoopImpl(AgentLoop):
         - Does not raise exceptions for expected failure conditions
         """
         messages: List[HistoryEntry] = []
+        # Reset per-run state before anything is rendered (no state persists
+        # between runs): stubbing indices and the synthetic-call counter must
+        # be fresh before the session-start results are processed, which may
+        # supersede results of an earlier run on this instance.
+        self._loop_last_signature = None
+        self._loop_repeat_count = 0
+        self._loop_last_range = None
+        self._loop_range_count = 0
+        self._loop_reminder_injected = False
+        self._stub_live = {}
+        self._synthetic_call_counter = 0
+
         if prompt:
             messages.append({"role": "user", "content": prompt})
             self._invoke_logger(logger, "message_added", {"message": messages[0]})
@@ -757,15 +769,6 @@ class AgentLoopImpl(AgentLoop):
             "total_tokens": 0,
             "request_count": 0,
         }
-        # Reset per-run loop-repetition state and stubbing state (no state
-        # persists between runs).
-        self._loop_last_signature = None
-        self._loop_repeat_count = 0
-        self._loop_last_range = None
-        self._loop_range_count = 0
-        self._loop_reminder_injected = False
-        self._stub_live = {}
-        self._synthetic_call_counter = 0
 
         while iterations < self._config.max_iterations:
             iterations += 1

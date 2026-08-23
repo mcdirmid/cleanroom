@@ -1809,6 +1809,53 @@ class TestAgentLoopImpl(unittest.TestCase):
     # Invariants
     # ---------------------------------------------------------------
 
+    def test_stubbing_state_reset_before_session_start_results(self) -> None:
+        """
+        LLS invariant: no state persists between runs — stubbing indices from
+        an earlier run on the same instance are reset before the session-start
+        results are rendered, so a superseding session-start result in a later
+        run never indexes into the earlier run's (gone) conversation.
+        """
+        # Run 1: a superseding read_file result records a live-stub index.
+        self.mock_client.chat.completions.create.side_effect = [
+            make_response(
+                content=None,
+                tool_calls=[make_tool_call("read_file", "c1", {"file_path": "a.txt"})],
+                finish_reason="tool_calls",
+            ),
+            make_succeed_response(),
+        ]
+
+        def executor(name: str, arguments: Any) -> ToolCallOutcome:
+            if name == "advance":
+                return TerminateAgentWithSuccess(NoChangeResult())
+            return self.stub_result("file contents")
+
+        first = self.agent.run_agent(
+            prompt="Read a.txt",
+            tools=make_tool_definitions(),
+            tool_executor=executor,
+        )
+        self.assert_success(first)
+
+        # Run 2 on the same instance: a superseding session-start read for
+        # the same file must not consult the first run's stubbing indices.
+        self.mock_client.chat.completions.create.side_effect = [make_succeed_response()]
+        session_read = PresentedToolResult(
+            name="read_file",
+            arguments={"file_path": "a.txt"},
+            result=ToolResult(content="fresh", supersedes=True),
+        )
+        second = self.agent.run_agent(
+            prompt="Re-read a.txt",
+            tools=make_tool_definitions(),
+            tool_executor=executor,
+            session_start_results=[session_read],
+        )
+        history = self.assert_success(second)
+        # The session-start result is live; no earlier result was stubbed.
+        self.assertIn("fresh", [m.get("content") for m in history])
+
     def test_no_state_persists_between_runs(self) -> None:
         """
         LLS invariant: no state persists between calls; each run starts a

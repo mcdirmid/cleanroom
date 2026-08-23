@@ -94,8 +94,8 @@ LogEvent = Literal[
 """
 The type of log event being reported:
 - message_added: Message appended to the conversation
-- message_stubbed: A tool result was stubbed (its content replaced in place
-  by the static stub because a newer result for the same file or tool
+- message_stubbed: A tool result was stubbed (its content replaced by a
+  placeholder because a newer result for the same file or tool
   command superseded it)
 - tool_called: Model requested tool execution
 - tool_result: Tool execution results received
@@ -128,11 +128,11 @@ Event data fields:
 TerminationReminderGenerator = Callable[[], str]
 """
 Client-provided function that generates the termination-reminder message.
-When the model stops with free text without signaling termination, the loop
-injects the reminder (this generator's message, or a default when none is
-configured) and continues prompting; the run completes only via a termination
-signal or the iteration limit. The reminder is not triggered by tool
-failures (see ToolFailure in tool_provider).
+When the model stops without signaling termination, a termination reminder
+(this generator's message, or a default when none is configured) is provided
+and the loop continues; the run completes only via a termination signal or
+the iteration limit. The reminder is not triggered by tool failures (see
+ToolFailure in tool_provider).
 """
 
 @dataclass
@@ -154,11 +154,11 @@ class AgentLoop(Protocol):
 
     Runs the agent loop to answer a user prompt: completes when a tool
     signals termination, or a failure occurs. There is no free-text final
-    answer: when the model stops with text without signaling termination, the
-    loop injects a termination reminder and keeps prompting. The conversation
-    is append-only except for stubbing: a result whose supersedes flag is set
-    stubs the earlier non-stubbed result for the same file or tool command,
-    in place with a static stub, before the new result is appended.
+    answer: when the model stops without signaling termination, a termination
+    reminder is provided and the loop continues. Stubbing follows
+    tool_provider semantics: a result whose supersedes flag is set replaces
+    the earlier non-stubbed result for the same file or tool command with a
+    placeholder.
     """
 
     def run_agent(
@@ -174,9 +174,8 @@ class AgentLoop(Protocol):
         Run the agent loop to answer a user prompt.
 
         Completes when a tool signals termination, or a failure occurs. When
-        the model stops with free text without signaling termination, the loop
-        injects a termination reminder and continues prompting (there is no
-        final answer).
+        the model stops without signaling termination, a termination reminder
+        is provided and the loop continues (there is no final answer).
 
         Args:
             prompt: The user's question or instruction (may be empty; an empty
@@ -189,10 +188,8 @@ class AgentLoop(Protocol):
             system_prompt: Static opening section of the conversation context;
                 never modified during the run (default: None).
             session_start_results: Optional tool results (PresentedToolResult
-                values, each carrying its tool call) rendered at the beginning
-                of the run, immediately after the user prompt (or at the start
-                of the conversation when the prompt is empty), before the
-                model's first turn (default: None).
+                values, each carrying the tool call it is presented with — a
+                result the model did not request) (default: None).
             logger: Optional callback for real-time execution monitoring.
 
         Returns:
@@ -216,23 +213,12 @@ class AgentLoop(Protocol):
             - Termination values pass through unchanged from the Signal[T_tool] produced by tool_executor
             - Final termination is terminal—no further processing (no API calls, no tool executions)
             - The system prompt is never modified during the run
-            - The agent conversation is append-only except for stubbing: no message
-              is removed or reordered; a stubbed message keeps its position and its
-              content is replaced by the static stub
-            - A tool result's content is appended to the conversation (rendered into
-              the model-visible tool message, with the note appended)
+            - A tool result's content is rendered into the model-visible tool
+              message, with the note appended
             - When a tool result's supersedes flag is set, the earlier non-stubbed
-              result for the same file or tool command has its content replaced in
-              place with the static stub before the new result is appended; the
-              stubbed message keeps its position, and the new result becomes the
-              live result for that file or tool command
+              result for the same file or tool command is replaced by a placeholder
             - A result with the supersedes flag unset supersedes nothing; at most one
               earlier result is superseded per result
-            - A stub is static once set: a stubbed message's content never changes
-              for the remainder of the run
-            - Stubbing preserves the conversation prefix: the conversation up to the
-              most recent live result for a file or tool command is identical from
-              one request to the next except for appended messages
             - Chronological order maintained
             - No state persists between runs
             - Logger callback invoked after data appended to history
@@ -260,12 +246,9 @@ class AgentLoop(Protocol):
         Notes:
             - No state persists between runs.
             - Termination values never inspected, transformed, or interpreted.
-            - At most one reminder injected per run.
-            - A result with the supersedes flag set stubs the earlier
-              non-stubbed result for the same file or tool command; stubbed
-              messages keep their positions.
-            - A stub is static once set: a stubbed message's content never
-              changes for the remainder of the run.
+            - A loop reminder is provided at most once per run.
+            - A result with the supersedes flag set replaces the earlier
+              non-stubbed result for the same file or tool command.
             - A tool failure never supersedes an earlier result.
         """
         ...

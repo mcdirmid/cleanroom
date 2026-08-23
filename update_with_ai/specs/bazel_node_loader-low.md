@@ -75,6 +75,8 @@ def get_node_prompt(self, node_label: str) -> str | None
 
 **Purpose:** Get the prompt for a specific node.
 
+**Preconditions:** None.
+
 **Postconditions:** Returns the node's prompt or `None` if not found.
 
 **Failure Handling:** Returns `None` for unknown labels.
@@ -84,10 +86,9 @@ def get_node_prompt(self, node_label: str) -> str | None
 
 ## Invariants
 
-- Nodes are cached by label; repeated loads of the same label return the cached instance.
-- Nodes load lazily from manifests, resolved relative to a configured runfiles directory; a node's manifest is read when the node is first loaded.
+- Repeated loads of the same label provide the same node.
+- A node is loaded from its manifest when requested, resolved relative to a configured runfiles directory; a node's manifest is read when the node is first loaded.
 - Manifests are never modified; loading reads them only.
-- Partial loads do not populate the cache; a node is cached only after successful deserialization.
 - Manifest file paths are derived deterministically from labels.
 
 

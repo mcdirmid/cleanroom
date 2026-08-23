@@ -7,16 +7,13 @@ Bazel targets (see update_with_ai/agent_config.bzl).
 This is the Bazel-flavored member of the config family: the agent_config rule
 generates a Python module ({name}_config.py) plus a JSON file from a BUILD
 target, and this component locates, imports, and combines that module with an
-API key resolved from the environment. The Bazel-ness (target labels,
-runfiles/bazel-bin layout) is deliberate: the configs are declared in the
-Bazel workspace, so the selection and loading contract is expressed in Bazel
-terms (config targets).
+API key resolved from the environment. Selection and loading are expressed
+in Bazel terms: config targets, the runfiles tree, and bazel-bin.
 
 Failure classification (per repo convention): expected failures are provided
-as values; the failures of this component (ConfigNotFoundError,
-ApiKeyNotFoundError) are classified as UNEXPECTED failures — they indicate a
-misconfiguration or environment problem, not a normal operation outcome — and
-are signaled as exceptions.
+as values; this component has no expected failures — every failure is an
+unexpected failure (a misconfiguration or environment problem), signaled as
+an exception.
 """
 
 from __future__ import annotations
@@ -29,14 +26,6 @@ from update_with_ai.lib.agent_loop import AgentLoopConfig
 DEFAULT_CONFIG_TARGET = "//agent_configs:default"
 CONFIG_TARGET_ENV = "AGENT_CONFIG_TARGET"
 API_KEY_ENV = "AGENT_API_KEY"
-
-
-class ConfigNotFoundError(ValueError):
-    """Unexpected failure: the generated module for an agent_config target cannot be located."""
-
-
-class ApiKeyNotFoundError(ValueError):
-    """Unexpected failure: no API key is available for a config's environment."""
 
 
 @dataclass

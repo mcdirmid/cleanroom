@@ -40,6 +40,8 @@ Every guide follows this structure:
 - [ ] Items carry the precision: exact spellings, required forms, conformance checks — never style preferences the source already dictates
 - [ ] Each item is checkable given the Summary, the section, and the artifact
 - [ ] Sections are ordered fine-grain-first (layout, imports, types, contracts, pitfalls)
+- [ ] Linter-verified points live in their own `## Lint checks` section, which contains only points the linter verifies — no judgment points
+- [ ] A point only partly linter-verified is split: the linter-verified part goes in `## Lint checks`, the judgment part stays in its content section
 
 ## Size
 
@@ -62,7 +64,7 @@ Every guide follows this structure:
 - [ ] One strong example per rule beats three similar ones
 - [ ] Every example obeys the guide's own rules
 - [ ] Anti-examples paired with their fixes
-- [ ] No examples from the surrounding context (code, specs, conversation); write clean synthetic ones
+- [ ] Examples never come from the current problem under work: no type names, components, or phrases from the specs, code, or conversation being guided; every example is a clean synthetic one invented for the guide
 
 ## Self-check
 
@@ -78,6 +80,7 @@ Every guide follows this structure:
 - [ ] Chunk-fragile structure — tables, header-dependent lines, "as above" — one fact per line; lists over tables
 - [ ] Ambiguity — "should", "can optionally" — "must", "never", "only"
 - [ ] Buried rules — the load-bearing constraint after examples — front-load; examples after rules
+- [ ] Mixed lint/judgment points — a point the linter half-checks left whole — split: the linter part in `## Lint checks`, the judgment part in its content section
 - [ ] Implicit requirements — required structure shown only by example — say "must contain"; list the structure
 - [ ] Over-general rules — a prohibition without its exception — state the exception beside the rule
 - [ ] Rule-breaking examples — a snippet that violates the guide — every example must conform

@@ -1,12 +1,13 @@
 <!-- Dependencies (md files to read alongside this one):
   - bazel_agent_config-low.md
+  - agent_loop-low.md
 -->
 
 # Implementation LLS: bazel_agent_config_impl
 
 ## Data Types
 ```python
-from bazel_agent_config import AgentConfig, ConfigNotFoundError, ApiKeyNotFoundError
+from bazel_agent_config import AgentConfig, BazelAgentConfig, ConfigNotFoundError, ApiKeyNotFoundError
 from agent_loop import AgentLoopConfig
 
 class BazelAgentConfigImpl(BazelAgentConfig): ...

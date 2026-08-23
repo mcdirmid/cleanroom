@@ -7,7 +7,7 @@ terms (owned): run, termination value, conversation, conversation message, syste
 
 ## Purpose
 
-Answers a user prompt through an iterative process of LLM processing and tool execution. Tool execution may provide a result that continues the loop, a tool failure that guides the agent, or a termination signal whose value passes through unchanged.
+Answers a user prompt through an iterative process of LLM processing and tool execution, guarding against wasted cycles and runaway repetition. Tool execution may provide a result that continues the loop, a tool failure that guides the agent, or a termination signal whose value passes through unchanged.
 
 ## Terms
 
@@ -36,26 +36,17 @@ Answers a user prompt through an iterative process of LLM processing and tool ex
 - Provides a termination signal with its carried value, or a failure result, each with the full conversation history; there is no free-text final answer.
 - Signals failure, leaving state unchanged, when the run fails, the language model service fails, the response is malformed, tool execution raises an exception, or a truncated response is degenerate.
 - Signals failure, leaving state unchanged, when the run exceeds the configured maximum number of loop iterations.
-- Maintains chronological conversation order and processes tool results per tool_provider semantics, rendering each tool result's note into the model-visible message.
-- Appends every tool result a tool call produces, in the order produced.
-- Each tool result appears in the conversation with its tool call immediately before it.
-- Renders the session-start tool results at the beginning of the run, immediately after the user prompt (or at the start of the conversation when the prompt is empty), before the model's first turn.
-- The conversation is append-only except for stubbing; never modifies the system prompt; rewrites prior conversation messages only by stubbing, per tool_provider semantics.
-- Stubs the earlier result for the same file or tool command when a result's supersession flag is set.
-- Appends tool failures to the conversation and continues the loop; no session reset, no history clearing.
 - The termination reminder is not triggered by tool failures.
-- Injects a loop reminder at most once per run when the model repeats itself without progress: the same tool call (name and arguments) repeated 4 consecutive times, or replace_lines targeting the same file and line range 4 consecutive times (even with different content) — urging the agent to make progress (re-read the file or finish the run). The advance tool is exempt: repeated advance calls are the run's progress in step mode (each passing advance provides the next step section), and an advance call resets the repetition tracking.
-- Signals failure, leaving state unchanged, when the same tool call (name and arguments) repeats 8 consecutive times, or when replace_lines targets the same file and line range 8 consecutive times (even with different content) — the run ends instead of spinning to the iteration limit. The advance tool is exempt from this limit as well.
-- Injects the termination reminder whenever the model stops with free text without signaling termination (the generator's message, or a default), and continues the loop; the run completes only via a termination signal or the iteration limit.
+- A loop reminder is provided at most once per run when the model repeats itself without progress.
+- Signals failure, leaving state unchanged, when repetition continues beyond the run's repetition limit.
+- The advance tool is exempt from repetition tracking.
+- A termination reminder is provided when the model stops without signaling termination, and the loop continues; the run completes only via a termination signal or the iteration limit.
 - A truncated response is not treated as a complete answer.
-- When a response is truncated and is not degenerate, the component appends the continuation prompt and resumes generation with a follow-up request.
+- When a response is truncated and is not degenerate, generation resumes with a follow-up request.
 - Tool calls present in a truncated response are not executed.
 - Final termination is atomic: once a termination signal occurs, no further API calls or tool executions occur.
-- Internal bookkeeping (supersession flags) is not sent to the language model service.
-- Stubbing preserves the conversation prefix: a stubbed result keeps its position and its stub is fixed once set, so the conversation up to the most recent live result is identical from one request to the next except for appended messages.
 - Each run is independent; no state persists.
 - Delegates tool execution to the provided logic.
-- Provides the current tool definitions with each request, re-requested from the tool execution logic; a tool's definition may change during a run (per tool_provider), so the conversation always carries the latest definitions.
 - If a logger callback is provided: invokes it chronologically for the events in the Events block; includes per-request and cumulative token usage in applicable events; catches and ignores logger callback exceptions.
 
 **Assumptions**
@@ -82,5 +73,5 @@ Answers a user prompt through an iterative process of LLM processing and tool ex
 ## Non-concerns
 
 - Timer implementation: the exact timeout mechanism is unspecified.
-- Model API version: the specific API version is unspecified; the implementation determines it.
-- Stub text: the exact text of a stub placeholder is pinned in the implementation spec.
+- Model API version: the specific API version is unspecified.
+- Stub text: the exact text of a stub placeholder is unspecified.

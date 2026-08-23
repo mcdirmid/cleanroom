@@ -53,6 +53,7 @@ The implementation produces one of the outcomes specified by the `agent_loop` in
 **Tool-result stubbing:**
 
 - Every result a tool call produces is appended in the order produced: the model-visible tool message content is the result's `content` with the result's `note` appended.
+- The conversation is append-only except for stubbing: prior messages are never rewritten or reordered.
 - A result whose tool call the model did not make (a `PresentedToolResult`) is presented with the call it carries immediately before the result: the loop assigns the call a fresh id, appends the call message, then appends the result's tool message, so the conversation contains no tool result without its preceding call.
 - Stubbing is applied per a result's `supersedes` flag before the next result of the same call is appended.
 - Session-start tool results are rendered immediately after the user prompt (or at the start of the conversation when the prompt is empty), before the model's first request; each result is presented with the tool call it carries (per the `agent_loop` interface contract).

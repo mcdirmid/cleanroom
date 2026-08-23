@@ -35,9 +35,9 @@ Provides runtime loading of node manifests (produced at build time by update_wit
 **Guarantees**
 
 - A loaded node is provided when its manifest is found; when the manifest cannot be found, no node is provided (manifests are never modified).
-- Nodes are cached by label; repeated loads of the same label provide the same node.
+- Repeated loads of the same label provide the same node.
 - The graph is loaded starting from the root label, recursively loading all transitive dependencies, including silent dependencies.
-- Nodes load lazily from manifests, resolved relative to a configured runfiles directory.
+- A node is loaded from its manifest when requested, resolved relative to a configured runfiles directory.
 - A node's deps include its feedback deps; loading a node's dependencies loads its feedback deps as dependency nodes.
 - Manifest file paths are derived deterministically from labels.
 - Tool definitions are resolved from the node's declared tools; a tool call no tool handles signals a tool failure.

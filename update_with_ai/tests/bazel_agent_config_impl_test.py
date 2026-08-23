@@ -32,13 +32,15 @@ from typing import Dict, Iterator, Optional
 from unittest.mock import patch
 
 from update_with_ai.lib.bazel_agent_config import (
-    ApiKeyNotFoundError,
     AgentConfig,
     BazelAgentConfig,
-    ConfigNotFoundError,
     DEFAULT_CONFIG_TARGET,
 )
-from update_with_ai.lib.bazel_agent_config_impl import BazelAgentConfigImpl
+from update_with_ai.lib.bazel_agent_config_impl import (
+    ApiKeyNotFoundError,
+    BazelAgentConfigImpl,
+    ConfigNotFoundError,
+)
 from update_with_ai.lib.agent_loop import AgentLoopConfig
 
 PACKAGE = "agent_configs"

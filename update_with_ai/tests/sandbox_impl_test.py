@@ -52,8 +52,8 @@ class TestSandboxImpl(unittest.TestCase):
             f.write("Line 3: Another line\n")
             f.write("Line 4: Final line\n")
 
-        # Creation target: mapped but does not exist until write_file creates
-        # it (write_file is creation-only).
+        # Creation target: mapped and writable but does not exist on disk
+        # (reads report it missing; edits require it to exist).
         self.new_file_path = os.path.join(self.temp_dir, "new.txt")
 
         self.file_mappings = {
@@ -143,7 +143,7 @@ class TestSandboxImpl(unittest.TestCase):
 
     def test_get_tool_definitions_always_includes_core_tools(self) -> None:
         names = [d["function"]["name"] for d in self.sandbox.get_tool_definitions()]
-        for expected in ("read_file", "write_file", "edit_file", "replace_lines",
+        for expected in ("read_file", "edit_file", "replace_lines",
                          "search_files", "advance", "fail"):
             self.assertIn(expected, names)
 
@@ -383,35 +383,6 @@ class TestSandboxImpl(unittest.TestCase):
         )
         self.assertEqual(SandboxImpl(config).get_session_start_reads(), [])
 
-    # ------------------------------------------------------------------
-    # write_file
-    # ------------------------------------------------------------------
-
-    def test_write_file_success_supersedes(self) -> None:
-        # LLS (sandbox-low.md write_file + Auto re-read): the outcome is a
-        # sequence of two results — the write confirmation (a minimal
-        # structured status, never a file-content echo, supersedes set) and
-        # the injected read (the automatic re-read with the file's full
-        # numbered content, supersedes set, presented as read_file with line
-        # numbers).
-        confirmation, injected = self.as_write_outcome(
-            self.sandbox.write_file("new.txt", "hello\nworld")
-        )
-        self.assertEqual(confirmation.content, "Created new.txt; 2 lines")
-        self.assertEqual(confirmation.note, "")
-        self.assertTrue(confirmation.supersedes)
-        self.assertEqual(injected.name, "read_file")
-        self.assertEqual(
-            injected.arguments,
-            {"file_path": "new.txt", "include_line_numbers": True},
-        )
-        self.assertEqual(injected.result.content, "1 \u2502 hello\n2 \u2502 world")
-        self.assertTrue(injected.result.supersedes)
-        self.assertIn("(line-numbered)", injected.result.note)
-        self.assertTrue(self.sandbox.get_write_occurred())
-        with open(self.new_file_path, "r", encoding="utf-8") as f:
-            self.assertEqual(f.read(), "hello\nworld")
-
     def test_write_result_is_status_and_injected_read_reenables_view(self) -> None:
         # A write/edit's confirmation carries the operation's status (never a
         # file-content echo) and supersedes the file's earlier results; the
@@ -430,12 +401,6 @@ class TestSandboxImpl(unittest.TestCase):
         # The change is on disk; the confirmation never echoes file content.
         with open(self.test_file_path, "r", encoding="utf-8") as f:
             self.assertIn("Line 2: New content", f.read())
-
-        new_conf, new_injected = self.as_write_outcome(
-            self.sandbox.write_file("new.txt", "one\ntwo")
-        )
-        self.assertEqual(new_conf.content, "Created new.txt; 2 lines")
-        self.assertEqual(new_injected.result.content, "1 \u2502 one\n2 \u2502 two")
 
     def test_replace_lines_after_write_succeeds_without_further_read(self) -> None:
         # LLS (sandbox-low.md Views + Auto re-read): a write resets the view
@@ -474,54 +439,6 @@ class TestSandboxImpl(unittest.TestCase):
         self.assert_supersedes(
             self.sandbox.replace_lines("test.txt", 2, 2, "Line 2: replaced"), True
         )
-
-    def test_write_file_rejects_existing_file(self) -> None:
-        failure = self.as_tool_failure(self.sandbox.write_file("test.txt", "x"))
-        self.assertIn("already exists", failure.value)
-        self.assertFalse(self.sandbox.get_write_occurred())
-
-    def test_failed_write_provides_no_injected_read(self) -> None:
-        # LLS (sandbox-low.md Auto re-read): a write that fails provides no
-        # injected read — the outcome is a ToolFailure signal, never a
-        # two-result sequence, and no write is recorded.
-        outcome = self.sandbox.write_file("test.txt", "x")  # already exists
-        self.as_tool_failure(outcome)
-        self.assertFalse(isinstance(outcome, list))
-        self.assertFalse(self.sandbox.get_write_occurred())
-
-    def test_write_file_empty_content_rejected(self) -> None:
-        failure = self.as_tool_failure(self.sandbox.write_file("new.txt", ""))
-        self.assertIn("non-empty", failure.value)
-
-    def test_write_file_not_in_mappings(self) -> None:
-        failure = self.as_tool_failure(self.sandbox.write_file("nope.txt", "x"))
-        self.assertIn("nope.txt", failure.value)
-
-    def test_write_file_not_writable(self) -> None:
-        config = SandboxConfig(
-            file_mappings={"a.txt": self.test_file_path},
-            readable_paths=["a.txt"],
-            writable_paths=[],
-            blame_targets=[],
-            search_result_limit=5,
-            verification_callback=None,
-        )
-        failure = self.as_tool_failure(SandboxImpl(config).write_file("a.txt", "x"))
-        self.assertIn("not writable", failure.value)
-
-    def test_write_file_creates_missing_directories(self) -> None:
-        nested = os.path.join(self.temp_dir, "sub", "nested.txt")
-        config = SandboxConfig(
-            file_mappings={"nested.txt": nested},
-            readable_paths=["nested.txt"],
-            writable_paths=["nested.txt"],
-            blame_targets=[],
-            search_result_limit=5,
-            verification_callback=None,
-        )
-        sandbox = SandboxImpl(config)
-        self.assert_supersedes(sandbox.write_file("nested.txt", "x"), True)
-        self.assertTrue(os.path.exists(nested))
 
     # ------------------------------------------------------------------
     # edit_file
@@ -997,14 +914,31 @@ class TestSandboxImpl(unittest.TestCase):
         self.assertIsInstance(outcome, TerminateAgentWithFailure)
 
     def test_advance_missing_changed_file_fails(self) -> None:
+        # Two files changed, advance's changes cover only one: the failure
+        # names the uncovered file.
+        other_path = os.path.join(self.temp_dir, "other.txt")
+        with open(other_path, "w", encoding="utf-8") as f:
+            f.write("other content\n")
+        mappings = dict(self.file_mappings)
+        mappings["other.txt"] = other_path
+        sandbox = SandboxImpl(SandboxConfig(
+            file_mappings=mappings,
+            readable_paths=self.readable_paths + ["other.txt"],
+            writable_paths=self.writable_paths + ["other.txt"],
+            blame_targets=self.blame_targets,
+            search_result_limit=5,
+            verification_callback=None,
+        ))
         self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
+            sandbox.edit_file("test.txt", "This is a test", "New content"), True
         )
-        self.assert_supersedes(self.sandbox.write_file("new.txt", "x"), True)
-        failure = self.as_tool_failure(self.sandbox.advance(
+        self.assert_supersedes(
+            sandbox.edit_file("other.txt", "other content", "Other content"), True
+        )
+        failure = self.as_tool_failure(sandbox.advance(
             changes=[{"file": "test.txt", "summary": "changed"}]
         ))
-        self.assertIn("new.txt", failure.value)
+        self.assertIn("other.txt", failure.value)
 
     def test_advance_fabricated_change_rejected(self) -> None:
         # A claimed change that does not appear in the diff (file rewritten
@@ -1076,9 +1010,11 @@ class TestSandboxImpl(unittest.TestCase):
     # get_write_occurred
     # ------------------------------------------------------------------
 
-    def test_write_occurred_false_until_first_write(self) -> None:
+    def test_write_occurred_false_until_first_modification(self) -> None:
         self.assertFalse(self.sandbox.get_write_occurred())
-        self.assert_supersedes(self.sandbox.write_file("new.txt", "x"), True)
+        self.assert_supersedes(
+            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
+        )
         self.assertTrue(self.sandbox.get_write_occurred())
         self.assertTrue(self.sandbox.get_write_occurred())
 
@@ -1325,7 +1261,8 @@ class TestStepMode(unittest.TestCase):
         empty change message signals a tool failure showing the diff."""
         sandbox = self._sandbox()
         # Create the artifact, then advance through both sections.
-        sandbox.write_file("artifact.md", "line 1\n")
+        with open(self.artifact_path, "w", encoding="utf-8") as f:
+            f.write("line 1\n")
         sandbox.advance()
         sandbox.advance()
         sandbox.read_file("artifact.md", include_line_numbers=True)

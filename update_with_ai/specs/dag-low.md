@@ -55,7 +55,7 @@ def clean_subgraph(self, target_node: NodeId) -> CleaningResult
 ## Invariants
 
 - Only nodes in the subgraph are cleaned; nodes outside may receive messages but are not cleaned.
-- Topological sort is computed once and remains fixed.
+- The topological order is fixed for the operation.
 - Cleaning always terminates (bounded by a single total bound on clean operations).
 - No cross-restart state: all state is per-run; nodes are dirty from message delivery until cleaned.
 

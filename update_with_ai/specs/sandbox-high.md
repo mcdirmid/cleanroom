@@ -44,17 +44,14 @@ Provides a controlled environment for agents to read, write, search, and modify 
 
 **Guarantees**
 
-- Permissions are enforced for all operations; file writes are tracked.
+- Permissions are enforced for all operations.
 - Signals whether any file write has occurred during the run.
 - The run begins when the sandbox is configured and ends when the agent signals termination.
 - A read provides the file's entire content; reads are not paginated and are not bounded by a size limit.
 - Search results beyond the search result limit signal a tool failure advising offset/limit pagination; the limit bounds rendered matches only.
 - Search results render matches only for files that are not writable; matches in writable files are reported as counts without content.
-- Each tool call produces exactly one outcome: one or more tool results, or a signal — continue, terminate with success, terminate with failure, or tool failure.
-- Tool results contain the content, the supersession flag, and the note, per tool_provider.
 - An edit's replacement applies atomically (all or nothing).
 - Error messages identify the violated policy or the failing operation; errors leave the filesystem unchanged.
-- A tool failure (invalid arguments, a policy violation, or a termination tool invoked incorrectly) signals failure, leaving the session active.
 
 **Assumptions**
 
@@ -64,82 +61,59 @@ Provides a controlled environment for agents to read, write, search, and modify 
 
 **File operations**
 
-- Writing: new files only; fails when the file already exists; empty content rejected.
 - Content-based editing: search-and-replace of short text, bounded in length; longer changes go through line-range editing.
 - Line-range editing: replace, delete, insert.
 - Recursive searching within a specified path.
 
 **Views**
 
-- A read of a non-writable file renders plain; a read of a writable file renders the line-numbered view only — a plain read of an existing writable file is rejected.
-- A file's view is plain until a read renders the line-numbered view; a read sets the file's view — plain or line-numbered — for the run; a write resets the file's view to plain, invalidating the line numbers, and the injected read that follows the write re-enables the line-numbered view.
-- Line-range edits may target any 1-indexed line range within the file's current bounds, and require the line-numbered view; the injected read after a write provides the line-numbered view, so a line-range edit may follow a write without a further read.
-- A line-range edit attempted without the line-numbered view signals a tool failure advising a numbered read; the file is left unchanged.
-- A read renders the file's content in the file's current view; a write or edit renders the operation's status, never a file-content echo; verification renders the diff report.
-- The file's content in the conversation is the content of its most recent non-stubbed result; after a write or edit the injected read provides the file's current content.
+- Reads of writable files provide line numbers, enabling line-range edits; a plain read of an existing writable file is rejected; reads of non-writable files provide plain content.
+- Line-range edits require a numbered read; attempting one without it signals a tool failure.
+- Line-range edits accept 1-indexed line numbers within the file's current bounds.
 
 **Stubbing**
 
-- The supersession flag is set on the results of operations on writable files and on verification results; it is not set on reads of files that are not writable, on searches, or on termination results.
-- A read of a writable file sets the flag: it supersedes the earlier result for that file.
-- A write, a content-based edit, and a line-range edit set the flag: they supersede the earlier result for that file.
-- Each advance output sets the flag: it supersedes the earlier advance output (in step mode, the previous step-mode output).
-- Advance's feedback on a failing verification sets the flag: it supersedes the earlier verification result.
-- The superseded result is identified by the file's virtual name or the advance operation — the name the operation itself carries; no separate identity is introduced.
+- Stubbing replaces superseded tool results with placeholders, keeping the conversation focused on current state.
 
 **Auto re-read**
 
-- Every file write provides a write confirmation and an injected read for the written file, in that order.
-- The injected read includes a read request for the file with line numbers and the read result, which provides the file's full current content.
-- The injected read appears in the conversation immediately after the write confirmation, before any subsequent messages.
-- The read result is present in the conversation before the agent's next turn.
-- The agent did not request the injected read; to the agent it appears as a numbered read it requested.
-- The injected read is a read of a writable file: it supersedes the file's earlier result and is itself superseded by the next write or read for the file, per the Stubbing rules.
-- A write that fails provides no injected read.
+- After a successful file write, the file's current content appears in the conversation.
+- A write that fails does not provide the file's content.
 
 **Session-start reads**
 
-- When session-start reads are enabled, the session-start reads are the reads of every file that is readable but not writable and exists as a regular file on disk; when disabled, no session-start reads are provided.
+- When session-start reads are enabled, a session-start read is provided for every file that is readable but not writable; when disabled, none are provided.
 - Session-start reads are provided in a deterministic order (sorted by virtual name).
-- A session-start read includes a read request for the file and the read result, presented as a read the agent requested.
-- A session-start read renders the file's content plain.
-- A session-start read does not set the supersession flag.
-- A session-start read is never stubbed: no file write targets a file that is not writable, and a read of a file that is not writable never supersedes an earlier result.
+- A session-start read renders the file's content plain and never supersedes an earlier result.
 
 **Step mode**
 
 - When step mode is disabled, the guide is provided whole at run start and is re-readable like other readable files.
 - When step mode is enabled, the guide is not readable: its content reaches the agent only through the advance operation's outputs.
-- In step mode, the guide summary is part of every advance output while the run is in step mode, so the summary is always visible; the step sections slide — each advance output supersedes the previous advance output, so at most one step section is live alongside the summary.
-- In step mode, a call to advance is pre-injected at run start, providing the guide summary with an instruction directing the agent to ensure the summary's requirements before calling advance again.
-- In step mode, on a passing verification with step sections remaining, advance provides the next step section, in the guide's section order, together with the guide summary and an instruction directing the agent to ensure the step section's requirements before calling advance again; on a passing verification with no step sections remaining, advance proceeds to the termination machinery.
-- In step mode, on a failing verification, advance provides the guide summary, the reason verification failed, and an instruction directing the agent to correct before calling advance again; the step-section pointer does not advance.
-- In step mode, the advance tool's definition omits the change-message argument while step sections remain; when verification passes with no step sections remaining, the definition includes it.
+- In step mode, the guide is revealed incrementally: advance delivers one section at a time.
+- The run cannot terminate until all guide sections are delivered and verification passes.
+- A failing verification prevents progressing to the next section, requiring correction before continuing.
 - A readable file that is not the guide is unaffected by step mode.
 
 **Template initialization**
 
-- A writable file with a configured template exists on disk at run start, its content exactly the template's content, when the file did not exist when the sandbox was configured.
-- A writable file that exists when the sandbox is configured is never modified by its template.
-- Template initialization is part of the sandbox's configuration, not an operation of the run: it never signals that the run modified the filesystem and is never a changed file.
-- The run's diff for a file initialized from its template compares the file's content during the run to the template's content at run start.
+- Files with templates are initialized from their template content at run start.
+- Template initialization is not a run write: it never signals that the run modified the filesystem and is never a changed file.
 
 **Verification**
 
-- Verification runs automatically as part of the advance operation: advance computes the diff of the run's file changes (truncated when it exceeds the diff size limit, reporting the truncated size and the full change counts) and, when a verification callback is configured, delegates validation to it, otherwise treating verification as passed.
-- A failing verification provides feedback — the verification failure details and guidance to change files and call advance again, or call blame or fail to end the run — and the session continues; advance never terminates on a failing verification.
-- The run's diff is shown to the agent only as part of the tool failure that requests the change message: when advance's verification passed, the run changed files, and the change message is empty; a failing verification's feedback does not include the diff.
+- Verification runs as part of the advance operation; verification passes when no verification callback is configured, and is delegated to the callback when one is configured.
+- When verification fails, the session continues with feedback; advance never terminates on a failing verification.
 
 **Termination**
 
-- Termination tools: advance, failure, and blame. Advance verifies the run and then signals successful termination; a valid blame signals successful termination; the failure operation ends the session in failure. Termination tools signal termination when invoked correctly.
-- In step mode, advance does not terminate while step sections remain: on a passing verification it provides the next step section and the session continues; advance terminates only when verification passes with no step sections remaining.
+- Termination tools: advance, failure, and blame. Advance signals successful termination; a valid blame signals successful termination; the failure operation ends the session in failure.
 - The change summary applies only when advance terminates: in step mode, an advance with step sections remaining carries no change summary.
-- Blame is offered only when blame targets are configured; each (target, feedback) pair is delivered as a feedback message to the blamed node, which is re-cleaned so the blaming node can run again.
+- Blame is offered only when blame targets are configured; each (target, feedback) pair is delivered as a feedback message to the blamed node.
 - Termination is at the agent's judgment: the agent signals termination when it considers its task complete, or when it cannot be completed.
-- Advance signals termination only when its internal verification passes (or no verification callback is configured); when the run changed no files, advance signals successful termination without a change message.
-- Advance carries the agent's change summary — naming the parts of each changed file that changed, so the next reader knows what to pay attention to when updating further artifacts (not the task performed, not how it was done) — broadcast to reverse dependencies to bring the next agent's attention to the changes; when the run changed files, a missing, malformed, or incomplete summary signals a tool failure (per the tool failure policy) that lists the changed files and asks for the change message in the required shape.
-- Change summaries are bounded by a soft length bound and a hard length bound: a summary within the soft bound is accepted; a summary exceeding the soft bound but within the hard bound is rejected with guidance up to a number of attempts and then accepted; a summary exceeding the hard bound is rejected with guidance up to a number of attempts and then fails the run (advance turns into failure).
+- Advance signals successful termination when verification passes; when files were modified, it requires a change summary naming what changed in each file, directing the next reader's attention to the changes.
+- When files were modified and the change summary is missing, malformed, or incomplete, advance signals a tool failure.
+- Change summaries are bounded; a summary exceeding the bound is rejected with guidance; persistent rejection fails the run.
 
 ## Non-concerns
 

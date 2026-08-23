@@ -34,10 +34,17 @@ from update_with_ai.lib.bazel_agent_config import (
     CONFIG_TARGET_ENV,
     DEFAULT_CONFIG_TARGET,
     AgentConfig,
-    ApiKeyNotFoundError,
     BazelAgentConfig,
-    ConfigNotFoundError,
 )
+
+
+class ConfigNotFoundError(ValueError):
+    """Unexpected failure: the generated module for an agent_config target cannot be located."""
+
+
+class ApiKeyNotFoundError(ValueError):
+    """Unexpected failure: no API key is available for a config's environment."""
+
 
 _CONFIG_MODULE_SUFFIX = "_config.py"
 

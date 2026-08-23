@@ -138,14 +138,6 @@ class SandboxImpl(Sandbox):
                 }
             ),
             self._create_tool_definition(
-                "write_file",
-                "Create a NEW file with the given content. Fails if the file already exists — use edit_file (content-based) or replace_lines (line-based) to modify existing files. Empty content is rejected. After a write the file is automatically re-read, so the file's updated content (with line numbers) appears in the conversation immediately after the write.",
-                {
-                    "file_path": {"type": "string", "description": "Virtual path to the file"},
-                    "content": {"type": "string", "description": "Content to write"}
-                }
-            ),
-            self._create_tool_definition(
                 "edit_file",
                 "Replace text in a file (content-based search and replace): replaces exactly one occurrence of old_str with new_str; fails when old_str is absent or matches more than once unless expect_multiple=True (then replaces all occurrences). old_str and new_str are limited to 100 characters each — use replace_lines for larger changes (requires the line-numbered view). After an edit the file is automatically re-read, so the file's updated content (with line numbers) appears in the conversation immediately after the edit.",
                 {
@@ -433,67 +425,6 @@ class SandboxImpl(Sandbox):
             )]
         return [ToolResult(content=content, supersedes=False, note=note)]
 
-    def write_file(self, file_path: VirtualName, content: str) -> ToolCallOutcome:
-        """Create a new file; its result supersedes the file's earlier results."""
-        # Check if path exists in mappings first
-        if file_path not in self.config.file_mappings:
-            return self._error_response(
-                f"File path '{file_path}' not found in mappings. "
-                f"Files you can write: {self._writable_list()}"
-            )
-
-        # Then check writability
-        if file_path not in self.config.writable_paths:
-            return self._error_response(
-                f"File path '{file_path}' is not writable. "
-                f"Files you can write: {self._writable_list()}"
-            )
-
-        if not content:
-            return self._error_response("Content must be non-empty")
-
-        # Resolve path
-        real_path = self.config.file_mappings[file_path]
-
-        # write_file creates new files only; modifying an existing file must go
-        # through the editing tools, which preserve the surrounding content.
-        if os.path.exists(real_path):
-            return self._error_response(
-                f"File '{file_path}' already exists; write_file is only for "
-                f"creating new files. Use edit_file (content-based) or "
-                f"replace_lines (line-based) to modify it."
-            )
-
-        # Ensure directory exists (skip for bare filenames with no directory)
-        parent_dir = os.path.dirname(real_path)
-        if parent_dir:
-            os.makedirs(parent_dir, exist_ok=True)
-
-        # Snapshot pre-write content (first write of the run only) for the
-        # no-callback verify diff.
-        self._snapshot(file_path, real_path)
-
-        # Write file
-        try:
-            with open(real_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-        except Exception as e:
-            return self._error_response(f"Error writing file: {str(e)}")
-
-        # Update state
-        self.write_occurred = True
-        if file_path not in self._changed_files:
-            self._changed_files.append(file_path)
-
-        # The outcome is a sequence of two results: the write confirmation
-        # (a minimal structured success message, never a file-content echo;
-        # supersedes is set so the agent loop stubs the file's earlier
-        # results) and the injected read (the automatic re-read with the
-        # file's full numbered content, which re-enables the line-numbered
-        # view so a line-range edit may follow without a further read).
-        n = len(content.splitlines())
-        return self._write_outcome(file_path, f"Created {file_path}; {n} lines")
-
     def _snapshot(self, file_path: VirtualName, real_path: str) -> None:
         """Capture a file's pre-write content on the run's first write of it."""
         if file_path in self._pre_write_snapshots:
@@ -678,7 +609,7 @@ class SandboxImpl(Sandbox):
         real_path = self.config.file_mappings[file_path]
         if not os.path.exists(real_path):
             return self._error_response(
-                f"File '{file_path}' does not exist; use write_file to create it"
+                f"File '{file_path}' does not exist; edit_file and replace_lines modify existing files only"
             )
         try:
             with open(real_path, 'r', encoding='utf-8') as f:
@@ -737,7 +668,7 @@ class SandboxImpl(Sandbox):
         real_path = self.config.file_mappings[file_path]
         if not os.path.exists(real_path):
             return self._error_response(
-                f"File '{file_path}' does not exist; use write_file to create it"
+                f"File '{file_path}' does not exist; edit_file and replace_lines modify existing files only"
             )
         try:
             with open(real_path, 'r', encoding='utf-8') as f:
@@ -909,7 +840,7 @@ class SandboxImpl(Sandbox):
                     content = (
                         (output + "\n\n" if output else "")
                         + "Verification failed; fix the reported issues by "
-                        "changing files (edit_file/replace_lines/write_file) "
+                        "changing files (edit_file/replace_lines) "
                         "and then call advance() again, or call blame() or "
                         "fail() to end the run."
                     )

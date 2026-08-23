@@ -34,7 +34,7 @@ terms (refined): dirty, cleaning
 - [external] bazel_graph_storage (node definitions), agent_loop (agent run), sandbox (tool definitions and execution), and the language model service.
 - [failure] Agent failures and tool-execution failures signal failure, leaving pending messages unchanged.
 - [failure] An invalid blame target (one that is not a dependency of the node) signals a tool failure, not an agent failure: the agent may correct its blame and continue.
-- [refines] dirty -> pending messages, a writable output file missing on disk, or a writable output file with a template holding exactly its template's content.
+- [refines] dirty -> pending messages, a writable output file missing on disk, or a writable output file whose content is exactly its template's content.
 - [refines] cleaning -> running the node's agent.
 
 ## Non-concerns

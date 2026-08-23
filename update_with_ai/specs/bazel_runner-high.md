@@ -41,7 +41,7 @@ Orchestrates the full agent run pipeline — graph resolution, message persisten
   - feedback targets a node outside the subgraph;
   - the graph contains a cycle (the subgraph cannot be topologically ordered).
 - All output (changes and feedback) is delivered to the appropriate target nodes' message stores.
-- Assembles all components internally; the client provides no component instances; the runner owns the full lifecycle of the components it creates (graph, message store, agent loop, DAG).
+- Assembles its components internally; the client provides no component instances.
 - Applies the agent configuration to each node's sandbox configuration: whether session-start reads are enabled and whether step mode is enabled.
 - Exposes only the cleaning and feedback operations, not component APIs.
 - A successful feedback injection adds each message to the target node's pending messages (marking the node dirty for a subsequent cleaning pass) and provides a no-change result.
@@ -55,8 +55,9 @@ Orchestrates the full agent run pipeline — graph resolution, message persisten
 
 **Logging**
 
-- Compact one-line event summaries to stdout, covering tool-called, API-response, run-terminated, and error events.
-- A verbose full transcript to a log file whose path is determined by a configured environment variable or a default location (the Bazel workspace directory when running under Bazel, otherwise the current working directory). The transcript records each request's conversation state.
+- Provides compact one-line summaries of run events to standard output.
+- Provides a verbose transcript to a log file whose path is determined by a configured environment variable or a default location (the Bazel workspace directory when running under Bazel, otherwise the current working directory).
+- The transcript records each request's conversation state.
 
 ## Non-concerns
 

@@ -11,7 +11,7 @@
 
 ## Data Types
 ```python
-from typing import Protocol, List
+from typing import Protocol, List, Optional
 from dag_storage import NodeId
 from dag import CleaningResult
 from dag_clean_logic import CleanResult, ChangeResult, FeedbackResult, NoChangeResult, FailureResult

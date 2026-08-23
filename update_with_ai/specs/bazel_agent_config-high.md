@@ -5,7 +5,7 @@ terms (owned): agent configuration, config target, API key
 
 ## Purpose
 
-Loads declarative agent/model configurations declared as Bazel targets (see update_with_ai/agent_config.bzl) and combines them with an API key resolved from the environment, providing the complete agent-loop configuration to the caller. The component is deliberately Bazel-shaped: configs live in the Bazel workspace, so selection and loading are expressed in Bazel terms (config targets, runfiles, bazel-bin).
+Loads declarative agent/model configurations declared as Bazel targets (see update_with_ai/agent_config.bzl) and combines them with an API key resolved from the environment, providing the complete agent-loop configuration to the caller. Selection and loading are expressed in Bazel terms: config targets, the runfiles tree, and bazel-bin.
 
 ## Terms
 
@@ -31,7 +31,7 @@ Loads declarative agent/model configurations declared as Bazel targets (see upda
 - Config-target selection: the explicit config target, when provided, wins; otherwise an environment variable selects the config target; otherwise the default config target //agent_configs:default applies.
 - No API key is ever part of an agent configuration or a config target; the API key exists only in the resolved agent-loop configuration.
 - When an agent configuration names an API-key environment variable, that variable alone supplies the API key; AGENT_API_KEY does not apply. When it names none, the plain AGENT_API_KEY variable supplies the key.
-- Expected failures are provided as values; this component has none — every failure of this component is an unexpected failure.
+- This component has no expected failures: every failure is an unexpected failure.
 
 **Assumptions**
 
@@ -41,9 +41,9 @@ Loads declarative agent/model configurations declared as Bazel targets (see upda
 
 **Unexpected failures**
 
-- Config target's generated module missing: the config target is invalid or was not built, signaled with guidance to build it (ConfigNotFoundError).
-- API key missing: the pinned API-key environment variable is unset (when the configuration names one), or AGENT_API_KEY is unset (when it does not), signaled with the exact variable names (ApiKeyNotFoundError).
-- Config target label malformed: not a canonical main-repo label (ConfigNotFoundError).
+- Config target's generated module missing: the config target is invalid or was not built, signaled with guidance to build it.
+- API key missing: the pinned API-key environment variable is unset (when the configuration names one), or AGENT_API_KEY is unset (when it does not), signaled with the exact variable names.
+- Config target label malformed: not a canonical main-repo label.
 
 ## Non-concerns
 

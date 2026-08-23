@@ -17,16 +17,16 @@ The section inventory is closed. An interface spec has exactly `Purpose`, `Terms
 ## Document structure
 
 - [ ] One component per file; interface and implementation in separate specs
-- [ ] Interface sections are exactly `Purpose`, `Terms`, `Contract`, `Non-concerns`; implementation exactly `Deltas`, `Non-concerns`; no other `##` section; no `###` headings
-- [ ] File kind matches the name: no "impl" in the name → interface (no `fulfills:`, no Deltas); "impl" in the name → implementation (`fulfills:` + Deltas, no Contract)
 - [ ] An interface spec contains no implementation content (no mechanism, no internal state, no refinements); an implementation spec contains no interface content (no Contract, no owned definitions)
 - [ ] An implementation spec fulfills exactly one interface; editing preserves the kind (an interface never becomes an implementation or vice versa)
+- [ ] An interface longer than its implementation signals misplaced detail: mechanism and procedure belong in the implementation spec
+- [ ] The Purpose sells the component: it states what the component does and why it matters; benefits and reasons belong there, never as rationale clauses in Guarantees
+- [ ] The interface hides how it is implemented: mechanisms, internal state, algorithms, and counts belong in the implementation spec, never in the interface
 
 ## Front matter
 
 - [ ] Front matter is `key: value` lines, one per line, interface names in backticks
 - [ ] Every dependency listed: `imports: <dep> (what it provides)`; every term used but not owned listed in `terms (from <dep>): ...`
-- [ ] `terms (owned):` lists the terms the spec defines; `## Terms` is present iff terms are owned
 - [ ] An implementation lists `fulfills: <interface>`, `imports:`, `terms (from ...):`, and `terms (refined): <names only>`
 - [ ] `terms (refined):` lists names only; concrete definitions live in `[refines]` Deltas lines
 
@@ -36,8 +36,9 @@ The section inventory is closed. An interface spec has exactly `Purpose`, `Terms
 - [ ] A spec that uses a term it does not own lists it in front matter; re-defining an owned term is an error; using a term without listing it is an error
 - [ ] No global glossary: `terms (from ...)` lines are pointers, not duplicates
 - [ ] An interface defines a term only as precisely as users need, marking withholdings: opaque (meaning withheld, the pass-through path pinned), open (content withheld), hook (conditions withheld)
+- [ ] A term is defined by what it means to users, never by how it is achieved; mechanics inside a definition belong in the implementation's refinement
 - [ ] A term may be unused in the owning file yet required by a consumer's `terms (from X:)` line — that is use, not a reason to delete it
-- [ ] Refinements narrow (instantiate, fill, identify), never contradict; refinement chains terminate; each refined term has exactly one `[refines]` Deltas line
+- [ ] Refinements narrow (instantiate, fill, identify), never contradict; refinement chains terminate
 - [ ] Refinement is local: it binds in the implementation and its dependents, never propagates back to the interface
 
 ## Contract blocks
@@ -52,12 +53,11 @@ The section inventory is closed. An interface spec has exactly `Purpose`, `Terms
 
 ## Deltas
 
-- [ ] The Deltas section is a flat list; no sub-headings
+- [ ] The Deltas section is a flat list
 - [ ] Every Deltas line is a delta: it adds, narrows, or pins what the fulfilled contract left open
-- [ ] No restated inherited constraint; no "per the <interface> contract" lines
-- [ ] At most one tag per line: `[ordering]`, `[boundary]`, `[state]`, `[external]`, `[failure]`, `[refines]`; untagged lines are behavior deltas
+- [ ] At most one tag per line; untagged lines are behavior deltas
 - [ ] Tags are lowercase bracketed prefixes with no colon; a line that is mostly behavior needs no tag
-- [ ] A `[refines]` line exists for every term named in `terms (refined):`; the front-matter line lists names only
+- [ ] The `terms (refined):` front-matter line lists names only
 
 ## Declarative writing
 
@@ -65,16 +65,21 @@ The section inventory is closed. An interface spec has exactly `Purpose`, `Terms
 - [ ] Sequencing language appears only for observable ordering
 - [ ] No mechanism: no "iterates", "builds", "calls", "stores in a hash map"
 - [ ] Every sentence passes the observability test: a client or downstream component can observe it
+- [ ] Every interface line passes the client-need test: a client or downstream component needs it to use the interface correctly; a line only the implementation needs is mechanism and belongs in the Deltas
+- [ ] A fact that requires "by" or "using" to state is mechanism — "by flushing the buffer" — and belongs in the Deltas; the interface states the outcome — "the record is persisted"
+- [ ] The caller-change test: "would the caller need to change their code if this detail changed?" — yes → interface; no → implementation; a detail that affects the calling contract is interface even when it forces no code change
+- [ ] Observability details appear in an interface only when a client consumes them; details only the implementation records belong in the implementation spec
+- [ ] Concrete policy values (counts, thresholds) are pinned in the implementation spec; the interface states the guarantee abstractly
 - [ ] Failure is a semantic statement: "signals failure, leaving the queue unchanged and halting the operation", never "raises an error", never "returns an error code"
 - [ ] `->` abbreviates "if...then": `target outside the service area -> failure, halt, pending orders unchanged`
 
 ## Language
 
-- [ ] "Returns" is prohibited — "provides", "signals", "delegates"
 - [ ] "iff" for meaningful equivalences; "must" for constraints; "may" for options; "when" for timing; "if" for conditions
-- [ ] No pseudo-code identifiers: no code tokens, type names, or literals (`item_id`, `True`); outcomes are "continue", "complete the request", "reject the request", "invalid input"; a record ID; flags are "true"/"false"; absence is "none"
+- [ ] No code tokens or type names (`item_id`); outcomes are "continue", "complete the request", "reject the request", "invalid input"; a record ID; flags are "true"/"false"; absence is "none"
+- [ ] Exception class names are code tokens: the interface describes the failure; the implementation pins the class
 - [ ] Interface and component names are exempt; ordinary English words that coincide with type names ("string", "number") are allowed
-- [ ] The client appears only in Interface sections; implementation sections never mention "client"
+- [ ] The client appears only in Interface sections
 - [ ] Every sentence passes the AI Action Test: it derives an interface usage constraint, an implementation behavior constraint, or a dependency requirement
 
 ## Formatting
@@ -87,6 +92,7 @@ The section inventory is closed. An interface spec has exactly `Purpose`, `Terms
 ## Constraint inheritance
 
 - [ ] The spec's effective constraint set is its own lines plus the transitive closure of its dependencies (`imports:`, `fulfills:`)
+- [ ] References point only to dependencies: an interface never references a spec that depends on it — its implementation spec, downstream consumers, or derived artifacts such as the LLS — and never says where another spec pins a fact
 - [ ] Inherited constraints are in effect without being restated; restating an inherited constraint is an error
 - [ ] Dependencies' assumptions are inherited; a dependent adds precision only when it must establish a dependency's precondition
 - [ ] Non-concerns propagate as "not guaranteed"; a dependent never relies on behavior a dependency declares out of scope
@@ -104,17 +110,40 @@ The section inventory is closed. An interface spec has exactly `Purpose`, `Terms
 - [ ] Only non-conforming content is changed; conformant lines untouched; a rewrite preserving every fact is reported as no change
 - [ ] The claimed change appears in the diff; output is verified against input
 
+## Lint checks
+
+- [ ] Interface sections are exactly `Purpose`, `Terms`, `Contract`, `Non-concerns`; implementation exactly `Deltas`, `Non-concerns`; no other `##` section, in canonical order
+- [ ] No `###` headings
+- [ ] A file whose name contains `impl` declares `fulfills:` and `## Deltas` and has no `## Contract`; a file without `impl` never declares `fulfills:` and has no Deltas
+- [ ] The `## Contract` contains **Operations**, **Guarantees**, and **Assumptions** blocks
+- [ ] `terms (owned):` is present iff `## Terms` is present
+- [ ] `terms (from X):` names an existing spec and a term `X` owns; a backticked import names an existing spec; the spec never references itself
+- [ ] A multi-word term used in the body is owned, referenced, or refined
+- [ ] `terms (refined):` appears only in implementation specs; a refined term is owned by the fulfilled interface or a listed owner; a `[refines]` Deltas line exists for every refined term
+- [ ] No "returns" anywhere — "provides", "signals", "delegates"
+- [ ] No pseudo-code literals (`` `True`/`False`/`None` ``)
+- [ ] Implementation sections never mention "client"
+- [ ] Deltas tags come from the known set: `[ordering]`, `[boundary]`, `[state]`, `[external]`, `[failure]`, `[refines]`
+- [ ] No Deltas line restates the fulfilled contract ("per the `<interface>` contract")
+
 ## Common pitfalls
 
 - [ ] No DSL drift — no invented syntax like `atomicity(per-call)` — plain words: "atomic per call"
 - [ ] No procedure as guarantee — "the component first validates, then executes" — "Execution occurs only when the request is valid; the result is observable only after execution completes"
 - [ ] No mechanism — "builds an index of all active orders" — "Queries provide a consistent view of all active orders"
+- [ ] No outcome-as-mechanism — "the record is saved by flushing the buffer" — "the record is persisted"; the flush belongs in the Deltas
+- [ ] No detail the caller cannot act on — "each entry is appended in arrival order" when the caller only reads the final list — "the final list reflects all entries"; the ordering belongs in the Deltas
+- [ ] No mechanics in term definitions — "a quote: cached and refreshed hourly" — "a quote: the current price"; caching and refresh belong in the implementation
 - [ ] No tables for heterogeneous facts, no header-dependent fragments — one fact per line, self-contained
 - [ ] No re-defined owned terms — a term described in three specs — `terms (from order_service): held`
 - [ ] No refinement contradicting the owner — narrow only; align
 - [ ] No refinement detail in front matter — names only; details in a `[refines]` Deltas line
 - [ ] No vagueness without marking — "the value is passed along" — "Opaque; passes through unchanged"
-- [ ] No restated inherited constraint — "per the <interface> contract" — deltas only; drop the pointer
+- [ ] No restated inherited constraint — "per the <interface> contract", a repeated guarantee, or a repeated owned term definition — deltas only; drop the restatement
+- [ ] No policy values in interfaces — "locks the account after three failed attempts" — "repeated failed attempts lock the account"; the count is pinned in the implementation spec
+- [ ] No exception class names — "signaled as `OrderNotFoundError`" — "signals an unexpected failure when the order is not found"; the class is pinned in the implementation spec
+- [ ] No rationale clauses in Guarantees — "so the report is current when the reader opens it" — state the observable effect; the reason belongs in the Purpose
+- [ ] No forward references — an interface never names a spec that depends on it (its implementation, downstream consumers, or the LLS); a fact only the implementation pins is withheld
 - [ ] No concern mixing — a guarantee inside Assumptions, a behavior inside Terms — each fact in its owning block
 - [ ] No "Returns" — "Returns true when in stock" — "Signals availability when in stock"
 - [ ] No failure without state — "Signals failure" — "Signals failure, leaving messages unchanged"

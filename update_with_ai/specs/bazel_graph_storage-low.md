@@ -31,7 +31,7 @@ class BazelGraphStorage(DagStorage, Protocol):
     def resolve_package_directory(self, node_id: NodeId) -> PackageDirectory: ...
 ```
 
-A label identifying the configured source of graph data — either a precomputed graph artifact path or a workspace root directory. The actual resolution mechanism is unspecified; the implementation determines how to read the graph from the source.
+A label identifying the configured source of graph data — either a precomputed graph artifact path or a workspace root directory. The actual resolution mechanism is unspecified.
 
 The client-supplied configuration, as listed in the `bazel_graph_storage` interface contract: either a graph source or a workspace root. At least one of `graph_source` or `workspace_root` must be provided; when only the workspace root is provided, the graph is derived from it.
 

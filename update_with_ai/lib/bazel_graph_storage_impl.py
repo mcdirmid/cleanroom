@@ -296,7 +296,7 @@ class BaseBazelGraphStorageImpl(BazelGraphStorage):
         with open(path, "r") as f:
             return json.load(f)
 
-    def _write_file(self, path: str, data: Dict[str, Any]) -> None:
+    def _persist_harness_file(self, path: str, data: Dict[str, Any]) -> None:
         """Write the messages file atomically."""
         tmp_path = path + ".tmp"
         with open(tmp_path, "w") as f:
@@ -324,14 +324,14 @@ class BaseBazelGraphStorageImpl(BazelGraphStorage):
         data = self._read_file(harness_file)
         entry = self._entry(data, node_id)
         entry["messages"].extend(messages)
-        self._write_file(harness_file, data)
+        self._persist_harness_file(harness_file, data)
 
     def _delete_node_data(self, harness_file: str, node_id: NodeId) -> None:
         """Delete all pending messages for a node and write atomically."""
         data = self._read_file(harness_file)
         if node_id in data:
             del data[node_id]
-        self._write_file(harness_file, data)
+        self._persist_harness_file(harness_file, data)
 
     def _read_reverse_dependencies(self, harness_file: str, node_id: NodeId) -> KnownReverseDependencies:
         """Read the node's known reverse dependencies from the file."""
@@ -348,7 +348,7 @@ class BaseBazelGraphStorageImpl(BazelGraphStorage):
         reverse_deps = entry["reverse_dependencies"]
         if dep not in reverse_deps:
             reverse_deps.append(dep)
-        self._write_file(harness_file, data)
+        self._persist_harness_file(harness_file, data)
 
 
 def _build_verify_callback(verify_cmd: str) -> Optional[VerificationCallback]:

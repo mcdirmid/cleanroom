@@ -1,8 +1,15 @@
 # specs/BUILD.bazel
 # High-level specification files, linted by //bin:hls_lint_test.
+# Low-level specification files, linted by //bin:lls_lint_test.
 
 filegroup(
     name = "high_specs",
     srcs = glob(["*-high.md"]),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "low_specs",
+    srcs = glob(["*-low.md"]),
     visibility = ["//visibility:public"],
 )

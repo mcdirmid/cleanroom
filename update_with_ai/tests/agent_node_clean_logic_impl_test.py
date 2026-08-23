@@ -163,14 +163,6 @@ class MockSandbox(Sandbox):
         )
         return ToolResult(content="file contents", supersedes=False)
 
-    def write_file(self, file_path: str, content: str) -> ToolCallOutcome:
-        self._record("write_file", {"file_path": file_path, "content": content})
-        self._write_occurred = True
-        return ToolResult(
-            content=f"Created {file_path}",
-            supersedes=True,
-        )
-
     def replace_lines(self, file_path: str, start_line: int, end_line: int,
                       new_str: str) -> ToolCallOutcome:
         self._record(

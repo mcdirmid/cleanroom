@@ -4,7 +4,8 @@ update_hls_with_ai creates a high-level specification (HLS) node and
 update_lls_with_ai creates a low-level specification (LLS) node. Both are
 thin wrappers over update_with_ai (macros.bzl): they differ only in the
 spec-specific data they pass — the prompt, the guide dep, the spec deps,
-and (for HLS) a *_lint test target that gates the node's verify tool. All
+and a *_lint test target that gates the node's verify tool (hls_lint for
+HLS nodes, lls_lint for LLS nodes). All
 node machinery (manifest, *_clean, *_feedback, *_prompt targets) comes from
 update_with_ai.
 
@@ -31,24 +32,31 @@ def _apparent_label_str(label):
     return s
 
 # ============================================================================
-# Specification lint rule: hls_lint
+# Specification lint rules: hls_lint and lls_lint
 # ============================================================================
 #
-# The hls_lint rule creates a bazel test target that lints the spec file and
+# Each lint rule creates a bazel test target that lints the spec file and
 # verifies that every spec referenced in the text is covered by spec_deps
 # (the "dependencies are synced" check). Covered spec paths are read at test
-# time from each spec_dep's manifest in runfiles (data-driven).
+# time from each spec_dep's manifest in runfiles (data-driven). hls_lint
+# validates high-level specs per guides/high_level_spec.md; lls_lint
+# validates low-level specs per guides/low_level_spec.md.
 
-def _hls_lint_impl(ctx):
-    """Implementation of the hls_lint rule: a test that lints a spec file."""
+def _spec_lint_test_impl(ctx):
+    """Implementation of a spec-lint test rule: a test that lints a spec file.
+
+    Shared by the hls_lint and lls_lint rules; the linter script and the
+    reference corpus come from the private `_linter` and `_corpus` attrs.
+    """
 
     # The spec files to lint.
     src_files = ctx.files.srcs
     src_args = " ".join(['"$ws"/{}'.format(f.short_path) for f in src_files])
+    linter = ctx.file._linter.short_path
 
     # Each spec_dep's manifest (in runfiles) lists the spec files it owns;
     # the test script reads them at runtime and passes the package-qualified
-    # paths to hls_lint.py as --deps. The closure is computed from the
+    # paths to the linter as --deps. The closure is computed from the
     # manifests: the spec deps' own sources plus, recursively, the sources
     # of every node in their deps/star_deps closure (never silent_deps), so
     # lint coverage matches exactly what the agent can read at run time.
@@ -101,13 +109,13 @@ def _hls_lint_impl(ctx):
             "print(' '.join(sorted(out)))\n" +
             "PYEOF\n)\n" +
             'if [ -n "$deps" ]; then\n' +
-            '    python3 "$ws/bin/hls_lint.py" --deps $deps -- {targets}\n' +
+            '    python3 "$ws/{linter}" --deps $deps -- {targets}\n' +
             "else\n" +
-            '    python3 "$ws/bin/hls_lint.py" {targets}\n' +
+            '    python3 "$ws/{linter}" {targets}\n' +
             "fi\n"
-        ).format(paths = paths_literal, targets = src_args)
+        ).format(linter = linter, paths = paths_literal, targets = src_args)
     else:
-        deps_cmd = 'python3 "$ws/bin/hls_lint.py" {targets}\n'.format(targets = src_args)
+        deps_cmd = 'python3 "$ws/{linter}" {targets}\n'.format(linter = linter, targets = src_args)
     script_content = (
         "#!/bin/bash\n" +
         "set -euo pipefail\n" +
@@ -124,7 +132,7 @@ def _hls_lint_impl(ctx):
     )
 
     runfiles = ctx.runfiles(
-        files = [ctx.file._hls_lint] + ctx.files._high_specs + src_files + ctx.files.spec_deps,
+        files = [ctx.file._linter] + ctx.files._corpus + src_files + ctx.files.spec_deps,
         transitive_files = transitive_manifests,
     )
     return [
@@ -132,7 +140,7 @@ def _hls_lint_impl(ctx):
     ]
 
 _hls_lint_test = rule(
-    implementation = _hls_lint_impl,
+    implementation = _spec_lint_test_impl,
     test = True,
     attrs = {
         "srcs": attr.label_list(
@@ -143,17 +151,39 @@ _hls_lint_test = rule(
             doc = "Spec dependency node targets whose coverage is verified against the text's references",
             aspects = [collect_node_manifests],
         ),
-        "_hls_lint": attr.label(
+        "_linter": attr.label(
             default = Label("//bin:hls_lint.py"),
             allow_single_file = True,
         ),
-        "_high_specs": attr.label(
+        "_corpus": attr.label(
             default = Label("//update_with_ai/specs:high_specs"),
             doc = "Canonical spec corpus used for term-ownership reference resolution",
         ),
     },
 )
 
+_lls_lint_test = rule(
+    implementation = _spec_lint_test_impl,
+    test = True,
+    attrs = {
+        "srcs": attr.label_list(
+            allow_files = True,
+            doc = "Spec file(s) to lint",
+        ),
+        "spec_deps": attr.label_list(
+            doc = "Spec dependency node targets whose coverage is verified against the dependency comment's entries",
+            aspects = [collect_node_manifests],
+        ),
+        "_linter": attr.label(
+            default = Label("//bin:lls_lint.py"),
+            allow_single_file = True,
+        ),
+        "_corpus": attr.label(
+            default = Label("//update_with_ai/specs:low_specs"),
+            doc = "Canonical low-level spec corpus (runfiles only)",
+        ),
+    },
+)
 # ============================================================================
 # Macro: update_hls_with_ai (high-level specification nodes)
 # ============================================================================
@@ -259,6 +289,23 @@ def update_spec_with_ai(name, spec_deps, visibility = None):
         template = "//templates:lls",
         guide = "//guides:high_to_low",
         spec_deps = lls_spec_deps + [":" + name + "_high"],
+        verify = "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{}:{}_low_lint --test_output=errors 2>&1".format(
+            native.package_name(),
+            name,
+        ),
         visibility = visibility,
     )
+
+    # The LLS is validated by a lls_lint test that mirrors the HLS's hls_lint
+    # test. The target is created only once the spec file exists on disk (low
+    # specs are generated as the graph is walked; a lint target with a missing
+    # src would fail to build). The template initializes the file at run start,
+    # so the target materializes on the next bazel invocation after the agent
+    # writes the spec, which is when the node's verify tool gates on it.
+    if native.glob([name + "-low.md"], allow_empty = True):
+        _lls_lint_test(
+            name = name + "_low_lint",
+            srcs = [name + "-low.md"],
+            spec_deps = lls_spec_deps,
+        )
     return ":" + name

@@ -92,7 +92,7 @@ The client-supplied configuration for the agent loop: connection and processing 
 def run_agent(self, prompt: str, tools: list[ToolDefinition], tool_executor: ToolExecutor[T_tool], system_prompt: str | None = None, session_start_results: list[PresentedToolResult] | None = None, logger: LoggerCallback | None = None) -> AgentResult
 ```
 
-**Purpose:** Run the agent loop. Completes when a tool signals termination or a failure occurs; there is no free-text final answer — when the model stops with free text without signaling termination, the loop injects a termination reminder and continues.
+**Purpose:** Run the agent loop. Completes when a tool signals termination or a failure occurs; there is no free-text final answer — when the model stops without signaling termination, a termination reminder is provided and the loop continues.
 
 **Preconditions:**
 - `prompt` is a string (may be empty; an empty prompt sends no user message)
@@ -106,36 +106,28 @@ def run_agent(self, prompt: str, tools: list[ToolDefinition], tool_executor: Too
 
 **Postconditions:**
 - On termination, returns `(TerminateAgentWithSuccess, history)` or `(TerminateAgentWithFailure[T_tool], history)` — the tool-provider termination signal paired with the conversation history
-- A model response that stops with free text and no tool calls has not signaled termination: the loop injects the termination reminder (the configured generator's message, or a default) into the conversation and continues with a follow-up API call; the run completes only via a termination signal or the iteration limit
+- A model response that stops without signaling termination has not completed: a termination reminder (the configured generator's message, or a default) is provided and the loop continues; the run completes only via a termination signal or the iteration limit
 - On error, returns `(error, history)` (a loop failure); state unchanged
 - Termination values pass through unchanged from the `Signal[T_tool]` produced by `tool_executor`
 - Final termination is terminal—no further processing (no API calls, no tool executions)
 - The system prompt is never modified during the run
-- The agent conversation is append-only except for stubbing: no message is removed or reordered; a stubbed message keeps its position and its content is replaced by the static stub
-- Every tool result a tool call produces is appended, in the order produced
-- The tool definitions are provided with each request, re-requested from the tool execution logic (the `tools` run input provides the initial definitions), so a tool's definition may change during a run and each request carries the latest definitions
-- Session-start tool results, when provided, are rendered at the beginning of the run, immediately after the user prompt (or at the start of the conversation when the prompt is empty), before the model's first turn; each appears with its tool call immediately before it
-- A tool result's content is appended to the conversation (rendered into the model-visible tool message, with the note appended)
-- Each tool result appears in the conversation with its tool call immediately before it: a result of the model's own call appears after that call, and a `PresentedToolResult` appears after the call it carries (the call's id assigned by the loop); no tool result appears without its preceding call
-- When a tool result's `supersedes` flag is set, the earlier non-stubbed result for the same file or tool command has its content replaced in place with the static stub before the new result is appended; the stubbed message keeps its position, and the new result becomes the live result for that file or tool command
+- A tool result's content is rendered into the model-visible tool message, with the note appended
+- When a tool result's `supersedes` flag is set, the earlier non-stubbed result for the same file or tool command is replaced by a placeholder
 - A result with the `supersedes` flag unset supersedes nothing; at most one earlier result is superseded per result
-- A stub is static once set: a stubbed message's content never changes for the remainder of the run
-- Stubbing preserves the conversation prefix: the conversation up to the most recent live result for a file or tool command is identical from one request to the next except for appended messages, preserving the model service's prefix caching
 - A response that stops at the generation limit (a truncated response) is not treated as complete
-- On a truncated response, the continuation prompt is appended to the conversation and the loop continues with a follow-up API call
+- On a truncated response, generation resumes with a follow-up request
 - A degenerate truncated response (content is a single character repeated) is not resumed; the run signals failure
-- Tool calls present in a truncated response are not executed and not retried; the assistant message appended from the truncated response omits them
+- Tool calls present in a truncated response are not executed
 - Each follow-up request counts toward the iteration limit
 - Chronological order maintained
 - No state persists between runs
-- A tool result's `note` is rendered into the model-visible tool message (appended to the result's content), and bookkeeping fields (the `supersedes` flag) are stripped before API calls
 - Logger callback invoked after data appended to history
 - If `tool_executor` returns `Continue`, the loop continues with the model processing the tool results.
 - If `tool_executor` returns `TerminateAgentWithSuccess`, the loop stops and returns `(TerminateAgentWithSuccess, history)`; if it returns `TerminateAgentWithFailure[T_tool]`, the loop stops and returns `(TerminateAgentWithFailure[T_tool], history)`.
 - If `tool_executor` returns `ToolFailure[T_tool]` (a tool failure — the agent misused a tool as specified by the tool provider): the failure message (e.g., the sandbox's reminder of what the agent can do) is appended to the conversation and the loop continues with the model making its next move. Tool failures are recoverable: no session reset, no history clearing, and no agent failure. A tool failure never supersedes an earlier result.
-- When the same tool call (name and arguments) is repeated 4 consecutive times, a reminder is injected into the conversation once per run — urging the agent to make progress (change a file with `edit_file`/`replace_lines`/`write_file`, or finish with `advance`/`fail`/`blame`) — and the loop continues. The repetition counter resets when the call changes or a new run starts. The `advance` tool is exempt: repeated `advance` calls are the run's progress in step mode (each passing advance provides the next step section), and an `advance` call resets the repetition tracking.
-- When `replace_lines` targets the same file and line range 4 consecutive times (even when the content differs), a range-specific reminder is injected into the conversation once per run — noting the range edited, urging a fresh numbered read (`read_file(file_path, include_line_numbers=True)`) to reassess, and offering to finish the run — and the loop continues. The range counter resets when the range changes or a new run starts; at most one reminder is injected per run across both repetition detectors.
-- The run signals failure when the same tool call (name and arguments) repeats 8 consecutive times, or when `replace_lines` targets the same file and line range 8 consecutive times (even when the content differs) — a degenerate loop ends the run instead of spinning to the iteration limit; the failure is a loop failure paired with the conversation history. The `advance` tool is exempt from this limit as well.
+- A loop reminder is provided at most once per run when the model repeats itself without progress.
+- The run signals failure when repetition continues beyond the run's repetition limit — a degenerate loop ends the run instead of spinning to the iteration limit; the failure is a loop failure paired with the conversation history.
+- The `advance` tool is exempt from repetition tracking.
 - If `tool_executor` raises an exception (an unhandled error by the tool_executor): the agent_loop catches it and returns `(error, history)` (state unchanged).
 
 **Failure Handling:**
@@ -144,7 +136,7 @@ def run_agent(self, prompt: str, tools: list[ToolDefinition], tool_executor: Too
   - API returns malformed response (expected by agent_loop)
   - Tool executor raises exception (tool_executor's unhandled error, caught by agent_loop)
   - Maximum iterations exceeded (expected by agent_loop)
-  - Degenerate loop repetition: the same tool call (name and arguments) repeats 8 consecutive times, or `replace_lines` targets the same file and line range 8 consecutive times (even when the content differs)
+  - Degenerate loop: repetition continues beyond the run's repetition limit
 - A truncated response is not a failure condition: the loop resumes generation (see Postconditions)
 - A degenerate truncated response returns `(error, history)` (a loop failure); the truncated response and the continuation prompt are not appended
 - State unchanged on failure
@@ -170,15 +162,14 @@ def run_agent(self, prompt: str, tools: list[ToolDefinition], tool_executor: Too
 
 - No state persists between runs
 - Termination values never inspected, transformed, or interpreted
-- The loop-repetition reminders (identical calls, same-range edits) are injected at most once per run; the termination reminder is injected on every stop-with-content; a degenerate loop (8 consecutive identical calls, or 8 consecutive same-range `replace_lines` calls) fails the run
+- A loop reminder is injected at most once per run; a termination reminder is provided when the model stops without signaling termination; repetition beyond the run's repetition limit fails the run
 - The system prompt is never modified during the run
-- A result with the `supersedes` flag set stubs the earlier non-stubbed result for the same file or tool command; stubbed messages keep their positions
-- A stub is static once set: a stubbed message's content never changes for the remainder of the run
+- A result with the `supersedes` flag set replaces the earlier non-stubbed result for the same file or tool command
 - A tool failure never supersedes an earlier result
 
 ## Non-Concerns
 
 - **Timer implementation:** The exact timeout mechanism (whether the timeout is enforced at the API layer or in the loop) is unspecified.
-- **Model API version:** The specific API version (v1, v2, etc.) is unspecified; the implementation determines the version.
-- **Termination reminder trigger:** The reminder is not triggered by tool failures, which carry their own guidance (see `tool_provider` `ToolFailure`); when it is otherwise injected is pinned in the implementation spec.
-- **Stub text:** The exact text of the static stub is pinned in the implementation spec — the interface specifies only that a stub is static once set and preserves the stubbed message's position.
+- **Model API version:** The specific API version (v1, v2, etc.) is unspecified.
+- **Termination reminder trigger:** The reminder is not triggered by tool failures, which carry their own guidance (see `tool_provider` `ToolFailure`).
+- **Stub text:** The exact text of a stub placeholder is unspecified.
