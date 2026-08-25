@@ -242,7 +242,7 @@ class DagCleanerImpl(DagCleaner):
                             return (False, FailureResult())
 
                 # Success: route new messages, then apply the result's metadata
-                # effect (dag_cleaner_impl-low.md / dag_cleaner-high.md):
+                # effect (specs/low/dag_cleaner_impl.md / specs/high/dag_cleaner.md):
                 #   change    -> delete the node's data (messages + reverse deps)
                 #   no-change -> clear the node's pending messages (reverse deps
                 #                retained)

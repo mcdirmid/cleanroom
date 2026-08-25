@@ -45,7 +45,7 @@ from .tool_provider import (
     ToolFailure,
 )
 
-# Pinned default continuation prompt (specs/agent_loop_impl-low.md,
+# Pinned default continuation prompt (specs/low/agent_loop_impl.md,
 # Non-Concerns): appended as a user message when a response is truncated at
 # the generation limit and no continuation_prompt is configured.
 DEFAULT_CONTINUATION_PROMPT = (
@@ -53,7 +53,7 @@ DEFAULT_CONTINUATION_PROMPT = (
     "Continue from where you left off."
 )
 
-# Pinned stub text (specs/agent_loop_impl-low.md, Non-Concerns): the content
+# Pinned stub text (specs/low/agent_loop_impl.md, Non-Concerns): the content
 # replacing a superseded tool result in place. A stub is static once set —
 # its text never changes for the remainder of the run, so the conversation
 # prefix up to the most recent live result stays byte-identical across
@@ -229,7 +229,7 @@ class AgentLoopImpl(AgentLoop):
     @staticmethod
     def _stub_key_for(tool_call: ToolCall, arguments: Any) -> Tuple[str, str]:
         """The file or tool command a result concerns, per the sandbox
-        contract (specs/sandbox-low.md, Stubbing): the file's virtual name
+        contract (specs/low/sandbox.md, Stubbing): the file's virtual name
         for file operations, or the tool command itself (e.g. "advance").
         File operations name the file via the `file_path` argument; the
         advance feedback carries no file and is keyed by its tool name. A
@@ -258,7 +258,7 @@ class AgentLoopImpl(AgentLoop):
         """Stub a tool result in place: its content is replaced with the
         pinned static stub text, the message keeps its position, and the
         message_stubbed logger event is emitted with the stubbed message and
-        the replacement message (specs/agent_loop_impl-low.md).
+        the replacement message (specs/low/agent_loop_impl.md).
         """
         stubbed = dict(messages[index])
         stubbed["content"] = STUB_TEXT
@@ -565,7 +565,7 @@ class AgentLoopImpl(AgentLoop):
             # Degenerate loop: the same call repeated 8 consecutive times ends
             # the run with a loop failure — the once-per-run reminder alone
             # cannot break a model that ignores it (pinned error text in
-            # specs/agent_loop_impl-low.md).
+            # specs/low/agent_loop_impl.md).
             if self._loop_repeat_count >= 8:
                 error_msg = "Degenerate loop: same tool call repeated 8 consecutive times"
                 self._log_error(logger, error_msg, last_usage, cumulative_usage)
@@ -603,7 +603,7 @@ class AgentLoopImpl(AgentLoop):
                 # Degenerate loop: the same file and line range edited 8
                 # consecutive times (even with different content) ends the run
                 # with a loop failure (pinned error text in
-                # specs/agent_loop_impl-low.md).
+                # specs/low/agent_loop_impl.md).
                 if self._loop_range_count >= 8 and range_signature[0] is not None:
                     error_msg = (
                         "Degenerate loop: replace_lines targeted the same file "

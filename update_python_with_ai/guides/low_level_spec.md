@@ -11,13 +11,13 @@ The LLS is a stand-alone document; readers use it without the HLS. Type aliases 
 ## Front matter
 
 - [ ] A component whose HLS has no `fulfills:` line is an interface — its LLS is `# Interface LLS: <name>`, never an Implementation LLS; an implementation LLS exists only when the HLS defines an implementation; a file may declare any number of interface and implementation sections
-- [ ] Filenames use underscores except the `-low` / `-high` suffix; no hyphens elsewhere
+- [ ] Filenames use underscores; no hyphens anywhere — high- and low-level specs are distinguished by directory (`specs/high/` vs `specs/low/`), not by filename suffix
 - [ ] The dependency comment is the file's first line — the LLS's only front matter: no `terms (owned):` or `terms (from X):` section; a `terms (from X):` entry becomes a dependency-comment entry
 - [ ] LLS dependencies are expressed through interfaces, never implementation LLS files; a type is imported from its owner's LLS, never through a re-exporting interface
 - [ ] The comment lists the LLS of every interface named in the HLS's front matter — `imports:`, `fulfills:`, `terms (from X):` — a prose-only concept reference is still a dependency
 - [ ] A component named in LLS prose but not in the HLS front matter is added to the comment; an entry is spurious only when it is neither imported, nor referenced, nor named in the front matter
-- [ ] An import `from <module> import ...` maps to the comment entry `- <module>-low.md`: the module name is the entry's name with the `-low.md` suffix removed; a module name never ends in `_low`
-- [ ] Type-level imports come from the immediate LLS closure — the `-low.md` files the dependency comment lists; a type-level dependency outside it is a traceability violation, recorded rather than imported or defined
+- [ ] An import `from <module> import ...` maps to the comment entry `- <module>.md`: the module name is the entry's name with the `.md` suffix removed
+- [ ] Type-level imports come from the immediate LLS closure — the `specs/low/` files the dependency comment lists; a type-level dependency outside it is a traceability violation, recorded rather than imported or defined
 - [ ] An imported type counts as used when it appears in a signature, in prose, or as part of the fulfilled contract; a Composition section may name concrete implementations without making them dependencies
 
 ## Data Types
@@ -106,7 +106,7 @@ The LLS is a stand-alone document; readers use it without the HLS. Type aliases 
 - [ ] Section headings are exactly `# Interface LLS: <name>` and `# Implementation LLS: <name>` matching the filename stem
 - [ ] Interface subsections are `## Data Types`, `## Component-Provided Operations`, `## Invariants`; implementation subsections are `## Data Types`, `## Composition`, `## Behavioral Description`, `## Invariants`, `## Non-Concerns`; no other `##` section; sections appear in that order
 - [ ] The interface section contains `## Data Types`, `## Component-Provided Operations`, and `## Invariants`; the implementation section contains `## Data Types`, `## Behavioral Description`, and `## Invariants`
-- [ ] The dependency comment is the file's first line — the LLS's only front matter — and lists each dependency as one `- <name>-low.md` entry; it never names an HLS file; every non-stdlib import appears in it
+- [ ] The dependency comment is the file's first line — the LLS's only front matter — and lists each dependency as one `- <name>.md` entry; it never names an HLS file (an HLS lives in `specs/high/`); every non-stdlib import appears in it
 - [ ] The Data Types section opens with exactly one Python code block; the interface's Protocol class is last
 - [ ] Every type alias is `X: TypeAlias = ...`; never a bare `X = ...` except string constants and `TypeVar` declarations
 - [ ] The Data Types block imports every `typing`, `dataclasses`, or `enum` name it uses (`from typing import Protocol, TypeAlias, Sequence`); a typing name is never assumed — it is imported exactly like any other name
@@ -124,5 +124,5 @@ The LLS is a stand-alone document; readers use it without the HLS. Type aliases 
 - [ ] `### ` headings appear only under Component-Provided Operations
 - [ ] Term-definition headings appear between Data Types and Component-Provided Operations
 - [ ] Implementation sections never mention "client"
-- [ ] An `# Implementation LLS:` heading appears only in a `<name>_impl-low.md` file
+- [ ] An `# Implementation LLS:` heading appears only in a `<name>_impl.md` file in `specs/low/`
 - [ ] There is no `## Config` section

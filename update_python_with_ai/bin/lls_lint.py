@@ -3,13 +3,13 @@
 lls_lint.py — lint low-level specification files per update_python_with_ai/guides/low_level_spec.md.
 
 Usage:
-    python3 update_python_with_ai/bin/lls_lint.py [files...]     # default: all *-low.md under specs/
+    python3 update_python_with_ai/bin/lls_lint.py [files...]     # default: all *.md under specs/low/
     python3 update_python_with_ai/bin/lls_lint.py --deps <spec file paths...> -- <target files...>
 
 Checks (E = error, exits nonzero; W = warning, does not affect exit code):
   E  missing dependency comment on the first line
   E  dependency-comment entry that is not among the linted files or the --deps closure
-  E  dependency comment references a spec that is not a `- <name>-low.md` entry (e.g. an HLS file)
+  E  dependency comment references a spec that is not a `- <name>.md` entry (e.g. an HLS file)
   E  header not `# Interface LLS: <stem>` / `# Implementation LLS: <stem>`, or name/stem mismatch
   E  `# Implementation LLS:` heading in a non-`_impl` file, or `# Interface LLS:` in an `_impl` file (a component whose HLS has no `fulfills:` line is an interface)
   E  unknown `##` section (closed inventory: Data Types, Component-Provided Operations,
@@ -52,7 +52,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-SPECS_DIR = ROOT / "update_with_ai" / "specs"
+SPECS_DIR = ROOT / "update_with_ai" / "specs" / "low"
 
 # Modules that are not specs and need no dependency-comment entry.
 STDLIB_MODULES = {"__future__", "abc", "collections", "dataclasses", "enum", "typing"}
@@ -93,7 +93,7 @@ def warn(f: Path, msg: str) -> None:
 
 
 def stem_of(path: Path) -> str:
-    return path.stem[:-4] if path.stem.endswith("-low") else path.stem
+    return path.stem
 
 
 # ---------------------------------------------------------------- parsing
@@ -135,7 +135,7 @@ def grouped_sections(parts: list[tuple[int, str, list[str]]]) -> list[tuple[str,
 
 
 def parse_comment(text: str) -> list[str] | None:
-    """Return dependency entry filenames (e.g. 'inventory-low.md') from the
+    """Return dependency entry filenames (e.g. 'inventory.md') from the
     leading comment, or None if the comment is missing or malformed."""
     first = text.splitlines()[0] if text.splitlines() else ""
     if not first.startswith("<!-- Dependencies"):
@@ -143,20 +143,24 @@ def parse_comment(text: str) -> list[str] | None:
     end = text.find("-->")
     if end == -1:
         return None
-    return re.findall(r"^\s*-\s*([\w]+-low\.md)\s*$", text[:end], re.M)
+    return re.findall(r"^\s*-\s*([\w]+\.md)\s*$", text[:end], re.M)
 
 
 def check_comment_refs(f: Path, text: str, entries: list[str]) -> None:
-    """The comment may contain only `- <name>-low.md` entry lines: any other
-    spec filename inside it (an HLS file, an entry not on its own line) is an
-    error — LLS files depend only on LLS files."""
+    """The comment may contain only `- <name>.md` entry lines: any other
+    spec filename inside it (an HLS file — a `specs/high/` reference — or an
+    entry not on its own line) is an error — LLS files depend only on LLS
+    files."""
     end = text.find("-->")
     if end == -1:
         return  # a malformed comment is reported by the caller
     comment = text[:end]
-    for m in re.finditer(r"([\w]+-(?:high|low)\.md)", comment):
-        if m.group(1) not in entries:
-            err(f, f"dependency comment references {m.group(1)!r}, which is not a `- <name>-low.md` entry; LLS files depend only on LLS files")
+    for m in re.finditer(r"([\w]+\.md)", comment):
+        line_start = comment.rfind("\n", 0, m.start()) + 1
+        line_end = comment.find("\n", m.end())
+        line = comment[line_start:line_end if line_end != -1 else len(comment)]
+        if not (m.group(1) in entries and re.match(r"^\s*-\s*" + re.escape(m.group(1)) + r"\s*$", line)):
+            err(f, f"dependency comment references {m.group(1)!r}, which is not a `- <name>.md` entry; LLS files depend only on LLS files")
 
 
 def python_blocks(body: str) -> list[str]:
@@ -188,24 +192,24 @@ def check_imports(f: Path, code: str, comment: list[str]) -> None:
     """Every non-stdlib import must be listed in the dependency comment.
 
     The module name in `from <module> import ...` is the comment entry's name
-    with the `-low.md` suffix removed (an import of `from tool_provider import`
-    maps to the `- tool_provider-low.md` entry). When the module is not listed,
+    with the `.md` suffix removed (an import of `from tool_provider import`
+    maps to the `- tool_provider.md` entry). When the module is not listed,
     suggest the closest listed module: a wrong underscore variant
     (`tool_provider_low`) is a common mistake that leads to editing the comment
     instead of the import.
     """
-    listed = {e[:-7] for e in comment if e.endswith("-low.md")}
+    listed = {e[:-3] for e in comment if e.endswith(".md")}
     for m in re.finditer(r"^from\s+([A-Za-z_]\w*)\s+import", code, re.M):
         mod = m.group(1)
         if mod in STDLIB_MODULES:
             continue
-        if mod + "-low.md" not in comment:
+        if mod + ".md" not in comment:
             hint = ""
             if listed:
                 close = difflib.get_close_matches(mod, sorted(listed), n=1, cutoff=0.5)
                 if close:
-                    hint = f"; did you mean `from {close[0]} import` (the comment entry is `- {close[0]}-low.md`)?"
-            err(f, f"imports '{mod}' but the dependency comment does not list {mod}-low.md{hint}")
+                    hint = f"; did you mean `from {close[0]} import` (the comment entry is `- {close[0]}.md`)?"
+            err(f, f"imports '{mod}' but the dependency comment does not list {mod}.md{hint}")
 
 
 def check_comment_entries(f: Path, comment: list[str], files: list[Path], deps: list[str]) -> None:
@@ -229,7 +233,7 @@ def check_header(f: Path, text: str) -> None:
     if m.group(2) != stem:
         err(f, f"LLS heading name {m.group(2)!r} does not match filename stem {stem!r}")
     # A component whose HLS has no `fulfills:` line is an interface: its LLS
-    # is an Interface LLS. Implementation LLS files are `<name>_impl-low.md`.
+    # is an Interface LLS. Implementation LLS files are `<name>_impl.md` in `specs/low/`.
     if m.group(1) == "Implementation" and not stem.endswith("_impl"):
         err(f, f"'# Implementation LLS: {stem}' in a non-`_impl` file: a component whose HLS has no `fulfills:` line is an interface; its LLS is '# Interface LLS: {stem}'")
     elif m.group(1) == "Interface" and stem.endswith("_impl"):
@@ -460,7 +464,7 @@ def check_import_owners(f: Path, text: str, owner_names: dict[str, set[str]]) ->
     for mod, name in imported_pairs(blocks):
         if mod in STDLIB_MODULES:
             continue
-        owner_file = mod + "-low.md"
+        owner_file = mod + ".md"
         if owner_file in owner_names and name not in owner_names[owner_file]:
             err(f, f"imports '{name}' from '{mod}', but {owner_file} does not define '{name}'; import it from its owner's LLS")
 
@@ -499,7 +503,7 @@ def check_undefined_types(f: Path, code: str, known: set[str], owner_names: dict
         reported.add(name)
         owners = sorted(o for o, names in owner_names.items() if name in names)
         if owners:
-            mod = owners[0][:-7]  # strip "-low.md"
+            mod = owners[0][:-3]  # strip ".md"
             err(f, f"type name '{name}' is used but never defined or imported; import it from its owner ({owners[0]}, `from {mod} import {name}`) rather than defining it")
         elif name in IMPORT_MODULES:
             err(f, f"type name '{name}' is used but never defined or imported; import it from {IMPORT_MODULES[name]} (`from {IMPORT_MODULES[name]} import {name}`)")
@@ -526,7 +530,7 @@ def check_redefinitions(f: Path, text: str, owner_names: dict[str, set[str]]) ->
     local = spec_defined_names(text)
     for owner_file, names in sorted(owner_names.items()):
         for n in sorted(local & names):
-            mod = owner_file[:-7]  # strip "-low.md"
+            mod = owner_file[:-3]  # strip ".md"
             err(f, f"redefines '{n}', which is owned by {owner_file}; import it (`from {mod} import {n}`) instead of redefining")
 
 
@@ -676,7 +680,7 @@ def main(argv: list[str]) -> int:
             rest.append(argv[i])
         i += 1
 
-    files = [Path(p) for p in rest] or sorted(SPECS_DIR.glob("*-low.md"))
+    files = [Path(p) for p in rest] or sorted(SPECS_DIR.glob("*.md"))
     for f in files:
         text = f.read_text(encoding="utf-8")
         check_header(f, text)
@@ -714,7 +718,7 @@ def main(argv: list[str]) -> int:
                 owner_sources[p.name] = p
         for d in deps:
             dp = Path(d)
-            if dp.name.endswith("-low.md") and dp.name not in owner_sources:
+            if dp.name.endswith(".md") and dp.name not in owner_sources:
                 owner_sources[dp.name] = dp
         owner_names: dict[str, set[str]] = {}
         for name, p in owner_sources.items():

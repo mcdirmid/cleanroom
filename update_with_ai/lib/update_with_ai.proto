@@ -1,7 +1,7 @@
 // update_with_ai.proto — the schema for the per-package message store file
 // (.update_with_ai.textproto).
 //
-// Pinned by the bazel_graph_storage_impl HLS/LLS: each package directory's
+// Pinned by the build_graph_storage_impl HLS/LLS: each package directory's
 // message file is a protobuf text-format serialization of an `UpdateWithAi`
 // message, mapping node IDs (valid Bazel target labels) to entries holding
 // the node's pending messages (each with its kind and text) and its known

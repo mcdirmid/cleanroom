@@ -18,7 +18,7 @@ from .dag_clean_logic import (
     FailureResult,
 )
 from .dag_storage import NodeMessage
-from .bazel_graph_storage import BazelGraphStorage, NodeDefinition
+from .build_graph_storage import BuildGraphStorage, NodeDefinition
 from .agent_loop import (
     AgentLoop,
     AgentResult,
@@ -49,7 +49,7 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
 
     def __init__(
         self,
-        graph: BazelGraphStorage,
+        graph: BuildGraphStorage,
         agent_loop_config: AgentLoopConfig,
         make_sandbox: Callable[[SandboxConfig], Sandbox],
         make_agent_loop: Callable[[AgentLoopConfig], AgentLoop],

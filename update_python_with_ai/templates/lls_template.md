@@ -1,5 +1,5 @@
 <!-- Dependencies (md files to read alongside this one):
-  - <dep>-low.md
+  - <dep>.md
 -->
 
 # Interface LLS: <name>

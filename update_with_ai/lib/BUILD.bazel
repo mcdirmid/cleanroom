@@ -80,9 +80,9 @@ pyright_library(
 )
 
 pyright_library(
-    name = "bazel_graph_storage",
+    name = "build_graph_storage",
     srcs = [
-        "bazel_graph_storage.py",
+        "build_graph_storage.py",
     ],
     pyright_deps = [":sandbox", ":dag_storage"],
     visibility = ["//visibility:public"],
@@ -98,11 +98,11 @@ pyright_library(
 )
 
 pyright_library(
-    name = "bazel_graph_storage_impl",
+    name = "build_graph_storage_impl",
     srcs = [
-        "bazel_graph_storage_impl.py",
+        "build_graph_storage_impl.py",
     ],
-    pyright_deps = [":bazel_graph_storage", ":dag_storage", ":sandbox"],
+    pyright_deps = [":build_graph_storage", ":dag_storage", ":sandbox"],
     visibility = ["//visibility:public"],
 )
 
@@ -111,75 +111,75 @@ pyright_library(
     srcs = [
         "agent_node_clean_logic_impl.py",
     ],
-    pyright_deps = [":dag_clean_logic", ":dag_storage", ":bazel_graph_storage", ":agent_loop", ":agent_loop_impl", ":sandbox", ":tool_provider"],
+    pyright_deps = [":dag_clean_logic", ":dag_storage", ":build_graph_storage", ":agent_loop", ":agent_loop_impl", ":sandbox", ":tool_provider"],
     visibility = ["//visibility:public"],
 )
 
 pyright_library(
-    name = "bazel_node_loader",
+    name = "build_node_loader",
     srcs = [
-        "bazel_node_loader.py",
+        "build_node_loader.py",
     ],
     pyright_deps = [":tool_provider"],
     visibility = ["//visibility:public"],
 )
 
 pyright_library(
-    name = "bazel_node_loader_impl",
+    name = "build_node_loader_impl",
     srcs = [
-        "bazel_node_loader_impl.py",
+        "build_node_loader_impl.py",
     ],
-    pyright_deps = [":tool_provider", ":agent_loop", ":bazel_node_loader"],
+    pyright_deps = [":tool_provider", ":agent_loop", ":build_node_loader"],
     visibility = ["//visibility:public"],
 )
 
 pyright_library(
-    name = "bazel_agent_config",
+    name = "build_agent_config",
     srcs = [
-        "bazel_agent_config.py",
+        "build_agent_config.py",
     ],
     pyright_deps = [":agent_loop_impl"],
     visibility = ["//visibility:public"],
 )
 
 pyright_library(
-    name = "bazel_agent_config_impl",
+    name = "build_agent_config_impl",
     srcs = [
-        "bazel_agent_config_impl.py",
+        "build_agent_config_impl.py",
     ],
-    pyright_deps = [":agent_loop_impl", ":bazel_agent_config"],
+    pyright_deps = [":agent_loop_impl", ":build_agent_config"],
     visibility = ["//visibility:public"],
 )
 
 pyright_library(
-    name = "bazel_runner",
+    name = "build_runner",
     srcs = [
-        "bazel_runner.py",
+        "build_runner.py",
     ],
     pyright_deps = [":dag_storage", ":dag_cleaner"],
     visibility = ["//visibility:public"],
 )
 
 pyright_library(
-    name = "bazel_runner_impl",
+    name = "build_runner_impl",
     srcs = [
-        "bazel_runner_impl.py",
+        "build_runner_impl.py",
     ],
     pyright_deps = [
         ":dag_cleaner_impl",
         ":dag_cleaner",
         ":dag_storage",
         ":dag_clean_logic",
-        ":bazel_graph_storage_impl",
-        ":bazel_graph_storage",
+        ":build_graph_storage_impl",
+        ":build_graph_storage",
         ":agent_node_clean_logic_impl",
         ":agent_loop_impl",
         ":agent_loop",
-        ":bazel_agent_config",
-        ":bazel_agent_config_impl",
+        ":build_agent_config",
+        ":build_agent_config_impl",
         ":sandbox_impl",
         ":sandbox",
-        ":bazel_runner",
+        ":build_runner",
     ],
     visibility = ["//visibility:public"],
 )

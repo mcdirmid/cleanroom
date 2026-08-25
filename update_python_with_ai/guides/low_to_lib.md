@@ -2,7 +2,7 @@
 
 ## Summary
 
-The module `lib/<component-name>.py` implements `specs/<component-name>-low.md` (an implementation LLS is implemented by `lib/<component-name>_impl.py`). The LLS and its dependency closure are the module's only contract; its `HLS Justification` labels quote the HLS and carry no implementation obligations. A file that is a template is filled in.
+The module `lib/<component-name>.py` implements `specs/low/<component-name>.md` (an implementation LLS is implemented by `lib/<component-name>_impl.py`). The LLS and its dependency closure are the module's only contract; its `HLS Justification` labels quote the HLS and carry no implementation obligations. A file that is a template is filled in.
 
 The module's BUILD entry exists in the package BUILD: one `pyright_library` per module, `srcs` the module file, `pyright_deps` every imported package module (each a `pyright_library` target), `deps` third-party runtime packages only, `visibility` public. A missing `pyright_deps` entry shows as an unresolved-import error in the type check.
 
@@ -10,7 +10,7 @@ The module's types mirror the LLS's Data Types block; every operation implements
 
 ## Module layout
 
-- [ ] One module per LLS file: `specs/inventory-low.md` → `lib/inventory.py`; `specs/csv_inventory_impl-low.md` → `lib/csv_inventory_impl.py`
+- [ ] One module per LLS file: `specs/low/inventory.md` → `lib/inventory.py`; `specs/low/csv_inventory_impl.md` → `lib/csv_inventory_impl.py`
 - [ ] The implementation subclasses the interface's Protocol class, per the LLS (`class CsvInventoryImpl(Inventory): ...`)
 
 ## Imports

@@ -32,11 +32,11 @@ Blame = Tuple[BlameTarget, Feedback]
 SearchResultLimit = int
 # Template content keyed by the writable file's virtual name: the initial
 # content the sandbox gives a writable file that does not exist on disk when
-# the sandbox is configured (see sandbox-high.md / sandbox-low.md).
+# the sandbox is configured (see specs/high/sandbox.md / specs/low/sandbox.md).
 TemplateMapping = Dict[VirtualName, str]
 # A verification callback runs a shell command and returns (success, output):
 # success is True when the command exited 0. The sandbox uses the success flag
-# to gate advance()'s termination (see sandbox-high.md / sandbox-low.md).
+# to gate advance()'s termination (see specs/high/sandbox.md / specs/low/sandbox.md).
 VerificationCallback = Optional[Callable[[], Tuple[bool, str]]]
 
 @dataclass

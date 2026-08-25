@@ -2,7 +2,7 @@
 tests/agent_loop_impl_test.py
 
 Tests for the AgentLoopImpl implementation (lib/agent_loop_impl.py) against
-its low-level spec (specs/agent_loop_impl-low.md) and the agent_loop /
+its low-level spec (specs/low/agent_loop_impl.md) and the agent_loop /
 tool_provider interfaces it depends on.
 
 The OpenAI client is mocked: no network calls are made. The tool executor
@@ -38,7 +38,7 @@ from update_with_ai.lib.tool_provider import (
     ToolResult,
 )
 
-# Pinned default continuation prompt (specs/agent_loop_impl-low.md,
+# Pinned default continuation prompt (specs/low/agent_loop_impl.md,
 # Non-Concerns): appended as a user message when a response is truncated at
 # the generation limit and no continuation_prompt is configured.
 DEFAULT_CONTINUATION_PROMPT = (
@@ -46,7 +46,7 @@ DEFAULT_CONTINUATION_PROMPT = (
     "Continue from where you left off."
 )
 
-# Pinned stub text (specs/agent_loop_impl-low.md, Non-Concerns): the content
+# Pinned stub text (specs/low/agent_loop_impl.md, Non-Concerns): the content
 # replacing a superseded tool result in place; a stub is static once set.
 STUB_TEXT = "Content removed because newer version is available."
 
@@ -209,7 +209,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         # detector does not fire; the same-range detector must.
         calls = [
             make_tool_call("replace_lines", f"call_{i}", {
-                "file_path": "dag_storage-low.md",
+                "file_path": "specs/low/dag_storage.md",
                 "start_line": 96,
                 "end_line": 100,
                 "new_str": "content version %d" % i,
@@ -244,7 +244,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         reminders = [d for e, d in events if e == "reminder_injected"]
         self.assertEqual(len(reminders), 1)
         self.assertIn("96-100", reminders[0]["message"])
-        self.assertIn("dag_storage-low.md", reminders[0]["message"])
+        self.assertIn("specs/low/dag_storage.md", reminders[0]["message"])
         self.assertIn("include_line_numbers=True", reminders[0]["message"])
         history_text = " ".join(str(m.get("content", "")) for m in history)
         self.assertIn("edited lines 96-100", history_text)
@@ -345,7 +345,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         """
         calls = [
             make_tool_call("replace_lines", f"call_{i}", {
-                "file_path": "dag_storage-low.md",
+                "file_path": "specs/low/dag_storage.md",
                 "start_line": 96,
                 "end_line": 100,
                 "new_str": "content version %d" % i,

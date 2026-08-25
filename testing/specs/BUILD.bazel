@@ -77,46 +77,46 @@ update_python_with_ai(
 # ---------------------------------------------------------------------------
 
 update_python_with_ai(
-    name = "bazel_node_loader",
+    name = "build_node_loader",
     spec_deps = ["tool_provider", "sandbox"],
 )
 
 update_python_with_ai(
-    name = "bazel_agent_config",
+    name = "build_agent_config",
     spec_deps = ["agent_loop", "agent_loop_impl"],
 )
 
 update_python_with_ai(
-    name = "bazel_graph_storage",
+    name = "build_graph_storage",
     spec_deps = ["dag_storage", "sandbox"],
 )
 
 update_python_with_ai(
-    name = "bazel_node_loader_impl",
-    spec_deps = ["bazel_node_loader", "tool_provider", "agent_loop"],
+    name = "build_node_loader_impl",
+    spec_deps = ["build_node_loader", "tool_provider", "agent_loop"],
 )
 
 update_python_with_ai(
-    name = "bazel_agent_config_impl",
-    spec_deps = ["bazel_agent_config", "agent_loop", "agent_loop_impl"],
+    name = "build_agent_config_impl",
+    spec_deps = ["build_agent_config", "agent_loop", "agent_loop_impl"],
 )
 
 update_python_with_ai(
-    name = "bazel_graph_storage_impl",
-    spec_deps = ["bazel_graph_storage", "dag_storage", "sandbox", "bazel_node_loader"],
+    name = "build_graph_storage_impl",
+    spec_deps = ["build_graph_storage", "dag_storage", "sandbox", "build_node_loader"],
 )
 
 update_python_with_ai(
     name = "agent_node_clean_logic_impl",
-    spec_deps = ["dag_clean_logic", "bazel_graph_storage", "dag_storage", "agent_loop", "agent_loop_impl", "sandbox"],
+    spec_deps = ["dag_clean_logic", "build_graph_storage", "dag_storage", "agent_loop", "agent_loop_impl", "sandbox"],
 )
 
 update_python_with_ai(
-    name = "bazel_runner",
-    spec_deps = ["dag_cleaner", "dag_storage", "dag_clean_logic", "bazel_agent_config", "sandbox", "agent_loop", "bazel_node_loader"],
+    name = "build_runner",
+    spec_deps = ["dag_cleaner", "dag_storage", "dag_clean_logic", "build_agent_config", "sandbox", "agent_loop", "build_node_loader"],
 )
 
 update_python_with_ai(
-    name = "bazel_runner_impl",
-    spec_deps = ["bazel_runner", "bazel_graph_storage", "dag_storage", "dag_clean_logic", "dag_cleaner", "agent_loop", "sandbox", "bazel_agent_config"],
+    name = "build_runner_impl",
+    spec_deps = ["build_runner", "build_graph_storage", "dag_storage", "dag_clean_logic", "dag_cleaner", "agent_loop", "sandbox", "build_agent_config"],
 )

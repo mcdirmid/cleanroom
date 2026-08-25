@@ -25,7 +25,7 @@ from .dag_storage import NodeMessage
 
 # The maximum characters a verification diff may report; the default (1000)
 # applies when the sandbox is constructed without an explicit value (see
-# specs/sandbox_impl-low.md, Non-Concerns).
+# specs/low/sandbox_impl.md, Non-Concerns).
 DiffSizeLimit = int
 
 
@@ -857,7 +857,7 @@ class SandboxImpl(Sandbox):
                 # The feedback supersedes the earlier non-stubbed verification
                 # result (an earlier advance feedback, stubbed by the agent
                 # loop); the note reports only the status (pinned in
-                # specs/sandbox_impl-low.md), never the failure details.
+                # specs/low/sandbox_impl.md), never the failure details.
                 return [ToolResult(
                     content=content,
                     supersedes=True,

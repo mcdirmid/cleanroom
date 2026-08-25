@@ -1,7 +1,7 @@
 """
 Tests for lib/agent_node_clean_logic_impl.py (AgentNodeCleanLogicImpl).
 
-Asserts the behavioral contract from specs/agent_node_clean_logic_impl-low.md,
+Asserts the behavioral contract from specs/low/agent_node_clean_logic_impl.md,
 biased to verifying that lib/agent_node_clean_logic_impl.py satisfies it.
 
 BazelGraph, the Sandbox factory, and the AgentLoop factory are mocked. The
@@ -24,7 +24,7 @@ from update_with_ai.lib.agent_loop import (
 )
 from update_with_ai.lib.agent_loop_impl import AgentLoopConfig
 from update_with_ai.lib.agent_node_clean_logic_impl import AgentNodeCleanLogicImpl
-from update_with_ai.lib.bazel_graph_storage import BazelGraphStorage, NodeDefinition
+from update_with_ai.lib.build_graph_storage import BuildGraphStorage, NodeDefinition
 from update_with_ai.lib.dag_storage import NodeId, NodeMessage, MessageKind, PendingMessages
 from update_with_ai.lib.dag_clean_logic import (
     CleanResult,
@@ -37,7 +37,7 @@ from update_with_ai.lib.sandbox import Blame, Sandbox, SandboxConfig
 
 
 def msg(text: str, kind: str = "change") -> NodeMessage:
-    """Test helper: build a NodeMessage (per dag_storage-low.md)."""
+    """Test helper: build a NodeMessage (per specs/low/dag_storage.md)."""
     return NodeMessage(kind=cast(MessageKind, kind), text=text)
 from update_with_ai.lib.tool_provider import (
     PresentedToolResult,
@@ -84,10 +84,10 @@ def _make_node_def(
     )
 
 
-class MockBazelGraphStorage(BazelGraphStorage):
-    """Mock BazelGraphStorage backed by in-memory definitions and dependencies.
+class MockBuildGraphStorage(BuildGraphStorage):
+    """Mock BuildGraphStorage backed by in-memory definitions and dependencies.
 
-    Implements the full bazel_graph_storage protocol (dag_storage operations
+    Implements the full build_graph_storage protocol (dag_storage operations
     plus definition/package-directory resolution). The clean logic consumes
     node definitions (resolve_node_definition) and dependencies
     (get_node_dependencies, for blame-target validation).
@@ -239,7 +239,7 @@ class TestCleanOutcomeMapping(unittest.TestCase):
         node_def: Optional[NodeDefinition] = None,
     ) -> AgentNodeCleanLogicImpl:
         node_def = node_def or _make_node_def()
-        graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+        graph = MockBuildGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
         return AgentNodeCleanLogicImpl(
             graph=graph,
             agent_loop_config=_agent_loop_config(),
@@ -292,7 +292,7 @@ class TestCleanOutcomeMapping(unittest.TestCase):
             guide="guide.md",
             step_sections=True,
         )
-        graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+        graph = MockBuildGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
         agent_loop = MockAgentLoop()
         impl = AgentNodeCleanLogicImpl(
             graph=graph,
@@ -308,7 +308,7 @@ class TestCleanOutcomeMapping(unittest.TestCase):
             writable_paths=["out.txt"],
             file_mappings={"out.txt": os.path.join("tmp", "out.txt")},
         )
-        graph2 = MockBazelGraphStorage(definitions={"a": node_def2}, dependencies={"a": []})
+        graph2 = MockBuildGraphStorage(definitions={"a": node_def2}, dependencies={"a": []})
         agent_loop2 = MockAgentLoop()
         impl2 = AgentNodeCleanLogicImpl(
             graph=graph2,
@@ -361,7 +361,7 @@ class TestIsDirty(unittest.TestCase):
     def _impl(
         self, node_def: NodeDefinition
     ) -> AgentNodeCleanLogicImpl:
-        graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+        graph = MockBuildGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
         return AgentNodeCleanLogicImpl(
             graph=graph,
             agent_loop_config=_agent_loop_config(),
@@ -393,7 +393,7 @@ class TestIsDirty(unittest.TestCase):
                 writable_paths=["out.txt"],
                 file_mappings={"out.txt": missing_path},
             )
-            graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+            graph = MockBuildGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
             impl = AgentNodeCleanLogicImpl(
                 graph=graph,
                 agent_loop_config=_agent_loop_config(),
@@ -423,7 +423,7 @@ class TestIsDirty(unittest.TestCase):
                 file_mappings={"out.txt": out_path},
                 templates={"out.txt": "# template\nTODO: fill me in\n"},
             )
-            graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+            graph = MockBuildGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
             impl = AgentNodeCleanLogicImpl(
                 graph=graph,
                 agent_loop_config=_agent_loop_config(),
@@ -453,7 +453,7 @@ class TestIsDirty(unittest.TestCase):
                 file_mappings={"out.txt": out_path},
                 templates={"out.txt": "# template\n"},
             )
-            graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+            graph = MockBuildGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
             impl = AgentNodeCleanLogicImpl(
                 graph=graph,
                 agent_loop_config=_agent_loop_config(),
@@ -481,7 +481,7 @@ class TestIsDirty(unittest.TestCase):
                 writable_paths=["out.txt"],
                 file_mappings={"out.txt": out_path},
             )
-            graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+            graph = MockBuildGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
             impl = AgentNodeCleanLogicImpl(
                 graph=graph,
                 agent_loop_config=_agent_loop_config(),
@@ -498,7 +498,7 @@ class TestToolExecutor(unittest.TestCase):
 
     def _capture_executor(self, node_def: NodeDefinition, sandbox: MockSandbox):
         agent_loop = MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), []))
-        graph = MockBazelGraphStorage(
+        graph = MockBuildGraphStorage(
             definitions={"a": node_def}, dependencies={"a": ["b"]}
         )
         impl = AgentNodeCleanLogicImpl(
@@ -613,7 +613,7 @@ class TestRunStructure(unittest.TestCase):
         """Each clean builds a fresh sandbox from the node's sandbox_config
         (per-run state, including the write flag, is reset)."""
         node_def = _make_node_def()
-        graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+        graph = MockBuildGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
         constructed: List[Tuple[SandboxConfig, MockSandbox]] = []
 
         def make_sandbox(sc: SandboxConfig) -> MockSandbox:
@@ -642,7 +642,7 @@ class TestRunStructure(unittest.TestCase):
         """The sandbox is configured with feedback_pending set from whether
         the node's pending messages include a feedback message (impl LLS)."""
         node_def = _make_node_def()
-        graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+        graph = MockBuildGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
         constructed: List[Tuple[SandboxConfig, MockSandbox]] = []
 
         def make_sandbox(sc: SandboxConfig) -> MockSandbox:
@@ -667,7 +667,7 @@ class TestRunStructure(unittest.TestCase):
     def test_exactly_one_agent_run_per_clean(self):
         """Each cleaning runs exactly one agent run."""
         node_def = _make_node_def()
-        graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+        graph = MockBuildGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
         loops: List[MockAgentLoop] = []
 
         def make_agent_loop(cfg: AgentLoopConfig) -> MockAgentLoop:
@@ -696,7 +696,7 @@ class TestRunStructure(unittest.TestCase):
             readable_paths=["foo.txt", "bar.txt"],
             writable_paths=["bar.txt"],
         )
-        graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+        graph = MockBuildGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
         agent_loop = MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), []))
         impl = AgentNodeCleanLogicImpl(
             graph=graph,
@@ -716,7 +716,7 @@ class TestRunStructure(unittest.TestCase):
     def test_prompt_empty_when_no_pending_messages(self):
         """With no pending messages, the user prompt is empty."""
         node_def = _make_node_def(prompt="Work on the files")
-        graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+        graph = MockBuildGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
         agent_loop = MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), []))
         impl = AgentNodeCleanLogicImpl(
             graph=graph,
@@ -743,7 +743,7 @@ class TestRunStructure(unittest.TestCase):
             }
         ]
         node_def = _make_node_def()
-        graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+        graph = MockBuildGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
         sandbox = MockSandbox(tool_defs=tool_defs)
         agent_loop = MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), []))
         impl = AgentNodeCleanLogicImpl(
@@ -766,7 +766,7 @@ class TestRunStructure(unittest.TestCase):
             logged.append((event, data))
 
         node_def = _make_node_def()
-        graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+        graph = MockBuildGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
         sandbox = MockSandbox()
         agent_loop = MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), []))
         impl = AgentNodeCleanLogicImpl(
@@ -789,7 +789,7 @@ class TestRunStructure(unittest.TestCase):
     def test_config_without_logger_passes_none(self):
         """logger=None is accepted; run_agent receives logger=None."""
         node_def = _make_node_def()
-        graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+        graph = MockBuildGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
         agent_loop = MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), []))
         impl = AgentNodeCleanLogicImpl(
             graph=graph,

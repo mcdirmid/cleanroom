@@ -12,7 +12,7 @@ Read the implementation LLS and the transitive closure of its dependency comment
 
 ## Module layout
 
-- [ ] One test module per implementation LLS: `specs/csv_inventory_impl-low.md` → `tests/csv_inventory_impl_test.py`
+- [ ] One test module per implementation LLS: `specs/low/csv_inventory_impl.md` → `tests/csv_inventory_impl_test.py`
 - [ ] The module uses `unittest`, ending with `if __name__ == "__main__": unittest.main()`
 - [ ] Tests are grouped into classes by concern (success routing, failure handling, invariants, config)
 

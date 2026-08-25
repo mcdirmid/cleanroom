@@ -2,96 +2,96 @@ nodes {
   key: "@@//testing/specs:agent_loop_high"
   value {
     reverse_dependencies: "@@//testing/specs:agent_loop_low"
-    reverse_dependencies: "@@//testing/specs:bazel_agent_config_high"
+    reverse_dependencies: "@@//testing/specs:build_agent_config_high"
     reverse_dependencies: "@@//testing/specs:sandbox_high"
-    reverse_dependencies: "@@//testing/specs:bazel_runner_high"
-    reverse_dependencies: "@@//testing/specs:bazel_runner_impl_high"
+    reverse_dependencies: "@@//testing/specs:build_runner_high"
+    reverse_dependencies: "@@//testing/specs:build_runner_impl_high"
   }
 }
 nodes {
   key: "@@//testing/specs:agent_loop_low"
   value {
-    reverse_dependencies: "@@//testing/specs:bazel_runner_impl_low"
-    reverse_dependencies: "@@//testing/specs:bazel_agent_config_low"
+    reverse_dependencies: "@@//testing/specs:build_runner_impl_low"
+    reverse_dependencies: "@@//testing/specs:build_agent_config_low"
     reverse_dependencies: "@@//testing/specs:sandbox_low"
-    reverse_dependencies: "@@//testing/specs:bazel_runner_low"
+    reverse_dependencies: "@@//testing/specs:build_runner_low"
   }
 }
 nodes {
-  key: "@@//testing/specs:bazel_agent_config_high"
+  key: "@@//testing/specs:build_agent_config_high"
   value {
-    reverse_dependencies: "@@//testing/specs:bazel_agent_config_low"
-    reverse_dependencies: "@@//testing/specs:bazel_runner_high"
-    reverse_dependencies: "@@//testing/specs:bazel_runner_impl_high"
+    reverse_dependencies: "@@//testing/specs:build_agent_config_low"
+    reverse_dependencies: "@@//testing/specs:build_runner_high"
+    reverse_dependencies: "@@//testing/specs:build_runner_impl_high"
   }
 }
 nodes {
-  key: "@@//testing/specs:bazel_agent_config_low"
+  key: "@@//testing/specs:build_agent_config_low"
   value {
-    reverse_dependencies: "@@//testing/specs:bazel_runner_impl_low"
-    reverse_dependencies: "@@//testing/specs:bazel_runner_low"
+    reverse_dependencies: "@@//testing/specs:build_runner_impl_low"
+    reverse_dependencies: "@@//testing/specs:build_runner_low"
   }
 }
 nodes {
-  key: "@@//testing/specs:bazel_graph_storage_high"
+  key: "@@//testing/specs:build_graph_storage_high"
   value {
-    reverse_dependencies: "@@//testing/specs:bazel_graph_storage_low"
-    reverse_dependencies: "@@//testing/specs:bazel_runner_impl_high"
+    reverse_dependencies: "@@//testing/specs:build_graph_storage_low"
+    reverse_dependencies: "@@//testing/specs:build_runner_impl_high"
   }
 }
 nodes {
-  key: "@@//testing/specs:bazel_graph_storage_low"
-  value {
-    messages {
-      kind: "change"
-      text: "dag_storage-low.md: Added dependency comment; renamed Node to NodeVertex; added Term definitions and Non-Concerns sections; fixed Failure Handling and HLS Justification formatting"
-    }
-    reverse_dependencies: "@@//testing/specs:bazel_runner_impl_low"
-  }
-}
-nodes {
-  key: "@@//testing/specs:bazel_node_loader_high"
-  value {
-    reverse_dependencies: "@@//testing/specs:bazel_node_loader_low"
-    reverse_dependencies: "@@//testing/specs:bazel_runner_high"
-  }
-}
-nodes {
-  key: "@@//testing/specs:bazel_node_loader_low"
-  value {
-    reverse_dependencies: "@@//testing/specs:bazel_runner_low"
-  }
-}
-nodes {
-  key: "@@//testing/specs:bazel_runner_high"
-  value {
-    reverse_dependencies: "@@//testing/specs:bazel_runner_low"
-    reverse_dependencies: "@@//testing/specs:bazel_runner_impl_high"
-  }
-}
-nodes {
-  key: "@@//testing/specs:bazel_runner_impl_high"
-  value {
-    reverse_dependencies: "@@//testing/specs:bazel_runner_impl_low"
-  }
-}
-nodes {
-  key: "@@//testing/specs:bazel_runner_impl_low"
+  key: "@@//testing/specs:build_graph_storage_low"
   value {
     messages {
       kind: "change"
       text: "dag_storage-low.md: Added dependency comment; renamed Node to NodeVertex; added Term definitions and Non-Concerns sections; fixed Failure Handling and HLS Justification formatting"
     }
+    reverse_dependencies: "@@//testing/specs:build_runner_impl_low"
   }
 }
 nodes {
-  key: "@@//testing/specs:bazel_runner_low"
+  key: "@@//testing/specs:build_node_loader_high"
+  value {
+    reverse_dependencies: "@@//testing/specs:build_node_loader_low"
+    reverse_dependencies: "@@//testing/specs:build_runner_high"
+  }
+}
+nodes {
+  key: "@@//testing/specs:build_node_loader_low"
+  value {
+    reverse_dependencies: "@@//testing/specs:build_runner_low"
+  }
+}
+nodes {
+  key: "@@//testing/specs:build_runner_high"
+  value {
+    reverse_dependencies: "@@//testing/specs:build_runner_low"
+    reverse_dependencies: "@@//testing/specs:build_runner_impl_high"
+  }
+}
+nodes {
+  key: "@@//testing/specs:build_runner_impl_high"
+  value {
+    reverse_dependencies: "@@//testing/specs:build_runner_impl_low"
+  }
+}
+nodes {
+  key: "@@//testing/specs:build_runner_impl_low"
   value {
     messages {
       kind: "change"
       text: "dag_storage-low.md: Added dependency comment; renamed Node to NodeVertex; added Term definitions and Non-Concerns sections; fixed Failure Handling and HLS Justification formatting"
     }
-    reverse_dependencies: "@@//testing/specs:bazel_runner_impl_low"
+  }
+}
+nodes {
+  key: "@@//testing/specs:build_runner_low"
+  value {
+    messages {
+      kind: "change"
+      text: "dag_storage-low.md: Added dependency comment; renamed Node to NodeVertex; added Term definitions and Non-Concerns sections; fixed Failure Handling and HLS Justification formatting"
+    }
+    reverse_dependencies: "@@//testing/specs:build_runner_impl_low"
   }
 }
 nodes {
@@ -100,8 +100,8 @@ nodes {
     reverse_dependencies: "@@//testing/specs:dag_clean_logic_low"
     reverse_dependencies: "@@//testing/specs:sandbox_high"
     reverse_dependencies: "@@//testing/specs:dag_cleaner_high"
-    reverse_dependencies: "@@//testing/specs:bazel_runner_high"
-    reverse_dependencies: "@@//testing/specs:bazel_runner_impl_high"
+    reverse_dependencies: "@@//testing/specs:build_runner_high"
+    reverse_dependencies: "@@//testing/specs:build_runner_impl_high"
   }
 }
 nodes {
@@ -111,18 +111,18 @@ nodes {
       kind: "change"
       text: "dag_storage-low.md: Added dependency comment; renamed Node to NodeVertex; added Term definitions and Non-Concerns sections; fixed Failure Handling and HLS Justification formatting"
     }
-    reverse_dependencies: "@@//testing/specs:bazel_runner_impl_low"
+    reverse_dependencies: "@@//testing/specs:build_runner_impl_low"
     reverse_dependencies: "@@//testing/specs:sandbox_low"
     reverse_dependencies: "@@//testing/specs:dag_cleaner_low"
-    reverse_dependencies: "@@//testing/specs:bazel_runner_low"
+    reverse_dependencies: "@@//testing/specs:build_runner_low"
   }
 }
 nodes {
   key: "@@//testing/specs:dag_cleaner_high"
   value {
     reverse_dependencies: "@@//testing/specs:dag_cleaner_low"
-    reverse_dependencies: "@@//testing/specs:bazel_runner_high"
-    reverse_dependencies: "@@//testing/specs:bazel_runner_impl_high"
+    reverse_dependencies: "@@//testing/specs:build_runner_high"
+    reverse_dependencies: "@@//testing/specs:build_runner_impl_high"
   }
 }
 nodes {
@@ -132,8 +132,8 @@ nodes {
       kind: "change"
       text: "dag_storage-low.md: Added dependency comment; renamed Node to NodeVertex; added Term definitions and Non-Concerns sections; fixed Failure Handling and HLS Justification formatting"
     }
-    reverse_dependencies: "@@//testing/specs:bazel_runner_impl_low"
-    reverse_dependencies: "@@//testing/specs:bazel_runner_low"
+    reverse_dependencies: "@@//testing/specs:build_runner_impl_low"
+    reverse_dependencies: "@@//testing/specs:build_runner_low"
   }
 }
 nodes {
@@ -143,19 +143,19 @@ nodes {
     reverse_dependencies: "@@//testing/specs:dag_clean_logic_high"
     reverse_dependencies: "@@//testing/specs:sandbox_high"
     reverse_dependencies: "@@//testing/specs:dag_cleaner_high"
-    reverse_dependencies: "@@//testing/specs:bazel_graph_storage_high"
-    reverse_dependencies: "@@//testing/specs:bazel_runner_high"
-    reverse_dependencies: "@@//testing/specs:bazel_runner_impl_high"
+    reverse_dependencies: "@@//testing/specs:build_graph_storage_high"
+    reverse_dependencies: "@@//testing/specs:build_runner_high"
+    reverse_dependencies: "@@//testing/specs:build_runner_impl_high"
   }
 }
 nodes {
   key: "@@//testing/specs:sandbox_high"
   value {
     reverse_dependencies: "@@//testing/specs:sandbox_low"
-    reverse_dependencies: "@@//testing/specs:bazel_graph_storage_high"
-    reverse_dependencies: "@@//testing/specs:bazel_node_loader_high"
-    reverse_dependencies: "@@//testing/specs:bazel_runner_high"
-    reverse_dependencies: "@@//testing/specs:bazel_runner_impl_high"
+    reverse_dependencies: "@@//testing/specs:build_graph_storage_high"
+    reverse_dependencies: "@@//testing/specs:build_node_loader_high"
+    reverse_dependencies: "@@//testing/specs:build_runner_high"
+    reverse_dependencies: "@@//testing/specs:build_runner_impl_high"
   }
 }
 nodes {
@@ -165,10 +165,10 @@ nodes {
       kind: "change"
       text: "dag_storage-low.md: Added dependency comment; renamed Node to NodeVertex; added Term definitions and Non-Concerns sections; fixed Failure Handling and HLS Justification formatting"
     }
-    reverse_dependencies: "@@//testing/specs:bazel_runner_impl_low"
-    reverse_dependencies: "@@//testing/specs:bazel_graph_storage_low"
-    reverse_dependencies: "@@//testing/specs:bazel_runner_low"
-    reverse_dependencies: "@@//testing/specs:bazel_node_loader_low"
+    reverse_dependencies: "@@//testing/specs:build_runner_impl_low"
+    reverse_dependencies: "@@//testing/specs:build_graph_storage_low"
+    reverse_dependencies: "@@//testing/specs:build_runner_low"
+    reverse_dependencies: "@@//testing/specs:build_node_loader_low"
   }
 }
 nodes {
@@ -178,7 +178,7 @@ nodes {
     reverse_dependencies: "@@//testing/specs:agent_loop_high"
     reverse_dependencies: "@@//testing/specs:dag_clean_logic_high"
     reverse_dependencies: "@@//testing/specs:sandbox_high"
-    reverse_dependencies: "@@//testing/specs:bazel_node_loader_high"
+    reverse_dependencies: "@@//testing/specs:build_node_loader_high"
   }
 }
 nodes {
@@ -187,6 +187,6 @@ nodes {
     reverse_dependencies: "@@//testing/specs:agent_loop_low"
     reverse_dependencies: "@@//testing/specs:sandbox_low"
     reverse_dependencies: "@@//testing/specs:dag_clean_logic_low"
-    reverse_dependencies: "@@//testing/specs:bazel_node_loader_low"
+    reverse_dependencies: "@@//testing/specs:build_node_loader_low"
   }
 }

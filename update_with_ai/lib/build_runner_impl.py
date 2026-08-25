@@ -1,0 +1,403 @@
+"""
+Build runner — assembler for running the cleanroom system.
+
+This module assembles the cleanroom components (graph storage,
+agent loop, DAG clean logic) and runs a topological cleaning pass
+over a target node and its transitive dependencies.
+
+Library usage:
+    from update_with_ai.lib.build_runner_impl import BuildRunnerImpl
+    success, err = BuildRunnerImpl().run_dag(root_node, workspace_root)
+
+Script usage (CLI entry point):
+    bazel run //pkg:target  # where target is a update_with_ai with clean target
+"""
+
+from update_with_ai.lib.dag_cleaner_impl import DagCleanerImpl
+from update_with_ai.lib.dag_cleaner import CleaningResult
+from update_with_ai.lib.dag_clean_logic import NoChangeResult, FailureResult
+from update_with_ai.lib.dag_storage import NodeId, NodeMessage
+from update_with_ai.lib.build_graph_storage_impl import BuildGraphStorageFileImpl
+from update_with_ai.lib.build_graph_storage import GraphConfig
+from update_with_ai.lib.agent_node_clean_logic_impl import AgentNodeCleanLogicImpl
+from update_with_ai.lib.agent_loop_impl import AgentLoopImpl, AgentLoopConfig
+from update_with_ai.lib.agent_loop import LogEvent
+from update_with_ai.lib.build_agent_config_impl import BuildAgentConfigImpl
+from update_with_ai.lib.sandbox import Sandbox
+from update_with_ai.lib.sandbox_impl import SandboxImpl
+from update_with_ai.lib.build_runner import BuildRunner
+from typing import Any, Dict, List, Optional
+import dataclasses
+import os
+import signal
+import sys
+import threading
+
+
+def _sigint_handler(signum, frame):
+    """Honor ctrl-C: raise KeyboardInterrupt so the run's cleanup (the log
+    file close, per-run state) completes and the process exits with the
+    interruption status — the interrupt is never ignored or continued past."""
+    raise KeyboardInterrupt
+
+
+# Register only from the main thread; signal.signal() raises ValueError if
+# called from a worker thread. The explicit handler guarantees SIGINT is
+# honored even if a dependency (e.g. a library) sets it to SIG_IGN.
+if threading.current_thread() is threading.main_thread():
+    signal.signal(signal.SIGINT, _sigint_handler)
+
+
+def _format_compact_log(event: LogEvent, data: Dict[str, Any]) -> Optional[str]:
+    """Format a one-line event summary for stdout; None skips the event."""
+    node = data.get("node_id", "?")
+
+    if event == "tool_called":
+        names = [tc.get("function", {}).get("name", "unknown") for tc in data.get("tool_calls", [])]
+        return f"[agent {node}] tool calls: {', '.join(names)}"
+
+    if event == "api_response":
+        usage = data.get("usage", {})
+        return (
+            f"[agent {node}] tokens: prompt {usage.get('prompt_tokens', 0)} | "
+            f"completion {usage.get('completion_tokens', 0)} | "
+            f"total {usage.get('total_tokens', 0)}"
+        )
+
+
+    if event == "run_terminated":
+        cumulative = data.get("cumulative_usage", {})
+        return (
+            f"[agent {node}] terminated ({data.get('termination_value', '?')}); cumulative: "
+            f"prompt {cumulative.get('prompt_tokens', 0)} | "
+            f"completion {cumulative.get('completion_tokens', 0)} | "
+            f"total {cumulative.get('total_tokens', 0)} "
+            f"({cumulative.get('request_count', 0)} requests)"
+        )
+
+    if event == "error":
+        return f"[agent {node}] ERROR: {data.get('error', 'unknown error')}"
+
+    return None
+
+
+def _format_full_log(event: LogEvent, data: Dict[str, Any]) -> str:
+    """Format a verbose transcript line for the agent log file."""
+    node = data.get("node_id", "?")
+
+    if event == "message_added":
+        msg = data.get("message", {})
+        role = msg.get("role", "unknown")
+        content = msg.get("content")
+        if content is not None:
+            preview = str(content).replace("\n", "\\n")
+            if len(preview) > 200:
+                preview = preview[:200] + "..."
+            return f"[{node}] message_added ({role}): {preview}"
+        tool_calls = msg.get("tool_calls")
+        if tool_calls:
+            names = [tc.get("function", {}).get("name", "unknown") for tc in tool_calls]
+            return f"[{node}] message_added ({role}): tool_calls={', '.join(names)}"
+        return f"[{node}] message_added ({role}): (no content)"
+
+    if event == "message_stubbed":
+        stubbed = data.get("stubbed_message", {})
+        content = str(stubbed.get("content", "")).replace("\n", "\\n")[:80]
+        return f"[{node}] message_stubbed: content={content!r}"
+
+    if event == "tool_result":
+        parts = []
+        for r in data.get("results", []):
+            supersedes = getattr(r, "supersedes", False)
+            content = str(getattr(r, "content", "")).replace("\n", "\\n")[:80]
+            parts.append(f"supersedes={supersedes!r} content={content!r}")
+        return f"[{node}] tool_result ({len(parts)}): {'; '.join(parts)}"
+
+    if event == "tool_called":
+        parts = []
+        for tc in data.get("tool_calls", []):
+            name = tc.get("function", {}).get("name", "unknown")
+            args = tc.get("function", {}).get("arguments", "{}")
+            parts.append(f"{name}({str(args)[:100]})")
+        return f"[{node}] tool_called: {'; '.join(parts)}"
+
+    if event == "api_response":
+        usage = data.get("usage", {})
+        return (
+            f"[{node}] api_response: prompt {usage.get('prompt_tokens', 0)} | "
+            f"completion {usage.get('completion_tokens', 0)} | "
+            f"total {usage.get('total_tokens', 0)}"
+        )
+
+    if event == "reminder_injected":
+        return f"[{node}] reminder_injected: {data.get('message', '')}"
+
+
+    if event == "run_terminated":
+        cumulative = data.get("cumulative_usage", {})
+        return (
+            f"[{node}] run_terminated: {data.get('termination_value', '?')} | "
+            f"cumulative: prompt {cumulative.get('prompt_tokens', 0)} "
+            f"completion {cumulative.get('completion_tokens', 0)} "
+            f"total {cumulative.get('total_tokens', 0)} "
+            f"({cumulative.get('request_count', 0)} requests) "
+            f"context {data.get('final_context_size', 0)}"
+        )
+
+    if event == "error":
+        return f"[{node}] error: {data.get('error', 'unknown error')}"
+
+    return f"[{node}] {event}: {data}"
+
+
+class BuildRunnerImpl(BuildRunner):
+    """
+    Assembler for running the cleanroom system.
+
+    Collects the components (graph storage, agent loop, DAG clean logic)
+    and runs a topological cleaning pass over a target node and its transitive dependencies.
+    """
+
+    def run_dag(
+        self,
+        root_node: NodeId,
+        workspace_root: str,
+        config_target: Optional[str] = None,
+    ) -> CleaningResult:
+        """
+        Run a DAG cleaning pass starting from root_node.
+
+        Args:
+            root_node: Label of the root node to clean.
+            workspace_root: Workspace/runfiles root for loading manifests.
+            config_target: Agent/model configuration target (an `agent_config`
+                Bazel target label, e.g. "//agent_configs:default"). If None,
+                the selection falls back to AGENT_CONFIG_TARGET and then
+                //agent_configs:default (see build_agent_config).
+
+        Returns a CleaningResult:
+            (True, CleanResult)  — all nodes in subgraph cleaned (a
+                                   ChangeResult, FeedbackResult, or
+                                   NoChangeResult)
+            (False, FailureResult) — failure at some node
+        """
+        print(f"Loading graph from {root_node}...")
+
+        # Step 1: Build the graph storage from manifest files (reads verify
+        # fields from manifests); it serves as both the graph and the message
+        # store.
+        graph = BuildGraphStorageFileImpl(
+            config=GraphConfig(workspace_root=workspace_root),
+        )
+
+        # Step 2: Configure the agent loop from an agent_config target.
+        # The target is selected by priority: the config_target argument
+        # (e.g. `--config //pkg:name` on the CLI), then AGENT_CONFIG_TARGET,
+        # then the //agent_configs:default convention. The API key is never
+        # part of the config target: it is resolved from the environment by
+        # the BuildAgentConfig component (the config's pinned API-key
+        # environment variable, or AGENT_API_KEY — an unexpected failure,
+        # see build_agent_config). The raw agent configuration also carries
+        # the session-start-reads gate, which the sandbox factory applies to
+        # each node's sandbox configuration below.
+        agent_config_impl = BuildAgentConfigImpl()
+        config_target = agent_config_impl.resolve_config_target(config_target)
+        agent_config = agent_config_impl.load_config(config_target, workspace_root)
+        api_key = agent_config_impl.resolve_api_key(agent_config.api_key_env)
+        agent_loop_config = agent_config.to_agent_loop_config(api_key)
+        agent_loop = AgentLoopImpl(config=agent_loop_config)
+
+        # Step 3: Agent logging — compact events on stdout, full transcript
+        # to a file in the directory where bazel was invoked (override with
+        # CLEANROOM_AGENT_LOG, e.g. an absolute path or a name relative to the
+        # workspace root).
+        log_dir = (
+            os.environ.get("BUILD_WORKSPACE_DIRECTORY")
+            or os.environ.get("BUILD_WORKING_DIRECTORY")
+            or os.getcwd()
+        )
+        log_override = os.environ.get("CLEANROOM_AGENT_LOG")
+        if log_override:
+            log_path = log_override if os.path.isabs(log_override) else os.path.join(log_dir, log_override)
+        else:
+            log_path = os.path.join(log_dir, "agent_loop.log")
+        log_file = open(log_path, "w", encoding="utf-8")
+        print(f"Agent log: {log_path}")
+
+        def _agent_logger(event: LogEvent, data: Dict[str, Any]) -> None:
+            line = _format_compact_log(event, data)
+            if line is not None:
+                print(line)
+            log_file.write(_format_full_log(event, data) + "\n")
+            # Flush each line immediately so the transcript reflects the run
+            # in real time (specs/low/build_runner_impl.md: log writes are
+            # unbuffered).
+            log_file.flush()
+
+        # Step 4: Clean logic with sandbox factory. The session-start-reads
+        # gate from the agent configuration applies to every node's sandbox
+        # (the agent_config is the run-level configuration; it overrides the
+        # per-node sandbox config's default).
+        clean_logic = AgentNodeCleanLogicImpl(
+            graph=graph,
+            agent_loop_config=agent_loop_config,
+            make_sandbox=lambda cfg: SandboxImpl(
+                config=dataclasses.replace(
+                    cfg,
+                    session_start_reads_enabled=agent_config.session_start_reads,
+                    step_sections_enabled=agent_config.step_sections,
+                )
+            ),
+            make_agent_loop=lambda cfg=None: agent_loop,
+            logger=_agent_logger,
+        )
+
+        # Step 5: Build the DAG and run
+        dag_cleaner = DagCleanerImpl(
+            storage=graph,
+            clean_logic=clean_logic,
+        )
+
+        print(f"\nRunning DAG from {root_node}...")
+        try:
+            result = dag_cleaner.clean_subgraph(root_node)
+        finally:
+            log_file.close()
+        print(f"Full agent transcript: {log_path}")
+        print(f"DAG result: {result}")
+        return result
+
+    def inject_feedback(
+        self,
+        node_id: NodeId,
+        workspace_root: str,
+        messages: List[str],
+    ) -> CleaningResult:
+        """
+        Deliver feedback messages to a node's own pending message store.
+
+        Each message is added to the node's pending messages (the same store
+        the DAG reads), so a subsequent clean treats the node as dirty and
+        processes the feedback.
+
+        Args:
+            node_id: Label of the node receiving the feedback
+            workspace_root: Workspace/runfiles root for loading manifests
+            messages: Feedback messages to deliver to the node
+
+        Returns:
+            (True, NoChangeResult()) on success,
+            (False, FailureResult()) on failure (node does not exist in graph)
+        """
+        print(f"Loading graph from {node_id}...")
+        graph = BuildGraphStorageFileImpl(config=GraphConfig(workspace_root=workspace_root))
+
+        try:
+            graph.resolve_package_directory(node_id)
+        except ValueError:
+            return (False, FailureResult())
+
+        graph.add_messages(
+            node_id,
+            [NodeMessage(kind="feedback", text=m) for m in messages],
+        )
+        for message in messages:
+            print(f"Delivered feedback to {node_id}: {message}")
+        return (True, NoChangeResult())
+
+    def add_change(
+        self,
+        node_id: NodeId,
+        workspace_root: str,
+        change: str = "check",
+    ) -> CleaningResult:
+        """
+        Deliver a change message to a node's own pending message store,
+        marking the node dirty for a subsequent cleaning pass. The node may
+        succeed without changing when cleaned; the change text defaults to
+        "check" when not provided.
+
+        Returns:
+            (True, NoChangeResult()) on success,
+            (False, FailureResult()) on failure (node does not exist in graph)
+        """
+        print(f"Loading graph from {node_id}...")
+        graph = BuildGraphStorageFileImpl(config=GraphConfig(workspace_root=workspace_root))
+
+        try:
+            graph.resolve_package_directory(node_id)
+        except ValueError:
+            return (False, FailureResult())
+
+        graph.add_messages(node_id, [NodeMessage(kind="change", text=change)])
+        print(f"Delivered change to {node_id}: {change}")
+        return (True, NoChangeResult())
+
+    def broadcast_change(
+        self,
+        node_id: NodeId,
+        workspace_root: str,
+        change: str,
+    ) -> CleaningResult:
+        """
+        Pretend the node was cleaned with changes: broadcast a change message
+        to the node's known reverse dependencies and clear the node's data,
+        without cleaning the node.
+
+        The broadcast message is the node's declared source file name (its
+        sandbox configuration's first writable path) followed by the change
+        text; when the node declares no source file, the message is the
+        change text alone. A known reverse dependency that is not in the
+        graph is skipped (per the dag_cleaner routing rule).
+
+        Returns:
+            (True, NoChangeResult()) on success,
+            (False, FailureResult()) on failure (node does not exist in graph)
+        """
+        print(f"Loading graph from {node_id}...")
+        graph = BuildGraphStorageFileImpl(config=GraphConfig(workspace_root=workspace_root))
+
+        try:
+            graph.resolve_package_directory(node_id)
+        except ValueError:
+            return (False, FailureResult())
+
+        writable = graph.resolve_node_definition(node_id).sandbox_config.writable_paths
+        src = writable[0] if writable else ""
+        message_text = "{}: {}".format(src, change) if src else change
+        broadcast = [NodeMessage(kind="change", text=message_text)]
+        for target in graph.get_known_reverse_dependencies(node_id):
+            try:
+                graph.add_messages(target, broadcast)
+            except ValueError:
+                continue
+        graph.delete_node_data(node_id)
+        print(
+            f"Broadcast change from {node_id} to its reverse dependencies: "
+            f"{message_text}"
+        )
+        return (True, NoChangeResult())
+
+
+def main() -> int:
+    """Entry point: parse target from CLI and run."""
+    args = sys.argv[1:]
+    if len(args) < 1:
+        print(f"Usage: {sys.argv[0]} <target> [workspace_root]", file=sys.stderr)
+        return 1
+
+    root_node: NodeId = args[0]
+    workspace_root: str = args[1] if len(args) > 1 else os.getcwd()
+
+    try:
+        runner = BuildRunnerImpl()
+        success, result = runner.run_dag(root_node, workspace_root)
+        return 0 if success else 1
+    except Exception as e:
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -25,7 +25,7 @@ Every guide follows this structure:
 
 ## Summary
 
-- [ ] The Summary states the guide's subject declaratively: an alignment guide names the artifact and its source ("The module implements `specs/<name>-low.md`"); a conformance guide names the artifact ("The artifact conforms to this guide")
+- [ ] The Summary states the guide's subject declaratively: an alignment guide names the artifact and its source ("The module implements `specs/low/<name>.md`"); a conformance guide names the artifact ("The artifact conforms to this guide")
 - [ ] No directive framing — never "ensure", "produce", "transform" (the file pre-exists; the prompt triggers, the guide constrains)
 - [ ] Build-critical requirements come first (BUILD entries, required structure) — nothing builds without them
 - [ ] The guide's requirements are satisfiable from the guide alone: no reliance on the artifact's starting state — the file's existing content (a template, a prior version) is at most an efficiency boost, never the source of required structure

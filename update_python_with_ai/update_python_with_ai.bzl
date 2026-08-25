@@ -258,14 +258,14 @@ def update_python_with_ai(name, spec_deps, visibility = None):
     _update_python_with_ai(
         name = name + "_high",
         prompt = (
-            "Ensure the high-level specification for %s (in %s-high.md) conforms to " +
+            "Ensure the high-level specification for %s (in high/%s.md) conforms to " +
             "high_level_spec.md with minimal changes: make only the targeted edits " +
             "needed to fix deviations, and leave conformant content untouched. If the " +
             "file is a template, fill it in. A write is followed by an automatic " +
             "re-read with line numbers, so a line-range edit (replace_lines) may " +
             "follow a write without a further read."
         ) % (name, name),
-        src = name + "-high.md",
+        src = "high/" + name + ".md",
         template = "//update_python_with_ai/templates:hls",
         guide = "//update_python_with_ai/guides:high_level_spec",
         spec_deps = hls_spec_deps,
@@ -278,23 +278,23 @@ def update_python_with_ai(name, spec_deps, visibility = None):
 
     _hls_lint_test(
         name = name + "_high_lint",
-        srcs = [name + "-high.md"],
+        srcs = ["high/" + name + ".md"],
         spec_deps = hls_spec_deps,
-        dep_srcs = native.glob([dep.split(":")[-1] + "-high.md" for dep in spec_deps], allow_empty = True),
+        dep_srcs = native.glob(["high/" + dep.split(":")[-1] + ".md" for dep in spec_deps], allow_empty = True),
     )
     lls_spec_deps = [dep + "_low" for dep in spec_deps]
     _update_python_with_ai(
         name = name + "_low",
         prompt = (
-            "Ensure the low-level specification (LLS) for %s (in %s-low.md) is aligned " +
-            "with the high-level specification (HLS) for %s (in %s-high.md) according to " +
+            "Ensure the low-level specification (LLS) for %s (in low/%s.md) is aligned " +
+            "with the high-level specification (HLS) for %s (in high/%s.md) according to " +
             "high_to_low.md, with minimal changes: make only the targeted edits needed to " +
             "fix misalignments, and leave conformant content untouched. If the file is a " +
             "template, fill it in. A write is followed by an automatic re-read with line " +
             "numbers, so a line-range edit (replace_lines) may follow a write without a " +
             "further read."
         ) % (name, name, name, name),
-        src = name + "-low.md",
+        src = "low/" + name + ".md",
         template = "//update_python_with_ai/templates:lls",
         guide = "//update_python_with_ai/guides:high_to_low",
         spec_deps = lls_spec_deps,
@@ -312,11 +312,11 @@ def update_python_with_ai(name, spec_deps, visibility = None):
     # src would fail to build). The template initializes the file at run start,
     # so the target materializes on the next bazel invocation after the agent
     # writes the spec, which is when the node's verify tool gates on it.
-    if native.glob([name + "-low.md"], allow_empty = True):
+    if native.glob(["low/" + name + ".md"], allow_empty = True):
         _lls_lint_test(
             name = name + "_low_lint",
-            srcs = [name + "-low.md"],
+            srcs = ["low/" + name + ".md"],
             spec_deps = lls_spec_deps,
-            dep_srcs = native.glob([dep.split(":")[-1] + "-low.md" for dep in spec_deps], allow_empty = True),
+            dep_srcs = native.glob(["low/" + dep.split(":")[-1] + ".md" for dep in spec_deps], allow_empty = True),
         )
     return ":" + name

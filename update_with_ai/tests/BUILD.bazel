@@ -46,11 +46,11 @@ pyright_test(
 )
 
 pyright_test(
-    name = "bazel_graph_storage_impl_test",
-    srcs = ["bazel_graph_storage_impl_test.py"],
+    name = "build_graph_storage_impl_test",
+    srcs = ["build_graph_storage_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:bazel_graph_storage",
-        "//update_with_ai/lib:bazel_graph_storage_impl",
+        "//update_with_ai/lib:build_graph_storage",
+        "//update_with_ai/lib:build_graph_storage_impl",
         "//update_with_ai/lib:dag_storage",
         "//update_with_ai/lib:sandbox",
     ],
@@ -62,7 +62,7 @@ pyright_test(
     pyright_deps = [
         "//update_with_ai/lib:dag_clean_logic",
         "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:bazel_graph_storage",
+        "//update_with_ai/lib:build_graph_storage",
         "//update_with_ai/lib:agent_loop",
         "//update_with_ai/lib:agent_loop_impl",
         "//update_with_ai/lib:sandbox",
@@ -72,11 +72,11 @@ pyright_test(
 )
 
 pyright_test(
-    name = "bazel_node_loader_impl_test",
-    srcs = ["bazel_node_loader_impl_test.py"],
+    name = "build_node_loader_impl_test",
+    srcs = ["build_node_loader_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:bazel_node_loader",
-        "//update_with_ai/lib:bazel_node_loader_impl",
+        "//update_with_ai/lib:build_node_loader",
+        "//update_with_ai/lib:build_node_loader_impl",
         "//update_with_ai/lib:tool_provider",
     ],
 )
@@ -88,12 +88,12 @@ pyright_test(
 )
 
 pyright_test(
-    name = "bazel_runner_impl_test",
-    srcs = ["bazel_runner_impl_test.py"],
+    name = "build_runner_impl_test",
+    srcs = ["build_runner_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:bazel_runner_impl",
-        "//update_with_ai/lib:bazel_graph_storage",
-        "//update_with_ai/lib:bazel_graph_storage_impl",
+        "//update_with_ai/lib:build_runner_impl",
+        "//update_with_ai/lib:build_graph_storage",
+        "//update_with_ai/lib:build_graph_storage_impl",
         "//update_with_ai/lib:dag_storage",
         "//update_with_ai/lib:agent_loop_impl",
         "//update_with_ai/lib:dag_clean_logic",
@@ -102,11 +102,11 @@ pyright_test(
 )
 
 pyright_test(
-    name = "bazel_agent_config_impl_test",
-    srcs = ["bazel_agent_config_impl_test.py"],
+    name = "build_agent_config_impl_test",
+    srcs = ["build_agent_config_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:bazel_agent_config",
-        "//update_with_ai/lib:bazel_agent_config_impl",
+        "//update_with_ai/lib:build_agent_config",
+        "//update_with_ai/lib:build_agent_config_impl",
         "//update_with_ai/lib:agent_loop_impl",
     ],
 )

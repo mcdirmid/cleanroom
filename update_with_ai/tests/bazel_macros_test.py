@@ -74,7 +74,7 @@ class TestBazelMacros(unittest.TestCase):
     
     def test_node_attributes(self):
         """Test that node has correct attributes for sandbox config."""
-        # Simulate BazNode with new fields
+        # Simulate BuildNode with new fields
         class MockNode:
             def __init__(self):
                 self.src = ":output.txt"

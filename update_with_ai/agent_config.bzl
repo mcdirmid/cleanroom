@@ -24,8 +24,8 @@ the repository:
 
 The rule generates:
   - {name}_config.py   — a Python module containing the AGENT_CONFIG dict,
-                         imported at runtime by the BazelAgentConfig component
-                         (update_with_ai/lib/bazel_agent_config_impl.py)
+                         imported at runtime by the BuildAgentConfig component
+                         (update_with_ai/lib/build_agent_config_impl.py)
   - {name}_config.json — the same configuration for non-Python consumers
 
 Discover all configs with:

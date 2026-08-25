@@ -1,8 +1,8 @@
 """
 Tests for the SandboxImpl implementation.
 
-Written from the LLS (specs/sandbox_impl-low.md, specs/sandbox-low.md,
-specs/tool_provider-low.md, specs/dag_clean_logic-low.md): the sandbox's
+Written from the LLS (specs/low/sandbox_impl.md, specs/low/sandbox.md,
+specs/low/tool_provider.md, specs/low/dag_clean_logic.md): the sandbox's
 Stubbing rules, operation postconditions, and expected failure signals.
 
 The API returns a ToolCallOutcome per tool call: a sequence of one or more
@@ -11,7 +11,7 @@ TerminateAgentWithSuccess, TerminateAgentWithFailure). A successful file
 write returns a two-result sequence: the write confirmation and the injected
 read (the automatic re-read, per the sandbox's Auto re-read rules).
 
-Stubbing (sandbox-low.md, Stubbing): a ToolResult's `supersedes` flag is set
+Stubbing (specs/low/sandbox.md, Stubbing): a ToolResult's `supersedes` flag is set
 on the results of operations on writable files and on verification results;
 it is not set on reads of files that are not writable, on searches, or on
 termination tools' results. The consuming agent loop stubs the superseded
@@ -168,7 +168,7 @@ class TestSandboxImpl(unittest.TestCase):
         self.assertNotIn("end_line", props)
 
     def test_replace_lines_definition_marks_all_parameters_required(self) -> None:
-        # LLS (sandbox-low.md replace_lines): the tool definition's schema
+        # LLS (specs/low/sandbox.md replace_lines): the tool definition's schema
         # marks file_path, start_line, end_line, and new_str as required, so
         # the model cannot omit them (e.g., drop end_line).
         replace_def = next(
@@ -315,7 +315,7 @@ class TestSandboxImpl(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_get_session_start_reads_reads_only_files(self) -> None:
-        # LLS (sandbox-low.md Session-start reads): when enabled (the default),
+        # LLS (specs/low/sandbox.md Session-start reads): when enabled (the default),
         # returns a session-start read for every file that is readable but not
         # writable and exists as a regular file on disk; each is a
         # PresentedToolResult pairing read_file with the plain read result
@@ -404,7 +404,7 @@ class TestSandboxImpl(unittest.TestCase):
             self.assertIn("Line 2: New content", f.read())
 
     def test_replace_lines_after_write_succeeds_without_further_read(self) -> None:
-        # LLS (sandbox-low.md Views + Auto re-read): a write resets the view
+        # LLS (specs/low/sandbox.md Views + Auto re-read): a write resets the view
         # to plain, but the injected read that follows re-enables the
         # line-numbered view, so a line-range edit may follow a write without
         # a further read (the read->edit->re-read discipline is gone).
@@ -420,7 +420,7 @@ class TestSandboxImpl(unittest.TestCase):
             self.assertIn("Line 2: replaced", f.read())
 
     def test_replace_lines_plain_view_failure_advises_numbered_read(self) -> None:
-        # LLS (sandbox-low.md Stubbing + replace_lines Failure Handling): a
+        # LLS (specs/low/sandbox.md Stubbing + replace_lines Failure Handling): a
         # replace_lines failure for a file whose view is not line-numbered
         # returns ToolFailure advising a numbered read; the failure
         # supersedes nothing and removes nothing (no buffers to close).
@@ -446,7 +446,7 @@ class TestSandboxImpl(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_edit_file_replaces_single_occurrence(self) -> None:
-        # LLS (sandbox-low.md edit_file): the result is a minimal structured
+        # LLS (specs/low/sandbox.md edit_file): the result is a minimal structured
         # status with supersedes set — never a file-content echo.
         result = self.assert_supersedes(
             self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
@@ -712,7 +712,7 @@ class TestSandboxImpl(unittest.TestCase):
 
     def test_advance_feedback_pending_no_change_fails(self) -> None:
         # A run processing feedback cannot terminate without a change
-        # (sandbox-low.md, advance): advance that would otherwise signal
+        # (specs/low/sandbox.md, advance): advance that would otherwise signal
         # successful termination without a change returns a tool failure with
         # a reason directing the agent to change, blame, or fail; the session
         # continues (no termination signal is produced).
@@ -914,7 +914,7 @@ class TestSandboxImpl(unittest.TestCase):
         ))
         # First soft-limit rejection: directs shortening to the soft bound
         # (200), naming the parts of the file that changed (substance pinned
-        # in sandbox-low.md; exact phrasing not pinned).
+        # in specs/low/sandbox.md; exact phrasing not pinned).
         self.assertIn("short sentence", failure.value)
         self.assertIn("200", failure.value)
         self.assertIn("parts of the file that changed", failure.value)
@@ -1066,7 +1066,7 @@ class TestSandboxImpl(unittest.TestCase):
 
 
 class TestTemplateInitialization(unittest.TestCase):
-    """Template initialization (sandbox-low.md, Template initialization):
+    """Template initialization (specs/low/sandbox.md, Template initialization):
     a writable file with a configured template that does not exist on disk is
     created with the template's content at run start, before any tool call;
     an existing writable file is never modified; initialization is not a run
@@ -1161,7 +1161,7 @@ class TestTemplateInitialization(unittest.TestCase):
 
 
 class TestStepMode(unittest.TestCase):
-    """Step mode (sandbox-low.md, Step mode): the guide is not readable and
+    """Step mode (specs/low/sandbox.md, Step mode): the guide is not readable and
     its content reaches the agent only through advance — the guide summary
     pre-injected at run start, then one step section per passing advance,
     until the terminating advance (the change-message machinery)."""

@@ -1,9 +1,9 @@
 """
 Tests for the DagCleanerImpl implementation.
 
-Asserts the behavioral contract of specs/dag_cleaner_impl-low.md (with its
-dependencies specs/dag_cleaner-low.md, specs/dag_storage-low.md, and
-specs/dag_clean_logic-low.md) against lib/dag_cleaner_impl.py, using mock
+Asserts the behavioral contract of specs/low/dag_cleaner_impl.md (with its
+dependencies specs/low/dag_cleaner.md, specs/low/dag_storage.md, and
+specs/low/dag_clean_logic.md) against lib/dag_cleaner_impl.py, using mock
 DagStorage and DagCleanLogic implementations. All state is driven through
 the mocks so the tests observe exactly what the implementation reads and
 writes.
@@ -35,14 +35,14 @@ from typing import cast
 
 
 def msg(text: str, kind: str = "change") -> NodeMessage:
-    """Test helper: build a NodeMessage (per dag_storage-low.md)."""
+    """Test helper: build a NodeMessage (per specs/low/dag_storage.md)."""
     return NodeMessage(kind=cast(MessageKind, kind), text=text)
 
 
 class MockDagStorage(DagStorage):
     """In-memory DagStorage that records every read/write for assertions.
 
-    Implements the dag_storage-low.md contract: get_node_dependencies returns
+    Implements the specs/low/dag_storage.md contract: get_node_dependencies returns
     the node's dependencies AND records the node as a known reverse dependency
     of each dependency (at most once); get_known_reverse_dependencies returns
     the recorded list. All reads/writes go through the protocol operations;
@@ -80,13 +80,13 @@ class MockDagStorage(DagStorage):
         self._messages[node_id].extend(messages)
 
     def clear_pending_messages(self, node_id: NodeId) -> None:
-        """dag_storage-low.md: clearing removes only the node's pending
+        """specs/low/dag_storage.md: clearing removes only the node's pending
         messages; its known reverse dependencies remain."""
         self.clear_calls.append(node_id)
         self._messages[node_id] = []
 
     def delete_node_data(self, node_id: NodeId) -> None:
-        """dag_storage-low.md: deleting removes the node's data — its pending
+        """specs/low/dag_storage.md: deleting removes the node's data — its pending
         messages and its known reverse dependencies."""
         self.delete_calls.append(node_id)
         self._messages[node_id] = []
@@ -97,7 +97,7 @@ class MockDagStorage(DagStorage):
         if node_id not in self._deps:
             raise ValueError(f"precondition violated: unknown node {node_id}")
         deps = self._deps[node_id]
-        # dag_storage-low.md postcondition: records the node as a known reverse
+        # specs/low/dag_storage.md postcondition: records the node as a known reverse
         # dependency of each dependency it provides, at most once per dependency.
         for dep in deps:
             if node_id not in self._reverse_deps[dep]:

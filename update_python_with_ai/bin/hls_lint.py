@@ -3,7 +3,7 @@
 hls_lint.py — lint high-level specification files per update_python_with_ai/guides/high_level_spec.md.
 
 Usage:
-    python3 update_python_with_ai/bin/hls_lint.py [files...]     # default: all *-high.md under specs/
+    python3 update_python_with_ai/bin/hls_lint.py [files...]     # default: all *.md under specs/high/
 
 Checks (E = error, exits nonzero; W = warning, does not affect exit code):
   E  filename/header mismatch
@@ -41,10 +41,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-SPECS_DIR = ROOT / "update_with_ai" / "specs"
+SPECS_DIR = ROOT / "update_with_ai" / "specs" / "high"
 
 # Files whose tables are sanctioned rectangular matrices (guide: Reading Model).
-SANCTIONED_TABLES = {"agent_loop-high.md", "agent_node_clean_logic_impl-high.md"}
+SANCTIONED_TABLES = {"agent_loop.md", "agent_node_clean_logic_impl.md"}
 
 # Single-word terms distinctive enough to enforce like multi-word terms.
 STRONG_TERMS = {"blame", "dirty", "cleaning", "stub"}
@@ -96,11 +96,11 @@ def warn(f: Path, msg: str) -> None:
 
 
 def stem_of(path: Path) -> str:
-    return path.stem[:-5] if path.stem.endswith("-high") else path.stem
+    return path.stem
 
 
 def spec_map(files: list[Path] | None = None) -> dict[str, Path]:
-    paths = files if files is not None else sorted(SPECS_DIR.glob("*-high.md"))
+    paths = files if files is not None else sorted(SPECS_DIR.glob("*.md"))
     return {stem_of(p): p for p in paths}
 
 
@@ -140,7 +140,7 @@ def get_section(body: str, heading: str) -> str | None:
 
 
 def read_all_owned(files: list[Path] | None = None) -> dict[str, str]:
-    """term -> owning spec name (without -high), across the given (or all) specs."""
+    """term -> owning spec name, across the given (or all) specs."""
     owned_by: dict[str, str] = {}
     for name, p in spec_map(files).items():
         m = re.search(r"^terms \(owned\): (.+)$", p.read_text(encoding="utf-8"), re.M)
@@ -209,12 +209,12 @@ def check_terms(f: Path, text: str, owned: set[str], terms_from: dict[str, set[s
 
     for owner, terms in terms_from.items():
         if owner not in names:
-            err(f, f"`terms (from {owner})` but no spec {owner}-high.md")
+            err(f, f"`terms (from {owner})` but no spec high/{owner}.md")
             continue
         owner_owned = {t for t, o in owned_by.items() if o == owner}
         for term in terms:
             if term not in owner_owned:
-                err(f, f"`terms (from {owner})` lists '{term}', which {owner}-high.md does not own")
+                err(f, f"`terms (from {owner})` lists '{term}', which high/{owner}.md does not own")
 
     allowed_owners = set(terms_from.keys())
     fm, body = split_front_matter(text)
@@ -249,12 +249,12 @@ def check_terms(f: Path, text: str, owned: set[str], terms_from: dict[str, set[s
         else:
             continue
         if matched:
-            err(f, f"uses '{term}' (owned by {owner}-high.md) without listing it in `terms (from {owner})`")
+            err(f, f"uses '{term}' (owned by high/{owner}.md) without listing it in `terms (from {owner})`")
 
 
 def _is_impl(f: Path) -> bool:
-    """Implementation specs are named `*_impl*` (dag_cleaner_impl-high.md,
-    bazel_graph_storage_impl-low.md); every other file is an interface spec."""
+    """Implementation specs are named `*_impl*` (high/dag_cleaner_impl.md,
+    low/build_graph_storage_impl.md); every other file is an interface spec."""
     return "impl" in f.stem
 
 
@@ -409,8 +409,8 @@ def _spec_refs(fm: str) -> set[str]:
 
 
 def _stem_from_spec_path(path: str) -> str:
-    """Derive a spec stem from a spec file path (dag_storage-high.md -> dag_storage)."""
-    return Path(path).stem.removesuffix("-high")
+    """Derive a spec stem from a spec file path (specs/high/dag_storage.md -> dag_storage)."""
+    return Path(path).stem
 
 
 def check_contract_blocks(f: Path, text: str, is_impl: bool) -> None:
@@ -465,13 +465,13 @@ def main(argv: list[str]) -> int:
             rest.append(argv[i])
         i += 1
 
-    files = [Path(p) for p in rest] or sorted(SPECS_DIR.glob("*-high.md"))
+    files = [Path(p) for p in rest] or sorted(SPECS_DIR.glob("*.md"))
     # Reference corpus: the canonical specs. A single-file lint run (e.g. a
     # node's verify gate) resolves `terms (from X)` / `fulfills:` / import
     # references against the corpus, so the lone target file is validated
     # without spurious "no spec X" errors; corpus files themselves are not
     # linted or reported.
-    reference_files = sorted(SPECS_DIR.glob("*-high.md"))
+    reference_files = sorted(SPECS_DIR.glob("*.md"))
     all_files = sorted(set(files) | set(reference_files))
     for f in files:
         text = f.read_text(encoding="utf-8")

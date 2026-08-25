@@ -431,7 +431,7 @@ def _update_ai_node_clean_impl(ctx):
         "if not _runfiles_root:",
         "    _runfiles_root = os.getcwd()",
         "sys.path.insert(0, _runfiles_root)",
-        "from update_with_ai.lib.bazel_runner_impl import BazRunnerImpl",
+        "from update_with_ai.lib.build_runner_impl import BuildRunnerImpl",
         "",
         "def main():",
         "    args = sys.argv[1:]",
@@ -480,7 +480,7 @@ def _update_ai_node_clean_impl(ctx):
         "    with open(_manifest_path) as f:",
         '        node_label = json.load(f).get("label")',
         "",
-        "    runner = BazRunnerImpl()",
+        "    runner = BuildRunnerImpl()",
         '    print(f"Agent config: {resolved_config}")',
         "    try:",
         "        result = runner.run_dag(node_label, workspace_root, config_target=resolved_config)",
@@ -585,7 +585,7 @@ _update_ai_node_clean_rule = rule(
                   "separate build. Add personal configs to //agent_configs:all_configs.",
         ),
         "_dag_runner": attr.label(
-            default = Label("//update_with_ai/lib:bazel_runner_impl"),
+            default = Label("//update_with_ai/lib:build_runner_impl"),
             providers = [PyInfo],
         ),
     },
@@ -618,7 +618,7 @@ def _update_ai_node_feedback_impl(ctx):
         "if not _runfiles_root:",
         "    _runfiles_root = os.getcwd()",
         "sys.path.insert(0, _runfiles_root)",
-        "from update_with_ai.lib.bazel_runner_impl import BazRunnerImpl",
+        "from update_with_ai.lib.build_runner_impl import BuildRunnerImpl",
         "from update_with_ai.lib.dag_clean_logic import FailureResult",
         "",
         "def main():",
@@ -654,7 +654,7 @@ def _update_ai_node_feedback_impl(ctx):
         '        print("Usage: bazel run <this target> -- \\"feedback message\\" [more...]", file=sys.stderr)',
         "        sys.exit(1)",
         "",
-        "    runner = BazRunnerImpl()",
+        "    runner = BuildRunnerImpl()",
         "    try:",
         "        result = runner.inject_feedback(node_label, workspace_root, messages)",
         "    except KeyboardInterrupt:",
@@ -704,7 +704,7 @@ _update_ai_node_feedback_rule = rule(
             doc = "The node target (must produce a manifest)",
         ),
         "_dag_runner": attr.label(
-            default = Label("//update_with_ai/lib:bazel_runner_impl"),
+            default = Label("//update_with_ai/lib:build_runner_impl"),
             providers = [PyInfo],
         ),
     },
@@ -742,7 +742,7 @@ def _update_ai_node_dirty_impl(ctx):
         "if not _runfiles_root:",
         "    _runfiles_root = os.getcwd()",
         "sys.path.insert(0, _runfiles_root)",
-        "from update_with_ai.lib.bazel_runner_impl import BazRunnerImpl",
+        "from update_with_ai.lib.build_runner_impl import BuildRunnerImpl",
         "",
         "def main():",
         "    # The change text defaults to 'check' when no argument is given.",
@@ -773,7 +773,7 @@ def _update_ai_node_dirty_impl(ctx):
         "    with open(_manifest_path) as f:",
         "        node_label = json.load(f).get('label')",
         "",
-        "    runner = BazRunnerImpl()",
+        "    runner = BuildRunnerImpl()",
         "    try:",
         "        result = runner.add_change(node_label, workspace_root, change)",
         "    except KeyboardInterrupt:",
@@ -821,7 +821,7 @@ _update_ai_node_dirty_rule = rule(
             doc = "The node target (must produce a manifest)",
         ),
         "_dag_runner": attr.label(
-            default = Label("//update_with_ai/lib:bazel_runner_impl"),
+            default = Label("//update_with_ai/lib:build_runner_impl"),
             providers = [PyInfo],
         ),
     },
@@ -833,7 +833,7 @@ _update_ai_node_dirty_rule = rule(
 #
 # Pretends the node was cleaned with changes: the CLI argument becomes the
 # change part of a message broadcast to the node's known reverse dependencies
-# (per bazel_runner's broadcast_change), and the node's own data is cleared —
+# (per build_runner's broadcast_change), and the node's own data is cleared —
 # for changes made outside of agent cleaning.
 
 def _update_ai_node_change_impl(ctx):
@@ -859,7 +859,7 @@ def _update_ai_node_change_impl(ctx):
         "if not _runfiles_root:",
         "    _runfiles_root = os.getcwd()",
         "sys.path.insert(0, _runfiles_root)",
-        "from update_with_ai.lib.bazel_runner_impl import BazRunnerImpl",
+        "from update_with_ai.lib.build_runner_impl import BuildRunnerImpl",
         "",
         "def main():",
         "    args = sys.argv[1:]",
@@ -894,7 +894,7 @@ def _update_ai_node_change_impl(ctx):
         "    with open(_manifest_path) as f:",
         "        node_label = json.load(f).get('label')",
         "",
-        "    runner = BazRunnerImpl()",
+        "    runner = BuildRunnerImpl()",
         "    try:",
         "        result = runner.broadcast_change(node_label, workspace_root, change)",
         "    except KeyboardInterrupt:",
@@ -942,7 +942,7 @@ _update_ai_node_change_rule = rule(
             doc = "The node target (must produce a manifest)",
         ),
         "_dag_runner": attr.label(
-            default = Label("//update_with_ai/lib:bazel_runner_impl"),
+            default = Label("//update_with_ai/lib:build_runner_impl"),
             providers = [PyInfo],
         ),
     },
