@@ -33,6 +33,9 @@ import contextlib
 import json
 import os
 import shutil
+import signal
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -828,6 +831,54 @@ class TestRunDag(unittest.TestCase):
         self.assertEqual(_StubAgentLoop.instances[-1]._config.model, "resolved-model")
         self.assertEqual(_StubAgentLoop.instances[-1]._config.api_key, "resolved-key")
         self.assertEqual(_StubAgentLoop.instances[-1]._config.max_iterations, 5)
+
+
+class TestSigintHandling(unittest.TestCase):
+    """LLS: SIGINT terminates the run promptly; the interrupt is never ignored."""
+
+    def test_sigint_raises_keyboard_interrupt(self) -> None:
+        """The handler installed at import honors SIGINT by raising
+        KeyboardInterrupt (never ignoring the interrupt), so the run's
+        cleanup unwinds and the process exits."""
+        with self.assertRaises(KeyboardInterrupt):
+            os.kill(os.getpid(), signal.SIGINT)
+
+    def test_sigint_terminates_promptly(self) -> None:
+        """A process importing the runner terminates promptly on SIGINT with
+        the interruption status, not by continuing or hanging; the handler
+        raises KeyboardInterrupt (the interrupt is never ignored)."""
+        code = (
+            "import sys, time\n"
+            "import update_with_ai.lib.bazel_runner_impl  # installs the SIGINT handler\n"
+            "print('ready', flush=True)\n"
+            "while True:\n"
+            "    time.sleep(0.05)\n"
+        )
+        proc = subprocess.Popen(
+            [sys.executable, "-c", code],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            line = proc.stdout.readline()
+            self.assertEqual(line.strip(), "ready")
+            proc.send_signal(signal.SIGINT)
+            rc = proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+            self.fail("process did not terminate promptly on SIGINT")
+        child_err = proc.stderr.read() if proc.stderr is not None else ""
+        if proc.stdout is not None:
+            proc.stdout.close()
+        if proc.stderr is not None:
+            proc.stderr.close()
+        # Interrupted: an unhandled KeyboardInterrupt exits 130 (128+SIGINT);
+        # CPython 3.8+ re-raises the signal so the process is also reported as
+        # killed by SIGINT (-2). Either is the interruption status.
+        self.assertIn(rc, (-2, 130))
+        self.assertIn("KeyboardInterrupt", child_err)
 
 
 if __name__ == "__main__":

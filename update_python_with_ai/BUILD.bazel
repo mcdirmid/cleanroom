@@ -1,0 +1,4 @@
+# update_python_with_ai/BUILD.bazel
+
+# Making the bzl file explicitly visible to the repository
+exports_files(["update_python_with_ai.bzl"])

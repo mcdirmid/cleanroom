@@ -1,0 +1,12 @@
+nodes {
+  key: "@@//update_python_with_ai/guides:high_level_spec"
+  value {
+    reverse_dependencies: "@@//update_python_with_ai/guides:high_to_low"
+  }
+}
+nodes {
+  key: "@@//update_python_with_ai/guides:low_level_spec"
+  value {
+    reverse_dependencies: "@@//update_python_with_ai/guides:high_to_low"
+  }
+}

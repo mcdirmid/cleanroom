@@ -38,7 +38,7 @@
 
 load("//update_with_ai:agent_config.bzl", "agent_config")
 
-# Public: referenced from update_with_ai/macros.bzl (the *_clean rule's
+# Public: referenced from update_with_ai/lib/update_with_ai.bzl (the *_clean rule's
 # `_agent_configs` attr) and selectable from any package.
 package(default_visibility = ["//visibility:public"])
 

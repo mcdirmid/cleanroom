@@ -193,8 +193,8 @@ class TestLoadNode(_TempRunfilesTestCase):
             silent_deps=["//pkg:silent_dep"],
             feedback_deps=["//pkg:fdep"],
             src="foo.txt",
-            template="templates/lls_template.md",
-            guide="//guides:high_to_low",
+            template="update_python_with_ai/templates/lls_template.md",
+            guide="//update_python_with_ai/guides:high_to_low",
             silent_srcs=["private.log"],
         )
         node = self.load_impl("//pkg:target")
@@ -206,8 +206,8 @@ class TestLoadNode(_TempRunfilesTestCase):
         self.assertEqual(node.silent_deps, ["//pkg:silent_dep"])
         self.assertEqual(node.feedback_deps, ["//pkg:fdep"])
         self.assertEqual(node.src, "foo.txt")
-        self.assertEqual(node.template, "templates/lls_template.md")
-        self.assertEqual(node.guide, "//guides:high_to_low")
+        self.assertEqual(node.template, "update_python_with_ai/templates/lls_template.md")
+        self.assertEqual(node.guide, "//update_python_with_ai/guides:high_to_low")
         self.assertEqual(node.silent_srcs, ["private.log"])
 
     def test_load_node_includes_feedback_deps_in_deps(self):

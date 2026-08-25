@@ -602,8 +602,18 @@ def _build_verify_callback(verify_cmd: str) -> Optional[VerificationCallback]:
     if not verify_cmd:
         return None
     def _callback() -> Tuple[bool, str]:
-        proc = subprocess.run(verify_cmd, shell=True, capture_output=True, text=True)
-        output = (proc.stdout or "") + (proc.stderr or "")
+        proc = subprocess.Popen(
+            verify_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+        try:
+            stdout, stderr = proc.communicate()
+        except KeyboardInterrupt:
+            # ctrl-C during verification: terminate the child so no rogue
+            # process is left running, then honor the interrupt.
+            proc.kill()
+            proc.wait()
+            raise
+        output = (stdout or "") + (stderr or "")
         return proc.returncode == 0, output
     return _callback
 

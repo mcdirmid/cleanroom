@@ -1,5 +1,5 @@
 """
-Tests for bazel_macros Starlark rules.
+Tests for the update_with_ai Starlark rules (update_with_ai.bzl).
 """
 
 import json
@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 class TestBazelMacros(unittest.TestCase):
-    """Test suite for bazel_macros.bzl rules."""
+    """Test suite for update_with_ai.bzl rules."""
     
     def test_manifest_structure(self):
         """Test that manifest contains expected fields."""
@@ -23,8 +23,8 @@ class TestBazelMacros(unittest.TestCase):
             "feedback_deps": ["//pkg:fdep"],
             "star_deps": ["//pkg:star_dep"],
             "src": "src1.txt",
-            "template": "//templates:lls",
-            "guide": "//guides:high_to_low",
+            "template": "//update_python_with_ai/templates:lls",
+            "guide": "//update_python_with_ai/guides:high_to_low",
             "silent_srcs": [":silent_src1"],
             "dependency_paths": [],
         }

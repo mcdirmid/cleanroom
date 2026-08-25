@@ -29,7 +29,23 @@ from update_with_ai.lib.bazel_runner import BazRunner
 from typing import Any, Dict, List, Optional
 import dataclasses
 import os
+import signal
 import sys
+import threading
+
+
+def _sigint_handler(signum, frame):
+    """Honor ctrl-C: raise KeyboardInterrupt so the run's cleanup (the log
+    file close, per-run state) completes and the process exits with the
+    interruption status — the interrupt is never ignored or continued past."""
+    raise KeyboardInterrupt
+
+
+# Register only from the main thread; signal.signal() raises ValueError if
+# called from a worker thread. The explicit handler guarantees SIGINT is
+# honored even if a dependency (e.g. a library) sets it to SIG_IGN.
+if threading.current_thread() is threading.main_thread():
+    signal.signal(signal.SIGINT, _sigint_handler)
 
 
 def _format_compact_log(event: LogEvent, data: Dict[str, Any]) -> Optional[str]:

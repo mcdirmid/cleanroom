@@ -1,0 +1,45 @@
+# update_python_with_ai/bin/BUILD.bazel
+load("//bin:pyright_library.bzl", "pyright_library")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+# The linter is referenced by hls_lint test targets in other packages.
+exports_files(["hls_lint.py"], visibility = ["//visibility:public"])
+
+# The linter is referenced by lls_lint test targets in other packages.
+exports_files(["lls_lint.py"], visibility = ["//visibility:public"])
+
+pyright_library(
+    name = "hls_lint",
+    srcs = ["hls_lint.py"],
+    pyright_deps = [],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "lls_lint",
+    srcs = ["lls_lint.py"],
+    pyright_deps = [],
+    visibility = ["//visibility:public"],
+)
+
+# Gate: the high-level specs must pass hls_lint.py.
+sh_test(
+    name = "hls_lint_test",
+    srcs = ["hls_lint_test.sh"],
+    data = [
+        "//update_python_with_ai/bin:hls_lint.py",
+        "//update_with_ai/specs:high_specs",
+    ],
+    tags = ["lint"],
+)
+
+# Gate: the low-level specs must pass lls_lint.py.
+sh_test(
+    name = "lls_lint_test",
+    srcs = ["lls_lint_test.sh"],
+    data = [
+        "//update_python_with_ai/bin:lls_lint.py",
+        "//update_with_ai/specs:low_specs",
+    ],
+    tags = ["lint"],
+)

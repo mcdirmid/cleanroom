@@ -2,6 +2,9 @@
 load("//bin:pyright_library.bzl", "pyright_library")
 load("@pip//:requirements.bzl", "requirement")
 
+# The update_with_ai macro/rule module (moved here from update_with_ai/macros.bzl).
+exports_files(["update_with_ai.bzl"])
+
 pyright_library(
     name = "tool_provider",
     srcs = [

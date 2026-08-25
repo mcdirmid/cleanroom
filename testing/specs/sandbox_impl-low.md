@@ -1,0 +1,101 @@
+<!-- Dependencies (md files to read alongside this one):
+  - sandbox-low.md
+  - tool_provider-low.md
+  - dag_clean_logic-low.md
+  - dag_storage-low.md
+  - agent_loop-low.md
+-->
+
+# Implementation LLS: sandbox_impl
+
+## Data Types
+```python
+from typing import TypeAlias
+from sandbox import (
+    Sandbox,
+    SandboxConfig,
+    VirtualName,
+    FilePath,
+    WriteOccurred,
+)
+from tool_provider import (
+    ToolDefinition,
+    ToolResult,
+    PresentedToolResult,
+    ToolCallOutcome,
+    TerminateAgentWithSuccess,
+    TerminateAgentWithFailure,
+    ToolFailure,
+)
+from dag_clean_logic import ChangeResult, FeedbackResult, NoChangeResult
+from dag_storage import NodeMessage
+
+DiffSizeLimit: TypeAlias = int
+
+class SandboxImpl(Sandbox):
+    def __init__(self, config: SandboxConfig, diff_size_limit: DiffSizeLimit | None = None): ...
+```
+
+Constructed with the `sandbox` interface's `SandboxConfig` and an optional diff size limit — the maximum characters a verification diff may report (default 1000, see Non-Concerns); it bundles no imported capabilities.
+
+## Behavioral Description
+
+The `SandboxImpl` class implements the `Sandbox` Protocol, providing all operations: `get_tool_definitions`, `read_file`, `edit_file`, `replace_lines`, `search_files`, `advance`, `fail`, `blame`, `get_session_start_reads`, and `get_write_occurred`.
+
+The implementation:
+- Maintains per-run state: the write-occurred flag, the per-file view mode for writable files (plain or line-numbered), the pre-write snapshots of changed files, and the step state (the configured guide, its split into guide summary and step sections, and the step-section pointer); nothing persists across runs. No stubbing state is maintained; no prior tool result is ever rewritten.
+- Resolves virtual names to full filesystem paths using `file_mappings`
+- Enforces policy by checking virtual paths against `readable_paths` and `writable_paths`
+- Applies the search result limit
+- Uses the filesystem for all read/write operations
+- Delegates verification to the injected `verification_callback` when non-null. The callback may perform arbitrary actions (including running shell commands) but must not depend on external state or modify the sandbox's filesystem; guaranteeing this is the assembler's responsibility.
+- Conditionally includes tools based on configuration (the blame tool only). The advance tool is always emitted.
+- Provides `edit_file` (content-based search-and-replace: one occurrence, or all when `expect_multiple` is set) and `replace_lines` (line-range replace, delete, or insert) as file writes: each sets the write-occurred flag, records the changed file, and produces an outcome of two results — a write confirmation with `supersedes` set and an injected read (a `PresentedToolResult` pairing `read_file(file_path, include_line_numbers=True)` with the file's numbered content, `supersedes` set); the agent loop applies the stubbing. `edit_file` rejects identical `old_str`/`new_str` (a no-op edit) as an invalid argument, and rejects `old_str`/`new_str` longer than 100 characters with a message advising `replace_lines` (which requires the line-numbered view).
+- `edit_file` and `replace_lines` fail cleanly when the file does not exist (they modify existing files only).
+- `read_file` returns the file's entire content, prefixed with line numbers (`"N \u2502 line"`) only when `include_line_numbers` is set (default: off) and the file is writable; a writable file that already exists on disk is only readable in the line-numbered view — a plain read fails with a message advising `read_file(file_path, include_line_numbers=True)`; a read of a file that is not writable produces a plain inline result.
+- Provides the session-start reads: when `session_start_reads_enabled` is set, a plain read (never superseding) of every configured file that is readable but not writable and exists as a regular file on disk, sorted by virtual name; each is a `PresentedToolResult` pairing `read_file(file_path)` with the plain read result (the session-start reads change no sandbox state); in step mode, the guide is not among them.
+- Reads the configured guide's content at run start and splits it into its guide summary and step sections, following the guide format; in step mode the guide is excluded from the run's readable files (a read of it fails identifying the violated policy) and is never provided whole.
+- Pre-injects the advance call in step mode: the session-start results include a `PresentedToolResult` pairing the `advance` call (arguments `{}`) with the step-mode output's result — the guide summary and the ensure instruction, `supersedes` set — before the agent's first turn.
+- Maintains the step-section pointer: a passing verification advances it; a failing verification does not; the pointer gates which output `advance` provides.
+- In step mode, each advance output is composed at delivery time from the guide summary, the ensure instruction, and the pointer's current selection (the next step section on a passing verification with sections remaining; the guide summary with the reason on a failing verification), with `supersedes` set — the output supersedes the previous advance output, so the guide summary is always visible and at most one step section is live.
+- Provides the advance tool's definition dynamically in step mode: it omits the `changes` argument while step sections remain and includes it when verification passes with no step sections remaining; the change-message machinery applies only to the terminating advance.
+- Initializes writable files from their templates when the sandbox is configured: when `templates` has an entry for a writable file that does not exist on disk, the file is created with exactly the template's content before any tool call; an existing writable file is never modified. Initialization is not a run write: it does not set the write-occurred flag and does not record the file as changed.
+- `replace_lines` may edit only when the file's current view is line-numbered (a write resets the view to plain; the injected read after a write re-enables the line-numbered view); otherwise it fails advising a numbered read (`read_file(file_path, include_line_numbers=True)`); the failure supersedes nothing and removes nothing.
+- After a successful `edit_file` or `replace_lines`, the file's view mode resets to plain (the write invalidates the line numbers) and the injected read that follows re-enables the line-numbered view; the write confirmation carries the operation's status with `supersedes` set and the injected read carries the file's numbered content, so the file's current content is visible in the conversation immediately after the write.
+- The injected read follows the write confirmation immediately; both precede the results of any subsequent tool call.
+- The injected read is rendered from the file's post-write content in the line-numbered view, restoring the file's line-numbered view state; no additional per-run state is required.
+- A write that fails provides no injected read.
+- `search_files` renders matches only for files that are not writable; matches in writable files are counted and reported in the note without content; pagination (`offset`/`limit`) pages over rendered matches only.
+- Processes operations sequentially
+- Captures each file's content at run start on its first write of the run (a file initialized from its template exists at run start, so its snapshot is the template's content); `advance` diffs the run's changed files against those snapshots (truncated when it exceeds the diff size limit, default 1000 chars, with a footer reporting the truncated size and full change counts) and, when a callback is configured, runs the callback; when no callback is configured, verification is treated as passed.
+- `advance` on a failing verification provides feedback — a result with `supersedes` set (it supersedes the earlier non-stubbed verification result), `content` the verification failure details and guidance (change files and call advance again, or blame/fail to end the run; never the run's diff), and `note` pinned to `Verification failed.`; the session continues and advance never terminates on a failing verification.
+- `advance` on a passing verification (or no callback) signals successful termination: with no net change it carries `NoChangeResult()`; when files changed it requires `changes` — a missing `changes` signals a `ToolFailure[str]` listing the changed files and showing the run's diff, and a valid `changes` carries `ChangeResult` with messages built from it.
+- Provides error messages that identify the violated policy (policy violations are handled by the sandbox). Messages name the virtual path, never the resolved filesystem path, and list the readable/writable paths.
+- Leaves filesystem unchanged on handled errors (policy violations). Filesystem errors and verification-callback exceptions are outside the interface contract; this implementation reports them as tool failures identifying the failing operation — a verification-callback exception is reported with text starting `Verification error: ` (pinned; tests may assert it).
+- Does not persist state across runs
+- Sets each result's `supersedes` flag per the `sandbox` interface contract: operations on writable files and advance's verification feedback set it; reads of files that are not writable, `search_files`, and termination tools' results do not. The agent loop applies the stubbing.
+- `blame` with no configured blame targets returns `ToolFailure[str]` (a precondition violation; the tool is not offered when targets are empty)
+- Forms the `TerminateAgentWithSuccess` result using `dag_clean_logic` result types:
+  - `advance` — carries `NoChangeResult()` when no file's current content differs from its run-start snapshot (writes may have occurred but net out to no change), or `ChangeResult` with messages built from `changes` when files changed; rejects a change summary for a net-unchanged file (its content equals its run-start snapshot), and directs a run whose writes all net out to report no change (advance with no changes)
+  - `advance`'s change summaries are bounded by the sandbox's soft and hard length bounds: a summary over the soft bound is rejected with shortening guidance up to 4 rejections per run, then accepted when within the hard bound; a summary over the hard bound is rejected with hard-bound guidance up to 4 rejections per run, and an advance call still over the hard bound after that returns `TerminateAgentWithFailure[str]` (the run fails); the rejection counters are per-run, independent, and reset on any accepted summary
+  - `blame` (valid pairs) — carries `FeedbackResult` whose messages convert each `(target, feedback)` pair into a `(target, NodeMessage)` pair — the target as the `NodeId`, the feedback as a `NodeMessage` with kind `feedback` and text the feedback (per `dag_clean_logic`'s `FeedbackResult.messages` type); each pair is one (target, feedback) message
+
+**HLS Justification:** Uses the filesystem directly and delegates verification when configured.
+
+## Invariants
+
+- No state persists between runs
+- A writable file with a template that did not exist at configuration exists with the template's content before any tool call; initialization never sets the write-occurred flag and never records a changed file
+- The write-occurred flag is set immediately upon a successful write
+- Pre-write snapshots are captured before the run's first write of each file and reset each run
+- In step mode, the guide is excluded from the run's readable files: reads of the guide are rejected and the guide is never provided whole
+- A write or edit sets `supersedes` on its results; the file's earlier results are stubbed by the agent loop
+
+## Non-Concerns
+
+- **View mode default:** A new writable file's results render plain until the agent reads it with `include_line_numbers=True`; an existing writable file is only readable in the line-numbered view, so its view mode is line-numbered from the first successful read; a write resets the view mode to plain, and the injected read that follows the write re-enables the line-numbered view.
+- **Edit length limit:** `edit_file` rejects `old_str`/`new_str` exceeding 100 characters, per the `sandbox` interface contract.
+- **Change summary length bounds:** Soft bound pinned to 200 characters, hard bound pinned to 500 characters, grace pinned to 4 rejections per run for each bound; tests may assert the soft/hard rejection messages and the grace transitions (a summary within the hard bound accepted on the advance call after 4 soft-limit rejections; a summary over the hard bound turning `advance` into `TerminateAgentWithFailure` on the advance call after 4 hard-limit rejections).
+- **Diff size limit default:** Pinned to 1000 characters when `diff_size_limit` is `None`; the truncation footer is pinned to `... diff truncated: showing <limit> of <full> chars ...`; tests may assert it.
+- **`fail` failure value:** `fail` returns `TerminateAgentWithFailure[str]` with its value pinned to `Task failed`; tests may assert it.
+- **T_tool resolution:** The implementation resolves `T_tool` (from `tool_provider`) to `str` in failure signals (`ToolFailure[str]`).

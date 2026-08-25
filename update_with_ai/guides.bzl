@@ -1,11 +1,11 @@
 """Guide-node entry points.
 
 update_guide_with_ai creates a guide node by delegating to the general
-update_with_ai macro (macros.bzl); the node's agent updates the guide file
-per the display name given.
+update_with_ai macro (update_with_ai.bzl); the node's agent updates the guide
+file per the display name given.
 """
 
-load("//update_with_ai:macros.bzl", "update_with_ai")
+load("//update_with_ai/lib:update_with_ai.bzl", "update_with_ai")
 
 def update_guide_with_ai(name, src, deps, display_name):
     """Create a guide node whose agent updates the guide file.

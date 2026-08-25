@@ -1,6 +1,6 @@
 # specs/BUILD.bazel
-# High-level specification files, linted by //bin:hls_lint_test.
-# Low-level specification files, linted by //bin:lls_lint_test.
+# High-level specification files, linted by //update_python_with_ai/bin:hls_lint_test.
+# Low-level specification files, linted by //update_python_with_ai/bin:lls_lint_test.
 
 filegroup(
     name = "high_specs",
