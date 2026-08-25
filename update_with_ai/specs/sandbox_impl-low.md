@@ -2,6 +2,7 @@
   - sandbox-low.md
   - tool_provider-low.md
   - dag_clean_logic-low.md
+  - dag_storage-low.md
   - agent_loop-low.md
 -->
 
@@ -9,6 +10,7 @@
 
 ## Data Types
 ```python
+from typing import TypeAlias
 from sandbox import (
     Sandbox,
     SandboxConfig,
@@ -26,12 +28,15 @@ from tool_provider import (
     ToolFailure,
 )
 from dag_clean_logic import ChangeResult, FeedbackResult, NoChangeResult
+from dag_storage import NodeMessage
+
+DiffSizeLimit: TypeAlias = int
 
 class SandboxImpl(Sandbox):
-    def __init__(self, config: SandboxConfig): ...
+    def __init__(self, config: SandboxConfig, diff_size_limit: DiffSizeLimit | None = None): ...
 ```
 
-Constructed with the `sandbox` interface's `SandboxConfig` (see Interface LLS Data Types); it bundles no imported capabilities.
+Constructed with the `sandbox` interface's `SandboxConfig` and an optional diff size limit — the maximum characters a verification diff may report (default 1000, see Non-Concerns); it bundles no imported capabilities.
 
 ## Behavioral Description
 
@@ -66,14 +71,14 @@ The implementation:
 - `advance` on a failing verification provides feedback — a result with `supersedes` set (it supersedes the earlier non-stubbed verification result), `content` the verification failure details and guidance (change files and call advance again, or blame/fail to end the run; never the run's diff), and `note` pinned to `Verification failed.`; the session continues and advance never terminates on a failing verification.
 - `advance` on a passing verification (or no callback) signals successful termination: with no net change it carries `NoChangeResult()`; when files changed it requires `changes` — a missing `changes` signals a `ToolFailure[str]` listing the changed files and showing the run's diff, and a valid `changes` carries `ChangeResult` with messages built from it.
 - Provides error messages that identify the violated policy (policy violations are handled by the sandbox). Messages name the virtual path, never the resolved filesystem path, and list the readable/writable paths.
-- Leaves filesystem unchanged on handled errors (policy violations). Filesystem errors and verification-callback exceptions are outside the interface contract; this implementation reports them as tool failures identifying the failing operation.
+- Leaves filesystem unchanged on handled errors (policy violations). Filesystem errors and verification-callback exceptions are outside the interface contract; this implementation reports them as tool failures identifying the failing operation — a verification-callback exception is reported with text starting `Verification error: ` (pinned; tests may assert it).
 - Does not persist state across runs
 - Sets each result's `supersedes` flag per the `sandbox` interface contract: operations on writable files and advance's verification feedback set it; reads of files that are not writable, `search_files`, and termination tools' results do not. The agent loop applies the stubbing.
 - `blame` with no configured blame targets returns `ToolFailure[str]` (a precondition violation; the tool is not offered when targets are empty)
 - Forms the `TerminateAgentWithSuccess` result using `dag_clean_logic` result types:
   - `advance` — carries `NoChangeResult()` when no file's current content differs from its run-start snapshot (writes may have occurred but net out to no change), or `ChangeResult` with messages built from `changes` when files changed; rejects a change summary for a net-unchanged file (its content equals its run-start snapshot), and directs a run whose writes all net out to report no change (advance with no changes)
   - `advance`'s change summaries are bounded by the sandbox's soft and hard length bounds: a summary over the soft bound is rejected with shortening guidance up to 4 rejections per run, then accepted when within the hard bound; a summary over the hard bound is rejected with hard-bound guidance up to 4 rejections per run, and an advance call still over the hard bound after that returns `TerminateAgentWithFailure[str]` (the run fails); the rejection counters are per-run, independent, and reset on any accepted summary
-  - `blame` (valid pairs) — carries `FeedbackResult(messages=blames)` (each pair is one (target, feedback) message)
+  - `blame` (valid pairs) — carries `FeedbackResult` whose messages convert each `(target, feedback)` pair into a `(target, NodeMessage)` pair — the target as the `NodeId`, the feedback as a `NodeMessage` with kind `feedback` and text the feedback (per `dag_clean_logic`'s `FeedbackResult.messages` type); each pair is one (target, feedback) message
 
 **HLS Justification:** Uses the filesystem directly and delegates verification when configured.
 
@@ -81,19 +86,16 @@ The implementation:
 
 - No state persists between runs
 - A writable file with a template that did not exist at configuration exists with the template's content before any tool call; initialization never sets the write-occurred flag and never records a changed file
-- Write-occurred flag set immediately upon successful write and never cleared
+- The write-occurred flag is set immediately upon a successful write
 - Pre-write snapshots are captured before the run's first write of each file and reset each run
-- All file operations use resolved filesystem paths, not virtual names
-- Verification callback has no filesystem side effects
-- All policy checks occur before any filesystem mutation
-- Errors leave the filesystem unchanged
-- A write or edit sets `supersedes` on its result; the file's earlier results are stubbed by the agent loop
-- A tool result never carries the stub text; the stub text is applied by the agent loop when a result supersedes an earlier one
+- In step mode, the guide is excluded from the run's readable files: reads of the guide are rejected and the guide is never provided whole
+- A write or edit sets `supersedes` on its results; the file's earlier results are stubbed by the agent loop
 
 ## Non-Concerns
 
 - **View mode default:** A new writable file's results render plain until the agent reads it with `include_line_numbers=True`; an existing writable file is only readable in the line-numbered view, so its view mode is line-numbered from the first successful read; a write resets the view mode to plain, and the injected read that follows the write re-enables the line-numbered view.
 - **Edit length limit:** `edit_file` rejects `old_str`/`new_str` exceeding 100 characters, per the `sandbox` interface contract.
 - **Change summary length bounds:** Soft bound pinned to 200 characters, hard bound pinned to 500 characters, grace pinned to 4 rejections per run for each bound; tests may assert the soft/hard rejection messages and the grace transitions (a summary within the hard bound accepted on the advance call after 4 soft-limit rejections; a summary over the hard bound turning `advance` into `TerminateAgentWithFailure` on the advance call after 4 hard-limit rejections).
-- **Diff size limit default:** Pinned to 1000 characters when `diff_size_limit` is `None`; tests may assert the truncation footer.
+- **Diff size limit default:** Pinned to 1000 characters when `diff_size_limit` is `None`; the truncation footer is pinned to `... diff truncated: showing <limit> of <full> chars ...`; tests may assert it.
+- **`fail` failure value:** `fail` returns `TerminateAgentWithFailure[str]` with its value pinned to `Task failed`; tests may assert it.
 - **T_tool resolution:** The implementation resolves `T_tool` (from `tool_provider`) to `str` in failure signals (`ToolFailure[str]`).

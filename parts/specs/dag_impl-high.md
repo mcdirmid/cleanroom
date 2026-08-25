@@ -7,8 +7,6 @@ terms (from dag_clean_logic): dirty, cleaning, change message, feedback message
 
 ## Deltas
 
-- Subgraph = target + transitive dependencies via dag_storage; topological sort computed once and fixed for the operation. Cycle in graph -> failure, state unchanged.
-- Clean dirty nodes in topological order, only when all dependencies are clean; dirtiness re-evaluated after each cleaning; stop when no node in the sort is dirty.
 - All reads and writes, including graph access, go through dag_storage without caching.
 - Empty strings are valid messages.
 - Messages are discrete items; multiple identical messages are allowed (no deduplication is performed).

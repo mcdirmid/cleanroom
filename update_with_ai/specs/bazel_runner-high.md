@@ -1,12 +1,12 @@
 # bazel_runner
 
-imports: dag (topological cleaning), dag_storage (messages), dag_clean_logic (change and feedback), bazel_agent_config (agent configuration), sandbox (step mode)
+imports: dag_cleaner (topological cleaning), dag_storage (messages), dag_clean_logic (change and feedback), bazel_agent_config (agent configuration), sandbox (step mode)
 terms (from dag_storage): node, pending message, subgraph
 terms (from dag_clean_logic): dirty, cleaning, change message, feedback message
 terms (from agent_loop): run
 terms (from bazel_node_loader): manifest
 terms (from bazel_agent_config): agent configuration, config target
-terms (from sandbox): step mode
+terms (from sandbox): step mode, blame
 terms (owned): result
 
 ## Purpose
@@ -25,11 +25,15 @@ Orchestrates the full agent run pipeline — graph resolution, message persisten
 - A workspace root.
 - An optional config target (selecting the agent configuration).
 - For feedback injection: feedback messages.
+- For change addition: a change text.
+- For change broadcast: a change text.
 
 **Operations**
 
 - Run a topological cleaning pass starting from a root node.
 - Inject feedback messages to a specific node's message store (marking the node dirty for a subsequent run).
+- Add a change message to a specific node's message store (marking the node dirty for a subsequent run).
+- Broadcast a change from a specific node to its known reverse dependencies.
 - Provide a config target selecting the agent configuration for the cleaning pass; when none is provided, the agent configuration is selected by the environment (AGENT_CONFIG_TARGET) and then the //agent_configs:default convention.
 
 **Guarantees**
@@ -43,9 +47,14 @@ Orchestrates the full agent run pipeline — graph resolution, message persisten
 - All output (changes and feedback) is delivered to the appropriate target nodes' message stores.
 - Assembles its components internally; the client provides no component instances.
 - Applies the agent configuration to each node's sandbox configuration: whether session-start reads are enabled and whether step mode is enabled.
-- Exposes only the cleaning and feedback operations, not component APIs.
-- A successful feedback injection adds each message to the target node's pending messages (marking the node dirty for a subsequent cleaning pass) and provides a no-change result.
-- A feedback injection for a node that does not exist in the graph signals failure, leaving state unchanged.
+- Exposes only the cleaning, feedback, change-addition, and change-broadcast operations, not component APIs.
+- A successful feedback injection adds each message to the target node's pending messages as a feedback message (marking the node dirty; when cleaned, the node must change, blame, or fail) and provides a no-change result.
+- A successful change addition adds a change message to the target node's pending messages (marking the node dirty for a subsequent cleaning pass); the node may succeed without changing.
+- A change addition with no provided change text adds a default change message.
+- A change broadcast adds a change message to the pending set of each of the target's known reverse dependencies.
+- The broadcast message is the target's declared source file name followed by the provided change text.
+- A change broadcast clears the target's pending messages and known reverse dependencies.
+- A feedback injection, a change addition, or a change broadcast for a node that does not exist in the graph signals failure, leaving state unchanged.
 - Expected failures are provided as values (a result); unexpected failures — assembly failures such as agent-configuration resolution failure or a missing manifest — are signaled as exceptions and are outside the value contract.
 
 **Assumptions**

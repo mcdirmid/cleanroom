@@ -1,5 +1,5 @@
 """
-Implementation LLS: dag_impl
+Implementation LLS: dag_cleaner_impl
 Provides concrete implementation of DAG cleaning orchestration.
 """
 
@@ -7,7 +7,6 @@ import os
 import signal
 import threading
 from typing import List, Set, cast
-from dataclasses import dataclass
 from collections import deque
 
 from .dag_storage import NodeId, NodeMessage, PendingMessages, DagStorage
@@ -19,7 +18,7 @@ from .dag_clean_logic import (
     NoChangeResult,
     FailureResult,
 )
-from .dag import Dag, CleaningResult
+from .dag_cleaner import DagCleaner, CleaningResult
 
 # SIGTERM handler: bazel's process-wrapper sends SIGTERM when --test_timeout
 # expires (then SIGKILL after a grace period). We must terminate immediately.
@@ -41,20 +40,7 @@ if threading.current_thread() is threading.main_thread():
     signal.signal(signal.SIGTERM, _sigterm_handler)
 
 
-@dataclass
-class Config:
-    """
-    Configuration for the dag_impl implementation.
-
-    HLS Justification: The dag_impl implementation is configured with dag_storage
-    (message persistence and graph access) and dag_clean_logic (message processing
-    and dirtiness determination).
-    """
-    storage: DagStorage
-    clean_logic: DagCleanLogic
-
-
-class DagImpl(Dag):
+class DagCleanerImpl(DagCleaner):
     """
     Implementation of DAG cleaning orchestration.
     
@@ -68,21 +54,23 @@ class DagImpl(Dag):
       -> on failure, halts immediately.
     - All reads/writes go through dag_storage; no caching.
     
-    HLS Justification: "Provides the dag_impl implementation that fulfills the dag interface. 
+    HLS Justification: "Provides the dag_cleaner_impl implementation that fulfills the dag_cleaner interface. 
     Uses the configured dag_storage for message persistence and dag_clean_logic for processing 
     node messages."
     """
     
-    def __init__(self, config: Config):
+    def __init__(self, storage: DagStorage, clean_logic: DagCleanLogic):
         """
-        Initialize DAG implementation with configuration.
+        Initialize DAG implementation with the configured dag_storage (message
+        persistence and graph access) and dag_clean_logic (message processing
+        and dirtiness determination), per the dag_cleaner_impl LLS.
         
         Invariants:
         - No caching; all state reads/writes go through dag_storage.
         - On failure, processing halts immediately; no recovery or retry.
         """
-        self.storage = config.storage
-        self.clean_logic = config.clean_logic
+        self.storage = storage
+        self.clean_logic = clean_logic
     
     def _get_subgraph_nodes(self, target_node: NodeId) -> Set[NodeId]:
         """
@@ -253,10 +241,19 @@ class DagImpl(Dag):
                         if target not in subgraph_nodes:
                             return (False, FailureResult())
 
-                # Success: route new messages (reads the node's known reverse
-                # dependencies), then delete the node's data.
+                # Success: route new messages, then apply the result's metadata
+                # effect (dag_cleaner_impl-low.md / dag_cleaner-high.md):
+                #   change    -> delete the node's data (messages + reverse deps)
+                #   no-change -> clear the node's pending messages (reverse deps
+                #                retained)
+                #   feedback  -> no stored data removed (the node keeps its
+                #                messages and reverse deps; it is cleaned again
+                #                after the blamed dependency changes)
                 self._route_messages(node, result)
-                self.storage.delete_node_data(node)
+                if isinstance(result, ChangeResult):
+                    self.storage.delete_node_data(node)
+                elif isinstance(result, NoChangeResult):
+                    self.storage.clear_pending_messages(node)
                 last_result = result
 
         # Cap reached: a message cycle or a non-clearing dirty state prevented

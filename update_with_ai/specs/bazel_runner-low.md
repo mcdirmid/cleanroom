@@ -1,10 +1,11 @@
 <!-- Dependencies (md files to read alongside this one):
-  - dag-low.md
+  - dag_cleaner-low.md
   - dag_storage-low.md
   - dag_clean_logic-low.md
   - agent_loop-low.md
   - bazel_node_loader-low.md
   - bazel_agent_config-low.md
+  - sandbox-low.md
 -->
 
 # Interface LLS: bazel_runner
@@ -13,13 +14,33 @@
 ```python
 from typing import Protocol, List, Optional
 from dag_storage import NodeId
-from dag import CleaningResult
+from dag_cleaner import CleaningResult
 from dag_clean_logic import CleanResult, ChangeResult, FeedbackResult, NoChangeResult, FailureResult
 
 class BazRunner(Protocol):
     def run_dag(self, root_node: NodeId, workspace_root: str, config_target: Optional[str] = None) -> CleaningResult: ...
     def inject_feedback(self, node_id: NodeId, workspace_root: str, messages: List[str]) -> CleaningResult: ...
+    def add_change(self, node_id: NodeId, workspace_root: str, change: str = "check") -> CleaningResult: ...
+    def broadcast_change(self, node_id: NodeId, workspace_root: str, change: str) -> CleaningResult: ...
 ```
+
+## Term definitions
+
+- **result** → the `CleaningResult` alias (definition in Data Types)
+- **node** → the `NodeId` alias from dag_storage
+- **pending message** → the `PendingMessages` alias from dag_storage
+- **subgraph** → term definition from dag_storage
+- **dirty** → term definition from dag_clean_logic
+- **cleaning** → term definition from dag_clean_logic
+- **change message** → term definition from dag_clean_logic
+- **feedback message** → term definition from dag_clean_logic
+- **run** → term definition from agent_loop
+- **manifest** → term definition from bazel_node_loader
+- **agent configuration** → the `AgentConfig` type from bazel_agent_config
+- **config target** → the `ConfigTarget` alias from bazel_agent_config
+- **step mode** → term definition from sandbox
+- **blame** → term definition from sandbox
+
 ## Component-Provided Operations
 
 ### `run_dag`
@@ -80,13 +101,61 @@ def inject_feedback(self, node_id: NodeId, workspace_root: str, messages: List[s
 
 **HLS Justification:** "Deliver feedback messages to a node's pending message store."
 
+### `add_change`
+
+```python
+def add_change(self, node_id: NodeId, workspace_root: str, change: str = "check") -> CleaningResult
+```
+
+**Purpose:** Deliver a change message to a node's own pending message store, marking the node dirty for a subsequent cleaning pass. The node may succeed without changing when cleaned.
+
+**Preconditions:**
+- `node_id` is a valid node label in the workspace
+- `workspace_root` points to a valid workspace with manifest files
+- `change` is a change text; when omitted, the change text `check` applies
+
+**Postconditions:**
+- A change-kind `NodeMessage` (the given `change` text, or `check` when omitted) is added to the node's pending messages (the same store the DAG reads)
+- A subsequent call to `run_dag` with this `node_id` (or any ancestor) will re-process the node as dirty
+- Returns `(True, CleanResult)` on success (a `NoChangeResult` from `dag_clean_logic`).
+- Returns `(False, CleanResult)` on failure (a `FailureResult` from `dag_clean_logic`) — the node does not exist in the graph.
+
+**Failure Handling:**
+- If the node does not exist in the graph, returns `(False, CleanResult)` (a `FailureResult`) without modifying any state.
+
+**HLS Justification:** "Add a change message to a specific node's message store (marking the node dirty for a subsequent run)."
+
+### `broadcast_change`
+
+```python
+def broadcast_change(self, node_id: NodeId, workspace_root: str, change: str) -> CleaningResult
+```
+
+**Purpose:** Pretend the node was cleaned with changes: broadcast a change message to the node's known reverse dependencies and clear the node's data, without cleaning the node.
+
+**Preconditions:**
+- `node_id` is a valid node label in the workspace
+- `workspace_root` points to a valid workspace with manifest files
+- `change` is a change text
+
+**Postconditions:**
+- A change-kind `NodeMessage` composed of the node's declared source file name followed by the change text is added to the pending set of each of the node's known reverse dependencies (as recorded in the message store)
+- The node's pending messages and known reverse dependencies are cleared
+- Returns `(True, CleanResult)` on success (a `NoChangeResult` from `dag_clean_logic`).
+- Returns `(False, CleanResult)` on failure (a `FailureResult` from `dag_clean_logic`) — the node does not exist in the graph.
+
+**Failure Handling:**
+- If the node does not exist in the graph, returns `(False, CleanResult)` (a `FailureResult`) without modifying any state.
+
+**HLS Justification:** "Broadcast a change from a specific node to its known reverse dependencies."
+
 
 ## Invariants
 
 - The runner assembles all components internally; the client provides no component instances
 - The runner owns the full lifecycle of all components it creates (graph storage, agent loop, DAG)
 - The log file is always written, regardless of success or failure
-- The runner does not expose component APIs; the interface is `run_dag` and `inject_feedback` only
+- The runner does not expose component APIs; the interface is `run_dag`, `inject_feedback`, `add_change`, and `broadcast_change` only
 
 
 ## Non-Concerns

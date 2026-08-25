@@ -21,13 +21,12 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
 )
 
 from update_with_ai.lib.agent_loop import (
-    AgentLoopConfig,
     HistoryEntry,
     LogEvent,
     LoggerCallback,
     ToolDefinition,
 )
-from update_with_ai.lib.agent_loop_impl import AgentLoopImpl
+from update_with_ai.lib.agent_loop_impl import AgentLoopImpl, AgentLoopConfig
 from update_with_ai.lib.dag_clean_logic import NoChangeResult
 from update_with_ai.lib.tool_provider import (
     Continue,

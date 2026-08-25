@@ -1,16 +1,20 @@
 <!-- Dependencies (md files to read alongside this one):
   - bazel_agent_config-low.md
-  - agent_loop-low.md
+  - agent_loop_impl-low.md
 -->
 
 # Implementation LLS: bazel_agent_config_impl
 
 ## Data Types
 ```python
-from bazel_agent_config import AgentConfig, BazelAgentConfig, ConfigNotFoundError, ApiKeyNotFoundError
-from agent_loop import AgentLoopConfig
+from bazel_agent_config import AgentConfig, BazelAgentConfig
+from agent_loop_impl import AgentLoopConfig
 
 class BazelAgentConfigImpl(BazelAgentConfig): ...
+
+class ConfigNotFoundError(Exception): ...
+
+class ApiKeyNotFoundError(Exception): ...
 ```
 
 `BazelAgentConfigImpl` implements the `BazelAgentConfig` Protocol (see
@@ -40,8 +44,11 @@ config target and workspace root are per-call parameters of the class methods.
 - `build_agent_loop_config` combines the three: selects the config target,
   loads its agent configuration, resolves the API key (the pinned variable
   or `AGENT_API_KEY`), and provides an `AgentLoopConfig`.
-- `AgentConfig.to_agent_loop_config` threads every parameter through to the
-  `AgentLoopConfig`, inserting the resolved API key.
+- `AgentConfig.to_agent_loop_config` threads the agent-loop parameters (model,
+  base URL, iteration limit, temperature, timeout, and token limit) through to
+  the `AgentLoopConfig`, inserting the resolved API key; the sandbox gates
+  (`session_start_reads`, `step_sections`) are not part of the agent-loop
+  configuration (see `bazel_runner_impl`).
 
 **HLS Justification:** The interface specifies config-target selection,
 API-key resolution, and module location; the implementation provides those
@@ -49,10 +56,8 @@ operations.
 
 ## Invariants
 
-- An `AgentConfig` never contains an API key.
-- Configuration values from the generated module pass through unchanged (no
-  transformation of model, limits, or URLs).
-- No persistent state is held across calls.
+- Every call operates on per-call inputs; no state persists across calls.
+- The API key is read from the process environment per call.
 
 ## Non-Concerns
 

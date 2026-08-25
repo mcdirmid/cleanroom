@@ -5,7 +5,7 @@ Provides the agent_node_clean_logic_impl implementation that fulfills the dag_cl
 
 from __future__ import annotations
 from typing import List, Optional, Callable, Dict, Any
-from dataclasses import dataclass
+import dataclasses
 import os
 
 from .dag_clean_logic import (
@@ -21,11 +21,11 @@ from .dag_storage import NodeMessage
 from .bazel_graph_storage import BazelGraphStorage, NodeDefinition
 from .agent_loop import (
     AgentLoop,
-    AgentLoopConfig,
     AgentResult,
     LoggerCallback,
     LogEvent,
 )
+from .agent_loop_impl import AgentLoopConfig
 from .sandbox import SandboxConfig, Sandbox
 from .tool_provider import (
     ToolCallOutcome,
@@ -34,15 +34,6 @@ from .tool_provider import (
     ToolFailure,
     TerminateAgentWithSuccess,
 )
-
-
-@dataclass
-class Config:
-    graph: BazelGraphStorage
-    agent_loop_config: AgentLoopConfig
-    make_sandbox: Callable[[SandboxConfig], Sandbox]
-    make_agent_loop: Callable[[AgentLoopConfig], AgentLoop]
-    logger: Optional[LoggerCallback] = None
 
 
 class AgentNodeCleanLogicImpl(DagCleanLogic):
@@ -56,12 +47,19 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
     Operation Implemented: dag_clean_logic.clean, dag_clean_logic.is_dirty
     """
 
-    def __init__(self, config: Config) -> None:
-        self._graph = config.graph
-        self._agent_loop_config = config.agent_loop_config
-        self._make_sandbox = config.make_sandbox
-        self._make_agent_loop = config.make_agent_loop
-        self._logger = config.logger
+    def __init__(
+        self,
+        graph: BazelGraphStorage,
+        agent_loop_config: AgentLoopConfig,
+        make_sandbox: Callable[[SandboxConfig], Sandbox],
+        make_agent_loop: Callable[[AgentLoopConfig], AgentLoop],
+        logger: Optional[LoggerCallback] = None,
+    ) -> None:
+        self._graph = graph
+        self._agent_loop_config = agent_loop_config
+        self._make_sandbox = make_sandbox
+        self._make_agent_loop = make_agent_loop
+        self._logger = logger
 
     def clean(self, node_id: NodeId, messages: List[NodeMessage]) -> CleanResult:
         """
@@ -84,7 +82,15 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
           leaving pending messages unchanged.
         """
         node_def: NodeDefinition = self._graph.resolve_node_definition(node_id)
-        sandbox: Sandbox = self._make_sandbox(node_def.sandbox_config)
+        # The sandbox is configured with whether the run is processing
+        # feedback (per the impl LLS): a pending feedback message obligates
+        # the node to change, blame, or fail — advance enforces it.
+        has_feedback = any(m.kind == "feedback" for m in messages)
+        sandbox_config = dataclasses.replace(
+            node_def.sandbox_config,
+            feedback_pending=has_feedback,
+        )
+        sandbox: Sandbox = self._make_sandbox(sandbox_config)
         tools: List[ToolDefinition] = sandbox.get_tool_definitions()
 
         def _get_tool_definitions() -> List[ToolDefinition]:
@@ -157,7 +163,7 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
         system_prompt = node_def.prompt
         if file_lines:
             system_prompt = f"{system_prompt}\n\n" + "\n".join(file_lines)
-        prompt = "\n".join(messages)
+        prompt = "\n".join(m.text for m in messages)
         if node_def.sandbox_config.step_sections_enabled and node_def.sandbox_config.guide:
             # Step mode (per the impl LLS): the run's user prompt includes the
             # step-mode protocol — the guide arrives through the advance
@@ -236,8 +242,12 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
         # cleaning succeeds: a failed cleaning leaves it pending (per the
         # dag_clean_logic contract), and a successful cleaning consumes the
         # node's pending messages. Delivered at most once per pending set.
-        if file_dirty and "update target file from template" not in pending_messages:
-            self._graph.add_messages(node_id, ["update target file from template"])
+        template_feedback = NodeMessage(
+            kind="feedback",
+            text="update target file from template",
+        )
+        if file_dirty and template_feedback not in pending_messages:
+            self._graph.add_messages(node_id, [template_feedback])
 
         return len(pending_messages) > 0 or file_dirty
 

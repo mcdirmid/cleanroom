@@ -7,7 +7,6 @@
 ## Data Types
 ```python
 from typing import Any, Callable, Literal, Union, Protocol, TypeAlias
-from dataclasses import dataclass, field
 from tool_provider import ToolDefinition, ToolResult, PresentedToolResult, Signal, Continue, TerminateAgentWithSuccess, TerminateAgentWithFailure, ToolFailure, ToolExecutor, T_tool
 
 ToolCall: TypeAlias = dict[str, Any]
@@ -16,10 +15,14 @@ Usage: TypeAlias = dict[str, int]
 
 CumulativeUsage: TypeAlias = dict[str, int]
 
+HistoryEntry: TypeAlias = dict[str, Any]
+
+ConversationHistory: TypeAlias = list[HistoryEntry]
+
 AgentResult: TypeAlias = Union[
-    tuple[TerminateAgentWithSuccess, list[HistoryEntry]],
-    tuple[TerminateAgentWithFailure[T_tool], list[HistoryEntry]],
-    tuple[str, list[HistoryEntry]],
+    tuple[TerminateAgentWithSuccess, ConversationHistory],
+    tuple[TerminateAgentWithFailure[T_tool], ConversationHistory],
+    tuple[str, ConversationHistory],
 ]
 
 LogEvent: TypeAlias = Literal[
@@ -35,20 +38,6 @@ LogEvent: TypeAlias = Literal[
 ]
 LoggerCallback: TypeAlias = Callable[[LogEvent, dict[str, Any]], None]
 TerminationReminderGenerator: TypeAlias = Callable[[], str]
-
-HistoryEntry: TypeAlias = dict[str, Any]
-
-@dataclass
-class AgentLoopConfig:
-    base_url: str
-    api_key: str
-    model: str
-    max_iterations: int = 10
-    temperature: float = 0.0
-    timeout: float = 60.0
-    max_tokens: int | None = None
-    termination_reminder_generator: TerminationReminderGenerator | None = None
-    continuation_prompt: str | None = None
 
 class AgentLoop(Protocol):
     def run_agent(self, prompt: str, tools: list[ToolDefinition], tool_executor: ToolExecutor[T_tool], system_prompt: str | None = None, session_start_results: list[PresentedToolResult] | None = None, logger: LoggerCallback | None = None) -> AgentResult: ...
@@ -73,17 +62,24 @@ The run result is a termination outcome or a loop failure; there is no free-text
 
 A conversation history entry: the data appended to the conversation (user prompt, assistant response, tool call, tool result) for a particular turn. The format is determined by the language model API.
 
-The client-supplied configuration for the agent loop: connection and processing parameters for the language model service, an optional maximum number of loop iterations, and an optional termination reminder generator. Field meanings:
+## Term definitions
 
-- `base_url`: Server endpoint for the language model service
-- `api_key`: API key for authentication
-- `model`: Model name to use
-- `max_iterations`: Maximum loop iterations before failure (default: 10)
-- `temperature`: Sampling temperature (default: 0.0)
-- `timeout`: Request timeout in seconds (default: 60.0)
-- `max_tokens`: Maximum tokens to generate (default: None, service default)
-- `termination_reminder_generator`: Optional generator for termination reminders
-- `continuation_prompt`: Prompt appended to resume generation when the model response is truncated (default: None, implementation default used)
+- **run** → term definition: a single agent execution session, realized as the `run_agent` operation
+- **termination value** → term definition: the opaque value of a successful termination signal; it enters via tool execution and exits via the run result unchanged — the loop does not inspect, transform, or interpret it (the `T_tool` type variable from tool_provider)
+- **conversation** → the `ConversationHistory` alias (definition in Data Types)
+- **conversation message** → the `HistoryEntry` alias (definition in Data Types)
+- **system prompt** → term definition: the static opening section of the conversation context, supplied per run; it is never modified during the run
+- **truncated response** → term definition: a model response that stops because the generation limit was reached, before completing naturally; it is not a complete answer
+- **continuation prompt** → term definition: the message appended to the conversation so that generation resumes from where a truncated response stopped
+- **degenerate response** → term definition: a truncated response whose content is a single character repeated; it carries no meaningful content and is not resumed
+- **tool definition** → the `ToolDefinition` alias from tool_provider
+- **tool result** → the `ToolResult` type from tool_provider
+- **supersession flag** → term definition from tool_provider
+- **stub** → term definition from tool_provider
+- **signal** → the `Signal` alias from tool_provider
+- **termination result** → the `TerminateSuccessResult` type from tool_provider
+- **tool failure** → the `ToolFailure` type from tool_provider
+
 ## Component-Provided Operations
 
 ### `run_agent`
@@ -102,7 +98,6 @@ def run_agent(self, prompt: str, tools: list[ToolDefinition], tool_executor: Too
 - `tool_executor` returns results in the `tool_provider` format
 - `session_start_results` when provided is a list of `PresentedToolResult` values, each carrying the tool call it is presented with (a result the model did not request)
 - `logger` if provided is callable accepting `(LogEvent, dict)` and returning `None`
-- Component configured with connection params and optional `termination_reminder_generator`
 
 **Postconditions:**
 - On termination, returns `(TerminateAgentWithSuccess, history)` or `(TerminateAgentWithFailure[T_tool], history)` — the tool-provider termination signal paired with the conversation history

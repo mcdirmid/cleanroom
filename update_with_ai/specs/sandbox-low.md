@@ -33,8 +33,6 @@ Blame: TypeAlias = tuple[BlameTarget, Feedback]
 
 SearchResultLimit: TypeAlias = int
 
-DiffSizeLimit: TypeAlias = int
-
 TemplateMapping: TypeAlias = dict[VirtualName, str]
 
 VerificationCallback: TypeAlias = Callable[[], tuple[bool, str]] | None
@@ -46,10 +44,10 @@ class SandboxConfig:
     writable_paths: WritablePaths
     blame_targets: BlameTargets
     search_result_limit: SearchResultLimit
-    diff_size_limit: DiffSizeLimit | None = None
     session_start_reads_enabled: bool = True
     guide: VirtualName | None = None
     step_sections_enabled: bool = True
+    feedback_pending: bool = False
     templates: TemplateMapping = field(default_factory=dict)
     verification_callback: VerificationCallback = None
 
@@ -70,48 +68,37 @@ class Sandbox(Protocol):
 
 `BlameTarget` identifies a node the agent may blame (a dependency of the current run). `Feedback` is the correction feedback on how to correct the blamed node's output. Each `Blame` pair corresponds to one feedback message to its target.
 
-The client-supplied configuration for a sandbox: file mappings, readable and writable paths, blame targets, the search result limit and the diff size limit, whether session-start reads are enabled (default: enabled), the guide (default: none — the declared guide's virtual name, a file in `file_mappings`), whether step mode is enabled (default: enabled), the templates (default: empty), and an optional verification callback.
-## Stubbing (term definition)
+The client-supplied configuration for a sandbox: file mappings, readable and writable paths, blame targets, the search result limit and the diff size limit, whether session-start reads are enabled (default: enabled), the guide (default: none — the declared guide's virtual name, a file in `file_mappings`), whether step mode is enabled (default: enabled), whether feedback is pending (default: false), the templates (default: empty), and an optional verification callback.
+## Term definitions
 
-These rules apply to all sandbox operations that produce a `ToolResult`.
-
-- Stubbing follows `tool_provider` semantics: when a result's `supersedes` flag is set, the earlier non-stubbed result for the same file or tool command is replaced by a placeholder, keeping the conversation focused on current state; a result with the flag unset supersedes nothing, and at most one earlier result is superseded per result.
-
-## Auto re-read (term definition)
-
-These rules apply to the outcome of a successful `edit_file` or `replace_lines`.
-
-- After a successful `edit_file` or `replace_lines`, the file's current content appears in the conversation.
-- A write that fails does not provide the file's content.
-
-## Session-start reads (term definition)
-
-These rules apply to the reads provided at the beginning of a run.
-
-- When `session_start_reads_enabled` is set, a session-start read is provided for every file in `readable_paths` that is not in `writable_paths`; when unset, none are provided.
-- Session-start reads are provided in a deterministic order (sorted by virtual name).
-- A session-start read renders the file's content plain and never supersedes an earlier result.
-- In step mode, the guide is not among the session-start reads: its content reaches the agent only through `advance`'s outputs (per the Step mode rules).
-
-## Step mode (term definition)
-
-These rules apply when `step_sections_enabled` is set and `guide` is configured; the guide is a readable file in the guide format — its first line is `# Guide: <title>` and its first `##` heading is `## Summary`.
-
-- In step mode, the guide is not readable: `read_file` of the guide returns `ToolFailure` identifying the violated policy; the guide is never provided whole; its content reaches the agent only through `advance`'s outputs.
-- In step mode, the guide is revealed incrementally: `advance` delivers one section at a time.
-- The run cannot terminate until all guide sections are delivered and verification passes.
-- A failing verification prevents progressing to the next section, requiring correction before continuing.
-- A readable file that is not the guide is unaffected by step mode.
-- When step mode is disabled, the guide is provided whole at run start (a session-start read, per the Session-start reads rules) and is re-readable like other readable files.
-
-## Template initialization (term definition)
-
-These rules apply to the files created from configured templates at the beginning of a run.
-
-- `templates` maps a writable file's virtual name to its template content: the initial content configured for the file.
-- Files with templates are initialized from their template content at run start.
-- A writable file that exists when the sandbox is configured is never modified by its template.
-- Template initialization is not a run write: it never sets the write-occurred flag and never records the file as changed.
+- **virtual name** → the `VirtualName` alias (definition in Data Types)
+- **file write** → term definition: any successful operation that modifies the filesystem; a file write sets the write-occurred flag
+- **line-numbered view** → term definition: a rendering of a file's content with each line prefixed by its 1-indexed line number (`"N │ line"`); the line numbers are metadata, never file content
+- **injected read** → term definition: the read provided for a file immediately after a successful file write of that file, presenting a read request with line numbers and the read result carrying the file's full current content; the agent did not request it, and to the agent it appears as a numbered read it requested
+- **session-start read** → term definition: a read of a file the agent can read but not write, provided at the beginning of a run for rendering before the agent's first turn; it renders the file's content plain, never supersedes an earlier result, and is never stubbed
+- **blame** → term definition: a termination outcome that attributes the task's incompleteness to one or more dependencies and provides feedback on how to correct their outputs; blame is not failure (realized as the `Blame` type)
+- **blame target** → the `BlameTarget` alias (definition in Data Types)
+- **soft length bound** → term definition: the preferred maximum length of a change summary; a summary exceeding it is rejected with shortening guidance up to a grace count, then accepted when within the hard length bound (the bound values are pinned in the implementation spec)
+- **hard length bound** → term definition: the maximum length a change summary may reach; a summary exceeding it is rejected with hard-bound guidance up to a grace count, and a summary still exceeding it after the grace count fails the run
+- **template** → term definition: a writable file's initial content, configured for the file; when the file does not exist when the sandbox is configured, the file is created with the template's content at run start, and a file that exists when the sandbox is configured is never modified by its template (realized as the `TemplateMapping` type)
+- **guide** → term definition: the run's declared guide input — a readable file the node declares separately from its dependencies, at most one per run, in the guide format: its first line is `# Guide: <title>` and its first `##` heading is `## Summary`
+- **guide summary** → term definition: the guide's first part — the content from the guide's first line through the end of its `## Summary` section
+- **step section** → term definition: a checklist section of the guide — a part of the guide after the guide summary, delimited by `## <name>` headings, delivered after an advance that passed verification
+- **step mode** → term definition: a run configuration in which the guide is not readable and its content reaches the agent only through the advance operation: the guide summary at run start, then the step sections one at a time after successful advances
+- **stubbing** → term definition: these rules apply to all sandbox operations that produce a `ToolResult`; stubbing follows `tool_provider` semantics — when a result's `supersedes` flag is set, the earlier non-stubbed result for the same file or tool command is replaced by a placeholder, keeping the conversation focused on current state; a result with the flag unset supersedes nothing, and at most one earlier result is superseded per result
+- **auto re-read** → term definition: these rules apply to the outcome of a successful `edit_file` or `replace_lines`; after a successful `edit_file` or `replace_lines`, the file's current content appears in the conversation, and a write that fails does not provide the file's content
+- **session-start reads** → term definition: these rules apply to the reads provided at the beginning of a run; when `session_start_reads_enabled` is set, a session-start read is provided for every file in `readable_paths` that is not in `writable_paths`, and when unset, none are provided; session-start reads are provided in a deterministic order (sorted by virtual name); a session-start read renders the file's content plain and never supersedes an earlier result; in step mode, the guide is not among the session-start reads — its content reaches the agent only through `advance`'s outputs (per the step mode rules)
+- **template initialization** → term definition: these rules apply to the files created from configured templates at the beginning of a run; `templates` maps a writable file's virtual name to its template content — the initial content configured for the file; files with templates are initialized from their template content at run start; a writable file that exists when the sandbox is configured is never modified by its template; template initialization is not a run write — it never sets the write-occurred flag and never records the file as changed
+- **tool definition** → the `ToolDefinition` alias from tool_provider
+- **tool result** → the `ToolResult` type from tool_provider
+- **supersession flag** → term definition from tool_provider
+- **stub** → term definition from tool_provider
+- **termination result** → the `TerminateSuccessResult` type from tool_provider
+- **tool failure** → the `ToolFailure` type from tool_provider
+- **run** → term definition from agent_loop
+- **dependency** → the `NodeDependencies` alias from dag_storage
+- **change message** → term definition from dag_clean_logic
+- **feedback message** → term definition from dag_clean_logic
 
 ## Component-Provided Operations
 
@@ -146,9 +133,9 @@ def get_session_start_reads(self) -> list[PresentedToolResult]
 **Preconditions:** None.
 
 **Postconditions:**
-- When `session_start_reads_enabled` is set: returns a session-start read (per the Session-start reads rules) for every file in `readable_paths` that is not in `writable_paths`, sorted by virtual name
+- When `session_start_reads_enabled` is set: returns a session-start read (per the session-start reads rules) for every file in `readable_paths` that is not in `writable_paths`, sorted by virtual name
 - When `session_start_reads_enabled` is unset: returns an empty list
-- In step mode, the guide is not among the reads (per the Step mode rules)
+- In step mode, the guide is not among the reads (per the step mode rules)
 - Each session-start read is a `PresentedToolResult` pairing the `read_file` call with its plain read result; each result's `supersedes` is unset
 - Requesting the session-start reads changes no sandbox state
 
@@ -204,7 +191,7 @@ def edit_file(self, file_path: VirtualName, old_str: str, new_str: str,
 **Postconditions:**
 - When `expect_multiple` is `False`: exactly one occurrence of `old_str` is replaced with `new_str`; when `True`: every occurrence is replaced
 - The file is written with the replacement applied; `write_occurred` flag set to `True`
-- The outcome is a sequence of two results, per the Auto re-read rules: a write confirmation (a `ToolResult` with `supersedes` set to `True`; it supersedes the earlier result for that file) and an injected read
+- The outcome is a sequence of two results, per the auto re-read rules: a write confirmation (a `ToolResult` with `supersedes` set to `True`; it supersedes the earlier result for that file) and an injected read
 - The write confirmation's `content` and `note` are minimal: a structured success message (with counts where relevant); no file content is echoed in it
 
 **Failure Handling:**
@@ -236,7 +223,7 @@ def replace_lines(self, file_path: VirtualName, start_line: int, end_line: int,
 **Postconditions:**
 - Lines `start_line` through `end_line` (inclusive) are replaced with `new_str`; `start_line > end_line` inserts `new_str` before line `start_line` (no lines removed); empty `new_str` deletes the range; a trailing newline is preserved when the file had one and lines remain
 - The file is written with the change applied; `write_occurred` flag set to `True`
-- The outcome is a sequence of two results, per the Auto re-read rules: a write confirmation (a `ToolResult` with `supersedes` set to `True`; it supersedes the earlier result for that file) and an injected read
+- The outcome is a sequence of two results, per the auto re-read rules: a write confirmation (a `ToolResult` with `supersedes` set to `True`; it supersedes the earlier result for that file) and an injected read
 - The write confirmation's `content` and `note` are minimal: a structured success message (with counts where relevant); no file content is echoed in it
 
 **Failure Handling:**
@@ -298,7 +285,8 @@ def advance(self, changes: list[dict[str, str]] = []) -> ToolCallOutcome
 - Verifies the run: runs the verification callback when one is configured; when no callback is configured, verification is treated as passed
 - On a failing verification: returns a `ToolResult` providing feedback — the verification failure details and guidance to change files and call `advance` again, or call `blame` or `fail` to end the run; the session continues and advance never terminates on a failing verification
 - On a passing verification (or no callback): returns `TerminateAgentWithSuccess` (a `Signal[T_tool]` variant) carrying a `TerminateSuccessResult` describing the session outcome: no change when no file's current content differs from its run-start content (writes may have occurred but net out), or a change whose messages are built from `changes` when files changed
-- In step mode: on a passing verification with step sections remaining, returns the next step section; on a failing verification, returns the guide summary with the reason verification failed, and the next section is not delivered (per the Step mode rules); on a passing verification with no step sections remaining, proceeds to termination
+- When `feedback_pending` is set and the run would otherwise signal successful termination without a change (no file's current content differs from its run-start content and no change message is provided), returns `ToolFailure` with a reason directing the agent to change, blame, or fail; the session continues
+- In step mode: on a passing verification with step sections remaining, returns the next step section; on a failing verification, returns the guide summary with the reason verification failed, and the next section is not delivered (per the step mode rules); on a passing verification with no step sections remaining, proceeds to termination
 - Termination tools produce no `ToolResult` and never supersede an earlier result; advance's termination outcome is never a tool failure; the change-message machinery (including the empty-message failure) applies only to the terminating advance
 
 **Failure Handling:**
@@ -309,6 +297,7 @@ def advance(self, changes: list[dict[str, str]] = []) -> ToolCallOutcome
 - A claimed change for a run whose writes all net out to no change (every written file's current content equals its run-start content) → `ToolFailure[T_tool]` stating the run net-changed nothing and directing `advance()` with no changes to report no change.
 - A summary exceeding the summary bound → `ToolFailure[T_tool]` directing the agent to shorten the summary and call `advance` again; persistent rejection turns `advance` into failure.
 - A changed file with no entry → `ToolFailure[T_tool]` listing the uncovered files.
+- `feedback_pending` set and advance without a change (no net-changed files, no change message) → `ToolFailure[T_tool]` with a reason directing the agent to change, blame, or fail; the session continues.
 - Verification callback throws exception → Callback error is unhandled (no contract specified in this interface spec).
 
 **HLS Justification:** advance signals successful termination when verification passes, provides feedback (never a tool failure) on a failing verification, and requires a change summary when the run changed files.
@@ -328,6 +317,10 @@ def fail(self) -> ToolCallOutcome
 - Returns `TerminateAgentWithFailure[T_tool]` (a `Signal[T_tool]` variant); the session terminates in failure.
 - A correctly-invoked `fail` is not a `ToolFailure` — `ToolFailure` signals a failed call.
 - Termination tools produce no `ToolResult` and never supersede an earlier result
+
+**Failure Handling:**
+- No expected failures: a correctly-invoked `fail` always signals termination.
+- Invoking `fail` after a termination signal has been produced violates the terminal precondition (undefined behavior).
 
 **HLS Justification:** Termination tools signal termination when invoked correctly: the failure operation ends the session in failure.
 
@@ -369,6 +362,8 @@ def get_write_occurred(self) -> WriteOccurred
 **Preconditions:** None.
 
 **Postconditions:** Returns `True` if any file write operation has succeeded during the current run; `False` otherwise.
+
+**Failure Handling:** Always succeeds.
 
 **HLS Justification:** "The client may: Query whether the run has modified the filesystem."
 

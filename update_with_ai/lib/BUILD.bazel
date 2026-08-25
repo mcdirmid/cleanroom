@@ -68,9 +68,9 @@ pyright_library(
 )
 
 pyright_library(
-    name = "dag",
+    name = "dag_cleaner",
     srcs = [
-        "dag.py",
+        "dag_cleaner.py",
     ],
     pyright_deps = [":dag_storage", ":dag_clean_logic"],
     visibility = ["//visibility:public"],  # Add this line
@@ -86,11 +86,11 @@ pyright_library(
 )
 
 pyright_library(
-    name = "dag_impl",
+    name = "dag_cleaner_impl",
     srcs = [
-        "dag_impl.py",
+        "dag_cleaner_impl.py",
     ],
-    pyright_deps = [":dag", ":dag_storage", ":dag_clean_logic"],
+    pyright_deps = [":dag_cleaner", ":dag_storage", ":dag_clean_logic"],
     visibility = ["//visibility:public"],  # Add this line
 )
 
@@ -108,7 +108,7 @@ pyright_library(
     srcs = [
         "agent_node_clean_logic_impl.py",
     ],
-    pyright_deps = [":dag_clean_logic", ":dag_storage", ":bazel_graph_storage", ":agent_loop", ":sandbox", ":tool_provider"],
+    pyright_deps = [":dag_clean_logic", ":dag_storage", ":bazel_graph_storage", ":agent_loop", ":agent_loop_impl", ":sandbox", ":tool_provider"],
     visibility = ["//visibility:public"],
 )
 
@@ -135,7 +135,7 @@ pyright_library(
     srcs = [
         "bazel_agent_config.py",
     ],
-    pyright_deps = [":agent_loop"],
+    pyright_deps = [":agent_loop_impl"],
     visibility = ["//visibility:public"],
 )
 
@@ -144,7 +144,7 @@ pyright_library(
     srcs = [
         "bazel_agent_config_impl.py",
     ],
-    pyright_deps = [":agent_loop", ":bazel_agent_config"],
+    pyright_deps = [":agent_loop_impl", ":bazel_agent_config"],
     visibility = ["//visibility:public"],
 )
 
@@ -153,7 +153,7 @@ pyright_library(
     srcs = [
         "bazel_runner.py",
     ],
-    pyright_deps = [":dag_storage", ":dag"],
+    pyright_deps = [":dag_storage", ":dag_cleaner"],
     visibility = ["//visibility:public"],
 )
 
@@ -163,8 +163,8 @@ pyright_library(
         "bazel_runner_impl.py",
     ],
     pyright_deps = [
-        ":dag_impl",
-        ":dag",
+        ":dag_cleaner_impl",
+        ":dag_cleaner",
         ":dag_storage",
         ":dag_clean_logic",
         ":bazel_graph_storage_impl",

@@ -33,6 +33,22 @@ class BazelNodeLoader(Protocol):
 A data class Protocol that bundles static node metadata with the `ToolProvider` interface. `deps` holds the node's dependency node labels, including its feedback deps; `feedback_deps` holds the labels that can receive feedback from the node (a subset of `deps`); `silent_deps` holds dependencies whose output is not readable. `src` is the node's declared source file (the artifact its agent writes; empty when the node declares none); `template` is the declared source file's template — its content initializes `src` at run start when `src` does not exist on disk (`None` when none is declared); `guide` is the node's declared guide — the guide node label, declared separately from `deps`, whose file the run's sandbox reads and treats per the step-mode flag (`None` when none is declared); `silent_srcs` holds the node's silent source files. Internal state fields (e.g., `_dependency_nodes`, `_agent_loop`) are implementation-specific and defined in the implementation spec. A loaded node resolves tool definitions and tool execution from the tool providers declared in its manifest; a tool call that no declared provider handles signals a tool failure.
 
 **HLS Justification:** "Designates a runtime representation of a Bazel node."
+
+## Term definitions
+
+- **manifest** → term definition: a build-time file produced for a node, containing the node's label, prompt, declared tools, declared dependencies, silent dependencies, feedback deps, the declared source file, the silent source files, the declared source file's template (when configured), the guide (when the node declares one, declared separately from its dependencies), and an optional verification command; the exact file format is unspecified
+- **loaded node** → the `BazNode` type (definition in Data Types)
+- **node prompt** → the `BazNode.prompt` field (definition in Data Types)
+- **dependency node** → the `BazNode.deps` field (definition in Data Types)
+- **tool provider** → the `ToolProvider` type from tool_provider (definition in Data Types)
+- **feedback deps** → the `BazNode.feedback_deps` field (definition in Data Types)
+- **tool definition** → the `ToolDefinition` alias from tool_provider
+- **tool result** → the `ToolResult` type from tool_provider
+- **signal** → the `Signal` alias from tool_provider
+- **tool failure** → the `ToolFailure` type from tool_provider
+- **template** → term definition from sandbox
+- **guide** → term definition from sandbox
+
 ## Component-Provided Operations
 
 ### `load_node`
@@ -87,7 +103,7 @@ def get_node_prompt(self, node_label: str) -> str | None
 ## Invariants
 
 - Repeated loads of the same label provide the same node.
-- A node is loaded from its manifest when requested, resolved relative to a configured runfiles directory; a node's manifest is read when the node is first loaded.
+- A node is loaded from its manifest when requested; a node's manifest is read when the node is first loaded.
 - Manifests are never modified; loading reads them only.
 - Manifest file paths are derived deterministically from labels.
 

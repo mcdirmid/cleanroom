@@ -6,11 +6,17 @@
 
 ## Data Types
 ```python
-from typing import Protocol, TypeAlias
+from typing import Protocol, TypeAlias, Literal
+from dataclasses import dataclass
 
 NodeId: TypeAlias = str
 
-NodeMessage: TypeAlias = str
+MessageKind: TypeAlias = Literal["change", "feedback"]
+
+@dataclass
+class NodeMessage:
+    kind: MessageKind
+    text: str
 
 PendingMessages: TypeAlias = list[NodeMessage]
 
@@ -21,21 +27,27 @@ KnownReverseDependencies: TypeAlias = list[NodeId]
 class DagStorage(Protocol):
     def get_pending_messages(self, node_id: NodeId) -> PendingMessages: ...
     def add_messages(self, node_id: NodeId, messages: list[NodeMessage]) -> None: ...
+    def clear_pending_messages(self, node_id: NodeId) -> None: ...
     def delete_node_data(self, node_id: NodeId) -> None: ...
     def get_node_dependencies(self, node_id: NodeId) -> NodeDependencies: ...
     def get_known_reverse_dependencies(self, node_id: NodeId) -> KnownReverseDependencies: ...
 ```
 
-- `NodeMessage`: a message stored in the DAG message store — a string assigned to a node by another node during cleaning. Produced by `dag_clean_logic`, consumed by `dag_storage`.
+- `NodeMessage`: a message stored in the DAG message store — a message with a kind and text, assigned to a node by another node during cleaning. A message of kind `change` dirties the node and may be processed without the node changing; a message of kind `feedback` additionally obligates the node to change, blame, or fail (per `dag_clean_logic`). Produced by `dag_clean_logic`, consumed by `dag_storage`.
+- `MessageKind`: the kind of a message: `"change"` or `"feedback"`.
 - `NodeDependencies`: the direct dependencies of a node.
 - `KnownReverseDependencies`: the nodes recorded as depending on this node.
 ## Term definitions
 
-- **Subgraph**: A target node (included) and all nodes reachable through its direct and indirect dependencies. The subgraph rooted at a node is that node and its transitive dependencies.
-- **Pending message**: A message that has been delivered to a node and has not been cleaned since delivery.
-- **Propagating dependency**: A dependency whose changes propagate to the depending node. Only propagating dependencies record the depending node as a reverse dependency when its dependencies are retrieved.
-- **Reverse dependency**: If a node A depends on a node B and B is a propagating dependency of A, then A is a reverse dependency of B.
-- **Known reverse dependencies**: The nodes recorded as depending on a node — nodes that list the node among their propagating dependencies. A node becomes a known reverse dependency of each of its propagating dependencies when the node's dependencies are retrieved. A node is recorded at most once per dependency; repeated recordings do not add duplicates. Dependencies whose changes do not propagate to the node are not recorded.
+- **node** → the `NodeId` alias (definition in Data Types)
+- **message** → the `NodeMessage` type (definition in Data Types)
+- **message kind** → the `MessageKind` alias (definition in Data Types)
+- **pending message** → the `PendingMessages` alias (definition in Data Types); term definition: a message that has been delivered to a node and has not been cleaned since delivery
+- **dependency** → the `NodeDependencies` alias (definition in Data Types)
+- **propagating dependency** → term definition: a dependency whose changes propagate to the depending node; only propagating dependencies record the depending node as a reverse dependency when its dependencies are retrieved
+- **reverse dependency** → term definition: if a node A depends on a node B and B is a propagating dependency of A, then A is a reverse dependency of B
+- **known reverse dependencies** → the `KnownReverseDependencies` alias (definition in Data Types); term definition: the nodes recorded as depending on a node — nodes that list the node among their propagating dependencies; a node becomes a known reverse dependency of each of its propagating dependencies when the node's dependencies are retrieved, a node is recorded at most once per dependency (repeated recordings do not add duplicates), and dependencies whose changes do not propagate to the node are not recorded
+- **subgraph** → term definition: a target node (included) and all nodes reachable through its direct and indirect dependencies; the subgraph rooted at a node is that node and its transitive dependencies
 
 ## Component-Provided Operations
 
@@ -51,6 +63,7 @@ def get_pending_messages(self, node_id: NodeId) -> PendingMessages
 
 **Postconditions:** Provides list of pending messages (empty if none).
 
+**Failure Handling:** No expected failures; the only caller obligation is the precondition that `node_id` exists in the graph (violations are undefined behavior). Storage failures are assumed not to occur; behavior is undefined if they do.
 
 **HLS Justification:** "The client may read pending messages for a node."
 
@@ -66,8 +79,25 @@ def add_messages(self, node_id: NodeId, messages: list[NodeMessage]) -> None
 
 **Postconditions:** All messages are added atomically to the node's pending set.
 
+**Failure Handling:** No expected failures; the only caller obligations are the preconditions that `node_id` exists in the graph and `messages` are valid messages (violations are undefined behavior). Storage failures are assumed not to occur; behavior is undefined if they do.
 
 **HLS Justification:** "The client may add messages to a node's pending set."
+
+### `clear_pending_messages`
+
+```python
+def clear_pending_messages(self, node_id: NodeId) -> None
+```
+
+**Purpose:** Clear a node's pending messages, leaving its known reverse dependencies.
+
+**Preconditions:** `node_id` must exist in the graph.
+
+**Postconditions:** The node's pending messages are removed atomically; the node's known reverse dependencies remain.
+
+**Failure Handling:** No expected failures; the only caller obligation is the precondition that `node_id` exists in the graph (violations are undefined behavior). Storage failures are assumed not to occur; behavior is undefined if they do.
+
+**HLS Justification:** "The client may clear a node's pending messages."
 
 ### `delete_node_data`
 
@@ -81,6 +111,7 @@ def delete_node_data(self, node_id: NodeId) -> None
 
 **Postconditions:** The node's pending messages and known reverse dependencies are deleted atomically.
 
+**Failure Handling:** No expected failures; the only caller obligation is the precondition that `node_id` exists in the graph (violations are undefined behavior). Storage failures are assumed not to occur; behavior is undefined if they do.
 
 **HLS Justification:** "The client may delete a node's data (its pending messages and its known reverse dependencies)."
 
@@ -98,6 +129,7 @@ def get_node_dependencies(self, node_id: NodeId) -> NodeDependencies
 - Provides the node's direct dependencies
 - Records the node as a known reverse dependency of each propagating dependency, at most once per dependency (each propagating dependency's known reverse dependencies gain the node; repeated recordings do not duplicate it). Dependencies whose changes do not propagate to the node are not recorded.
 
+**Failure Handling:** No expected failures; the only caller obligation is the precondition that `node_id` exists in the graph (violations are undefined behavior). Storage failures are assumed not to occur; behavior is undefined if they do.
 
 **HLS Justification:** "The client may retrieve a node's dependencies."
 
@@ -113,6 +145,7 @@ def get_known_reverse_dependencies(self, node_id: NodeId) -> KnownReverseDepende
 
 **Postconditions:** Provides the node's known reverse dependencies exactly as recorded (empty if none recorded).
 
+**Failure Handling:** No expected failures; the only caller obligation is the precondition that `node_id` exists in the graph (violations are undefined behavior). Storage failures are assumed not to occur; behavior is undefined if they do.
 
 **HLS Justification:** "The client may retrieve a node's known reverse dependencies."
 

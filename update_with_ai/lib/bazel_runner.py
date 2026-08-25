@@ -18,7 +18,7 @@ Script usage (CLI entry point):
 from __future__ import annotations
 from typing import List, Optional, Protocol
 from update_with_ai.lib.dag_storage import NodeId
-from update_with_ai.lib.dag import CleaningResult
+from update_with_ai.lib.dag_cleaner import CleaningResult
 
 
 class BazRunner(Protocol):
@@ -58,6 +58,41 @@ class BazRunner(Protocol):
         """
         Deliver feedback messages to a node's own pending message store,
         marking the node dirty for a subsequent cleaning pass.
+
+        Returns (True, CleanResult) on success (a NoChangeResult);
+        (False, CleanResult) on failure (a FailureResult) if the node does
+        not exist in the graph.
+        """
+        ...
+
+    def add_change(
+        self,
+        node_id: NodeId,
+        workspace_root: str,
+        change: str = "check",
+    ) -> CleaningResult:
+        """
+        Deliver a change message to a node's own pending message store,
+        marking the node dirty for a subsequent cleaning pass. The node may
+        succeed without changing when cleaned. The change text defaults to
+        "check" when not provided.
+
+        Returns (True, CleanResult) on success (a NoChangeResult);
+        (False, CleanResult) on failure (a FailureResult) if the node does
+        not exist in the graph.
+        """
+        ...
+
+    def broadcast_change(
+        self,
+        node_id: NodeId,
+        workspace_root: str,
+        change: str,
+    ) -> CleaningResult:
+        """
+        Pretend the node was cleaned with changes: broadcast a change message
+        to the node's known reverse dependencies and clear the node's data,
+        without cleaning the node.
 
         Returns (True, CleanResult) on success (a NoChangeResult);
         (False, CleanResult) on failure (a FailureResult) if the node does

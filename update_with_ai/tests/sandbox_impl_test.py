@@ -34,6 +34,7 @@ from update_with_ai.lib.tool_provider import (
     TerminateAgentWithFailure,
 )
 from update_with_ai.lib.dag_clean_logic import ChangeResult, FeedbackResult, NoChangeResult
+from update_with_ai.lib.dag_storage import NodeMessage
 
 
 class TestSandboxImpl(unittest.TestCase):
@@ -709,6 +710,43 @@ class TestSandboxImpl(unittest.TestCase):
         result = self.as_success(self.sandbox.advance())
         self.assertEqual(result.value.type, "no_change")
 
+    def test_advance_feedback_pending_no_change_fails(self) -> None:
+        # A run processing feedback cannot terminate without a change
+        # (sandbox-low.md, advance): advance that would otherwise signal
+        # successful termination without a change returns a tool failure with
+        # a reason directing the agent to change, blame, or fail; the session
+        # continues (no termination signal is produced).
+        sandbox = SandboxImpl(SandboxConfig(
+            file_mappings=self.file_mappings,
+            readable_paths=self.readable_paths,
+            writable_paths=self.writable_paths,
+            blame_targets=self.blame_targets,
+            search_result_limit=5,
+            feedback_pending=True,
+        ))
+        failure = self.as_tool_failure(sandbox.advance())
+        self.assertIn("feedback", failure.value)
+        self.assertIn("blame() or fail()", failure.value)
+
+    def test_advance_feedback_pending_change_succeeds(self) -> None:
+        # A run processing feedback terminates successfully when the run
+        # changed files and reports the change (the node changed).
+        sandbox = SandboxImpl(SandboxConfig(
+            file_mappings=self.file_mappings,
+            readable_paths=self.readable_paths,
+            writable_paths=self.writable_paths,
+            blame_targets=self.blame_targets,
+            search_result_limit=5,
+            feedback_pending=True,
+        ))
+        self.assert_supersedes(
+            sandbox.edit_file("test.txt", "This is a test", "New content"), True
+        )
+        result = self.as_success(sandbox.advance(
+            changes=[{"file": "test.txt", "summary": "Updated the test line"}]
+        ))
+        self.assertIsInstance(result.value, ChangeResult)
+
     def test_advance_no_callback_changed_files_empty_message_shows_diff(self) -> None:
         # Files changed and the change message is empty: a tool failure that
         # lists the changed files and shows the run's diff (per the sandbox
@@ -758,7 +796,10 @@ class TestSandboxImpl(unittest.TestCase):
             changes=[{"file": "test.txt", "summary": "Updated the test line"}]
         ))
         self.assertEqual(result.value.type, "change")
-        self.assertEqual(result.value.messages, ["test.txt: Updated the test line"])
+        self.assertEqual(
+            result.value.messages,
+            [NodeMessage(kind="change", text="test.txt: Updated the test line")],
+        )
 
     def test_advance_callback_failing_provides_feedback(self) -> None:
         # A failing verification provides feedback (never a tool failure,
@@ -830,10 +871,9 @@ class TestSandboxImpl(unittest.TestCase):
             writable_paths=self.writable_paths,
             blame_targets=self.blame_targets,
             search_result_limit=5,
-            diff_size_limit=40,
             verification_callback=None,
         )
-        sandbox = SandboxImpl(config)
+        sandbox = SandboxImpl(config, diff_size_limit=40)
         self.assert_supersedes(
             sandbox.edit_file("test.txt", "This is a test", "New content"), True
         )
@@ -895,7 +935,10 @@ class TestSandboxImpl(unittest.TestCase):
         self.assertIsInstance(outcome, TerminateAgentWithSuccess)
         assert isinstance(outcome, TerminateAgentWithSuccess)
         self.assertIsInstance(outcome.value, ChangeResult)
-        self.assertEqual(outcome.value.messages, ["test.txt: " + "y" * 480])
+        self.assertEqual(
+            outcome.value.messages,
+            [NodeMessage(kind="change", text="test.txt: " + "y" * 480)],
+        )
 
     def test_advance_hard_grace_turns_advance_into_failure(self) -> None:
         # A summary over the hard bound (500) is rejected up to 4 times, then
@@ -1003,7 +1046,10 @@ class TestSandboxImpl(unittest.TestCase):
         self.assertIsInstance(result.value, FeedbackResult)
         self.assertEqual(
             result.value.messages,
-            [("agent", "fix the output"), ("system", "redo")],
+            [
+                ("agent", NodeMessage(kind="feedback", text="fix the output")),
+                ("system", NodeMessage(kind="feedback", text="redo")),
+            ],
         )
 
     # ------------------------------------------------------------------

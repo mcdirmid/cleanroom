@@ -21,9 +21,9 @@ Cleans every dirty node in the subgraph rooted at a target node, in topological 
 **Guarantees**
 
 - Cleaning produces no direct output; messages are routed to node stores via dag_storage.
-- Cleaning can re-dirty nodes (message delivery), so a node may be cleaned multiple times; feedback re-dirties previously cleaned nodes, processed in subsequent iterations.
+- Cleaning can re-dirty nodes: a node may be cleaned multiple times in one operation; feedback delivered to a previously cleaned node re-dirties it within the same operation.
 - Nodes outside the subgraph may receive messages and become dirty, but are not cleaned until a subgraph containing them is cleaned.
-- Cleaning is topological: the sort is computed once and fixed for the operation; a node is cleaned only while none of its dependencies are dirty; dirtiness is re-evaluated for all nodes after each cleaning; iteration stops when no node in the sort is dirty.
+- Cleaning is topological: it follows a fixed topological order for the operation; a node is cleaned only while none of its dependencies are dirty; after each cleaning, dirtiness is re-evaluated for all nodes; cleaning stops when no node remains dirty.
 - Each node's cleaning is atomic.
 - Cleaning always terminates, bounded by a single total bound on clean operations.
 - All state is per-run; no state persists across restarts.

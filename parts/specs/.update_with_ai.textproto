@@ -1,0 +1,174 @@
+nodes {
+  key: "@@//parts/specs:agent_loop_high"
+  value {
+    reverse_dependencies: "@@//parts/specs:agent_loop_low"
+    reverse_dependencies: "@@//parts/specs:bazel_agent_config_high"
+    reverse_dependencies: "@@//parts/specs:sandbox_high"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_high"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_impl_high"
+  }
+}
+nodes {
+  key: "@@//parts/specs:agent_loop_low"
+  value {
+    reverse_dependencies: "@@//parts/specs:bazel_runner_impl_low"
+    reverse_dependencies: "@@//parts/specs:bazel_agent_config_low"
+    reverse_dependencies: "@@//parts/specs:sandbox_low"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_low"
+  }
+}
+nodes {
+  key: "@@//parts/specs:bazel_agent_config_high"
+  value {
+    reverse_dependencies: "@@//parts/specs:bazel_agent_config_low"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_high"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_impl_high"
+  }
+}
+nodes {
+  key: "@@//parts/specs:bazel_agent_config_low"
+  value {
+    reverse_dependencies: "@@//parts/specs:bazel_runner_impl_low"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_low"
+  }
+}
+nodes {
+  key: "@@//parts/specs:bazel_graph_storage_high"
+  value {
+    reverse_dependencies: "@@//parts/specs:bazel_graph_storage_low"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_impl_high"
+  }
+}
+nodes {
+  key: "@@//parts/specs:bazel_graph_storage_low"
+  value {
+    reverse_dependencies: "@@//parts/specs:bazel_runner_impl_low"
+  }
+}
+nodes {
+  key: "@@//parts/specs:bazel_node_loader_high"
+  value {
+    reverse_dependencies: "@@//parts/specs:bazel_node_loader_low"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_high"
+  }
+}
+nodes {
+  key: "@@//parts/specs:bazel_node_loader_low"
+  value {
+    reverse_dependencies: "@@//parts/specs:bazel_runner_low"
+  }
+}
+nodes {
+  key: "@@//parts/specs:bazel_runner_high"
+  value {
+    reverse_dependencies: "@@//parts/specs:bazel_runner_low"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_impl_high"
+  }
+}
+nodes {
+  key: "@@//parts/specs:bazel_runner_impl_high"
+  value {
+    reverse_dependencies: "@@//parts/specs:bazel_runner_impl_low"
+  }
+}
+nodes {
+  key: "@@//parts/specs:bazel_runner_low"
+  value {
+    reverse_dependencies: "@@//parts/specs:bazel_runner_impl_low"
+  }
+}
+nodes {
+  key: "@@//parts/specs:dag_clean_logic_high"
+  value {
+    reverse_dependencies: "@@//parts/specs:dag_clean_logic_low"
+    reverse_dependencies: "@@//parts/specs:sandbox_high"
+    reverse_dependencies: "@@//parts/specs:dag_high"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_high"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_impl_high"
+  }
+}
+nodes {
+  key: "@@//parts/specs:dag_clean_logic_low"
+  value {
+    reverse_dependencies: "@@//parts/specs:bazel_runner_impl_low"
+    reverse_dependencies: "@@//parts/specs:sandbox_low"
+    reverse_dependencies: "@@//parts/specs:dag_low"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_low"
+  }
+}
+nodes {
+  key: "@@//parts/specs:dag_high"
+  value {
+    reverse_dependencies: "@@//parts/specs:dag_low"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_high"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_impl_high"
+  }
+}
+nodes {
+  key: "@@//parts/specs:dag_low"
+  value {
+    reverse_dependencies: "@@//parts/specs:bazel_runner_impl_low"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_low"
+  }
+}
+nodes {
+  key: "@@//parts/specs:dag_storage_high"
+  value {
+    reverse_dependencies: "@@//parts/specs:dag_storage_low"
+    reverse_dependencies: "@@//parts/specs:dag_clean_logic_high"
+    reverse_dependencies: "@@//parts/specs:sandbox_high"
+    reverse_dependencies: "@@//parts/specs:dag_high"
+    reverse_dependencies: "@@//parts/specs:bazel_graph_storage_high"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_high"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_impl_high"
+  }
+}
+nodes {
+  key: "@@//parts/specs:dag_storage_low"
+  value {
+    reverse_dependencies: "@@//parts/specs:bazel_runner_impl_low"
+    reverse_dependencies: "@@//parts/specs:sandbox_low"
+    reverse_dependencies: "@@//parts/specs:dag_clean_logic_low"
+    reverse_dependencies: "@@//parts/specs:dag_low"
+    reverse_dependencies: "@@//parts/specs:bazel_graph_storage_low"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_low"
+  }
+}
+nodes {
+  key: "@@//parts/specs:sandbox_high"
+  value {
+    reverse_dependencies: "@@//parts/specs:sandbox_low"
+    reverse_dependencies: "@@//parts/specs:bazel_graph_storage_high"
+    reverse_dependencies: "@@//parts/specs:bazel_node_loader_high"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_high"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_impl_high"
+  }
+}
+nodes {
+  key: "@@//parts/specs:sandbox_low"
+  value {
+    reverse_dependencies: "@@//parts/specs:bazel_node_loader_low"
+    reverse_dependencies: "@@//parts/specs:bazel_graph_storage_low"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_low"
+    reverse_dependencies: "@@//parts/specs:bazel_runner_impl_low"
+  }
+}
+nodes {
+  key: "@@//parts/specs:tool_provider_high"
+  value {
+    reverse_dependencies: "@@//parts/specs:tool_provider_low"
+    reverse_dependencies: "@@//parts/specs:agent_loop_high"
+    reverse_dependencies: "@@//parts/specs:dag_clean_logic_high"
+    reverse_dependencies: "@@//parts/specs:sandbox_high"
+    reverse_dependencies: "@@//parts/specs:bazel_node_loader_high"
+  }
+}
+nodes {
+  key: "@@//parts/specs:tool_provider_low"
+  value {
+    reverse_dependencies: "@@//parts/specs:agent_loop_low"
+    reverse_dependencies: "@@//parts/specs:sandbox_low"
+    reverse_dependencies: "@@//parts/specs:dag_clean_logic_low"
+    reverse_dependencies: "@@//parts/specs:bazel_node_loader_low"
+  }
+}

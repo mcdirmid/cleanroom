@@ -11,6 +11,7 @@ Checks (E = error, exits nonzero; W = warning, does not affect exit code):
   E  dependency-comment entry that is not among the linted files or the --deps closure
   E  dependency comment references a spec that is not a `- <name>-low.md` entry (e.g. an HLS file)
   E  header not `# Interface LLS: <stem>` / `# Implementation LLS: <stem>`, or name/stem mismatch
+  E  `# Implementation LLS:` heading in a non-`_impl` file, or `# Interface LLS:` in an `_impl` file (a component whose HLS has no `fulfills:` line is an interface)
   E  unknown `##` section (closed inventory: Data Types, Component-Provided Operations,
      Invariants, Non-Concerns for interfaces; Data Types, Composition, Behavioral
      Description, Invariants, Non-Concerns for implementations; term definitions
@@ -28,19 +29,24 @@ Checks (E = error, exits nonzero; W = warning, does not affect exit code):
   E  operation documented under `### `name`` but not a method of the interface's Protocol class
   E  type name used in a code block but never defined or imported (`typing`/`dataclasses`/`enum` names included — `Protocol`, `TypeAlias`, `dataclass` must be imported, not assumed)
   E  type name redefined locally that a dependency (or another linted spec) already defines; import it from its owner's LLS
+  E  type name imported from a dependency that does not define it (invented name, or import through a re-exporting interface)
   E  generic type name `Message`/`Result`/`Status`/`Data` defined in Data Types
   E  operation heading is not `### `name``
   E  operation missing one of Purpose / Preconditions / Postconditions / HLS Justification
-  E  `### ` heading outside a Component-Provided Operations section
+  E  operation has no signature block under its `### `name`` heading (`def <name>(...)` in ```python)
+  E  `TypedDict` used in a Data Types block (records are `@dataclass` or `TypeAlias`)
+  E  `### ` heading inside any section other than Component-Provided Operations (Data Types included)
   E  implementation LLS mentions "client"
   E  imported module (non-stdlib) not listed in the dependency comment
   W  operation missing **Failure Handling:**
   W  one-word type name (use two descriptive words)
   W  type name names the representation (suffix `Key`/`Id`/`Text`/`Value`/`Data`/...) instead of the domain concept
+  W  imported name (non-stdlib) never used in code or prose
 """
 
 from __future__ import annotations
 
+import difflib
 import re
 import sys
 from pathlib import Path
@@ -179,13 +185,27 @@ def check_code_block(f: Path, code: str) -> None:
 
 
 def check_imports(f: Path, code: str, comment: list[str]) -> None:
-    """Every non-stdlib import must be listed in the dependency comment."""
+    """Every non-stdlib import must be listed in the dependency comment.
+
+    The module name in `from <module> import ...` is the comment entry's name
+    with the `-low.md` suffix removed (an import of `from tool_provider import`
+    maps to the `- tool_provider-low.md` entry). When the module is not listed,
+    suggest the closest listed module: a wrong underscore variant
+    (`tool_provider_low`) is a common mistake that leads to editing the comment
+    instead of the import.
+    """
+    listed = {e[:-7] for e in comment if e.endswith("-low.md")}
     for m in re.finditer(r"^from\s+([A-Za-z_]\w*)\s+import", code, re.M):
         mod = m.group(1)
         if mod in STDLIB_MODULES:
             continue
         if mod + "-low.md" not in comment:
-            err(f, f"imports '{mod}' but the dependency comment does not list {mod}-low.md")
+            hint = ""
+            if listed:
+                close = difflib.get_close_matches(mod, sorted(listed), n=1, cutoff=0.5)
+                if close:
+                    hint = f"; did you mean `from {close[0]} import` (the comment entry is `- {close[0]}-low.md`)?"
+            err(f, f"imports '{mod}' but the dependency comment does not list {mod}-low.md{hint}")
 
 
 def check_comment_entries(f: Path, comment: list[str], files: list[Path], deps: list[str]) -> None:
@@ -205,8 +225,15 @@ def check_header(f: Path, text: str) -> None:
     if m is None:
         err(f, f"first top-level heading must be '# Interface LLS: <name>' or '# Implementation LLS: <name>': {first[1]!r}")
         return
-    if m.group(2) != stem_of(f):
-        err(f, f"LLS heading name {m.group(2)!r} does not match filename stem {stem_of(f)!r}")
+    stem = stem_of(f)
+    if m.group(2) != stem:
+        err(f, f"LLS heading name {m.group(2)!r} does not match filename stem {stem!r}")
+    # A component whose HLS has no `fulfills:` line is an interface: its LLS
+    # is an Interface LLS. Implementation LLS files are `<name>_impl-low.md`.
+    if m.group(1) == "Implementation" and not stem.endswith("_impl"):
+        err(f, f"'# Implementation LLS: {stem}' in a non-`_impl` file: a component whose HLS has no `fulfills:` line is an interface; its LLS is '# Interface LLS: {stem}'")
+    elif m.group(1) == "Interface" and stem.endswith("_impl"):
+        err(f, f"'# Interface LLS: {stem}' in an `_impl` file: an implementation LLS is headed '# Implementation LLS: {stem}'")
 
 
 def check_aliases(f: Path, code: str) -> None:
@@ -227,6 +254,8 @@ def check_aliases(f: Path, code: str) -> None:
             continue
         if "TypeVar" in line_of(code, m.start()):
             continue
+        if m.group(1) and re.search(r"\([^)]*\bProtocol\b", line_of(code, m.start())):
+            continue  # Protocol class named after the component; two-word rule exempt
         words = COMPOUND_RE.findall(name)
         if len(words) < 2:
             warn(f, f"type name '{name}' is a single word; use two descriptive words (e.g. 'InventoryItem' rather than 'Item')")
@@ -235,7 +264,9 @@ def check_aliases(f: Path, code: str) -> None:
 
 
 def line_of(code: str, pos: int) -> str:
-    return code[:pos].rsplit("\n", 1)[-1]
+    start = code.rfind("\n", 0, pos) + 1
+    end = code.find("\n", pos)
+    return code[start:end if end != -1 else len(code)]
 
 
 def check_dataclasses(f: Path, code: str) -> None:
@@ -270,6 +301,15 @@ def check_abc(f: Path, code: str) -> None:
     """Interfaces are Protocols; abc abstract classes are prohibited."""
     if re.search(r"\babc\.[A-Za-z_]+", code) or re.search(r"^from abc import", code, re.M):
         err(f, "abc abstract classes express interfaces; use `Protocol`")
+
+
+def check_typeddict(f: Path, code: str) -> None:
+    """Records are `@dataclass` classes or `TypeAlias` aliases; `TypedDict` is
+    never used: a TypedDict cannot carry defaults, and its field shape is the
+    same structure a dataclass or a type alias expresses (guide: Data Types).
+    """
+    if re.search(r"\bTypedDict\b", code):
+        err(f, "'TypedDict' is used; records are `@dataclass` classes or `TypeAlias` aliases (a TypedDict cannot carry defaults)")
 
 
 def protocol_methods(code: str) -> set[str] | None:
@@ -358,6 +398,87 @@ def block_names(blocks: list[str]) -> tuple[set[str], set[str]]:
     return defined, imported
 
 
+def imported_pairs(blocks: list[str]) -> list[tuple[str, str]]:
+    """(module, name) pairs from `from <module> import ...` lines.
+
+    Continuation lines of a parenthesized import are consumed so every name
+    is collected exactly once.
+    """
+    pairs: list[tuple[str, str]] = []
+    for code in blocks:
+        lines = code.splitlines()
+        i = 0
+        while i < len(lines):
+            m = re.match(r"^from\s+([A-Za-z_]\w*)\s+import\s*(.*)$", lines[i])
+            if m:
+                clause = m.group(2)
+                if "(" in clause:
+                    parts = [clause]
+                    while ")" not in clause and i + 1 < len(lines):
+                        i += 1
+                        clause = lines[i]
+                        parts.append(clause)
+                    clause = " ".join(parts)
+                for n in re.finditer(r"[A-Za-z_]\w*", clause):
+                    pairs.append((m.group(1), n.group(0)))
+            i += 1
+    return pairs
+
+
+def _strip_import_statements(text: str) -> str:
+    """Return the text with `from X import ...` / `import X` statements removed.
+
+    Used to decide whether an imported name is used elsewhere (in code or in
+    prose); a mention inside the import statement itself is not a use.
+    """
+    lines = text.splitlines()
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if re.match(r"^\s*from\s+[A-Za-z_]\w*\s+import", line) or re.match(r"^\s*import\s+[A-Za-z_]", line):
+            if "(" in line and ")" not in line:
+                i += 1
+                while i < len(lines) and ")" not in lines[i]:
+                    i += 1
+            i += 1
+            continue
+        out.append(line)
+        i += 1
+    return "\n".join(out)
+
+
+def check_import_owners(f: Path, text: str, owner_names: dict[str, set[str]]) -> None:
+    """Every name imported from a dependency must be defined by that dependency.
+
+    A type is imported from its owner's LLS; importing a name the owner does
+    not define (an invented name, or a type imported through a re-exporting
+    interface) is an error. Skipped for dependencies not among the linted
+    files or the --deps closure (their definitions are unknown).
+    """
+    blocks = [code for _, _, body in parse(text) for code in python_blocks("\n".join(body))]
+    for mod, name in imported_pairs(blocks):
+        if mod in STDLIB_MODULES:
+            continue
+        owner_file = mod + "-low.md"
+        if owner_file in owner_names and name not in owner_names[owner_file]:
+            err(f, f"imports '{name}' from '{mod}', but {owner_file} does not define '{name}'; import it from its owner's LLS")
+
+
+def check_unused_imports(f: Path, text: str) -> None:
+    """A non-stdlib imported name is used somewhere: a signature, prose, or the
+    fulfilled contract. A name that appears nowhere outside the import
+    statement is a spurious import (guide: no spurious entries).
+    """
+    body = _strip_import_statements(text)
+    blocks = [code for _, _, b in parse(text) for code in python_blocks("\n".join(b))]
+    for mod, name in imported_pairs(blocks):
+        if mod in STDLIB_MODULES:
+            continue
+        if not re.search(r"\b" + re.escape(name) + r"\b", body):
+            warn(f, f"imports '{name}' from '{mod}' but never uses it in code or prose")
+
+
 def check_undefined_types(f: Path, code: str, known: set[str], owner_names: dict[str, set[str]]) -> None:
     """Every capitalized type name in a code block is defined, imported, or a builtin.
 
@@ -428,6 +549,7 @@ def check_data_types(f: Path, body: str, comment: list[str], is_impl: bool) -> N
     check_aliases(f, code)
     check_dataclasses(f, code)
     check_abc(f, code)
+    check_typeddict(f, code)
     if not is_impl:
         check_protocol_last(f, code)
 
@@ -464,6 +586,26 @@ def check_operations(f: Path, body: str) -> None:
                 err(f, f"operation '{name}' is missing its {block} block")
         if "**Failure Handling:**" not in chunk:
             warn(f, f"operation '{name}' has no **Failure Handling:** block")
+    check_operation_signatures(f, body)
+
+
+def check_operation_signatures(f: Path, body: str) -> None:
+    """Each `### `name`` heading is followed by a ```python block echoing
+    `def <name>(...)` (guide: Lint checks — the signature block is the
+    operation's contract in code form; the template shows it)."""
+    for m in re.finditer(r"^### `([^`]+)`", body, re.M):
+        name = m.group(1)
+        after = body[m.end():].lstrip("\n")
+        if not after.startswith("```python"):
+            err(f, f"operation '{name}' is missing its signature block; echo the signature as `def {name}(...) -> ...` in a ```python block directly under the heading")
+            continue
+        fence_end = after.find("```", 3)
+        if fence_end == -1:
+            err(f, f"operation '{name}' signature block is unclosed")
+            continue
+        code = after[3:fence_end]
+        if not re.search(r"def\s+" + re.escape(name) + r"\s*\(", code):
+            err(f, f"operation '{name}' signature block does not declare `def {name}(`")
 
 
 def check_sections(f: Path, parts: list[tuple[int, str, list[str]]], comment: list[str]) -> None:
@@ -490,15 +632,20 @@ def check_sections(f: Path, parts: list[tuple[int, str, list[str]]], comment: li
         dt_code = ""
         ops_body = ""
         for h, body in subs:
-            if h == "Data Types":
-                check_data_types(f, body, comment, is_impl)
-                blocks = python_blocks(body)
-                dt_code = blocks[0] if blocks else ""
-            elif h == "Component-Provided Operations":
+            if h == "Component-Provided Operations":
                 check_operations(f, body)
                 ops_body = body
-            elif h != "Component-Provided Operations" and re.search(r"^### ", body, re.M):
-                err(f, f"`### ` heading inside '## {h}'; operations live under Component-Provided Operations")
+            else:
+                # `### ` headings appear only under Component-Provided
+                # Operations: term definitions are `## <Name> (term definition)`
+                # headings between Data Types and Component-Provided Operations,
+                # never `### ` headings inside another section.
+                if re.search(r"^### ", body, re.M):
+                    err(f, f"`### ` heading inside '## {h}'; `### ` headings appear only under Component-Provided Operations")
+                if h == "Data Types":
+                    check_data_types(f, body, comment, is_impl)
+                    blocks = python_blocks(body)
+                    dt_code = blocks[0] if blocks else ""
         if not is_impl and dt_code and ops_body:
             methods = protocol_methods(dt_code)
             if methods is not None:
@@ -574,6 +721,8 @@ def main(argv: list[str]) -> int:
             if p.exists():
                 owner_names[name] = spec_defined_names(p.read_text(encoding="utf-8"))
 
+        check_import_owners(f, text, owner_names)
+        check_unused_imports(f, text)
         for code in blocks:
             check_undefined_types(f, code, known, owner_names)
         check_redefinitions(f, text, owner_names)

@@ -27,7 +27,9 @@ Usage:
   # Automatically generates:
   #   //pkg:my_node           — the node manifest
   #   //pkg:my_node_clean     — binary that runs DAG cleaning on this node
-  #   //pkg:my_node_feedback  — binary that injects feedback into dependencies
+  #   //pkg:my_node_feedback  — binary that delivers feedback to this node
+  #   //pkg:my_node_dirty     — binary that delivers a change (nudge) to this node
+  #   //pkg:my_node_change    — binary that broadcasts a change from this node
   #   //pkg:my_node_prompt    — binary that prints the node's initial agent prompt
   # Run with: bazel run //pkg:my_node_clean
   #           bazel run //pkg:my_node_prompt
@@ -172,11 +174,18 @@ def update_with_ai(
     """
     Macro to create an AI agent node with clean and feedback targets.
 
-    This macro wraps the update_with_ai rule and automatically generates two
+    This macro wraps the update_with_ai rule and automatically generates four
     sibling targets:
       - `name + "_clean"`     runs DAG cleaning on the node
       - `name + "_feedback"`  delivers CLI feedback messages to the node's own
                               pending messages, marking it dirty with feedback
+      - `name + "_dirty"`     delivers a CLI change message to the node's own
+                              pending messages, marking it dirty (a gentler
+                              nudge; the change text defaults to "check")
+      - `name + "_change"`    pretends the node was cleaned with changes:
+                              broadcasts the CLI argument (as the change part
+                              of the message) to the node's known reverse
+                              dependencies and clears the node's data
       - `name + "_prompt"`    prints the node's initial agent prompt
                               (bazel run //pkg:name_prompt)
 
@@ -187,8 +196,9 @@ def update_with_ai(
     4. Runs the cleaning pass
 
     The feedback target delivers each positional CLI argument as a feedback
-    message to the node's own pending message store, so the node becomes dirty
-    and a subsequent *_clean run processes the feedback.
+    message to the node's own pending message store, so the node becomes
+    dirty and a subsequent *_clean run processes the feedback; when cleaned,
+    a node with pending feedback must change, blame, or fail.
 
     Agent/model configuration: the *_clean target resolves an `agent_config`
     target (see update_with_ai/agent_config.bzl) in this priority order:
@@ -203,6 +213,9 @@ def update_with_ai(
     Usage:
       bazel run //pkg:node_name_clean     # runs cleaning pass on node_name
       bazel run //pkg:node_name_feedback -- "feedback message" ["more"...]
+      bazel run //pkg:node_name_dirty     # adds the change "check"
+      bazel run //pkg:node_name_dirty -- "check the new behavior"
+      bazel run //pkg:node_name_change -- "changed hello world"
       bazel run //pkg:node_name_prompt    # prints the node's initial agent prompt
 
     Args:
@@ -237,7 +250,8 @@ def update_with_ai(
         visibility: Optional visibility applied to all targets this macro
             generates — the node manifest (`name`), the clean target
             (`name + "_clean"`), the feedback target
-            (`name + "_feedback"`), and the prompt target
+            (`name + "_feedback"`), the dirty target (`name + "_dirty"`),
+            the change target (`name + "_change"`), and the prompt target
             (`name + "_prompt"`). None (default) leaves each target with
             Bazel's default (package-private) visibility. Set to
             ["//visibility:public"] (or a package list) to allow other
@@ -290,6 +304,26 @@ def update_with_ai(
     _feedback_target = name + "_feedback"
     _update_ai_node_feedback_rule(
         name = _feedback_target,
+        node = ":{}".format(name),  # the node manifest
+        **_rule_kwargs
+    )
+
+    # Create a dirty target that delivers a change message (a nudge) to the
+    # node itself, marking it dirty; when cleaned, the node may succeed
+    # without changing (the change text defaults to "check").
+    _dirty_target = name + "_dirty"
+    _update_ai_node_dirty_rule(
+        name = _dirty_target,
+        node = ":{}".format(name),  # the node manifest
+        **_rule_kwargs
+    )
+
+    # Create a change target that pretends the node was cleaned with changes:
+    # the CLI argument becomes the change part of a message broadcast to the
+    # node's known reverse dependencies, and the node's own data is cleared.
+    _change_target = name + "_change"
+    _update_ai_node_change_rule(
+        name = _change_target,
         node = ":{}".format(name),  # the node manifest
         **_rule_kwargs
     )
@@ -637,7 +671,7 @@ def _update_ai_node_feedback_impl(ctx):
     )
 
     # Return the wrapper as the executable with the manifest and lib sources
-    # from the dag runner.
+    # from the dag_cleaner runner.
     _runfiles = ctx.runfiles(
         files = [
             _wrapper_py,
@@ -655,6 +689,236 @@ def _update_ai_node_feedback_impl(ctx):
 
 _update_ai_node_feedback_rule = rule(
     implementation = _update_ai_node_feedback_impl,
+    executable = True,
+    attrs = {
+        "node": attr.label(
+            mandatory = True,
+            doc = "The node target (must produce a manifest)",
+        ),
+        "_dag_runner": attr.label(
+            default = Label("//update_with_ai/lib:bazel_runner_impl"),
+            providers = [PyInfo],
+        ),
+    },
+)
+
+# ============================================================================
+# Rule: update_ai_node_dirty (generates a dirty target per node)
+# ============================================================================
+#
+# A gentler sibling of *_feedback: the CLI argument is delivered as a
+# change-kind message to the node's own pending store (marking the node
+# dirty), so when cleaned the node may succeed without changing. With no
+# argument, the change text defaults to "check".
+
+def _update_ai_node_dirty_impl(ctx):
+    """Generates a Python binary that delivers a change message to the node itself."""
+    _node = ctx.attr.node
+    _manifest = _node[DefaultInfo].files.to_list()[0]  # _manifest.json
+    _manifest_filename = _manifest.basename  # just the filename
+
+    # Generate a Python wrapper
+    _wrapper_py = ctx.actions.declare_file(ctx.label.name + ".py")
+    _lines = [
+        "#!/usr/bin/env python3",
+        "import json",
+        "import sys",
+        "import os",
+        "",
+        "# Ensure lib is importable from runfiles",
+        "_runfiles_root = None",
+        'for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
+        '    if os.path.isdir(os.path.join(base, "lib")):',
+        "        _runfiles_root = base",
+        "        break",
+        "if not _runfiles_root:",
+        "    _runfiles_root = os.getcwd()",
+        "sys.path.insert(0, _runfiles_root)",
+        "from update_with_ai.lib.bazel_runner_impl import BazRunnerImpl",
+        "",
+        "def main():",
+        "    # The change text defaults to 'check' when no argument is given.",
+        "    change = sys.argv[1] if len(sys.argv) > 1 else 'check'",
+        "    # Determine workspace root from runfiles or cwd",
+        "    _runfiles_root = None",
+        '    for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
+        '        if os.path.isdir(os.path.join(base, "_main")):',
+        '            _runfiles_root = os.path.join(base, "_main")',
+        "            break",
+        "    workspace_root = _runfiles_root or os.getcwd()",
+        "",
+        "    # Find the manifest in runfiles",
+        "    _manifest_path = None",
+        '    manifest_name = "{}"'.format(_manifest_filename),
+        '    for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
+        "        if base:",
+        "            candidate = os.path.join(base, manifest_name)",
+        "            if os.path.isfile(candidate):",
+        "                _manifest_path = candidate",
+        "                break",
+        "",
+        "    if not _manifest_path:",
+        "        # Fallback: manifest is alongside the executable",
+        '        _script_dir = os.path.dirname(os.path.abspath(__file__)) or "."',
+        "        _manifest_path = os.path.join(_script_dir, manifest_name)",
+        "",
+        "    with open(_manifest_path) as f:",
+        "        node_label = json.load(f).get('label')",
+        "",
+        "    runner = BazRunnerImpl()",
+        "    result = runner.add_change(node_label, workspace_root, change)",
+        "    if isinstance(result, tuple):",
+        "        success, error = result",
+        "        sys.exit(0 if success else 1)",
+        "    else:",
+        "        sys.exit(0)",
+        "",
+        'if __name__ == "__main__":',
+        "    main()",
+        "",
+    ]
+    ctx.actions.write(
+        output = _wrapper_py,
+        content = "\n".join(_lines),
+        is_executable = True,
+    )
+
+    # Return the wrapper as the executable with the manifest and lib sources
+    # from the dag_cleaner runner.
+    _runfiles = ctx.runfiles(
+        files = [
+            _wrapper_py,
+            _manifest,
+        ],
+        transitive_files = ctx.attr.node[DefaultInfo].transitive_sources if hasattr(ctx.attr.node[DefaultInfo], "transitive_sources") else depset([]),
+    ).merge(ctx.runfiles(transitive_files = ctx.attr._dag_runner[PyInfo].transitive_sources))
+
+    return [
+        DefaultInfo(
+            executable = _wrapper_py,
+            runfiles = _runfiles,
+        ),
+    ]
+
+_update_ai_node_dirty_rule = rule(
+    implementation = _update_ai_node_dirty_impl,
+    executable = True,
+    attrs = {
+        "node": attr.label(
+            mandatory = True,
+            doc = "The node target (must produce a manifest)",
+        ),
+        "_dag_runner": attr.label(
+            default = Label("//update_with_ai/lib:bazel_runner_impl"),
+            providers = [PyInfo],
+        ),
+    },
+)
+
+# ============================================================================
+# Rule: update_ai_node_change (generates a change target per node)
+# ============================================================================
+#
+# Pretends the node was cleaned with changes: the CLI argument becomes the
+# change part of a message broadcast to the node's known reverse dependencies
+# (per bazel_runner's broadcast_change), and the node's own data is cleared —
+# for changes made outside of agent cleaning.
+
+def _update_ai_node_change_impl(ctx):
+    """Generates a Python binary that broadcasts a change from the node."""
+    _node = ctx.attr.node
+    _manifest = _node[DefaultInfo].files.to_list()[0]  # _manifest.json
+    _manifest_filename = _manifest.basename  # just the filename
+
+    # Generate a Python wrapper
+    _wrapper_py = ctx.actions.declare_file(ctx.label.name + ".py")
+    _lines = [
+        "#!/usr/bin/env python3",
+        "import json",
+        "import sys",
+        "import os",
+        "",
+        "# Ensure lib is importable from runfiles",
+        "_runfiles_root = None",
+        'for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
+        '    if os.path.isdir(os.path.join(base, "lib")):',
+        "        _runfiles_root = base",
+        "        break",
+        "if not _runfiles_root:",
+        "    _runfiles_root = os.getcwd()",
+        "sys.path.insert(0, _runfiles_root)",
+        "from update_with_ai.lib.bazel_runner_impl import BazRunnerImpl",
+        "",
+        "def main():",
+        "    args = sys.argv[1:]",
+        "    if not args:",
+        '        print("No change text given.", file=sys.stderr)',
+        '        print("Usage: bazel run <this target> -- \\"change text\\"", file=sys.stderr)',
+        "        sys.exit(1)",
+        "    change = args[0]",
+        "    # Determine workspace root from runfiles or cwd",
+        "    _runfiles_root = None",
+        '    for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
+        '        if os.path.isdir(os.path.join(base, "_main")):',
+        '            _runfiles_root = os.path.join(base, "_main")',
+        "            break",
+        "    workspace_root = _runfiles_root or os.getcwd()",
+        "",
+        "    # Find the manifest in runfiles",
+        "    _manifest_path = None",
+        '    manifest_name = "{}"'.format(_manifest_filename),
+        '    for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
+        "        if base:",
+        "            candidate = os.path.join(base, manifest_name)",
+        "            if os.path.isfile(candidate):",
+        "                _manifest_path = candidate",
+        "                break",
+        "",
+        "    if not _manifest_path:",
+        "        # Fallback: manifest is alongside the executable",
+        '        _script_dir = os.path.dirname(os.path.abspath(__file__)) or "."',
+        "        _manifest_path = os.path.join(_script_dir, manifest_name)",
+        "",
+        "    with open(_manifest_path) as f:",
+        "        node_label = json.load(f).get('label')",
+        "",
+        "    runner = BazRunnerImpl()",
+        "    result = runner.broadcast_change(node_label, workspace_root, change)",
+        "    if isinstance(result, tuple):",
+        "        success, error = result",
+        "        sys.exit(0 if success else 1)",
+        "    else:",
+        "        sys.exit(0)",
+        "",
+        'if __name__ == "__main__":',
+        "    main()",
+        "",
+    ]
+    ctx.actions.write(
+        output = _wrapper_py,
+        content = "\n".join(_lines),
+        is_executable = True,
+    )
+
+    # Return the wrapper as the executable with the manifest and lib sources
+    # from the dag_cleaner runner.
+    _runfiles = ctx.runfiles(
+        files = [
+            _wrapper_py,
+            _manifest,
+        ],
+        transitive_files = ctx.attr.node[DefaultInfo].transitive_sources if hasattr(ctx.attr.node[DefaultInfo], "transitive_sources") else depset([]),
+    ).merge(ctx.runfiles(transitive_files = ctx.attr._dag_runner[PyInfo].transitive_sources))
+
+    return [
+        DefaultInfo(
+            executable = _wrapper_py,
+            runfiles = _runfiles,
+        ),
+    ]
+
+_update_ai_node_change_rule = rule(
+    implementation = _update_ai_node_change_impl,
     executable = True,
     attrs = {
         "node": attr.label(

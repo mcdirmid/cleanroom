@@ -1,6 +1,6 @@
 # dag_storage
 
-terms (owned): node, message, pending message, dependency, propagating dependency, reverse dependency, subgraph
+terms (owned): node, message, message kind, pending message, dependency, propagating dependency, reverse dependency, subgraph
 
 ## Purpose
 
@@ -9,7 +9,8 @@ Provides persistent storage for messages addressed to nodes and access to graph 
 ## Terms
 
 - Node: a vertex in the graph; messages are addressed to nodes.
-- Message: a string addressed to a node.
+- Message: a string addressed to a node; every message carries a kind.
+- Message kind: the stored distinction among messages, one of two kinds — change or feedback; the kind is stored with the message and read back exactly as stored.
 - Pending message: a message delivered to a node and not cleaned since delivery.
 - Dependency: A depends on B -> A has an outgoing edge to B.
 - Propagating dependency: a dependency whose changes propagate to the depending node; retrieving a node's dependencies records the node as a reverse dependency of each of its propagating dependencies, and of no other dependency.
@@ -22,6 +23,7 @@ Provides persistent storage for messages addressed to nodes and access to graph 
 
 - Read pending messages for a node.
 - Add messages to a node's pending set.
+- Clear a node's pending messages.
 - Delete a node's data (its pending messages and its known reverse dependencies).
 - Retrieve a node's dependencies.
 - Retrieve a node's known reverse dependencies.
@@ -29,8 +31,9 @@ Provides persistent storage for messages addressed to nodes and access to graph 
 **Guarantees**
 
 - Messages and reverse dependencies persist across restarts.
-- Read, write, and delete operations are atomic per node.
-- Messages are provided exactly as stored; dependencies as declared; reverse dependencies exactly as recorded.
+- Read, write, clear, and delete operations are atomic per node.
+- Messages are provided exactly as stored, with their kinds; dependencies as declared; reverse dependencies exactly as recorded.
+- Clearing removes only the node's pending messages; its known reverse dependencies remain.
 - Retrieving a node's dependencies records the node as a reverse dependency of each of its propagating dependencies, at most once per dependency.
 
 **Assumptions**

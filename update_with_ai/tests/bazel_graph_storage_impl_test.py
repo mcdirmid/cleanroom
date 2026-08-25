@@ -32,10 +32,16 @@ from update_with_ai.lib.bazel_graph_storage_impl import (
     BaseBazelGraphStorageImpl,
     BazelGraphStorageFileImpl,
 )
-from update_with_ai.lib.dag_storage import NodeMessage, PendingMessages
+from update_with_ai.lib.dag_storage import NodeMessage, MessageKind, PendingMessages
 from update_with_ai.lib.sandbox import SandboxConfig
+from typing import cast
 
-HARNESS_FILE = ".update_with_ai.json"
+HARNESS_FILE = ".update_with_ai.textproto"
+
+
+def msg(text: str, kind: str = "change") -> NodeMessage:
+    """Test helper: build a NodeMessage (per dag_storage-low.md)."""
+    return NodeMessage(kind=cast(MessageKind, kind), text=text)
 
 
 def _make_definition(prompt: str) -> NodeDefinition:
@@ -272,37 +278,51 @@ class TestMessageFileOperations(unittest.TestCase):
     # -- get_pending_messages ------------------------------------------------
 
     def test_get_pending_messages_missing_file_returns_empty(self):
-        """LLS: a missing .update_with_ai.json reads as empty and is not created."""
+        """LLS: a missing .update_with_ai.textproto reads as empty and is not created."""
         self.assertEqual(self.graph.get_pending_messages("node_a"), [])
         self.assertFalse(os.path.exists(self.harness_file("node_a")))
 
     def test_get_pending_messages_missing_node_entry_returns_empty(self):
         """LLS: an absent node entry reads as an empty list."""
-        self.graph.add_messages("other", ["msg"])
+        self.graph.add_messages("other", [msg("msg")])
         self.assertEqual(self.graph.get_pending_messages("node_a"), [])
 
     def test_get_pending_messages_returns_stored_messages(self):
-        """LLS: returns the node's pending messages exactly as stored."""
-        self.graph.add_messages("node_a", ["msg1", "msg2"])
+        """LLS: returns the node's pending messages (with their kinds) exactly
+        as stored."""
+        self.graph.add_messages("node_a", [msg("msg1"), msg("msg2")])
         self.assertEqual(
-            self.graph.get_pending_messages("node_a"), ["msg1", "msg2"]
+            self.graph.get_pending_messages("node_a"), [msg("msg1"), msg("msg2")]
+        )
+
+    def test_get_pending_messages_returns_stored_kinds(self):
+        """LLS: the message kind is persisted with the message and read back
+        exactly as stored."""
+        self.graph.add_messages(
+            "node_a",
+            [msg("a dependency changed"), msg("fix your output", "feedback")],
+        )
+        self.assertEqual(
+            self.graph.get_pending_messages("node_a"),
+            [msg("a dependency changed"), msg("fix your output", "feedback")],
         )
 
     # -- add_messages --------------------------------------------------------
 
     def test_add_messages_appends_to_pending_set_and_persists(self):
         """LLS: add_messages appends to the node's pending set and persists."""
-        self.graph.add_messages("node_a", ["msg1"])
-        self.graph.add_messages("node_a", ["msg2", "msg3"])
+        self.graph.add_messages("node_a", [msg("msg1")])
+        self.graph.add_messages("node_a", [msg("msg2"), msg("msg3")])
 
         self.assertEqual(
-            self.graph.get_pending_messages("node_a"), ["msg1", "msg2", "msg3"]
+            self.graph.get_pending_messages("node_a"),
+            [msg("msg1"), msg("msg2"), msg("msg3")],
         )
         self.assertTrue(os.path.isfile(self.harness_file("node_a")))
 
     def test_add_messages_visible_to_new_store_instance(self):
         """LLS: a new store instance reading the same directory sees the messages."""
-        self.graph.add_messages("node_a", ["msg1"])
+        self.graph.add_messages("node_a", [msg("msg1")])
 
         fresh = _MockGraphStorageImpl(
             adjacency={"node_a": [], "node_b": []},
@@ -310,14 +330,40 @@ class TestMessageFileOperations(unittest.TestCase):
             package_dirs={"node_a": self.pkg_a, "node_b": self.pkg_b},
         )
 
-        self.assertEqual(fresh.get_pending_messages("node_a"), ["msg1"])
+        self.assertEqual(fresh.get_pending_messages("node_a"), [msg("msg1")])
+
+    # -- clear_pending_messages ----------------------------------------------
+
+    def test_clear_pending_messages_removes_messages_keeps_reverse_dependencies(self):
+        """LLS: clear_pending_messages removes only the node's pending
+        messages; its known reverse dependencies remain."""
+        self.graph.add_messages("node_a", [msg("msg1"), msg("msg2")])
+        # node_b depends on node_a; resolving node_b's dependencies records
+        # node_b as a known reverse dependency of node_a.
+        self.graph.get_node_dependencies("node_b")
+        self.assertEqual(
+            self.graph.get_known_reverse_dependencies("node_a"), ["node_b"]
+        )
+
+        self.graph.clear_pending_messages("node_a")
+
+        self.assertEqual(self.graph.get_pending_messages("node_a"), [])
+        self.assertEqual(
+            self.graph.get_known_reverse_dependencies("node_a"), ["node_b"]
+        )
+
+    def test_clear_pending_messages_node_with_no_entry_is_unchanged(self):
+        """LLS: clearing a node with no entry (or no pending messages) writes
+        nothing: the message file is not created or modified."""
+        self.graph.clear_pending_messages("node_a")
+        self.assertFalse(os.path.exists(self.harness_file("node_a")))
 
     # -- delete_node_data -----------------------------------------------------
 
     def test_delete_node_data_removes_messages_and_reverse_dependencies(self):
         """LLS: delete_node_data deletes the node's data — both its pending
         messages and its known reverse dependencies."""
-        self.graph.add_messages("node_a", ["msg1", "msg2"])
+        self.graph.add_messages("node_a", [msg("msg1"), msg("msg2")])
         # node_b depends on node_a; resolving node_b's dependencies records
         # node_b as a known reverse dependency of node_a.
         self.graph.get_node_dependencies("node_b")
@@ -332,19 +378,19 @@ class TestMessageFileOperations(unittest.TestCase):
 
     def test_delete_node_data_leaves_other_nodes_untouched(self):
         """LLS: deleting one node's entry leaves other nodes' entries intact."""
-        self.graph.add_messages("node_a", ["a"])
-        self.graph.add_messages("node_b", ["b"])
+        self.graph.add_messages("node_a", [msg("a")])
+        self.graph.add_messages("node_b", [msg("b")])
 
         self.graph.delete_node_data("node_a")
 
         self.assertEqual(self.graph.get_pending_messages("node_a"), [])
-        self.assertEqual(self.graph.get_pending_messages("node_b"), ["b"])
+        self.assertEqual(self.graph.get_pending_messages("node_b"), [msg("b")])
 
     # -- file naming and layout ---------------------------------------------
 
-    def test_harness_file_is_update_with_ai_json_in_package_dir(self):
-        """LLS: a single JSON file named .update_with_ai.json in the node.s package directory."""
-        self.graph.add_messages("node_a", ["msg"])
+    def test_harness_file_is_update_with_ai_textproto_in_package_dir(self):
+        """LLS: a single file named .update_with_ai.textproto in the node's package directory."""
+        self.graph.add_messages("node_a", [msg("msg")])
 
         messages_file = self.harness_file("node_a")
         self.assertEqual(os.path.dirname(messages_file), self.pkg_a)
@@ -352,7 +398,7 @@ class TestMessageFileOperations(unittest.TestCase):
         self.assertTrue(os.path.isfile(messages_file))
 
     def test_single_messages_file_per_package_directory(self):
-        """LLS: one .update_with_ai.json per package directory holds all nodes in it."""
+        """LLS: one .update_with_ai.textproto per package directory holds all nodes in it."""
         shared = _make_pkg_dir(self._tmp_root, "shared_pkg")
         graph = _MockGraphStorageImpl(
             adjacency={"node_a": [], "node_b": []},
@@ -360,16 +406,16 @@ class TestMessageFileOperations(unittest.TestCase):
             package_dirs={"node_a": shared, "node_b": shared},
         )
 
-        graph.add_messages("node_a", ["a"])
-        graph.add_messages("node_b", ["b"])
+        graph.add_messages("node_a", [msg("a")])
+        graph.add_messages("node_b", [msg("b")])
 
-        self.assertEqual(graph.get_pending_messages("node_a"), ["a"])
-        self.assertEqual(graph.get_pending_messages("node_b"), ["b"])
+        self.assertEqual(graph.get_pending_messages("node_a"), [msg("a")])
+        self.assertEqual(graph.get_pending_messages("node_b"), [msg("b")])
 
     def test_different_packages_have_separate_message_files(self):
-        """LLS: each package directory holds its own .update_with_ai.json."""
-        self.graph.add_messages("node_a", ["a"])
-        self.graph.add_messages("node_b", ["b"])
+        """LLS: each package directory holds its own .update_with_ai.textproto."""
+        self.graph.add_messages("node_a", [msg("a")])
+        self.graph.add_messages("node_b", [msg("b")])
 
         self.assertNotEqual(self.pkg_a, self.pkg_b)
         self.assertEqual(
@@ -379,10 +425,23 @@ class TestMessageFileOperations(unittest.TestCase):
             len(list(Path(self.pkg_b).glob(HARNESS_FILE))), 1
         )
 
+    def test_message_file_is_protobuf_text_format(self):
+        """LLS: the message file content is the update_with_ai message in the
+        protobuf text format (nodes/key/value, quoted strings)."""
+        self.graph.add_messages("node_a", [msg("hello world")])
+
+        with open(self.harness_file("node_a")) as f:
+            content = f.read()
+        self.assertIn("nodes {", content)
+        self.assertIn('key: "node_a"', content)
+        self.assertIn("messages {", content)
+        self.assertIn('kind: "change"', content)
+        self.assertIn('text: "hello world"', content)
+
     # -- atomic writes -------------------------------------------------------
 
     def test_write_uses_temp_file_and_atomic_replace(self):
-        """LLS: writes go to a temporary file, then atomically replaced onto .update_with_ai.json."""
+        """LLS: writes go to a temporary file, then atomically replaced onto .update_with_ai.textproto."""
         messages_file = self.harness_file("node_a")
         calls: List[tuple] = []
         real_replace = os.replace
@@ -394,7 +453,7 @@ class TestMessageFileOperations(unittest.TestCase):
         with mock.patch(
             "update_with_ai.lib.bazel_graph_storage_impl.os.replace", side_effect=_recording_replace
         ):
-            self.graph.add_messages("node_a", ["msg"])
+            self.graph.add_messages("node_a", [msg("msg")])
 
         self.assertEqual(len(calls), 1)
         src, dst = calls[0]
@@ -404,61 +463,62 @@ class TestMessageFileOperations(unittest.TestCase):
 
     def test_write_failure_before_replace_leaves_previous_file_unchanged(self):
         """LLS: a failed replace leaves the previous message file unchanged."""
-        self.graph.add_messages("node_a", ["old"])
+        self.graph.add_messages("node_a", [msg("old")])
 
         with mock.patch(
             "update_with_ai.lib.bazel_graph_storage_impl.os.replace",
             side_effect=OSError("replace failed"),
         ):
             with self.assertRaises(OSError):
-                self.graph.add_messages("node_a", ["new"])
+                self.graph.add_messages("node_a", [msg("new")])
 
-        self.assertEqual(self.graph.get_pending_messages("node_a"), ["old"])
+        self.assertEqual(self.graph.get_pending_messages("node_a"), [msg("old")])
 
     @unittest.skipIf(os.geteuid() == 0, "root bypasses directory write permissions")
     def test_write_failure_read_only_dir_leaves_file_unchanged(self):
         """LLS: a failure before replacement (unwritable dir) leaves the file unchanged."""
-        self.graph.add_messages("node_a", ["old"])
+        self.graph.add_messages("node_a", [msg("old")])
         os.chmod(self.pkg_a, 0o500)
         try:
             with self.assertRaises(OSError):
-                self.graph.add_messages("node_a", ["new"])
+                self.graph.add_messages("node_a", [msg("new")])
         finally:
             os.chmod(self.pkg_a, 0o700)
 
-        self.assertEqual(self.graph.get_pending_messages("node_a"), ["old"])
+        self.assertEqual(self.graph.get_pending_messages("node_a"), [msg("old")])
 
     # -- persistence / no in-memory state -----------------------------------
 
     def test_no_in_memory_state_reads_reflect_file(self):
         """LLS: the message file is the sole state; another instance's writes are visible."""
-        self.graph.add_messages("node_a", ["m1"])
+        self.graph.add_messages("node_a", [msg("m1")])
 
         other = _MockGraphStorageImpl(
             adjacency={"node_a": [], "node_b": []},
             definitions={},
             package_dirs={"node_a": self.pkg_a, "node_b": self.pkg_b},
         )
-        other.add_messages("node_a", ["m2"])
+        other.add_messages("node_a", [msg("m2")])
 
         self.assertEqual(
-            self.graph.get_pending_messages("node_a"), ["m1", "m2"]
+            self.graph.get_pending_messages("node_a"), [msg("m1"), msg("m2")]
         )
 
     def test_messages_persist_across_component_restarts(self):
-        """LLS: messages persist across component restarts (JSON file on disk)."""
-        self.graph.add_messages("node_a", ["m1", "m2"])
+        """LLS: messages persist across component restarts (message file on disk)."""
+        self.graph.add_messages("node_a", [msg("m1"), msg("m2")])
 
         restarted = _MockGraphStorageImpl(
             adjacency={"node_a": [], "node_b": []},
             definitions={},
             package_dirs={"node_a": self.pkg_a, "node_b": self.pkg_b},
         )
-        self.assertEqual(restarted.get_pending_messages("node_a"), ["m1", "m2"])
+        self.assertEqual(restarted.get_pending_messages("node_a"), [msg("m1"), msg("m2")])
 
-        restarted.add_messages("node_a", ["m3"])
+        restarted.add_messages("node_a", [msg("m3")])
         self.assertEqual(
-            self.graph.get_pending_messages("node_a"), ["m1", "m2", "m3"]
+            self.graph.get_pending_messages("node_a"),
+            [msg("m1"), msg("m2"), msg("m3")],
         )
 
 

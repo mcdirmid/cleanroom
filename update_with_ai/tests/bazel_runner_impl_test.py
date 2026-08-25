@@ -2,11 +2,11 @@
 Tests for lib/bazel_runner_impl.py (BazRunnerImpl).
 
 Asserts the behavioral contract from specs/bazel_runner_impl-low.md and its
-dependencies (bazel_runner-low.md, dag-low.md, dag_storage-low.md,
+dependencies (bazel_runner-low.md, dag_cleaner-low.md, dag_storage-low.md,
 dag_clean_logic-low.md, agent_loop-low.md):
 
 - inject_feedback returns (True, NoChangeResult()) on success and stores the
-  messages in the node's pending message store (.update_with_ai.json in the package
+  messages in the node's pending message store (.update_with_ai.textproto in the package
   directory); returns (False, FailureResult()) for a nonexistent node without
   mutating any state.
 - inject_feedback builds its own graph per call, and run_dag builds its own
@@ -49,15 +49,27 @@ from update_with_ai.lib.bazel_agent_config_impl import BazelAgentConfigImpl
 from update_with_ai.lib.bazel_agent_config import AgentConfig
 from update_with_ai.lib.bazel_graph_storage import GraphConfig
 from update_with_ai.lib.bazel_graph_storage_impl import BazelGraphStorageFileImpl
-from update_with_ai.lib.agent_loop import AgentLoopConfig
+from update_with_ai.lib.agent_loop_impl import AgentLoopConfig
 from update_with_ai.lib.dag_clean_logic import NoChangeResult, FailureResult
+from update_with_ai.lib.dag_storage import NodeMessage, MessageKind
 from update_with_ai.lib.tool_provider import ToolResult, TerminateAgentWithSuccess
+from typing import cast
+
+
+def msg(text: str, kind: str = "change") -> NodeMessage:
+    """Test helper: build a NodeMessage (per dag_storage-low.md)."""
+    return NodeMessage(kind=cast(MessageKind, kind), text=text)
 
 NODE_LABEL = "//tests/example:sample_node_1"
 UNKNOWN_LABEL = "//nope:missing"
 
 
-def _write_manifest(pkg_dir: Path, label: str, src: Optional[str] = None) -> None:
+def _write_manifest(
+    pkg_dir: Path,
+    label: str,
+    src: Optional[str] = None,
+    deps: Optional[List[str]] = None,
+) -> None:
     """Write a minimal node manifest to pkg_dir (current manifest format)."""
     pkg_dir.mkdir(parents=True, exist_ok=True)
     name = label.split(":")[-1]
@@ -66,7 +78,7 @@ def _write_manifest(pkg_dir: Path, label: str, src: Optional[str] = None) -> Non
         "name": name,
         "prompt": "test prompt",
         "tools": [],
-        "deps": [],
+        "deps": deps or [],
         "silent_deps": [],
         "src": src or "",
         "template": None,
@@ -83,11 +95,17 @@ def _storage(workspace_root: str) -> BazelGraphStorageFileImpl:
 
 
 def _seed_pending(workspace_root: str, label: str, messages: List[str]) -> None:
-    """Mark a node dirty by adding pending messages through the dag_storage API."""
-    _storage(workspace_root).add_messages(label, messages)
+    """Mark a node dirty by adding pending messages through the dag_storage API.
+
+    Seeded messages are change-kind: they dirty the node without obligating it
+    to change (the gentler kind; feedback seeding is explicit where needed)."""
+    _storage(workspace_root).add_messages(
+        label,
+        [NodeMessage(kind="change", text=m) for m in messages],
+    )
 
 
-def _read_pending(workspace_root: str, label: str) -> List[str]:
+def _read_pending(workspace_root: str, label: str) -> List[NodeMessage]:
     """Read a node's pending messages through the dag_storage API."""
     return _storage(workspace_root).get_pending_messages(label)
 
@@ -135,6 +153,7 @@ def _patch_agent_config() -> Any:
                 max_iterations=10,
                 temperature=0.0,
                 timeout=60.0,
+                max_tokens=None,
                 session_start_reads=True,
             )
         ),
@@ -357,7 +376,7 @@ class TestInjectFeedback(unittest.TestCase):
         _write_manifest(self._root / "tests" / "example", NODE_LABEL)
 
     def test_delivers_feedback_to_node_itself(self) -> None:
-        """Messages are stored in the node's pending message store (.update_with_ai.json)."""
+        """Messages are stored in the node's pending message store (.update_with_ai.textproto)."""
         self._write_workspace()
         with _patch_env():
             success, result = self._runner.inject_feedback(
@@ -366,9 +385,12 @@ class TestInjectFeedback(unittest.TestCase):
         self.assertTrue(success)
         self.assertIsInstance(result, NoChangeResult)
 
-        # The feedback landed in the node's pending message store (via the API).
+        # The feedback landed in the node's pending message store (via the API),
+        # as a feedback-kind message (when cleaned, the node must change,
+        # blame, or fail).
         self.assertEqual(
-            _read_pending(self._tmp, NODE_LABEL), ["my feedback to sample_node_1"]
+            _read_pending(self._tmp, NODE_LABEL),
+            [msg("my feedback to sample_node_1", "feedback")],
         )
 
     def test_multiple_messages_preserved_in_order(self) -> None:
@@ -381,7 +403,10 @@ class TestInjectFeedback(unittest.TestCase):
         self.assertTrue(success)
         self.assertIsInstance(result, NoChangeResult)
 
-        self.assertEqual(_read_pending(self._tmp, NODE_LABEL), ["first", "second"])
+        self.assertEqual(
+            _read_pending(self._tmp, NODE_LABEL),
+            [msg("first", "feedback"), msg("second", "feedback")],
+        )
 
     def test_unknown_node_fails_without_mutating_state(self) -> None:
         """A nonexistent node returns (False, FailureResult()) and changes nothing."""
@@ -396,8 +421,8 @@ class TestInjectFeedback(unittest.TestCase):
         self.assertIsInstance(result, FailureResult)
         # No state was mutated: the node's pending messages are unchanged and
         # no new message state appeared anywhere in the workspace.
-        self.assertEqual(_read_pending(self._tmp, NODE_LABEL), ["pre-existing"])
-        self.assertEqual(len(list(self._root.rglob(".update_with_ai.json"))), 1)
+        self.assertEqual(_read_pending(self._tmp, NODE_LABEL), [msg("pre-existing")])
+        self.assertEqual(len(list(self._root.rglob(".update_with_ai.textproto"))), 1)
 
     def test_constructs_own_graph_no_shared_state_with_run_dag(self) -> None:
         """
@@ -451,6 +476,112 @@ class TestInjectFeedback(unittest.TestCase):
         # pending messages were consumed (no longer pending).
         self.assertEqual(_StubAgentLoop.instances[0].run_count, 1)
         self.assertEqual(_read_pending(self._tmp, NODE_LABEL), [])
+
+
+class TestAddChange(unittest.TestCase):
+    """BazRunnerImpl.add_change (_dirty) per bazel_runner-low.md / _impl-low.md."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.mkdtemp(prefix="cleanroom_addchange_test_")
+        self._root = Path(self._tmp)
+        self._runner = BazRunnerImpl()
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
+    def _write_workspace(self) -> None:
+        _write_manifest(self._root / "tests" / "example", NODE_LABEL)
+
+    def test_add_change_stores_change_kind_message(self) -> None:
+        """add_change adds a change-kind message (marking the node dirty);
+        the node may succeed without changing when cleaned."""
+        self._write_workspace()
+        success, result = self._runner.add_change(NODE_LABEL, self._tmp, "check the behavior")
+        self.assertTrue(success)
+        self.assertIsInstance(result, NoChangeResult)
+        self.assertEqual(
+            _read_pending(self._tmp, NODE_LABEL), [msg("check the behavior")]
+        )
+
+    def test_add_change_defaults_to_check(self) -> None:
+        """With no change text, the change message defaults to `check`."""
+        self._write_workspace()
+        success, result = self._runner.add_change(NODE_LABEL, self._tmp)
+        self.assertTrue(success)
+        self.assertIsInstance(result, NoChangeResult)
+        self.assertEqual(_read_pending(self._tmp, NODE_LABEL), [msg("check")])
+
+    def test_add_change_unknown_node_fails_without_mutating_state(self) -> None:
+        """A nonexistent node returns (False, FailureResult()) and changes nothing."""
+        self._write_workspace()
+        _seed_pending(self._tmp, NODE_LABEL, ["pre-existing"])
+        success, result = self._runner.add_change(UNKNOWN_LABEL, self._tmp, "hi")
+        self.assertFalse(success)
+        self.assertIsInstance(result, FailureResult)
+        self.assertEqual(_read_pending(self._tmp, NODE_LABEL), [msg("pre-existing")])
+
+
+class TestBroadcastChange(unittest.TestCase):
+    """BazRunnerImpl.broadcast_change (_change) per bazel_runner-low.md / _impl-low.md."""
+
+    DEP_LABEL = "//tests/example:consumer"
+    TARGET_SRC = "target.py"
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.mkdtemp(prefix="cleanroom_broadcast_test_")
+        self._root = Path(self._tmp)
+        self._runner = BazRunnerImpl()
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
+    def _write_workspace(self) -> None:
+        _write_manifest(self._root / "tests" / "example", NODE_LABEL, src=self.TARGET_SRC)
+        _write_manifest(
+            self._root / "tests" / "consumer",
+            self.DEP_LABEL,
+            deps=[NODE_LABEL],
+        )
+
+    def _record_reverse_dependency(self) -> None:
+        """Resolve the dependent's dependencies so it is recorded as a known
+        reverse dependency of the target (per dag_storage)."""
+        _storage(str(self._root)).get_node_dependencies(self.DEP_LABEL)
+
+    def test_broadcast_change_delivers_to_reverse_dependencies_and_clears(self) -> None:
+        """broadcast_change pretends the node was cleaned with changes: a
+        change message `<src>: <change>` is delivered to each known reverse
+        dependency, and the target's pending messages and known reverse
+        dependencies are cleared."""
+        self._write_workspace()
+        # The dependent depends on the target (its manifest deps).
+        self._record_reverse_dependency()
+
+        success, result = self._runner.broadcast_change(NODE_LABEL, self._tmp, "changed hello world")
+        self.assertTrue(success)
+        self.assertIsInstance(result, NoChangeResult)
+
+        # The reverse dependency received "<src>: <change text>".
+        self.assertEqual(
+            _read_pending(self._tmp, self.DEP_LABEL),
+            [msg("target.py: changed hello world")],
+        )
+        # The target's own data was cleared (messages + reverse deps).
+        self.assertEqual(_read_pending(self._tmp, NODE_LABEL), [])
+        self.assertEqual(
+            _storage(str(self._root)).get_known_reverse_dependencies(NODE_LABEL),
+            [],
+        )
+
+    def test_broadcast_change_unknown_node_fails_without_mutating_state(self) -> None:
+        """A nonexistent node returns (False, FailureResult()) and changes nothing."""
+        self._write_workspace()
+        self._record_reverse_dependency()
+        success, result = self._runner.broadcast_change(UNKNOWN_LABEL, self._tmp, "hi")
+        self.assertFalse(success)
+        self.assertIsInstance(result, FailureResult)
+        # No message state appeared anywhere in the workspace.
+        self.assertEqual(len(list(self._root.rglob(".update_with_ai.textproto"))), 1)
 
 
 class TestRunDag(unittest.TestCase):
@@ -583,7 +714,7 @@ class TestRunDag(unittest.TestCase):
         base.mkdir()
         # Mirror the package directory under the base: the graph maps package
         # directories onto the BUILD_WORKSPACE_DIRECTORY tree (the "real
-        # source root"), where the message store reads/writes .update_with_ai.json.
+        # source root"), where the message store reads/writes .update_with_ai.textproto.
         (base / "tests" / "example").mkdir(parents=True)
         self._write_workspace()
 
@@ -676,6 +807,7 @@ class TestRunDag(unittest.TestCase):
                 max_iterations=5,
                 temperature=0.4,
                 timeout=30.0,
+                max_tokens=None,
                 session_start_reads=True,
             )
 

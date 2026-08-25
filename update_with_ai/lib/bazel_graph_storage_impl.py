@@ -6,7 +6,7 @@ storage with per-package message files.
 """
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 import json
 import os
 import subprocess
@@ -22,6 +22,7 @@ from .bazel_graph_storage import (
 )
 from .dag_storage import (
     NodeMessage,
+    MessageKind,
     PendingMessages,
     NodeDependencies,
     KnownReverseDependencies,
@@ -39,9 +40,204 @@ from .sandbox import (
 # bazel_graph_storage-low.md); the Config alias names it per the implementation spec.
 Config = GraphConfig
 
-# The per-package data file (pinned by the implementation LLS): maps node IDs
-# to entries holding the node's pending messages and known reverse dependencies.
-HARNESS_FILE = ".update_with_ai.json"
+# The per-package data file (pinned by the implementation LLS): a protobuf
+# text-format file named .update_with_ai.textproto, serialized from the
+# `update_with_ai` message type defined by the update_with_ai.proto schema.
+# The file maps node IDs to entries holding the node's pending messages
+# (each with its kind and text) and known reverse dependencies.
+HARNESS_FILE = ".update_with_ai.textproto"
+
+
+def _proto_quote(s: str) -> str:
+    """Quote a string as a protobuf text-format string literal."""
+    out = ['"']
+    for ch in s:
+        code = ord(ch)
+        if ch == "\\":
+            out.append("\\\\")
+        elif ch == '"':
+            out.append('\\"')
+        elif ch == "\n":
+            out.append("\\n")
+        elif ch == "\r":
+            out.append("\\r")
+        elif ch == "\t":
+            out.append("\\t")
+        elif code < 0x20 or code == 0x7F:
+            out.append("\\x{:02x}".format(code))
+        else:
+            out.append(ch)
+    out.append('"')
+    return "".join(out)
+
+
+def _proto_unquote(token: str) -> str:
+    """Unquote a protobuf text-format string literal token (including its quotes)."""
+    body = token[1:-1]
+    out: List[str] = []
+    i = 0
+    while i < len(body):
+        ch = body[i]
+        if ch != "\\":
+            out.append(ch)
+            i += 1
+            continue
+        i += 1
+        if i >= len(body):
+            break
+        esc = body[i]
+        i += 1
+        simple = {
+            "n": "\n", "r": "\r", "t": "\t", "a": "\a", "b": "\b",
+            "f": "\f", "v": "\v", "\\": "\\", "'": "'", '"': '"', "?": "?",
+        }
+        if esc in simple:
+            out.append(simple[esc])
+        elif esc == "x":
+            hex_digits = body[i:i + 2]
+            out.append(chr(int(hex_digits, 16)))
+            i += 2
+        elif esc.isdigit():
+            oct_digits = body[i:i + 3]
+            out.append(chr(int(oct_digits, 8)))
+            i += 3
+        else:
+            out.append(esc)
+    return "".join(out)
+
+
+def _tokenize_textproto(text: str) -> List[str]:
+    """Tokenize protobuf text format: strings, bare keys, braces, colons."""
+    tokens: List[str] = []
+    i = 0
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        if ch.isspace():
+            i += 1
+            continue
+        if ch == "#":
+            # Comment: skip to end of line.
+            while i < n and text[i] != "\n":
+                i += 1
+            continue
+        if ch == '"' or ch == "'":
+            j = i + 1
+            while j < n:
+                if text[j] == "\\":
+                    j += 2
+                    continue
+                if text[j] == ch:
+                    break
+                j += 1
+            tokens.append(text[i:j + 1])
+            i = j + 1
+            continue
+        if ch in "{}:":
+            tokens.append(ch)
+            i += 1
+            continue
+        # Bare token: up to whitespace, brace, colon, or quote.
+        j = i
+        while j < n and not text[j].isspace() and text[j] not in "{}:\"'":
+            j += 1
+        tokens.append(text[i:j])
+        i = j
+    return tokens
+
+
+def _parse_textproto(text: str) -> Dict[str, Any]:
+    """Parse the protobuf text format into nested dicts.
+
+    The parser handles the grammar used by the update_with_ai.proto schema:
+    message fields (name { ... }), scalar string fields (name: "..." or
+    name: '...'), and repeated fields. Every field's occurrences are kept in
+    a list; a field that never occurs is absent.
+    """
+    tokens = _tokenize_textproto(text)
+
+    def parse_message(start: int) -> Tuple[Dict[str, Any], int]:
+        result: Dict[str, Any] = {}
+        i = start
+        while i < len(tokens):
+            tok = tokens[i]
+            if tok == "}":
+                return result, i + 1
+            name = tok
+            i += 1
+            if i >= len(tokens):
+                return result, i
+            if tokens[i] == ":":
+                i += 1
+                if i >= len(tokens):
+                    return result, i
+                value = tokens[i]
+                i += 1
+                if value == "{":
+                    sub, i = parse_message(i)
+                    result.setdefault(name, []).append(sub)
+                else:
+                    result.setdefault(name, []).append(_proto_unquote(value))
+            else:
+                # Message-typed field with the implicit colon omitted:
+                # "name { ... }".
+                if tokens[i] == "{":
+                    i += 1
+                    sub, i = parse_message(i)
+                    result.setdefault(name, []).append(sub)
+                else:
+                    result.setdefault(name, []).append(tok)
+        return result, i
+
+    parsed, _ = parse_message(0)
+    return parsed
+
+
+def _serialize_textproto(data: Dict[str, Any]) -> str:
+    """Serialize the in-memory node map to the protobuf text format.
+
+    The output matches the update_with_ai.proto schema: a repeated `nodes`
+    map field whose entries are `key` (the node ID) and `value` (a NodeEntry
+    with repeated `messages` and repeated `reverse_dependencies`).
+    """
+    lines: List[str] = []
+    for node_id in sorted(data):
+        entry = data[node_id]
+        lines.append("nodes {")
+        lines.append("  key: {}".format(_proto_quote(node_id)))
+        lines.append("  value {")
+        for message in entry.get("messages", []):
+            lines.append("    messages {")
+            lines.append("      kind: {}".format(_proto_quote(message["kind"])))
+            lines.append("      text: {}".format(_proto_quote(message["text"])))
+            lines.append("    }")
+        for dep in entry.get("reverse_dependencies", []):
+            lines.append("    reverse_dependencies: {}".format(_proto_quote(dep)))
+        lines.append("  }")
+        lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
+def _decode_nodes(parsed: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert the parsed top-level `nodes` map into the node-ID-keyed map."""
+    data: Dict[str, Any] = {}
+    for entry in parsed.get("nodes", []):
+        keys = entry.get("key", [])
+        values = entry.get("value", [])
+        if not keys or not values:
+            continue
+        node_id = keys[0]
+        value = values[0]
+        messages: List[Dict[str, str]] = []
+        for message in value.get("messages", []):
+            kind = (message.get("kind") or ["change"])[0]
+            text = (message.get("text") or [""])[0]
+            messages.append({"kind": kind, "text": text})
+        data[node_id] = {
+            "messages": messages,
+            "reverse_dependencies": list(value.get("reverse_dependencies", [])),
+        }
+    return data
 
 
 class BaseBazelGraphStorageImpl(BazelGraphStorage):
@@ -202,7 +398,7 @@ class BaseBazelGraphStorageImpl(BazelGraphStorage):
 
         Preconditions:
         - node_id is a valid Bazel target label
-        - messages are valid strings
+        - messages are valid messages
 
         Postconditions:
         - All messages are added atomically to the node's pending set
@@ -213,6 +409,26 @@ class BaseBazelGraphStorageImpl(BazelGraphStorage):
         pkg_dir = self.resolve_package_directory(node_id)
         harness_file = os.path.join(pkg_dir, HARNESS_FILE)
         self._add_messages(harness_file, node_id, messages)
+
+    def clear_pending_messages(self, node_id: NodeId) -> None:
+        """
+        Clear a node's pending messages, leaving its known reverse dependencies.
+
+        Operation Implemented: dag_storage.clear_pending_messages
+
+        Preconditions:
+        - node_id is a valid Bazel target label
+
+        Postconditions:
+        - The node's pending messages are removed atomically; the node's
+          known reverse dependencies remain
+
+        Failure Handling:
+        - If node_id does not exist, behavior is undefined.
+        """
+        pkg_dir = self.resolve_package_directory(node_id)
+        harness_file = os.path.join(pkg_dir, HARNESS_FILE)
+        self._clear_pending_messages(harness_file, node_id)
 
     def delete_node_data(self, node_id: NodeId) -> None:
         """
@@ -294,13 +510,13 @@ class BaseBazelGraphStorageImpl(BazelGraphStorage):
         if not os.path.exists(path):
             return {}
         with open(path, "r") as f:
-            return json.load(f)
+            return _decode_nodes(_parse_textproto(f.read()))
 
     def _persist_harness_file(self, path: str, data: Dict[str, Any]) -> None:
-        """Write the messages file atomically."""
+        """Write the messages file atomically in the protobuf text format."""
         tmp_path = path + ".tmp"
         with open(tmp_path, "w") as f:
-            json.dump(data, f)
+            f.write(_serialize_textproto(data))
         os.replace(tmp_path, path)
 
     def _entry(self, data: Dict[str, Any], node_id: NodeId) -> Dict[str, Any]:
@@ -317,13 +533,38 @@ class BaseBazelGraphStorageImpl(BazelGraphStorage):
         entry = data.get(node_id)
         if entry is None:
             return []
-        return list(entry.get("messages", []))
+        return [
+            NodeMessage(
+                kind=cast(MessageKind, m.get("kind", "change")),
+                text=m.get("text", ""),
+            )
+            for m in entry.get("messages", [])
+        ]
 
     def _add_messages(self, harness_file: str, node_id: NodeId, messages: List[NodeMessage]) -> None:
         """Add messages to a node's pending set and write atomically."""
         data = self._read_file(harness_file)
         entry = self._entry(data, node_id)
-        entry["messages"].extend(messages)
+        entry["messages"].extend(
+            {"kind": m.kind, "text": m.text} for m in messages
+        )
+        self._persist_harness_file(harness_file, data)
+
+    def _clear_pending_messages(self, harness_file: str, node_id: NodeId) -> None:
+        """Clear a node's pending messages (keeping its known reverse
+        dependencies) and write atomically.
+
+        A node with no entry, or with no pending messages, is unchanged: no
+        write occurs. When the cleared entry has no known reverse
+        dependencies, the entry is removed entirely (per the impl LLS).
+        """
+        data = self._read_file(harness_file)
+        entry = data.get(node_id)
+        if entry is None or not entry.get("messages"):
+            return
+        entry["messages"] = []
+        if not entry.get("reverse_dependencies"):
+            del data[node_id]
         self._persist_harness_file(harness_file, data)
 
     def _delete_node_data(self, harness_file: str, node_id: NodeId) -> None:

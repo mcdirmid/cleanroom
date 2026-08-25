@@ -1,91 +1,111 @@
-<!-- Dependencies (md files to read alongside this one): -->
-# Interface LLS: tool_provider
-## Data Types
+<!-- Dependencies (md files to read alongside this one):
+  - (none)
+-->
 
+# Interface LLS: tool_provider
+
+## Data Types
 ```python
+from typing import Any, Literal, Protocol, TypeAlias
 from dataclasses import dataclass
-from typing import Optional, Protocol, TypeAlias
-@dataclass
-class ToolDefinition:
-    name: str
-    parameters: object
-    description: str
+
+SupersessionFlag: TypeAlias = bool
+
+ExecutionSignal: TypeAlias = Literal["continue", "terminate_success", "terminate_failure", "tool_failure"]
+
+TerminationResult: TypeAlias = Literal["completed_with_no_changes", "completed_with_changes_to_propagate", "attributed_to_dependencies_with_feedback"]
 
 @dataclass
 class ToolResult:
     content: str
-    supersession_flag: bool
-    note: Optional[str]
-
-@dataclass
-class TerminationResult:
-    outcome: str
-    feedback: Optional[str] = None
+    supersession_flag: SupersessionFlag
+    note: str
 
 ToolFailure: TypeAlias = str
 
 @dataclass
-class ToolSession:
-    tool_calls: list
-    results: list
+class ToolDefinition:
+    name: str
+    parameters: Any
+    purpose: str
 
-ReplacementStub: TypeAlias = str
+@dataclass
+class ToolCall:
+    tool_name: str
+    arguments: Any
 
 class ToolProvider(Protocol):
     def get_tool_definitions(self) -> list[ToolDefinition]: ...
-    def execute_tool_call(self, tool_name: str, tool_arguments: object) -> tuple[str, list[ToolResult], Optional[TerminationResult], Optional[ToolFailure]]: ...
+    def execute_tool_call(self, tool_call: ToolCall) -> tuple[list[ToolResult] | None, ExecutionSignal, TerminationResult | ToolFailure | None]: ...
 ```
 
-- **Signal values**: the indicator of whether execution continues, terminates, or fails; the values are `continue`, `terminate the run with success`, `terminate the run with failure`, and `tool failure`.
-- **Termination outcome values**: the possible outcomes of a successfully terminated session — `completed with no changes`, `completed with changes to propagate`, or `attributed to dependencies with feedback for correction`.
-- **ToolDefinition**: a JSON schema describing a tool's name, parameters, and purpose, in the tool-calling dialect accepted by the language model.
-- **ToolResult**: a structured outcome produced by executing a tool call — the content produced, a supersession flag, and an optional note carrying producer-generated guidance for the model. The note does not replace the content; the consuming agent loop renders it into the model-visible message.
-- **TerminationResult**: the outcome of a successfully terminated session, carried by the successful termination signal.
-- **ToolFailure**: a signal that a tool call could not do meaningful work — wrong arguments, wrong format, an unknown tool, a policy violation, or a termination tool invoked incorrectly; the operation is not executed and the session continues.
-- **ToolSession**: the sequence of tool calls and outcomes of a single run, continuing until a termination signal is produced.
-- **Error state preservation**: errors leave the provider's state unchanged; stubbing preserves the original position of messages in the conversation.
+**ToolResult:** A structured outcome produced by executing a tool call, containing the content produced, a supersession flag, and an optional note carrying producer-generated guidance for the model. The note does not replace the content; the consuming agent loop renders it into the model-visible message.
+
+**SupersessionFlag:** A boolean flag indicating whether the result supersedes the earlier non-stubbed result for the same file or tool command. A result without the flag never supersedes an earlier result. When set, the earlier non-stubbed result is replaced by a static stub. The flag unset stubs nothing. A result supersedes at most one earlier result.
+
+**ExecutionSignal:** A literal union of execution states: "continue" (execution proceeds), "terminate_success" (session ends successfully), "terminate_failure" (session ends with a failure), or "tool_failure" (the tool call could not do meaningful work).
+
+**TerminationResult:** The outcome carried by "terminate_success": "completed_with_no_changes", "completed_with_changes_to_propagate", or "attributed_to_dependencies_with_feedback".
+
+**ToolFailure:** A signal indicating a tool call could not do meaningful work — wrong arguments, wrong format, an unknown tool, a policy violation, or a termination tool invoked incorrectly. The operation is not executed and the session continues.
+
+**ToolDefinition:** A JSON schema describing a tool's name, parameters, and purpose, in the tool-calling dialect accepted by the language model.
+
+**ToolCall:** A tool invocation consisting of a tool name and tool arguments.
+
+## Term definitions
+
+- **tool definition** → the `ToolDefinition` alias
+- **tool result** → the `ToolResult` alias
+- **supersession flag** → the `SupersessionFlag` alias
+- **stub** → a placeholder that replaces a superseded tool result's content when the supersession flag is set; the consumer handles stubbing, not the provider.
+- **signal** → the `ExecutionSignal` alias
+- **termination result** → the `TerminationResult` alias
+- **tool failure** → the `ToolFailure` alias
+- **session** → term definition: The sequence of tool calls and outcomes of a single run, continuing until a termination signal is produced.
 
 ## Component-Provided Operations
 
 ### `get_tool_definitions`
 
-**Purpose:** Request and return the list of available tool definitions.
+```python
+def get_tool_definitions(self) -> list[ToolDefinition]: ...
+```
+
+**Purpose:** Request the list of available tool definitions.
 
 **Preconditions:** None.
 
-**Postconditions:** Returns the complete list of tool definitions available in the current session. Each tool definition conforms to the schema format defined by this interface.
+**Postconditions:** Returns the full list of available `ToolDefinition` objects. Tool definitions conform to the schema format defined by this interface.
 
-**Failure Handling:** None documented — error handling is not documented.
+**Failure Handling:** No failures are expected; if the provider has no tool definitions, an empty list is returned.
 
-**HLS Justification:** "Request the list of available tool definitions." (HLS: Operations)
+**HLS Justification:** Contract → Operations → "Request the list of available tool definitions."
 
 ### `execute_tool_call`
 
-**Purpose:** Execute a tool call given the tool name and arguments.
+```python
+def execute_tool_call(self, tool_call: ToolCall) -> tuple[list[ToolResult] | None, ExecutionSignal, TerminationResult | ToolFailure | None]: ...
+```
+
+**Purpose:** Execute a tool call by name with the provided arguments.
 
 **Preconditions:** None.
 
-**Postconditions:**
-- All inputs are validated against the tool's schema before execution; an invalid tool call signals tool failure without executing the operation.
-- Each tool call produces exactly one outcome: either one or more tool results, or a signal (continue, terminate with success, terminate with failure, or tool failure).
-- Tool results contain the content, the supersession flag, and the note.
-- A tool result never carries the stub text: the stub text appears only when earlier results are replaced in the conversation.
-- When a result's supersession flag is set, the earlier non-stubbed result for the same file or tool command is stubbed in place with a static stub.
-- A stub is static once set: a stubbed result's placeholder never changes for the remainder of the session.
-- The flag unset (False) stubs nothing.
-- A result supersedes at most one earlier result.
-- A successful termination signal always carries a termination result; a failure termination signal carries a value describing the failure.
-- Termination is atomic: once a termination signal is produced, no further tool results are produced.
-- Errors leave the provider's state unchanged; stubbing preserves the original position of messages in the conversation.
-- The provider does not interpret tool results; it produces them.
+**Postconditions:** Produces exactly one outcome: one or more `ToolResult` objects, or an `ExecutionSignal`. The `ToolResult` structure and the `SupersessionFlag` behavior are defined in the Data Types section. A successful termination signal always carries a `TerminationResult`; a failure termination signal carries a value describing the failure. Termination is atomic: once a termination signal is produced, no further tool results are produced.
 
-**Failure Handling:**
-- `ToolFailure` is returned when: wrong arguments, wrong format, an unknown tool, a policy violation, or a termination tool invoked incorrectly.
-- A check that failed or a result rejected with feedback is a tool result carrying the feedback, never a tool failure.
-- The tool failure signal does not execute the operation and does not end the session.
+**Failure Handling:** If the tool call arguments are invalid (wrong arguments, wrong format, unknown tool, policy violation, or termination tool invoked incorrectly), returns `(None, "tool_failure", None)`. Invalid tool calls do not execute the operation. Errors leave the provider's state unchanged. A rejected result with feedback is a `ToolResult`, never a `ToolFailure`.
 
-**HLS Justification:** "Execute a tool call." (HLS: Operations)
+**HLS Justification:** Contract → Operations → "Execute a tool call"; Contract → Guarantees → input validation and tool failure signaling.
 
 ## Invariants
 
-- The observable structure of a tool result is limited to its semantic content, the supersession flag, and the note.
+- A tool failure signals an immediate problem that prevented meaningful work.
+- The provider does not interpret tool results; it produces them.
+- May maintain state across tool calls within a single session; no state persists across sessions.
+
+## Non-Concerns
+
+- **Tool result structure:** Only the semantic content, the supersession flag, and the note are observable. — The HLS states this as a non-concern; the provider does not interpret or validate the content structure.
+- **Termination signal routing:** The consumer routes termination signals appropriately and interprets the carried termination result. — The HLS states this as an assumption; the provider does not handle routing.
+- **Result stubbing:** The consumer stubs the earlier result when a result's flag is set, identifying it by the file or tool command the result concerns. — The HLS states this as an assumption; the provider does not handle stubbing.

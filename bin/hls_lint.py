@@ -253,7 +253,7 @@ def check_terms(f: Path, text: str, owned: set[str], terms_from: dict[str, set[s
 
 
 def _is_impl(f: Path) -> bool:
-    """Implementation specs are named `*_impl*` (dag_impl-high.md,
+    """Implementation specs are named `*_impl*` (dag_cleaner_impl-high.md,
     bazel_graph_storage_impl-low.md); every other file is an interface spec."""
     return "impl" in f.stem
 

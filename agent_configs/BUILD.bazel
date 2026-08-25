@@ -102,7 +102,7 @@ agent_config(
     timeout_seconds = "100.0",
     api_key_env = "OPENAI_API_KEY",
     # so spiraling is detected quickly.
-    max_tokens = 2048,
+    max_tokens = 4096,
 )
 
 

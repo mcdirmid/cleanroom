@@ -90,6 +90,18 @@ Abstract result carried by a successful termination signal. Concrete results des
 A tool call produces either a sequence of one or more results (`ToolResult` or `PresentedToolResult` values) or a `Signal[T_tool]`, never both. A `PresentedToolResult` pairs a result with the tool call it is presented with when the model did not make that call: the producing component provides the call's name and arguments, and the consuming agent loop assigns the call's id. Results are rendered in the order produced.
 
 Executes a single tool call and returns a sequence of one or more tool results or a `Signal[T_tool]`. The executor operates per-tool (one call at a time), not in batches.
+
+## Term definitions
+
+- **tool definition** → the `ToolDefinition` alias (definition in Data Types)
+- **tool result** → the `ToolResult` type (definition in Data Types)
+- **supersession flag** → term definition: whether the result supersedes the earlier non-stubbed result for the same file or tool command; which results carry the flag is declared by the producing component, and a result without the flag never supersedes an earlier result (realized as the `ToolResult.supersedes` field)
+- **stub** → term definition: replacing a superseded tool result's content with a placeholder; the stub text is applied by the consuming agent loop, and a `ToolResult` never carries it
+- **signal** → the `Signal` alias (definition in Data Types)
+- **termination result** → the `TerminateSuccessResult` type (definition in Data Types)
+- **tool failure** → the `ToolFailure` type (definition in Data Types)
+- **session** → term definition: the sequence of tool calls and outcomes of a single run, continuing until a termination signal is produced
+
 ## Component-Provided Operations
 
 ### `get_tool_definitions`

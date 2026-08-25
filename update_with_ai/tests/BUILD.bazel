@@ -35,13 +35,13 @@ pyright_test(
 )
 
 pyright_test(
-    name = "dag_impl_test",
-    srcs = ["dag_impl_test.py"],
+    name = "dag_cleaner_impl_test",
+    srcs = ["dag_cleaner_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:dag", 
+        "//update_with_ai/lib:dag_cleaner", 
         "//update_with_ai/lib:dag_storage", 
         "//update_with_ai/lib:dag_clean_logic", 
-        "//update_with_ai/lib:dag_impl", 
+        "//update_with_ai/lib:dag_cleaner_impl", 
     ],
 )
 
@@ -64,6 +64,7 @@ pyright_test(
         "//update_with_ai/lib:dag_storage",
         "//update_with_ai/lib:bazel_graph_storage",
         "//update_with_ai/lib:agent_loop",
+        "//update_with_ai/lib:agent_loop_impl",
         "//update_with_ai/lib:sandbox",
         "//update_with_ai/lib:tool_provider",
         "//update_with_ai/lib:agent_node_clean_logic_impl",
@@ -94,7 +95,7 @@ pyright_test(
         "//update_with_ai/lib:bazel_graph_storage",
         "//update_with_ai/lib:bazel_graph_storage_impl",
         "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:agent_loop",
+        "//update_with_ai/lib:agent_loop_impl",
         "//update_with_ai/lib:dag_clean_logic",
         "//update_with_ai/lib:tool_provider",
     ],
@@ -106,6 +107,6 @@ pyright_test(
     pyright_deps = [
         "//update_with_ai/lib:bazel_agent_config",
         "//update_with_ai/lib:bazel_agent_config_impl",
-        "//update_with_ai/lib:agent_loop",
+        "//update_with_ai/lib:agent_loop_impl",
     ],
 )

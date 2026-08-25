@@ -25,7 +25,7 @@ Provides Bazel-workspace-backed storage and graph access for the agent build: no
 
 **Operations**
 
-- Perform the dag_storage operations: read pending messages, add messages, delete a node's data, retrieve dependencies, retrieve known reverse dependencies.
+- Perform the dag_storage operations: read pending messages, add messages, clear a node's pending messages, delete a node's data, retrieve dependencies, retrieve known reverse dependencies.
 - Query a node's definition.
 - Query a node's package directory.
 

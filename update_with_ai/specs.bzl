@@ -6,8 +6,8 @@ thin wrappers over update_with_ai (macros.bzl): they differ only in the
 spec-specific data they pass — the prompt, the guide dep, the spec deps,
 and a *_lint test target that gates the node's verify tool (hls_lint for
 HLS nodes, lls_lint for LLS nodes). All
-node machinery (manifest, *_clean, *_feedback, *_prompt targets) comes from
-update_with_ai.
+node machinery (manifest, *_clean, *_feedback, *_dirty, *_change, *_prompt
+targets) comes from update_with_ai.
 
 Each macro returns its own label (":" + name) so a BUILD file can bind the
 result to a variable and pass it to a dependent node's spec deps. Spec deps
@@ -96,7 +96,7 @@ def _spec_lint_test_impl(ctx):
             "        m = json.load(f)\n" +
             "    s = m.get('src')\n" +
             "    if s:\n" +
-            "        out.append(os.path.dirname(p) + '/' + s)\n" +
+            "        out.append(os.path.join(ws, os.path.dirname(p), s))\n" +
             "    follow = list(m.get('deps', []))\n" +
             "    for sd in m.get('star_deps', []):\n" +
             "        if sd not in follow:\n" +
@@ -132,7 +132,7 @@ def _spec_lint_test_impl(ctx):
     )
 
     runfiles = ctx.runfiles(
-        files = [ctx.file._linter] + ctx.files._corpus + src_files + ctx.files.spec_deps,
+        files = [ctx.file._linter] + ctx.files._corpus + src_files + ctx.files.spec_deps + ctx.files.dep_srcs,
         transitive_files = transitive_manifests,
     )
     return [
@@ -150,6 +150,10 @@ _hls_lint_test = rule(
         "spec_deps": attr.label_list(
             doc = "Spec dependency node targets whose coverage is verified against the text's references",
             aspects = [collect_node_manifests],
+        ),
+        "dep_srcs": attr.label_list(
+            allow_files = True,
+            doc = "Dep spec files whose Data Types names the closure checks import against",
         ),
         "_linter": attr.label(
             default = Label("//bin:hls_lint.py"),
@@ -173,6 +177,10 @@ _lls_lint_test = rule(
         "spec_deps": attr.label_list(
             doc = "Spec dependency node targets whose coverage is verified against the dependency comment's entries",
             aspects = [collect_node_manifests],
+        ),
+        "dep_srcs": attr.label_list(
+            allow_files = True,
+            doc = "Dep spec files whose Data Types names the closure checks import against",
         ),
         "_linter": attr.label(
             default = Label("//bin:lls_lint.py"),
@@ -272,6 +280,7 @@ def update_spec_with_ai(name, spec_deps, visibility = None):
         name = name + "_high_lint",
         srcs = [name + "-high.md"],
         spec_deps = hls_spec_deps,
+        dep_srcs = native.glob([dep.split(":")[-1] + "-high.md" for dep in spec_deps], allow_empty = True),
     )
     lls_spec_deps = [dep + "_low" for dep in spec_deps]
     _update_spec_with_ai(
@@ -288,7 +297,8 @@ def update_spec_with_ai(name, spec_deps, visibility = None):
         src = name + "-low.md",
         template = "//templates:lls",
         guide = "//guides:high_to_low",
-        spec_deps = lls_spec_deps + [":" + name + "_high"],
+        spec_deps = lls_spec_deps,
+        deps = [":" + name + "_high"],
         verify = "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{}:{}_low_lint --test_output=errors 2>&1".format(
             native.package_name(),
             name,
@@ -307,5 +317,6 @@ def update_spec_with_ai(name, spec_deps, visibility = None):
             name = name + "_low_lint",
             srcs = [name + "-low.md"],
             spec_deps = lls_spec_deps,
+            dep_srcs = native.glob([dep.split(":")[-1] + "-low.md" for dep in spec_deps], allow_empty = True),
         )
     return ":" + name

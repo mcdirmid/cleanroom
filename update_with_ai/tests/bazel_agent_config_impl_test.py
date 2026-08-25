@@ -41,7 +41,7 @@ from update_with_ai.lib.bazel_agent_config_impl import (
     BazelAgentConfigImpl,
     ConfigNotFoundError,
 )
-from update_with_ai.lib.agent_loop import AgentLoopConfig
+from update_with_ai.lib.agent_loop_impl import AgentLoopConfig
 
 PACKAGE = "agent_configs"
 NAME = "default"
@@ -360,12 +360,13 @@ class TestBuildAgentLoopConfig(TestBazelAgentConfigImpl):
                 )
 
     def test_agent_config_to_agent_loop_config(self) -> None:
-        """AgentConfig.to_agent_loop_config threads every field through."""
+        """AgentConfig.to_agent_loop_config threads the agent-loop parameters through."""
         cfg = AgentConfig(
             label="//agent_configs:default",
             name="default",
             model="m",
             base_url="http://x/v1",
+            api_key_env="",
             max_iterations=3,
             temperature=0.5,
             timeout=9.0,

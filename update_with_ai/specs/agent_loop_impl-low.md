@@ -7,9 +7,9 @@
 
 ## Data Types
 ```python
+from dataclasses import dataclass
 from agent_loop import (
     AgentLoop,
-    AgentLoopConfig,
     AgentResult,
     HistoryEntry,
     ToolCall,
@@ -17,6 +17,7 @@ from agent_loop import (
     LogEvent,
     Usage,
     CumulativeUsage,
+    TerminationReminderGenerator,
 )
 from tool_provider import (
     ToolDefinition,
@@ -32,15 +33,39 @@ from tool_provider import (
     T_tool,
 )
 
+@dataclass
+class AgentLoopConfig:
+    base_url: str
+    api_key: str
+    model: str
+    max_iterations: int = 10
+    temperature: float = 0.0
+    timeout: float = 60.0
+    max_tokens: int | None = None
+    termination_reminder_generator: TerminationReminderGenerator | None = None
+    continuation_prompt: str | None = None
+
 class AgentLoopImpl(AgentLoop):
     def __init__(self, config: AgentLoopConfig): ...
 ```
 
-Constructed with the `agent_loop` interface's `AgentLoopConfig` (see Interface LLS Data Types); it bundles no imported capabilities. The `continuation_prompt` field (default `None`) supplies the continuation prompt; when `None`, the pinned default continuation prompt is used.
+The run's configuration is supplied when the loop is constructed (per the `agent_loop_impl` HLS Deltas); it bundles no imported capabilities. Field meanings:
+
+- `base_url`: Server endpoint for the language model service
+- `api_key`: API key for authentication
+- `model`: Model name to use
+- `max_iterations`: Maximum loop iterations before failure (default: 10)
+- `temperature`: Sampling temperature (default: 0.0)
+- `timeout`: Request timeout in seconds (default: 60.0)
+- `max_tokens`: Maximum tokens to generate (default: None, service default)
+- `termination_reminder_generator`: Optional generator for termination reminders
+- `continuation_prompt`: Prompt appended to resume generation when the model response is truncated (default: None, implementation default used)
 
 ## Behavioral Description
 
 `AgentLoopImpl` fulfills the `AgentLoop` Protocol by wrapping the OpenAI API.
+
+**`run_agent`:** Runs the agent loop per the `agent_loop` contract: takes the user prompt, the tool definitions, the tool executor, and the optional system prompt, session-start results, and logger; produces one of the `AgentResult` outcomes (a termination signal paired with the conversation history, or a loop failure paired with an error description). The responsibilities below describe how a normal run is executed.
 
 **Responsibilities:**
 
@@ -82,10 +107,8 @@ Returns `(error, history)` on any failure. Logger callback exceptions are caught
 ## Invariants
 
 - No state persists between calls
-- The system prompt is never modified during the run
-- A result with the `supersedes` flag set stubs the earlier non-stubbed result for the same file or tool command (at most one); stubbed messages keep their positions
+- When a result's `supersedes` flag is set, the earlier non-stubbed result for the same file or tool command is replaced in place with the static stub; stubbed messages keep their positions
 - A stub is static once set: a stubbed message's content never changes for the remainder of the run
-- A tool failure never supersedes an earlier result
 - A degenerate loop (8 consecutive identical tool calls, or 8 consecutive `replace_lines` calls on the same file and line range) fails the run
 - At most one reminder injected per run
 

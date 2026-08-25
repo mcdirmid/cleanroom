@@ -1,4 +1,4 @@
-# dag
+# dag_cleaner
 
 imports: dag_storage (graph + messages), dag_clean_logic (cleaning)
 terms (from dag_storage): node, dependency, pending message, subgraph, reverse dependency
@@ -21,6 +21,9 @@ Cleans every dirty node in the subgraph rooted at a target node, in topological 
 **Guarantees**
 
 - Cleaning produces no direct output; messages are routed to node stores via dag_storage.
+- A node whose cleaning produces a change message has its pending messages and known reverse dependencies cleared after the change messages are routed.
+- A node whose cleaning produces no messages has its pending messages cleared and its known reverse dependencies retained.
+- A node whose cleaning produces feedback messages retains its pending messages and known reverse dependencies.
 - Cleaning can re-dirty nodes: a node may be cleaned multiple times in one operation; feedback delivered to a previously cleaned node re-dirties it within the same operation.
 - Nodes outside the subgraph may receive messages and become dirty, but are not cleaned until a subgraph containing them is cleaned.
 - Cleaning is topological: it follows a fixed topological order for the operation; a node is cleaned only while none of its dependencies are dirty; after each cleaning, dirtiness is re-evaluated for all nodes; cleaning stops when no node remains dirty.

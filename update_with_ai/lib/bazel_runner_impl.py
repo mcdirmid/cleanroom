@@ -13,19 +13,15 @@ Script usage (CLI entry point):
     bazel run //pkg:target  # where target is a update_with_ai with clean target
 """
 
-from update_with_ai.lib.dag_impl import DagImpl
-from update_with_ai.lib.dag_impl import Config as DagConfig
-from update_with_ai.lib.dag import CleaningResult
+from update_with_ai.lib.dag_cleaner_impl import DagCleanerImpl
+from update_with_ai.lib.dag_cleaner import CleaningResult
 from update_with_ai.lib.dag_clean_logic import NoChangeResult, FailureResult
-from update_with_ai.lib.dag_storage import NodeId
+from update_with_ai.lib.dag_storage import NodeId, NodeMessage
 from update_with_ai.lib.bazel_graph_storage_impl import BazelGraphStorageFileImpl
 from update_with_ai.lib.bazel_graph_storage import GraphConfig
-from update_with_ai.lib.agent_node_clean_logic_impl import (
-    AgentNodeCleanLogicImpl,
-    Config as CleanLogicConfig,
-)
-from update_with_ai.lib.agent_loop_impl import AgentLoopImpl
-from update_with_ai.lib.agent_loop import AgentLoopConfig, LogEvent
+from update_with_ai.lib.agent_node_clean_logic_impl import AgentNodeCleanLogicImpl
+from update_with_ai.lib.agent_loop_impl import AgentLoopImpl, AgentLoopConfig
+from update_with_ai.lib.agent_loop import LogEvent
 from update_with_ai.lib.bazel_agent_config_impl import BazelAgentConfigImpl
 from update_with_ai.lib.sandbox import Sandbox
 from update_with_ai.lib.sandbox_impl import SandboxImpl
@@ -192,7 +188,8 @@ class BazRunnerImpl(BazRunner):
         config_target = agent_config_impl.resolve_config_target(config_target)
         agent_config = agent_config_impl.load_config(config_target, workspace_root)
         api_key = agent_config_impl.resolve_api_key(agent_config.api_key_env)
-        agent_loop = AgentLoopImpl(config=agent_config.to_agent_loop_config(api_key))
+        agent_loop_config = agent_config.to_agent_loop_config(api_key)
+        agent_loop = AgentLoopImpl(config=agent_loop_config)
 
         # Step 3: Agent logging — compact events on stdout, full transcript
         # to a file in the directory where bazel was invoked (override with
@@ -226,36 +223,28 @@ class BazRunnerImpl(BazRunner):
         # (the agent_config is the run-level configuration; it overrides the
         # per-node sandbox config's default).
         clean_logic = AgentNodeCleanLogicImpl(
-            config=CleanLogicConfig(
-                graph=graph,
-                agent_loop_config=AgentLoopConfig(
-                    base_url=agent_loop._config.base_url,
-                    api_key=agent_loop._config.api_key,
-                    model=agent_loop._config.model,
-                ),
-                make_sandbox=lambda cfg: SandboxImpl(
-                    config=dataclasses.replace(
-                        cfg,
-                        session_start_reads_enabled=agent_config.session_start_reads,
-                        step_sections_enabled=agent_config.step_sections,
-                    )
-                ),
-                make_agent_loop=lambda cfg=None: agent_loop,
-                logger=_agent_logger,
-            )
+            graph=graph,
+            agent_loop_config=agent_loop_config,
+            make_sandbox=lambda cfg: SandboxImpl(
+                config=dataclasses.replace(
+                    cfg,
+                    session_start_reads_enabled=agent_config.session_start_reads,
+                    step_sections_enabled=agent_config.step_sections,
+                )
+            ),
+            make_agent_loop=lambda cfg=None: agent_loop,
+            logger=_agent_logger,
         )
 
         # Step 5: Build the DAG and run
-        dag = DagImpl(
-            config=DagConfig(
-                storage=graph,
-                clean_logic=clean_logic,
-            )
+        dag_cleaner = DagCleanerImpl(
+            storage=graph,
+            clean_logic=clean_logic,
         )
 
         print(f"\nRunning DAG from {root_node}...")
         try:
-            result = dag.clean_subgraph(root_node)
+            result = dag_cleaner.clean_subgraph(root_node)
         finally:
             log_file.close()
         print(f"Full agent transcript: {log_path}")
@@ -292,9 +281,85 @@ class BazRunnerImpl(BazRunner):
         except ValueError:
             return (False, FailureResult())
 
-        graph.add_messages(node_id, messages)
+        graph.add_messages(
+            node_id,
+            [NodeMessage(kind="feedback", text=m) for m in messages],
+        )
         for message in messages:
             print(f"Delivered feedback to {node_id}: {message}")
+        return (True, NoChangeResult())
+
+    def add_change(
+        self,
+        node_id: NodeId,
+        workspace_root: str,
+        change: str = "check",
+    ) -> CleaningResult:
+        """
+        Deliver a change message to a node's own pending message store,
+        marking the node dirty for a subsequent cleaning pass. The node may
+        succeed without changing when cleaned; the change text defaults to
+        "check" when not provided.
+
+        Returns:
+            (True, NoChangeResult()) on success,
+            (False, FailureResult()) on failure (node does not exist in graph)
+        """
+        print(f"Loading graph from {node_id}...")
+        graph = BazelGraphStorageFileImpl(config=GraphConfig(workspace_root=workspace_root))
+
+        try:
+            graph.resolve_package_directory(node_id)
+        except ValueError:
+            return (False, FailureResult())
+
+        graph.add_messages(node_id, [NodeMessage(kind="change", text=change)])
+        print(f"Delivered change to {node_id}: {change}")
+        return (True, NoChangeResult())
+
+    def broadcast_change(
+        self,
+        node_id: NodeId,
+        workspace_root: str,
+        change: str,
+    ) -> CleaningResult:
+        """
+        Pretend the node was cleaned with changes: broadcast a change message
+        to the node's known reverse dependencies and clear the node's data,
+        without cleaning the node.
+
+        The broadcast message is the node's declared source file name (its
+        sandbox configuration's first writable path) followed by the change
+        text; when the node declares no source file, the message is the
+        change text alone. A known reverse dependency that is not in the
+        graph is skipped (per the dag_cleaner routing rule).
+
+        Returns:
+            (True, NoChangeResult()) on success,
+            (False, FailureResult()) on failure (node does not exist in graph)
+        """
+        print(f"Loading graph from {node_id}...")
+        graph = BazelGraphStorageFileImpl(config=GraphConfig(workspace_root=workspace_root))
+
+        try:
+            graph.resolve_package_directory(node_id)
+        except ValueError:
+            return (False, FailureResult())
+
+        writable = graph.resolve_node_definition(node_id).sandbox_config.writable_paths
+        src = writable[0] if writable else ""
+        message_text = "{}: {}".format(src, change) if src else change
+        broadcast = [NodeMessage(kind="change", text=message_text)]
+        for target in graph.get_known_reverse_dependencies(node_id):
+            try:
+                graph.add_messages(target, broadcast)
+            except ValueError:
+                continue
+        graph.delete_node_data(node_id)
+        print(
+            f"Broadcast change from {node_id} to its reverse dependencies: "
+            f"{message_text}"
+        )
         return (True, NoChangeResult())
 
 

@@ -30,7 +30,6 @@ BlameTarget = str
 Feedback = str
 Blame = Tuple[BlameTarget, Feedback]
 SearchResultLimit = int
-DiffSizeLimit = int
 # Template content keyed by the writable file's virtual name: the initial
 # content the sandbox gives a writable file that does not exist on disk when
 # the sandbox is configured (see sandbox-high.md / sandbox-low.md).
@@ -42,16 +41,16 @@ VerificationCallback = Optional[Callable[[], Tuple[bool, str]]]
 
 @dataclass
 class SandboxConfig:
-    """Client-supplied configuration for the sandbox: file mappings, readable and writable paths, blame targets, limits, whether session-start reads are enabled, the guide and whether step mode is enabled, the templates (default: empty), and an optional verification callback."""
+    """Client-supplied configuration for the sandbox: file mappings, readable and writable paths, blame targets, limits, whether session-start reads are enabled, the guide and whether step mode is enabled, whether feedback is pending, the templates (default: empty), and an optional verification callback."""
     file_mappings: FileMapping
     readable_paths: ReadablePaths
     writable_paths: WritablePaths
     blame_targets: BlameTargets
     search_result_limit: SearchResultLimit
-    diff_size_limit: Optional[DiffSizeLimit] = None
     session_start_reads_enabled: bool = True
     guide: Optional[VirtualName] = None
     step_sections_enabled: bool = True
+    feedback_pending: bool = False
     templates: TemplateMapping = field(default_factory=dict)
     verification_callback: VerificationCallback = None
 

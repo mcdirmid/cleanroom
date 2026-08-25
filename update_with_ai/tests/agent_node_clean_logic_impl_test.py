@@ -13,26 +13,32 @@ directly against the sandbox.
 import os
 import tempfile
 import unittest
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from update_with_ai.lib.agent_loop import (
     AgentLoop,
-    AgentLoopConfig,
     AgentResult,
     LoggerCallback,
     ToolDefinition,
     ToolExecutor,
 )
-from update_with_ai.lib.agent_node_clean_logic_impl import AgentNodeCleanLogicImpl, Config
+from update_with_ai.lib.agent_loop_impl import AgentLoopConfig
+from update_with_ai.lib.agent_node_clean_logic_impl import AgentNodeCleanLogicImpl
 from update_with_ai.lib.bazel_graph_storage import BazelGraphStorage, NodeDefinition
+from update_with_ai.lib.dag_storage import NodeId, NodeMessage, MessageKind, PendingMessages
 from update_with_ai.lib.dag_clean_logic import (
+    CleanResult,
     ChangeResult,
-    FailureResult,
     FeedbackResult,
     NoChangeResult,
+    FailureResult,
 )
-from update_with_ai.lib.dag_storage import NodeId, NodeMessage, PendingMessages
 from update_with_ai.lib.sandbox import Blame, Sandbox, SandboxConfig
+
+
+def msg(text: str, kind: str = "change") -> NodeMessage:
+    """Test helper: build a NodeMessage (per dag_storage-low.md)."""
+    return NodeMessage(kind=cast(MessageKind, kind), text=text)
 from update_with_ai.lib.tool_provider import (
     PresentedToolResult,
     TerminateAgentWithFailure,
@@ -133,7 +139,7 @@ class MockSandbox(Sandbox):
         self._tool_defs = tool_defs if tool_defs is not None else []
         self._write_occurred = write_occurred
         self._blame_outcome = blame_outcome or TerminateAgentWithSuccess(
-            FeedbackResult(messages=[("b", "fix it")])
+            FeedbackResult(messages=[("b", msg("fix it", "feedback"))])
         )
         self._session_start_reads = session_start_reads or []
         self.calls: List[Tuple[str, Dict[str, Any]]] = []
@@ -235,18 +241,16 @@ class TestCleanOutcomeMapping(unittest.TestCase):
         node_def = node_def or _make_node_def()
         graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
         return AgentNodeCleanLogicImpl(
-            Config(
-                graph=graph,
-                agent_loop_config=_agent_loop_config(),
-                make_sandbox=lambda sc: sandbox,
-                make_agent_loop=lambda cfg: agent_loop,
-            )
+            graph=graph,
+            agent_loop_config=_agent_loop_config(),
+            make_sandbox=lambda sc: sandbox,
+            make_agent_loop=lambda cfg: agent_loop,
         )
 
     def test_terminate_success_feedback_result_adopted(self):
         """(TerminateAgentWithSuccess(FeedbackResult), history) is adopted as-is,
         regardless of the sandbox write flag."""
-        feedback = FeedbackResult(messages=[("b", "fix it")])
+        feedback = FeedbackResult(messages=[("b", msg("fix it", "feedback"))])
         sandbox = MockSandbox(write_occurred=True)
         agent_loop = MockAgentLoop(
             result=(TerminateAgentWithSuccess(feedback), [{"role": "assistant", "content": "x"}])
@@ -257,7 +261,7 @@ class TestCleanOutcomeMapping(unittest.TestCase):
 
     def test_terminate_success_change_result_adopted(self):
         """(TerminateAgentWithSuccess(ChangeResult), history) is adopted as-is."""
-        change = ChangeResult(messages=["changed"])
+        change = ChangeResult(messages=[msg("changed")])
         sandbox = MockSandbox(write_occurred=True)
         agent_loop = MockAgentLoop(
             result=(TerminateAgentWithSuccess(change), [])
@@ -291,12 +295,10 @@ class TestCleanOutcomeMapping(unittest.TestCase):
         graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
         agent_loop = MockAgentLoop()
         impl = AgentNodeCleanLogicImpl(
-            Config(
-                graph=graph,
-                agent_loop_config=_agent_loop_config(),
-                make_sandbox=lambda sc: MockSandbox(),
-                make_agent_loop=lambda cfg: agent_loop,
-            )
+            graph=graph,
+            agent_loop_config=_agent_loop_config(),
+            make_sandbox=lambda sc: MockSandbox(),
+            make_agent_loop=lambda cfg: agent_loop,
         )
         impl.clean("a", [])
         self.assertIn("step", agent_loop.last_run["prompt"])
@@ -309,12 +311,10 @@ class TestCleanOutcomeMapping(unittest.TestCase):
         graph2 = MockBazelGraphStorage(definitions={"a": node_def2}, dependencies={"a": []})
         agent_loop2 = MockAgentLoop()
         impl2 = AgentNodeCleanLogicImpl(
-            Config(
-                graph=graph2,
-                agent_loop_config=_agent_loop_config(),
-                make_sandbox=lambda sc: MockSandbox(),
-                make_agent_loop=lambda cfg: agent_loop2,
-            )
+            graph=graph2,
+            agent_loop_config=_agent_loop_config(),
+            make_sandbox=lambda sc: MockSandbox(),
+            make_agent_loop=lambda cfg: agent_loop2,
         )
         impl2.clean("a", [])
         self.assertNotIn("The guide arrives", agent_loop2.last_run["prompt"])
@@ -363,12 +363,10 @@ class TestIsDirty(unittest.TestCase):
     ) -> AgentNodeCleanLogicImpl:
         graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
         return AgentNodeCleanLogicImpl(
-            Config(
-                graph=graph,
-                agent_loop_config=_agent_loop_config(),
-                make_sandbox=lambda sc: MockSandbox(),
-                make_agent_loop=lambda cfg: MockAgentLoop(),
-            )
+            graph=graph,
+            agent_loop_config=_agent_loop_config(),
+            make_sandbox=lambda sc: MockSandbox(),
+            make_agent_loop=lambda cfg: MockAgentLoop(),
         )
 
     def test_dirty_when_pending_messages_present(self):
@@ -382,7 +380,7 @@ class TestIsDirty(unittest.TestCase):
                 file_mappings={"out.txt": out_path},
             )
             impl = self._impl(node_def)
-            self.assertTrue(impl.is_dirty("a", ["message"]))
+            self.assertTrue(impl.is_dirty("a", [msg("message")]))
             self.assertFalse(impl.is_dirty("a", []))
 
     def test_dirty_when_writable_file_missing_on_disk(self):
@@ -397,16 +395,15 @@ class TestIsDirty(unittest.TestCase):
             )
             graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
             impl = AgentNodeCleanLogicImpl(
-                Config(
-                    graph=graph,
-                    agent_loop_config=_agent_loop_config(),
-                    make_sandbox=lambda sc: MockSandbox(),
-                    make_agent_loop=lambda cfg: MockAgentLoop(),
-                )
+                graph=graph,
+                agent_loop_config=_agent_loop_config(),
+                make_sandbox=lambda sc: MockSandbox(),
+                make_agent_loop=lambda cfg: MockAgentLoop(),
             )
             self.assertTrue(impl.is_dirty("a", []))
             self.assertEqual(
-                graph.get_pending_messages("a"), ["update target file from template"]
+                graph.get_pending_messages("a"),
+                [msg("update target file from template", "feedback")],
             )
             # Once the file exists on disk, the node is clean without messages.
             with open(missing_path, "w") as f:
@@ -428,16 +425,15 @@ class TestIsDirty(unittest.TestCase):
             )
             graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
             impl = AgentNodeCleanLogicImpl(
-                Config(
-                    graph=graph,
-                    agent_loop_config=_agent_loop_config(),
-                    make_sandbox=lambda sc: MockSandbox(),
-                    make_agent_loop=lambda cfg: MockAgentLoop(),
-                )
+                graph=graph,
+                agent_loop_config=_agent_loop_config(),
+                make_sandbox=lambda sc: MockSandbox(),
+                make_agent_loop=lambda cfg: MockAgentLoop(),
             )
             self.assertTrue(impl.is_dirty("a", []))
             self.assertEqual(
-                graph.get_pending_messages("a"), ["update target file from template"]
+                graph.get_pending_messages("a"),
+                [msg("update target file from template", "feedback")],
             )
             # Once transformed, the node is clean without messages.
             with open(out_path, "w") as f:
@@ -459,20 +455,19 @@ class TestIsDirty(unittest.TestCase):
             )
             graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
             impl = AgentNodeCleanLogicImpl(
-                Config(
-                    graph=graph,
-                    agent_loop_config=_agent_loop_config(),
-                    make_sandbox=lambda sc: MockSandbox(),
-                    make_agent_loop=lambda cfg: MockAgentLoop(),
-                )
+                graph=graph,
+                agent_loop_config=_agent_loop_config(),
+                make_sandbox=lambda sc: MockSandbox(),
+                make_agent_loop=lambda cfg: MockAgentLoop(),
             )
             # A prior failed cleaning left the feedback pending.
-            graph.add_messages("a", ["update target file from template"])
+            graph.add_messages("a", [msg("update target file from template", "feedback")])
             self.assertTrue(
-                impl.is_dirty("a", ["update target file from template"])
+                impl.is_dirty("a", [msg("update target file from template", "feedback")])
             )
             self.assertEqual(
-                graph.get_pending_messages("a"), ["update target file from template"]
+                graph.get_pending_messages("a"),
+                [msg("update target file from template", "feedback")],
             )
 
     def test_no_feedback_for_pending_messages_alone(self):
@@ -488,14 +483,12 @@ class TestIsDirty(unittest.TestCase):
             )
             graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
             impl = AgentNodeCleanLogicImpl(
-                Config(
-                    graph=graph,
-                    agent_loop_config=_agent_loop_config(),
-                    make_sandbox=lambda sc: MockSandbox(),
-                    make_agent_loop=lambda cfg: MockAgentLoop(),
-                )
+                graph=graph,
+                agent_loop_config=_agent_loop_config(),
+                make_sandbox=lambda sc: MockSandbox(),
+                make_agent_loop=lambda cfg: MockAgentLoop(),
             )
-            self.assertTrue(impl.is_dirty("a", ["a real message"]))
+            self.assertTrue(impl.is_dirty("a", [msg("a real message")]))
             self.assertEqual(graph.get_pending_messages("a"), [])
 
 
@@ -509,12 +502,10 @@ class TestToolExecutor(unittest.TestCase):
             definitions={"a": node_def}, dependencies={"a": ["b"]}
         )
         impl = AgentNodeCleanLogicImpl(
-            Config(
-                graph=graph,
-                agent_loop_config=_agent_loop_config(),
-                make_sandbox=lambda sc: sandbox,
-                make_agent_loop=lambda cfg: agent_loop,
-            )
+            graph=graph,
+            agent_loop_config=_agent_loop_config(),
+            make_sandbox=lambda sc: sandbox,
+            make_agent_loop=lambda cfg: agent_loop,
         )
         impl.clean("a", [])
         assert agent_loop.last_run is not None
@@ -538,7 +529,7 @@ class TestToolExecutor(unittest.TestCase):
         sandbox's outcome is returned unchanged."""
         node_def = _make_node_def(blame_targets=["b"])
         blame_outcome: ToolCallOutcome = TerminateAgentWithSuccess(
-            FeedbackResult(messages=[("b", "fix it")])
+            FeedbackResult(messages=[("b", msg("fix it", "feedback"))])
         )
         sandbox = MockSandbox(blame_outcome=blame_outcome)
         executor = self._capture_executor(node_def, sandbox)
@@ -631,21 +622,47 @@ class TestRunStructure(unittest.TestCase):
             return sandbox
 
         impl = AgentNodeCleanLogicImpl(
-            Config(
-                graph=graph,
-                agent_loop_config=_agent_loop_config(),
-                make_sandbox=make_sandbox,
-                make_agent_loop=lambda cfg: MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), [])),
-            )
+            graph=graph,
+            agent_loop_config=_agent_loop_config(),
+            make_sandbox=make_sandbox,
+            make_agent_loop=lambda cfg: MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), [])),
         )
         impl.clean("a", [])
-        impl.clean("a", ["m"])
+        impl.clean("a", [msg("m")])
         self.assertEqual(len(constructed), 2)
         # Fresh instance per clean (per-run state reset).
         self.assertIsNot(constructed[0][1], constructed[1][1])
-        # Constructed from the node's resolved sandbox configuration.
-        self.assertIs(constructed[0][0], node_def.sandbox_config)
-        self.assertIs(constructed[1][0], node_def.sandbox_config)
+        # Constructed from the node's resolved sandbox configuration, with the
+        # feedback-pending flag copied (no feedback pending here -> default).
+        self.assertEqual(constructed[0][0], node_def.sandbox_config)
+        self.assertFalse(constructed[0][0].feedback_pending)
+        self.assertEqual(constructed[1][0], node_def.sandbox_config)
+
+    def test_sandbox_configured_feedback_pending_from_pending_messages(self):
+        """The sandbox is configured with feedback_pending set from whether
+        the node's pending messages include a feedback message (impl LLS)."""
+        node_def = _make_node_def()
+        graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
+        constructed: List[Tuple[SandboxConfig, MockSandbox]] = []
+
+        def make_sandbox(sc: SandboxConfig) -> MockSandbox:
+            sandbox = MockSandbox()
+            constructed.append((sc, sandbox))
+            return sandbox
+
+        impl = AgentNodeCleanLogicImpl(
+            graph=graph,
+            agent_loop_config=_agent_loop_config(),
+            make_sandbox=make_sandbox,
+            make_agent_loop=lambda cfg: MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), [])),
+        )
+        # A change-kind pending message: the node may succeed without changing.
+        impl.clean("a", [msg("a dependency changed")])
+        # A feedback-kind pending message: the node must change, blame, or fail.
+        impl.clean("a", [msg("fix your output", "feedback")])
+        self.assertEqual(len(constructed), 2)
+        self.assertFalse(constructed[0][0].feedback_pending)
+        self.assertTrue(constructed[1][0].feedback_pending)
 
     def test_exactly_one_agent_run_per_clean(self):
         """Each cleaning runs exactly one agent run."""
@@ -659,15 +676,13 @@ class TestRunStructure(unittest.TestCase):
             return loop
 
         impl = AgentNodeCleanLogicImpl(
-            Config(
-                graph=graph,
-                agent_loop_config=_agent_loop_config(),
-                make_sandbox=lambda sc: MockSandbox(),
-                make_agent_loop=make_agent_loop,
-            )
+            graph=graph,
+            agent_loop_config=_agent_loop_config(),
+            make_sandbox=lambda sc: MockSandbox(),
+            make_agent_loop=make_agent_loop,
         )
         impl.clean("a", [])
-        impl.clean("a", ["m"])
+        impl.clean("a", [msg("m")])
         self.assertEqual(len(loops), 2)
         self.assertEqual(loops[0].run_count, 1)
         self.assertEqual(loops[1].run_count, 1)
@@ -684,14 +699,12 @@ class TestRunStructure(unittest.TestCase):
         graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
         agent_loop = MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), []))
         impl = AgentNodeCleanLogicImpl(
-            Config(
-                graph=graph,
-                agent_loop_config=_agent_loop_config(),
-                make_sandbox=lambda sc: MockSandbox(),
-                make_agent_loop=lambda cfg: agent_loop,
-            )
+            graph=graph,
+            agent_loop_config=_agent_loop_config(),
+            make_sandbox=lambda sc: MockSandbox(),
+            make_agent_loop=lambda cfg: agent_loop,
         )
-        impl.clean("a", ["fix this", "and this"])
+        impl.clean("a", [msg("fix this"), msg("and this")])
         assert agent_loop.last_run is not None
         system_prompt = agent_loop.last_run["system_prompt"]
         self.assertTrue(system_prompt.startswith("Work on the files"))
@@ -706,12 +719,10 @@ class TestRunStructure(unittest.TestCase):
         graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
         agent_loop = MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), []))
         impl = AgentNodeCleanLogicImpl(
-            Config(
-                graph=graph,
-                agent_loop_config=_agent_loop_config(),
-                make_sandbox=lambda sc: MockSandbox(),
-                make_agent_loop=lambda cfg: agent_loop,
-            )
+            graph=graph,
+            agent_loop_config=_agent_loop_config(),
+            make_sandbox=lambda sc: MockSandbox(),
+            make_agent_loop=lambda cfg: agent_loop,
         )
         impl.clean("a", [])
         assert agent_loop.last_run is not None
@@ -736,12 +747,10 @@ class TestRunStructure(unittest.TestCase):
         sandbox = MockSandbox(tool_defs=tool_defs)
         agent_loop = MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), []))
         impl = AgentNodeCleanLogicImpl(
-            Config(
-                graph=graph,
-                agent_loop_config=_agent_loop_config(),
-                make_sandbox=lambda sc: sandbox,
-                make_agent_loop=lambda cfg: agent_loop,
-            )
+            graph=graph,
+            agent_loop_config=_agent_loop_config(),
+            make_sandbox=lambda sc: sandbox,
+            make_agent_loop=lambda cfg: agent_loop,
         )
         impl.clean("a", [])
         assert agent_loop.last_run is not None
@@ -761,13 +770,11 @@ class TestRunStructure(unittest.TestCase):
         sandbox = MockSandbox()
         agent_loop = MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), []))
         impl = AgentNodeCleanLogicImpl(
-            Config(
-                graph=graph,
-                agent_loop_config=_agent_loop_config(),
-                make_sandbox=lambda sc: sandbox,
-                make_agent_loop=lambda cfg: agent_loop,
-                logger=logger,
-            )
+            graph=graph,
+            agent_loop_config=_agent_loop_config(),
+            make_sandbox=lambda sc: sandbox,
+            make_agent_loop=lambda cfg: agent_loop,
+            logger=logger,
         )
         impl.clean("a", [])
         assert agent_loop.last_run is not None
@@ -780,17 +787,15 @@ class TestRunStructure(unittest.TestCase):
         )
 
     def test_config_without_logger_passes_none(self):
-        """Config(logger=None) is accepted; run_agent receives logger=None."""
+        """logger=None is accepted; run_agent receives logger=None."""
         node_def = _make_node_def()
         graph = MockBazelGraphStorage(definitions={"a": node_def}, dependencies={"a": []})
         agent_loop = MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), []))
         impl = AgentNodeCleanLogicImpl(
-            Config(
-                graph=graph,
-                agent_loop_config=_agent_loop_config(),
-                make_sandbox=lambda sc: MockSandbox(),
-                make_agent_loop=lambda cfg: agent_loop,
-            )
+            graph=graph,
+            agent_loop_config=_agent_loop_config(),
+            make_sandbox=lambda sc: MockSandbox(),
+            make_agent_loop=lambda cfg: agent_loop,
         )
         impl.clean("a", [])
         assert agent_loop.last_run is not None

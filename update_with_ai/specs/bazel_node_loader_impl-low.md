@@ -52,11 +52,11 @@ Constructed with no configuration (`BazNode` instances are constructed by the im
 - Nodes are cached by label; repeated loads of the same label return the cached instance.
 - Partial loads do not populate the cache; a node is cached only after successful deserialization.
 - Invalid labels produce `None`, not a partial cache entry.
-- Manifest file paths are derived deterministically from labels (e.g., `//pkg:target` → `pkg/target_manifest.json` in runfiles).
 
 ## Non-Concerns
 
 - **Manifest resolution algorithm:** The exact mechanism for resolving a label to a manifest path (e.g., `RUNFILES_DIR`, `//pkg:target` → `pkg/target_manifest.json`) is implementation-specific.
 - **Cache eviction policy:** Whether and when the cache evicts entries is unspecified.
+- **Unconfigured-loop failure message:** `run_prompt` with no configured agent loop returns the loop-failure result `("Agent loop not configured", [])`; tests may assert it.
 - **T_tool resolution:** The implementation resolves `T_tool` (from `tool_provider`) to `str` in failure signals (`ToolFailure("Tool {name} not found")`).
 

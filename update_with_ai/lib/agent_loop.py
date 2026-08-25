@@ -9,7 +9,6 @@ Defines types and operations for the agent loop component.
 from __future__ import annotations
 
 from typing import Any, Callable, Literal, Protocol, Union, List, Dict, Optional, Tuple
-from dataclasses import dataclass, field
 from .tool_provider import (
     ToolDefinition,
     ToolResult,
@@ -135,19 +134,6 @@ the iteration limit. The reminder is not triggered by tool failures (see
 ToolFailure in tool_provider).
 """
 
-@dataclass
-class AgentLoopConfig:
-    """Client-supplied configuration for the agent loop: connection and processing parameters, an optional iteration limit, and an optional termination reminder generator."""
-    base_url: str
-    api_key: str
-    model: str
-    max_iterations: int = 10
-    temperature: float = 0.0
-    timeout: float = 60.0
-    max_tokens: Optional[int] = None
-    termination_reminder_generator: Optional[TerminationReminderGenerator] = None
-    continuation_prompt: Optional[str] = None
-
 class AgentLoop(Protocol):
     """
     Interface for the LLS Agent Loop.
@@ -272,5 +258,4 @@ __all__ = [
     "LogEvent",
     "LoggerCallback",
     "TerminationReminderGenerator",
-    "AgentLoopConfig",
 ]

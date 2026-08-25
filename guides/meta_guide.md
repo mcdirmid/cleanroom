@@ -43,6 +43,15 @@ Every guide follows this structure:
 - [ ] Linter-verified points live in their own `## Lint checks` section, which contains only points the linter verifies — no judgment points
 - [ ] A point only partly linter-verified is split: the linter-verified part goes in `## Lint checks`, the judgment part stays in its content section
 
+## Step mode
+
+- [ ] In step mode the reader sees the Summary and one section at a time; earlier sections are stubbed — each section is self-sufficient: a rule the section depends on appears in that section or in the Summary
+- [ ] A rule with no document region (it constrains the whole artifact) lives in the Summary, never in a section
+- [ ] All items in a section concern one step of producing the artifact; if the items split into two concerns, split the section
+- [ ] If one item can undo another, they are one item stating both constraints, or two items in the same section with the clobbered rule first
+- [ ] Sections are named after the document regions they govern, in document order
+- [ ] A rule that applies to every instance in a region is stated once, generically ("every operation", "every alias")
+
 ## Size
 
 - [ ] Whole guide under the read-size limit (20,000 bytes in this repo) so whole-guide mode reads it in one read
@@ -53,11 +62,12 @@ Every guide follows this structure:
 
 - [ ] Headers and lists over tables; one fact per line; each line complete on its own
 - [ ] "must", "never", "only" — never "should consider", "ideally"
+- [ ] Never state a rule as "X or Y" when the reader must choose; state the condition of the choice
 - [ ] Say what is an error and what is merely discouraged; the reader treats both as prohibitions unless told otherwise
 - [ ] State exceptions beside their rules; the reader over-generalizes prohibitions
 - [ ] Distinguish REQUIRED structure ("must contain") from CONTENT rules; the reader deletes redundant-looking required structure unless told it is required
 - [ ] Define terms once; never introduce synonyms for one concept
-- [ ] State each rule once; cross-references point to a section instead of repeating the rule
+- [ ] State each rule once within a section; a section never relies on a rule stated only in an earlier section (step mode stubs it) — repeat the rule or state it in the Summary
 
 ## Examples
 

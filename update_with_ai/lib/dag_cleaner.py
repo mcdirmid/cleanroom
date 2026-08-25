@@ -1,5 +1,5 @@
 """
-Interface LLS: dag
+Interface LLS: dag_cleaner
 Provides DAG cleaning orchestration.
 """
 
@@ -13,7 +13,7 @@ from .dag_clean_logic import CleanResult
 CleaningResult = Tuple[bool, CleanResult]
 
 
-class Dag(Protocol):
+class DagCleaner(Protocol):
     """Interface for DAG cleaning operations."""
 
     def clean_subgraph(self, target_node: NodeId) -> CleaningResult:

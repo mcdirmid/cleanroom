@@ -1,5 +1,5 @@
 <!-- Dependencies (md files to read alongside this one):
-  - agent_loop-low.md
+  - agent_loop_impl-low.md
 -->
 
 # Interface LLS: bazel_agent_config
@@ -7,12 +7,14 @@
 ## Data Types
 ```python
 from dataclasses import dataclass
-from typing import Optional, Protocol
-from agent_loop import AgentLoopConfig
+from typing import Optional, Protocol, TypeAlias
+from agent_loop_impl import AgentLoopConfig
 
 DEFAULT_CONFIG_TARGET = "//agent_configs:default"
 CONFIG_TARGET_ENV = "AGENT_CONFIG_TARGET"
 API_KEY_ENV = "AGENT_API_KEY"
+
+ConfigTarget: TypeAlias = str
 
 @dataclass
 class AgentConfig:
@@ -29,7 +31,7 @@ class AgentConfig:
     step_sections: bool = True
 
 class BazelAgentConfig(Protocol):
-    def build_agent_loop_config(self, config_target: Optional[str] = None, workspace_root: Optional[str] = None) -> AgentLoopConfig: ...
+    def build_agent_loop_config(self, config_target: ConfigTarget | None = None, workspace_root: Optional[str] = None) -> AgentLoopConfig: ...
 ```
 
 `AgentConfig` mirrors the generated module's `AGENT_CONFIG` dict (see
@@ -40,12 +42,20 @@ gates (per `bazel_agent_config-high.md`): whether the run's sandbox provides
 session-start reads and whether step mode is enabled (both default to
 enabled). All failures are unexpected failures, signaled as exceptions (see
 Failure Handling below).
+
+## Term definitions
+
+- **agent configuration** → the `AgentConfig` type (definition in Data Types)
+- **config target** → the `ConfigTarget` alias (definition in Data Types)
+- **API key** → term definition: a secret credential for the language model service; an API key is never part of an agent configuration or a config target — it is provided by the caller through the environment
+- **agent-loop configuration** → the `AgentLoopConfig` type from agent_loop_impl
+
 ## Component-Provided Operations
 
 ### `build_agent_loop_config`
 
 ```python
-def build_agent_loop_config(self, config_target: Optional[str] = None, workspace_root: Optional[str] = None) -> AgentLoopConfig
+def build_agent_loop_config(self, config_target: ConfigTarget | None = None, workspace_root: Optional[str] = None) -> AgentLoopConfig
 ```
 
 **Purpose:** Provide the agent-loop configuration for an agent_config target,

@@ -21,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, Protocol
 
-from update_with_ai.lib.agent_loop import AgentLoopConfig
+from update_with_ai.lib.agent_loop_impl import AgentLoopConfig
 
 DEFAULT_CONFIG_TARGET = "//agent_configs:default"
 CONFIG_TARGET_ENV = "AGENT_CONFIG_TARGET"
@@ -40,11 +40,11 @@ class AgentConfig:
     name: str
     model: str
     base_url: str
-    api_key_env: str = ""
-    max_iterations: int = 100
-    temperature: float = 0.0
-    timeout: float = 60.0
-    max_tokens: Optional[int] = None
+    api_key_env: str
+    max_iterations: int
+    temperature: float
+    timeout: float
+    max_tokens: Optional[int]
     session_start_reads: bool = True
     step_sections: bool = True
 

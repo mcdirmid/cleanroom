@@ -32,7 +32,7 @@ Provides a controlled environment for agents to read, write, search, and modify 
 
 **Inputs**
 
-- Configured: file mappings (virtual name to full path); readable and writable virtual paths; blame targets (may be empty); the search result limit (the maximum matches a single search may render) and the diff size limit (the maximum characters a verification diff may report); whether session-start reads are enabled; the guide (the run's declared guide, at most one, may be absent); whether step mode is enabled; the templates (a mapping from writable virtual names to their template content; may be empty); an optional verification callback.
+- Configured: file mappings (virtual name to full path); readable and writable virtual paths; blame targets (may be empty); the search result limit (the maximum matches a single search may render); whether session-start reads are enabled; the guide (the run's declared guide, at most one, may be absent); whether step mode is enabled; whether the run's pending messages include a feedback message; the templates (a mapping from writable virtual names to their template content; may be empty); an optional verification callback.
 - Per call: a tool call (tool name and arguments, per tool_provider).
 
 **Operations**
@@ -112,6 +112,8 @@ Provides a controlled environment for agents to read, write, search, and modify 
 - Blame is offered only when blame targets are configured; each (target, feedback) pair is delivered as a feedback message to the blamed node.
 - Termination is at the agent's judgment: the agent signals termination when it considers its task complete, or when it cannot be completed.
 - Advance signals successful termination when verification passes; when files were modified, it requires a change summary naming what changed in each file, directing the next reader's attention to the changes.
+- When the run's pending messages include a feedback message, advance that would otherwise signal successful termination without a change signals a tool failure with a reason directing the agent to change, blame, or fail; the session continues.
+- The feedback obligation is not disclosed to the agent before advance is attempted without a change; it surfaces only through advance's rejection.
 - When files were modified and the change summary is missing, malformed, or incomplete, advance signals a tool failure.
 - Change summaries are bounded; a summary exceeding the bound is rejected with guidance; persistent rejection fails the run.
 

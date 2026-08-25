@@ -3,10 +3,24 @@ Interface LLS: dag_storage
 Provides atomic message persistence and graph access for DAG nodes.
 """
 
-from typing import List, Protocol
+from dataclasses import dataclass
+from typing import List, Literal, Protocol
 
 NodeId = str
-NodeMessage = str
+
+# The kind of a message: a change merely dirties a node (the node may process
+# it and succeed without changing); a feedback obligates the node to change,
+# blame, or fail (per dag_clean_logic).
+MessageKind = Literal["change", "feedback"]
+
+
+@dataclass
+class NodeMessage:
+    """A message addressed to a node: a kind (change or feedback) and text."""
+    kind: MessageKind
+    text: str
+
+
 PendingMessages = List[NodeMessage]
 NodeDependencies = List[NodeId]
 KnownReverseDependencies = List[NodeId]
@@ -35,6 +49,19 @@ class DagStorage(Protocol):
         Failure Handling: If node_id does not exist, behavior is undefined.
                          Storage failures are not handled.
         HLS Justification: "The client may add messages to a node's pending set."
+        """
+        ...
+
+    def clear_pending_messages(self, node_id: NodeId) -> None:
+        """
+        Clear a node's pending messages, leaving its known reverse dependencies.
+
+        Preconditions: node_id must exist in the graph.
+        Postconditions: The node's pending messages are removed atomically; the
+                       node's known reverse dependencies remain.
+        Failure Handling: If node_id does not exist, behavior is undefined.
+                         Storage failures are not handled.
+        HLS Justification: "The client may clear a node's pending messages."
         """
         ...
 

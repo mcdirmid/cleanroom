@@ -3,7 +3,7 @@
   - dag_clean_logic-low.md
 -->
 
-# Interface LLS: dag
+# Interface LLS: dag_cleaner
 
 ## Data Types
 ```python
@@ -13,11 +13,24 @@ from dag_clean_logic import CleanResult
 
 CleaningResult: TypeAlias = tuple[bool, CleanResult]
 
-class Dag(Protocol):
+class DagCleaner(Protocol):
     def clean_subgraph(self, target_node: NodeId) -> CleaningResult: ...
 ```
 
 Represents the outcome of cleaning: `(True, success)`, `(True, change_result)`, `(True, feedback_result)`, or `(False, failure_result)`.
+
+## Term definitions
+
+- **node** → the `NodeId` alias from dag_storage
+- **dependency** → the `NodeDependencies` alias from dag_storage
+- **pending message** → the `PendingMessages` alias from dag_storage
+- **subgraph** → term definition from dag_storage
+- **reverse dependency** → term definition from dag_storage
+- **dirty** → term definition from dag_clean_logic
+- **cleaning** → term definition from dag_clean_logic
+- **change message** → term definition from dag_clean_logic
+- **feedback message** → term definition from dag_clean_logic
+
 ## Component-Provided Operations
 
 ### `clean_subgraph`
@@ -41,6 +54,9 @@ def clean_subgraph(self, target_node: NodeId) -> CleaningResult
 - A node is not cleaned while any dependency is dirty.
 - Each node's cleaning is atomic (it provides messages or signals failure, never both).
 - Change messages delivered to all known reverse dependencies of the node (as provided by `dag_storage`); feedback messages delivered to specified dependencies (within the subgraph).
+- After routing, a node whose cleaning produced a `ChangeResult` has its pending messages and known reverse dependencies deleted.
+- After cleaning, a node whose cleaning produced a `NoChangeResult` has its pending messages cleared; its known reverse dependencies remain.
+- A node whose cleaning produced a `FeedbackResult` keeps its pending messages and known reverse dependencies.
 - Cleaning always terminates (guarded by a single total bound on clean operations).
 - Returns `(True, CleanResult)` on success (indicating no messages, a `ChangeResult`, or a `FeedbackResult`); otherwise `(False, FailureResult)` where the `CleanResult` variant is a `FailureResult`.
 - On failure: the offending node's messages remain unchanged; previously cleaned nodes retain changes; processing halts.

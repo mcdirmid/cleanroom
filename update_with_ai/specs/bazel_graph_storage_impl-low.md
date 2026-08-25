@@ -12,7 +12,6 @@
 from bazel_graph_storage import (
     BazelGraphStorage,
     NodeDefinition,
-    NodeId,
     PackageDirectory,
     GraphConfig,
 )
@@ -45,9 +44,11 @@ Constructed with the `bazel_graph_storage` interface's `GraphConfig` (see Interf
 
 7. **`add_messages`** — Appends the given messages to the node's pending set in the message file and persists the result.
 
-8. **`delete_node_data`** — Deletes the node's data: removes the node's entry from the file entirely, so both its pending messages and its known reverse dependencies are deleted.
+8. **`clear_pending_messages`** — Removes the node's pending messages from its entry in the message file while preserving its known reverse dependencies, and persists the result; a node with no entry is unchanged.
 
-Persistence: a single JSON file named `.update_with_ai.json` per package directory maps node IDs to entries holding the node's pending messages and known reverse dependencies. Reads treat a missing file as empty. Writes are atomic: new content is written to a temporary file, which is then atomically replaced onto `.update_with_ai.json`. A write that fails before the replacement leaves the previous file unchanged (the node's data is not updated).
+9. **`delete_node_data`** — Deletes the node's data: removes the node's entry from the file entirely, so both its pending messages and its known reverse dependencies are deleted.
+
+Persistence: a single file named `.update_with_ai.textproto` per package directory, serialized from the `update_with_ai` message type defined by the `update_with_ai.proto` schema in the protobuf text format, mapping node IDs to entries holding the node's pending messages (each with its kind and text) and known reverse dependencies. Reads treat a missing file as empty. Writes are atomic: new content is written to a temporary file, which is then atomically replaced onto `.update_with_ai.textproto`. A write that fails before the replacement leaves the previous file unchanged (the node's data is not updated).
 
 **Subclass: `BazelGraphStorageFileImpl`** (concrete implementation) overrides the abstract methods and loads all data from manifests during `__init__`:
 - The subclass requires `workspace_root` in the config (a `graph_source`-only config is rejected): it locates manifest files under the workspace root.
@@ -59,6 +60,7 @@ Persistence: a single JSON file named `.update_with_ai.json` per package directo
 - Derives package directories from the manifest file location (mapped onto the real source tree via `BUILD_WORKSPACE_DIRECTORY` environment variable).
 
 **`_build_sandbox_config` helper**: Given a manifest and file mappings, constructs a `SandboxConfig` with:
+- `file_mappings`: the node's declared `src`, its `silent_srcs`, and the declared `src`s of its deps (and star-closure nodes), each mapped to its full filesystem path — a dependency's src maps into the dependency's package directory, the node's own src and silent srcs map into the node's package directory, and the guide file (when declared) maps into the guide's package directory; name collisions prefer the node's own files
 - `readable_paths`: the node's own `src` plus its deps' `src`s and the `src` of every node in its star deps' transitive closure (deps include feedback deps and star deps; neither the node's own `silent_srcs` nor the deps' `silent_srcs` are readable, silent deps' `src`s are not readable, and star-closure traversal never follows `silent_deps`); the guide file when the manifest declares a guide
 - `writable_paths`: the node's own `src` + `silent_srcs`
 - `guide`: the guide's virtual name when the manifest declares a guide — the guide file is mapped (its path resolved relative to the real source tree) and listed in `readable_paths`, so the sandbox can read it and treat it per the step-mode flag; `None` when the manifest declares no guide
@@ -73,22 +75,18 @@ Persistence: a single JSON file named `.update_with_ai.json` per package directo
 
 - Storage operations are atomic per node
 - Messages are appended to a node's pending set in the order delivered
-- Messages and known reverse dependencies persist across component restarts (JSON file on disk)
 - The message file is the sole state for messages and known reverse dependencies; the component maintains no in-memory state for them
 - Resolved lookups (definitions, package directories, dependencies) are served from data built when the component is initialized; cached values are never stale relative to the configured graph source
-- Queries are read-only; no workspace modification occurs (except during `__init__` of the subclass)
-- Each query provides a consistent view of the graph
-- Graph-source failures signal failure without side effects (the graph is unmodified)
 - Unknown labels raise an error for all queries (a precondition violation; no exception is required)
-- Storage failures are unexpected (filesystem errors) and unhandled by the implementation
 - The implementation never invokes Bazel tooling (`bazel query`, `cquery`, aspects) during processing; those are at most offline extraction tools used outside the component
 
 ## Non-Concerns
 
-- **Harness file naming:** Pinned to `.update_with_ai.json` in the package directory (the interface leaves the filename open).
+- **Storage failures:** Filesystem errors are unexpected and unhandled by the implementation.
+- **Harness file naming:** Pinned to `.update_with_ai.textproto` in the package directory (the interface leaves the filename open).
 - **Concurrency:** Behavior with concurrent writers is unspecified.
-- **Serialization format:** Messages and known reverse dependencies are serialized as JSON; the node-ID-keyed mapping is an internal representation detail.
-- **Empty entries:** `delete_node_data` removes the node's key from the file rather than writing an empty entry.
+- **Serialization format:** Messages (each with its kind and text) and known reverse dependencies are serialized in the protobuf text format per the `update_with_ai.proto` schema; the exact field layout is pinned by that schema.
+- **Empty entries:** `delete_node_data` removes the node's key from the file rather than writing an empty entry; `clear_pending_messages` writes an entry with an empty message list when the node has known reverse dependencies, and removes the node's key when it has none.
 - **Label canonicalization:** Normalization of label spellings is unspecified.
 
 

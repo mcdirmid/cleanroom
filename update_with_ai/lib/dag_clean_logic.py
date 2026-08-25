@@ -55,6 +55,8 @@ class DagCleanLogic(Protocol):
           dependencies), or NoChangeResult (no messages)
         - On failure: provides FailureResult
         - Produces either change or feedback messages, not both.
+        - When messages includes a feedback message, provides no NoChangeResult:
+          the cleaning produces a ChangeResult, a FeedbackResult, or a FailureResult.
         - Caller routes change messages to reverse dependencies; feedback
           messages to specified dependencies.
 

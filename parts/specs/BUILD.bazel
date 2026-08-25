@@ -1,40 +1,122 @@
 # parts/specs/BUILD.bazel
 #
-# High-level specification nodes for the DAG components. Each
-# update_hls_with_ai call returns a handle carrying the node's transitive
-# spec-dep closure; a dependent node passes the handles of its spec deps
-# (not raw labels), so its manifest deps and lint coverage include the full
-# transitive closure. Handles require deps to be created before dependents.
+# High-level specification nodes for testing. Each update_spec_with_ai call
+# creates the node's *_high (and *_low) update_with_ai targets plus a
+# *_high_lint test target; a dependent node passes the labels of its spec
+# deps (not raw file labels), so its manifest deps and lint coverage include
+# the full transitive closure.
+#
+# spec_deps mirrors each spec's front matter: the fulfills target, the
+# `imports:` specs, and every `terms (from X)` owner. Label strings (rather
+# than bound handles) are used so dependency order is resolved by Bazel;
+# the spec graph must be acyclic, since node deps are hard build edges.
 
 load("//update_with_ai:specs.bzl", "update_spec_with_ai")
 
-dag_storage = update_spec_with_ai(
+# ---------------------------------------------------------------------------
+# Dependency-free specs
+# ---------------------------------------------------------------------------
+
+update_spec_with_ai(
     name = "dag_storage",
     spec_deps = [],
 )
 
-
-
-# tool_provider is referenced by dag_clean_logic (and others); it is a
-# reference-only spec (owns its terms, depends on nothing).
-tool_provider = update_spec_with_ai(
+update_spec_with_ai(
     name = "tool_provider",
     spec_deps = [],
 )
 
-dag_clean_logic = update_spec_with_ai(
+# ---------------------------------------------------------------------------
+# dag family
+# ---------------------------------------------------------------------------
+
+update_spec_with_ai(
     name = "dag_clean_logic",
-    # The text references dag_storage and tool_provider; both must be in
-    # spec_deps so the agent context can read them.
-    spec_deps = [dag_storage, tool_provider],
+    spec_deps = ["dag_storage", "tool_provider"],
 )
 
-dag = update_spec_with_ai(
+update_spec_with_ai(
     name = "dag",
-    spec_deps = [dag_storage, dag_clean_logic],
+    spec_deps = ["dag_storage", "dag_clean_logic"],
 )
 
-dag_impl = update_spec_with_ai(
+update_spec_with_ai(
     name = "dag_impl",
-    spec_deps = [dag, dag_storage, dag_clean_logic],
+    spec_deps = ["dag", "dag_storage", "dag_clean_logic"],
+)
+
+# ---------------------------------------------------------------------------
+# sandbox / agent_loop (sandbox imports agent_loop's run term; agent_loop's
+# front matter no longer references sandbox — its step-mode terms are unused
+# there, and an interface must not reference a spec that depends on it)
+# ---------------------------------------------------------------------------
+
+update_spec_with_ai(
+    name = "agent_loop",
+    spec_deps = ["tool_provider"],
+)
+
+update_spec_with_ai(
+    name = "sandbox",
+    spec_deps = ["tool_provider", "agent_loop", "dag_storage", "dag_clean_logic"],
+)
+
+update_spec_with_ai(
+    name = "agent_loop_impl",
+    spec_deps = ["agent_loop", "tool_provider"],
+)
+
+update_spec_with_ai(
+    name = "sandbox_impl",
+    spec_deps = ["sandbox", "tool_provider", "dag_clean_logic", "agent_loop"],
+)
+
+# ---------------------------------------------------------------------------
+# bazel_* family and remaining implementations
+# ---------------------------------------------------------------------------
+
+update_spec_with_ai(
+    name = "bazel_node_loader",
+    spec_deps = ["tool_provider", "sandbox"],
+)
+
+update_spec_with_ai(
+    name = "bazel_agent_config",
+    spec_deps = ["agent_loop"],
+)
+
+update_spec_with_ai(
+    name = "bazel_graph_storage",
+    spec_deps = ["dag_storage", "sandbox"],
+)
+
+update_spec_with_ai(
+    name = "bazel_node_loader_impl",
+    spec_deps = ["bazel_node_loader", "tool_provider", "agent_loop"],
+)
+
+update_spec_with_ai(
+    name = "bazel_agent_config_impl",
+    spec_deps = ["bazel_agent_config", "agent_loop"],
+)
+
+update_spec_with_ai(
+    name = "bazel_graph_storage_impl",
+    spec_deps = ["bazel_graph_storage", "dag_storage", "sandbox", "bazel_node_loader"],
+)
+
+update_spec_with_ai(
+    name = "agent_node_clean_logic_impl",
+    spec_deps = ["dag_clean_logic", "bazel_graph_storage", "dag_storage", "agent_loop", "sandbox"],
+)
+
+update_spec_with_ai(
+    name = "bazel_runner",
+    spec_deps = ["dag", "dag_storage", "dag_clean_logic", "bazel_agent_config", "sandbox", "agent_loop", "bazel_node_loader"],
+)
+
+update_spec_with_ai(
+    name = "bazel_runner_impl",
+    spec_deps = ["bazel_runner", "bazel_graph_storage", "dag_storage", "dag_clean_logic", "dag", "agent_loop", "sandbox", "bazel_agent_config"],
 )

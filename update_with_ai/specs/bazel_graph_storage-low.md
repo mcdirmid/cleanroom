@@ -39,7 +39,26 @@ The directory containing a node's BUILD file; also where the node's messages are
 
 The agent prompt and sandbox configuration declared by a node's target. The sandbox configuration is a `sandbox.SandboxConfig`.
 
-`BazelGraphStorage` fulfills the `DagStorage` Protocol — pending messages, node dependencies, and known reverse dependencies per `dag_storage-low.md` — and additionally resolves node definitions and package directories.
+`BazelGraphStorage` fulfills the `DagStorage` Protocol — pending messages, message clearing, node dependencies, and known reverse dependencies per `dag_storage-low.md` — and additionally resolves node definitions and package directories.
+
+## Term definitions
+
+- **node definition** → the `NodeDefinition` type (definition in Data Types)
+- **package directory** → the `PackageDirectory` alias (definition in Data Types)
+- **silent dependency** → term definition: a dependency a node declares as silent; a silent dependency is a dependency (cleaned before the declaring node) whose changes do not propagate to the declaring node
+- **star dependency** → term definition: a dependency a node declares as a star dependency; a star dependency is a dependency (cleaned before the declaring node) whose declared source, and the declared source of every node reachable from it through star dependencies (never through non-star dependencies or silent dependencies), are readable by the declaring node
+- **node** → the `NodeId` alias from dag_storage
+- **message** → the `NodeMessage` type from dag_storage
+- **pending message** → the `PendingMessages` alias from dag_storage
+- **dependency** → the `NodeDependencies` alias from dag_storage
+- **propagating dependency** → term definition from dag_storage
+- **reverse dependency** → term definition from dag_storage
+- **subgraph** → term definition from dag_storage
+- **blame target** → the `BlameTarget` alias from sandbox
+- **template** → term definition from sandbox
+- **guide** → term definition from sandbox
+- **step mode** → term definition from sandbox
+
 ## Component-Provided Operations
 
 ### `resolve_node_definition`

@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .sandbox import (
     VirtualName, Blame, SandboxConfig, WriteOccurred, Sandbox
 )
+
 from .tool_provider import (
     ToolDefinition,
     ToolResult,
@@ -20,6 +21,12 @@ from .tool_provider import (
     ToolFailure,
 )
 from .dag_clean_logic import ChangeResult, FeedbackResult, NoChangeResult
+from .dag_storage import NodeMessage
+
+# The maximum characters a verification diff may report; the default (1000)
+# applies when the sandbox is constructed without an explicit value (see
+# specs/sandbox_impl-low.md, Non-Concerns).
+DiffSizeLimit = int
 
 
 class SandboxImpl(Sandbox):
@@ -33,14 +40,17 @@ class SandboxImpl(Sandbox):
     the agent loop applies the stubbing.
     """
 
-    def __init__(self, config: SandboxConfig):
+    def __init__(self, config: SandboxConfig, diff_size_limit: Optional[DiffSizeLimit] = None):
         """
         Initialize the sandbox with configuration.
 
         Args:
             config: Configuration object containing file mappings, policies, etc.
+            diff_size_limit: Maximum characters a verification diff may report
+                (default: 1000 when None).
         """
         self.config = config
+        self.diff_size_limit = diff_size_limit
         self.write_occurred: WriteOccurred = False
 
         # Per-run change-summary rejection counters (soft/hard length bounds):
@@ -889,6 +899,16 @@ class SandboxImpl(Sandbox):
                     "at run start. Call advance() with no changes to report "
                     "no change."
                 )
+            if self.config.feedback_pending:
+                # The run is processing feedback (per the sandbox contract):
+                # advance cannot terminate without a change. The session
+                # continues; the agent must change files (and report the
+                # change), or call blame() or fail() to end the run.
+                return ToolFailure[str](
+                    "Cannot advance without a change: the run is processing "
+                    "feedback, so it must change files and report the change "
+                    "in advance(), or call blame() or fail() to end the run."
+                )
             return TerminateAgentWithSuccess(NoChangeResult())
 
         if not changes:
@@ -908,7 +928,7 @@ class SandboxImpl(Sandbox):
 
         changed_set = set(effectively_changed)
         mentioned: set = set()
-        messages: List[str] = []
+        messages: List[NodeMessage] = []
         for entry in changes:
             file_name = (entry or {}).get("file")
             summary = (entry or {}).get("summary")
@@ -972,7 +992,10 @@ class SandboxImpl(Sandbox):
             self._summary_soft_rejections = 0
             self._summary_hard_rejections = 0
             mentioned.add(file_name)
-            messages.append("{}: {}".format(file_name, summary_text))
+            messages.append(NodeMessage(
+                kind="change",
+                text="{}: {}".format(file_name, summary_text),
+            ))
 
         missing = changed_set - mentioned
         if missing:
@@ -1018,7 +1041,7 @@ class SandboxImpl(Sandbox):
             return "No files were changed in this run."
 
         full = "\n\n".join(sections)
-        limit = self.config.diff_size_limit if self.config.diff_size_limit is not None else 1000
+        limit = self.diff_size_limit if self.diff_size_limit is not None else 1000
         if len(full) <= limit:
             return full
         lines = full.splitlines()
@@ -1061,7 +1084,12 @@ class SandboxImpl(Sandbox):
         if invalid_blames:
             return ToolFailure[str](f"Blame assignment rejected for: {invalid_blames}")
 
-        return TerminateAgentWithSuccess(FeedbackResult(messages=blames))
+        return TerminateAgentWithSuccess(FeedbackResult(
+            messages=[
+                (target, NodeMessage(kind="feedback", text=feedback))
+                for (target, feedback) in blames
+            ],
+        ))
 
     def get_write_occurred(self) -> WriteOccurred:
         """Return whether the agent has modified the filesystem during the current run."""

@@ -44,7 +44,8 @@ The section inventory is closed. An interface spec has exactly `Purpose`, `Terms
 ## Contract blocks
 
 - [ ] The Contract is a set of labeled blocks: `**Inputs**`, `**Operations**`, `**Guarantees**`, `**Assumptions**`, plus named blocks
-- [ ] Inputs lists everything the client supplies, distinguishing "configured:" from "per call:"; present only when the client supplies something
+- [ ] Inputs lists what the client supplies to the interface, distinguishing "configured:" from "per call:"; "configured:" appears only when an interface operation consumes the config (a config-providing operation or a per-call config parameter); configuration that only constructs the implementation is declared in the implementation's `imports:` front matter and `[external]` Deltas lines, never in the interface Inputs
+- [ ] A configuration is never defined in a component interface unless it is used in that interface: the interface's operations consume or provide every configuration it defines (a config-providing operation or a per-call config parameter); a configuration only the implementation performs — construction inputs, defaults, policy values, mechanism parameters — is declared in the implementation spec, never in the interface
 - [ ] Operations lists the client-initiated behaviors; each becomes an operation in the LLS
 - [ ] Guarantees lists the component's obligations; failure clauses shared by several triggers are factored once, with the triggers as a sub-list
 - [ ] Assumptions lists preconditions the component relies on; assumptions are caller obligations, never failure conditions
@@ -141,6 +142,7 @@ The section inventory is closed. An interface spec has exactly `Purpose`, `Terms
 - [ ] No vagueness without marking — "the value is passed along" — "Opaque; passes through unchanged"
 - [ ] No restated inherited constraint — "per the <interface> contract", a repeated guarantee, or a repeated owned term definition — deltas only; drop the restatement
 - [ ] No policy values in interfaces — "locks the account after three failed attempts" — "repeated failed attempts lock the account"; the count is pinned in the implementation spec
+- [ ] No configuration without a performing operation — "Configured: an exchange rate and a settlement delay" with no operation consuming them — an interface defines only configurations its operations consume; the values are pinned in the implementation spec
 - [ ] No exception class names — "signaled as `OrderNotFoundError`" — "signals an unexpected failure when the order is not found"; the class is pinned in the implementation spec
 - [ ] No rationale clauses in Guarantees — "so the report is current when the reader opens it" — state the observable effect; the reason belongs in the Purpose
 - [ ] No forward references — an interface never names a spec that depends on it (its implementation, downstream consumers, or the LLS); a fact only the implementation pins is withheld
