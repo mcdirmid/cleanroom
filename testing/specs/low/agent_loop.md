@@ -115,7 +115,6 @@ def run_agent(self, prompt: str, tools: list[ToolDefinition], tool_executor: Too
 - Tool calls present in a truncated response are not executed
 - Each follow-up request counts toward the iteration limit
 - Chronological order maintained
-- No state persists between runs
 - Logger callback invoked after data appended to history
 - If `tool_executor` returns `Continue`, the loop continues with the model processing the tool results.
 - If `tool_executor` returns `TerminateAgentWithSuccess`, the loop stops and returns `(TerminateAgentWithSuccess, history)`; if it returns `TerminateAgentWithFailure[T_tool]`, the loop stops and returns `(TerminateAgentWithFailure[T_tool], history)`.
@@ -168,3 +167,6 @@ def run_agent(self, prompt: str, tools: list[ToolDefinition], tool_executor: Too
 - **Model API version:** The specific API version (v1, v2, etc.) is unspecified.
 - **Termination reminder trigger:** The reminder is not triggered by tool failures, which carry their own guidance (see `tool_provider` `ToolFailure`).
 - **Stub text:** The exact text of a stub placeholder is unspecified.
+- **Empty prompt:** An empty prompt sends no user message — a pinned reading of the HLS's prompt input, recorded here so it is not read as an omission.
+- **Degenerate truncation:** A degenerate truncated response returns `(error, history)` without appending the truncated response or the continuation prompt — a pinned reading of the HLS's "signals failure" for degenerate truncation.
+- **Iteration counting:** Each follow-up request counts toward the iteration limit — a pinned reading of the HLS's iteration limit, recorded here.

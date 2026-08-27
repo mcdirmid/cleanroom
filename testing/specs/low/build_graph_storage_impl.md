@@ -30,7 +30,7 @@ Constructed with the `build_graph_storage` interface's `GraphConfig` (see Interf
 
 `BaseBuildGraphStorageImpl` (abstract base class) implements the `BuildGraphStorage` Protocol by:
 
-1. **`__init__`**: Resolves the graph source from config (specifying one of `graph_source` or `workspace_root`). Then calls abstract methods `_build_adjacency`, `_build_definitions`, and `_build_package_dirs`, implemented by subclasses.
+1. **`__init__`**: Resolves the graph source from config (specifying one of `graph_source` or `workspace_root`). Then calls abstract methods `_build_adjacency`, `_build_definitions`, `_build_package_dirs`, and `_build_propagating_deps`, implemented by subclasses. The propagating-deps map (which declared deps of each node are propagating, i.e., not silent) is obtained through the fourth hook so the reverse-dependency recording side effect can consult it.
 
 2. **`resolve_node_definition`**: Returns a `NodeDefinition` (agent prompt + sandbox configuration) from the built-in definitions map.
 
@@ -48,7 +48,7 @@ Constructed with the `build_graph_storage` interface's `GraphConfig` (see Interf
 
 9. **`delete_node_data`** — Deletes the node's data: removes the node's entry from the file entirely, so both its pending messages and its known reverse dependencies are deleted.
 
-Persistence: a single file named `.update_with_ai.textproto` per package directory, serialized from the `update_with_ai` message type defined by the `update_with_ai.proto` schema in the protobuf text format, mapping node IDs to entries holding the node's pending messages (each with its kind and text) and known reverse dependencies. Reads treat a missing file as empty. Writes are atomic: new content is written to a temporary file, which is then atomically replaced onto `.update_with_ai.textproto`. A write that fails before the replacement leaves the previous file unchanged (the node's data is not updated).
+Persistence: a single file named `.update_with_ai.textproto` per package directory, serialized from the `update_with_ai` message type defined by the `update_with_ai.proto` schema in the protobuf text format, mapping node IDs to entries holding the node's pending messages (each with its kind and text) and known reverse dependencies. Reads treat a missing file as empty; a message entry with no kind is decoded as kind `change` (a defensive default for entries written before the kind field was populated). Writes are atomic: new content is written to a temporary file, which is then atomically replaced onto `.update_with_ai.textproto`. A write that fails before the replacement leaves the previous file unchanged (the node's data is not updated).
 
 **Subclass: `BuildGraphStorageFileImpl`** (concrete implementation) overrides the abstract methods and loads all data from manifests during `__init__`:
 - The subclass requires `workspace_root` in the config (a `graph_source`-only config is rejected): it locates manifest files under the workspace root.
@@ -60,12 +60,12 @@ Persistence: a single file named `.update_with_ai.textproto` per package directo
 - Derives package directories from the manifest file location (mapped onto the real source tree via `BUILD_WORKSPACE_DIRECTORY` environment variable).
 
 **`_build_sandbox_config` helper**: Given a manifest and file mappings, constructs a `SandboxConfig` with:
-- `file_mappings`: the node's declared `src`, its `silent_srcs`, and the declared `src`s of its deps (and star-closure nodes), each mapped to its full filesystem path — a dependency's src maps into the dependency's package directory, the node's own src and silent srcs map into the node's package directory, and the guide file (when declared) maps into the guide's package directory; name collisions prefer the node's own files
-- `readable_paths`: the node's own `src` plus its deps' `src`s and the `src` of every node in its star deps' transitive closure (deps include feedback deps and star deps; neither the node's own `silent_srcs` nor the deps' `silent_srcs` are readable, silent deps' `src`s are not readable, and star-closure traversal never follows `silent_deps`); the guide file when the manifest declares a guide
-- `writable_paths`: the node's own `src` + `silent_srcs`
+- `file_mappings`: the node's declared `src`, its `silent_srcs`, and the declared `src`s of its deps (and star-closure nodes), each keyed by the file's virtual name (per sandbox: the shortest path suffix unique among the node's files — the bare file name when unambiguous) and mapped to its full filesystem path — a dependency's src maps into the dependency's package directory, the node's own src and silent srcs map into the node's package directory, and the guide file (when declared) maps into the guide's package directory; name collisions prefer the node's own files
+- `readable_paths`: the virtual names of the node's own `src`, its own `silent_srcs` (readable so the agent can read and edit them), its deps' `src`s and the `src` of every node in its star deps' transitive closure (deps include feedback deps and star deps; deps' `silent_srcs` are not readable, silent deps' `src`s are not readable, and star-closure traversal never follows `silent_deps`); the guide file when the manifest declares a guide
+- `writable_paths`: the virtual names of the node's own `src` + `silent_srcs`
 - `guide`: the guide's virtual name when the manifest declares a guide — the guide file is mapped (its path resolved relative to the real source tree) and listed in `readable_paths`, so the sandbox can read it and treat it per the step-mode flag; `None` when the manifest declares no guide
-- `templates`: when the manifest declares a `template`, the node's declared `src` mapped to the template file's content — the template file's path is resolved relative to the real source tree (the `BUILD_WORKSPACE_DIRECTORY`-mapped root) and read at initialization; an empty mapping when the manifest declares no template
-- `blame_targets`: the manifest's `feedback_deps` (only feedback deps may receive feedback from the node)
+- `templates`: when the manifest declares a `template`, the node's declared `src`'s virtual name mapped to the template file's content — the template file's path is resolved relative to the real source tree (the `BUILD_WORKSPACE_DIRECTORY`-mapped root) and read at initialization; an empty mapping when the manifest declares no template
+- `blame_targets`: the mapping from each feedback dep's declared `src`'s virtual name to the feedback dep's label (only feedback deps may receive feedback from the node; a feedback dep with no declared `src` contributes no entry)
 - `search_result_limit`: pinned to 10 — the maximum rendered matches a single search may return
 - `verification_callback`: built from the manifest's `verify` field (a shell command string); `_build_verify_callback` runs the command via `subprocess` and returns `(success, output)` where `success` is `True` when the command exits 0. The success flag gates `advance` (see sandbox specs).
 

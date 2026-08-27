@@ -106,3 +106,8 @@ from the environment."
   rule (update_with_ai/agent_config.bzl), not specified here.
 - The meaning of individual configuration parameters: they pass through
   unchanged.
+- **Identity fields:** `AgentConfig.label` and `AgentConfig.name` carry the
+  config target's label and rule name for attribution — a pin beyond the
+  HLS's term enumeration of the config's contents (the generated `{name}_config.py`
+  module convention names the rule), recorded here so they are not read as
+  invented configuration.

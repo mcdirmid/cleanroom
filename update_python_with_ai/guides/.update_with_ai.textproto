@@ -5,8 +5,16 @@ nodes {
   }
 }
 nodes {
+  key: "@@//update_python_with_ai/guides:high_to_low"
+  value {
+    reverse_dependencies: "@@//update_python_with_ai/guides:low_to_lib"
+  }
+}
+nodes {
   key: "@@//update_python_with_ai/guides:low_level_spec"
   value {
     reverse_dependencies: "@@//update_python_with_ai/guides:high_to_low"
+    reverse_dependencies: "@@//update_python_with_ai/guides:low_to_lib"
+    reverse_dependencies: "@@//update_python_with_ai/guides:low_to_test"
   }
 }

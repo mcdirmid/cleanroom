@@ -94,6 +94,7 @@ Executes a single tool call and returns a sequence of one or more tool results o
 
 - **tool definition** → the `ToolDefinition` alias (definition in Data Types)
 - **tool result** → the `ToolResult` type (definition in Data Types)
+- **presented tool result** → the `PresentedToolResult` type (definition in Data Types)
 - **supersession flag** → term definition: whether the result supersedes the earlier non-stubbed result for the same file or tool command; which results carry the flag is declared by the producing component, and a result without the flag never supersedes an earlier result (realized as the `ToolResult.supersedes` field)
 - **stub** → term definition: replacing a superseded tool result's content with a placeholder; the stub text is applied by the consuming agent loop, and a `ToolResult` never carries it
 - **signal** → the `Signal` alias (definition in Data Types)
@@ -186,3 +187,6 @@ Once a termination signal is produced:
 ## Non-Concerns
 
 - **Provider state corruption:** Unhandled by this interface; providers may handle it explicitly by extending their own interface spec.
+- **Tool result structure:** the semantic content, supersession flag, and note are observable; the presented form additionally carries the tool's name and arguments for attribution (per presented tool result).
+- **Consumer routing:** the consumer routes termination signals, interprets the carried termination result, and stubs superseded results — an assumption on the consumer, recorded per the HLS.
+- **Executor protocol:** the `ToolExecutor` protocol (one tool call at a time; call ids assigned by the consuming agent loop) serves the closure's delegation of tool execution to a provided executor; the interface pins it so consumers can inject execution.

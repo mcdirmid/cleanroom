@@ -8,6 +8,13 @@ exports_files(["hls_lint.py"], visibility = ["//visibility:public"])
 # The linter is referenced by lls_lint test targets in other packages.
 exports_files(["lls_lint.py"], visibility = ["//visibility:public"])
 
+# The lib/test BUILD fixers are referenced by the lib/test nodes' verify
+# commands (update_python_with_ai.bzl) in other packages.
+exports_files(
+    ["build_lint_common.py", "lib_lint.py", "test_lint.py"],
+    visibility = ["//visibility:public"],
+)
+
 pyright_library(
     name = "hls_lint",
     srcs = ["hls_lint.py"],
@@ -19,6 +26,27 @@ pyright_library(
     name = "lls_lint",
     srcs = ["lls_lint.py"],
     pyright_deps = [],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "build_lint_common",
+    srcs = ["build_lint_common.py"],
+    pyright_deps = [],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "lib_lint",
+    srcs = ["lib_lint.py"],
+    pyright_deps = ["//update_python_with_ai/bin:build_lint_common"],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "test_lint",
+    srcs = ["test_lint.py"],
+    pyright_deps = ["//update_python_with_ai/bin:build_lint_common"],
     visibility = ["//visibility:public"],
 )
 
@@ -41,5 +69,21 @@ sh_test(
         "//update_python_with_ai/bin:lls_lint.py",
         "//update_with_ai/specs:low_specs",
     ],
+    tags = ["lint"],
+)
+
+# Gate: lib_lint.py creates/fixes pyright_library BUILD entries.
+sh_test(
+    name = "lib_lint_test",
+    srcs = ["lib_lint_test.sh"],
+    data = ["//update_python_with_ai/bin:lib_lint.py"],
+    tags = ["lint"],
+)
+
+# Gate: test_lint.py creates/fixes pyright_test BUILD entries.
+sh_test(
+    name = "test_lint_test",
+    srcs = ["test_lint_test.sh"],
+    data = ["//update_python_with_ai/bin:test_lint.py"],
     tags = ["lint"],
 )

@@ -1,0 +1,89 @@
+load("//bin:pyright_library.bzl", "pyright_library")
+# lib/BUILD.bazel
+pyright_library(
+    name = "dag_storage",
+    srcs = ["dag_storage.py"],
+    pyright_deps = [],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "dag_cleaner",
+    srcs = ["dag_cleaner.py"],
+    pyright_deps = [
+        "//testing/lib:dag_storage",
+        "//testing/lib:dag_clean_logic",
+        "//testing/lib:tool_provider",
+    ],
+    deps = [],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "tool_provider",
+    srcs = ["tool_provider.py"],
+    pyright_deps = [],
+    deps = [],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "dag_clean_logic",
+    srcs = ["dag_clean_logic.py"],
+    pyright_deps = [
+        "//testing/lib:dag_storage",
+        "//testing/lib:tool_provider",
+    ],
+    deps = [],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "dag_cleaner_impl",
+    srcs = ["dag_cleaner_impl.py"],
+    pyright_deps = [
+        "//testing/lib:dag_cleaner",
+        "//testing/lib:dag_storage",
+        "//testing/lib:dag_clean_logic",
+        "//testing/lib:tool_provider",
+    ],
+    deps = [],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "agent_loop",
+    srcs = ["agent_loop.py"],
+    pyright_deps = [
+        "//testing/lib:tool_provider",
+    ],
+    deps = [],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "sandbox",
+    srcs = ["sandbox.py"],
+    pyright_deps = [
+        "//testing/lib:tool_provider",
+        "//testing/lib:agent_loop",
+        "//testing/lib:dag_storage",
+        "//testing/lib:dag_clean_logic",
+    ],
+    deps = [],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "sandbox_impl",
+    srcs = ["sandbox_impl.py"],
+    pyright_deps = [
+        "//testing/lib:sandbox",
+        "//testing/lib:tool_provider",
+        "//testing/lib:dag_clean_logic",
+        "//testing/lib:agent_loop",
+        "//testing/lib:dag_storage",
+    ],
+    deps = [],
+    visibility = ["//visibility:public"],
+)

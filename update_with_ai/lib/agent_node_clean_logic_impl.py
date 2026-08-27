@@ -105,14 +105,17 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
             """Per-call tool executor (tool_provider.ToolExecutor): dispatch a
             single tool call to the sandbox operation of the same name."""
             if name == "blame":
-                # Additional validation layer: a blame target must be a
-                # dependency of the node (the sandbox already validated the
-                # targets against the configured blame_targets). An invalid
-                # target is a tool failure, not an agent failure: the agent
-                # may correct its blame and continue.
+                # Additional validation layer: a blame target is the virtual
+                # name of a blameable artifact; resolve it to its owning node
+                # via the sandbox configuration's blame_targets mapping, then
+                # validate the owning node is a dependency of the node (the
+                # sandbox itself resolves and validates the targets at call
+                # time). An invalid target is a tool failure, not an agent
+                # failure: the agent may correct its blame and continue.
                 deps = set(self._graph.get_node_dependencies(node_id))
                 for target, _feedback in arguments.get("blames", []):
-                    if target not in deps:
+                    owner = sandbox_config.blame_targets.get(target)
+                    if owner is None or owner not in deps:
                         return ToolFailure[str](
                             f"Blame target {target} is not a dependency of {node_id}"
                         )

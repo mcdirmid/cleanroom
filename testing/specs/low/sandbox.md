@@ -12,6 +12,7 @@
 from typing import Any, Callable, Protocol, TypeVar, Generic, TypeAlias
 from dataclasses import dataclass, field
 from tool_provider import ToolDefinition, ToolResult, PresentedToolResult, Signal, TerminateAgentWithSuccess, TerminateAgentWithFailure, TerminateSuccessResult, ToolFailure, ToolCallOutcome, T_tool
+from dag_storage import NodeId
 
 VirtualName: TypeAlias = str
 
@@ -23,9 +24,9 @@ ReadablePaths: TypeAlias = list[VirtualName]
 
 WritablePaths: TypeAlias = list[VirtualName]
 
-BlameTargets: TypeAlias = list[str]
+BlameTargets: TypeAlias = dict[VirtualName, NodeId]
 
-BlameTarget: TypeAlias = str
+BlameTarget: TypeAlias = VirtualName
 
 Feedback: TypeAlias = str
 
@@ -66,25 +67,25 @@ class Sandbox(Protocol):
     def get_write_occurred(self) -> WriteOccurred: ...
 ```
 
-`BlameTarget` identifies a node the agent may blame (a dependency of the current run). `Feedback` is the correction feedback on how to correct the blamed node's output. Each `Blame` pair corresponds to one feedback message to its target.
+`BlameTarget` is the virtual name of a blameable artifact — a dependency's declared source file, addressed per the virtual name rules; the sandbox resolves it to the owning node via the configured `blame_targets` mapping. `Feedback` is the correction feedback on how to correct the blamed node's output. Each `Blame` pair corresponds to one feedback message delivered to the owning node.
 
-The client-supplied configuration for a sandbox: file mappings, readable and writable paths, blame targets, the search result limit and the diff size limit, whether session-start reads are enabled (default: enabled), the guide (default: none — the declared guide's virtual name, a file in `file_mappings`), whether step mode is enabled (default: enabled), whether feedback is pending (default: false), the templates (default: empty), and an optional verification callback.
+The client-supplied configuration for a sandbox: file mappings (each file's virtual name to its full path), readable and writable virtual names, blame targets (a mapping from each blameable artifact's virtual name to the node that owns it), the search result limit and the diff size limit, whether session-start reads are enabled (default: enabled), the guide (default: none — the declared guide's virtual name, a file in `file_mappings`), whether step mode is enabled (default: enabled), whether feedback is pending (default: false), the templates (default: empty), and an optional verification callback.
 ## Term definitions
 
-- **virtual name** → the `VirtualName` alias (definition in Data Types)
+- **virtual name** → the `VirtualName` alias (definition in Data Types): the name the agent uses to address a file — the file's final path component when no other configured file shares it, otherwise the shortest path suffix unique among the configured files; the sandbox resolves the virtual name to the file's full filesystem path via `file_mappings`, and reads, writes, edits, searches, session-start reads, and error messages name files by virtual name, never by path
 - **file write** → term definition: any successful operation that modifies the filesystem; a file write sets the write-occurred flag
 - **line-numbered view** → term definition: a rendering of a file's content with each line prefixed by its 1-indexed line number (`"N │ line"`); the line numbers are metadata, never file content
 - **injected read** → term definition: the read provided for a file immediately after a successful file write of that file, presenting a read request with line numbers and the read result carrying the file's full current content; the agent did not request it, and to the agent it appears as a numbered read it requested
 - **session-start read** → term definition: a read of a file the agent can read but not write, provided at the beginning of a run for rendering before the agent's first turn; it renders the file's content plain, never supersedes an earlier result, and is never stubbed
 - **blame** → term definition: a termination outcome that attributes the task's incompleteness to one or more dependencies and provides feedback on how to correct their outputs; blame is not failure (realized as the `Blame` type)
-- **blame target** → the `BlameTarget` alias (definition in Data Types)
+- **blame target** → the `BlameTarget` alias (definition in Data Types): the virtual name of a blameable artifact — a dependency's declared source file — resolved to its owning node via the configured `blame_targets` mapping
 - **soft length bound** → term definition: the preferred maximum length of a change summary; a summary exceeding it is rejected with shortening guidance up to a grace count, then accepted when within the hard length bound (the bound values are pinned in the implementation spec)
 - **hard length bound** → term definition: the maximum length a change summary may reach; a summary exceeding it is rejected with hard-bound guidance up to a grace count, and a summary still exceeding it after the grace count fails the run
 - **template** → term definition: a writable file's initial content, configured for the file; when the file does not exist when the sandbox is configured, the file is created with the template's content at run start, and a file that exists when the sandbox is configured is never modified by its template (realized as the `TemplateMapping` type)
 - **guide** → term definition: the run's declared guide input — a readable file the node declares separately from its dependencies, at most one per run, in the guide format: its first line is `# Guide: <title>` and its first `##` heading is `## Summary`
 - **guide summary** → term definition: the guide's first part — the content from the guide's first line through the end of its `## Summary` section
 - **step section** → term definition: a checklist section of the guide — a part of the guide after the guide summary, delimited by `## <name>` headings, delivered after an advance that passed verification
-- **step mode** → term definition: a run configuration in which the guide is not readable and its content reaches the agent only through the advance operation: the guide summary at run start, then the step sections one at a time after successful advances
+- **step mode** → term definition: a run configuration in which the guide is not readable and its content reaches the agent only through the advance operation: the guide summary at run start, then the step sections one at a time after successful advances; in step mode the guide is not presented among the readable files (file lists shown to the agent do not name the guide), and a readable file that is not the guide is unaffected by step mode
 - **stubbing** → term definition: these rules apply to all sandbox operations that produce a `ToolResult`; stubbing follows `tool_provider` semantics — when a result's `supersedes` flag is set, the earlier non-stubbed result for the same file or tool command is replaced by a placeholder, keeping the conversation focused on current state; a result with the flag unset supersedes nothing, and at most one earlier result is superseded per result
 - **auto re-read** → term definition: these rules apply to the outcome of a successful `edit_file` or `replace_lines`; after a successful `edit_file` or `replace_lines`, the file's current content appears in the conversation, and a write that fails does not provide the file's content
 - **session-start reads** → term definition: these rules apply to the reads provided at the beginning of a run; when `session_start_reads_enabled` is set, a session-start read is provided for every file in `readable_paths` that is not in `writable_paths`, and when unset, none are provided; session-start reads are provided in a deterministic order (sorted by virtual name); a session-start read renders the file's content plain and never supersedes an earlier result; in step mode, the guide is not among the session-start reads — its content reaches the agent only through `advance`'s outputs (per the step mode rules)
@@ -291,6 +292,7 @@ def advance(self, changes: list[dict[str, str]] = []) -> ToolCallOutcome
 
 **Failure Handling:**
 - In step mode, an advance with step sections remaining never signals a tool failure for the change message: the change-message machinery applies only to the terminating advance.
+- A pending feedback message is not disclosed to the agent before advance is attempted without a change; it surfaces only through advance's rejection (per the termination rules).
 - Run changed files and `changes` empty → Return `ToolFailure[T_tool]` listing the changed files and instructing the agent to call `advance` again with one `{file, summary}` entry per changed file (one short sentence on what changed, not how) or to call `fail`/`blame` to end the run.
 - An entry with a missing/empty `file` or `summary` → `ToolFailure[T_tool]` requiring both fields.
 - An entry naming a file the run did not change → `ToolFailure[T_tool]` naming the changed files.
@@ -335,16 +337,16 @@ def blame(self, blames: list[Blame]) -> ToolCallOutcome
 
 **Preconditions:**
 - Blame targets are configured (non-empty)
-- Each pair's target must be in `blame_targets`
+- Each pair's target must be a key of `blame_targets` (a blameable artifact's virtual name)
 
 **Postconditions:**
-- If all pairs are valid: returns `TerminateAgentWithSuccess` (a `Signal[T_tool]` variant) carrying a `TerminateSuccessResult` that describes feedback to dependencies (one (target, feedback) pair per blamed dependency)
-- If any pair's target is not in `blame_targets`: returns `ToolFailure[T_tool]` (a `Signal[T_tool]` variant)
-- Each pair corresponds to one feedback message to its target
+- If all pairs are valid: returns `TerminateAgentWithSuccess` (a `Signal[T_tool]` variant) carrying a `TerminateSuccessResult` that describes feedback to dependencies (one (target, feedback) pair per blamed dependency; each target resolved to its owning node's `NodeId` via `blame_targets`)
+- If any pair's target is not a key of `blame_targets`: returns `ToolFailure[T_tool]` (a `Signal[T_tool]` variant)
+- Each pair corresponds to one feedback message to its owning node
 - Termination tools produce no `ToolResult` and never supersede an earlier result
 
 **Failure Handling:**
-- Invalid pairs (targets not in `blame_targets`): Return `ToolFailure[T_tool]` (a `Signal[T_tool]` variant) with an error message identifying the invalid pair.
+- Invalid pairs (targets not keys of `blame_targets`): Return `ToolFailure[T_tool]` (a `Signal[T_tool]` variant) with an error message identifying the invalid pair.
 - Empty `blames` list: Return `ToolFailure[T_tool]` with an error message describing the empty list.
 - Blame targets not configured is a precondition violation (unexpected); the interface does not prescribe violation behavior (`blame` is not provided in the tool definitions when targets are empty).
 
@@ -375,7 +377,7 @@ def get_write_occurred(self) -> WriteOccurred
 - No state persists across runs
 - Write-occurred flag is monotonic (once `True`, never `False`)
 - All policy checks occur before any filesystem mutation
-- `verify` callback has no filesystem side effects
+- `verify` callback has no filesystem side effects except maintaining the node's lib/test BUILD file (per the configured build linter), which is not among the sandbox's files and is never a run write
 - Errors leave the filesystem unchanged
 - A result with `supersedes` set supersedes the earlier non-stubbed result for the same file or tool command; a result with `supersedes` unset supersedes nothing
 - A result supersedes at most one earlier result (at most one non-stubbed result exists per file or per the advance feedback at any time)
@@ -385,3 +387,17 @@ def get_write_occurred(self) -> WriteOccurred
 - Termination tools never produce `ToolResult` and never supersede an earlier result
 - Search results never render matches from writable files
 - A tool result never carries the stub text
+
+## Non-Concerns
+
+- **Error message wording:** error messages identify the violated policy or failing operation; their exact wording is unspecified.
+- **Session-start read size:** session-start reads inherit the unbounded-read rule; the read-only files are assumed to be reasonably sized, so no separate size bound is introduced for session-start reads.
+- **Template size:** templates are assumed to be reasonably sized, so no separate size bound is introduced for template content.
+- **Step section size:** step sections are parts of the guide file, which is assumed reasonably sized; no separate size bound is introduced for step sections.
+- **Guide parsing:** the exact rules for splitting the guide into its guide summary and step sections follow the guide format; section content is delivered in order without interpretation.
+- **Step presentation:** the exact wording of the ensure instruction and the formatting of the summary and step sections within an advance output are unspecified; the intent is conveyed by the Step mode rules.
+- **Advance tool description:** the advance tool's description wording is unspecified; the tool's contract is defined by the Verification, Termination, and Step mode rules.
+- **Virtual-name derivation:** the exact procedure that selects the shortest unique suffix is unspecified; the resulting virtual names follow the virtual name definition.
+- **Multiple-occurrence edits:** the HLS's "search-and-replace of short text" does not pin whether an edit applies to one or all occurrences; the `expect_multiple` parameter pins it here (an edit without it applies to the first occurrence).
+- **Net-out change claims:** the HLS rejects "missing, malformed, or incomplete" change summaries; a run whose writes all net out to no change is narrowed here to report no change (the change-message requirement applies only when the filesystem differs from run start).
+- **Blame failures:** the HLS pins blame as offered when blame targets are configured; the failure signals for an invalid blame target or an empty `blames` list are pinned here (expected failures are return signals).

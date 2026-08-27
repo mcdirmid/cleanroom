@@ -1,43 +1,41 @@
 """
 Implementation of the LLS Sandbox interface.
+
+The sandbox is a facade: it composes the file machinery (file_view), the
+step-mode guide delivery (guide_delivery), and the verification and
+termination rules (run_control) into a single tool surface. Each operation
+delegates to the owning component's operation; the composition is described
+in specs/low/sandbox_impl.md.
 """
 
-import json
-import os
-import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
-from .sandbox import (
-    VirtualName, Blame, SandboxConfig, WriteOccurred, Sandbox
-)
-
+from .sandbox import Sandbox, SandboxConfig
+from .file_view import FileViewConfig, VirtualName, WriteOccurred
+from .guide_delivery import GuideDeliveryConfig
+from .run_control import RunControlConfig, DiffSizeLimit, Blame
+from .file_view_impl import FileViewImpl
+from .guide_delivery_impl import GuideDeliveryImpl
+from .run_control_impl import RunControlImpl
 from .tool_provider import (
     ToolDefinition,
-    ToolResult,
     PresentedToolResult,
     ToolCallOutcome,
-    TerminateAgentWithSuccess,
-    TerminateAgentWithFailure,
     ToolFailure,
 )
-from .dag_clean_logic import ChangeResult, FeedbackResult, NoChangeResult
-from .dag_storage import NodeMessage
-
-# The maximum characters a verification diff may report; the default (1000)
-# applies when the sandbox is constructed without an explicit value (see
-# specs/low/sandbox_impl.md, Non-Concerns).
-DiffSizeLimit = int
 
 
 class SandboxImpl(Sandbox):
     """
     Implementation of the LLS Sandbox interface.
 
-    Provides secure file system operations, policy enforcement, and per-run
-    state (write-occurred flag, per-file view modes, pre-write snapshots).
-    No stubbing state is maintained: the supersedes flag is set statically
-    per operation type and the sandbox tracks nothing about prior results;
-    the agent loop applies the stubbing.
+    An assembler: wires together the file machinery (FileViewImpl), the
+    step-mode delivery (GuideDeliveryImpl), and the verification and
+    termination rules (RunControlImpl) from the aggregate SandboxConfig,
+    and dispatches each tool call to the owning component. Holds only
+    per-run state, in the components: the file state (file_view), the step
+    state (guide_delivery), and the verification state (run_control);
+    nothing persists across runs.
     """
 
     def __init__(self, config: SandboxConfig, diff_size_limit: Optional[DiffSizeLimit] = None):
@@ -45,1130 +43,126 @@ class SandboxImpl(Sandbox):
         Initialize the sandbox with configuration.
 
         Args:
-            config: Configuration object containing file mappings, policies, etc.
+            config: Configuration object containing file mappings, policies,
+                etc.
             diff_size_limit: Maximum characters a verification diff may report
                 (default: 1000 when None).
         """
         self.config = config
         self.diff_size_limit = diff_size_limit
-        self.write_occurred: WriteOccurred = False
-
-        # Per-run change-summary rejection counters (soft/hard length bounds):
-        # a summary over the soft bound is rejected up to a grace count, then
-        # accepted within the hard bound; a summary over the hard bound after
-        # its grace turns advance() into a hard failure. Reset on any accepted
-        # summary; per-run state only (fresh sandbox per run).
-        self._summary_soft_rejections: int = 0
-        self._summary_hard_rejections: int = 0
-
-        # Precompute real->virtual path map so error messages can present
-        # virtual names to the agent instead of absolute on-disk paths.
-        self._real_to_virtual: Dict[str, str] = {}
-        for virtual, real in self.config.file_mappings.items():
-            if real:
-                self._real_to_virtual.setdefault(real, virtual)
-        # Longest paths first so a path that prefixes another is replaced
-        # correctly (e.g. /pkg/foo.txt before /pkg/foo.txt.bak).
-        self._real_paths_sorted: List[str] = sorted(
-            self._real_to_virtual.keys(), key=len, reverse=True
-        )
-
-        # Per-run view mode per writable file: False = plain view, True =
-        # line-numbered view. Set by read_file; a write resets the view to
-        # plain (the line numbers are invalidated).
-        self._file_views: Dict[VirtualName, bool] = {}
-
-        # Files written by the run (virtual names, deduped, in write order).
-        # advance() reports these when called without a change message.
-        self._changed_files: List[str] = []
-
-        # Pre-write content snapshots: each file's content at run start (before
-        # this run's first write of that file), used by advance()'s diff report
-        # when no verification callback is configured.
-        self._pre_write_snapshots: Dict[VirtualName, Optional[str]] = {}
-
-        # Template initialization (per the sandbox contract): a writable file
-        # with a configured template that does not exist on disk is created
-        # with the template's content at run start, before any tool call; an
-        # existing writable file is never modified. Initialization is part of
-        # the sandbox's configuration, not a run write: it does not set the
-        # write-occurred flag and does not record the file as changed (the
-        # file's first write of the run snapshots the template content as the
-        # run-start baseline for advance()'s diff).
-        for virtual, content in self.config.templates.items():
-            real_path = self.config.file_mappings.get(virtual)
-            if real_path is None:
-                continue
-            if os.path.exists(real_path):
-                continue
-            parent_dir = os.path.dirname(real_path)
-            if parent_dir:
-                os.makedirs(parent_dir, exist_ok=True)
-            with open(real_path, 'w', encoding='utf-8') as f:
-                f.write(content)
 
         # Step mode (per the sandbox contract): when step mode is enabled and
-        # a guide is configured, the guide is read at run start and split into
-        # its guide summary and step sections; the guide is then not readable
-        # and its content reaches the agent only through advance's outputs
-        # (the summary pre-injected at run start, then one section per passing
-        # advance). The step state is per-run state only.
+        # a guide is configured, the guide is not readable and its content
+        # reaches the agent only through advance's outputs. The guide is
+        # excluded from the file machinery's readable paths, so reads of the
+        # guide are rejected (with the step-mode policy message below) and the
+        # guide never appears among the session-start reads.
         self._step_mode: bool = bool(
-            self.config.step_sections_enabled and self.config.guide
+            config.step_sections_enabled and config.guide
         )
-        self._step_summary: str = ""
-        self._step_sections: List[str] = []
-        self._step_pointer: int = 0
+        readable_paths = list(config.readable_paths)
         if self._step_mode:
-            guide_real = self.config.file_mappings.get(self.config.guide, "")
-            if guide_real and os.path.isfile(guide_real):
-                with open(guide_real, "r", encoding="utf-8") as f:
-                    guide_content = f.read()
-                summary, sections = self._split_guide(guide_content)
-                self._step_summary = summary
-                self._step_sections = sections
+            readable_paths = [p for p in readable_paths if p != config.guide]
+
+        # The guide's full path, resolved from the guide's virtual name via
+        # the file mappings; None when no guide is declared.
+        guide_real = config.file_mappings.get(config.guide) if config.guide else None
+
+        self.file_view = FileViewImpl(FileViewConfig(
+            file_mappings=config.file_mappings,
+            readable_paths=readable_paths,
+            writable_paths=config.writable_paths,
+            templates=config.templates,
+            search_result_limit=config.search_result_limit,
+            session_start_reads_enabled=config.session_start_reads_enabled,
+        ))
+        self.guide_delivery = GuideDeliveryImpl(GuideDeliveryConfig(
+            guide=guide_real,
+            step_sections_enabled=config.step_sections_enabled,
+        ))
+        self.run_control = RunControlImpl(
+            RunControlConfig(
+                verification_callback=config.verification_callback,
+                feedback_pending=config.feedback_pending,
+                blame_targets=config.blame_targets,
+                diff_size_limit=diff_size_limit if diff_size_limit is not None else 1000,
+            ),
+            file_view=self.file_view,
+            guide_delivery=self.guide_delivery,
+        )
 
     def get_tool_definitions(self) -> List[ToolDefinition]:
-        """Return tool definitions based on configuration."""
-        definitions = []
-
-        # Always available
-        definitions.extend([
-            self._create_tool_definition(
-                "read_file",
-                "Read a file's ENTIRE content (files are small; reads are never paginated). "
-                "Reading a writable file makes its content the file's current content in the "
-                "conversation (an earlier read of the same file is replaced by a stub). "
-                "Line numbers are metadata, not file content: reading "
-                "a writable file that already exists REQUIRES include_line_numbers=True (a "
-                "plain read is rejected); line numbers also serve replace_lines edits.",
-                {
-                    "file_path": {"type": "string", "description": "Virtual path to the file"},
-                    "include_line_numbers": {"type": "boolean", "description": "Prefix each line with its line number; REQUIRED when reading a writable file that already exists; line numbers serve replace_lines edits and are allowed only for writable files (default: false)", "default": False}
-                }
-            ),
-            self._create_tool_definition(
-                "edit_file",
-                "Replace text in a file (content-based search and replace): replaces exactly one occurrence of old_str with new_str; fails when old_str is absent or matches more than once unless expect_multiple=True (then replaces all occurrences). old_str and new_str are limited to 100 characters each — use replace_lines for larger changes (requires the line-numbered view). After an edit the file is automatically re-read, so the file's updated content (with line numbers) appears in the conversation immediately after the edit.",
-                {
-                    "file_path": {"type": "string", "description": "Virtual path to the file"},
-                    "old_str": {"type": "string", "description": "Exact text to find"},
-                    "new_str": {"type": "string", "description": "Replacement text"},
-                    "expect_multiple": {"type": "boolean", "description": "Allow multiple matches and replace all of them", "default": False}
-                }
-            ),
-            self._create_tool_definition(
-                "replace_lines",
-                "Replace, delete, or insert lines by 1-indexed line range: replaces lines start_line..end_line with new_str; start_line > end_line inserts new_str before start_line; empty new_str deletes the range. Requires the line-numbered view: call read_file(file_path, include_line_numbers=true) first; after a write the automatic re-read provides the line-numbered view. Line numbers are 1-indexed and current only in the most recent read.",
-                {
-                    "file_path": {"type": "string", "description": "Virtual path to the file"},
-                    "start_line": {"type": "integer", "description": "1-indexed start line (inclusive); between 1 and len(file)+1"},
-                    "end_line": {"type": "integer", "description": "1-indexed end line (inclusive); between 0 and len(file)"},
-                    "new_str": {"type": "string", "description": "Replacement content; empty deletes the range"}
-                },
-                required=["file_path", "start_line", "end_line", "new_str"],
-            ),
-            self._create_tool_definition(
-                "search_files",
-                "Search for a pattern in files. Renders matches only for read-only files; matches in writable files are counted in the note but never shown (their content is not supported and would go stale).",
-                {
-                    "path": {"type": "string", "description": "Virtual path to search"},
-                    "pattern": {"type": "string", "description": "Regex pattern to search for"},
-                    "offset": {"type": "integer", "description": "Match offset to start from (default: 0)", "default": 0},
-                    "limit": {"type": "integer", "description": f"Maximum rendered matches to return (1..{self.config.search_result_limit}); if omitted, returns all rendered matches, which fails if more than {self.config.search_result_limit} exist. Each result includes a note reporting how many rendered matches remain and the offset to continue from."}
-                }
-            ),
-            self._create_tool_definition(
-                "advance",
-                self._advance_tool_description(),
-                self._advance_tool_parameters(),
-            ),
-            self._create_tool_definition(
-                "fail",
-                "Signal failed termination",
-                {}
-            )
-        ])
-
-        # Conditional: blame
-        if self.config.blame_targets:
-            definitions.append(
-                self._create_tool_definition(
-                    "blame",
-                    "Signal termination with blame: attribute the task's incompleteness to dependencies and provide feedback on how to correct their outputs",
-                    {
-                        "blames": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "target": {"type": "string", "description": "Target to blame (a dependency)"},
-                                    "feedback": {"type": "string", "description": "Feedback on how to correct the target's output"}
-                                },
-                                "required": ["target", "feedback"],
-                                "additionalProperties": False
-                            },
-                            "description": "Blame pairs (target, feedback), each delivered as a feedback message to its target"
-                        }
-                    }
-                )
-            )
-
-        return definitions
-
-    def _advance_tool_description(self) -> str:
-        """The advance tool's description, per the current step state.
-
-        In step mode, while step sections remain, the description directs the
-        agent to the step-mode loop (call advance after each section); when
-        verification passed with no sections remaining (the terminating
-        advance), the description includes the change-message requirement.
-        """
-        if self._step_mode and self._step_pointer < len(self._step_sections):
-            return (
-                "Call advance when you have completed the current step's "
-                "requirements. Advance verifies the run's changes and, when "
-                "verification passes, provides the next step; when no steps "
-                "remain, it signals successful termination. A failing "
-                "verification returns feedback: fix the reported issues and "
-                "call advance() again, or call fail() or blame() to end the "
-                "run."
-            )
+        """Return the composed tool registry: the file tools, the advance
+        tool, and the termination tools, presented together as the sandbox's
+        tool surface."""
         return (
-            "Call advance when you have nothing more to do or think you are "
-            "done. Advance verifies the run's changes (running the "
-            "verification callback when configured) and, when verification "
-            "passes, signals successful termination — requiring a change "
-            "message naming the parts of each changed file when files "
-            "changed. A failing verification returns feedback: fix the "
-            "reported issues and call advance() again, or call fail() or "
-            "blame() to end the run."
+            self.file_view.get_tool_definitions()
+            + self.guide_delivery.get_tool_definitions()
+            + self.run_control.get_tool_definitions()
         )
-
-    def _advance_tool_parameters(self) -> Dict[str, Any]:
-        """The advance tool's parameters, per the current step state.
-
-        In step mode, while step sections remain, the `changes` argument is
-        omitted from the definition (the change message applies only to the
-        terminating advance); when verification passed with no sections
-        remaining, the definition includes it.
-        """
-        if self._step_mode and self._step_pointer < len(self._step_sections):
-            return {}
-        return {
-            "changes": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "file": {"type": "string", "description": "A file changed by this run"},
-                        "summary": {"type": "string", "description": "One short sentence naming the parts of the file that changed, so the next agent knows what to pay attention to when updating further artifacts; not the task performed, not how it was done; aim for at most %d characters (hard limit %d)" % (SandboxImpl.SOFT_CHANGE_SUMMARY_LENGTH, SandboxImpl.HARD_CHANGE_SUMMARY_LENGTH)}
-                    },
-                    "required": ["file", "summary"],
-                    "additionalProperties": False
-                },
-                "description": "Required when the run changed files: one entry per changed file, each a short sentence naming the parts of that file that changed, so the next agent knows what to pay attention to when updating further artifacts"
-            }
-        }
 
     def get_session_start_reads(self) -> List[PresentedToolResult]:
-        """The session-start reads: plain reads of the read-only files.
-
-        When session-start reads are enabled, provides a session-start read
-        for every file that is readable but not writable and exists as a
-        regular file on disk, sorted by virtual name: a PresentedToolResult
-        pairing the read_file call with the file's plain read result (never
-        superseding — reads of files that are not writable never supersede).
-        When disabled, provides no reads. Requesting the reads changes no
-        sandbox state; filesystem errors reading a readable file are
-        unhandled (propagate).
-        """
-        if not self.config.session_start_reads_enabled:
-            return []
-        reads: List[PresentedToolResult] = []
-        read_only = sorted(
-            set(self.config.readable_paths) - set(self.config.writable_paths)
-        )
-        for file_path in read_only:
-            if self._in_step_mode(file_path):
-                # The guide is not readable in step mode: its content reaches
-                # the agent only through advance's outputs (the pre-injected
-                # advance provides the guide summary instead).
-                continue
-            real_path = self.config.file_mappings.get(file_path, file_path)
-            if not os.path.isfile(real_path):
-                continue
-            with open(real_path, 'r', encoding='utf-8') as f:
-                lines = f.read().splitlines()
-            content = self._render_lines(lines, False)
-            n = len(lines)
-            reads.append(PresentedToolResult(
-                name="read_file",
-                arguments={"file_path": file_path},
-                result=ToolResult(
-                    content=content,
-                    supersedes=False,
-                    note=f"Read {n} lines (plain)",
-                ),
-            ))
-        if self._step_mode:
-            # Pre-inject the advance call: the guide summary with the ensure
-            # instruction, presented as the first advance output. The result
-            # supersedes the earlier advance output (the previous step-mode
-            # output), so the summary is always visible and the step sections
-            # slide; at run start there is nothing to stub yet.
-            reads.append(self._step_advance_output(include_section=False))
-        return reads
-
-    def _step_advance_output(self, include_section: bool) -> PresentedToolResult:
-        """Compose a step-mode advance output.
-
-        The guide summary is part of every step-mode advance output, so the
-        summary is always visible; the step sections slide. When a step
-        section is presented, the output carries the summary, the ensure
-        instruction for the section, and the section itself; otherwise it
-        carries the summary and the ensure instruction for the summary only.
-        The output's result supersedes the earlier advance output (the
-        consuming agent loop stubs it), so at most one step section is live
-        alongside the summary.
-        """
-        parts: List[str] = [self._step_summary]
-        if include_section and self._step_pointer < len(self._step_sections):
-            parts.append(self._step_instruction(with_section=True))
-            parts.append(self._step_sections[self._step_pointer])
-        else:
-            parts.append(self._step_instruction(with_section=False))
-        return PresentedToolResult(
-            name="advance",
-            arguments={},
-            result=ToolResult(
-                content="\n\n".join(parts),
-                supersedes=True,
-                note=(
-                    f"Guide summary"
-                    if not include_section
-                    else f"Step {self._step_pointer + 1} of {len(self._step_sections)}"
-                ),
-            ),
+        """The session-start reads: the plain reads of the read-only files
+        and, in step mode, the guide's presentation, presented together
+        before the model's first turn."""
+        return (
+            self.file_view.get_session_start_reads()
+            + self.guide_delivery.get_session_start_reads()
         )
 
     def read_file(self, file_path: VirtualName,
                   include_line_numbers: bool = False) -> ToolCallOutcome:
         """Read a file's entire content, optionally in the line-numbered view."""
-        # Check if path exists in mappings first
-        if file_path not in self.config.file_mappings:
-            return self._error_response(
-                f"File path '{file_path}' not found in mappings. "
-                f"Files you can read: {self._readable_list()}"
-            )
-
-        # Then check readability
         if self._in_step_mode(file_path):
-            return self._error_response(
+            return ToolFailure[str](
                 f"File path '{file_path}' is not readable in step mode: the "
                 f"guide's content reaches the agent only through advance outputs."
             )
-        if file_path not in self.config.readable_paths:
-            return self._error_response(
-                f"File path '{file_path}' is not readable. "
-                f"Files you can read: {self._readable_list()}"
-            )
-
-        # Line numbers exist to serve replace_lines edits, which require a
-        # writable file; a line-numbered read of a read-only file is an
-        # argument error.
-        if include_line_numbers and file_path not in self.config.writable_paths:
-            return self._error_response(
-                f"include_line_numbers is allowed only for writable files; "
-                f"'{file_path}' is not writable"
-            )
-
-        # Resolve path
-        real_path = self.config.file_mappings[file_path]
-        if not os.path.exists(real_path):
-            return self._error_response(f"File '{real_path}' does not exist")
-        if not os.path.isfile(real_path):
-            return self._error_response(f"Path '{real_path}' is not a file")
-
-        # A writable file that already exists on disk is only readable in the
-        # line-numbered view: the agent must buy into line numbers (they are
-        # metadata, not file content), which also guarantees the numbered
-        # view that replace_lines requires. A plain read fails with guidance.
-        if (
-            file_path in self.config.writable_paths
-            and not include_line_numbers
-        ):
-            return self._error_response(
-                f"Reading the writable file '{file_path}' requires "
-                f"include_line_numbers=True: line numbers are metadata, not "
-                f"file content. Call read_file('{file_path}', "
-                f"include_line_numbers=True) to see them."
-            )
-
-        # Read the entire file (reads are not paginated and are not bounded by
-        # a size limit).
-        try:
-            with open(real_path, 'r', encoding='utf-8') as f:
-                lines = f.read().splitlines()
-        except Exception as e:
-            return self._error_response(f"Error reading file: {str(e)}")
-
-        # A read sets the file's view for the run (plain or line-numbered);
-        # the view persists across writes and gates replace_lines.
-        self._file_views[file_path] = include_line_numbers
-
-        content = self._render_lines(lines, include_line_numbers)
-        n = len(lines)
-        view = "line-numbered" if include_line_numbers else "plain"
-        note = f"Read {n} lines ({view})"
-
-        # Routing per the sandbox contract's Stubbing rules: a read of a
-        # writable file supersedes the earlier result for that file (the
-        # agent loop stubs it); a read of a file that is not writable never
-        # supersedes an earlier result — reads of readable files are not
-        # stubbed.
-        if file_path in self.config.writable_paths:
-            return [ToolResult(
-                content=content,
-                supersedes=True,
-                note=note,
-            )]
-        return [ToolResult(content=content, supersedes=False, note=note)]
-
-    def _snapshot(self, file_path: VirtualName, real_path: str) -> None:
-        """Capture a file's pre-write content on the run's first write of it."""
-        if file_path in self._pre_write_snapshots:
-            return
-        try:
-            with open(real_path, "r", encoding="utf-8") as f:
-                self._pre_write_snapshots[file_path] = f.read()
-        except FileNotFoundError:
-            self._pre_write_snapshots[file_path] = ""
-        except Exception:
-            self._pre_write_snapshots[file_path] = None
-
-    @staticmethod
-    def _render_lines(lines: List[str], numbered: bool) -> str:
-        """Render lines plain or in the line-numbered view ("N \u2502 line")."""
-        if numbered:
-            width = len(str(len(lines)))
-            return "\n".join(
-                f"{i:>{width}} \u2502 {line}" for i, line in enumerate(lines, start=1)
-            )
-        return "\n".join(lines)
-
-    def _apply_write(self, file_path: VirtualName, real_path: str, new_content: str,
-                     status: str) -> ToolCallOutcome:
-        """Snapshot pre-write content, write the file, and update per-run state.
-
-        Shared by the editing tools (edit_file, replace_lines): a successful
-        edit is a file write — it sets the write-occurred flag and records the
-        changed file. The outcome is a sequence of two results: the write
-        confirmation (a `ToolResult` whose content is the operation's status,
-        a structured success message, never a file-content echo; supersedes
-        is set so the agent loop stubs the file's earlier read) and the
-        injected read (the automatic re-read, per the sandbox contract).
-        A write invalidates the line-numbered view; the injected read that
-        follows re-enables it, so a line-range edit may follow a write
-        without a further read.
-        """
-        self._snapshot(file_path, real_path)
-        # The write changes the line structure: reset the view to plain so
-        # the injected read re-establishes fresh line numbers.
-        self._file_views[file_path] = False
-
-        try:
-            with open(real_path, 'w', encoding='utf-8') as f:
-                f.write(new_content)
-        except Exception as e:
-            return self._error_response(f"Error writing file: {str(e)}")
-
-        self.write_occurred = True
-        if file_path not in self._changed_files:
-            self._changed_files.append(file_path)
-
-        return self._write_outcome(file_path, status)
-
-    def _write_outcome(self, file_path: VirtualName, status: str) -> ToolCallOutcome:
-        """The two-result outcome of a successful file write, in order.
-
-        Per the sandbox contract's Auto re-read rules: the write confirmation
-        (a `ToolResult` with `supersedes` set, its content a minimal status)
-        and the injected read (a `PresentedToolResult` pairing the `read_file`
-        call with its numbered result, `supersedes` set). The injected read
-        supersedes the write confirmation, so the file's most recent
-        non-stubbed result is a read; the next write or read for the file
-        supersedes it, per the Stubbing rules.
-        """
-        return [
-            ToolResult(content=status, supersedes=True),
-            self._injected_read(file_path),
-        ]
-
-    def _injected_read(self, file_path: VirtualName) -> PresentedToolResult:
-        """The auto re-read after a file write: a numbered read of the file.
-
-        The injected read carries the file's full current content rendered in
-        the line-numbered view with `supersedes` set, and re-enables the
-        file's line-numbered view (a write reset it to plain). It is
-        presented as `read_file(file_path, include_line_numbers=True)`; the
-        consuming agent loop assigns the call's id and presents the call
-        immediately before the result.
-        """
-        real_path = self.config.file_mappings[file_path]
-        with open(real_path, 'r', encoding='utf-8') as f:
-            lines = f.read().splitlines()
-        # A file just written is expected to be readable; a read failure here
-        # is a filesystem error, which is unhandled per the sandbox contract.
-        self._file_views[file_path] = True
-        content = self._render_lines(lines, True)
-        n = len(lines)
-        return PresentedToolResult(
-            name="read_file",
-            arguments={"file_path": file_path, "include_line_numbers": True},
-            result=ToolResult(
-                content=content,
-                supersedes=True,
-                note=f"Read {n} lines (line-numbered)",
-            ),
-        )
-
-    @staticmethod
-    def _split_lines(content: str) -> Tuple[List[str], bool]:
-        """Split content into lines without terminators; report trailing newline."""
-        if content == "":
-            return [], False
-        trailing = content.endswith('\n')
-        lines = content.split('\n')
-        if trailing and lines and lines[-1] == '':
-            lines = lines[:-1]
-        return lines, trailing
-
-    @staticmethod
-    def _split_guide(content: str) -> Tuple[str, List[str]]:
-        """Split a guide's content into its guide summary and step sections.
-
-        The guide summary is the content from the guide's first line through
-        the end of its `## Summary` section (the guide's first `##` heading);
-        each step section is a `## <name>`-delimited part of the guide after
-        the summary, in the guide's section order.
-        """
-        lines = content.split("\n")
-        headings = [
-            i for i, line in enumerate(lines) if line.startswith("## ")
-        ]
-        if not headings:
-            return content, []
-        summary_end = headings[1] if len(headings) > 1 else len(lines)
-        summary = "\n".join(lines[:summary_end])
-        sections: List[str] = []
-        for idx in range(1, len(headings)):
-            start = headings[idx]
-            end = headings[idx + 1] if idx + 1 < len(headings) else len(lines)
-            sections.append("\n".join(lines[start:end]))
-        return summary, sections
-
-    def _in_step_mode(self, file_path: VirtualName) -> bool:
-        """Whether a file is excluded by step mode: the guide is not readable."""
-        return self._step_mode and file_path == self.config.guide
-
-    def _step_instruction(self, with_section: bool) -> str:
-        """The ensure instruction for a step-mode advance output.
-
-        The exact wording is implementation-pinned (the sandbox contract
-        leaves it unspecified): when a step section is presented, direct the
-        agent to ensure that section's requirements before advancing; when
-        only the summary is presented, direct the agent to ensure the
-        summary's requirements before advancing.
-        """
-        if with_section:
-            return (
-                "Ensure the following before calling advance again:"
-            )
-        return "Ensure the above before calling advance again."
+        return self.file_view.read_file(file_path, include_line_numbers)
 
     def edit_file(self, file_path: VirtualName, old_str: str, new_str: str,
                   expect_multiple: bool = False) -> ToolCallOutcome:
         """Replace text in a file (content-based search and replace)."""
-        if file_path not in self.config.file_mappings:
-            return self._error_response(
-                f"File path '{file_path}' not found in mappings. "
-                f"Files you can write: {self._writable_list()}"
-            )
-        if file_path not in self.config.writable_paths:
-            return self._error_response(
-                f"File path '{file_path}' is not writable. "
-                f"Files you can write: {self._writable_list()}"
-            )
-        if not old_str:
-            return self._error_response("old_str must be non-empty")
-        if old_str == new_str:
-            return self._error_response(
-                "old_str and new_str are identical; the edit would change "
-                "nothing — fix the old_str or new_str and retry"
-            )
-        if len(old_str) > self.MAX_EDIT_LENGTH or len(new_str) > self.MAX_EDIT_LENGTH:
-            return self._error_response(
-                f"edit_file supports only short old_str and new_str (at most "
-                f"{self.MAX_EDIT_LENGTH} characters each; got old_str="
-                f"{len(old_str)}, new_str={len(new_str)}). Use replace_lines "
-                f"for larger edits (requires the line-numbered view: "
-                f"read_file(file_path, include_line_numbers=True))."
-            )
-
-        real_path = self.config.file_mappings[file_path]
-        if not os.path.exists(real_path):
-            return self._error_response(
-                f"File '{file_path}' does not exist; edit_file and replace_lines modify existing files only"
-            )
-        try:
-            with open(real_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-        except Exception as e:
-            return self._error_response(f"Error reading file: {str(e)}")
-
-        count = content.count(old_str)
-        if count == 0:
-            return self._error_response(f"old_str not found in '{file_path}'")
-        if count > 1 and not expect_multiple:
-            return self._error_response(
-                f"old_str matches {count} times in '{file_path}'; "
-                "pass expect_multiple=True to replace all, or narrow old_str"
-            )
-        if expect_multiple:
-            new_content = content.replace(old_str, new_str)
-            message = f"Replaced {count} occurrences in {file_path}"
-        else:
-            new_content = content.replace(old_str, new_str, 1)
-            message = f"Replaced 1 occurrence in {file_path}"
-        return self._apply_write(file_path, real_path, new_content, message)
+        return self.file_view.edit_file(file_path, old_str, new_str, expect_multiple)
 
     def replace_lines(self, file_path: VirtualName, start_line: int, end_line: int,
                       new_str: str) -> ToolCallOutcome:
         """Replace, delete, or insert lines by 1-indexed line range."""
-        if file_path not in self.config.file_mappings:
-            return self._error_response(
-                f"File path '{file_path}' not found in mappings. "
-                f"Files you can write: {self._writable_list()}"
-            )
-        if file_path not in self.config.writable_paths:
-            return self._error_response(
-                f"File path '{file_path}' is not writable. "
-                f"Files you can write: {self._writable_list()}"
-            )
-        if not isinstance(start_line, int) or not isinstance(end_line, int):
-            return self._error_response("start_line and end_line must be integers")
-
-        # replace_lines operates on 1-indexed line numbers: the file's current
-        # view must be line-numbered (the agent enabled line numbers by reading
-        # with include_line_numbers=True). A write resets the view to plain —
-        # the line numbers are invalidated until the next numbered read — so
-        # a line edit after a write fails with the reminder below. The failure
-        # supersedes nothing and removes nothing (per the sandbox contract).
-        if not self._file_views.get(file_path, False):
-            return ToolFailure(
-                value=(
-                    f"replace_lines requires the line-numbered view: call "
-                    f"read_file('{file_path}', include_line_numbers=True) to "
-                    f"re-enable it (a write invalidated the line numbers); the "
-                    f"file's current view is plain"
-                ),
-            )
-
-        real_path = self.config.file_mappings[file_path]
-        if not os.path.exists(real_path):
-            return self._error_response(
-                f"File '{file_path}' does not exist; edit_file and replace_lines modify existing files only"
-            )
-        try:
-            with open(real_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-        except Exception as e:
-            return self._error_response(f"Error reading file: {str(e)}")
-
-        lines, trailing = self._split_lines(content)
-        n = len(lines)
-        if not (1 <= start_line <= n + 1):
-            return self._error_response(
-                f"start_line must be between 1 and {n + 1} (file has {n} lines)"
-            )
-        if not (0 <= end_line <= n):
-            return self._error_response(
-                f"end_line must be between 0 and {n} (file has {n} lines)"
-            )
-
-        insertion = [new_str] if new_str else []
-        if start_line > end_line:
-            new_lines = lines[:start_line - 1] + insertion + lines[start_line - 1:]
-            message = f"Inserted content before line {start_line} in {file_path}"
-        else:
-            new_lines = lines[:start_line - 1] + insertion + lines[end_line:]
-            removed = end_line - start_line + 1
-            if new_str:
-                message = f"Replaced lines {start_line}-{end_line} in {file_path}"
-            else:
-                message = f"Deleted lines {start_line}-{end_line} in {file_path}"
-
-        if new_lines:
-            content = '\n'.join(new_lines)
-            if trailing:
-                content += '\n'
-        else:
-            content = ""
-        return self._apply_write(file_path, real_path, content, message)
+        return self.file_view.replace_lines(file_path, start_line, end_line, new_str)
 
     def search_files(self, path: VirtualName, pattern: str,
                      offset: Optional[int] = None,
                      limit: Optional[int] = None) -> ToolCallOutcome:
         """Search for a pattern in files; render matches only for read-only files."""
-        # Check if path exists in mappings first
-        if path not in self.config.file_mappings:
-            return self._error_response(
-                f"File path '{path}' not found in mappings. "
-                f"Files you can read: {self._readable_list()}"
-            )
-
-        # Then check readability
         if self._in_step_mode(path):
-            return self._error_response(
+            return ToolFailure[str](
                 f"Path '{path}' is not readable in step mode: the "
                 f"guide's content reaches the agent only through advance outputs."
             )
-        if path not in self.config.readable_paths:
-            return self._error_response(
-                f"Path '{path}' is not readable. "
-                f"Files you can read: {self._readable_list()}"
-            )
+        return self.file_view.search_files(path, pattern, offset, limit)
 
-        # Validate parameters
-        if offset is not None and offset < 0:
-            return self._error_response("Offset must be non-negative")
-        if limit is not None and limit <= 0:
-            return self._error_response("Limit must be positive")
-        if limit is not None and limit > self.config.search_result_limit:
-            return self._error_response(
-                f"Limit {limit} exceeds the search result limit "
-                f"({self.config.search_result_limit}); specify a smaller limit"
-            )
-
-        try:
-            re.compile(pattern)
-        except re.error as e:
-            return self._error_response(f"Invalid regex pattern: {str(e)}")
-
-        # Resolve path
-        real_path = self.config.file_mappings[path]
-        if not os.path.exists(real_path):
-            return self._error_response(f"Path '{real_path}' does not exist")
-
-        if offset is None:
-            offset = 0
-
-        # Perform search; matches are (virtual_name, text) pairs so matches in
-        # writable files can be suppressed (their content would go stale).
-        try:
-            matches = self._perform_search(real_path, pattern)
-        except Exception as e:
-            return self._error_response(f"Error searching: {str(e)}")
-
-        rendered: List[str] = []
-        suppressed = 0
-        for virtual, text in matches:
-            if virtual in self.config.writable_paths:
-                suppressed += 1
-            else:
-                rendered.append(text)
-
-        total = len(rendered)
-        if limit is None:
-            # Omitted limit means all rendered matches; allowed only within the
-            # search result limit, otherwise the tool fails and the agent
-            # must page through results with offset/limit.
-            if total > self.config.search_result_limit:
-                return self._error_response(
-                    f"Search returned {total} rendered matches, exceeding the "
-                    f"search result limit ({self.config.search_result_limit}); "
-                    f"specify offset/limit to page through results"
-                )
-            page = rendered
-        else:
-            page = rendered[offset:offset + limit]
-        content = "\n".join(page)
-
-        page_end = offset + len(page)
-        remaining = max(total - page_end, 0)
-        note = (
-            f"{total} matches total; {remaining} more after this page; "
-            f"continue with offset={page_end}"
-        )
-        if suppressed:
-            note += f"; {suppressed} match(es) in writable files not shown"
-
-        # Search results never supersede an earlier result (matches in
-        # writable files are never rendered, so they never become stale).
-        return [ToolResult(content=content, supersedes=False, note=note)]
-
-    def advance(self, changes: Optional[List[Dict[str, str]]] = None) -> ToolCallOutcome:
+    def advance(self, changes: List[Dict[str, str]] = []) -> ToolCallOutcome:
         """Signal the run's completion: verify the run and then signal
         successful termination, or provide feedback on a failing verification.
 
-        Verifies the run automatically: computes the diff of the run's
-        changes and, when a verification callback is configured, runs it. A
-        failing verification provides feedback (never a tool failure, never
-        termination) and the session continues. On a passing verification (or
-        no callback), requires the change message when the run changed files
-        and signals successful termination. A file counts as changed only
-        when its current content differs from its run-start snapshot; a run
-        whose writes all net out to no change reports no change.
+        Delegates to run_control.advance, which sequences verification, the
+        step-mode output (per guide_delivery's output rule), and the
+        termination machinery.
         """
-        changes = changes or []
-
-        # Verification runs automatically as part of advance: run the
-        # configured callback (when present). A failing verification provides
-        # feedback — the failure details and guidance, never the run's diff —
-        # and the session continues.
-        if self.config.verification_callback is not None:
-            try:
-                success, output = self.config.verification_callback()
-            except Exception as e:
-                return ToolFailure[str](f"Verification error: {str(e)}")
-            if not success:
-                if self._step_mode:
-                    # In step mode, a failing verification restates the guide
-                    # summary with the reason and an instruction to correct
-                    # before calling advance again; the step-section pointer
-                    # does not advance.
-                    content = (
-                        self._step_summary
-                        + "\n\n"
-                        + (output + "\n\n" if output else "")
-                        + "Verification failed; correct the reported issues "
-                        "before calling advance() again, or call blame() or "
-                        "fail() to end the run."
-                    )
-                else:
-                    content = (
-                        (output + "\n\n" if output else "")
-                        + "Verification failed; fix the reported issues by "
-                        "changing files (edit_file/replace_lines) "
-                        "and then call advance() again, or call blame() or "
-                        "fail() to end the run."
-                    )
-                # The feedback supersedes the earlier non-stubbed verification
-                # result (an earlier advance feedback, stubbed by the agent
-                # loop); the note reports only the status (pinned in
-                # specs/low/sandbox_impl.md), never the failure details.
-                return [ToolResult(
-                    content=content,
-                    supersedes=True,
-                    note="Verification failed.",
-                )]
-
-        # Verification passed (or no callback). In step mode, while step
-        # sections remain, advance provides the next step section and the
-        # session continues (no termination, no change message): the output
-        # supersedes the previous advance output, so the guide summary stays
-        # visible and at most one step section is live.
-        if self._step_mode and self._step_pointer < len(self._step_sections):
-            output = self._step_advance_output(include_section=True)
-            self._step_pointer += 1
-            return [output]
-
-        # Verification passed (or no callback): require the change message
-        # when the run changed files, then signal successful termination.
-        # A write may net out to no change (e.g., an edit undone by a later
-        # edit): only files whose current content differs from their run-start
-        # snapshot count as changed for advance's requirements and result. A
-        # claimed change for a net-unchanged file is fabricated and rejected.
-        effectively_changed: List[str] = []
-        for file_path in self._changed_files:
-            real_path = self.config.file_mappings[file_path]
-            try:
-                with open(real_path, "r", encoding="utf-8") as f:
-                    current = f.read()
-            except Exception:
-                current = None
-            if current != self._pre_write_snapshots.get(file_path):
-                effectively_changed.append(file_path)
-
-        if not effectively_changed:
-            if changes:
-                return ToolFailure[str](
-                    "Cannot advance: the run wrote files but net-changed "
-                    "nothing — each file's current content equals its content "
-                    "at run start. Call advance() with no changes to report "
-                    "no change."
-                )
-            if self.config.feedback_pending:
-                # The run is processing feedback (per the sandbox contract):
-                # advance cannot terminate without a change. The session
-                # continues; the agent must change files (and report the
-                # change), or call blame() or fail() to end the run.
-                return ToolFailure[str](
-                    "Cannot advance without a change: the run is processing "
-                    "feedback, so it must change files and report the change "
-                    "in advance(), or call blame() or fail() to end the run."
-                )
-            return TerminateAgentWithSuccess(NoChangeResult())
-
-        if not changes:
-            # The run's diff is shown only here (per the sandbox contract):
-            # advance's verification passed, files changed, and the change
-            # message is empty, so the agent sees what changed and can write
-            # the change message.
-            failure_message = (
-                "Cannot advance: the run changed files ({changed}). Call "
-                "advance(changes=[{{file, summary}}, ...]) with one entry "
-                "per changed file — each summary one short sentence on "
-                "what changed in that file (not how it was done) — so the "
-                "next agent knows what changed, or call fail() or blame() "
-                "to end the run.\n\nThe run's diff:\n{diff}"
-            ).format(changed=", ".join(effectively_changed), diff=self._diff_report())
-            return ToolFailure[str](failure_message)
-
-        changed_set = set(effectively_changed)
-        mentioned: set = set()
-        messages: List[NodeMessage] = []
-        for entry in changes:
-            file_name = (entry or {}).get("file")
-            summary = (entry or {}).get("summary")
-            if not file_name or not summary or not summary.strip():
-                return ToolFailure[str](
-                    "Cannot advance: each change entry must have a "
-                    "non-empty 'file' and a non-empty one-sentence "
-                    "'summary' of what changed in that file."
-                )
-            if file_name not in changed_set:
-                unknown_message = (
-                    "Cannot advance: '{file}' was not changed by this run; "
-                    "report only the changed files ({changed})."
-                ).format(file=file_name, changed=", ".join(effectively_changed))
-                return ToolFailure[str](unknown_message)
-            summary_text = summary.strip()
-            summary_length = len(summary_text)
-            if summary_length > self.HARD_CHANGE_SUMMARY_LENGTH:
-                if self._summary_hard_rejections >= self.SUMMARY_LENGTH_GRACE:
-                    # The hard-limit grace is exhausted: advance() turns into
-                    # a hard failure ending the run.
-                    return TerminateAgentWithFailure[str](
-                        f"Task failed: the change summary for '{file_name}' "
-                        f"could not be shortened to the hard limit "
-                        f"({self.HARD_CHANGE_SUMMARY_LENGTH} characters) "
-                        f"after repeated attempts."
-                    )
-                self._summary_hard_rejections += 1
-                return ToolFailure[str](
-                    "Cannot advance: the summary for '{file}' is {length} "
-                    "characters (max {max} — the hard limit). Shorten it to "
-                    "at most {max} characters: name the parts of the file "
-                    "that changed in one short sentence, dropping how it was "
-                    "done, then call advance() again with the shortened "
-                    "summary.".format(
-                        file=file_name,
-                        length=summary_length,
-                        max=self.HARD_CHANGE_SUMMARY_LENGTH,
-                    )
-                )
-            if summary_length > self.SOFT_CHANGE_SUMMARY_LENGTH:
-                if self._summary_soft_rejections < self.SUMMARY_LENGTH_GRACE:
-                    self._summary_soft_rejections += 1
-                    return ToolFailure[str](
-                        "Cannot advance: the summary for '{file}' is {length} "
-                        "characters (aim for at most {soft}). Shorten it to "
-                        "at most {soft} characters: name the parts of the "
-                        "file that changed in one short sentence, so the next "
-                        "agent knows what to pay attention to when updating "
-                        "further artifacts, dropping how it was done, then "
-                        "call advance() again with the shortened summary."
-                        .format(
-                            file=file_name,
-                            length=summary_length,
-                            soft=self.SOFT_CHANGE_SUMMARY_LENGTH,
-                        )
-                    )
-                # The soft-limit grace is exhausted: accept the summary when
-                # it is within the hard bound.
-            # An accepted summary resets the rejection counters.
-            self._summary_soft_rejections = 0
-            self._summary_hard_rejections = 0
-            mentioned.add(file_name)
-            messages.append(NodeMessage(
-                kind="change",
-                text="{}: {}".format(file_name, summary_text),
-            ))
-
-        missing = changed_set - mentioned
-        if missing:
-            missing_message = (
-                "Cannot advance: changed files not covered by the change "
-                "summary ({missing}). Add one entry per changed file."
-            ).format(missing=", ".join(sorted(missing)))
-            return ToolFailure[str](missing_message)
-
-        return TerminateAgentWithSuccess(ChangeResult(messages=messages))
-
-    def _diff_report(self) -> str:
-        """Diff of each changed file vs. its content at run start, truncated.
-
-        The report is bounded by the diff size limit (config; default 1000
-        chars): a larger diff is cut to its first `limit` characters, followed
-        by a footer stating the truncated size and the full change counts.
-        """
-        import difflib
-
-        sections: List[str] = []
-        for file_path in self._changed_files:
-            old = self._pre_write_snapshots.get(file_path)
-            real_path = self.config.file_mappings[file_path]
-            try:
-                with open(real_path, "r", encoding="utf-8") as f:
-                    current = f.read()
-            except Exception:
-                current = None
-            if old is None or current is None:
-                sections.append(
-                    f"### {file_path}: diff unavailable (no baseline for this run)"
-                )
-                continue
-            diff = difflib.unified_diff(
-                old.splitlines(),
-                current.splitlines(),
-                fromfile=f"{file_path} (at run start)",
-                tofile=f"{file_path} (now)",
-            )
-            sections.append(f"### diff for {file_path}\n" + "\n".join(diff))
-        if not sections:
-            return "No files were changed in this run."
-
-        full = "\n\n".join(sections)
-        limit = self.diff_size_limit if self.diff_size_limit is not None else 1000
-        if len(full) <= limit:
-            return full
-        lines = full.splitlines()
-        additions = sum(1 for l in lines if l.startswith("+") and not l.startswith("+++"))
-        deletions = sum(1 for l in lines if l.startswith("-") and not l.startswith("---"))
-        footer = (
-            f"\n... diff truncated: showing {limit} of {len(full)} chars "
-            f"({len(self._changed_files)} file(s), +{additions}/-{deletions} lines). "
-            "Raise diff_size_limit to see it in full."
-        )
-        return full[:limit] + footer
-
-    # Change summaries must stay bounded so the change messages broadcast to
-    # dependents stay concise. A soft bound nudges one short sentence; a hard
-    # bound caps the message. advance() rejects a change message over the
-    # soft bound (with shortening guidance) up to a grace count, then accepts
-    # it when within the hard bound; a change message still over the hard
-    # bound after its grace count turns advance() into a hard failure.
-    SOFT_CHANGE_SUMMARY_LENGTH = 200
-    HARD_CHANGE_SUMMARY_LENGTH = 500
-    SUMMARY_LENGTH_GRACE = 4
-
-    # edit_file supports only short search/replace strings: a whole-file swap
-    # must go through replace_lines (which requires the line-numbered view).
-    MAX_EDIT_LENGTH = 100
+        return self.run_control.advance(changes)
 
     def fail(self) -> ToolCallOutcome:
         """End the session in failure (agent failure)."""
-        return TerminateAgentWithFailure[str]("Task failed")
+        return self.run_control.fail()
 
     def blame(self, blames: List[Blame]) -> ToolCallOutcome:
         """Signal termination with blame: attribute the task's incompleteness to dependencies and provide feedback on how to correct their outputs."""
-        if not self.config.blame_targets:
-            return ToolFailure[str]("Blame targets are not configured")
-
-        if not blames:
-            return ToolFailure[str]("Blame list must not be empty")
-
-        invalid_blames = [(t, f) for (t, f) in blames if t not in self.config.blame_targets]
-        if invalid_blames:
-            return ToolFailure[str](f"Blame assignment rejected for: {invalid_blames}")
-
-        return TerminateAgentWithSuccess(FeedbackResult(
-            messages=[
-                (target, NodeMessage(kind="feedback", text=feedback))
-                for (target, feedback) in blames
-            ],
-        ))
+        return self.run_control.blame(blames)
 
     def get_write_occurred(self) -> WriteOccurred:
         """Return whether the agent has modified the filesystem during the current run."""
-        return self.write_occurred
+        return self.file_view.get_write_occurred()
 
-    # Helper methods
-
-    def _create_tool_definition(self, name: str, description: str,
-                                parameters: Dict[str, Any],
-                                required: Optional[List[str]] = None) -> ToolDefinition:
-        """Create a tool definition in OpenAI function-calling format."""
-        schema = {
-            "type": "object",
-            "properties": parameters,
-            "additionalProperties": False,
-        }
-        if required:
-            schema["required"] = required
-        return {
-            "type": "function",
-            "function": {
-                "name": name,
-                "description": description,
-                "parameters": schema,
-            },
-        }
-
-    def _error_response(self, error_message: str) -> ToolFailure[str]:
-        """Create a ToolFailure response for a policy or parameter violation."""
-        return ToolFailure[str](self._virtualize_paths(error_message))
-
-    def _readable_list(self) -> str:
-        """Comma-separated list of virtual file names the agent may read."""
-        return ", ".join(sorted(set(self.config.readable_paths)))
-
-    def _writable_list(self) -> str:
-        """Comma-separated list of virtual file names the agent may write."""
-        return ", ".join(sorted(set(self.config.writable_paths)))
-
-    def _virtualize_paths(self, message: str) -> str:
-        """
-        Replace real on-disk paths in a message with their virtual names.
-
-        The agent only ever sees virtual file names (e.g. 'foo.txt'), so error
-        text that embeds the resolved absolute path (like "File '/Users/.../
-        tests/example/foo.txt' does not exist") is rewritten to use the
-        virtual name ('foo.txt') before being returned to the agent.
-        """
-        for real_path in self._real_paths_sorted:
-            if real_path in message:
-                message = message.replace(real_path, self._real_to_virtual[real_path])
-        return message
-
-    def _perform_search(self, path: str, pattern: str) -> List[Tuple[str, str]]:
-        """Perform a recursive search for pattern in files.
-
-        Returns (virtual_name, match_text) pairs; matches in writable files
-        are suppressed by search_files (their content is never rendered).
-        """
-        results: List[Tuple[str, str]] = []
-        pattern_re = re.compile(pattern)
-
-        def _scan(real_file: str) -> None:
-            virtual = self._real_to_virtual.get(real_file, os.path.basename(real_file))
-            try:
-                with open(real_file, 'r', encoding='utf-8') as f:
-                    for line_num, line in enumerate(f, 1):
-                        if pattern_re.search(line):
-                            results.append(
-                                (virtual, f"{os.path.basename(real_file)}:{line_num}: {line.strip()}")
-                            )
-            except (UnicodeDecodeError, PermissionError):
-                pass
-
-        if os.path.isfile(path):
-            _scan(path)
-        else:
-            for root, _dirs, files in os.walk(path):
-                for file in files:
-                    _scan(os.path.join(root, file))
-
-        return results
+    def _in_step_mode(self, file_path: VirtualName) -> bool:
+        """Whether a file is excluded by step mode: the guide is not readable."""
+        return self._step_mode and file_path == self.config.guide

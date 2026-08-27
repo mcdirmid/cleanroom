@@ -17,8 +17,8 @@ Script usage (CLI entry point):
 
 from __future__ import annotations
 from typing import List, Optional, Protocol
-from update_with_ai.lib.dag_storage import NodeId
-from update_with_ai.lib.dag_cleaner import CleaningResult
+from .dag_storage import NodeId
+from .dag_cleaner import CleaningResult
 
 
 class BuildRunner(Protocol):

@@ -64,7 +64,7 @@ class TestSandboxImpl(unittest.TestCase):
         }
         self.readable_paths = ["test.txt", "ro.txt", "new.txt"]
         self.writable_paths = ["test.txt", "new.txt"]
-        self.blame_targets = ["agent", "system"]
+        self.blame_targets = {"agent": "//pkg:agent", "system": "//pkg:system"}
 
         self.config = SandboxConfig(
             file_mappings=self.file_mappings,
@@ -197,7 +197,7 @@ class TestSandboxImpl(unittest.TestCase):
             file_mappings=self.file_mappings,
             readable_paths=self.readable_paths,
             writable_paths=self.writable_paths,
-            blame_targets=[],
+            blame_targets={},
             search_result_limit=5,
             verification_callback=None,
         )
@@ -215,7 +215,7 @@ class TestSandboxImpl(unittest.TestCase):
             file_mappings={"ro.txt": self.test_file_path},
             readable_paths=["ro.txt"],
             writable_paths=[],
-            blame_targets=[],
+            blame_targets={},
             search_result_limit=5,
             verification_callback=None,
         )
@@ -272,7 +272,7 @@ class TestSandboxImpl(unittest.TestCase):
             file_mappings={"ro.txt": self.test_file_path},
             readable_paths=["ro.txt"],
             writable_paths=[],
-            blame_targets=[],
+            blame_targets={},
             search_result_limit=5,
             verification_callback=None,
         )
@@ -285,7 +285,7 @@ class TestSandboxImpl(unittest.TestCase):
             file_mappings={"ro.txt": self.test_file_path},
             readable_paths=["ro.txt"],
             writable_paths=[],
-            blame_targets=[],
+            blame_targets={},
             search_result_limit=5,
             verification_callback=None,
         )
@@ -303,7 +303,7 @@ class TestSandboxImpl(unittest.TestCase):
             file_mappings={"a.txt": self.test_file_path},
             readable_paths=[],
             writable_paths=["a.txt"],
-            blame_targets=[],
+            blame_targets={},
             search_result_limit=5,
             verification_callback=None,
         )
@@ -344,7 +344,7 @@ class TestSandboxImpl(unittest.TestCase):
             file_mappings={"a.txt": self.test_file_path, "b.txt": ro2},
             readable_paths=["b.txt", "a.txt"],
             writable_paths=[],
-            blame_targets=[],
+            blame_targets={},
             search_result_limit=5,
             verification_callback=None,
         )
@@ -363,7 +363,7 @@ class TestSandboxImpl(unittest.TestCase):
             },
             readable_paths=["exists.txt", "missing.txt", "dir"],
             writable_paths=[],
-            blame_targets=[],
+            blame_targets={},
             search_result_limit=5,
             verification_callback=None,
         )
@@ -523,7 +523,7 @@ class TestSandboxImpl(unittest.TestCase):
             file_mappings={"a.txt": self.test_file_path},
             readable_paths=["a.txt"],
             writable_paths=[],
-            blame_targets=[],
+            blame_targets={},
             search_result_limit=5,
             verification_callback=None,
         )
@@ -598,7 +598,7 @@ class TestSandboxImpl(unittest.TestCase):
             file_mappings={"test.txt": self.test_file_path},
             readable_paths=["test.txt"],
             writable_paths=[],
-            blame_targets=[],
+            blame_targets={},
             search_result_limit=5,
             verification_callback=None,
         )
@@ -617,7 +617,7 @@ class TestSandboxImpl(unittest.TestCase):
             file_mappings={"dir": self.temp_dir, "a.txt": a_path, "b.txt": b_path},
             readable_paths=["dir"],
             writable_paths=["b.txt"],
-            blame_targets=[],
+            blame_targets={},
             search_result_limit=5,
             verification_callback=None,
         )
@@ -641,7 +641,7 @@ class TestSandboxImpl(unittest.TestCase):
             file_mappings={"a.txt": self.test_file_path},
             readable_paths=[],
             writable_paths=["a.txt"],
-            blame_targets=[],
+            blame_targets={},
             search_result_limit=5,
             verification_callback=None,
         )
@@ -653,7 +653,7 @@ class TestSandboxImpl(unittest.TestCase):
             file_mappings={"dir": self.temp_dir},
             readable_paths=["dir"],
             writable_paths=[],
-            blame_targets=[],
+            blame_targets={},
             search_result_limit=5,
             verification_callback=None,
         )
@@ -665,7 +665,7 @@ class TestSandboxImpl(unittest.TestCase):
             file_mappings={"test.txt": self.test_file_path},
             readable_paths=["test.txt"],
             writable_paths=[],
-            blame_targets=[],
+            blame_targets={},
             search_result_limit=2,
             verification_callback=None,
         )
@@ -677,7 +677,7 @@ class TestSandboxImpl(unittest.TestCase):
             file_mappings={"test.txt": self.test_file_path},
             readable_paths=["test.txt"],
             writable_paths=[],
-            blame_targets=[],
+            blame_targets={},
             search_result_limit=2,
             verification_callback=None,
         )
@@ -1024,7 +1024,7 @@ class TestSandboxImpl(unittest.TestCase):
             file_mappings=self.file_mappings,
             readable_paths=self.readable_paths,
             writable_paths=self.writable_paths,
-            blame_targets=[],
+            blame_targets={},
             search_result_limit=5,
             verification_callback=None,
         )
@@ -1044,11 +1044,13 @@ class TestSandboxImpl(unittest.TestCase):
             self.sandbox.blame([("agent", "fix the output"), ("system", "redo")])
         )
         self.assertIsInstance(result.value, FeedbackResult)
+        # Each target (the blamed artifact's virtual name) is resolved to its
+        # owning node, so the feedback messages are addressed to the nodes.
         self.assertEqual(
             result.value.messages,
             [
-                ("agent", NodeMessage(kind="feedback", text="fix the output")),
-                ("system", NodeMessage(kind="feedback", text="redo")),
+                ("//pkg:agent", NodeMessage(kind="feedback", text="fix the output")),
+                ("//pkg:system", NodeMessage(kind="feedback", text="redo")),
             ],
         )
 
@@ -1094,7 +1096,7 @@ class TestTemplateInitialization(unittest.TestCase):
                 file_mappings=self.file_mappings,
                 readable_paths=self.readable_paths,
                 writable_paths=self.writable_paths,
-                blame_targets=[],
+                blame_targets={},
                 search_result_limit=5,
                 templates=templates,
                 verification_callback=None,
@@ -1195,7 +1197,7 @@ class TestStepMode(unittest.TestCase):
                 file_mappings=self.file_mappings,
                 readable_paths=self.readable_paths,
                 writable_paths=self.writable_paths,
-                blame_targets=[],
+                blame_targets={},
                 search_result_limit=5,
                 guide="guide.md",
                 step_sections_enabled=step_sections,

@@ -1,43 +1,40 @@
 # lib/sandbox.py
 """
 Interface definitions for the LLS Sandbox.
+
+The sandbox is a facade: it composes the file machinery (file_view), the
+step-mode guide delivery (guide_delivery), and the verification and
+termination rules (run_control) into a single tool surface. The component
+types are owned by their defining interfaces (file_view, guide_delivery,
+run_control) and re-exported here so existing imports of
+`update_with_ai.lib.sandbox` keep working.
 """
 
-from typing import Callable, Dict, List, Optional, Protocol, Tuple
+from typing import List, Optional, Protocol
 from dataclasses import dataclass, field
 from .tool_provider import (
     ToolDefinition,
-    ToolResult,
     PresentedToolResult,
-    Signal,
-    Continue,
-    TerminateAgentWithSuccess,
-    TerminateAgentWithFailure,
-    TerminateSuccessResult,
-    ToolFailure,
     ToolCallOutcome,
 )
+from .file_view import (
+    FileMapping,
+    FilePath,
+    ReadablePaths,
+    SearchResultLimit,
+    TemplateMapping,
+    VirtualName,
+    WritablePaths,
+    WriteOccurred,
+)
+from .run_control import (
+    Blame,
+    BlameTarget,
+    BlameTargets,
+    Feedback,
+    VerificationCallback,
+)
 
-
-# Type definitions
-VirtualName = str
-FilePath = str
-FileMapping = Dict[VirtualName, FilePath]
-ReadablePaths = List[VirtualName]
-WritablePaths = List[VirtualName]
-BlameTargets = List[str]
-BlameTarget = str
-Feedback = str
-Blame = Tuple[BlameTarget, Feedback]
-SearchResultLimit = int
-# Template content keyed by the writable file's virtual name: the initial
-# content the sandbox gives a writable file that does not exist on disk when
-# the sandbox is configured (see specs/high/sandbox.md / specs/low/sandbox.md).
-TemplateMapping = Dict[VirtualName, str]
-# A verification callback runs a shell command and returns (success, output):
-# success is True when the command exited 0. The sandbox uses the success flag
-# to gate advance()'s termination (see specs/high/sandbox.md / specs/low/sandbox.md).
-VerificationCallback = Optional[Callable[[], Tuple[bool, str]]]
 
 @dataclass
 class SandboxConfig:
@@ -53,8 +50,6 @@ class SandboxConfig:
     feedback_pending: bool = False
     templates: TemplateMapping = field(default_factory=dict)
     verification_callback: VerificationCallback = None
-
-WriteOccurred = bool
 
 
 class Sandbox(Protocol):
@@ -95,15 +90,16 @@ class Sandbox(Protocol):
     def get_session_start_reads(self) -> List[PresentedToolResult]:
         """
         Return the session-start reads: the plain reads of the read-only
-        files, for rendering at the beginning of a run before the model's
-        first turn.
+        files and, in step mode, the guide's presentation, for rendering at
+        the beginning of a run before the model's first turn.
 
         When session-start reads are enabled, returns a session-start read
         for every file that is readable but not writable, sorted by virtual
         name; each is a PresentedToolResult pairing the read_file call with
         its plain read result (supersedes unset). When disabled, returns an
-        empty list. Requesting the session-start reads changes no sandbox
-        state.
+        empty list. In step mode, the guide's presentation (the pre-injected
+        advance call) follows the reads. Requesting the session-start reads
+        changes no sandbox state.
         """
         ...
 
@@ -291,19 +287,21 @@ class Sandbox(Protocol):
         dependencies and provide feedback on how to correct their outputs.
 
         Args:
-            blames: List of (target, feedback) pairs; each pair is one feedback
-                    message to its target.
+            blames: List of (target, feedback) pairs; each target is the
+                    virtual name of a blameable artifact (a dependency's
+                    declared source file), and each pair is one feedback
+                    message to that artifact's owning node.
 
         Returns:
             TerminateAgentWithSuccess carrying a TerminateSuccessResult (the
-            implementation forms a feedback result from the pairs) if all
-            pairs are valid, or ToolFailure[T_tool] if any target is invalid.
-            Termination tools produce no ToolResult and never supersede an earlier
-            update.
+            implementation resolves each target to its owning node and forms a
+            feedback result from the pairs) if all pairs are valid, or
+            ToolFailure[T_tool] if any target is invalid. Termination tools
+            produce no ToolResult and never supersede an earlier update.
 
         Preconditions:
             Blame targets must be configured and non-empty.
-            Each pair's target must be in blame_targets.
+            Each pair's target must be a key of blame_targets.
         """
         ...
 

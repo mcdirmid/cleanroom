@@ -52,7 +52,7 @@ def _make_definition(prompt: str) -> NodeDefinition:
             file_mappings={},
             readable_paths=[],
             writable_paths=[],
-            blame_targets=[],
+            blame_targets={},
             search_result_limit=10,
         ),
     )
@@ -700,16 +700,18 @@ class TestBuildGraphStorageFileImpl(unittest.TestCase):
     def test_readable_paths_are_own_src_plus_dep_srcs(self):
         with self._workspace() as ws:
             graph = self._build_graph(ws)
-            # b's readable: own src (b1) + deps' srcs (a's a1). c is b's silent
-            # dep: its src (c_only) is not readable at all.
+            # b's readable: own src (b1) + own silent src (b_priv) + deps'
+            # srcs (a's a1). c is b's silent dep: its src (c_only) is not
+            # readable at all.
             self.assertCountEqual(
                 graph.resolve_node_definition("//pkg_b:b").sandbox_config.readable_paths,
-                ["b1.txt", "a1.txt"],
+                ["b1.txt", "b_priv.txt", "a1.txt"],
             )
-            # a's readable: own src (a1) + deps' srcs (c's c_only).
+            # a's readable: own src (a1) + own silent src (a_priv) + deps'
+            # srcs (c's c_only).
             self.assertCountEqual(
                 graph.resolve_node_definition("//pkg_a:a").sandbox_config.readable_paths,
-                ["a1.txt", "c_only.txt"],
+                ["a1.txt", "a_priv.txt", "c_only.txt"],
             )
 
     def test_readable_paths_exclude_silent_dep_srcs(self):
@@ -726,19 +728,21 @@ class TestBuildGraphStorageFileImpl(unittest.TestCase):
             self.assertNotIn("c_only.txt", b_readable)
             self.assertNotIn("c_only.txt", b_mappings)
 
-    def test_readable_paths_exclude_silent_srcs(self):
+    def test_own_silent_srcs_readable_deps_silent_srcs_not(self):
+        """A node's own silent_srcs are readable (so the agent can read and
+        edit them — e.g. the package BUILD file); its deps' silent_srcs are
+        not readable."""
         with self._workspace() as ws:
             graph = self._build_graph(ws)
-            # Neither a node's own silent_srcs nor its deps' silent_srcs are readable.
             b_readable = graph.resolve_node_definition(
                 "//pkg_b:b"
             ).sandbox_config.readable_paths
             a_readable = graph.resolve_node_definition(
                 "//pkg_a:a"
             ).sandbox_config.readable_paths
-            self.assertNotIn("b_priv.txt", b_readable)  # own silent_srcs
+            self.assertIn("b_priv.txt", b_readable)    # own silent_srcs
             self.assertNotIn("a_priv.txt", b_readable)  # dep's silent_srcs
-            self.assertNotIn("a_priv.txt", a_readable)  # own silent_srcs
+            self.assertIn("a_priv.txt", a_readable)    # own silent_srcs
 
     def test_feedback_deps_are_included_in_deps(self):
         """A feedback dep is automatically a dep: d declares only feedback_deps
@@ -910,27 +914,28 @@ class TestBuildGraphStorageFileImpl(unittest.TestCase):
             self.assertNotIn("c_only.txt", a_writable)  # c's src, not writable
 
     def test_blame_targets_are_feedback_deps(self):
-        """Only feedback deps may receive feedback: b's blame targets are its
-        feedback dep a; its silent dep c is not a blame target."""
+        """Only feedback deps may receive feedback: b's blame targets map its
+        feedback dep a's declared source (a1.txt, by virtual name) to a; its
+        silent dep c is not a blame target."""
         with self._workspace() as ws:
             graph = self._build_graph(ws)
             self.assertEqual(
                 graph.resolve_node_definition("//pkg_b:b").sandbox_config.blame_targets,
-                ["//pkg_a:a"],
+                {"a1.txt": "//pkg_a:a"},
             )
             self.assertEqual(
                 graph.resolve_node_definition("//pkg_d:d").sandbox_config.blame_targets,
-                ["//pkg_a:a"],
+                {"a1.txt": "//pkg_a:a"},
             )
             # No feedback deps declared -> no blame targets (deps and silent
             # deps alone do not make targets blameable).
             self.assertEqual(
                 graph.resolve_node_definition("//pkg_a:a").sandbox_config.blame_targets,
-                [],
+                {},
             )
             self.assertEqual(
                 graph.resolve_node_definition("//pkg_c:c").sandbox_config.blame_targets,
-                [],
+                {},
             )
 
     def test_file_mappings_map_bare_names_to_real_paths(self):

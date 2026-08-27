@@ -39,7 +39,7 @@ pyright_library(
     srcs = [
         "sandbox.py",
     ],
-    pyright_deps = [":tool_provider"],
+    pyright_deps = [":file_view", ":run_control", ":tool_provider"],
     visibility = ["//visibility:public"],  # Add this line
 )
 
@@ -48,7 +48,7 @@ pyright_library(
     srcs = [
         "sandbox_impl.py",
     ],
-    pyright_deps = [":tool_provider", ":sandbox", ":dag_clean_logic"],
+    pyright_deps = [":file_view", ":file_view_impl", ":guide_delivery", ":guide_delivery_impl", ":run_control", ":run_control_impl", ":sandbox", ":tool_provider"],
     visibility = ["//visibility:public"],  # Add this line
 )
 
@@ -182,4 +182,58 @@ pyright_library(
         ":build_runner",
     ],
     visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "file_view",
+    srcs = [
+        "file_view.py",
+    ],
+    pyright_deps = [":tool_provider"],
+    visibility = ["//visibility:public"],  # Add this line
+)
+
+pyright_library(
+    name = "file_view_impl",
+    srcs = [
+        "file_view_impl.py",
+    ],
+    pyright_deps = [":file_view", ":tool_provider"],
+    visibility = ["//visibility:public"],  # Add this line
+)
+
+pyright_library(
+    name = "guide_delivery",
+    srcs = [
+        "guide_delivery.py",
+    ],
+    pyright_deps = [":tool_provider"],
+    visibility = ["//visibility:public"],  # Add this line
+)
+
+pyright_library(
+    name = "guide_delivery_impl",
+    srcs = [
+        "guide_delivery_impl.py",
+    ],
+    pyright_deps = [":guide_delivery", ":tool_provider"],
+    visibility = ["//visibility:public"],  # Add this line
+)
+
+pyright_library(
+    name = "run_control",
+    srcs = [
+        "run_control.py",
+    ],
+    pyright_deps = [":dag_clean_logic", ":dag_storage", ":file_view", ":tool_provider"],
+    visibility = ["//visibility:public"],  # Add this line
+)
+
+pyright_library(
+    name = "run_control_impl",
+    srcs = [
+        "run_control_impl.py",
+    ],
+    pyright_deps = [":dag_clean_logic", ":dag_storage", ":file_view", ":guide_delivery", ":run_control", ":tool_provider"],
+    visibility = ["//visibility:public"],  # Add this line
 )

@@ -63,7 +63,7 @@ def _make_node_def(
     readable_paths: Optional[List[str]] = None,
     writable_paths: Optional[List[str]] = None,
     file_mappings: Optional[Dict[str, str]] = None,
-    blame_targets: Optional[List[str]] = None,
+    blame_targets: Optional[Dict[str, str]] = None,
     templates: Optional[Dict[str, str]] = None,
     guide: Optional[str] = None,
     step_sections: bool = True,
@@ -75,7 +75,7 @@ def _make_node_def(
             file_mappings=file_mappings or {},
             readable_paths=readable_paths or [],
             writable_paths=writable_paths or [],
-            blame_targets=blame_targets or [],
+            blame_targets=blame_targets or {},
             search_result_limit=10,
             templates=templates or {},
             guide=guide,
@@ -512,9 +512,10 @@ class TestToolExecutor(unittest.TestCase):
         return agent_loop.last_run["tool_executor"]
 
     def test_blame_invalid_target_is_tool_failure_not_reaching_sandbox(self):
-        """A blame target that is not a dependency returns ToolFailure[str]
-        without invoking the sandbox's blame tool."""
-        node_def = _make_node_def(blame_targets=["b"])
+        """A blame target that resolves to no owning node, or whose owning
+        node is not a dependency, returns ToolFailure[str] without invoking
+        the sandbox's blame tool."""
+        node_def = _make_node_def(blame_targets={"b.py": "b"})
         sandbox = MockSandbox()
         executor = self._capture_executor(node_def, sandbox)
         outcome = executor("blame", {"blames": [("x", "not a dependency")]})
@@ -525,15 +526,15 @@ class TestToolExecutor(unittest.TestCase):
         self.assertEqual(sandbox.calls, [])
 
     def test_blame_valid_target_passes_through_to_sandbox(self):
-        """A blame target that is a dependency reaches the sandbox, and the
-        sandbox's outcome is returned unchanged."""
-        node_def = _make_node_def(blame_targets=["b"])
+        """A blame target whose owning node is a dependency reaches the
+        sandbox, and the sandbox's outcome is returned unchanged."""
+        node_def = _make_node_def(blame_targets={"b.py": "b"})
         blame_outcome: ToolCallOutcome = TerminateAgentWithSuccess(
             FeedbackResult(messages=[("b", msg("fix it", "feedback"))])
         )
         sandbox = MockSandbox(blame_outcome=blame_outcome)
         executor = self._capture_executor(node_def, sandbox)
-        blames: List[Blame] = [("b", "fix it")]
+        blames: List[Blame] = [("b.py", "fix it")]
         outcome = executor("blame", {"blames": blames})
         self.assertIsInstance(outcome, TerminateAgentWithSuccess)
         self.assertIs(outcome, blame_outcome)

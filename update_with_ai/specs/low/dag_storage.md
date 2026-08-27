@@ -32,7 +32,7 @@ class DagStorage(Protocol):
     def get_known_reverse_dependencies(self, node_id: NodeId) -> KnownReverseDependencies: ...
 ```
 
-- `NodeMessage`: a message stored in the DAG message store — a message with a kind and text, assigned to a node by another node during cleaning. A message of kind `change` dirties the node and may be processed without the node changing; a message of kind `feedback` additionally obligates the node to change, blame, or fail (per `dag_clean_logic`). Produced by `dag_clean_logic`, consumed by `dag_storage`.
+- `NodeMessage`: a message stored in the DAG message store — a message with a kind and text, assigned to a node by another node during cleaning. A message of kind `change` dirties the node; a message of kind `feedback` carries an obligation on the node. The store persists messages exactly as stored; kind semantics are the producer's concern, not the store's.
 - `MessageKind`: the kind of a message: `"change"` or `"feedback"`.
 - `NodeDependencies`: the direct dependencies of a node.
 - `KnownReverseDependencies`: the nodes recorded as depending on this node.

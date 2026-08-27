@@ -6,9 +6,12 @@ terms (from sandbox): virtual name, file write, line-numbered view, injected rea
 terms (from agent_loop): run
 terms (from dag_clean_logic): change message
 terms (from tool_provider): tool failure, supersession flag, stub
+terms (refined): virtual name
 
 ## Deltas
 
+- [refines] virtual name -> the implementation addresses every configured file by its virtual name — the file's final path component, or the shortest path suffix unique among the configured files — and never presents a file's full path to the agent: reads, writes, edits, searches, session-start reads, and error messages name files by virtual name.
+- [refines] blame target -> the virtual name of the blamed artifact; the implementation resolves the virtual name to the owning node via the configured blame targets mapping before forming the feedback result.
 - Uses the filesystem directly for all operations; verification is delegated to the injected callback when provided.
 - Provides the following tools, each as a fixed function: file operations (reading the entire file, writing, content-based editing, line-range editing, searching); termination (advance, failure, blame).
 - Tools are conditionally included: the blame tool only if blame targets are non-empty. The advance tool is always included.

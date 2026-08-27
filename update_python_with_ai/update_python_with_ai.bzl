@@ -1,15 +1,19 @@
 """Specification-node entry points.
 
-update_python_with_ai creates a high-level specification (HLS) node and a
-low-level specification (LLS) node. Both are thin wrappers over
-update_with_ai (update_with_ai.bzl): they differ only in the spec-specific
-data they pass — the prompt, the guide dep, the spec deps, and a *_lint
-test target that gates the node's verify tool (hls_lint for HLS nodes,
-lls_lint for LLS nodes). All node machinery (manifest, *_clean, *_feedback,
-*_dirty, *_change, *_prompt targets) comes from update_with_ai.
+update_python_with_ai creates a high-level specification (HLS) node, a
+low-level specification (LLS) node, a lib-python node, a test node (for
+implementations), and a QA arbiter node (for implementations). All are thin
+wrappers over update_with_ai (update_with_ai.bzl): they differ only in the
+spec-specific data they pass — the prompt, the guide dep, the module deps,
+and a *_lint test target that gates the node's verify tool (hls_lint for HLS
+nodes, lls_lint for LLS nodes; the lib and test nodes verify through the
+type-check / test targets in the BUILD files one level up, and the QA node
+verifies by running the tests via bazel test). All node machinery (manifest,
+*_clean, *_feedback, *_dirty, *_change, *_prompt targets) comes from
+update_with_ai.
 
 The macro returns its own label (":" + name) so a BUILD file can bind the
-result to a variable and pass it to a dependent node's spec deps. Spec deps
+result to a variable and pass it to a dependent node's module deps. Module deps
 are plain labels (same or other packages); the graph is resolved at run
 time from the loaded manifests.
 """
@@ -57,7 +61,7 @@ def _spec_lint_test_impl(ctx):
     # Each spec_dep's manifest (in runfiles) lists the spec files it owns;
     # the test script reads them at runtime and passes the package-qualified
     # paths to the linter as --deps. The closure is computed from the
-    # manifests: the spec deps' own sources plus, recursively, the sources
+    # manifests: the module deps' own sources plus, recursively, the sources
     # of every node in their deps/star_deps closure (never silent_deps), so
     # lint coverage matches exactly what the agent can read at run time.
     dep_manifest_paths = [f.short_path for f in ctx.files.spec_deps]
@@ -196,12 +200,12 @@ _lls_lint_test = rule(
 # Macro: update_python_with_ai (specification nodes)
 # ============================================================================
 
-def _update_python_with_ai(name, prompt, src, deps = [], spec_deps = [], template = None, guide = None, verify = "", visibility = None):
+def _update_python_with_ai(name, prompt, src, deps = [], module_deps = [], star_deps = [], feedback_deps = [], silent_deps = [], silent_srcs = [], template = None, guide = None, verify = "", visibility = None):
     """Create a spec node by delegating to update_with_ai.
 
     The single common spec-node entry: forwards the spec-specific arguments
     to update_with_ai (which generates the node, *_clean, *_feedback, and
-    *_prompt targets) and returns the node's own label. The spec deps are
+    *_prompt targets) and returns the node's own label. The module deps are
     kept separate from the declared deps and passed as star_deps: they are
     cleaned before run and their sources (and, recursively, the sources of
     their whole deps/star_deps closure) are readable by the node.
@@ -211,7 +215,21 @@ def _update_python_with_ai(name, prompt, src, deps = [], spec_deps = [], templat
         prompt: The agent prompt for the spec node.
         src: The spec file path the agent writes.
         deps: Declared readable dependency node labels (e.g. the guide).
-        spec_deps: spec targets the current spec depends on (must be _update_python_with_ai targets).
+        module_deps: Whole-module spec targets the current spec depends on
+            (must be _update_python_with_ai targets); their module names feed
+            the module pyright_deps. Passed to update_with_ai as star_deps.
+        star_deps: Additional dependency node labels passed directly to
+            update_with_ai as star_deps (e.g. a spec-part target like
+            "<name>_low"); combined with module_deps. Their transitive
+            closure over star deps is readable by the node.
+        feedback_deps: Dependency node labels that can receive feedback from
+            this node (the node's blame targets); automatically included in
+            deps, so their declared sources are readable.
+        silent_deps: Declared silent dependency node labels (cleaned before
+            the node; their sources are not readable to it).
+        silent_srcs: Paths (relative to the node's package directory) the
+            agent can write that deps cannot read (e.g. a package BUILD
+            file one level up).
         template: Optional template file label whose content initializes the
             spec file at run start when the file does not exist on disk.
         verify: Shell command to run when the agent calls verify()
@@ -223,9 +241,9 @@ def _update_python_with_ai(name, prompt, src, deps = [], spec_deps = [], templat
         The node's own label (":" + name).
     """
 
-    # Spec deps are passed as star_deps (not deps): the node can read the
-    # spec dep's sources and, recursively, the sources of the whole
-    # transitive closure of its spec deps (computed at run time from the
+    # Module deps are passed as star_deps (not deps): the node can read the
+    # module dep's sources and, recursively, the sources of the whole
+    # transitive closure of its module deps (computed at run time from the
     # manifests). Star deps are automatically included in deps, so they are
     # still cleaned before run.
     update_with_ai(
@@ -235,18 +253,21 @@ def _update_python_with_ai(name, prompt, src, deps = [], spec_deps = [], templat
         template = template,
         guide = guide,
         deps = deps,
-        star_deps = spec_deps,
+        silent_deps = silent_deps,
+        star_deps = module_deps + star_deps,
+        feedback_deps = feedback_deps,
+        silent_srcs = silent_srcs,
         verify = verify,
         visibility = visibility,
     )
     return ":" + name
 
-def update_python_with_ai(name, spec_deps, visibility = None):
+def update_python_with_ai(name, module_deps, visibility = None):
     """Create a spec node for each root in spec_dep_roots.
 
     Args:
         name: Target name prefix (e.g. "dag_storage").
-        spec_deps: List of spec dep target labels (e.g. [":dag_clean_logic"]).
+        module_deps: List of dependency spec/module labels (e.g. [":dag_clean_logic"]); each is a readable spec dependency and a pyright_dep of the module.
         visibility: Optional visibility applied to all generated targets
             (node, *_clean, *_feedback, *_prompt); needed for cross-package
             deps.
@@ -254,7 +275,7 @@ def update_python_with_ai(name, spec_deps, visibility = None):
     Returns:
         List of the created spec node labels (":" + name).
     """
-    hls_spec_deps = [dep + "_high" for dep in spec_deps]
+    hls_spec_deps = [dep + "_high" for dep in module_deps]
     _update_python_with_ai(
         name = name + "_high",
         prompt = (
@@ -268,8 +289,8 @@ def update_python_with_ai(name, spec_deps, visibility = None):
         src = "high/" + name + ".md",
         template = "//update_python_with_ai/templates:hls",
         guide = "//update_python_with_ai/guides:high_level_spec",
-        spec_deps = hls_spec_deps,
-        verify = "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{}:{}_high_lint --test_output=errors 2>&1".format(
+        module_deps = hls_spec_deps,
+        verify = "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{}:{}_high_lint --test_output=errors --noshow_progress 2>&1".format(
             native.package_name(),
             name,
         ),
@@ -280,9 +301,9 @@ def update_python_with_ai(name, spec_deps, visibility = None):
         name = name + "_high_lint",
         srcs = ["high/" + name + ".md"],
         spec_deps = hls_spec_deps,
-        dep_srcs = native.glob(["high/" + dep.split(":")[-1] + ".md" for dep in spec_deps], allow_empty = True),
+        dep_srcs = native.glob(["high/" + dep.split(":")[-1] + ".md" for dep in module_deps], allow_empty = True),
     )
-    lls_spec_deps = [dep + "_low" for dep in spec_deps]
+    lls_spec_deps = [dep + "_low" for dep in module_deps]
     _update_python_with_ai(
         name = name + "_low",
         prompt = (
@@ -297,9 +318,9 @@ def update_python_with_ai(name, spec_deps, visibility = None):
         src = "low/" + name + ".md",
         template = "//update_python_with_ai/templates:lls",
         guide = "//update_python_with_ai/guides:high_to_low",
-        spec_deps = lls_spec_deps,
+        module_deps = lls_spec_deps,
         deps = [":" + name + "_high"],
-        verify = "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{}:{}_low_lint --test_output=errors 2>&1".format(
+        verify = "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{}:{}_low_lint --test_output=errors --noshow_progress 2>&1".format(
             native.package_name(),
             name,
         ),
@@ -317,6 +338,156 @@ def update_python_with_ai(name, spec_deps, visibility = None):
             name = name + "_low_lint",
             srcs = ["low/" + name + ".md"],
             spec_deps = lls_spec_deps,
-            dep_srcs = native.glob(["low/" + dep.split(":")[-1] + ".md" for dep in spec_deps], allow_empty = True),
+            dep_srcs = native.glob(["low/" + dep.split(":")[-1] + ".md" for dep in module_deps], allow_empty = True),
+        )
+
+    # The lib and tests directories are one level up from this package (the
+    # parent of the instantiation package): the lib-python node writes
+    # ../lib/<name>.py and the test node writes ../tests/<name>_test.py. The
+    # package BUILD files (../lib/BUILD.bazel, ../tests/BUILD.bazel) are
+    # silent sources: the agent may edit them to add the module's
+    # pyright_library / pyright_test entry, whose type-check (and test)
+    # targets gate the node's verify() tool.
+    _parent_pkg = "/".join(native.package_name().split("/")[:-1])
+
+    # The lib-python node: the module that implements the LLS per
+    # low_to_lib.md. Its verify runs the module's type check once the agent
+    # adds the pyright_library entry to ../lib/BUILD.bazel. The module kind
+    # follows the spec: an interface spec's module defines the Protocol and
+    # types only; an implementation spec's module subclasses the interface's
+    # Protocol per the LLS.
+    if name.endswith("_impl"):
+        _lib_kind_clause = (
+            "This is an implementation module: it subclasses the interface's " +
+            "Protocol class per the LLS."
+        )
+    else:
+        _lib_kind_clause = (
+            "This is an interface module: it defines the interface's Protocol " +
+            "and types only, never an implementation class (implementations " +
+            "live in the `_impl` module, which implements an implementation " +
+            "LLS; this spec has none). If the template has an " +
+            "implementation-class half, delete it."
+        )
+    _update_python_with_ai(
+        name = name + "_lib",
+        prompt = (
+            "Ensure the lib module for %s (the file %s.py) implements " +
+            "its LLS per low_to_lib.md, with minimal changes: make only the " +
+            "targeted edits needed to fix deviations, and leave conformant content " +
+            "untouched. If the file is a template, fill it in. " +
+            "Call advance() regularly to re-run the type check: after fixing type " +
+            "errors, call advance() to confirm they are really gone, and after each " +
+            "edit or small series of edits, call advance() to confirm no new type " +
+            "errors were introduced. " +
+            _lib_kind_clause + " " +
+            "A write is " +
+            "followed by an automatic re-read with line numbers, so a line-range edit " +
+            "(replace_lines) may follow a write without a further read."
+        ) % (name, name),
+        src = "../lib/" + name + ".py",
+        template = "//update_python_with_ai/templates:lib",
+        guide = "//update_python_with_ai/guides:low_to_lib",
+        module_deps = [":" + name + "_low"],
+        silent_deps = [dep + "_lib" for dep in module_deps],
+        verify = (
+            "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_python_with_ai/bin/lib_lint.py " +
+            "{}/lib/BUILD.bazel {}/lib/{}.py {} && " +
+            "bazel test //{}/lib:{}_type_check --test_output=errors --noshow_progress 2>&1"
+        ).format(
+            _parent_pkg,
+            _parent_pkg,
+            name,
+            "--deps " + ",".join([dep.split(":")[-1] for dep in module_deps])
+            if module_deps
+            else "",
+            _parent_pkg,
+            name,
+        ),
+        visibility = visibility,
+    )
+
+    # The test node (implementations only, per low_to_test.md: one test
+    # module per implementation LLS): written from the implementation LLS
+    # alone. The implementation module is a silent dep — cleaned before this
+    # node (so the tests type-check against it) but not readable to it (the
+    # implementation Python file is never consulted). Verify gates on the
+    # tests' BUILD entry and their type check only: the tests themselves are
+    # not run here — the implementation's conformance is verified later, in a
+    # separate agent run against the final implementation.
+    if name.endswith("_impl"):
+        _update_python_with_ai(
+            name = name + "_test",
+            prompt = (
+                "Ensure the test module for %s (the file %s_test.py) is written from " +
+                "the implementation LLS per low_to_test.md, " +
+                "with minimal changes: make only the targeted edits needed to fix " +
+                "deviations, and leave conformant content untouched. The implementation " +
+                "Python file is never consulted. If the file is a template, fill it in. " +
+                "Write incrementally: append one test class per edit, never the whole " +
+                "file in one edit (an edit that exceeds the response limit is lost). " +
+                "Call advance() regularly to re-run the type check: after fixing type " +
+                "errors, call advance() to confirm they are really gone, and after each " +
+                "edit or small series of edits, call advance() to confirm no new type " +
+                "errors were introduced. " +
+                "A write is followed by an automatic re-read with line numbers, so a " +
+                "line-range edit (replace_lines) may follow a write without a further " +
+                "read."
+            ) % (name, name),
+            src = "../tests/" + name + "_test.py",
+            template = "//update_python_with_ai/templates:test",
+            guide = "//update_python_with_ai/guides:low_to_test",
+            module_deps = [":" + name + "_low"],
+            silent_deps = [":" + name + "_lib"] + [dep + "_lib" for dep in module_deps],
+            verify = (
+                "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_python_with_ai/bin/test_lint.py " +
+                "{}/tests/BUILD.bazel {}/tests/{}_test.py --lib-pkg {}/lib {} && " +
+                "bazel test //{}/tests:{}_test_type_check --test_output=errors --noshow_progress 2>&1"
+            ).format(
+                _parent_pkg,
+                _parent_pkg,
+                name,
+                _parent_pkg,
+                "--deps " + ",".join([name] + [dep.split(":")[-1] for dep in module_deps])
+                if module_deps
+                else "",
+                _parent_pkg,
+                name,
+            ),
+            visibility = visibility,
+        )
+
+        # The QA arbiter node (implementations only, like the test node):
+        # runs the implementation's tests (bazel test on the test node's
+        # pyright_test target) via the verification callback and arbitrates
+        # blame between the lib module and the test module against the LLS
+        # when a test fails. The lib and test nodes are feedback deps: their
+        # declared sources are readable (the QA reads the lib and test code)
+        # and they are the QA's blame targets — the agent blames an artifact
+        # by its file's virtual name (e.g. foo.py / foo_test.py), which the
+        # sandbox resolves to the owning node. The low spec nodes are star
+        # deps, so the whole LLS closure is readable as the contract. The log
+        # (logs/<name>_qa.log, committed empty in the specs package) is the
+        # run's persistent record of problems across the feedback loop; the
+        # verification runs the tests and then, when the tests pass, fails
+        # with feedback directing the agent to empty the log when it is not
+        # empty, so a run whose tests pass succeeds only with an empty log.
+        _qa_log_path = "{}/logs/{}_qa.log".format(native.package_name(), name)
+        _update_python_with_ai(
+            name = name + "_qa",
+            prompt = (
+                "Call advance() to start. Do not try to execute the tests " +
+                "yourself: advance runs the tests and gives you feedback " +
+                "about any test failures."
+            ),
+            src = "logs/" + name + "_qa.log",
+            guide = "//update_python_with_ai/guides:qa",
+            star_deps = [":" + name + "_low"],
+            feedback_deps = [":" + name + "_lib", ":" + name + "_test"],
+            verify = (
+                "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{}/tests:{}_test --test_output=errors --noshow_progress 2>&1 && " +
+                "if [ -s {} ]; then echo 'QA log {} is not empty; empty it and call advance again.'; exit 1; fi"
+            ).format(_parent_pkg, name, _qa_log_path, _qa_log_path),
+            visibility = visibility,
         )
     return ":" + name

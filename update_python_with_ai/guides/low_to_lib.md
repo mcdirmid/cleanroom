@@ -4,13 +4,12 @@
 
 The module `lib/<component-name>.py` implements `specs/low/<component-name>.md` (an implementation LLS is implemented by `lib/<component-name>_impl.py`). The LLS and its dependency closure are the module's only contract; its `HLS Justification` labels quote the HLS and carry no implementation obligations. A file that is a template is filled in.
 
-The module's BUILD entry exists in the package BUILD: one `pyright_library` per module, `srcs` the module file, `pyright_deps` every imported package module (each a `pyright_library` target), `deps` third-party runtime packages only, `visibility` public. A missing `pyright_deps` entry shows as an unresolved-import error in the type check.
-
 The module's types mirror the LLS's Data Types block; every operation implements its contract; the invariants hold. Read the LLS and its dependency closure: every LLS in the dependency comment, every LLS in their dependency comments, until no new files remain — types are owned once by their defining interface and imported elsewhere.
 
 ## Module layout
 
 - [ ] One module per LLS file: `specs/low/inventory.md` → `lib/inventory.py`; `specs/low/csv_inventory_impl.md` → `lib/csv_inventory_impl.py`
+- [ ] An interface module (for a spec with no `_impl` LLS) defines the interface's Protocol and types only; it never defines an implementation class — an implementation class appears only in the module of an implementation LLS (`<name>_impl.py`)
 - [ ] The implementation subclasses the interface's Protocol class, per the LLS (`class CsvInventoryImpl(Inventory): ...`)
 
 ## Imports
@@ -48,5 +47,4 @@ The module's types mirror the LLS's Data Types block; every operation implements
 - [ ] No redefined types that the LLS imports from its closure
 - [ ] No raising where the LLS names a return signal
 - [ ] No over-implementing beyond the LLS (open non-concerns are freedom)
-- [ ] No missing BUILD deps (every imported package module in `pyright_deps`)
 - [ ] No mechanism where the LLS states only the outcome

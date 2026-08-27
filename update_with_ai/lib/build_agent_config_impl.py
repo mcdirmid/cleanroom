@@ -38,11 +38,11 @@ from update_with_ai.lib.build_agent_config import (
 )
 
 
-class ConfigNotFoundError(ValueError):
+class ConfigNotFoundError(Exception):
     """Unexpected failure: the generated module for an agent_config target cannot be located."""
 
 
-class ApiKeyNotFoundError(ValueError):
+class ApiKeyNotFoundError(Exception):
     """Unexpected failure: no API key is available for a config's environment."""
 
 

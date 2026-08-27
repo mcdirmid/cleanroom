@@ -1,6 +1,8 @@
 <!-- Dependencies (md files to read alongside this one):
   - tool_provider.md
   - sandbox.md
+  - file_view.md
+  - guide_delivery.md
 -->
 
 # Interface LLS: build_node_loader
@@ -46,8 +48,8 @@ A data class Protocol that bundles static node metadata with the `ToolProvider` 
 - **tool result** → the `ToolResult` type from tool_provider
 - **signal** → the `Signal` alias from tool_provider
 - **tool failure** → the `ToolFailure` type from tool_provider
-- **template** → term definition from sandbox
-- **guide** → term definition from sandbox
+- **template** → term definition from file_view
+- **guide** → term definition from guide_delivery
 
 ## Component-Provided Operations
 
@@ -59,7 +61,7 @@ def load_node(self, label: str) -> BuildNode | None
 
 **Purpose:** Load a single node from its manifest.
 
-**Preconditions:** None.
+**Preconditions:** The node's manifest is valid JSON with all required fields; the manifest is accessible; the tool-provider modules the node declares are importable (per the interface's assumptions).
 
 **Postconditions:** Returns a `BuildNode` with manifest data and tool-provider capability, or `None` if not found.
 

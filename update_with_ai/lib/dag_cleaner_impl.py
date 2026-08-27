@@ -232,8 +232,6 @@ class DagCleanerImpl(DagCleaner):
                     # Failure: halt immediately, failed node's messages remain unchanged
                     return (False, FailureResult())
 
-                print(f"{node} cleaned")
-
                 # Feedback targets must stay within the subgraph; routing
                 # elsewhere would leave messages that this clean never processes.
                 if isinstance(result, FeedbackResult):

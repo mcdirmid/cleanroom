@@ -7,6 +7,8 @@
   - agent_loop.md
   - sandbox.md
   - build_agent_config.md
+  - file_view.md
+  - guide_delivery.md
 -->
 
 # Implementation LLS: build_runner_impl
@@ -45,7 +47,7 @@ The implementation is an assembler: it wires together these concrete implementat
 
 - **`add_change`** — Delivers a change-kind `NodeMessage` (the given change text, or `check` when omitted) to the node's pending message store, marking the node dirty for a subsequent cleaning pass. Returns `(True, CleanResult)` on success (a `NoChangeResult` per `dag_clean_logic`) or `(False, CleanResult)` on failure (a `FailureResult`) if the node does not exist.
 
-- **`broadcast_change`** — Composes the message from the node's declared source file (its sandbox configuration's first writable path) and the given change text (`<declared source file>: <change text>`), adds a change-kind `NodeMessage` of that text to the pending set of each of the node's known reverse dependencies, then deletes the node's data (pending messages and known reverse dependencies). Returns `(True, CleanResult)` on success (a `NoChangeResult` per `dag_clean_logic`) or `(False, CleanResult)` on failure (a `FailureResult`) if the node does not exist.
+- **`broadcast_change`** — Composes the message from the node's declared source file (its sandbox configuration's first writable path) and the given change text (`<declared source file>: <change text>`), adds a change-kind `NodeMessage` of that text to the pending set of each of the node's known reverse dependencies, then deletes the node's data (pending messages and known reverse dependencies). A recorded reverse dependency absent from the graph is skipped (its message is not delivered); the skip is a pinned refinement of the delivery rule, so stale reverse dependencies do not fail the broadcast. Returns `(True, CleanResult)` on success (a `NoChangeResult` per `dag_clean_logic`) or `(False, CleanResult)` on failure (a `FailureResult`) if the node does not exist.
 
 **HLS Justification:** Assembles the cleanroom system internally (graph storage, agent loop, DAG clean logic).
 

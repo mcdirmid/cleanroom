@@ -19,13 +19,15 @@ an exception.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Protocol
+from typing import Optional, Protocol, TypeAlias
 
-from update_with_ai.lib.agent_loop_impl import AgentLoopConfig
+from .agent_loop_impl import AgentLoopConfig
 
 DEFAULT_CONFIG_TARGET = "//agent_configs:default"
 CONFIG_TARGET_ENV = "AGENT_CONFIG_TARGET"
 API_KEY_ENV = "AGENT_API_KEY"
+
+ConfigTarget: TypeAlias = str
 
 
 @dataclass
@@ -81,7 +83,7 @@ class BuildAgentConfig(Protocol):
 
     def build_agent_loop_config(
         self,
-        config_target: Optional[str] = None,
+        config_target: Optional[ConfigTarget] = None,
         workspace_root: Optional[str] = None,
     ) -> AgentLoopConfig:
         """
@@ -113,7 +115,5 @@ __all__ = [
     "CONFIG_TARGET_ENV",
     "API_KEY_ENV",
     "AgentConfig",
-    "ConfigNotFoundError",
-    "ApiKeyNotFoundError",
     "BuildAgentConfig",
 ]

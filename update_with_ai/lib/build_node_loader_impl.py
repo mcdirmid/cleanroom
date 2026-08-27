@@ -308,15 +308,18 @@ class BuildNodeLoaderImpl(BuildNodeLoader):
 
     def get_node_prompt(self, node_label: str) -> Optional[str]:
         """
-        Get the prompt for a node without loading the full node.
-
-        Args:
-            node_label: Bazel label
+        Get the prompt for a node without loading the full node: the
+        manifest is read directly, never the node construction or its
+        dependency loading (per the interface's "without loading the full
+        node" qualifier).
 
         Returns:
             Prompt string or None
         """
-        manifest = self.load_node(node_label)
-        if manifest:
-            return manifest.prompt
-        return None
+        runfiles = _get_runfiles_path()
+        manifest_path = _resolve_manifest_path(node_label, runfiles)
+        if manifest_path is None:
+            return None
+        with open(manifest_path) as f:
+            data = json.load(f)
+        return data.get("prompt")

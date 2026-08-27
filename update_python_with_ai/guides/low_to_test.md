@@ -6,8 +6,6 @@ The artifact is the test module for an implementation: `<component-name>_test.py
 
 The LLS is the only contract: the tests cover its postconditions, invariants, and expected failure signals, and nothing else — no internal mechanisms, no exact message wording, no unspecified ordering, no behavior outside the contract. When in doubt, do not test it. The HLS is not part of the test contract; the LLS is self-contained.
 
-The test module's BUILD entry exists in `tests/BUILD.bazel`: one `pyright_test` per module, `pyright_deps` every package module the test imports — the implementation under test, its interface, and the dependency interfaces the mocks implement. A missing entry shows as an unresolved-import error in the type check.
-
 Read the implementation LLS and the transitive closure of its dependency comment: every LLS in the comment, every LLS in their comments, until no new files remain — dependency mocks implement the dependency interfaces exactly from their own LLSs. Extract the testable claims: Data Types (construction, fields, defaults, `Literal` discriminators); Config (fields, defaults, mock wiring); Behavioral Description (each bullet → outcome tests); Failure Handling (each expected failure signal → a test); Invariants (sequence tests); Non-Concerns (pinned only).
 
 ## Module layout
@@ -15,6 +13,7 @@ Read the implementation LLS and the transitive closure of its dependency comment
 - [ ] One test module per implementation LLS: `specs/low/csv_inventory_impl.md` → `tests/csv_inventory_impl_test.py`
 - [ ] The module uses `unittest`, ending with `if __name__ == "__main__": unittest.main()`
 - [ ] Tests are grouped into classes by concern (success routing, failure handling, invariants, config)
+- [ ] Write incrementally: append one test class per edit (a `replace_lines` inserting a class), never the whole file in one edit — an edit that exceeds the response limit is lost, and the file must be re-read
 
 ## What to test
 
@@ -58,4 +57,4 @@ Read the implementation LLS and the transitive closure of its dependency comment
 - [ ] No mocks of the system under test
 - [ ] No precondition tests (preconditions are enforced by the mocks, not tested)
 - [ ] No open-non-concern tests (pin the aspect in the LLS first, or drop the assertion)
-- [ ] No missing `pyright_deps` entries (unresolved-import errors in the type check)
+- [ ] No imports outside the LLS closure (the test imports only within its spec's dependency closure)

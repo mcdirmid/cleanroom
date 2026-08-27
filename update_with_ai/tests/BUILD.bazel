@@ -110,3 +110,45 @@ pyright_test(
         "//update_with_ai/lib:agent_loop_impl",
     ],
 )
+
+pyright_test(
+    name = "file_view_impl_test",
+    srcs = ["file_view_impl_test.py"],
+    pyright_deps = [
+        "//update_with_ai/lib:file_view",
+        "//update_with_ai/lib:file_view_impl",
+        "//update_with_ai/lib:tool_provider",
+    ],
+    deps = [],
+    visibility = ["//visibility:public"],
+)
+
+pyright_test(
+    name = "guide_delivery_impl_test",
+    srcs = ["guide_delivery_impl_test.py"],
+    pyright_deps = [
+        "//update_with_ai/lib:guide_delivery",
+        "//update_with_ai/lib:guide_delivery_impl",
+        "//update_with_ai/lib:tool_provider",
+    ],
+    deps = [],
+    visibility = ["//visibility:public"],
+)
+
+pyright_test(
+    name = "run_control_impl_test",
+    srcs = ["run_control_impl_test.py"],
+    pyright_deps = [
+        "//update_with_ai/lib:dag_clean_logic",
+        "//update_with_ai/lib:dag_storage",
+        "//update_with_ai/lib:file_view",
+        "//update_with_ai/lib:file_view_impl",
+        "//update_with_ai/lib:guide_delivery",
+        "//update_with_ai/lib:guide_delivery_impl",
+        "//update_with_ai/lib:run_control",
+        "//update_with_ai/lib:run_control_impl",
+        "//update_with_ai/lib:tool_provider",
+    ],
+    deps = [],
+    visibility = ["//visibility:public"],
+)

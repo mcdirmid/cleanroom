@@ -1,12 +1,13 @@
 # build_runner
 
-imports: dag_cleaner (topological cleaning), dag_storage (messages), dag_clean_logic (change and feedback), build_agent_config (agent configuration), sandbox (step mode)
+imports: dag_cleaner (topological cleaning), dag_storage (messages), dag_clean_logic (change and feedback), build_agent_config (agent configuration), sandbox (sandbox configuration), guide_delivery (step mode), run_control (blame)
 terms (from dag_storage): node, pending message, subgraph
 terms (from dag_clean_logic): dirty, cleaning, change message, feedback message
 terms (from agent_loop): run
 terms (from build_node_loader): manifest
 terms (from build_agent_config): agent configuration, config target
-terms (from sandbox): step mode, blame
+terms (from guide_delivery): step mode
+terms (from run_control): blame
 terms (owned): result
 
 ## Purpose

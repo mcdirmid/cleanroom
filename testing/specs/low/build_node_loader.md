@@ -59,7 +59,7 @@ def load_node(self, label: str) -> BuildNode | None
 
 **Purpose:** Load a single node from its manifest.
 
-**Preconditions:** None.
+**Preconditions:** The node's manifest is valid JSON with all required fields; the manifest is accessible; the tool-provider modules the node declares are importable (per the interface's assumptions).
 
 **Postconditions:** Returns a `BuildNode` with manifest data and tool-provider capability, or `None` if not found.
 

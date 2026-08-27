@@ -141,8 +141,8 @@ _update_with_ai_rule = rule(
         "guide": attr.label(
             doc = "Optional node target whose declared source is the run's guide: a readable file in the guide format (# Guide: ... ## Summary ...). The guide node is cleaned before this node; the guide's readable and delivery treatment follows the agent configuration's step-sections gate (when step mode is enabled the guide is not readable and its content reaches the agent only through advance outputs).",
         ),
-        "silent_srcs": attr.label_list(
-            doc = "Files agent can write that are NOT readable by deps",
+        "silent_srcs": attr.string_list(
+            doc = "Paths (relative to the node's package directory) the agent can write that are NOT readable by deps",
         ),
         "verify": attr.string(
             mandatory = False,
@@ -240,7 +240,7 @@ def update_with_ai(
             (a readable file in the guide format); the guide node is cleaned
             before this node, and the guide's readable/delivery treatment
             follows the agent configuration's step-sections gate
-        silent_srcs: Files agent can write that are NOT readable by deps
+        silent_srcs: Paths (relative to the node's package directory) the agent can write that are NOT readable by deps
         verify: Shell command to run when the agent calls verify()
             (default: empty = no verify tool)
         config: Optional agent_config target label used as the default

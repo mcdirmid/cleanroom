@@ -36,10 +36,6 @@ from .sandbox import (
     BlameTargets,
 )
 
-# The implementation is constructed with the interface's GraphConfig (see
-# specs/low/build_graph_storage.md); the Config alias names it per the implementation spec.
-Config = GraphConfig
-
 # The per-package data file (pinned by the implementation LLS): a protobuf
 # text-format file named .update_with_ai.textproto, serialized from the
 # `update_with_ai` message type defined by the update_with_ai.proto schema.
@@ -625,13 +621,14 @@ def _build_sandbox_config(
     writable_paths: List[str],  # pyright: ignore[reportArgumentType]
     templates: Dict[str, str],  # pyright: ignore[reportArgumentType]
     guide: Optional[str] = None,  # pyright: ignore[reportArgumentType]
+    blame_targets: Dict[str, str] = {},  # pyright: ignore[reportArgumentType]
 ) -> SandboxConfig:  # pyright: ignore[reportReturnType]
     """Build a SandboxConfig from a manifest dict. (pyright: ignore[reportArgumentType])"""
     return SandboxConfig(
         file_mappings=file_mappings,
         readable_paths=readable_paths,
         writable_paths=writable_paths,
-        blame_targets=list(manifest.get("feedback_deps", [])),  # pyright: ignore[reportArgumentType]
+        blame_targets=blame_targets,
         search_result_limit=10,
         guide=guide,
         templates=templates,
@@ -679,11 +676,50 @@ def _synthesized_definition() -> NodeDefinition:
             file_mappings={},
             readable_paths=[],
             writable_paths=[],
-            blame_targets=[],
+            blame_targets={},
             search_result_limit=10,
             verification_callback=None,
         ),
     )
+
+
+def _virtual_names(paths: List[str]) -> Dict[str, str]:
+    """Assign each path a virtual name (per sandbox): the shortest suffix of
+    the path (a slash-separated trailing part) that no other path has as a
+    suffix — the bare file name when unambiguous, just enough of the path to
+    disambiguate otherwise (e.g. low/foo.md vs high/foo.md). A path whose
+    every suffix another path also has falls back to the shortest suffix no
+    earlier path took (deterministic order)."""
+    suffix_of: Dict[str, List[str]] = {}
+    for p in paths:
+        parts = p.split("/")
+        suffix_of[p] = ["/".join(parts[i:]) for i in range(len(parts) - 1, -1, -1)]
+    result: Dict[str, str] = {}
+    taken: set = set()
+    # Shortest paths first (fewest suffix candidates): a bare file name is
+    # claimed by the file whose path is exactly that name before a longer
+    # path claims it as a suffix; longer paths then take their shortest
+    # remaining distinguishing suffix. Deterministic tie-break by path.
+    for p in sorted(paths, key=lambda x: (len(suffix_of[x]), x)):
+        other_suffixes: set = set()
+        for q in paths:
+            if q != p:
+                other_suffixes.update(suffix_of[q])
+        chosen: Optional[str] = None
+        for cand in suffix_of[p]:
+            if cand not in other_suffixes:
+                chosen = cand
+                break
+        if chosen is None:
+            for cand in suffix_of[p]:
+                if cand not in taken:
+                    chosen = cand
+                    break
+        if chosen is None:
+            chosen = p
+        result[p] = chosen
+        taken.add(chosen)
+    return result
 
 
 class BuildGraphStorageFileImpl(BaseBuildGraphStorageImpl):
@@ -811,20 +847,45 @@ class BuildGraphStorageFileImpl(BaseBuildGraphStorageImpl):
             own_silent_srcs: List[str] = [str(s) for s in manifest.get("silent_srcs", [])]
             pkg_dir = pkg_dirs[node_id]
 
-            # Dependency file mappings first; the node's own files win on
-            # name collisions.
-            file_mappings: FileMapping = {
+            # Every file the sandbox knows, keyed by its declared src string
+            # and mapped to its real path: dep srcs first, then the node's
+            # own files (which win on key collisions), then the guide file.
+            guide_label: Optional[NodeId] = manifest.get("guide")  # pyright: ignore[reportArgumentType]
+            guide_src: Optional[str] = None
+            files: Dict[str, str] = {
                 s: os.path.join(d, s) for s, d in dep_srcs.items()
             }
             if own_src:
-                file_mappings[own_src] = os.path.join(pkg_dir, own_src)
+                files[own_src] = os.path.join(pkg_dir, own_src)
             for s in own_silent_srcs:
-                file_mappings[s] = os.path.join(pkg_dir, s)
+                files[s] = os.path.join(pkg_dir, s)
+            if guide_label:
+                guide_manifest = raw.get(guide_label)
+                guide_pkg = pkg_dirs.get(guide_label)
+                if guide_manifest is not None and guide_pkg is not None:
+                    gs = str(guide_manifest.get("src") or "")
+                    if gs:
+                        files[gs] = os.path.join(guide_pkg, gs)
+                        guide_src = gs
 
-            readable_paths = ([own_src] if own_src else []) + [
-                s for s in dep_srcs if s != own_src
+            # Virtual names (per sandbox): each file is addressed by the
+            # shortest suffix of its path that no other file in the sandbox
+            # shares — the bare file name when unambiguous, just enough path
+            # to disambiguate otherwise. The agent addresses files by virtual
+            # name only; the sandbox maps each to the real path.
+            virtual_of = _virtual_names(list(files.keys()))
+
+            file_mappings: FileMapping = {
+                virtual_of[s]: real for s, real in files.items()
+            }
+            readable_paths = ([virtual_of[own_src]] if own_src else []) + [
+                virtual_of[s] for s in own_silent_srcs
+            ] + [
+                virtual_of[s] for s in dep_srcs if s != own_src
             ]
-            writable_paths = ([own_src] if own_src else []) + own_silent_srcs
+            writable_paths = ([virtual_of[own_src]] if own_src else []) + [
+                virtual_of[s] for s in own_silent_srcs
+            ]
 
             # Template content for the node's declared source file: the
             # manifest carries the template file's repo-relative path; the
@@ -834,7 +895,7 @@ class BuildGraphStorageFileImpl(BaseBuildGraphStorageImpl):
             if template_rel and own_src:
                 template_path = self._real_root / str(template_rel)
                 with open(template_path, "r", encoding="utf-8") as f:
-                    templates[own_src] = f.read()
+                    templates[virtual_of[own_src]] = f.read()
 
             # The guide (per the sandbox contract): the manifest's guide is a
             # node label declared separately from deps. The guide node is
@@ -843,19 +904,26 @@ class BuildGraphStorageFileImpl(BaseBuildGraphStorageImpl):
             # it and treat it per the step-mode flag (in step mode the guide
             # is not readable and its content reaches the agent only through
             # advance outputs).
-            guide_label: Optional[NodeId] = manifest.get("guide")  # pyright: ignore[reportArgumentType]
-            guide_src: Optional[str] = None
-            if guide_label:
-                guide_manifest = raw.get(guide_label)
-                guide_pkg = pkg_dirs.get(guide_label)
-                if guide_manifest is not None and guide_pkg is not None:
-                    guide_src = str(guide_manifest.get("src") or "")
-                    if guide_src:
-                        file_mappings.setdefault(
-                            guide_src, os.path.join(guide_pkg, guide_src)
-                        )
-                        if guide_src not in readable_paths:
-                            readable_paths.append(guide_src)
+            guide_virtual: Optional[str] = (
+                virtual_of.get(guide_src) if guide_src else None
+            )
+            if guide_virtual and guide_virtual not in readable_paths:
+                readable_paths.append(guide_virtual)
+
+            # Blame targets (per the sandbox config): the mapping from each
+            # feedback dep's declared src's virtual name to the feedback dep's
+            # node label. Only feedback deps may receive feedback from the
+            # node; a feedback dep with no declared src contributes no entry.
+            # The virtual names are the same ones the agent reads files by, so
+            # the agent blames an artifact by the virtual name it already uses.
+            blame_targets: Dict[str, str] = {}
+            for fd in manifest.get("feedback_deps", []):
+                fd_manifest = raw.get(fd)
+                if fd_manifest is None:
+                    continue
+                fd_src: str = str(fd_manifest.get("src") or "")
+                if fd_src and fd_src in virtual_of:
+                    blame_targets[virtual_of[fd_src]] = fd
 
             self._definitions[node_id] = NodeDefinition(
                 prompt=manifest["prompt"],
@@ -865,7 +933,8 @@ class BuildGraphStorageFileImpl(BaseBuildGraphStorageImpl):
                     readable_paths=readable_paths,
                     writable_paths=writable_paths,
                     templates=templates,
-                    guide=guide_src,
+                    guide=guide_virtual,
+                    blame_targets=blame_targets,
                 ),
             )
 

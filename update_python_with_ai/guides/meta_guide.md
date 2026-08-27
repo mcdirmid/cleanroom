@@ -30,6 +30,7 @@ Every guide follows this structure:
 - [ ] Build-critical requirements come first (BUILD entries, required structure) — nothing builds without them
 - [ ] The guide's requirements are satisfiable from the guide alone: no reliance on the artifact's starting state — the file's existing content (a template, a prior version) is at most an efficiency boost, never the source of required structure
 - [ ] No instruction to run or interpret verification; verification is transparent and the reader's only verification action is calling `advance`
+- [ ] No instruction to do what the reader cannot do — the reader's capabilities are fixed (file reads, edits, and advance; no execution, no shell, no test runs); a capability the reader lacks is never stated as a requirement and never as a prohibition — the reader already knows it lacks it
 - [ ] No reference to files the reader cannot read (other guides, HLS files, implementations); a label in the source material that names an unreadable file gets one sentence saying it carries no requirements
 - [ ] Templates mentioned at most once ("a file that is a template is filled in")
 - [ ] No meta-commentary, no rationale, no examples — state the constraint
@@ -83,6 +84,7 @@ Every guide follows this structure:
 - [ ] Section test: given the Summary, one section, and the artifact, the reader can check that section's items
 - [ ] One-read test: given the whole guide in one read, the reader produces the required structure and applies the rules
 - [ ] No-trigger test: no sentence directs the reader to do something the prompt already drives ("ensure", "produce", "call advance")
+- [ ] Capability test: every action the guide names is one the reader can perform with its tools — no test runs, no shell, no unreadable files
 
 ## Common pitfalls
 
@@ -96,3 +98,4 @@ Every guide follows this structure:
 - [ ] Rule-breaking examples — a snippet that violates the guide — every example must conform
 - [ ] Context examples — a snippet lifted from surrounding code or specs — use synthetic examples that obey the guide's rules
 - [ ] Triggering — a sentence that instructs the reader ("ensure the module...") — the guide constrains; the prompt triggers
+- [ ] Capability noise — telling the reader to run or interpret checks it has no tool for, or stating what it cannot do — the reader's capabilities are fixed; mention only actions the reader can take

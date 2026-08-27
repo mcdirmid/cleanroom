@@ -6,7 +6,7 @@
 # deps (not raw file labels), so its manifest deps and lint coverage include
 # the full transitive closure.
 #
-# spec_deps mirrors each spec's front matter: the fulfills target, the
+# module_deps mirrors each spec's front matter: the fulfills target, the
 # `imports:` specs, and every `terms (from X)` owner. Label strings (rather
 # than bound handles) are used so dependency order is resolved by Bazel;
 # the spec graph must be acyclic, since node deps are hard build edges.
@@ -19,12 +19,12 @@ load("//update_python_with_ai:update_python_with_ai.bzl", "update_python_with_ai
 
 update_python_with_ai(
     name = "dag_storage",
-    spec_deps = [],
+    module_deps = [],
 )
 
 update_python_with_ai(
     name = "tool_provider",
-    spec_deps = [],
+    module_deps = [],
 )
 
 # ---------------------------------------------------------------------------
@@ -33,17 +33,17 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "dag_clean_logic",
-    spec_deps = ["dag_storage", "tool_provider"],
+    module_deps = ["dag_storage", "tool_provider"],
 )
 
 update_python_with_ai(
     name = "dag_cleaner",
-    spec_deps = ["dag_storage", "dag_clean_logic"],
+    module_deps = ["dag_storage", "dag_clean_logic"],
 )
 
 update_python_with_ai(
     name = "dag_cleaner_impl",
-    spec_deps = ["dag_cleaner", "dag_storage", "dag_clean_logic"],
+    module_deps = ["dag_cleaner", "dag_storage", "dag_clean_logic"],
 )
 
 # ---------------------------------------------------------------------------
@@ -54,22 +54,22 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "agent_loop",
-    spec_deps = ["tool_provider"],
+    module_deps = ["tool_provider"],
 )
 
 update_python_with_ai(
     name = "sandbox",
-    spec_deps = ["tool_provider", "agent_loop", "dag_storage", "dag_clean_logic"],
+    module_deps = ["tool_provider", "agent_loop", "dag_storage", "dag_clean_logic"],
 )
 
 update_python_with_ai(
     name = "agent_loop_impl",
-    spec_deps = ["agent_loop", "tool_provider"],
+    module_deps = ["agent_loop", "tool_provider"],
 )
 
 update_python_with_ai(
     name = "sandbox_impl",
-    spec_deps = ["sandbox", "tool_provider", "dag_clean_logic", "agent_loop"],
+    module_deps = ["sandbox", "tool_provider", "dag_clean_logic", "agent_loop"],
 )
 
 # ---------------------------------------------------------------------------
@@ -78,45 +78,45 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "build_node_loader",
-    spec_deps = ["tool_provider", "sandbox"],
+    module_deps = ["tool_provider", "sandbox"],
 )
 
 update_python_with_ai(
     name = "build_agent_config",
-    spec_deps = ["agent_loop", "agent_loop_impl"],
+    module_deps = ["agent_loop", "agent_loop_impl"],
 )
 
 update_python_with_ai(
     name = "build_graph_storage",
-    spec_deps = ["dag_storage", "sandbox"],
+    module_deps = ["dag_storage", "sandbox"],
 )
 
 update_python_with_ai(
     name = "build_node_loader_impl",
-    spec_deps = ["build_node_loader", "tool_provider", "agent_loop"],
+    module_deps = ["build_node_loader", "tool_provider", "agent_loop"],
 )
 
 update_python_with_ai(
     name = "build_agent_config_impl",
-    spec_deps = ["build_agent_config", "agent_loop", "agent_loop_impl"],
+    module_deps = ["build_agent_config", "agent_loop", "agent_loop_impl"],
 )
 
 update_python_with_ai(
     name = "build_graph_storage_impl",
-    spec_deps = ["build_graph_storage", "dag_storage", "sandbox", "build_node_loader"],
+    module_deps = ["build_graph_storage", "dag_storage", "sandbox", "build_node_loader"],
 )
 
 update_python_with_ai(
     name = "agent_node_clean_logic_impl",
-    spec_deps = ["dag_clean_logic", "build_graph_storage", "dag_storage", "agent_loop", "agent_loop_impl", "sandbox"],
+    module_deps = ["dag_clean_logic", "build_graph_storage", "dag_storage", "agent_loop", "agent_loop_impl", "sandbox"],
 )
 
 update_python_with_ai(
     name = "build_runner",
-    spec_deps = ["dag_cleaner", "dag_storage", "dag_clean_logic", "build_agent_config", "sandbox", "agent_loop", "build_node_loader"],
+    module_deps = ["dag_cleaner", "dag_storage", "dag_clean_logic", "build_agent_config", "sandbox", "agent_loop", "build_node_loader"],
 )
 
 update_python_with_ai(
     name = "build_runner_impl",
-    spec_deps = ["build_runner", "build_graph_storage", "dag_storage", "dag_clean_logic", "dag_cleaner", "agent_loop", "sandbox", "build_agent_config"],
+    module_deps = ["build_runner", "build_graph_storage", "dag_storage", "dag_clean_logic", "dag_cleaner", "agent_loop", "sandbox", "build_agent_config"],
 )

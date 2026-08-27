@@ -37,7 +37,7 @@ The client-supplied configuration, as listed in the `build_graph_storage` interf
 
 The directory containing a node's BUILD file; also where the node's messages are stored.
 
-The agent prompt and sandbox configuration declared by a node's target. The sandbox configuration is a `sandbox.SandboxConfig`.
+The agent prompt and sandbox configuration declared by a node's target. The sandbox configuration is a `sandbox.SandboxConfig`: its `file_mappings` keys are each file's virtual name (per sandbox) — the node's declared source, its silent sources, the declared sources of its deps and star-dep closure, and the guide — so the agent addresses every file by virtual name.
 
 `BuildGraphStorage` fulfills the `DagStorage` Protocol — pending messages, message clearing, node dependencies, and known reverse dependencies per `dag_storage.md` — and additionally resolves node definitions and package directories.
 
@@ -58,6 +58,7 @@ The agent prompt and sandbox configuration declared by a node's target. The sand
 - **template** → term definition from sandbox
 - **guide** → term definition from sandbox
 - **step mode** → term definition from sandbox
+- **virtual name** → term definition from sandbox
 
 ## Component-Provided Operations
 

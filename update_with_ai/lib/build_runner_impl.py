@@ -13,19 +13,19 @@ Script usage (CLI entry point):
     bazel run //pkg:target  # where target is a update_with_ai with clean target
 """
 
-from update_with_ai.lib.dag_cleaner_impl import DagCleanerImpl
-from update_with_ai.lib.dag_cleaner import CleaningResult
-from update_with_ai.lib.dag_clean_logic import NoChangeResult, FailureResult
-from update_with_ai.lib.dag_storage import NodeId, NodeMessage
-from update_with_ai.lib.build_graph_storage_impl import BuildGraphStorageFileImpl
-from update_with_ai.lib.build_graph_storage import GraphConfig
-from update_with_ai.lib.agent_node_clean_logic_impl import AgentNodeCleanLogicImpl
-from update_with_ai.lib.agent_loop_impl import AgentLoopImpl, AgentLoopConfig
-from update_with_ai.lib.agent_loop import LogEvent
-from update_with_ai.lib.build_agent_config_impl import BuildAgentConfigImpl
-from update_with_ai.lib.sandbox import Sandbox
-from update_with_ai.lib.sandbox_impl import SandboxImpl
-from update_with_ai.lib.build_runner import BuildRunner
+from .dag_cleaner_impl import DagCleanerImpl
+from .dag_cleaner import CleaningResult
+from .dag_clean_logic import NoChangeResult, FailureResult
+from .dag_storage import NodeId, NodeMessage
+from .build_graph_storage_impl import BuildGraphStorageFileImpl
+from .build_graph_storage import GraphConfig
+from .agent_node_clean_logic_impl import AgentNodeCleanLogicImpl
+from .agent_loop_impl import AgentLoopImpl, AgentLoopConfig
+from .agent_loop import LogEvent
+from .build_agent_config_impl import BuildAgentConfigImpl
+from .sandbox import Sandbox
+from .sandbox_impl import SandboxImpl
+from .build_runner import BuildRunner
 from typing import Any, Dict, List, Optional
 import dataclasses
 import os

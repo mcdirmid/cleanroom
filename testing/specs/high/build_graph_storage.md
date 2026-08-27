@@ -2,7 +2,7 @@
 
 imports: dag_storage (contract fulfilled with Bazel workspace data), sandbox (node definitions)
 terms (from dag_storage): node, message, pending message, dependency, propagating dependency, reverse dependency, subgraph
-terms (from sandbox): blame target, template, guide, step mode
+terms (from sandbox): blame target, template, guide, step mode, virtual name
 terms (owned): node definition, package directory, silent dependency, star dependency
 
 ## Purpose
@@ -11,7 +11,7 @@ Provides Bazel-workspace-backed storage and graph access for the agent build: no
 
 ## Terms
 
-- Node definition: the agent prompt and sandbox configuration declared by a node's target — file mappings, readable and writable paths, blame targets, the search result limit, the templates, and the guide.
+- Node definition: the agent prompt and sandbox configuration declared by a node's target — file mappings (each file's virtual name to its full path), readable and writable virtual names, blame targets, the search result limit, the templates, and the guide.
 - Package directory: the directory containing a node's BUILD file; also where the node's messages are stored.
 - Silent dependency: a dependency a node declares as silent; a silent dependency is a dependency (cleaned before the declaring node) whose changes do not propagate to the declaring node.
 - Star dependency: a dependency a node declares as a star dependency; a star dependency is a dependency (cleaned before the declaring node) whose declared source, and the declared source of every node reachable from it through star dependencies (never through non-star dependencies or silent dependencies), are readable by the declaring node.
@@ -33,6 +33,7 @@ Provides Bazel-workspace-backed storage and graph access for the agent build: no
 
 - The dag_storage guarantees hold.
 - A node's dependencies are the targets it declares, plus the guide node, which is cleaned before the node. The guide's readable and delivery treatment follows the step-mode flag: when step mode is disabled the guide is readable; when step mode is enabled the guide is not readable and its content reaches the agent only through the advance operation (per sandbox).
+- A node's sandbox configuration maps every file the node can read or write to its virtual name (per sandbox); files sharing a final path component are mapped to distinct virtual names.
 - A node's propagating dependencies are its declared dependencies, excluding its silent dependencies; retrieving a node's dependencies records the node as a reverse dependency of each declared dependency that is not silent, and of no silent dependency.
 - Queries do not modify the workspace; each query provides a consistent view of the graph.
 - Queries signal failure without side effects when the graph source fails (the graph is unmodified).

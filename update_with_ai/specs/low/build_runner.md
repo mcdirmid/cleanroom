@@ -6,6 +6,8 @@
   - build_node_loader.md
   - build_agent_config.md
   - sandbox.md
+  - guide_delivery.md
+  - run_control.md
 -->
 
 # Interface LLS: build_runner
@@ -38,8 +40,8 @@ class BuildRunner(Protocol):
 - **manifest** → term definition from build_node_loader
 - **agent configuration** → the `AgentConfig` type from build_agent_config
 - **config target** → the `ConfigTarget` alias from build_agent_config
-- **step mode** → term definition from sandbox
-- **blame** → term definition from sandbox
+- **step mode** → term definition from guide_delivery
+- **blame** → term definition from run_control
 
 ## Component-Provided Operations
 
