@@ -15,31 +15,31 @@ import tempfile
 import unittest
 from typing import Any, Dict, List, Optional, Tuple, cast
 
-from update_with_ai.lib.agent_loop import (
+from testing.lib.agent_loop import (
     AgentLoop,
     AgentResult,
     LoggerCallback,
     ToolDefinition,
     ToolExecutor,
 )
-from update_with_ai.lib.agent_loop_config import AgentLoopConfig
-from update_with_ai.lib.agent_node_clean_logic_impl import AgentNodeCleanLogicImpl
-from update_with_ai.lib.build_graph_storage import BuildGraphStorage, NodeDefinition
-from update_with_ai.lib.dag_storage import NodeId, NodeMessage, MessageKind, PendingMessages
-from update_with_ai.lib.dag_clean_logic import (
+from testing.lib.agent_loop_config import AgentLoopConfig
+from testing.lib.agent_node_clean_logic_impl import AgentNodeCleanLogicImpl
+from testing.lib.build_graph_storage import BuildGraphStorage, NodeDefinition
+from testing.lib.dag_storage import NodeId, NodeMessage, MessageKind, PendingMessages
+from testing.lib.dag_clean_logic import (
     CleanResult,
     ChangeResult,
     FeedbackResult,
     NoChangeResult,
     FailureResult,
 )
-from update_with_ai.lib.sandbox import Blame, Sandbox, SandboxConfig
+from testing.lib.sandbox import Blame, Sandbox, SandboxConfig
 
 
 def msg(text: str, kind: str = "change") -> NodeMessage:
     """Test helper: build a NodeMessage (per specs/low/dag_storage.md)."""
     return NodeMessage(kind=cast(MessageKind, kind), text=text)
-from update_with_ai.lib.tool_provider import (
+from testing.lib.tool_provider import (
     PresentedToolResult,
     TerminateAgentWithFailure,
     TerminateAgentWithSuccess,

@@ -29,12 +29,12 @@ import tempfile
 import unittest
 from typing import Any, Dict, List, Optional, Tuple
 
-from update_with_ai.lib.sandbox import SandboxConfig
-from update_with_ai.lib.sandbox_impl import SandboxImpl
-from update_with_ai.lib.file_view import FileViewConfig
-from update_with_ai.lib.guide_delivery import GuideDeliveryConfig
-from update_with_ai.lib.run_control import RunControlConfig
-from update_with_ai.lib.tool_provider import (
+from testing.lib.sandbox import SandboxConfig
+from testing.lib.sandbox_impl import SandboxImpl
+from testing.lib.file_view import FileViewConfig
+from testing.lib.guide_delivery import GuideDeliveryConfig
+from testing.lib.run_control import RunControlConfig
+from testing.lib.tool_provider import (
     PresentedToolResult,
     ToolDefinition,
     ToolFailure,
@@ -371,9 +371,9 @@ class TestSmoke(unittest.TestCase):
     the factories compose into a working sandbox."""
 
     def test_reads_real_file_through_default_wiring(self) -> None:
-        from update_with_ai.lib.file_view_impl import FileViewImpl
-        from update_with_ai.lib.guide_delivery_impl import GuideDeliveryImpl
-        from update_with_ai.lib.run_control_impl import RunControlImpl
+        from testing.lib.file_view_impl import FileViewImpl
+        from testing.lib.guide_delivery_impl import GuideDeliveryImpl
+        from testing.lib.run_control_impl import RunControlImpl
 
         tmp = tempfile.mkdtemp()
         try:

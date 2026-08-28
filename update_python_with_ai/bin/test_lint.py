@@ -70,6 +70,14 @@ def main() -> int:
     deps = transitive_closure(args.lib_pkg, roots)
     text = ensure_target(text, RULE, stem, srcs, deps, args.lib_pkg)
     write_text(args.build_path, text)
+
+    if os.path.exists(args.module_path):
+        module_text = read_text(args.module_path)
+        if "unittest.main()" not in module_text:
+            sys.stderr.write(
+                f"{args.module_path}: error: test module must end with 'if __name__ == \"__main__\": unittest.main()'\n"
+            )
+            return 1
     return 0
 
 

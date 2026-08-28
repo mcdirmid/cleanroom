@@ -56,4 +56,34 @@ EOF
 check "c2 dep added" "$tmp/c2/tests/BUILD.bazel" '"//lib:sandbox"'
 check "c2 dep kept" "$tmp/c2/tests/BUILD.bazel" '"//lib:sandbox_impl"'
 
+# Case 3: test file exists but lacks unittest.main() -> fails
+mkdir -p "$tmp/c3/tests"
+cat > "$tmp/c3/tests/foo_test.py" <<'EOF'
+import unittest
+class FooTest(unittest.TestCase):
+    pass
+EOF
+if ( cd "$tmp/c3" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/foo_test.py --lib-pkg lib 2>/dev/null ); then
+    echo "FAIL: c3 expected failure when unittest.main() missing" >&2
+    fail=1
+else
+    echo "PASS: c3 rejected test file missing unittest.main()"
+fi
+
+# Case 4: test file exists with unittest.main() -> passes
+mkdir -p "$tmp/c4/tests"
+cat > "$tmp/c4/tests/foo_test.py" <<'EOF'
+import unittest
+class FooTest(unittest.TestCase):
+    pass
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c4" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/foo_test.py --lib-pkg lib ); then
+    echo "PASS: c4 accepted test file with unittest.main()"
+else
+    echo "FAIL: c4 expected success with unittest.main()" >&2
+    fail=1
+fi
+
 exit "$fail"

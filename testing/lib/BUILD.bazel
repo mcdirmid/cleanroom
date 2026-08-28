@@ -1,0 +1,271 @@
+# lib/BUILD.bazel
+load("//bin:pyright_library.bzl", "pyright_library")
+load("@pip//:requirements.bzl", "requirement")
+
+# The update_with_ai macro/rule module (moved here from update_with_ai/macros.bzl).
+exports_files(["update_with_ai.bzl"])
+
+pyright_library(
+    name = "tool_provider",
+    srcs = [
+        "tool_provider.py",
+    ],
+    pyright_deps = [],
+    visibility = ["//visibility:public"],  # Add this line
+)
+
+
+pyright_library(
+    name = "agent_loop",
+    srcs = [
+        "agent_loop.py",
+    ],
+    pyright_deps = [":tool_provider"],
+    visibility = ["//visibility:public"],  # Add this line
+)
+
+pyright_library(
+    name = "agent_loop_config",
+    srcs = [
+        "agent_loop_config.py",
+    ],
+    pyright_deps = [":agent_loop"],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "agent_loop_impl",
+    srcs = [
+        "agent_loop_impl.py",
+    ],
+    deps = [requirement("openai")],
+    pyright_deps = [":agent_loop", ":agent_loop_config", ":tool_provider"],
+    visibility = ["//visibility:public"],  # Add this line
+)
+
+pyright_library(
+    name = "sandbox",
+    srcs = [
+        "sandbox.py",
+    ],
+    pyright_deps = [":file_view", ":run_control", ":tool_provider"],
+    visibility = ["//visibility:public"],  # Add this line
+)
+
+pyright_library(
+    name = "sandbox_impl",
+    srcs = [
+        "sandbox_impl.py",
+    ],
+    pyright_deps = [":file_view", ":guide_delivery", ":run_control", ":sandbox", ":tool_provider"],
+    visibility = ["//visibility:public"],  # Add this line
+)
+
+pyright_library(
+    name = "dag_storage",
+    srcs = [
+        "dag_storage.py",
+    ],
+    pyright_deps = [],
+    visibility = ["//visibility:public"],  # Add this line
+)
+
+pyright_library(
+    name = "dag_clean_logic",
+    srcs = [
+        "dag_clean_logic.py",
+    ],
+    pyright_deps = [":dag_storage", ":tool_provider"],
+    visibility = ["//visibility:public"],  # Add this line
+)
+
+pyright_library(
+    name = "dag_cleaner",
+    srcs = [
+        "dag_cleaner.py",
+    ],
+    pyright_deps = [":dag_storage", ":dag_clean_logic"],
+    visibility = ["//visibility:public"],  # Add this line
+)
+
+pyright_library(
+    name = "build_graph_storage",
+    srcs = [
+        "build_graph_storage.py",
+    ],
+    pyright_deps = [":sandbox", ":dag_storage"],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "dag_cleaner_impl",
+    srcs = [
+        "dag_cleaner_impl.py",
+    ],
+    pyright_deps = [":dag_cleaner", ":dag_storage", ":dag_clean_logic"],
+    visibility = ["//visibility:public"],  # Add this line
+)
+
+pyright_library(
+    name = "build_graph_storage_impl",
+    srcs = [
+        "build_graph_storage_impl.py",
+    ],
+    pyright_deps = [":build_graph_storage", ":dag_storage", ":sandbox"],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "agent_node_clean_logic_impl",
+    srcs = [
+        "agent_node_clean_logic_impl.py",
+    ],
+    pyright_deps = [":dag_clean_logic", ":dag_storage", ":build_graph_storage", ":agent_loop", ":agent_loop_config", ":sandbox", ":tool_provider"],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "build_node_loader",
+    srcs = [
+        "build_node_loader.py",
+    ],
+    pyright_deps = [":tool_provider"],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "build_node_loader_impl",
+    srcs = [
+        "build_node_loader_impl.py",
+    ],
+    pyright_deps = [":tool_provider", ":agent_loop", ":build_node_loader"],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "build_agent_config",
+    srcs = [
+        "build_agent_config.py",
+    ],
+    pyright_deps = [":agent_loop_config"],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "build_agent_config_impl",
+    srcs = [
+        "build_agent_config_impl.py",
+    ],
+    pyright_deps = [":agent_loop_config", ":build_agent_config"],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "build_runner",
+    srcs = [
+        "build_runner.py",
+    ],
+    pyright_deps = [":dag_storage", ":dag_cleaner"],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "build_runner_impl",
+    srcs = [
+        "build_runner_impl.py",
+    ],
+    pyright_deps = [
+        ":build_runner",
+        ":dag_storage",
+        ":dag_cleaner",
+        ":dag_clean_logic",
+        ":build_graph_storage",
+        ":agent_loop",
+        ":build_agent_config",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "build_asm",
+    srcs = [
+        "build_asm.py",
+    ],
+    pyright_deps = [
+        ":build_runner_impl",
+        ":dag_cleaner",
+        ":dag_clean_logic",
+        ":build_graph_storage",
+        ":agent_loop",
+        ":agent_loop_config",
+        ":build_agent_config",
+        ":build_graph_storage_impl",
+        ":build_agent_config_impl",
+        ":agent_loop_impl",
+        ":agent_node_clean_logic_impl",
+        ":file_view",
+        ":file_view_impl",
+        ":guide_delivery",
+        ":guide_delivery_impl",
+        ":run_control",
+        ":run_control_impl",
+        ":sandbox",
+        ":sandbox_impl",
+        ":dag_cleaner_impl",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "file_view",
+    srcs = [
+        "file_view.py",
+    ],
+    pyright_deps = [":tool_provider"],
+    visibility = ["//visibility:public"],  # Add this line
+)
+
+pyright_library(
+    name = "file_view_impl",
+    srcs = [
+        "file_view_impl.py",
+    ],
+    pyright_deps = [":file_view", ":tool_provider"],
+    visibility = ["//visibility:public"],  # Add this line
+)
+
+pyright_library(
+    name = "guide_delivery",
+    srcs = [
+        "guide_delivery.py",
+    ],
+    pyright_deps = [":tool_provider"],
+    visibility = ["//visibility:public"],  # Add this line
+)
+
+pyright_library(
+    name = "guide_delivery_impl",
+    srcs = [
+        "guide_delivery_impl.py",
+    ],
+    pyright_deps = [":guide_delivery", ":tool_provider"],
+    visibility = ["//visibility:public"],  # Add this line
+)
+
+pyright_library(
+    name = "run_control",
+    srcs = [
+        "run_control.py",
+    ],
+    pyright_deps = [":dag_clean_logic", ":dag_storage", ":file_view", ":tool_provider"],
+    visibility = ["//visibility:public"],  # Add this line
+)
+
+pyright_library(
+    name = "run_control_impl",
+    srcs = [
+        "run_control_impl.py",
+    ],
+    pyright_deps = [":dag_clean_logic", ":dag_storage", ":file_view", ":guide_delivery", ":run_control", ":tool_provider"],
+    visibility = ["//visibility:public"],  # Add this line
+)
