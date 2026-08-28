@@ -21,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, Protocol, TypeAlias
 
-from .agent_loop_impl import AgentLoopConfig
+from .agent_loop_config import AgentLoopConfig
 
 DEFAULT_CONFIG_TARGET = "//agent_configs:default"
 CONFIG_TARGET_ENV = "AGENT_CONFIG_TARGET"

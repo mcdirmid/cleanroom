@@ -1,6 +1,6 @@
 <!-- Dependencies (md files to read alongside this one):
   - build_agent_config.md
-  - agent_loop_impl.md
+  - agent_loop_config.md
 -->
 
 # Implementation LLS: build_agent_config_impl
@@ -8,7 +8,7 @@
 ## Data Types
 ```python
 from build_agent_config import AgentConfig, BuildAgentConfig
-from agent_loop_impl import AgentLoopConfig
+from agent_loop_config import AgentLoopConfig
 
 class BuildAgentConfigImpl(BuildAgentConfig): ...
 
@@ -48,7 +48,7 @@ config target and workspace root are per-call parameters of the class methods.
   base URL, iteration limit, temperature, timeout, and token limit) through to
   the `AgentLoopConfig`, inserting the resolved API key; the sandbox gates
   (`session_start_reads`, `step_sections`) are not part of the agent-loop
-  configuration (see `build_runner_impl`).
+  configuration.
 
 **HLS Justification:** The interface specifies config-target selection,
 API-key resolution, and module location; the implementation provides those
@@ -62,6 +62,6 @@ operations.
 ## Non-Concerns
 
 - The format of the generated module file: produced by the `agent_config`
-  rule (update_with_ai/agent_config.bzl), not specified here.
+  rule, not specified here.
 - Which environment variables a caller sets: only the resolution order and
   the variable names are specified.

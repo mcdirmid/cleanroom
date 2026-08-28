@@ -14,11 +14,13 @@ The spec is ordinary English and declarative: constraints, invariants, and obser
 
 The section inventory is closed. An interface spec has exactly `Purpose`, `Terms`, `Contract`, `Non-concerns`; an implementation spec has exactly `Deltas`, `Non-concerns`. No other `##` section exists; no `###` headings. A file whose name contains `impl` is an implementation spec and declares `fulfills:`; every other file is an interface spec and never declares `fulfills:`.
 
+An assembly spec (a file whose name ends in `_asm`) is a third kind: it has exactly `Deltas`, `Non-concerns`, declares no `fulfills:` and no `## Contract`, and is the only kind of module that may import implementation (`_impl`) or other assembly (`_asm`) specs — its sole role is configuration and assembly of other modules. An assembly is never tested: it implements no functionality beyond configuration and assembly, so it has no test module and no testable contract.
+
 ## Document structure
 
-- [ ] One component per file; interface and implementation in separate specs
-- [ ] An interface spec contains no implementation content (no mechanism, no internal state, no refinements); an implementation spec contains no interface content (no Contract, no owned definitions)
-- [ ] An implementation spec fulfills exactly one interface; editing preserves the kind (an interface never becomes an implementation or vice versa)
+- [ ] One component per file; interface, implementation, and assembly in separate specs
+- [ ] An interface spec contains no implementation content (no mechanism, no internal state, no refinements); an implementation spec contains no interface content (no Contract, no owned definitions); an assembly spec contains neither (no Contract, no owned definitions, no fulfills)
+- [ ] An implementation spec fulfills exactly one interface; an assembly spec fulfills nothing; editing preserves the kind (an interface never becomes an implementation or an assembly, or vice versa)
 - [ ] An interface longer than its implementation signals misplaced detail: mechanism and procedure belong in the implementation spec
 - [ ] The Purpose sells the component: it states what the component does and why it matters; benefits and reasons belong there, never as rationale clauses in Guarantees
 - [ ] The interface hides how it is implemented: mechanisms, internal state, algorithms, and counts belong in the implementation spec, never in the interface
@@ -28,6 +30,7 @@ The section inventory is closed. An interface spec has exactly `Purpose`, `Terms
 - [ ] Front matter is `key: value` lines, one per line, interface names in backticks
 - [ ] Every dependency listed: `imports: <dep> (what it provides)`; every term used but not owned listed in `terms (from <dep>): ...`
 - [ ] An implementation lists `fulfills: <interface>`, `imports:`, `terms (from ...):`, and `terms (refined): <names only>`
+- [ ] An assembly lists `imports:` and `terms (from ...):` only — never `fulfills:`; its `imports:` may name implementation (`_impl`) or assembly (`_asm`) specs, the only kind allowed to import implementations or assemblies (the concrete behavior it assembles)
 - [ ] `terms (refined):` lists names only; concrete definitions live in `[refines]` Deltas lines
 
 ## Terms
@@ -46,6 +49,7 @@ The section inventory is closed. An interface spec has exactly `Purpose`, `Terms
 - [ ] The Contract is a set of labeled blocks: `**Inputs**`, `**Operations**`, `**Guarantees**`, `**Assumptions**`, plus named blocks
 - [ ] Inputs lists what the client supplies to the interface, distinguishing "configured:" from "per call:"; "configured:" appears only when an interface operation consumes the config (a config-providing operation or a per-call config parameter); configuration that only constructs the implementation is declared in the implementation's `imports:` front matter and `[external]` Deltas lines, never in the interface Inputs
 - [ ] A configuration is never defined in a component interface unless it is used in that interface: the interface's operations consume or provide every configuration it defines (a config-providing operation or a per-call config parameter); a configuration only the implementation performs — construction inputs, defaults, policy values, mechanism parameters — is declared in the implementation spec, never in the interface
+- [ ] A configuration that only constructs an implementation yet must be produced by other modules lives in its own interface module (e.g. `agent_loop_config` holds the configuration the `agent_loop_impl` consumes and `build_agent_config` produces): the config module may import the interface it configures, and the implementation that consumes the config imports the config module — a config type is never reached through an implementation import
 - [ ] Operations lists the client-initiated behaviors; each becomes an operation in the LLS
 - [ ] Guarantees lists the component's obligations; failure clauses shared by several triggers are factored once, with the triggers as a sub-list
 - [ ] Assumptions lists preconditions the component relies on; assumptions are caller obligations, never failure conditions
@@ -94,6 +98,8 @@ The section inventory is closed. An interface spec has exactly `Purpose`, `Terms
 
 - [ ] The spec's effective constraint set is its own lines plus the transitive closure of its dependencies (`imports:`, `fulfills:`)
 - [ ] References point only to dependencies: an interface never references a spec that depends on it — its implementation spec, downstream consumers, or derived artifacts such as the LLS — and never says where another spec pins a fact
+- [ ] Commentary never names another component or its terms unless the reference is materially needed to express the component's behavior or implementation: an incidental mention — meta-commentary about a consumer, a producer, the system as a whole, or a concept the behavior does not depend on — is removed or reworded, because a prose reference is a dependency and a dependency requires substance (referring to "the run" does not depend on the agent loop; "the advance tool's definition is provided by guide_delivery" does)
+- [ ] Only an assembly spec may import an implementation spec or another assembly spec; an interface or implementation spec imports interfaces only (an assembly is the one kind that assembles concrete modules, so it alone names them)
 - [ ] Inherited constraints are in effect without being restated; restating an inherited constraint is an error
 - [ ] Dependencies' assumptions are inherited; a dependent adds precision only when it must establish a dependency's precondition
 - [ ] Non-concerns propagate as "not guaranteed"; a dependent never relies on behavior a dependency declares out of scope
@@ -113,9 +119,9 @@ The section inventory is closed. An interface spec has exactly `Purpose`, `Terms
 
 ## Lint checks
 
-- [ ] Interface sections are exactly `Purpose`, `Terms`, `Contract`, `Non-concerns`; implementation exactly `Deltas`, `Non-concerns`; no other `##` section, in canonical order
+- [ ] Interface sections are exactly `Purpose`, `Terms`, `Contract`, `Non-concerns`; implementation and assembly exactly `Deltas`, `Non-concerns`; no other `##` section, in canonical order
 - [ ] No `###` headings
-- [ ] A file whose name contains `impl` declares `fulfills:` and `## Deltas` and has no `## Contract`; a file without `impl` never declares `fulfills:` and has no Deltas
+- [ ] A file whose name contains `impl` declares `fulfills:` and `## Deltas` and has no `## Contract`; a file whose name ends in `_asm` declares `## Deltas`, has no `## Contract`, and never declares `fulfills:` (an assembly fulfills nothing); a file with neither never declares `fulfills:` and has no Deltas
 - [ ] The `## Contract` contains **Operations**, **Guarantees**, and **Assumptions** blocks
 - [ ] `terms (owned):` is present iff `## Terms` is present
 - [ ] `terms (from X):` names an existing spec and a term `X` owns; a backticked import names an existing spec; the spec never references itself
@@ -141,6 +147,7 @@ The section inventory is closed. An interface spec has exactly `Purpose`, `Terms
 - [ ] No refinement detail in front matter — names only; details in a `[refines]` Deltas line
 - [ ] No vagueness without marking — "the value is passed along" — "Opaque; passes through unchanged"
 - [ ] No restated inherited constraint — "per the <interface> contract", a repeated guarantee, or a repeated owned term definition — deltas only; drop the restatement
+- [ ] No incidental component references — "the runner reads this guide", "the sandbox consumes the loaded node", "a subsequent run" — name a component or its term only when the behavior is defined in terms of it; incidental references are removed or reworded
 - [ ] No policy values in interfaces — "locks the account after three failed attempts" — "repeated failed attempts lock the account"; the count is pinned in the implementation spec
 - [ ] No configuration without a performing operation — "Configured: an exchange rate and a settlement delay" with no operation consuming them — an interface defines only configurations its operations consume; the values are pinned in the implementation spec
 - [ ] No exception class names — "signaled as `OrderNotFoundError`" — "signals an unexpected failure when the order is not found"; the class is pinned in the implementation spec

@@ -11,9 +11,11 @@ Every LLS statement traces to the HLS's effective constraint set: the LLS adds n
 ## Front matter
 
 - [ ] A component whose HLS has no `fulfills:` line is an interface — its LLS is `# Interface LLS: <name>`, never an Implementation LLS; an implementation LLS exists only when the HLS defines an implementation; a file may declare any number of interface and implementation sections
+- [ ] The one exception to the `fulfills:` rule is an assembly spec (a `<name>_asm` HLS): it has no `fulfills:` yet its LLS is an implementation-form LLS — `# Implementation LLS: <name>` with the implementation section inventory (Data Types, Composition, Behavioral Description, Invariants, Non-Concerns) — because it shares the implementation structure and performs no interface role
 - [ ] Filenames use underscores; no hyphens anywhere — high- and low-level specs are distinguished by directory (`specs/high/` vs `specs/low/`), not by filename suffix
 - [ ] The dependency comment is the file's first line — the LLS's only front matter: no `terms (owned):` or `terms (from X):` section; a `terms (from X):` entry becomes a dependency-comment entry
 - [ ] LLS dependencies are expressed through interfaces, never implementation LLS files; a type is imported from its owner's LLS, never through a re-exporting interface
+- [ ] The one exception: an assembly LLS's dependency comment lists the implementation (`- <name>_impl.md`) and assembly (`- <name>_asm.md`) LLS files it assembles — the only LLS kind permitted to depend on implementation or assembly LLS files; its Data Types imports the types of the assembled modules from those files
 - [ ] The comment lists the LLS of every interface named in the converted HLS's front matter — `imports:`, `fulfills:`, `terms (from X):` — a prose-only concept reference is still a dependency
 - [ ] A component named in LLS prose but not in the HLS front matter is added to the comment; an entry is spurious only when it is neither imported, nor referenced, nor named in the front matter
 - [ ] An import `from <module> import ...` maps to the comment entry `- <module>.md`: the module name is the entry's name with the `.md` suffix removed
@@ -79,12 +81,13 @@ Every LLS statement traces to the HLS's effective constraint set: the LLS adds n
 
 ## Implementation sections
 
-- [ ] An Implementation LLS section exists only when the HLS defines an implementation (an `*_impl` spec with `fulfills: <interface>`); otherwise the interface LLS stands alone
+- [ ] An Implementation LLS section exists only when the HLS defines an implementation (an `*_impl` spec with `fulfills: <interface>`) or an assembly (an `*_asm` spec); otherwise the interface LLS stands alone
 - [ ] The implementation is declared as `class FooImpl(Foo): ...` extending the fulfilled interface's Protocol, imported from the interface's LLS and never redeclared locally; the implementation name matches the interface only when exactly one implementation will ever exist; multi-implementation interfaces use distinct names; abstract bases are named distinctly (`BaseFoo`)
+- [ ] An assembly is declared as a plain class (`class FooAsm: ...`) that extends no Protocol and fulfills no interface; its only operation provides the assembled result (e.g. `def build(self) -> FooImpl: ...`); it performs configuration and assembly of other modules and no other functionality, and it is never tested
 - [ ] Implementation sections reference the interface contract instead of the client; implementation sections never mention "client"
 - [ ] The implementation HLS's Deltas are the semantic source: untagged behavior lines and tagged (`[ordering]`, `[boundary]`, `[state]`, `[external]`, `[failure]`) lines map onto the Behavioral Description, Invariants, and Failure Handling; `[refines]` lines pin concrete conditions and values and name the withheld precision
 - [ ] The implementation's Invariants add delta-derived guarantees only; the fulfilled interface's invariants are never restated
-- [ ] Assembler implementations list the wired concrete implementations in a Composition section (names only — not dependencies; the dependency comment still lists interfaces only)
+- [ ] Assembler implementations list the wired concrete implementations in a Composition section (names only — not dependencies; the dependency comment still lists interfaces only); an assembly's Composition section is required and lists the concrete implementations it wires, and its dependency comment lists the implementation LLS files those implementations come from (the one exception to the interfaces-only rule)
 - [ ] Behavioral Description states outcomes, not mechanisms; interactions with external systems may be described in the external protocol's terms
 - [ ] The fulfilled interface's operations are documented in the interface LLS; the implementation documents them in Behavioral Description as bullets — never in an interface section, never under `### ` headings
 - [ ] Implementation-owned configuration becomes the implementation class's `__init__` parameters in the Implementation LLS Data Types (`fulfillment_impl.__init__(self, inventory: Inventory, pricing: Pricing)`); in the HLS this is the implementation's `imports:` front matter and `[external]` Deltas lines; no other `__init__` is declared
@@ -124,5 +127,5 @@ Every LLS statement traces to the HLS's effective constraint set: the LLS adds n
 - [ ] `### ` headings appear only under Component-Provided Operations
 - [ ] Term-definition headings appear between Data Types and Component-Provided Operations
 - [ ] Implementation sections never mention "client"
-- [ ] An `# Implementation LLS:` heading appears only in a `<name>_impl.md` file in `specs/low/`
+- [ ] An `# Implementation LLS:` heading appears only in a `<name>_impl.md` or `<name>_asm.md` file in `specs/low/`
 - [ ] There is no `## Config` section

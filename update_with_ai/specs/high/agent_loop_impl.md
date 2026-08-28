@@ -1,7 +1,7 @@
 # agent_loop_impl
 
 fulfills: agent_loop
-imports: tool_provider (tool results, signals)
+imports: agent_loop_config (agent-loop configuration), tool_provider (tool results, signals)
 terms (from agent_loop): run, termination value, conversation, system prompt, truncated response, degenerate response
 terms (from tool_provider): tool failure, supersession flag, stub, tool result
 terms (refined): continuation prompt

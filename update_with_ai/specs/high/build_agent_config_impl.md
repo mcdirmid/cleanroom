@@ -1,7 +1,7 @@
 # build_agent_config_impl
 
 fulfills: build_agent_config
-imports: build_agent_config (contract), agent_loop_impl (agent-loop configuration)
+imports: build_agent_config (contract), agent_loop_config (agent-loop configuration)
 terms (from build_agent_config): agent configuration, config target, API key
 terms (refined): config target
 
@@ -16,5 +16,5 @@ terms (refined): config target
 
 ## Non-concerns
 
-- The format of the generated module: produced by the `agent_config` rule (update_with_ai/agent_config.bzl).
+- The format of the generated module: produced by the `agent_config` rule.
 - Which environment variables a caller sets: only the resolution order and the variable names are specified.

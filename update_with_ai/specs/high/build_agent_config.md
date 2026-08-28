@@ -1,11 +1,12 @@
 # build_agent_config
 
-imports: agent_loop_impl (agent-loop configuration)
+imports: agent_loop_config (agent-loop configuration)
+terms (from agent_loop_config): agent-loop configuration
 terms (owned): agent configuration, config target, API key
 
 ## Purpose
 
-Loads declarative agent/model configurations declared as Bazel targets (see update_with_ai/agent_config.bzl) and combines them with an API key resolved from the environment, providing the complete agent-loop configuration to the caller. Selection and loading are expressed in Bazel terms: config targets, the runfiles tree, and bazel-bin.
+Loads declarative agent/model configurations declared as Bazel `agent_config` targets and combines them with an API key resolved from the environment, providing the complete agent-loop configuration to the caller. Selection and loading are expressed in Bazel terms: config targets, the runfiles tree, and bazel-bin.
 
 ## Terms
 

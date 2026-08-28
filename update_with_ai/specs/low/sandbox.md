@@ -1,6 +1,5 @@
 <!-- Dependencies (md files to read alongside this one):
   - tool_provider.md
-  - agent_loop.md
   - dag_storage.md
   - dag_clean_logic.md
   - file_view.md
@@ -55,7 +54,7 @@ class Sandbox(Protocol):
 
 `SandboxConfig` is the aggregate client-supplied configuration for the sandbox: file mappings (each file's virtual name to its full path), the readable and writable virtual names, the blame targets (a mapping from each blameable artifact's virtual name to the node that owns it), the search result limit, whether session-start reads are enabled (default: enabled), the guide (default: none — the declared guide's virtual name, a file in `file_mappings`), whether step mode is enabled (default: enabled), whether feedback is pending (default: false), the templates (default: empty), and an optional verification callback.
 
-The sandbox is a facade: it composes the file machinery (`file_view`), the step-mode guide delivery (`guide_delivery`), and the verification and termination rules (`run_control`) into a single tool surface. Each operation below delegates to the owning component's operation; the composition itself is described in `sandbox_impl`.
+The sandbox is a facade: it composes the file machinery (`file_view`), the step-mode guide delivery (`guide_delivery`), and the verification and termination rules (`run_control`) into a single tool surface. Each operation below delegates to the owning component's operation; the composition itself is described in the implementation spec.
 ## Term definitions
 
 - **virtual name** → the `VirtualName` alias from file_view
@@ -78,7 +77,6 @@ The sandbox is a facade: it composes the file machinery (`file_view`), the step-
 - **stub** → term definition from tool_provider
 - **termination result** → the `TerminateSuccessResult` type from tool_provider
 - **tool failure** → the `ToolFailure` type from tool_provider
-- **run** → term definition from agent_loop
 - **dependency** → the `NodeDependencies` alias from dag_storage
 - **change message** → term definition from dag_clean_logic
 - **feedback message** → term definition from dag_clean_logic
@@ -95,7 +93,7 @@ def get_tool_definitions(self) -> list[ToolDefinition]
 
 **Preconditions:** The sandbox has been configured with the aggregate `SandboxConfig`.
 
-**Postconditions:** Delegates to the components' tool definitions and composes them into one list (per the composition in `sandbox_impl`): the file tools from `file_view.get_tool_definitions`, the advance tool from `guide_delivery.get_tool_definitions` (its parameters per the step state), and the termination tools from `run_control.get_tool_definitions` — the failure tool always, the blame tool only when blame targets are configured. Each definition follows the JSON schema format expected by the model (as defined in `tool_provider`).
+**Postconditions:** Delegates to the components' tool definitions and composes them into one list (per the composition described in the implementation spec): the file tools from `file_view.get_tool_definitions`, the advance tool from `guide_delivery.get_tool_definitions` (its parameters per the step state), and the termination tools from `run_control.get_tool_definitions` — the failure tool always, the blame tool only when blame targets are configured. Each definition follows the JSON schema format expected by the model (as defined in `tool_provider`).
 
 **Failure Handling:** No failure conditions.
 
@@ -108,11 +106,11 @@ def get_tool_definitions(self) -> list[ToolDefinition]
 def get_session_start_reads(self) -> list[PresentedToolResult]
 ```
 
-**Purpose:** Return the session-start reads for rendering at the beginning of a run before the model's first turn: the plain reads of the read-only files and, in step mode, the guide's presentation.
+**Purpose:** Return the session-start reads for rendering at the beginning of a session before the model's first turn: the plain reads of the read-only files and, in step mode, the guide's presentation.
 
 **Preconditions:** None.
 
-**Postconditions:** Delegates to `file_view.get_session_start_reads` (the plain reads of the read-only files) and `guide_delivery.get_session_start_reads` (the guide's presentation at run start — in step mode, the pre-injected advance call); the results are presented together before the model's first turn; requesting them changes no sandbox state.
+**Postconditions:** Delegates to `file_view.get_session_start_reads` (the plain reads of the read-only files) and `guide_delivery.get_session_start_reads` (the guide's presentation at session start — in step mode, the pre-injected advance call); the results are presented together before the model's first turn; requesting them changes no sandbox state.
 
 **Failure Handling:** Always succeeds; filesystem errors reading a readable file are unhandled.
 
@@ -197,11 +195,11 @@ def search_files(self, path: VirtualName, pattern: str,
 def advance(self, changes: list[dict[str, str]] = []) -> ToolCallOutcome
 ```
 
-**Purpose:** Signal the run's completion: verification, step-mode delivery, and termination sequence within the advance. The agent calls this when it has nothing more to do or considers its task complete.
+**Purpose:** Signal the session's completion: verification, step-mode delivery, and termination sequence within the advance. The agent calls this when it has nothing more to do or considers its task complete.
 
 **Preconditions:** Per `run_control.advance`'s preconditions (the change-message requirement applies only to the terminating advance) and the step mode rules from guide_delivery.
 
-**Postconditions:** Delegates to `run_control.advance`, which sequences verification, the step-mode output (per guide_delivery's output rule), and the termination machinery; the advance sequencing is described in `sandbox_impl`.
+**Postconditions:** Delegates to `run_control.advance`, which sequences verification, the step-mode output (per guide_delivery's output rule), and the termination machinery; the advance sequencing is described in the implementation spec.
 
 **Failure Handling:** Per `run_control.advance`'s failure signals, returned as-is (including the change-message and feedback-pending `ToolFailure` signals; a failing verification never signals a tool failure).
 
@@ -248,19 +246,19 @@ def blame(self, blames: list[Blame]) -> ToolCallOutcome
 def get_write_occurred(self) -> WriteOccurred
 ```
 
-**Purpose:** Return whether the agent has modified the filesystem during the current run.
+**Purpose:** Return whether the agent has modified the filesystem during the current session.
 
 **Preconditions:** None.
 
-**Postconditions:** Delegates to `file_view.get_write_occurred`: returns `True` if any file write has succeeded during the current run; `False` otherwise.
+**Postconditions:** Delegates to `file_view.get_write_occurred`: returns `True` if any file write has succeeded during the current session; `False` otherwise.
 
 **Failure Handling:** Always succeeds.
 
-**HLS Justification:** "Query whether the run modified the filesystem."
+**HLS Justification:** "Query whether the session modified the filesystem."
 
 ## Invariants
 
-- The run begins when the sandbox is configured and ends when the agent signals termination
+- The session begins when the sandbox is configured and ends when the agent signals termination
 - No state persists across runs
 - The tool surface composes the components' operations: file_view provides the file tools, run_control provides the termination tools, and guide_delivery provides the step-mode delivery; the composed tools are presented together
 - The blame tool is offered only when blame targets are configured

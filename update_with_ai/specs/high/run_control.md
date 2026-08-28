@@ -1,15 +1,14 @@
 # run_control
 
-imports: tool_provider (tool results, signals), dag_clean_logic (change message, feedback message, termination-result types), dag_storage (node message), agent_loop (run), file_view (virtual name)
+imports: tool_provider (tool results, signals), dag_clean_logic (change message, feedback message, termination-result types), dag_storage (node message), file_view (virtual name)
 terms (from tool_provider): tool failure
 terms (from dag_clean_logic): feedback message
-terms (from agent_loop): run
 terms (from file_view): virtual name
 terms (owned): blame, blame target, soft length bound, hard length bound
 
 ## Purpose
 
-Provides verification and termination for a file-modifying agent session: verifying run state, bounding change summaries, and signaling successful or failing termination through the advance, failure, and blame operations. Enforces the feedback rule when a feedback message is pending.
+Provides verification and termination for a file-modifying agent session: verifying session state, bounding change summaries, and signaling successful or failing termination through the advance, failure, and blame operations. Enforces the feedback rule when a feedback message is pending.
 
 ## Terms
 
@@ -22,16 +21,16 @@ Provides verification and termination for a file-modifying agent session: verify
 
 **Inputs**
 
-- Configured: an optional verification callback; whether the run's pending messages include a feedback message; the blame targets (a mapping from each blameable artifact's virtual name to the node that owns it; may be empty); the diff size limit (the maximum characters a verification diff may report).
+- Configured: an optional verification callback; whether the session's pending messages include a feedback message; the blame targets (a mapping from each blameable artifact's virtual name to the node that owns it; may be empty); the diff size limit (the maximum characters a verification diff may report).
 - Per call: a tool call (tool name and arguments, per tool_provider).
 
 **Operations**
 
-- Verify the run.
+- Verify the session.
 - Check a change summary.
 - Blame.
 - Fail.
-- Complete the run.
+- Complete the session.
 
 **Guarantees**
 
@@ -43,8 +42,8 @@ Provides verification and termination for a file-modifying agent session: verify
 - Termination is at the agent's judgment: the agent signals termination when it considers its task complete, or when it cannot be completed.
 - Advance signals successful termination when verification passes; when files were modified, it requires a change summary naming what changed in each file, directing the next reader's attention to the changes.
 - When files were modified and the change summary is missing, malformed, or incomplete, advance signals a tool failure.
-- Change summaries are bounded; a summary exceeding the bound is rejected with guidance; persistent rejection fails the run.
-- When the run's pending messages include a feedback message, advance that would otherwise signal successful termination without a change signals a tool failure with a reason directing the agent to change, blame, or fail; the session continues.
+- Change summaries are bounded; a summary exceeding the bound is rejected with guidance; persistent rejection fails the session.
+- When the session's pending messages include a feedback message, advance that would otherwise signal successful termination without a change signals a tool failure with a reason directing the agent to change, blame, or fail; the session continues.
 
 **Assumptions**
 

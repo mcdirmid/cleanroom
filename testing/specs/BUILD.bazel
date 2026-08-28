@@ -69,7 +69,7 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "sandbox_impl",
-    module_deps = ["sandbox", "tool_provider", "dag_clean_logic", "agent_loop"],
+    module_deps = ["sandbox", "tool_provider", "dag_clean_logic", "dag_storage", "agent_loop"],
 )
 
 # ---------------------------------------------------------------------------
@@ -108,7 +108,7 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "agent_node_clean_logic_impl",
-    module_deps = ["dag_clean_logic", "build_graph_storage", "dag_storage", "agent_loop", "agent_loop_impl", "sandbox"],
+    module_deps = ["dag_clean_logic", "build_graph_storage", "dag_storage", "agent_loop", "agent_loop_impl", "sandbox", "tool_provider"],
 )
 
 update_python_with_ai(

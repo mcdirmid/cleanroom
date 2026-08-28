@@ -7,7 +7,6 @@ Provides the agent loop implementation using the OpenAI API.
 """
 
 import json
-from dataclasses import dataclass
 from typing import Any, cast, List, Dict, Optional, Tuple, Union
 
 from openai import OpenAI
@@ -32,8 +31,8 @@ from .agent_loop import (
     LogEvent,
     Usage,
     CumulativeUsage,
-    TerminationReminderGenerator,
 )
+from .agent_loop_config import AgentLoopConfig
 from .tool_provider import (
     ToolDefinition,
     ToolResult,
@@ -59,20 +58,6 @@ DEFAULT_CONTINUATION_PROMPT = (
 # prefix up to the most recent live result stays byte-identical across
 # requests, preserving the model service's prefix caching.
 STUB_TEXT = "Content removed because newer version is available."
-
-
-@dataclass
-class AgentLoopConfig:
-    """The run's configuration, supplied when the loop is constructed: connection and processing parameters, an optional iteration limit, and an optional termination reminder generator."""
-    base_url: str
-    api_key: str
-    model: str
-    max_iterations: int = 10
-    temperature: float = 0.0
-    timeout: float = 60.0
-    max_tokens: Optional[int] = None
-    termination_reminder_generator: Optional[TerminationReminderGenerator] = None
-    continuation_prompt: Optional[str] = None
 
 
 class AgentLoopImpl(AgentLoop):

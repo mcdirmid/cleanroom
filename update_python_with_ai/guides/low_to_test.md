@@ -8,6 +8,8 @@ The LLS is the only contract: the tests cover its postconditions, invariants, an
 
 Read the implementation LLS and the transitive closure of its dependency comment: every LLS in the comment, every LLS in their comments, until no new files remain — dependency mocks implement the dependency interfaces exactly from their own LLSs. Extract the testable claims: Data Types (construction, fields, defaults, `Literal` discriminators); Config (fields, defaults, mock wiring); Behavioral Description (each bullet → outcome tests); Failure Handling (each expected failure signal → a test); Invariants (sequence tests); Non-Concerns (pinned only).
 
+This guide does not apply to assembly specs (`<name>_asm.md`): an assembly performs no functionality beyond configuration and assembly of other modules, so it has no test module (per high_level_spec.md, an assembly is never tested).
+
 ## Module layout
 
 - [ ] One test module per implementation LLS: `specs/low/csv_inventory_impl.md` → `tests/csv_inventory_impl_test.py`

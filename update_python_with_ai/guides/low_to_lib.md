@@ -8,13 +8,15 @@ The module's types mirror the LLS's Data Types block; every operation implements
 
 ## Module layout
 
-- [ ] One module per LLS file: `specs/low/inventory.md` → `lib/inventory.py`; `specs/low/csv_inventory_impl.md` → `lib/csv_inventory_impl.py`
+- [ ] One module per LLS file: `specs/low/inventory.md` → `lib/inventory.py`; `specs/low/csv_inventory_impl.md` → `lib/csv_inventory_impl.py`; `specs/low/build_asm.md` → `lib/build_asm.py`
 - [ ] An interface module (for a spec with no `_impl` LLS) defines the interface's Protocol and types only; it never defines an implementation class — an implementation class appears only in the module of an implementation LLS (`<name>_impl.py`)
+- [ ] An assembly module (for a `_asm` LLS) defines the assembly class only: it performs configuration and assembly of other modules and no other functionality, provides the assembled result (e.g. `build()`), and has no test module (an assembly is never tested)
 - [ ] The implementation subclasses the interface's Protocol class, per the LLS (`class CsvInventoryImpl(Inventory): ...`)
 
 ## Imports
 
 - [ ] The types the module uses are imported from the LLS's Data Types block, from their owning interface, never redefined
+- [ ] The one exception: an assembly module imports from the implementation and assembly modules it assembles (`from .build_graph_storage_impl import ...`) — the only module kind permitted to import implementation or assembly modules
 - [ ] Imports use relative form for package modules (`.inventory import ...`)
 
 ## Data types

@@ -1,37 +1,51 @@
 """
-Build runner — assembler for running the cleanroom system.
+Build runner — interface-only implementation of the build_runner interface.
 
-This module assembles the cleanroom components (graph storage,
-agent loop, DAG clean logic) and runs a topological cleaning pass
-over a target node and its transitive dependencies.
+This module implements the build_runner operations over component factories
+supplied at construction: a graph factory, a clean-logic factory, and a DAG
+factory. It holds no component instances and creates them per call; the
+concrete implementations the factories provide are selected by the assembly
+component, never here.
 
 Library usage:
     from update_with_ai.lib.build_runner_impl import BuildRunnerImpl
-    success, err = BuildRunnerImpl().run_dag(root_node, workspace_root)
-
-Script usage (CLI entry point):
-    bazel run //pkg:target  # where target is a update_with_ai with clean target
+    runner = BuildRunnerImpl(
+        graph_factory=..., clean_logic_factory=..., dag_factory=...,
+    )
+    success, err = runner.run_dag(root_node, workspace_root)
 """
 
-from .dag_cleaner_impl import DagCleanerImpl
-from .dag_cleaner import CleaningResult
-from .dag_clean_logic import NoChangeResult, FailureResult
-from .dag_storage import NodeId, NodeMessage
-from .build_graph_storage_impl import BuildGraphStorageFileImpl
-from .build_graph_storage import GraphConfig
-from .agent_node_clean_logic_impl import AgentNodeCleanLogicImpl
-from .agent_loop_impl import AgentLoopImpl, AgentLoopConfig
-from .agent_loop import LogEvent
-from .build_agent_config_impl import BuildAgentConfigImpl
-from .sandbox import Sandbox
-from .sandbox_impl import SandboxImpl
-from .build_runner import BuildRunner
-from typing import Any, Dict, List, Optional
-import dataclasses
+from __future__ import annotations
+
 import os
 import signal
-import sys
 import threading
+from typing import Any, Callable, Dict, List, Optional, TypeAlias
+
+from .build_runner import BuildRunner
+from .dag_storage import NodeId, NodeMessage
+from .dag_cleaner import DagCleaner, CleaningResult
+from .dag_clean_logic import (
+    CleanResult,
+    ChangeResult,
+    FeedbackResult,
+    NoChangeResult,
+    FailureResult,
+    DagCleanLogic,
+)
+from .build_graph_storage import BuildGraphStorage, GraphConfig
+from .agent_loop import LogEvent, LoggerCallback
+from .build_agent_config import ConfigTarget
+
+# The clean-logic factory: constructs the per-run clean logic from the graph,
+# the workspace root, the config target, and the run logger. The factory
+# (provided by the assembly) resolves the run's agent configuration and
+# supplies the per-node agent loop and sandbox; this module never names the
+# concrete agent-loop, sandbox, or configuration components.
+CleanLogicFactory: TypeAlias = Callable[
+    [BuildGraphStorage, str, Optional[ConfigTarget], Optional[LoggerCallback]],
+    DagCleanLogic,
+]
 
 
 def _sigint_handler(signum, frame):
@@ -152,11 +166,44 @@ def _format_full_log(event: LogEvent, data: Dict[str, Any]) -> str:
 
 class BuildRunnerImpl(BuildRunner):
     """
-    Assembler for running the cleanroom system.
+    Interface-only implementation of the build_runner interface.
 
-    Collects the components (graph storage, agent loop, DAG clean logic)
-    and runs a topological cleaning pass over a target node and its transitive dependencies.
+    Constructed with the component factories (the graph factory, the
+    clean-logic factory, and the DAG factory); the concrete implementations
+    the factories provide are selected by the assembly, never here. All
+    components are created per call through the factories; no persistent
+    state is held across calls.
     """
+
+    def __init__(
+        self,
+        graph_factory: Callable[[GraphConfig], BuildGraphStorage],
+        clean_logic_factory: CleanLogicFactory,
+        dag_factory: Callable[[BuildGraphStorage, DagCleanLogic], DagCleaner],
+    ) -> None:
+        """Configure the runner with the component factories (see the
+        implementation LLS; the concrete implementations are the assembly's
+        concern)."""
+        self._graph_factory = graph_factory
+        self._clean_logic_factory = clean_logic_factory
+        self._dag_factory = dag_factory
+
+    def _resolve_log_path(self) -> str:
+        """Resolve the agent log path: CLEANROOM_AGENT_LOG (absolute, or a
+        name relative to the log base directory), else agent_loop.log in the
+        log base directory; the base is BUILD_WORKSPACE_DIRECTORY, else
+        BUILD_WORKING_DIRECTORY, else the current working directory."""
+        log_dir = (
+            os.environ.get("BUILD_WORKSPACE_DIRECTORY")
+            or os.environ.get("BUILD_WORKING_DIRECTORY")
+            or os.getcwd()
+        )
+        log_override = os.environ.get("CLEANROOM_AGENT_LOG")
+        if log_override:
+            if os.path.isabs(log_override):
+                return log_override
+            return os.path.join(log_dir, log_override)
+        return os.path.join(log_dir, "agent_loop.log")
 
     def run_dag(
         self,
@@ -167,13 +214,20 @@ class BuildRunnerImpl(BuildRunner):
         """
         Run a DAG cleaning pass starting from root_node.
 
+        The graph and message store come from the graph factory; the clean
+        logic comes from the clean-logic factory (which resolves the run's
+        agent configuration from the config target and supplies the per-node
+        agent loop and sandbox); the DAG comes from the DAG factory over the
+        graph and the clean logic. The log file is always written and closed,
+        regardless of the result.
+
         Args:
             root_node: Label of the root node to clean.
             workspace_root: Workspace/runfiles root for loading manifests.
             config_target: Agent/model configuration target (an `agent_config`
                 Bazel target label, e.g. "//agent_configs:default"). If None,
                 the selection falls back to AGENT_CONFIG_TARGET and then
-                //agent_configs:default (see build_agent_config).
+                //agent_configs:default (resolved by the clean-logic factory).
 
         Returns a CleaningResult:
             (True, CleanResult)  — all nodes in subgraph cleaned (a
@@ -183,44 +237,17 @@ class BuildRunnerImpl(BuildRunner):
         """
         print(f"Loading graph from {root_node}...")
 
-        # Step 1: Build the graph storage from manifest files (reads verify
-        # fields from manifests); it serves as both the graph and the message
-        # store.
-        graph = BuildGraphStorageFileImpl(
-            config=GraphConfig(workspace_root=workspace_root),
-        )
+        # Step 1: Build the graph storage from manifest files (it serves as
+        # both the graph and the message store) through the graph factory.
+        graph = self._graph_factory(GraphConfig(workspace_root=workspace_root))
 
-        # Step 2: Configure the agent loop from an agent_config target.
-        # The target is selected by priority: the config_target argument
-        # (e.g. `--config //pkg:name` on the CLI), then AGENT_CONFIG_TARGET,
-        # then the //agent_configs:default convention. The API key is never
-        # part of the config target: it is resolved from the environment by
-        # the BuildAgentConfig component (the config's pinned API-key
-        # environment variable, or AGENT_API_KEY — an unexpected failure,
-        # see build_agent_config). The raw agent configuration also carries
-        # the session-start-reads gate, which the sandbox factory applies to
-        # each node's sandbox configuration below.
-        agent_config_impl = BuildAgentConfigImpl()
-        config_target = agent_config_impl.resolve_config_target(config_target)
-        agent_config = agent_config_impl.load_config(config_target, workspace_root)
-        api_key = agent_config_impl.resolve_api_key(agent_config.api_key_env)
-        agent_loop_config = agent_config.to_agent_loop_config(api_key)
-        agent_loop = AgentLoopImpl(config=agent_loop_config)
-
-        # Step 3: Agent logging — compact events on stdout, full transcript
+        # Step 2: Agent logging — compact events on stdout, full transcript
         # to a file in the directory where bazel was invoked (override with
         # CLEANROOM_AGENT_LOG, e.g. an absolute path or a name relative to the
-        # workspace root).
-        log_dir = (
-            os.environ.get("BUILD_WORKSPACE_DIRECTORY")
-            or os.environ.get("BUILD_WORKING_DIRECTORY")
-            or os.getcwd()
-        )
-        log_override = os.environ.get("CLEANROOM_AGENT_LOG")
-        if log_override:
-            log_path = log_override if os.path.isabs(log_override) else os.path.join(log_dir, log_override)
-        else:
-            log_path = os.path.join(log_dir, "agent_loop.log")
+        # workspace root). The log file is created after graph construction:
+        # a failure during assembly (e.g. graph construction) propagates
+        # without a log file.
+        log_path = self._resolve_log_path()
         log_file = open(log_path, "w", encoding="utf-8")
         print(f"Agent log: {log_path}")
 
@@ -234,29 +261,19 @@ class BuildRunnerImpl(BuildRunner):
             # unbuffered).
             log_file.flush()
 
-        # Step 4: Clean logic with sandbox factory. The session-start-reads
-        # gate from the agent configuration applies to every node's sandbox
-        # (the agent_config is the run-level configuration; it overrides the
-        # per-node sandbox config's default).
-        clean_logic = AgentNodeCleanLogicImpl(
-            graph=graph,
-            agent_loop_config=agent_loop_config,
-            make_sandbox=lambda cfg: SandboxImpl(
-                config=dataclasses.replace(
-                    cfg,
-                    session_start_reads_enabled=agent_config.session_start_reads,
-                    step_sections_enabled=agent_config.step_sections,
-                )
-            ),
-            make_agent_loop=lambda cfg=None: agent_loop,
-            logger=_agent_logger,
+        # Step 3: Clean logic through the clean-logic factory: the factory
+        # resolves the run's agent configuration (config target argument,
+        # then AGENT_CONFIG_TARGET, then //agent_configs:default) with the
+        # API key resolved from the environment, and supplies the per-node
+        # agent loop and sandbox (configuration failures are unexpected
+        # failures signaled by the build_agent_config component before the
+        # cleaning pass starts).
+        clean_logic = self._clean_logic_factory(
+            graph, workspace_root, config_target, _agent_logger
         )
 
-        # Step 5: Build the DAG and run
-        dag_cleaner = DagCleanerImpl(
-            storage=graph,
-            clean_logic=clean_logic,
-        )
+        # Step 4: Build the DAG through the DAG factory and run.
+        dag_cleaner = self._dag_factory(graph, clean_logic)
 
         print(f"\nRunning DAG from {root_node}...")
         try:
@@ -278,19 +295,15 @@ class BuildRunnerImpl(BuildRunner):
 
         Each message is added to the node's pending messages (the same store
         the DAG reads), so a subsequent clean treats the node as dirty and
-        processes the feedback.
-
-        Args:
-            node_id: Label of the node receiving the feedback
-            workspace_root: Workspace/runfiles root for loading manifests
-            messages: Feedback messages to deliver to the node
+        processes the feedback. A fresh graph is constructed through the
+        graph factory for this call, separate from the one used by run_dag.
 
         Returns:
             (True, NoChangeResult()) on success,
             (False, FailureResult()) on failure (node does not exist in graph)
         """
         print(f"Loading graph from {node_id}...")
-        graph = BuildGraphStorageFileImpl(config=GraphConfig(workspace_root=workspace_root))
+        graph = self._graph_factory(GraphConfig(workspace_root=workspace_root))
 
         try:
             graph.resolve_package_directory(node_id)
@@ -315,14 +328,15 @@ class BuildRunnerImpl(BuildRunner):
         Deliver a change message to a node's own pending message store,
         marking the node dirty for a subsequent cleaning pass. The node may
         succeed without changing when cleaned; the change text defaults to
-        "check" when not provided.
+        "check" when not provided. A fresh graph is constructed through the
+        graph factory for this call.
 
         Returns:
             (True, NoChangeResult()) on success,
             (False, FailureResult()) on failure (node does not exist in graph)
         """
         print(f"Loading graph from {node_id}...")
-        graph = BuildGraphStorageFileImpl(config=GraphConfig(workspace_root=workspace_root))
+        graph = self._graph_factory(GraphConfig(workspace_root=workspace_root))
 
         try:
             graph.resolve_package_directory(node_id)
@@ -348,14 +362,15 @@ class BuildRunnerImpl(BuildRunner):
         sandbox configuration's first writable path) followed by the change
         text; when the node declares no source file, the message is the
         change text alone. A known reverse dependency that is not in the
-        graph is skipped (per the dag_cleaner routing rule).
+        graph is skipped (per the dag_cleaner routing rule). A fresh graph is
+        constructed through the graph factory for this call.
 
         Returns:
             (True, NoChangeResult()) on success,
             (False, FailureResult()) on failure (node does not exist in graph)
         """
         print(f"Loading graph from {node_id}...")
-        graph = BuildGraphStorageFileImpl(config=GraphConfig(workspace_root=workspace_root))
+        graph = self._graph_factory(GraphConfig(workspace_root=workspace_root))
 
         try:
             graph.resolve_package_directory(node_id)
@@ -377,27 +392,3 @@ class BuildRunnerImpl(BuildRunner):
             f"{message_text}"
         )
         return (True, NoChangeResult())
-
-
-def main() -> int:
-    """Entry point: parse target from CLI and run."""
-    args = sys.argv[1:]
-    if len(args) < 1:
-        print(f"Usage: {sys.argv[0]} <target> [workspace_root]", file=sys.stderr)
-        return 1
-
-    root_node: NodeId = args[0]
-    workspace_root: str = args[1] if len(args) > 1 else os.getcwd()
-
-    try:
-        runner = BuildRunnerImpl()
-        success, result = runner.run_dag(root_node, workspace_root)
-        return 0 if success else 1
-    except Exception as e:
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-        return 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())

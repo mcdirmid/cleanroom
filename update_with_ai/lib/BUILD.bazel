@@ -25,12 +25,21 @@ pyright_library(
 )
 
 pyright_library(
+    name = "agent_loop_config",
+    srcs = [
+        "agent_loop_config.py",
+    ],
+    pyright_deps = [":agent_loop"],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
     name = "agent_loop_impl",
     srcs = [
         "agent_loop_impl.py",
     ],
     deps = [requirement("openai")],
-    pyright_deps = [":agent_loop", ":tool_provider"],
+    pyright_deps = [":agent_loop", ":agent_loop_config", ":tool_provider"],
     visibility = ["//visibility:public"],  # Add this line
 )
 
@@ -48,7 +57,7 @@ pyright_library(
     srcs = [
         "sandbox_impl.py",
     ],
-    pyright_deps = [":file_view", ":file_view_impl", ":guide_delivery", ":guide_delivery_impl", ":run_control", ":run_control_impl", ":sandbox", ":tool_provider"],
+    pyright_deps = [":file_view", ":guide_delivery", ":run_control", ":sandbox", ":tool_provider"],
     visibility = ["//visibility:public"],  # Add this line
 )
 
@@ -111,7 +120,7 @@ pyright_library(
     srcs = [
         "agent_node_clean_logic_impl.py",
     ],
-    pyright_deps = [":dag_clean_logic", ":dag_storage", ":build_graph_storage", ":agent_loop", ":agent_loop_impl", ":sandbox", ":tool_provider"],
+    pyright_deps = [":dag_clean_logic", ":dag_storage", ":build_graph_storage", ":agent_loop", ":agent_loop_config", ":sandbox", ":tool_provider"],
     visibility = ["//visibility:public"],
 )
 
@@ -138,7 +147,7 @@ pyright_library(
     srcs = [
         "build_agent_config.py",
     ],
-    pyright_deps = [":agent_loop_impl"],
+    pyright_deps = [":agent_loop_config"],
     visibility = ["//visibility:public"],
 )
 
@@ -147,7 +156,7 @@ pyright_library(
     srcs = [
         "build_agent_config_impl.py",
     ],
-    pyright_deps = [":agent_loop_impl", ":build_agent_config"],
+    pyright_deps = [":agent_loop_config", ":build_agent_config"],
     visibility = ["//visibility:public"],
 )
 
@@ -166,20 +175,43 @@ pyright_library(
         "build_runner_impl.py",
     ],
     pyright_deps = [
-        ":dag_cleaner_impl",
-        ":dag_cleaner",
+        ":build_runner",
         ":dag_storage",
+        ":dag_cleaner",
         ":dag_clean_logic",
-        ":build_graph_storage_impl",
         ":build_graph_storage",
-        ":agent_node_clean_logic_impl",
-        ":agent_loop_impl",
         ":agent_loop",
         ":build_agent_config",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "build_asm",
+    srcs = [
+        "build_asm.py",
+    ],
+    pyright_deps = [
+        ":build_runner_impl",
+        ":dag_cleaner",
+        ":dag_clean_logic",
+        ":build_graph_storage",
+        ":agent_loop",
+        ":agent_loop_config",
+        ":build_agent_config",
+        ":build_graph_storage_impl",
         ":build_agent_config_impl",
-        ":sandbox_impl",
+        ":agent_loop_impl",
+        ":agent_node_clean_logic_impl",
+        ":file_view",
+        ":file_view_impl",
+        ":guide_delivery",
+        ":guide_delivery_impl",
+        ":run_control",
+        ":run_control_impl",
         ":sandbox",
-        ":build_runner",
+        ":sandbox_impl",
+        ":dag_cleaner_impl",
     ],
     visibility = ["//visibility:public"],
 )

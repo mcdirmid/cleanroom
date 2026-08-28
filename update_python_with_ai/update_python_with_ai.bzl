@@ -39,12 +39,15 @@ def _apparent_label_str(label):
 # ============================================================================
 #
 # Each lint rule creates a bazel test target that lints the spec file and
-# verifies that every spec referenced in the text is covered by spec_deps
-# (the "dependencies are synced" check). Covered spec paths are read at test
-# time from each spec_dep's manifest in runfiles (data-driven). hls_lint
-# validates high-level specs per update_python_with_ai/guides/high_level_spec.md;
-# lls_lint validates low-level specs per
-# update_python_with_ai/guides/low_level_spec.md.
+# verifies that every spec referenced in the text is covered by the lint's
+# deps (the "dependencies are synced" check). hls_lint (walk mode) reads the
+# covered spec paths at test time from each spec_dep's manifest in runfiles
+# (data-driven transitive closure); lls_lint (direct mode) passes exactly the
+# module_deps md files (dep_srcs) — the dependency comment lists the direct
+# deps, and the transitive closure lives in the node's star_deps for
+# run-time reading. hls_lint validates high-level specs per
+# update_python_with_ai/guides/high_level_spec.md; lls_lint validates
+# low-level specs per update_python_with_ai/guides/low_level_spec.md.
 
 def _spec_lint_test_impl(ctx):
     """Implementation of a spec-lint test rule: a test that lints a spec file.
@@ -58,68 +61,83 @@ def _spec_lint_test_impl(ctx):
     src_args = " ".join(['"$ws"/{}'.format(f.short_path) for f in src_files])
     linter = ctx.file._linter.short_path
 
-    # Each spec_dep's manifest (in runfiles) lists the spec files it owns;
-    # the test script reads them at runtime and passes the package-qualified
-    # paths to the linter as --deps. The closure is computed from the
-    # manifests: the module deps' own sources plus, recursively, the sources
-    # of every node in their deps/star_deps closure (never silent_deps), so
-    # lint coverage matches exactly what the agent can read at run time.
-    dep_manifest_paths = [f.short_path for f in ctx.files.spec_deps]
-
     script = ctx.actions.declare_file(ctx.label.name + ".sh")
 
-    # Emit --deps only when there are deps: an empty --deps would consume
-    # the target file as a dep and leave nothing to lint.
-    if dep_manifest_paths:
-        paths_literal = " ".join(dep_manifest_paths)
-        deps_cmd = (
-            'deps=$("${{PYTHON:-python3}}" - "$ws" {paths} <<\'PYEOF\'\n' +
-            "import json, os, sys\n" +
-            "def rel(name):\n" +
-            "    s = name\n" +
-            "    if s.startswith('@' + '@'):\n" +
-            "        s = s[2:]\n" +
-            "    elif s.startswith('@') and '//' in s:\n" +
-            "        s = s[s.index('//'):]\n" +
-            "    if s.startswith('//'):\n" +
-            "        s = s[2:]\n" +
-            "    return s.replace(':', '/') + '_manifest.json'\n" +
-            "ws, paths = sys.argv[1], sys.argv[2:]\n" +
-            "out = []\n" +
-            "seen = set()\n" +
-            "queue = list(paths)\n" +
-            "while queue:\n" +
-            "    p = queue.pop(0)\n" +
-            "    if p in seen:\n" +
-            "        continue\n" +
-            "    seen.add(p)\n" +
-            "    mpath = os.path.join(ws, p)\n" +
-            "    if not os.path.isfile(mpath):\n" +
-            "        continue\n" +
-            "    with open(mpath) as f:\n" +
-            "        m = json.load(f)\n" +
-            "    s = m.get('src')\n" +
-            "    if s:\n" +
-            "        out.append(os.path.join(ws, os.path.dirname(p), s))\n" +
-            "    follow = list(m.get('deps', []))\n" +
-            "    for sd in m.get('star_deps', []):\n" +
-            "        if sd not in follow:\n" +
-            "            follow.append(sd)\n" +
-            "    for fd in m.get('feedback_deps', []):\n" +
-            "        if fd not in follow:\n" +
-            "            follow.append(fd)\n" +
-            "    for d in follow:\n" +
-            "        queue.append(rel(d))\n" +
-            "print(' '.join(sorted(out)))\n" +
-            "PYEOF\n)\n" +
-            'if [ -n "$deps" ]; then\n' +
-            '    python3 "$ws/{linter}" --deps $deps -- {targets}\n' +
-            "else\n" +
-            '    python3 "$ws/{linter}" {targets}\n' +
-            "fi\n"
-        ).format(linter = linter, paths = paths_literal, targets = src_args)
+    # Direct-deps mode (lls_lint): the --deps list is exactly the specified
+    # module-dep md files (dep_srcs) plus the external-doc files
+    # (external_deps). The dependency comment lists the direct deps, so no
+    # transitive closure is computed here; the closure lives in the node's
+    # star_deps (module_deps) for run-time reading.
+    if ctx.attr._direct_deps:
+        dep_files = ctx.files.dep_srcs
+        if dep_files:
+            deps_literal = " ".join(['"$ws"/{}'.format(f.short_path) for f in dep_files])
+            deps_cmd = 'python3 "$ws/{linter}" --deps {deps} -- {targets}\n'.format(
+                linter = linter,
+                deps = deps_literal,
+                targets = src_args,
+            )
+        else:
+            deps_cmd = 'python3 "$ws/{linter}" {targets}\n'.format(linter = linter, targets = src_args)
+    # Walk mode (hls_lint): each spec_dep's manifest (in runfiles) lists the
+    # spec files it owns; the test script reads them at runtime and passes
+    # the package-qualified paths to the linter as --deps. The closure is
+    # computed from the manifests: the module deps' own sources plus,
+    # recursively, the sources of every node in their deps/star_deps closure
+    # (never silent_deps), so lint coverage matches exactly what the agent
+    # can read at run time.
     else:
-        deps_cmd = 'python3 "$ws/{linter}" {targets}\n'.format(linter = linter, targets = src_args)
+        dep_manifest_paths = [f.short_path for f in ctx.files.spec_deps]
+        if dep_manifest_paths:
+            paths_literal = " ".join(dep_manifest_paths)
+            deps_cmd = (
+                'deps=$("${{PYTHON:-python3}}" - "$ws" {paths} <<\'PYEOF\'\n' +
+                "import json, os, sys\n" +
+                "def rel(name):\n" +
+                "    s = name\n" +
+                "    if s.startswith('@' + '@'):\n" +
+                "        s = s[2:]\n" +
+                "    elif s.startswith('@') and '//' in s:\n" +
+                "        s = s[s.index('//'):]\n" +
+                "    if s.startswith('//'):\n" +
+                "        s = s[2:]\n" +
+                "    return s.replace(':', '/') + '_manifest.json'\n" +
+                "ws, paths = sys.argv[1], sys.argv[2:]\n" +
+                "out = []\n" +
+                "seen = set()\n" +
+                "queue = list(paths)\n" +
+                "while queue:\n" +
+                "    p = queue.pop(0)\n" +
+                "    if p in seen:\n" +
+                "        continue\n" +
+                "    seen.add(p)\n" +
+                "    mpath = os.path.join(ws, p)\n" +
+                "    if not os.path.isfile(mpath):\n" +
+                "        continue\n" +
+                "    with open(mpath) as f:\n" +
+                "        m = json.load(f)\n" +
+                "    s = m.get('src')\n" +
+                "    if s:\n" +
+                "        out.append(os.path.join(ws, os.path.dirname(p), s))\n" +
+                "    follow = list(m.get('deps', []))\n" +
+                "    for sd in m.get('star_deps', []):\n" +
+                "        if sd not in follow:\n" +
+                "            follow.append(sd)\n" +
+                "    for fd in m.get('feedback_deps', []):\n" +
+                "        if fd not in follow:\n" +
+                "            follow.append(fd)\n" +
+                "    for d in follow:\n" +
+                "        queue.append(rel(d))\n" +
+                "print(' '.join(sorted(out)))\n" +
+                "PYEOF\n)\n" +
+                'if [ -n "$deps" ]; then\n' +
+                '    python3 "$ws/{linter}" --deps $deps -- {targets}\n' +
+                "else\n" +
+                '    python3 "$ws/{linter}" {targets}\n' +
+                "fi\n"
+            ).format(linter = linter, paths = paths_literal, targets = src_args)
+        else:
+            deps_cmd = 'python3 "$ws/{linter}" {targets}\n'.format(linter = linter, targets = src_args)
     script_content = (
         "#!/bin/bash\n" +
         "set -euo pipefail\n" +
@@ -136,7 +154,10 @@ def _spec_lint_test_impl(ctx):
     )
 
     runfiles = ctx.runfiles(
-        files = [ctx.file._linter] + ctx.files._corpus + src_files + ctx.files.spec_deps + ctx.files.dep_srcs,
+        files = (
+            [ctx.file._linter] + ctx.files._corpus + src_files +
+            ctx.files.spec_deps + ctx.files.dep_srcs + ctx.files._external_corpus
+        ),
         transitive_files = transitive_manifests,
     )
     return [
@@ -163,9 +184,17 @@ _hls_lint_test = rule(
             default = Label("//update_python_with_ai/bin:hls_lint.py"),
             allow_single_file = True,
         ),
+        "_direct_deps": attr.bool(
+            default = False,
+            doc = "True when --deps comes from dep_srcs directly (lls_lint); False when it comes from the spec_deps manifest closure walk (hls_lint)",
+        ),
         "_corpus": attr.label(
             default = Label("//update_with_ai/specs:high_specs"),
             doc = "Canonical spec corpus used for term-ownership reference resolution",
+        ),
+        "_external_corpus": attr.label(
+            default = Label("//update_with_ai/specs:external_specs"),
+            doc = "External dependency docs (specs/external/*.md); in runfiles (unused by hls_lint)",
         ),
     },
 )
@@ -189,6 +218,14 @@ _lls_lint_test = rule(
         "_linter": attr.label(
             default = Label("//update_python_with_ai/bin:lls_lint.py"),
             allow_single_file = True,
+        ),
+        "_direct_deps": attr.bool(
+            default = True,
+            doc = "True when --deps comes from dep_srcs directly (lls_lint); False when it comes from the spec_deps manifest closure walk (hls_lint)",
+        ),
+        "_external_corpus": attr.label(
+            default = Label("//update_with_ai/specs:external_specs"),
+            doc = "External dependency docs (specs/external/*.md); in runfiles so the linter's external-doc resolution finds them in the sandbox",
         ),
         "_corpus": attr.label(
             default = Label("//update_with_ai/specs:low_specs"),
@@ -262,12 +299,16 @@ def _update_python_with_ai(name, prompt, src, deps = [], module_deps = [], star_
     )
     return ":" + name
 
-def update_python_with_ai(name, module_deps, visibility = None):
+def update_python_with_ai(name, module_deps, external_deps = [], visibility = None):
     """Create a spec node for each root in spec_dep_roots.
 
     Args:
         name: Target name prefix (e.g. "dag_storage").
         module_deps: List of dependency spec/module labels (e.g. [":dag_clean_logic"]); each is a readable spec dependency and a pyright_dep of the module.
+        external_deps: List of external-dependency doc node labels (update_with_ai
+            targets, e.g. [":openai_api"]); added to the _low node's deps and the
+            _low_lint's --deps directly (no transitive closure; the doc files are
+            readable but their own deps are not pulled in).
         visibility: Optional visibility applied to all generated targets
             (node, *_clean, *_feedback, *_prompt); needed for cross-package
             deps.
@@ -319,7 +360,7 @@ def update_python_with_ai(name, module_deps, visibility = None):
         template = "//update_python_with_ai/templates:lls",
         guide = "//update_python_with_ai/guides:high_to_low",
         module_deps = lls_spec_deps,
-        deps = [":" + name + "_high"],
+        deps = [":" + name + "_high"] + external_deps,
         verify = "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{}:{}_low_lint --test_output=errors --noshow_progress 2>&1".format(
             native.package_name(),
             name,
@@ -332,12 +373,14 @@ def update_python_with_ai(name, module_deps, visibility = None):
     # specs are generated as the graph is walked; a lint target with a missing
     # src would fail to build). The template initializes the file at run start,
     # so the target materializes on the next bazel invocation after the agent
-    # writes the spec, which is when the node's verify tool gates on it.
+    # writes the spec, which is when the node's verify tool gates on it. The
+    # lint's --deps are the module_deps md files directly (no transitive
+    # closure: the comment lists the direct deps, and the closure lives in the
+    # node's star_deps) plus the external-doc files.
     if native.glob(["low/" + name + ".md"], allow_empty = True):
         _lls_lint_test(
             name = name + "_low_lint",
             srcs = ["low/" + name + ".md"],
-            spec_deps = lls_spec_deps,
             dep_srcs = native.glob(["low/" + dep.split(":")[-1] + ".md" for dep in module_deps], allow_empty = True),
         )
 
@@ -355,11 +398,22 @@ def update_python_with_ai(name, module_deps, visibility = None):
     # adds the pyright_library entry to ../lib/BUILD.bazel. The module kind
     # follows the spec: an interface spec's module defines the Protocol and
     # types only; an implementation spec's module subclasses the interface's
-    # Protocol per the LLS.
+    # Protocol per the LLS; an assembly spec's module (name ending in _asm)
+    # performs configuration and assembly of other modules only, is never
+    # tested, and has no _test or _qa node (the test/qa nodes below are
+    # created only for _impl names).
     if name.endswith("_impl"):
         _lib_kind_clause = (
             "This is an implementation module: it subclasses the interface's " +
             "Protocol class per the LLS."
+        )
+    elif name.endswith("_asm"):
+        _lib_kind_clause = (
+            "This is an assembly module: it performs no functionality beyond " +
+            "configuration and assembly of other modules — it wires the " +
+            "concrete implementations into the configured interface-only " +
+            "components and provides the assembled result. It implements no " +
+            "interface and is never tested (no test module exists for it)."
         )
     else:
         _lib_kind_clause = (

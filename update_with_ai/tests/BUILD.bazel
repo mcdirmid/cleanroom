@@ -7,6 +7,7 @@ pyright_binary(
     pyright_deps = [
         "//update_with_ai/lib:tool_provider", 
         "//update_with_ai/lib:agent_loop", 
+        "//update_with_ai/lib:agent_loop_config", 
         "//update_with_ai/lib:agent_loop_impl", 
         "//update_with_ai/lib:dag_clean_logic",
     ],
@@ -18,6 +19,7 @@ pyright_test(
     pyright_deps = [
         "//update_with_ai/lib:tool_provider",
         "//update_with_ai/lib:agent_loop",
+        "//update_with_ai/lib:agent_loop_config",
         "//update_with_ai/lib:agent_loop_impl",
         "//update_with_ai/lib:dag_clean_logic",
     ],
@@ -30,7 +32,12 @@ pyright_test(
         "//update_with_ai/lib:tool_provider", 
         "//update_with_ai/lib:sandbox", 
         "//update_with_ai/lib:sandbox_impl", 
-        "//update_with_ai/lib:dag_clean_logic",
+        "//update_with_ai/lib:file_view",
+        "//update_with_ai/lib:guide_delivery",
+        "//update_with_ai/lib:run_control",
+        "//update_with_ai/lib:file_view_impl",
+        "//update_with_ai/lib:guide_delivery_impl",
+        "//update_with_ai/lib:run_control_impl",
     ],
 )
 
@@ -64,7 +71,7 @@ pyright_test(
         "//update_with_ai/lib:dag_storage",
         "//update_with_ai/lib:build_graph_storage",
         "//update_with_ai/lib:agent_loop",
-        "//update_with_ai/lib:agent_loop_impl",
+        "//update_with_ai/lib:agent_loop_config",
         "//update_with_ai/lib:sandbox",
         "//update_with_ai/lib:tool_provider",
         "//update_with_ai/lib:agent_node_clean_logic_impl",
@@ -95,8 +102,10 @@ pyright_test(
         "//update_with_ai/lib:build_graph_storage",
         "//update_with_ai/lib:build_graph_storage_impl",
         "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:agent_loop_impl",
+        "//update_with_ai/lib:dag_cleaner",
         "//update_with_ai/lib:dag_clean_logic",
+        "//update_with_ai/lib:agent_loop",
+        "//update_with_ai/lib:build_agent_config",
         "//update_with_ai/lib:tool_provider",
     ],
 )
@@ -107,7 +116,7 @@ pyright_test(
     pyright_deps = [
         "//update_with_ai/lib:build_agent_config",
         "//update_with_ai/lib:build_agent_config_impl",
-        "//update_with_ai/lib:agent_loop_impl",
+        "//update_with_ai/lib:agent_loop_config",
     ],
 )
 

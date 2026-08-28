@@ -26,7 +26,8 @@ from update_with_ai.lib.agent_loop import (
     LoggerCallback,
     ToolDefinition,
 )
-from update_with_ai.lib.agent_loop_impl import AgentLoopImpl, AgentLoopConfig
+from update_with_ai.lib.agent_loop_config import AgentLoopConfig
+from update_with_ai.lib.agent_loop_impl import AgentLoopImpl
 from update_with_ai.lib.dag_clean_logic import NoChangeResult
 from update_with_ai.lib.tool_provider import (
     Continue,

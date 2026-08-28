@@ -1,1324 +1,397 @@
 """
 Tests for the SandboxImpl implementation.
 
-Written from the LLS (specs/low/sandbox_impl.md, specs/low/sandbox.md,
-specs/low/tool_provider.md, specs/low/dag_clean_logic.md): the sandbox's
-Stubbing rules, operation postconditions, and expected failure signals.
+Written from the LLS (specs/low/sandbox_impl.md, specs/low/sandbox.md): the
+sandbox is a facade that composes injected components — the file machinery
+(file_view), the step-mode delivery (guide_delivery), and the verification
+and termination rules (run_control). The tests inject recording stubs for
+the three components and assert the sandbox's own contract:
 
-The API returns a ToolCallOutcome per tool call: a sequence of one or more
-results (ToolResult or PresentedToolResult values) or a Signal (ToolFailure,
-TerminateAgentWithSuccess, TerminateAgentWithFailure). A successful file
-write returns a two-result sequence: the write confirmation and the injected
-read (the automatic re-read, per the sandbox's Auto re-read rules).
+- the construction protocol: the derived component configs (with the
+  step-mode gating of the guide's readability), the run_control factory
+  receiving the sandbox's file_view and guide_delivery, and the diff size
+  limit default;
+- the dispatch of each operation to the owning component with the same
+  arguments, and the result pass-through for pure delegations;
+- the composed tool registry and session-start reads;
+- the step-mode read/search gating policy.
 
-Stubbing (specs/low/sandbox.md, Stubbing): a ToolResult's `supersedes` flag is set
-on the results of operations on writable files and on verification results;
-it is not set on reads of files that are not writable, on searches, or on
-termination tools' results. The consuming agent loop stubs the superseded
-result; the sandbox itself maintains no stubbing state.
+Component behavior itself (file semantics, diff truncation, blame
+resolution, step-section delivery) is tested in the components' own tests
+(file_view_impl_test, run_control_impl_test, guide_delivery_impl_test);
+one smoke test wires the default implementations to prove the facade
+composes them coherently.
 """
 
 import os
 import shutil
 import tempfile
 import unittest
-from typing import Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from update_with_ai.lib.sandbox import SandboxConfig
 from update_with_ai.lib.sandbox_impl import SandboxImpl
+from update_with_ai.lib.file_view import FileViewConfig
+from update_with_ai.lib.guide_delivery import GuideDeliveryConfig
+from update_with_ai.lib.run_control import RunControlConfig
 from update_with_ai.lib.tool_provider import (
     PresentedToolResult,
-    ToolResult,
+    ToolDefinition,
     ToolFailure,
-    TerminateAgentWithSuccess,
-    TerminateAgentWithFailure,
+    ToolResult,
 )
-from update_with_ai.lib.dag_clean_logic import ChangeResult, FeedbackResult, NoChangeResult
-from update_with_ai.lib.dag_storage import NodeMessage
 
 
-class TestSandboxImpl(unittest.TestCase):
-    """Main coverage: tools, policy enforcement, stubbing semantics, state."""
+class _StubFileView:
+    """Recording stub for the file machinery (FileView)."""
+
+    def __init__(self) -> None:
+        self.calls: List[Tuple[str, Tuple[Any, ...]]] = []
+        self.tool_definitions: List[ToolDefinition] = []
+        self.session_start_reads: List[PresentedToolResult] = []
+        self.read_result: Any = ToolResult(content="read", supersedes=False)
+        self.write_occurred: Any = False
+
+    def _record(self, name: str, *args: Any) -> None:
+        self.calls.append((name, args))
+
+    def get_tool_definitions(self) -> Any:
+        self._record("get_tool_definitions")
+        return self.tool_definitions
+
+    def get_session_start_reads(self) -> Any:
+        self._record("get_session_start_reads")
+        return self.session_start_reads
+
+    def read_file(self, file_path: Any, include_line_numbers: Any = False) -> Any:
+        self._record("read_file", file_path, include_line_numbers)
+        return self.read_result
+
+    def edit_file(self, file_path: Any, old_str: Any, new_str: Any, expect_multiple: Any = False) -> Any:
+        self._record("edit_file", file_path, old_str, new_str, expect_multiple)
+        return self.read_result
+
+    def replace_lines(self, file_path: Any, start_line: Any, end_line: Any, new_str: Any) -> Any:
+        self._record("replace_lines", file_path, start_line, end_line, new_str)
+        return self.read_result
+
+    def search_files(self, path: Any, pattern: Any) -> Any:
+        self._record("search_files", path, pattern)
+        return self.read_result
+
+    def get_write_occurred(self) -> Any:
+        self._record("get_write_occurred")
+        return self.write_occurred
+
+    def get_changed_files(self) -> Any:
+        self._record("get_changed_files")
+        return []
+
+    def get_run_start_snapshot(self, file_path: Any) -> Any:
+        self._record("get_run_start_snapshot", file_path)
+        return None
+
+    def get_current_content(self, file_path: Any) -> Any:
+        self._record("get_current_content", file_path)
+        return None
+
+
+class _StubGuideDelivery:
+    """Recording stub for the step-mode delivery (GuideDelivery)."""
+
+    def __init__(self) -> None:
+        self.calls: List[Tuple[str, Tuple[Any, ...]]] = []
+        self.tool_definitions: List[ToolDefinition] = []
+        self.session_start_reads: List[PresentedToolResult] = []
+        self.advance_output: Any = None
+
+    def _record(self, name: str, *args: Any) -> None:
+        self.calls.append((name, args))
+
+    def get_tool_definitions(self) -> Any:
+        self._record("get_tool_definitions")
+        return self.tool_definitions
+
+    def get_session_start_reads(self) -> Any:
+        self._record("get_session_start_reads")
+        return self.session_start_reads
+
+    def get_advance_output(self, verification_passed: Any, *args: Any, **kwargs: Any) -> Any:
+        self._record("get_advance_output", verification_passed)
+        return self.advance_output
+
+    def has_step_sections_remaining(self) -> Any:
+        self._record("has_step_sections_remaining")
+        return False
+
+
+class _StubRunControl:
+    """Recording stub for the verification and termination rules (RunControl)."""
+
+    def __init__(self) -> None:
+        self.calls: List[Tuple[str, Tuple[Any, ...]]] = []
+        self.tool_definitions: List[ToolDefinition] = []
+        self.advance_result: Any = None
+        self.fail_result: Any = None
+        self.blame_result: Any = None
+
+    def _record(self, name: str, *args: Any) -> None:
+        self.calls.append((name, args))
+
+    def get_tool_definitions(self) -> Any:
+        self._record("get_tool_definitions")
+        return self.tool_definitions
+
+    def advance(self, changes: Any = []) -> Any:
+        self._record("advance", changes)
+        return self.advance_result
+
+    def fail(self) -> Any:
+        self._record("fail")
+        return self.fail_result
+
+    def blame(self, blames: Any) -> Any:
+        self._record("blame", blames)
+        return self.blame_result
+
+
+class _SandboxHarness:
+    """Builds a SandboxImpl around recording stubs and records the factory
+    calls (the derived configs and the constructed components)."""
+
+    def __init__(self, config: SandboxConfig, diff_size_limit: Optional[int] = None) -> None:
+        self.file_view = _StubFileView()
+        self.guide_delivery = _StubGuideDelivery()
+        self.run_control = _StubRunControl()
+        self.factory_calls: List[Tuple[str, Tuple[Any, ...]]] = []
+
+        def make_file_view(fvc: FileViewConfig) -> Any:
+            self.factory_calls.append(("file_view", (fvc,)))
+            return self.file_view
+
+        def make_guide_delivery(gdc: GuideDeliveryConfig) -> Any:
+            self.factory_calls.append(("guide_delivery", (gdc,)))
+            return self.guide_delivery
+
+        def make_run_control(rcc: RunControlConfig, fv: Any, gd: Any) -> Any:
+            self.factory_calls.append(("run_control", (rcc, fv, gd)))
+            return self.run_control
+
+        self.sandbox = SandboxImpl(
+            config=config,
+            make_file_view=make_file_view,
+            make_guide_delivery=make_guide_delivery,
+            make_run_control=make_run_control,
+            diff_size_limit=diff_size_limit,
+        )
+
+    def call(self, name: str) -> Tuple[Any, ...]:
+        for n, args in self.factory_calls:
+            if n == name:
+                return args
+        raise AssertionError(f"factory {name!r} never called; calls: {self.factory_calls}")
+
+
+def _config(**overrides: Any) -> SandboxConfig:
+    """A sandbox config with the default mappings; override any field."""
+    base: Dict[str, Any] = dict(
+        file_mappings={"a.txt": "/ws/a.txt", "guide.txt": "/ws/guide.md"},
+        readable_paths=["a.txt", "guide.txt"],
+        writable_paths=["a.txt"],
+        blame_targets={},
+        search_result_limit=5,
+    )
+    base.update(overrides)
+    return SandboxConfig(**base)
+
+
+class TestConstruction(unittest.TestCase):
+    """The construction protocol: derived configs, step-mode gating, and the
+    run_control factory receiving the sandbox's components."""
+
+    def test_file_view_config_derived(self) -> None:
+        h = _SandboxHarness(_config())
+        (fvc,) = h.call("file_view")
+        self.assertIsInstance(fvc, FileViewConfig)
+        self.assertEqual(fvc.file_mappings, {"a.txt": "/ws/a.txt", "guide.txt": "/ws/guide.md"})
+        self.assertEqual(fvc.readable_paths, ["a.txt", "guide.txt"])
+        self.assertEqual(fvc.writable_paths, ["a.txt"])
+        self.assertEqual(fvc.search_result_limit, 5)
+        self.assertTrue(fvc.session_start_reads_enabled)
+
+    def test_guide_delivery_config_derived(self) -> None:
+        h = _SandboxHarness(_config(guide="guide.txt", step_sections_enabled=True))
+        (gdc,) = h.call("guide_delivery")
+        self.assertIsInstance(gdc, GuideDeliveryConfig)
+        self.assertEqual(gdc.guide, "/ws/guide.md")  # resolved via file_mappings
+        self.assertTrue(gdc.step_sections_enabled)
+
+    def test_guide_delivery_config_no_guide(self) -> None:
+        h = _SandboxHarness(_config())
+        (gdc,) = h.call("guide_delivery")
+        self.assertIsNone(gdc.guide)
+
+    def test_run_control_config_derived(self) -> None:
+        h = _SandboxHarness(_config(feedback_pending=True))
+        (rcc, _, _) = h.call("run_control")
+        self.assertIsInstance(rcc, RunControlConfig)
+        self.assertTrue(rcc.feedback_pending)
+        self.assertEqual(rcc.blame_targets, {})
+        self.assertEqual(rcc.diff_size_limit, 1000)  # default when None
+
+    def test_diff_size_limit_passed_through(self) -> None:
+        h = _SandboxHarness(_config(), diff_size_limit=40)
+        (rcc, _, _) = h.call("run_control")
+        self.assertEqual(rcc.diff_size_limit, 40)
+
+    def test_run_control_receives_sandbox_components(self) -> None:
+        h = _SandboxHarness(_config())
+        (_, fv, gd) = h.call("run_control")
+        self.assertIs(fv, h.file_view)
+        self.assertIs(gd, h.guide_delivery)
+
+    def test_step_mode_excludes_guide_from_readable_paths(self) -> None:
+        h = _SandboxHarness(_config(guide="guide.txt", step_sections_enabled=True))
+        (fvc,) = h.call("file_view")
+        self.assertEqual(fvc.readable_paths, ["a.txt"])  # guide excluded
+
+    def test_no_step_mode_keeps_guide_readable(self) -> None:
+        h = _SandboxHarness(_config(guide="guide.txt", step_sections_enabled=False))
+        (fvc,) = h.call("file_view")
+        self.assertEqual(fvc.readable_paths, ["a.txt", "guide.txt"])
+
+
+class TestDelegation(unittest.TestCase):
+    """Each operation dispatches to the owning component with the same
+    arguments and returns its result unchanged."""
 
     def setUp(self) -> None:
-        """Set up a temp workspace with a writable file, a read-only file,
-        and a creation target."""
-        self.temp_dir = tempfile.mkdtemp()
-
-        # Plain text file (4 lines).
-        self.test_file_path = os.path.join(self.temp_dir, "test.txt")
-        with open(self.test_file_path, "w", encoding="utf-8") as f:
-            f.write("Line 1: Hello World\n")
-            f.write("Line 2: This is a test\n")
-            f.write("Line 3: Another line\n")
-            f.write("Line 4: Final line\n")
-
-        # Creation target: mapped and writable but does not exist on disk
-        # (reads report it missing; edits require it to exist).
-        self.new_file_path = os.path.join(self.temp_dir, "new.txt")
-
-        self.file_mappings = {
-            "test.txt": self.test_file_path,
-            "ro.txt": self.test_file_path,
-            "new.txt": self.new_file_path,
-        }
-        self.readable_paths = ["test.txt", "ro.txt", "new.txt"]
-        self.writable_paths = ["test.txt", "new.txt"]
-        self.blame_targets = {"agent": "//pkg:agent", "system": "//pkg:system"}
-
-        self.config = SandboxConfig(
-            file_mappings=self.file_mappings,
-            readable_paths=self.readable_paths,
-            writable_paths=self.writable_paths,
-            blame_targets=self.blame_targets,
-            search_result_limit=5,
-            verification_callback=None,
-        )
-        self.sandbox = SandboxImpl(self.config)
-
-    def tearDown(self) -> None:
-        shutil.rmtree(self.temp_dir)
-
-    # ------------------------------------------------------------------
-    # Outcome narrowing helpers
-    # ------------------------------------------------------------------
-
-    def as_tool_result(self, outcome: Any) -> ToolResult:
-        """Unwrap a result sequence: its first result (for a write outcome,
-        the write confirmation)."""
-        if isinstance(outcome, list):
-            assert len(outcome) >= 1, f"Expected a result sequence, got {outcome!r}"
-            outcome = outcome[0]
-        assert isinstance(outcome, ToolResult), f"Expected ToolResult, got {outcome!r}"
-        return outcome
-
-    def as_write_outcome(self, outcome: Any) -> Tuple[ToolResult, PresentedToolResult]:
-        """A file write's outcome per the Auto re-read rules: the write
-        confirmation and the injected read, in that order."""
-        assert isinstance(outcome, list) and len(outcome) == 2, (
-            f"Expected a two-result sequence, got {outcome!r}"
-        )
-        confirmation = outcome[0]
-        injected = outcome[1]
-        assert isinstance(confirmation, ToolResult), (
-            f"Expected ToolResult, got {confirmation!r}"
-        )
-        assert isinstance(injected, PresentedToolResult), (
-            f"Expected PresentedToolResult, got {injected!r}"
-        )
-        return confirmation, injected
-
-    def as_tool_failure(self, outcome: Any) -> ToolFailure:
-        assert isinstance(outcome, ToolFailure), f"Expected ToolFailure, got {outcome!r}"
-        return outcome
-
-    def as_success(self, outcome: Any) -> TerminateAgentWithSuccess:
-        assert isinstance(outcome, TerminateAgentWithSuccess), (
-            f"Expected TerminateAgentWithSuccess, got {outcome!r}"
-        )
-        return outcome
-
-    def as_terminate_failure(self, outcome: Any) -> TerminateAgentWithFailure[Any]:
-        assert isinstance(outcome, TerminateAgentWithFailure), (
-            f"Expected TerminateAgentWithFailure, got {outcome!r}"
-        )
-        return outcome
-
-    def assert_supersedes(self, outcome: Any, supersedes: bool) -> ToolResult:
-        """Assert the outcome is a ToolResult with the given supersedes flag.
-
-        supersedes=True: the result supersedes the earlier non-stubbed result
-        for the same file or tool command (the agent loop stubs it).
-        supersedes=False: the result never supersedes an earlier result
-        (reads of files that are not writable, searches, termination tools).
-        """
-        result = self.as_tool_result(outcome)
-        assert result.supersedes is supersedes, (
-            f"Expected supersedes={supersedes}, got {result!r}"
-        )
-        return result
-
-    # ------------------------------------------------------------------
-    # get_tool_definitions
-    # ------------------------------------------------------------------
-
-    def test_get_tool_definitions_always_includes_core_tools(self) -> None:
-        names = [d["function"]["name"] for d in self.sandbox.get_tool_definitions()]
-        for expected in ("read_file", "edit_file", "replace_lines",
-                         "search_files", "advance", "fail"):
-            self.assertIn(expected, names)
-
-    def test_get_tool_definitions_follow_json_schema_shape(self) -> None:
-        for d in self.sandbox.get_tool_definitions():
-            self.assertEqual(d["type"], "function")
-            fn = d["function"]
-            self.assertIn("name", fn)
-            self.assertIn("description", fn)
-            self.assertEqual(fn["parameters"]["type"], "object")
-
-    def test_read_file_definition_line_numbers_off_by_default(self) -> None:
-        read_def = next(
-            d for d in self.sandbox.get_tool_definitions()
-            if d["function"]["name"] == "read_file"
-        )
-        props = read_def["function"]["parameters"]["properties"]
-        self.assertFalse(props["include_line_numbers"]["default"])
-        # No pagination parameters: the whole file is read.
-        self.assertNotIn("start_line", props)
-        self.assertNotIn("end_line", props)
-
-    def test_replace_lines_definition_marks_all_parameters_required(self) -> None:
-        # LLS (specs/low/sandbox.md replace_lines): the tool definition's schema
-        # marks file_path, start_line, end_line, and new_str as required, so
-        # the model cannot omit them (e.g., drop end_line).
-        replace_def = next(
-            d for d in self.sandbox.get_tool_definitions()
-            if d["function"]["name"] == "replace_lines"
-        )
-        schema = replace_def["function"]["parameters"]
-        self.assertEqual(
-            sorted(schema["required"]),
-            ["end_line", "file_path", "new_str", "start_line"],
-        )
-        for param in ("file_path", "start_line", "end_line", "new_str"):
-            self.assertIn(param, schema["properties"])
-
-    def test_get_tool_definitions_advance_always_present(self) -> None:
-        names = [d["function"]["name"] for d in self.sandbox.get_tool_definitions()]
-        self.assertIn("advance", names)
-        self.assertNotIn("verify", names)
-        self.assertNotIn("succeed", names)
-
-    def test_get_tool_definitions_blame_conditional(self) -> None:
-        with_targets = [d["function"]["name"] for d in self.sandbox.get_tool_definitions()]
-        self.assertIn("blame", with_targets)
-
-        no_targets = SandboxConfig(
-            file_mappings=self.file_mappings,
-            readable_paths=self.readable_paths,
-            writable_paths=self.writable_paths,
-            blame_targets={},
-            search_result_limit=5,
-            verification_callback=None,
-        )
-        names = [d["function"]["name"] for d in SandboxImpl(no_targets).get_tool_definitions()]
-        self.assertNotIn("blame", names)
-
-    # ------------------------------------------------------------------
-    # read_file
-    # ------------------------------------------------------------------
-
-    def test_read_file_reads_entire_file(self) -> None:
-        # A read returns the file's ENTIRE content (never paginated). A
-        # non-writable file reads plain; its result never supersedes.
-        config = SandboxConfig(
-            file_mappings={"ro.txt": self.test_file_path},
-            readable_paths=["ro.txt"],
-            writable_paths=[],
-            blame_targets={},
-            search_result_limit=5,
-            verification_callback=None,
-        )
-        result = self.assert_supersedes(SandboxImpl(config).read_file("ro.txt"), False)
-        self.assertEqual(
-            result.content,
-            "Line 1: Hello World\nLine 2: This is a test\n"
-            "Line 3: Another line\nLine 4: Final line",
-        )
-        self.assertIn("4 lines", result.note)
-
-    def test_read_file_writable_existing_requires_line_numbers(self) -> None:
-        # The buy-in flow: a plain read of a writable file that already
-        # exists is rejected with guidance; the agent re-reads with
-        # include_line_numbers=True and the numbered read supersedes the
-        # earlier result for the file.
-        failure = self.as_tool_failure(self.sandbox.read_file("test.txt"))
-        self.assertIn("include_line_numbers=True", failure.value)
-        self.assertIn("writable", failure.value)
-
-        result = self.assert_supersedes(
-            self.sandbox.read_file("test.txt", include_line_numbers=True), True
-        )
-        self.assertIn("1 \u2502 Line 1: Hello World", result.content)
-        self.assertIn("(line-numbered)", result.note)
-
-    def test_read_file_writable_missing_still_reports_missing(self) -> None:
-        # new.txt is writable but does not exist: the read reports the
-        # missing file (not the line-number requirement).
-        failure = self.as_tool_failure(self.sandbox.read_file("new.txt"))
-        self.assertIn("does not exist", failure.value)
-
-    def test_read_file_line_numbered_view(self) -> None:
-        # test.txt is writable, so the numbered read supersedes the earlier
-        # result for the file.
-        result = self.assert_supersedes(
-            self.sandbox.read_file("test.txt", include_line_numbers=True), True
-        )
-        self.assertIn("1 \u2502 Line 1: Hello World", result.content)
-        self.assertIn("4 \u2502 Line 4: Final line", result.content)
-        self.assertIn("(line-numbered)", result.note)
-
-    def test_read_file_writable_read_supersedes(self) -> None:
-        result = self.assert_supersedes(
-            self.sandbox.read_file("test.txt", include_line_numbers=True), True
-        )
-        self.assertIn("1 \u2502 Line 1: Hello World", result.content)
-
-    def test_read_file_readonly_file_never_supersedes(self) -> None:
-        # A file that is readable but not writable reads plain and never
-        # supersedes an earlier result (reads of readable files are not
-        # stubbed).
-        config = SandboxConfig(
-            file_mappings={"ro.txt": self.test_file_path},
-            readable_paths=["ro.txt"],
-            writable_paths=[],
-            blame_targets={},
-            search_result_limit=5,
-            verification_callback=None,
-        )
-        result = self.assert_supersedes(SandboxImpl(config).read_file("ro.txt"), False)
-        self.assertIn("Line 1: Hello World", result.content)
-        self.assertNotIn("\u2502", result.content)
-
-    def test_read_file_line_numbers_require_writable(self) -> None:
-        config = SandboxConfig(
-            file_mappings={"ro.txt": self.test_file_path},
-            readable_paths=["ro.txt"],
-            writable_paths=[],
-            blame_targets={},
-            search_result_limit=5,
-            verification_callback=None,
-        )
-        failure = self.as_tool_failure(
-            SandboxImpl(config).read_file("ro.txt", include_line_numbers=True)
-        )
-        self.assertIn("writable", failure.value)
-
-    def test_read_file_policy_not_in_mappings(self) -> None:
-        failure = self.as_tool_failure(self.sandbox.read_file("nope.txt"))
-        self.assertIn("nope.txt", failure.value)
-
-    def test_read_file_policy_not_readable(self) -> None:
-        config = SandboxConfig(
-            file_mappings={"a.txt": self.test_file_path},
-            readable_paths=[],
-            writable_paths=["a.txt"],
-            blame_targets={},
-            search_result_limit=5,
-            verification_callback=None,
-        )
-        failure = self.as_tool_failure(SandboxImpl(config).read_file("a.txt"))
-        self.assertIn("not readable", failure.value)
-
-    # ------------------------------------------------------------------
-    # get_session_start_reads
-    # ------------------------------------------------------------------
-
-    def test_get_session_start_reads_reads_only_files(self) -> None:
-        # LLS (specs/low/sandbox.md Session-start reads): when enabled (the default),
-        # returns a session-start read for every file that is readable but not
-        # writable and exists as a regular file on disk; each is a
-        # PresentedToolResult pairing read_file with the plain read result
-        # (never superseding); requesting the reads changes no sandbox state.
-        reads = self.sandbox.get_session_start_reads()
-        # ro.txt is the only readable-but-not-writable existing regular file
-        # (test.txt and new.txt are writable; new.txt does not exist).
-        self.assertEqual(len(reads), 1)
-        read = reads[0]
-        self.assertIsInstance(read, PresentedToolResult)
-        self.assertEqual(read.name, "read_file")
-        self.assertEqual(read.arguments, {"file_path": "ro.txt"})
-        self.assertIn("Line 1: Hello World", read.result.content)
-        self.assertNotIn("\u2502", read.result.content)  # plain: no line numbers
-        self.assertFalse(read.result.supersedes)
-        self.assertIn("plain", read.result.note)
-        self.assertFalse(self.sandbox.get_write_occurred())
-
-    def test_get_session_start_reads_sorted_by_virtual_name(self) -> None:
-        # Session-start reads are provided in a deterministic order (sorted
-        # by virtual name), not the config's path order.
-        ro2 = os.path.join(self.temp_dir, "ro2.txt")
-        with open(ro2, "w", encoding="utf-8") as f:
-            f.write("second\n")
-        config = SandboxConfig(
-            file_mappings={"a.txt": self.test_file_path, "b.txt": ro2},
-            readable_paths=["b.txt", "a.txt"],
-            writable_paths=[],
-            blame_targets={},
-            search_result_limit=5,
-            verification_callback=None,
-        )
-        reads = SandboxImpl(config).get_session_start_reads()
-        self.assertEqual([r.arguments["file_path"] for r in reads], ["a.txt", "b.txt"])
-
-    def test_get_session_start_reads_skips_missing_and_directories(self) -> None:
-        # Files that do not exist and directories are not provided (only
-        # files that exist as regular files on disk).
-        missing = os.path.join(self.temp_dir, "missing.txt")
-        config = SandboxConfig(
-            file_mappings={
-                "exists.txt": self.test_file_path,
-                "missing.txt": missing,
-                "dir": self.temp_dir,
-            },
-            readable_paths=["exists.txt", "missing.txt", "dir"],
-            writable_paths=[],
-            blame_targets={},
-            search_result_limit=5,
-            verification_callback=None,
-        )
-        reads = SandboxImpl(config).get_session_start_reads()
-        self.assertEqual([r.arguments["file_path"] for r in reads], ["exists.txt"])
-
-    def test_get_session_start_reads_disabled_returns_empty(self) -> None:
-        # When session-start reads are disabled, no session-start reads are
-        # provided.
-        config = SandboxConfig(
-            file_mappings=self.file_mappings,
-            readable_paths=self.readable_paths,
-            writable_paths=self.writable_paths,
-            blame_targets=self.blame_targets,
-            search_result_limit=5,
-            session_start_reads_enabled=False,
-            verification_callback=None,
-        )
-        self.assertEqual(SandboxImpl(config).get_session_start_reads(), [])
-
-    def test_write_result_is_status_and_injected_read_reenables_view(self) -> None:
-        # A write/edit's confirmation carries the operation's status (never a
-        # file-content echo) and supersedes the file's earlier results; the
-        # injected read that follows re-enables the line-numbered view (a
-        # write resets it to plain), so a line-range edit may follow a write
-        # without a further read (LLS Auto re-read + Views).
-        self.assert_supersedes(
-            self.sandbox.read_file("test.txt", include_line_numbers=True), True
-        )
-        confirmation, injected = self.as_write_outcome(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content")
-        )
-        self.assertEqual(confirmation.content, "Replaced 1 occurrence in test.txt")
-        self.assertEqual(confirmation.note, "")
-        self.assertIn("2 \u2502 Line 2: New content", injected.result.content)
-        # The change is on disk; the confirmation never echoes file content.
-        with open(self.test_file_path, "r", encoding="utf-8") as f:
-            self.assertIn("Line 2: New content", f.read())
-
-    def test_replace_lines_after_write_succeeds_without_further_read(self) -> None:
-        # LLS (specs/low/sandbox.md Views + Auto re-read): a write resets the view
-        # to plain, but the injected read that follows re-enables the
-        # line-numbered view, so a line-range edit may follow a write without
-        # a further read (the read->edit->re-read discipline is gone).
-        self._numbered_read()
-        self.as_write_outcome(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content")
-        )
-        result = self.assert_supersedes(
-            self.sandbox.replace_lines("test.txt", 2, 2, "Line 2: replaced"), True
-        )
-        self.assertEqual(result.content, "Replaced lines 2-2 in test.txt")
-        with open(self.test_file_path, "r", encoding="utf-8") as f:
-            self.assertIn("Line 2: replaced", f.read())
-
-    def test_replace_lines_plain_view_failure_advises_numbered_read(self) -> None:
-        # LLS (specs/low/sandbox.md Stubbing + replace_lines Failure Handling): a
-        # replace_lines failure for a file whose view is not line-numbered
-        # returns ToolFailure advising a numbered read; the failure
-        # supersedes nothing and removes nothing (no buffers to close).
-        failure = self.as_tool_failure(
-            self.sandbox.replace_lines("test.txt", 1, 1, "Line 1: replaced")
-        )
-        self.assertFalse(hasattr(failure, "close_buffer"))
-        self.assertIn("include_line_numbers=True", failure.value)
-
-        # A numbered read restores the view; replace_lines then succeeds, and
-        # the injected read that follows re-enables the line-numbered view,
-        # so the next line edit also succeeds without a further read.
-        self._numbered_read()
-        self.assert_supersedes(
-            self.sandbox.replace_lines("test.txt", 1, 1, "Line 1: replaced"), True
-        )
-        self.assert_supersedes(
-            self.sandbox.replace_lines("test.txt", 2, 2, "Line 2: replaced"), True
-        )
-
-    # ------------------------------------------------------------------
-    # edit_file
-    # ------------------------------------------------------------------
-
-    def test_edit_file_replaces_single_occurrence(self) -> None:
-        # LLS (specs/low/sandbox.md edit_file): the result is a minimal structured
-        # status with supersedes set — never a file-content echo.
-        result = self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        self.assertEqual(result.content, "Replaced 1 occurrence in test.txt")
-        self.assertEqual(result.note, "")
-        self.assertTrue(self.sandbox.get_write_occurred())
-        with open(self.test_file_path, "r", encoding="utf-8") as f:
-            self.assertIn("Line 2: New content", f.read())
-
-    def test_edit_file_identical_old_and_new_fails(self) -> None:
-        failure = self.as_tool_failure(
-            self.sandbox.edit_file("test.txt", "x", "x")
-        )
-        self.assertIn("identical", failure.value)
-
-    def test_edit_file_not_found_fails(self) -> None:
-        failure = self.as_tool_failure(
-            self.sandbox.edit_file("test.txt", "no such text", "x")
-        )
-        self.assertIn("not found", failure.value)
-
-    def test_edit_file_multiple_matches_fail_without_expect_multiple(self) -> None:
-        failure = self.as_tool_failure(
-            self.sandbox.edit_file("test.txt", "Line", "Row")
-        )
-        self.assertIn("matches", failure.value)
-
-    def test_edit_file_expect_multiple_replaces_all(self) -> None:
-        result = self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "Line", "Row", expect_multiple=True), True
-        )
-        self.assertEqual(result.content, "Replaced 4 occurrences in test.txt")
-        with open(self.test_file_path, "r", encoding="utf-8") as f:
-            self.assertNotIn("Line", f.read())
-
-    def test_edit_file_empty_old_str_fails(self) -> None:
-        failure = self.as_tool_failure(
-            self.sandbox.edit_file("test.txt", "", "x")
-        )
-        self.assertIn("non-empty", failure.value)
-
-    def test_edit_file_overlong_strings_fail_recommending_replace_lines(self) -> None:
-        # edit_file is for short search/replace pairs only: an old_str or
-        # new_str over 100 characters fails, advising replace_lines (which
-        # requires the line-numbered view). No write occurs.
-        overlong_old = self.as_tool_failure(
-            self.sandbox.edit_file("test.txt", "x" * 101, "y")
-        )
-        self.assertIn("100 characters", overlong_old.value)
-        self.assertIn("replace_lines", overlong_old.value)
-        self.assertFalse(self.sandbox.get_write_occurred())
-
-        overlong_new = self.as_tool_failure(
-            self.sandbox.edit_file("test.txt", "Line 1", "y" * 101)
-        )
-        self.assertIn("100 characters", overlong_new.value)
-        self.assertIn("replace_lines", overlong_new.value)
-
-    def test_edit_file_at_length_limit_succeeds(self) -> None:
-        # A 100-character old_str is within the limit and edits normally.
-        filler = "x" * 94  # 94 + len("TARGET") == 100
-        with open(self.test_file_path, "a", encoding="utf-8") as f:
-            f.write(filler + "TARGET\n")
-        result = self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", filler + "TARGET", "replaced"), True
-        )
-        self.assertEqual(result.content, "Replaced 1 occurrence in test.txt")
-        with open(self.test_file_path, "r", encoding="utf-8") as f:
-            self.assertNotIn("TARGET", f.read())
-
-    def test_edit_file_policy_violation(self) -> None:
-        config = SandboxConfig(
-            file_mappings={"a.txt": self.test_file_path},
-            readable_paths=["a.txt"],
-            writable_paths=[],
-            blame_targets={},
-            search_result_limit=5,
-            verification_callback=None,
-        )
-        failure = self.as_tool_failure(SandboxImpl(config).edit_file("a.txt", "x", "y"))
-        self.assertIn("not writable", failure.value)
-
-    # ------------------------------------------------------------------
-    # replace_lines
-    # ------------------------------------------------------------------
-
-    def _numbered_read(self) -> None:
-        self.assert_supersedes(
-            self.sandbox.read_file("test.txt", include_line_numbers=True), True
-        )
-
-    def test_replace_lines_replaces_range(self) -> None:
-        self._numbered_read()
-        result = self.assert_supersedes(
-            self.sandbox.replace_lines("test.txt", 2, 2, "Line 2: replaced"), True
-        )
-        # LLS: the result is a minimal status with supersedes set — never a
-        # file-content echo; the write resets the view to plain.
-        self.assertEqual(result.content, "Replaced lines 2-2 in test.txt")
-        self.assertTrue(self.sandbox.get_write_occurred())
-        with open(self.test_file_path, "r", encoding="utf-8") as f:
-            self.assertIn("Line 2: replaced", f.read())
-
-    def test_replace_lines_deletes_range(self) -> None:
-        self._numbered_read()
-        result = self.assert_supersedes(
-            self.sandbox.replace_lines("test.txt", 2, 3, ""), True
-        )
-        self.assertEqual(result.content, "Deleted lines 2-3 in test.txt")
-        with open(self.test_file_path, "r", encoding="utf-8") as f:
-            file_content = f.read()
-        self.assertNotIn("Line 2:", file_content)
-        self.assertNotIn("Line 3:", file_content)
-        self.assertIn("Line 4: Final line", file_content)
-
-    def test_replace_lines_inserts_before_line(self) -> None:
-        self._numbered_read()
-        result = self.assert_supersedes(
-            self.sandbox.replace_lines("test.txt", 2, 1, "inserted"), True
-        )
-        self.assertEqual(result.content, "Inserted content before line 2 in test.txt")
-        with open(self.test_file_path, "r", encoding="utf-8") as f:
-            self.assertIn("inserted", f.read())
-
-    def test_replace_lines_requires_line_numbered_view(self) -> None:
-        # No numbered read: the view is plain and the edit is refused.
-        failure = self.as_tool_failure(
-            self.sandbox.replace_lines("test.txt", 1, 1, "x")
-        )
-        self.assertIn("include_line_numbers=True", failure.value)
-        self.assertFalse(self.sandbox.get_write_occurred())
-
-    def test_replace_lines_validation_fails(self) -> None:
-        self._numbered_read()
-        failure = self.as_tool_failure(
-            self.sandbox.replace_lines("test.txt", 99, 100, "x")
-        )
-        self.assertIn("between", failure.value)
-
-    # ------------------------------------------------------------------
-    # search_files
-    # ------------------------------------------------------------------
-
-    def test_search_files_success_readonly(self) -> None:
-        # A read-only search target: matches are rendered; the result never
-        # supersedes an earlier result.
-        config = SandboxConfig(
-            file_mappings={"test.txt": self.test_file_path},
-            readable_paths=["test.txt"],
-            writable_paths=[],
-            blame_targets={},
-            search_result_limit=5,
-            verification_callback=None,
-        )
-        result = self.assert_supersedes(SandboxImpl(config).search_files("test.txt", "Line"), False)
-        self.assertIn("test.txt:1:", result.content)
-        self.assertIn("4 matches total", result.note)
-
-    def test_search_files_suppresses_writable_matches(self) -> None:
-        a_path = os.path.join(self.temp_dir, "a.txt")
-        b_path = os.path.join(self.temp_dir, "b.txt")
-        with open(a_path, "w", encoding="utf-8") as f:
-            f.write("needle in a\n")
-        with open(b_path, "w", encoding="utf-8") as f:
-            f.write("needle in b\n")
-        config = SandboxConfig(
-            file_mappings={"dir": self.temp_dir, "a.txt": a_path, "b.txt": b_path},
-            readable_paths=["dir"],
-            writable_paths=["b.txt"],
-            blame_targets={},
-            search_result_limit=5,
-            verification_callback=None,
-        )
-        result = self.assert_supersedes(SandboxImpl(config).search_files("dir", "needle"), False)
-        # The writable file's match is never rendered; only a.txt's is.
-        self.assertIn("a.txt:1:", result.content)
-        self.assertNotIn("b.txt:", result.content)
-        self.assertIn("1 matches total", result.note)
-        self.assertIn("1 match(es) in writable files not shown", result.note)
-
-    def test_search_files_invalid_pattern(self) -> None:
-        failure = self.as_tool_failure(self.sandbox.search_files("test.txt", "["))
-        self.assertIn("Invalid regex", failure.value)
-
-    def test_search_files_not_in_mappings(self) -> None:
-        failure = self.as_tool_failure(self.sandbox.search_files("nope.txt", "x"))
-        self.assertIn("nope.txt", failure.value)
-
-    def test_search_files_not_readable(self) -> None:
-        config = SandboxConfig(
-            file_mappings={"a.txt": self.test_file_path},
-            readable_paths=[],
-            writable_paths=["a.txt"],
-            blame_targets={},
-            search_result_limit=5,
-            verification_callback=None,
-        )
-        failure = self.as_tool_failure(SandboxImpl(config).search_files("a.txt", "x"))
-        self.assertIn("not readable", failure.value)
-
-    def test_search_files_recursive_in_directory(self) -> None:
-        config = SandboxConfig(
-            file_mappings={"dir": self.temp_dir},
-            readable_paths=["dir"],
-            writable_paths=[],
-            blame_targets={},
-            search_result_limit=5,
-            verification_callback=None,
-        )
-        result = self.assert_supersedes(SandboxImpl(config).search_files("dir", "Line 1"), False)
-        self.assertIn("test.txt:1:", result.content)
-
-    def test_search_files_omitted_limit_fails_when_matches_exceed_limit(self) -> None:
-        config = SandboxConfig(
-            file_mappings={"test.txt": self.test_file_path},
-            readable_paths=["test.txt"],
-            writable_paths=[],
-            blame_targets={},
-            search_result_limit=2,
-            verification_callback=None,
-        )
-        failure = self.as_tool_failure(SandboxImpl(config).search_files("test.txt", "Line"))
-        self.assertIn("search result limit", failure.value)
-
-    def test_search_files_pagination_with_limit_and_offset(self) -> None:
-        config = SandboxConfig(
-            file_mappings={"test.txt": self.test_file_path},
-            readable_paths=["test.txt"],
-            writable_paths=[],
-            blame_targets={},
-            search_result_limit=2,
-            verification_callback=None,
-        )
-        sandbox = SandboxImpl(config)
-        first = self.assert_supersedes(
-            sandbox.search_files("test.txt", "Line", limit=2), False
-        )
-        self.assertIn("test.txt:1:", first.content)
-        self.assertIn("test.txt:2:", first.content)
-        self.assertIn("2 more after this page", first.note)
-        second = self.assert_supersedes(
-            sandbox.search_files("test.txt", "Line", offset=2, limit=2), False
-        )
-        self.assertIn("test.txt:3:", second.content)
-        self.assertIn("0 more after this page", second.note)
-
-    def test_search_files_explicit_limit_above_max_fails(self) -> None:
-        failure = self.as_tool_failure(
-            self.sandbox.search_files("test.txt", "Line", limit=10)
-        )
-        self.assertIn("search result limit", failure.value)
-
-    # ------------------------------------------------------------------
-    # advance (verification + termination)
-    # ------------------------------------------------------------------
-
-    def test_advance_no_callback_no_changes_terminates_no_change(self) -> None:
-        # No callback, no writes: advance verifies (treated as passed) and
-        # signals successful termination with no change.
-        result = self.as_success(self.sandbox.advance())
-        self.assertEqual(result.value.type, "no_change")
-
-    def test_advance_feedback_pending_no_change_fails(self) -> None:
-        # A run processing feedback cannot terminate without a change
-        # (specs/low/sandbox.md, advance): advance that would otherwise signal
-        # successful termination without a change returns a tool failure with
-        # a reason directing the agent to change, blame, or fail; the session
-        # continues (no termination signal is produced).
-        sandbox = SandboxImpl(SandboxConfig(
-            file_mappings=self.file_mappings,
-            readable_paths=self.readable_paths,
-            writable_paths=self.writable_paths,
-            blame_targets=self.blame_targets,
-            search_result_limit=5,
-            feedback_pending=True,
-        ))
-        failure = self.as_tool_failure(sandbox.advance())
-        self.assertIn("feedback", failure.value)
-        self.assertIn("blame() or fail()", failure.value)
-
-    def test_advance_feedback_pending_change_succeeds(self) -> None:
-        # A run processing feedback terminates successfully when the run
-        # changed files and reports the change (the node changed).
-        sandbox = SandboxImpl(SandboxConfig(
-            file_mappings=self.file_mappings,
-            readable_paths=self.readable_paths,
-            writable_paths=self.writable_paths,
-            blame_targets=self.blame_targets,
-            search_result_limit=5,
-            feedback_pending=True,
-        ))
-        self.assert_supersedes(
-            sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        result = self.as_success(sandbox.advance(
-            changes=[{"file": "test.txt", "summary": "Updated the test line"}]
-        ))
-        self.assertIsInstance(result.value, ChangeResult)
-
-    def test_advance_no_callback_changed_files_empty_message_shows_diff(self) -> None:
-        # Files changed and the change message is empty: a tool failure that
-        # lists the changed files and shows the run's diff (per the sandbox
-        # contract, the diff is shown only in this case).
-        self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        failure = self.as_tool_failure(self.sandbox.advance())
-        self.assertIn("test.txt", failure.value)
-        self.assertIn("### diff for test.txt", failure.value)
-        self.assertIn("-Line 2: This is a test", failure.value)
-        self.assertIn("+Line 2: New content", failure.value)
-        self.assertIn("advance(changes=", failure.value)
-
-    def test_advance_callback_passing_terminates_no_change(self) -> None:
-        def callback() -> Tuple[bool, str]:
-            return (True, "ok")
-
-        config = SandboxConfig(
-            file_mappings=self.file_mappings,
-            readable_paths=self.readable_paths,
-            writable_paths=self.writable_paths,
-            blame_targets=self.blame_targets,
-            search_result_limit=5,
-            verification_callback=callback,
-        )
-        result = self.as_success(SandboxImpl(config).advance())
-        self.assertEqual(result.value.type, "no_change")
-
-    def test_advance_callback_passing_changed_files_requires_change_message(self) -> None:
-        def callback() -> Tuple[bool, str]:
-            return (True, "ok")
-
-        config = SandboxConfig(
-            file_mappings=self.file_mappings,
-            readable_paths=self.readable_paths,
-            writable_paths=self.writable_paths,
-            blame_targets=self.blame_targets,
-            search_result_limit=5,
-            verification_callback=callback,
-        )
-        sandbox = SandboxImpl(config)
-        self.assert_supersedes(
-            sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        result = self.as_success(sandbox.advance(
-            changes=[{"file": "test.txt", "summary": "Updated the test line"}]
-        ))
-        self.assertEqual(result.value.type, "change")
-        self.assertEqual(
-            result.value.messages,
-            [NodeMessage(kind="change", text="test.txt: Updated the test line")],
-        )
-
-    def test_advance_callback_failing_provides_feedback(self) -> None:
-        # A failing verification provides feedback (never a tool failure,
-        # never termination): the failure details and guidance, note pinned
-        # to "Verification failed.", and the session continues.
-        def callback() -> Tuple[bool, str]:
-            return (False, "lint errors found")
-
-        config = SandboxConfig(
-            file_mappings=self.file_mappings,
-            readable_paths=self.readable_paths,
-            writable_paths=self.writable_paths,
-            blame_targets=self.blame_targets,
-            search_result_limit=5,
-            verification_callback=callback,
-        )
-        result = self.assert_supersedes(SandboxImpl(config).advance(), True)
-        self.assertIn("lint errors found", result.content)
-        self.assertIn("Verification failed", result.content)
-        self.assertIn("advance() again", result.content)
-        self.assertIn("blame() or fail()", result.content)
-        self.assertEqual(result.note, "Verification failed.")
-
-    def test_advance_callback_failing_feedback_has_no_diff(self) -> None:
-        # The run's diff is never shown in a failing verification's
-        # feedback (per the sandbox contract).
-        def callback() -> Tuple[bool, str]:
-            return (False, "bad")
-
-        config = SandboxConfig(
-            file_mappings=self.file_mappings,
-            readable_paths=self.readable_paths,
-            writable_paths=self.writable_paths,
-            blame_targets=self.blame_targets,
-            search_result_limit=5,
-            verification_callback=callback,
-        )
-        sandbox = SandboxImpl(config)
-        self.assert_supersedes(
-            sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        result = self.assert_supersedes(sandbox.advance(), True)
-        self.assertNotIn("### diff", result.content)
-
-    def test_advance_callback_failing_supersedes_earlier_feedback(self) -> None:
-        # The feedback supersedes the earlier non-stubbed verification
-        # result (an earlier advance feedback), per the Stubbing rules.
-        def callback() -> Tuple[bool, str]:
-            return (False, "bad")
-
-        config = SandboxConfig(
-            file_mappings=self.file_mappings,
-            readable_paths=self.readable_paths,
-            writable_paths=self.writable_paths,
-            blame_targets=self.blame_targets,
-            search_result_limit=5,
-            verification_callback=callback,
-        )
-        sandbox = SandboxImpl(config)
-        first = self.assert_supersedes(sandbox.advance(), True)
-        self.assertIn("bad", first.content)
-        second = self.assert_supersedes(sandbox.advance(), True)
-        self.assertIn("bad", second.content)
-
-    def test_advance_diff_truncated_when_large_in_empty_message_failure(self) -> None:
-        config = SandboxConfig(
-            file_mappings=self.file_mappings,
-            readable_paths=self.readable_paths,
-            writable_paths=self.writable_paths,
-            blame_targets=self.blame_targets,
-            search_result_limit=5,
-            verification_callback=None,
-        )
-        sandbox = SandboxImpl(config, diff_size_limit=40)
-        self.assert_supersedes(
-            sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        failure = self.as_tool_failure(sandbox.advance())
-        self.assertIn("diff truncated", failure.value)
-        self.assertIn("showing 40 of", failure.value)
-
-    def test_advance_callback_exception(self) -> None:
-        def callback() -> Tuple[bool, str]:
-            raise RuntimeError("callback blew up")
-
-        config = SandboxConfig(
-            file_mappings=self.file_mappings,
-            readable_paths=self.readable_paths,
-            writable_paths=self.writable_paths,
-            blame_targets=self.blame_targets,
-            search_result_limit=5,
-            verification_callback=callback,
-        )
-        failure = self.as_tool_failure(SandboxImpl(config).advance())
-        self.assertIn("Verification error", failure.value)
-
-    def test_advance_unknown_file_in_changes_fails(self) -> None:
-        self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        failure = self.as_tool_failure(self.sandbox.advance(
-            changes=[{"file": "nope.txt", "summary": "changed"}]
-        ))
-        self.assertIn("nope.txt", failure.value)
-
-    def test_advance_overlong_summary_fails(self) -> None:
-        self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        failure = self.as_tool_failure(self.sandbox.advance(
-            changes=[{"file": "test.txt", "summary": "x" * 201}]
-        ))
-        # First soft-limit rejection: directs shortening to the soft bound
-        # (200), naming the parts of the file that changed (substance pinned
-        # in specs/low/sandbox.md; exact phrasing not pinned).
-        self.assertIn("short sentence", failure.value)
-        self.assertIn("200", failure.value)
-        self.assertIn("parts of the file that changed", failure.value)
-
-    def test_advance_soft_grace_accepts_within_hard_limit(self) -> None:
-        # A summary over the soft bound (200) is rejected up to 4 times, then
-        # accepted on the next advance call when within the hard bound (500).
-        self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        for _ in range(4):
-            self.as_tool_failure(self.sandbox.advance(
-                changes=[{"file": "test.txt", "summary": "x" * 201}]
-            ))
-        outcome = self.sandbox.advance(
-            changes=[{"file": "test.txt", "summary": "y" * 480}]
-        )
-        self.assertIsInstance(outcome, TerminateAgentWithSuccess)
-        assert isinstance(outcome, TerminateAgentWithSuccess)
-        self.assertIsInstance(outcome.value, ChangeResult)
-        self.assertEqual(
-            outcome.value.messages,
-            [NodeMessage(kind="change", text="test.txt: " + "y" * 480)],
-        )
-
-    def test_advance_hard_grace_turns_advance_into_failure(self) -> None:
-        # A summary over the hard bound (500) is rejected up to 4 times, then
-        # advance() turns into a hard failure (TerminateAgentWithFailure).
-        self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        for _ in range(4):
-            failure = self.as_tool_failure(self.sandbox.advance(
-                changes=[{"file": "test.txt", "summary": "x" * 600}]
-            ))
-            self.assertIn("500", failure.value)
-        outcome = self.sandbox.advance(
-            changes=[{"file": "test.txt", "summary": "x" * 600}]
-        )
-        self.assertIsInstance(outcome, TerminateAgentWithFailure)
-
-    def test_advance_missing_changed_file_fails(self) -> None:
-        # Two files changed, advance's changes cover only one: the failure
-        # names the uncovered file.
-        other_path = os.path.join(self.temp_dir, "other.txt")
-        with open(other_path, "w", encoding="utf-8") as f:
-            f.write("other content\n")
-        mappings = dict(self.file_mappings)
-        mappings["other.txt"] = other_path
-        sandbox = SandboxImpl(SandboxConfig(
-            file_mappings=mappings,
-            readable_paths=self.readable_paths + ["other.txt"],
-            writable_paths=self.writable_paths + ["other.txt"],
-            blame_targets=self.blame_targets,
-            search_result_limit=5,
-            verification_callback=None,
-        ))
-        self.assert_supersedes(
-            sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        self.assert_supersedes(
-            sandbox.edit_file("other.txt", "other content", "Other content"), True
-        )
-        failure = self.as_tool_failure(sandbox.advance(
-            changes=[{"file": "test.txt", "summary": "changed"}]
-        ))
-        self.assertIn("other.txt", failure.value)
-
-    def test_advance_fabricated_change_rejected(self) -> None:
-        # A claimed change that does not appear in the diff (file rewritten
-        # back to identical content) is rejected, and the run is directed to
-        # report no change: advance() with no changes resolves the deadlock
-        # (writes net out to no change -> NoChangeResult).
-        self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "New content", "This is a test"), True
-        )
-        failure = self.as_tool_failure(self.sandbox.advance(
-            changes=[{"file": "test.txt", "summary": "I changed it"}]
-        ))
-        self.assertIn("net-changed nothing", failure.value)
-        self.assertIn("with no changes", failure.value)
-
-        outcome = self.sandbox.advance()
-        self.assertIsInstance(outcome, TerminateAgentWithSuccess)
-        assert isinstance(outcome, TerminateAgentWithSuccess)
-        self.assertIsInstance(outcome.value, NoChangeResult)
-
-    # ------------------------------------------------------------------
-    # fail / blame
-    # ------------------------------------------------------------------
-
-    def test_fail(self) -> None:
-        result = self.as_terminate_failure(self.sandbox.fail())
-        self.assertEqual(result.value, "Task failed")
-
-    def test_fail_never_gated(self) -> None:
-        # fail is never gated: it ends the session in failure regardless of
-        # verification or change-message state.
-        result = self.as_terminate_failure(self.sandbox.fail())
-        self.assertEqual(result.value, "Task failed")
-
-    def test_blame_no_targets_configured(self) -> None:
-        config = SandboxConfig(
-            file_mappings=self.file_mappings,
-            readable_paths=self.readable_paths,
-            writable_paths=self.writable_paths,
-            blame_targets={},
-            search_result_limit=5,
-            verification_callback=None,
-        )
-        failure = self.as_tool_failure(SandboxImpl(config).blame([("x", "fix it")]))
-        self.assertIn("not configured", failure.value)
-
-    def test_blame_empty_list_fails(self) -> None:
-        failure = self.as_tool_failure(self.sandbox.blame([]))
-        self.assertIn("must not be empty", failure.value)
-
-    def test_blame_invalid_target_fails(self) -> None:
-        failure = self.as_tool_failure(self.sandbox.blame([("not_a_dep", "fix it")]))
-        self.assertIn("not_a_dep", failure.value)
-
-    def test_blame_success_forms_feedback_result(self) -> None:
-        result = self.as_success(
-            self.sandbox.blame([("agent", "fix the output"), ("system", "redo")])
-        )
-        self.assertIsInstance(result.value, FeedbackResult)
-        # Each target (the blamed artifact's virtual name) is resolved to its
-        # owning node, so the feedback messages are addressed to the nodes.
-        self.assertEqual(
-            result.value.messages,
-            [
-                ("//pkg:agent", NodeMessage(kind="feedback", text="fix the output")),
-                ("//pkg:system", NodeMessage(kind="feedback", text="redo")),
-            ],
-        )
-
-    # ------------------------------------------------------------------
-    # get_write_occurred
-    # ------------------------------------------------------------------
-
-    def test_write_occurred_false_until_first_modification(self) -> None:
-        self.assertFalse(self.sandbox.get_write_occurred())
-        self.assert_supersedes(
-            self.sandbox.edit_file("test.txt", "This is a test", "New content"), True
-        )
-        self.assertTrue(self.sandbox.get_write_occurred())
-        self.assertTrue(self.sandbox.get_write_occurred())
-
-
-class TestTemplateInitialization(unittest.TestCase):
-    """Template initialization (specs/low/sandbox.md, Template initialization):
-    a writable file with a configured template that does not exist on disk is
-    created with the template's content at run start, before any tool call;
-    an existing writable file is never modified; initialization is not a run
-    write and the template content is the run-start baseline for advance."""
-
-    def setUp(self) -> None:
-        self.temp_dir = tempfile.mkdtemp()
-
-        self.templated_path = os.path.join(self.temp_dir, "artifact.md")
-        self.existing_path = os.path.join(self.temp_dir, "existing.md")
-        with open(self.existing_path, "w", encoding="utf-8") as f:
-            f.write("existing content\n")
-
-        self.file_mappings = {
-            "artifact.md": self.templated_path,
-            "existing.md": self.existing_path,
-        }
-        self.readable_paths = ["artifact.md", "existing.md"]
-        self.writable_paths = ["artifact.md", "existing.md"]
-        self.template_content = "# artifact\nTODO: fill me in\n"
-
-    def _sandbox(self, templates) -> SandboxImpl:
-        return SandboxImpl(
-            SandboxConfig(
-                file_mappings=self.file_mappings,
-                readable_paths=self.readable_paths,
-                writable_paths=self.writable_paths,
-                blame_targets={},
-                search_result_limit=5,
-                templates=templates,
-                verification_callback=None,
-            )
-        )
-
-    def tearDown(self) -> None:
-        shutil.rmtree(self.temp_dir)
-
-    def test_template_initializes_missing_file_with_exact_content(self) -> None:
-        """A writable file with a template that does not exist on disk exists
-        at run start with exactly the template's content."""
-        self.assertFalse(os.path.exists(self.templated_path))
-        self._sandbox({"artifact.md": self.template_content})
-        self.assertTrue(os.path.exists(self.templated_path))
-        with open(self.templated_path, "r", encoding="utf-8") as f:
-            self.assertEqual(f.read(), self.template_content)
-
-    def test_template_never_modifies_existing_file(self) -> None:
-        """A writable file that exists at configuration is never modified by
-        its template."""
-        self._sandbox({"existing.md": "template would overwrite"})
-        with open(self.existing_path, "r", encoding="utf-8") as f:
-            self.assertEqual(f.read(), "existing content\n")
-
-    def test_template_initialization_is_not_a_run_write(self) -> None:
-        """Initialization is part of the sandbox's configuration, not an
-        operation of the run: the write-occurred flag stays unset and advance
-        reports no change."""
-        sandbox = self._sandbox({"artifact.md": self.template_content})
-        self.assertFalse(sandbox.get_write_occurred())
-        outcome = sandbox.advance()
-        self.assertIsInstance(outcome, TerminateAgentWithSuccess)
-        self.assertIsInstance(outcome.value, NoChangeResult)
-
-    def test_template_content_is_the_diff_baseline(self) -> None:
-        """A file initialized from its template has the template's content as
-        its run-start content: an agent edit shows the template->final
-        transformation in advance's empty-change-message diff."""
-        sandbox = self._sandbox({"artifact.md": self.template_content})
-        # The agent edits the materialized file (read numbered, then replace).
-        sandbox.read_file("artifact.md", include_line_numbers=True)
-        sandbox.replace_lines("artifact.md", 2, 2, "Filled in.")
-        outcome = sandbox.advance()
-        self.assertIsInstance(outcome, ToolFailure)
-        self.assertIn("artifact.md", outcome.value)
-        self.assertIn("-TODO: fill me in", outcome.value)
-        self.assertIn("+Filled in.", outcome.value)
-
-    def test_materialized_file_is_readable_numbered_and_writable(self) -> None:
-        """The materialized file is a writable file: read requires line
-        numbers and editing works through the line-range tool."""
-        sandbox = self._sandbox({"artifact.md": self.template_content})
-        result = self._first(sandbox.read_file("artifact.md", include_line_numbers=True))
-        self.assertTrue(result.supersedes)
-        self.assertIn("1 \u2502 # artifact", result.content)
-        # A plain read of the existing writable file is rejected.
-        plain = sandbox.read_file("artifact.md", include_line_numbers=False)
-        self.assertIsInstance(plain, ToolFailure)
-
-    def _first(self, outcome: Any) -> ToolResult:
-        assert isinstance(outcome, list) and outcome, f"expected a result sequence, got {outcome!r}"
-        return outcome[0]
+        self.h = _SandboxHarness(_config())
+
+    def test_read_file_delegates(self) -> None:
+        result = self.h.sandbox.read_file("a.txt", include_line_numbers=True)
+        self.assertEqual(self.h.file_view.calls, [("read_file", ("a.txt", True))])
+        self.assertIs(result, self.h.file_view.read_result)
+
+    def test_read_file_default_line_numbers(self) -> None:
+        self.h.sandbox.read_file("a.txt")
+        self.assertEqual(self.h.file_view.calls, [("read_file", ("a.txt", False))])
+
+    def test_edit_file_delegates(self) -> None:
+        result = self.h.sandbox.edit_file("a.txt", "old", "new", expect_multiple=True)
+        self.assertEqual(self.h.file_view.calls, [("edit_file", ("a.txt", "old", "new", True))])
+        self.assertIs(result, self.h.file_view.read_result)
+
+    def test_replace_lines_delegates(self) -> None:
+        result = self.h.sandbox.replace_lines("a.txt", 1, 3, "content")
+        self.assertEqual(self.h.file_view.calls, [("replace_lines", ("a.txt", 1, 3, "content"))])
+        self.assertIs(result, self.h.file_view.read_result)
+
+    def test_search_files_delegates(self) -> None:
+        result = self.h.sandbox.search_files("a.txt", "needle")
+        self.assertEqual(self.h.file_view.calls, [("search_files", ("a.txt", "needle"))])
+        self.assertIs(result, self.h.file_view.read_result)
+
+    def test_get_write_occurred_delegates(self) -> None:
+        self.h.file_view.write_occurred = True
+        self.assertTrue(self.h.sandbox.get_write_occurred())
+        self.assertEqual(self.h.file_view.calls, [("get_write_occurred", ())])
+
+    def test_advance_delegates(self) -> None:
+        changes = [{"file": "a.txt", "summary": "changed"}]
+        self.h.run_control.advance_result = ToolResult(content="advance", supersedes=False)
+        result = self.h.sandbox.advance(changes)
+        self.assertEqual(self.h.run_control.calls, [("advance", (changes,))])
+        self.assertIs(result, self.h.run_control.advance_result)
+
+    def test_fail_delegates(self) -> None:
+        self.h.run_control.fail_result = ToolFailure[str]("failed")
+        result = self.h.sandbox.fail()
+        self.assertEqual(self.h.run_control.calls, [("fail", ())])
+        self.assertIs(result, self.h.run_control.fail_result)
+
+    def test_blame_delegates(self) -> None:
+        self.h.run_control.blame_result = ToolResult(content="blame", supersedes=False)
+        result = self.h.sandbox.blame([("a.txt", "fix it")])
+        self.assertEqual(self.h.run_control.calls, [("blame", ([("a.txt", "fix it")],))])
+        self.assertIs(result, self.h.run_control.blame_result)
+
+    def test_get_session_start_reads_composes(self) -> None:
+        fv_reads = [PresentedToolResult(name="read_file", arguments={}, result=ToolResult(content="r", supersedes=False))]
+        gd_reads = [PresentedToolResult(name="advance", arguments={}, result=ToolResult(content="g", supersedes=False))]
+        self.h.file_view.session_start_reads = fv_reads
+        self.h.guide_delivery.session_start_reads = gd_reads
+        result = self.h.sandbox.get_session_start_reads()
+        self.assertEqual(result, fv_reads + gd_reads)
+        self.assertEqual(self.h.file_view.calls, [("get_session_start_reads", ())])
+        self.assertEqual(self.h.guide_delivery.calls, [("get_session_start_reads", ())])
+
+    def test_get_tool_definitions_composes_in_order(self) -> None:
+        fv_defs = [{"name": "file"}]
+        gd_defs = [{"name": "advance"}]
+        rc_defs = [{"name": "fail"}, {"name": "blame"}]
+        self.h.file_view.tool_definitions = fv_defs
+        self.h.guide_delivery.tool_definitions = gd_defs
+        self.h.run_control.tool_definitions = rc_defs
+        result = self.h.sandbox.get_tool_definitions()
+        self.assertEqual(result, fv_defs + gd_defs + rc_defs)
+        self.assertEqual(self.h.file_view.calls, [("get_tool_definitions", ())])
+        self.assertEqual(self.h.guide_delivery.calls, [("get_tool_definitions", ())])
+        self.assertEqual(self.h.run_control.calls, [("get_tool_definitions", ())])
 
 
 class TestStepMode(unittest.TestCase):
-    """Step mode (specs/low/sandbox.md, Step mode): the guide is not readable and
-    its content reaches the agent only through advance — the guide summary
-    pre-injected at run start, then one step section per passing advance,
-    until the terminating advance (the change-message machinery)."""
-
-    GUIDE = (
-        "# Guide: Converting\n\n"
-        "## Summary\n\n"
-        "The artifact conforms to this guide.\n\n"
-        "## Checklist: Imports\n\n"
-        "- [ ] Imports come from the closure\n\n"
-        "## Checklist: Contracts\n\n"
-        "- [ ] Signatures match the LLS\n"
-    )
+    """The sandbox's own policy: the guide is not readable in step mode."""
 
     def setUp(self) -> None:
-        self.temp_dir = tempfile.mkdtemp()
-        self.artifact_path = os.path.join(self.temp_dir, "artifact.md")
-        self.guide_path = os.path.join(self.temp_dir, "guide.md")
-        with open(self.guide_path, "w", encoding="utf-8") as f:
-            f.write(self.GUIDE)
-        self.file_mappings = {
-            "artifact.md": self.artifact_path,
-            "guide.md": self.guide_path,
-        }
-        self.readable_paths = ["artifact.md", "guide.md"]
-        self.writable_paths = ["artifact.md"]
+        self.h = _SandboxHarness(_config(guide="guide.txt", step_sections_enabled=True))
 
-    def _sandbox(self, verification_callback=None, step_sections=True) -> SandboxImpl:
-        return SandboxImpl(
-            SandboxConfig(
-                file_mappings=self.file_mappings,
-                readable_paths=self.readable_paths,
-                writable_paths=self.writable_paths,
-                blame_targets={},
-                search_result_limit=5,
-                guide="guide.md",
-                step_sections_enabled=step_sections,
-                verification_callback=verification_callback,
+    def test_read_guide_in_step_mode_fails(self) -> None:
+        result = self.h.sandbox.read_file("guide.txt")
+        self.assertIsInstance(result, ToolFailure)
+        self.assertEqual(self.h.file_view.calls, [])  # never delegated
+
+    def test_read_other_file_in_step_mode_delegates(self) -> None:
+        self.h.sandbox.read_file("a.txt")
+        self.assertEqual(self.h.file_view.calls, [("read_file", ("a.txt", False))])
+
+    def test_search_guide_in_step_mode_fails(self) -> None:
+        result = self.h.sandbox.search_files("guide.txt", "x")
+        self.assertIsInstance(result, ToolFailure)
+        self.assertEqual(self.h.file_view.calls, [])
+
+    def test_read_guide_not_in_step_mode_delegates(self) -> None:
+        h = _SandboxHarness(_config(guide="guide.txt", step_sections_enabled=False))
+        h.sandbox.read_file("guide.txt")
+        self.assertEqual(h.file_view.calls, [("read_file", ("guide.txt", False))])
+
+
+class TestSmoke(unittest.TestCase):
+    """One smoke test: the default component implementations wired through
+    the factories compose into a working sandbox."""
+
+    def test_reads_real_file_through_default_wiring(self) -> None:
+        from update_with_ai.lib.file_view_impl import FileViewImpl
+        from update_with_ai.lib.guide_delivery_impl import GuideDeliveryImpl
+        from update_with_ai.lib.run_control_impl import RunControlImpl
+
+        tmp = tempfile.mkdtemp()
+        try:
+            path = os.path.join(tmp, "a.txt")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("hello")
+            config = _config(
+                file_mappings={"a.txt": path},
+                readable_paths=["a.txt"],
+                writable_paths=["a.txt"],
             )
-        )
-
-    def tearDown(self) -> None:
-        shutil.rmtree(self.temp_dir)
-
-    def test_session_start_pre_injects_summary_and_excludes_guide(self):
-        """In step mode, the guide is not among the session-start reads; the
-        pre-injected advance provides the guide summary with the ensure
-        instruction (no step section)."""
-        sandbox = self._sandbox()
-        reads = sandbox.get_session_start_reads()
-        self.assertEqual([r.name for r in reads], ["advance"])
-        advance = reads[0]
-        self.assertIsInstance(advance, PresentedToolResult)
-        self.assertEqual(advance.arguments, {})
-        self.assertIn("The artifact conforms to this guide.", advance.result.content)
-        self.assertIn("Ensure the above before calling advance again.", advance.result.content)
-        self.assertNotIn("Checklist: Imports", advance.result.content)
-        self.assertTrue(advance.result.supersedes)
-
-    def test_advance_delivers_sections_then_terminates(self):
-        """On a passing verification, advance provides the next step section
-        (with the guide summary and the ensure instruction) and continues;
-        when no sections remain, advance proceeds to the termination
-        machinery."""
-        sandbox = self._sandbox()
-        sec1 = sandbox.advance()
-        self.assertIsInstance(sec1, list)
-        self.assertIsInstance(sec1[0], PresentedToolResult)
-        self.assertIn("Checklist: Imports", sec1[0].result.content)
-        self.assertIn("Ensure the following before calling advance again:", sec1[0].result.content)
-        self.assertIn("The artifact conforms to this guide.", sec1[0].result.content)
-        self.assertTrue(sec1[0].result.supersedes)
-        sec2 = sandbox.advance()
-        self.assertIn("Checklist: Contracts", sec2[0].result.content)
-        out3 = sandbox.advance()
-        self.assertIsInstance(out3, TerminateAgentWithSuccess)
-        self.assertIsInstance(out3.value, NoChangeResult)
-
-    def test_failing_verification_restates_summary_and_keeps_pointer(self):
-        """On a failing verification, advance provides the guide summary, the
-        reason, and an instruction to correct; the step-section pointer does
-        not advance (the next passing advance still delivers section 1)."""
-        results = iter([(False, "lint error here"), (True, "")])
-
-        def cb():
-            return next(results)
-
-        sandbox = self._sandbox(verification_callback=cb)
-        feedback = sandbox.advance()
-        self.assertIsInstance(feedback, list)
-        self.assertIsInstance(feedback[0], ToolResult)
-        self.assertIn("The artifact conforms to this guide.", feedback[0].content)
-        self.assertIn("lint error here", feedback[0].content)
-        self.assertIn("before calling advance", feedback[0].content)
-        self.assertTrue(feedback[0].supersedes)
-        out = sandbox.advance()
-        self.assertIn("Checklist: Imports", out[0].result.content)
-
-    def test_advance_tool_definition_omits_changes_until_final_step(self):
-        """The advance tool's definition omits the change argument while step
-        sections remain and includes it when no sections remain."""
-        sandbox = self._sandbox()
-
-        def adv_def():
-            defs = sandbox.get_tool_definitions()
-            return next(d for d in defs if d["function"]["name"] == "advance")
-
-        self.assertNotIn("changes", adv_def()["function"]["parameters"]["properties"])
-        sandbox.advance()
-        sandbox.advance()
-        self.assertIn("changes", adv_def()["function"]["parameters"]["properties"])
-
-    def test_guide_not_readable_in_step_mode(self):
-        """In step mode, the guide is not readable: reads and searches of it
-        fail identifying the violated policy."""
-        sandbox = self._sandbox()
-        failure = sandbox.read_file("guide.md")
-        self.assertIsInstance(failure, ToolFailure)
-        self.assertIn("step mode", failure.value)
-        search_failure = sandbox.search_files("guide.md", "pattern")
-        self.assertIsInstance(search_failure, ToolFailure)
-
-    def test_step_mode_disabled_guide_readable_at_session_start(self):
-        """When step mode is disabled, the guide is provided whole at run
-        start and is re-readable like other readable files."""
-        sandbox = self._sandbox(step_sections=False)
-        reads = sandbox.get_session_start_reads()
-        names = [r.name for r in reads]
-        self.assertIn("read_file", names)
-        self.assertNotIn("advance", names)
-        guide_read = next(
-            r for r in reads if r.arguments.get("file_path") == "guide.md"
-        )
-        self.assertIn("# Guide: Converting", guide_read.result.content)
-        self.assertFalse(guide_read.result.supersedes)
-        result = sandbox.read_file("guide.md")
-        self.assertIsInstance(result, list)
-        self.assertIsInstance(result[0], ToolResult)
-
-    def test_terminating_advance_change_message_machinery(self):
-        """The change-message machinery applies only to the terminating
-        advance: after the sections are exhausted, a changed run with an
-        empty change message signals a tool failure showing the diff."""
-        sandbox = self._sandbox()
-        # Create the artifact, then advance through both sections.
-        with open(self.artifact_path, "w", encoding="utf-8") as f:
-            f.write("line 1\n")
-        sandbox.advance()
-        sandbox.advance()
-        sandbox.read_file("artifact.md", include_line_numbers=True)
-        sandbox.replace_lines("artifact.md", 1, 1, "changed")
-        outcome = sandbox.advance()
-        self.assertIsInstance(outcome, ToolFailure)
-        self.assertIn("artifact.md", outcome.value)
-
-
-if __name__ == "__main__":
-    unittest.main()
+            sandbox = SandboxImpl(
+                config=config,
+                make_file_view=lambda fvc: FileViewImpl(config=fvc),
+                make_guide_delivery=lambda gdc: GuideDeliveryImpl(config=gdc),
+                make_run_control=lambda rcc, fv, gd: RunControlImpl(rcc, file_view=fv, guide_delivery=gd),
+            )
+            result = sandbox.read_file("a.txt")
+            self.assertIn("hello", str(result.content))
+        finally:
+            shutil.rmtree(tmp)

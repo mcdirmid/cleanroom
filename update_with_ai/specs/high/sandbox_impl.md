@@ -1,11 +1,7 @@
 # sandbox_impl
 
 fulfills: sandbox
-imports: tool_provider (tool definitions, results, signals, stubbing), agent_loop (run), dag_storage (dependency), dag_clean_logic (change message, feedback message), file_view (file machinery), guide_delivery (step mode), run_control (verification and termination)
-terms (from tool_provider): tool failure, supersession flag, stub, termination result
-terms (from agent_loop): run
-terms (from dag_storage): dependency
-terms (from dag_clean_logic): change message, feedback message
+imports: file_view (file machinery), guide_delivery (step mode), run_control (verification and termination)
 terms (from file_view): virtual name, file write, line-numbered view, injected read, session-start read, template
 terms (from guide_delivery): guide, guide summary, step section, step mode
 terms (from run_control): blame, blame target, soft length bound, hard length bound
@@ -18,8 +14,8 @@ terms (from run_control): blame, blame target, soft length bound, hard length bo
 - [ordering] Tool calls are dispatched to the owning component: file tools to file_view; the advance, failure, and blame tools to run_control.
 - [ordering] Each advance is sequenced: a failing verification produces feedback and no step delivery; a passing verification with step sections remaining produces the next step section; a passing verification with no step sections remaining produces the termination machinery.
 - [ordering] In step mode, the step-section pointer gates advance's outputs between the next step section, the restated guide summary, and the termination machinery.
-- [ordering] The run's diff is produced after verification passes and is reported within the termination machinery.
-- [ordering] The change-message requirement is evaluated against the changed set when advance would otherwise signal successful termination: when files were modified, a change message is required; when no files were modified, none is required.
+- [ordering] The diff is produced after verification passes and is reported within the termination machinery.
+- [ordering] The change-description requirement is evaluated against the changed set when advance would otherwise signal successful termination: when files were modified, a description of the change is required; when no files were modified, none is required.
 - [state] Only per-run state is held — the file state (file_view), the step state (guide_delivery), and the verification state (run_control) — and nothing persists across runs.
 - [external] The composed components' externals: the filesystem (file_view), and the injected verification callback and the diff size limit (run_control).
 - [failure] Errors are categorized as policy violations, validation errors, filesystem errors, or callback errors.

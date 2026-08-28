@@ -23,8 +23,9 @@ Checks (E = error, exits nonzero; W = warning, does not affect exit code):
   E  `###` sub-heading (use a Contract block or a Deltas tag)
   E  old-format markers (Observable dataflow, Owned definitions, impl sub-sections, "**The client ...", Deltas beyond the)
   E  backticked import that is not an existing spec
-  E  interface spec without `## Contract`; implementation spec without `## Deltas`
-  E  interface spec (filename without "impl") containing `fulfills:`; implementation spec (`*_impl*` filename) missing `fulfills:`
+  E  interface spec without `## Contract`; implementation spec (`*_impl*`) or assembly spec (`*_asm`) without `## Deltas`
+  E  interface spec (filename without "impl") containing `fulfills:`; implementation spec (`*_impl*` filename) missing `fulfills:`; assembly spec (`*_asm`) containing `fulfills:` (assemblies fulfill nothing)
+  E  implementation or assembly spec containing `## Contract` (an assembly has no contract)
   E  `fulfills:` or `imports:` referencing the file itself (self-dependency)
   E  section order deviates from the canonical order for the spec kind
   E  Deltas line with an unknown tag (allowed: ordering, boundary, state, external, failure, refines)
@@ -252,10 +253,27 @@ def check_terms(f: Path, text: str, owned: set[str], terms_from: dict[str, set[s
             err(f, f"uses '{term}' (owned by high/{owner}.md) without listing it in `terms (from {owner})`")
 
 
+def _kind(f: Path) -> str:
+    """Spec kind by filename: 'assembly' for a `*_asm` stem, 'implementation'
+    for a `*_impl*` stem, 'interface' otherwise.
+
+    An assembly spec (high/build_asm.md) is the only kind that may import
+    implementation specs: it performs configuration and assembly of other
+    modules only, declares no `fulfills:` and no `## Contract`, and is never
+    tested.
+    """
+    stem = f.stem
+    if stem.endswith("_asm"):
+        return "assembly"
+    if "impl" in stem:
+        return "implementation"
+    return "interface"
+
+
 def _is_impl(f: Path) -> bool:
-    """Implementation specs are named `*_impl*` (high/dag_cleaner_impl.md,
-    low/build_graph_storage_impl.md); every other file is an interface spec."""
-    return "impl" in f.stem
+    """Implementation-like specs (implementation or assembly) share the
+    implementation rules: Deltas, no Contract, no owned terms, no 'client'."""
+    return _kind(f) in ("implementation", "assembly")
 
 
 def check_structure(f: Path, text: str, files: list[Path] | None = None) -> tuple[bool, str]:
@@ -266,9 +284,10 @@ def check_structure(f: Path, text: str, files: list[Path] | None = None) -> tupl
     """
     fm, body = split_front_matter(text)
     m = re.search(r"^fulfills: (.+)$", fm, re.M)
-    is_impl = _is_impl(f)
+    kind = _kind(f)
+    is_impl = kind in ("implementation", "assembly")
     names = set(spec_map(files))
-    if is_impl:
+    if kind == "implementation":
         if m is None:
             err(f, "implementation spec missing `fulfills:`; an implementation fulfills exactly one interface")
         else:
@@ -281,6 +300,13 @@ def check_structure(f: Path, text: str, files: list[Path] | None = None) -> tupl
             err(f, "implementation spec contains `## Contract`; the contract is inherited from the fulfilled interface")
         if "## Deltas" not in body:
             err(f, "implementation spec missing `## Deltas`")
+    elif kind == "assembly":
+        if m is not None:
+            err(f, "assembly spec declares `fulfills:`; an assembly fulfills nothing — it assembles and configures other modules")
+        if "## Contract" in body:
+            err(f, "assembly spec contains `## Contract`; an assembly has no contract — it performs configuration and assembly only")
+        if "## Deltas" not in body:
+            err(f, "assembly spec missing `## Deltas`")
     else:
         if m is not None:
             err(f, "interface spec contains `fulfills:`; only implementation specs (named *_impl*) fulfill an interface")

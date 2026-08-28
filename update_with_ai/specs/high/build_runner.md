@@ -3,7 +3,6 @@
 imports: dag_cleaner (topological cleaning), dag_storage (messages), dag_clean_logic (change and feedback), build_agent_config (agent configuration), sandbox (sandbox configuration), guide_delivery (step mode), run_control (blame)
 terms (from dag_storage): node, pending message, subgraph
 terms (from dag_clean_logic): dirty, cleaning, change message, feedback message
-terms (from agent_loop): run
 terms (from build_node_loader): manifest
 terms (from build_agent_config): agent configuration, config target
 terms (from guide_delivery): step mode
@@ -12,7 +11,7 @@ terms (owned): result
 
 ## Purpose
 
-Orchestrates the full agent run pipeline — graph resolution, message persistence, agent execution, and topological cleaning — as a single executable unit.
+Orchestrates the full agent pipeline — graph resolution, message persistence, agent execution, and topological cleaning — as a single executable unit.
 
 ## Terms
 

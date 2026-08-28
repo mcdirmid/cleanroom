@@ -2,25 +2,26 @@
 Tests for lib/build_runner_impl.py (BuildRunnerImpl).
 
 Asserts the behavioral contract from specs/low/build_runner_impl.md and its
-dependencies (specs/low/build_runner.md, specs/low/dag_cleaner.md, specs/low/dag_storage.md,
-specs/low/dag_clean_logic.md, specs/low/agent_loop.md):
+dependencies (specs/low/build_runner.md, specs/low/dag_cleaner.md,
+specs/low/dag_storage.md, specs/low/dag_clean_logic.md, specs/low/agent_loop.md):
 
+- BuildRunnerImpl is constructed with the component factories (graph factory,
+  clean-logic factory, DAG factory) and holds no component instances; the
+  components are created per call through the factories (invariant: no shared
+  state across calls, and each of inject_feedback / add_change /
+  broadcast_change constructs a graph separate from run_dag's).
 - inject_feedback returns (True, NoChangeResult()) on success and stores the
-  messages in the node's pending message store (.update_with_ai.textproto in the package
-  directory); returns (False, FailureResult()) for a nonexistent node without
-  mutating any state.
-- inject_feedback builds its own graph per call, and run_dag builds its own
-  graph separately (no shared state across calls).
-- run_dag drives a full cleaning pass: returns (True, NoChangeResult()) when
-  the node cleans with no changes, consumes the node's pending messages, and
-  writes/closes the agent log file. The log path follows the
-  CLEANROOM_AGENT_LOG / BUILD_WORKSPACE_DIRECTORY / BUILD_WORKING_DIRECTORY
-  priority; a root node with no manifest makes run_dag raise rather than
-  return a result.
-- run_dag forwards its config_target argument to the BuildAgentConfig
-  component and constructs the agent loop from the returned AgentLoopConfig
-  (no hardcoded model/URL/key in the runner). The component itself is tested
-  separately in build_agent_config_impl_test.
+  messages in the node's pending message store; returns
+  (False, FailureResult()) for a nonexistent node without mutating any state.
+- add_change stores a change-kind message (defaulting to `check`).
+- broadcast_change delivers `<declared source file>: <change text>` to each
+  known reverse dependency and clears the target's data.
+- run_dag drives a cleaning pass through the injected factories: it forwards
+  (graph, workspace_root, config_target, logger) to the clean-logic factory
+  and (graph, clean_logic) to the DAG factory, returns the DAG's CleaningResult,
+  and writes/closes the agent log file (CLEANROOM_AGENT_LOG /
+  BUILD_WORKSPACE_DIRECTORY / BUILD_WORKING_DIRECTORY priority); each log line
+  is flushed immediately; a graph-factory failure propagates without a log file.
 - _format_compact_log emits one-line summaries exactly for tool_called,
   api_response, run_terminated, and error events and None for all other
   events.
@@ -39,24 +40,25 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional
-from unittest.mock import MagicMock, patch
+from typing import Any, Dict, Iterator, List, Optional, Tuple
+from unittest.mock import patch
+from typing import cast
 
-from update_with_ai.lib import build_runner_impl
 from update_with_ai.lib.build_runner_impl import (
     BuildRunnerImpl,
     _format_compact_log,
     _format_full_log,
 )
-from update_with_ai.lib.build_agent_config_impl import BuildAgentConfigImpl
-from update_with_ai.lib.build_agent_config import AgentConfig
-from update_with_ai.lib.build_graph_storage import GraphConfig
+from update_with_ai.lib.build_graph_storage import BuildGraphStorage, GraphConfig
 from update_with_ai.lib.build_graph_storage_impl import BuildGraphStorageFileImpl
-from update_with_ai.lib.agent_loop_impl import AgentLoopConfig
-from update_with_ai.lib.dag_clean_logic import NoChangeResult, FailureResult
+from update_with_ai.lib.dag_cleaner import CleaningResult
+from update_with_ai.lib.dag_clean_logic import (
+    DagCleanLogic,
+    CleanResult,
+    NoChangeResult,
+    FailureResult,
+)
 from update_with_ai.lib.dag_storage import NodeMessage, MessageKind
-from update_with_ai.lib.tool_provider import ToolResult, TerminateAgentWithSuccess
-from typing import cast
 
 
 def msg(text: str, kind: str = "change") -> NodeMessage:
@@ -98,10 +100,7 @@ def _storage(workspace_root: str) -> BuildGraphStorageFileImpl:
 
 
 def _seed_pending(workspace_root: str, label: str, messages: List[str]) -> None:
-    """Mark a node dirty by adding pending messages through the dag_storage API.
-
-    Seeded messages are change-kind: they dirty the node without obligating it
-    to change (the gentler kind; feedback seeding is explicit where needed)."""
+    """Mark a node dirty by adding pending messages through the dag_storage API."""
     _storage(workspace_root).add_messages(
         label,
         [NodeMessage(kind="change", text=m) for m in messages],
@@ -138,67 +137,122 @@ def _patch_env(**set_vars: str) -> Iterator[None]:
                 os.environ[k] = v
 
 
-def _patch_agent_config() -> Any:
+class _FakeDagCleanLogic:
+    """Stand-in for the DagCleanLogic interface: the runner only passes it to
+    the DAG factory; it is never called by the runner itself."""
+
+    def clean(self, node_id: str, messages: Any) -> CleanResult:
+        raise NotImplementedError
+
+    def is_dirty(self, node_id: str, pending_messages: Any) -> bool:
+        return False
+
+
+class _FakeDagCleaner:
+    """Stand-in for the DagCleaner interface: records clean_subgraph calls and
+    returns a scripted result."""
+
+    def __init__(self, result: CleaningResult) -> None:
+        self._result = result
+        self.clean_subgraph_calls: List[str] = []
+
+    def clean_subgraph(self, target_node: str) -> CleaningResult:
+        self.clean_subgraph_calls.append(target_node)
+        return self._result
+
+
+class _RunDagHarness:
     """
-    Point the runner at a fixed agent config so run_dag tests don't need real
-    Bazel agent_config targets. (The component itself is tested separately in
-    build_agent_config_impl_test.py.)
-    """
-    return patch.multiple(
-        BuildAgentConfigImpl,
-        load_config=MagicMock(
-            return_value=AgentConfig(
-                label="//agent_configs:default",
-                name="default",
-                base_url="http://test.local/v1",
-                model="test-model",
-                api_key_env="",
-                max_iterations=10,
-                temperature=0.0,
-                timeout=60.0,
-                max_tokens=None,
-                session_start_reads=True,
-            )
-        ),
-        resolve_api_key=MagicMock(return_value="test-key"),
-    )
+    A BuildRunnerImpl with recorded factories over a real file-backed graph.
 
-
-class _StubAgentLoop:
-    """
-    Stand-in for AgentLoopImpl: records instances, emits logger events, and
-    returns a termination result (so the clean maps to a NoChangeResult).
+    Records every factory call: ("graph", graph) / ("clean_logic", graph,
+    workspace_root, config_target, logger) / ("dag", graph, clean_logic).
+    The clean-logic factory emits a fixed set of logger events (mirroring the
+    events a real agent run reports), so log-content tests can assert the
+    transcript without an agent loop.
     """
 
-    instances: List["_StubAgentLoop"] = []
+    def __init__(
+        self,
+        workspace_root: str,
+        dag_result: CleaningResult = (True, NoChangeResult()),
+        emit_events: bool = True,
+    ) -> None:
+        self.calls: List[Any] = []
+        self.graph_instances: List[BuildGraphStorage] = []
+        self.clean_logic_instances: List[Any] = []
+        self.dag_cleaners: List[_FakeDagCleaner] = []
+        self.clean_logic_config_targets: List[Optional[str]] = []
+        self.loggers: List[Any] = []
+        self._workspace_root = workspace_root
+        self._dag_result = dag_result
+        self._emit_events = emit_events
 
-    def __init__(self, config: AgentLoopConfig) -> None:
-        self._config = config
-        self.run_count = 0
-        _StubAgentLoop.instances.append(self)
+        def graph_factory(config: GraphConfig) -> BuildGraphStorage:
+            inst = BuildGraphStorageFileImpl(config=config)
+            self.graph_instances.append(inst)
+            self.calls.append(("graph", config))
+            return inst
 
-    def run_agent(self, prompt, tools, tool_executor, system_prompt=None, session_start_results=None, logger=None):
-        self.run_count += 1
-        if logger is not None:
-            logger("message_added", {"message": {"role": "user", "content": prompt}})
-            logger(
-                "tool_called",
-                {
-                    "tool_calls": [
-                        {"id": "c1", "type": "function",
-                         "function": {"name": "edit_file", "arguments": "{}"}}
-                    ]
-                },
-            )
-            logger(
-                "api_response",
-                {"usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}},
-            )
-            # A realistic run that stops with content injects the termination
-            # reminder (specs/low/agent_loop.md logger table: reminder_injected);
-            # the transcript must record it.
-            logger("reminder_injected", {"message": "You must signal termination to end the run."})
-        return (TerminateAgentWithSuccess(NoChangeResult()), [])
+        def clean_logic_factory(
+            graph: BuildGraphStorage,
+            workspace_root: str,
+            config_target: Optional[str],
+            logger: Any,
+        ) -> DagCleanLogic:
+            self.calls.append(("clean_logic", graph, workspace_root, config_target, logger))
+            self.clean_logic_config_targets.append(config_target)
+            self.loggers.append(logger)
+            if logger is not None and self._emit_events:
+                logger("message_added", {"message": {"role": "user", "content": "prompt"}})
+                logger(
+                    "tool_called",
+                    {
+                        "tool_calls": [
+                            {"id": "c1", "type": "function",
+                             "function": {"name": "edit_file", "arguments": "{}"}}
+                        ]
+                    },
+                )
+                logger(
+                    "api_response",
+                    {"usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}},
+                )
+                logger("reminder_injected", {"message": "You must signal termination to end the run."})
+            clean_logic = _FakeDagCleanLogic()
+            self.clean_logic_instances.append(clean_logic)
+            return clean_logic
+
+        def dag_factory(graph: BuildGraphStorage, clean_logic: DagCleanLogic) -> Any:
+            dag = _FakeDagCleaner(self._dag_result)
+            self.dag_cleaners.append(dag)
+            self.calls.append(("dag", graph, clean_logic))
+            return dag
+
+        self.runner = BuildRunnerImpl(
+            graph_factory=graph_factory,
+            clean_logic_factory=clean_logic_factory,
+            dag_factory=dag_factory,
+        )
+
+
+class _MessageOpRunner:
+    """A BuildRunnerImpl for the message operations: real file-backed graph via
+    the graph factory; the clean-logic and DAG factories are unused stubs."""
+
+    def __init__(self) -> None:
+        self.graph_instances: List[BuildGraphStorage] = []
+
+        def graph_factory(config: GraphConfig) -> BuildGraphStorage:
+            inst = BuildGraphStorageFileImpl(config=config)
+            self.graph_instances.append(inst)
+            return inst
+
+        self.runner = BuildRunnerImpl(
+            graph_factory=graph_factory,
+            clean_logic_factory=lambda *_: _FakeDagCleanLogic(),
+            dag_factory=lambda *_: _FakeDagCleaner((True, NoChangeResult())),
+        )
 
 
 class TestLogFormatters(unittest.TestCase):
@@ -242,7 +296,6 @@ class TestLogFormatters(unittest.TestCase):
         self.assertIn("prompt 10", line)
         self.assertIn("completion 5", line)
         self.assertIn("total 15", line)
-
 
     def test_compact_run_terminated(self) -> None:
         """run_terminated gets a one-line summary with the termination value."""
@@ -307,6 +360,8 @@ class TestLogFormatters(unittest.TestCase):
         )
 
     def test_full_tool_result(self) -> None:
+        from update_with_ai.lib.tool_provider import ToolResult
+
         line = _format_full_log(
             "tool_result",
             {
@@ -369,8 +424,8 @@ class TestInjectFeedback(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.mkdtemp(prefix="cleanroom_feedback_test_")
         self._root = Path(self._tmp)
-        self._runner = BuildRunnerImpl()
-        _StubAgentLoop.instances.clear()
+        self._harness = _MessageOpRunner()
+        self._runner = self._harness.runner
 
     def tearDown(self) -> None:
         shutil.rmtree(self._tmp, ignore_errors=True)
@@ -379,7 +434,7 @@ class TestInjectFeedback(unittest.TestCase):
         _write_manifest(self._root / "tests" / "example", NODE_LABEL)
 
     def test_delivers_feedback_to_node_itself(self) -> None:
-        """Messages are stored in the node's pending message store (.update_with_ai.textproto)."""
+        """Messages are stored in the node's pending message store."""
         self._write_workspace()
         with _patch_env():
             success, result = self._runner.inject_feedback(
@@ -433,52 +488,20 @@ class TestInjectFeedback(unittest.TestCase):
         run_dag separately (invariant: no shared state across calls).
         """
         self._write_workspace()
-        instances: List[Any] = []
-        original_graph_cls = build_runner_impl.BuildGraphStorageFileImpl
-
-        def _factory(config: Any) -> Any:
-            inst = original_graph_cls(config)
-            instances.append(inst)
-            return inst
-
-        with _patch_env(), patch(
-            "update_with_ai.lib.build_runner_impl.BuildGraphStorageFileImpl", side_effect=_factory
-        ):
+        with _patch_env():
             self._runner.inject_feedback(NODE_LABEL, self._tmp, ["one"])
             self._runner.inject_feedback(NODE_LABEL, self._tmp, ["two"])
-        self.assertEqual(len(instances), 2)
-        self.assertIsNot(instances[0], instances[1])
+        self.assertEqual(len(self._harness.graph_instances), 2)
+        self.assertIsNot(self._harness.graph_instances[0], self._harness.graph_instances[1])
 
         # run_dag assembles its own graph, distinct from the feedback graphs.
-        with _patch_env(CLEANROOM_AGENT_LOG=str(self._root / "agent_loop.log")), patch(
-            "update_with_ai.lib.build_runner_impl.BuildGraphStorageFileImpl", side_effect=_factory
-        ), patch("update_with_ai.lib.build_runner_impl.AgentLoopImpl", _StubAgentLoop), _patch_agent_config():
-            success, result = self._runner.run_dag(NODE_LABEL, self._tmp)
+        dag_harness = _RunDagHarness(self._tmp)
+        with _patch_env(CLEANROOM_AGENT_LOG=str(self._root / "agent_loop.log")):
+            success, result = dag_harness.runner.run_dag(NODE_LABEL, self._tmp)
         self.assertTrue(success)
         self.assertIsInstance(result, NoChangeResult)
-        self.assertEqual(len(instances), 3)
-        self.assertIsNot(instances[1], instances[2])
-
-    def test_marks_node_dirty_for_subsequent_run_dag(self) -> None:
-        """Feedback is seen by a later run_dag, which re-processes the node."""
-        self._write_workspace()
-        with _patch_env():
-            success, result = self._runner.inject_feedback(
-                NODE_LABEL, self._tmp, ["make it better"]
-            )
-        self.assertTrue(success)
-        self.assertIsInstance(result, NoChangeResult)
-
-        with _patch_env(CLEANROOM_AGENT_LOG=str(self._root / "agent_loop.log")), patch(
-            "update_with_ai.lib.build_runner_impl.AgentLoopImpl", _StubAgentLoop
-        ), _patch_agent_config():
-            success, result = self._runner.run_dag(NODE_LABEL, self._tmp)
-        self.assertTrue(success)
-        self.assertIsInstance(result, NoChangeResult)
-        # The dirty node was cleaned exactly once: the agent ran and its
-        # pending messages were consumed (no longer pending).
-        self.assertEqual(_StubAgentLoop.instances[0].run_count, 1)
-        self.assertEqual(_read_pending(self._tmp, NODE_LABEL), [])
+        self.assertEqual(len(dag_harness.graph_instances), 1)
+        self.assertIsNot(self._harness.graph_instances[1], dag_harness.graph_instances[0])
 
 
 class TestAddChange(unittest.TestCase):
@@ -487,7 +510,8 @@ class TestAddChange(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.mkdtemp(prefix="cleanroom_addchange_test_")
         self._root = Path(self._tmp)
-        self._runner = BuildRunnerImpl()
+        self._harness = _MessageOpRunner()
+        self._runner = self._harness.runner
 
     def tearDown(self) -> None:
         shutil.rmtree(self._tmp, ignore_errors=True)
@@ -533,7 +557,8 @@ class TestBroadcastChange(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.mkdtemp(prefix="cleanroom_broadcast_test_")
         self._root = Path(self._tmp)
-        self._runner = BuildRunnerImpl()
+        self._harness = _MessageOpRunner()
+        self._runner = self._harness.runner
 
     def tearDown(self) -> None:
         shutil.rmtree(self._tmp, ignore_errors=True)
@@ -593,23 +618,19 @@ class TestRunDag(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.mkdtemp(prefix="cleanroom_rundag_test_")
         self._root = Path(self._tmp)
-        self._runner = BuildRunnerImpl()
-        _StubAgentLoop.instances.clear()
 
     def tearDown(self) -> None:
         shutil.rmtree(self._tmp, ignore_errors=True)
 
-    def _write_workspace(self, src: Optional[str] = None,
-                         seed_messages: bool = False) -> None:
-        _write_manifest(self._root / "tests" / "example", NODE_LABEL, src=src)
-        if seed_messages:
-            _seed_pending(str(self._root), NODE_LABEL, ["pending change"])
+    def _write_workspace(self) -> None:
+        _write_manifest(self._root / "tests" / "example", NODE_LABEL)
 
     def test_full_cleaning_pass_writes_and_closes_log(self) -> None:
         """
-        A dirty node (pending messages) is cleaned through the assembled
-        components: returns (True, NoChangeResult()), the log file is written
-        and closed, and the pending messages are consumed.
+        run_dag drives the pass through the injected factories: returns the
+        DAG's CleaningResult, the log file is written and closed, and the
+        clean-logic factory received the graph, the workspace root, and the
+        run logger.
         """
         self._write_workspace()
         log_path = str(self._root / "logs" / "custom.log")
@@ -625,17 +646,25 @@ class TestRunDag(unittest.TestCase):
                 opened_writers.append(handle)
             return handle
 
+        harness = _RunDagHarness(self._tmp)
         with _patch_env(CLEANROOM_AGENT_LOG=log_path), patch(
-            "update_with_ai.lib.build_runner_impl.AgentLoopImpl", _StubAgentLoop
-        ), patch("builtins.open", side_effect=_tracking_open), _patch_agent_config():
-            # A pending message marks the node dirty; the clean pass consumes it.
-            _seed_pending(self._tmp, NODE_LABEL, ["pending change"])
-            success, result = self._runner.run_dag(NODE_LABEL, self._tmp)
+            "builtins.open", side_effect=_tracking_open
+        ):
+            success, result = harness.runner.run_dag(NODE_LABEL, self._tmp)
 
         self.assertTrue(success)
         self.assertIsInstance(result, NoChangeResult)
-        # The agent loop actually ran (the node was dirty and got cleaned).
-        self.assertEqual(_StubAgentLoop.instances[0].run_count, 1)
+
+        # The DAG factory received (graph, clean_logic) and clean_subgraph ran.
+        self.assertEqual(len(harness.dag_cleaners), 1)
+        self.assertEqual(harness.dag_cleaners[0].clean_subgraph_calls, [NODE_LABEL])
+        self.assertEqual([c[0] for c in harness.calls], ["graph", "clean_logic", "dag"])
+        self.assertIs(harness.calls[2][1], harness.graph_instances[0])  # dag <- same graph
+        self.assertIs(harness.calls[2][2], harness.clean_logic_instances[0])  # <- same clean logic
+
+        # The clean-logic factory received the workspace root and a logger.
+        self.assertEqual(harness.clean_logic_config_targets, [None])
+        self.assertIsNotNone(harness.loggers[0])
 
         # Log file written at the CLEANROOM_AGENT_LOG path with transcript lines.
         log_file = Path(log_path)
@@ -647,9 +676,6 @@ class TestRunDag(unittest.TestCase):
         # The log file (a write-mode handle opened by the runner) is closed.
         self.assertIn(log_path, [getattr(h, "name", None) for h in opened_writers])
         self.assertTrue(all(h.closed for h in opened_writers))
-
-        # The clean pass consumed the node's pending messages.
-        self.assertEqual(_read_pending(self._tmp, NODE_LABEL), [])
 
     def test_log_writes_are_flushed_immediately(self) -> None:
         """
@@ -687,19 +713,20 @@ class TestRunDag(unittest.TestCase):
                 return fake
             return real_open(*args, **kwargs)
 
+        harness = _RunDagHarness(self._tmp)
         with _patch_env(CLEANROOM_AGENT_LOG="fake.log"), patch(
-            "update_with_ai.lib.build_runner_impl.AgentLoopImpl", _StubAgentLoop
-        ), patch("builtins.open", side_effect=_fake_open), _patch_agent_config():
-            _seed_pending(self._tmp, NODE_LABEL, ["pending change"])
-            success, result = self._runner.run_dag(NODE_LABEL, self._tmp)
+            "builtins.open", side_effect=_fake_open
+        ):
+            success, result = harness.runner.run_dag(NODE_LABEL, self._tmp)
 
         self.assertTrue(success)
         self.assertIsInstance(result, NoChangeResult)
         writes = [c for c in calls if c[0] == "write"]
         flushes = [c for c in calls if c[0] == "flush"]
-        # One line per stub-emitted event (message_added, tool_called,
-        # api_response) plus the compact summaries are printed, not written.
-        self.assertGreaterEqual(len(writes), 3)
+        # One line per harness-emitted event (message_added, tool_called,
+        # api_response, reminder_injected) plus the compact summaries are
+        # printed, not written.
+        self.assertGreaterEqual(len(writes), 4)
         self.assertEqual(len(flushes), len(writes))
         # Every write is immediately followed by a flush (real-time log).
         for i, (kind, _) in enumerate(calls):
@@ -715,19 +742,11 @@ class TestRunDag(unittest.TestCase):
         """
         base = self._root / "base"
         base.mkdir()
-        # Mirror the package directory under the base: the graph maps package
-        # directories onto the BUILD_WORKSPACE_DIRECTORY tree (the "real
-        # source root"), where the message store reads/writes .update_with_ai.textproto.
-        (base / "tests" / "example").mkdir(parents=True)
         self._write_workspace()
 
-        with _patch_env(
-            BUILD_WORKSPACE_DIRECTORY=str(base), CLEANROOM_AGENT_LOG="my_agent.log"
-        ), patch("update_with_ai.lib.build_runner_impl.AgentLoopImpl", _StubAgentLoop), _patch_agent_config():
-            # A pending message marks the node dirty (written under the base,
-            # where package directories map); the clean pass consumes it.
-            _seed_pending(self._tmp, NODE_LABEL, ["pending change"])
-            success, result = self._runner.run_dag(NODE_LABEL, self._tmp)
+        harness = _RunDagHarness(self._tmp)
+        with _patch_env(BUILD_WORKSPACE_DIRECTORY=str(base), CLEANROOM_AGENT_LOG="my_agent.log"):
+            success, result = harness.runner.run_dag(NODE_LABEL, self._tmp)
         self.assertTrue(success)
         self.assertIsInstance(result, NoChangeResult)
         log_file = base / "my_agent.log"
@@ -738,17 +757,11 @@ class TestRunDag(unittest.TestCase):
         """Without CLEANROOM_AGENT_LOG, the log lands in BUILD_WORKSPACE_DIRECTORY."""
         base = self._root / "base"
         base.mkdir()
-        # Mirror the package directory under the base (see above).
-        (base / "tests" / "example").mkdir(parents=True)
         self._write_workspace()
 
-        with _patch_env(BUILD_WORKSPACE_DIRECTORY=str(base)), patch(
-            "update_with_ai.lib.build_runner_impl.AgentLoopImpl", _StubAgentLoop
-        ), _patch_agent_config():
-            # A pending message marks the node dirty (written under the base);
-            # the clean pass consumes it.
-            _seed_pending(self._tmp, NODE_LABEL, ["pending change"])
-            success, result = self._runner.run_dag(NODE_LABEL, self._tmp)
+        harness = _RunDagHarness(self._tmp)
+        with _patch_env(BUILD_WORKSPACE_DIRECTORY=str(base)):
+            success, result = harness.runner.run_dag(NODE_LABEL, self._tmp)
         self.assertTrue(success)
         self.assertIsInstance(result, NoChangeResult)
         log_file = base / "agent_loop.log"
@@ -759,78 +772,85 @@ class TestRunDag(unittest.TestCase):
         """BUILD_WORKING_DIRECTORY is the log base when BUILD_WORKSPACE_DIRECTORY is unset."""
         base = self._root / "base"
         base.mkdir()
-        # Only the log base is BUILD_WORKING_DIRECTORY; package dirs still map
-        # to the workspace root (BUILD_WORKSPACE_DIRECTORY is unset), so seed
-        # the pending message there.
         self._write_workspace()
 
-        with _patch_env(BUILD_WORKING_DIRECTORY=str(base)), patch(
-            "update_with_ai.lib.build_runner_impl.AgentLoopImpl", _StubAgentLoop
-        ), _patch_agent_config():
-            _seed_pending(self._tmp, NODE_LABEL, ["pending change"])
-            success, result = self._runner.run_dag(NODE_LABEL, self._tmp)
+        harness = _RunDagHarness(self._tmp)
+        with _patch_env(BUILD_WORKING_DIRECTORY=str(base)):
+            success, result = harness.runner.run_dag(NODE_LABEL, self._tmp)
         self.assertTrue(success)
         self.assertIsInstance(result, NoChangeResult)
         log_file = base / "agent_loop.log"
         self.assertTrue(log_file.exists())
         self.assertIn("reminder_injected", log_file.read_text(encoding="utf-8"))
 
-    def test_run_dag_raises_when_root_node_has_no_manifest(self) -> None:
+    def test_run_dag_forwards_config_target_to_clean_logic_factory(self) -> None:
         """
-        A workspace with no manifest for the root node: run_dag raises rather
-        than returning a result (the failure propagates out of the cleaning
-        pass; specs/low/build_runner.md only guarantees a returned result for valid
-        root nodes).
-        """
-        # Clean workspace (no manifests at all). The log env is pinned to a
-        # writable path so any failure is not masked by a log-open error, and
-        # the agent config is patched so the raised error is the missing
-        # manifest (not a config-resolution error).
-        with _patch_env(CLEANROOM_AGENT_LOG=str(self._root / "agent_loop.log")), _patch_agent_config():
-            with self.assertRaises(Exception):
-                self._runner.run_dag(NODE_LABEL, self._tmp)
-
-    def test_run_dag_passes_config_target_through(self) -> None:
-        """
-        run_dag forwards config_target to the BuildAgentConfig component and
-        constructs the agent loop with the resulting AgentLoopConfig.
+        run_dag forwards its config_target argument to the clean-logic factory
+        (the factory resolves the agent configuration; the runner hardcodes
+        nothing).
         """
         self._write_workspace()
-        captured: Dict[str, Any] = {}
-
-        def _fake_load(config_target: str, workspace_root: Optional[str]) -> AgentConfig:
-            captured["target"] = config_target
-            captured["root"] = workspace_root
-            return AgentConfig(
-                label=config_target,
-                name="custom",
-                base_url="http://resolved/v1",
-                model="resolved-model",
-                api_key_env="",
-                max_iterations=5,
-                temperature=0.4,
-                timeout=30.0,
-                max_tokens=None,
-                session_start_reads=True,
-            )
-
-        with _patch_env(CLEANROOM_AGENT_LOG=str(self._root / "agent_loop.log")), patch.object(
-            BuildAgentConfigImpl, "load_config", side_effect=_fake_load
-        ), patch.object(
-            BuildAgentConfigImpl, "resolve_api_key", return_value="resolved-key"
-        ), patch("update_with_ai.lib.build_runner_impl.AgentLoopImpl", _StubAgentLoop):
-            success, result = self._runner.run_dag(
+        harness = _RunDagHarness(self._tmp)
+        with _patch_env(CLEANROOM_AGENT_LOG=str(self._root / "agent_loop.log")):
+            success, result = harness.runner.run_dag(
                 NODE_LABEL, self._tmp, config_target="//agent_configs:custom"
             )
-
         self.assertTrue(success)
         self.assertIsInstance(result, NoChangeResult)
-        self.assertEqual(captured["target"], "//agent_configs:custom")
-        self.assertEqual(captured["root"], self._tmp)
-        # The agent loop was built from the resolved config, not hardcoded values.
-        self.assertEqual(_StubAgentLoop.instances[-1]._config.model, "resolved-model")
-        self.assertEqual(_StubAgentLoop.instances[-1]._config.api_key, "resolved-key")
-        self.assertEqual(_StubAgentLoop.instances[-1]._config.max_iterations, 5)
+        self.assertEqual(harness.clean_logic_config_targets, ["//agent_configs:custom"])
+        self.assertEqual(harness.calls[1][2], self._tmp)  # workspace_root forwarded
+
+    def test_run_dag_constructs_fresh_graph_per_call(self) -> None:
+        """
+        Each run_dag constructs a fresh graph, clean logic, and DAG through
+        the factories (invariant: components created per call).
+        """
+        self._write_workspace()
+        harness = _RunDagHarness(self._tmp)
+        with _patch_env(CLEANROOM_AGENT_LOG=str(self._root / "agent_loop.log")):
+            success1, _ = harness.runner.run_dag(NODE_LABEL, self._tmp)
+            success2, _ = harness.runner.run_dag(NODE_LABEL, self._tmp)
+        self.assertTrue(success1)
+        self.assertTrue(success2)
+        self.assertEqual(len(harness.graph_instances), 2)
+        self.assertEqual(len(harness.dag_cleaners), 2)
+        self.assertIsNot(harness.graph_instances[0], harness.graph_instances[1])
+        self.assertEqual(harness.dag_cleaners[0].clean_subgraph_calls, [NODE_LABEL])
+        self.assertEqual(harness.dag_cleaners[1].clean_subgraph_calls, [NODE_LABEL])
+
+    def test_run_dag_propagates_dag_failure_result(self) -> None:
+        """A FailureResult from the DAG is returned as-is (expected failures
+        are values)."""
+        self._write_workspace()
+        harness = _RunDagHarness(self._tmp, dag_result=(False, FailureResult()))
+        with _patch_env(CLEANROOM_AGENT_LOG=str(self._root / "agent_loop.log")):
+            success, result = harness.runner.run_dag(NODE_LABEL, self._tmp)
+        self.assertFalse(success)
+        self.assertIsInstance(result, FailureResult)
+        # The log file is still written on failure.
+        self.assertTrue((self._root / "agent_loop.log").exists())
+
+    def test_graph_factory_failure_propagates_without_log(self) -> None:
+        """
+        A failure during graph construction (e.g. assembly failure) propagates
+        and no log file is created (per specs/low/build_runner.md: the log is
+        created after component assembly).
+        """
+        self._write_workspace()
+        log_path = str(self._root / "logs" / "custom.log")
+
+        def graph_factory(config: GraphConfig) -> BuildGraphStorage:
+            raise RuntimeError("no workspace")
+
+        runner = BuildRunnerImpl(
+            graph_factory=graph_factory,
+            clean_logic_factory=lambda *_: _FakeDagCleanLogic(),
+            dag_factory=lambda *_: _FakeDagCleaner((True, NoChangeResult())),
+        )
+        with _patch_env(CLEANROOM_AGENT_LOG=log_path):
+            with self.assertRaises(RuntimeError):
+                runner.run_dag(NODE_LABEL, self._tmp)
+        self.assertFalse(Path(log_path).exists())
 
 
 class TestSigintHandling(unittest.TestCase):

@@ -3,7 +3,7 @@
   - dag_storage.md
   - build_graph_storage.md
   - agent_loop.md
-  - agent_loop_impl.md
+  - agent_loop_config.md
   - sandbox.md
   - tool_provider.md
   - file_view.md
@@ -20,7 +20,7 @@ from dag_clean_logic import DagCleanLogic, CleanResult, ChangeResult, FeedbackRe
 from dag_storage import NodeMessage
 from build_graph_storage import BuildGraphStorage
 from agent_loop import AgentLoop, AgentResult, LoggerCallback
-from agent_loop_impl import AgentLoopConfig
+from agent_loop_config import AgentLoopConfig
 from sandbox import Sandbox, SandboxConfig
 from tool_provider import ToolDefinition, ToolExecutor, ToolFailure, TerminateSuccessResult, TerminateAgentWithSuccess, TerminateAgentWithFailure
 

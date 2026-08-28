@@ -2,7 +2,6 @@
   - dag_cleaner.md
   - dag_storage.md
   - dag_clean_logic.md
-  - agent_loop.md
   - build_node_loader.md
   - build_agent_config.md
   - sandbox.md
@@ -36,7 +35,6 @@ class BuildRunner(Protocol):
 - **cleaning** → term definition from dag_clean_logic
 - **change message** → term definition from dag_clean_logic
 - **feedback message** → term definition from dag_clean_logic
-- **run** → term definition from agent_loop
 - **manifest** → term definition from build_node_loader
 - **agent configuration** → the `AgentConfig` type from build_agent_config
 - **config target** → the `ConfigTarget` alias from build_agent_config

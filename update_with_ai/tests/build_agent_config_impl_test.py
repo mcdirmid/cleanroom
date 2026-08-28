@@ -41,7 +41,7 @@ from update_with_ai.lib.build_agent_config_impl import (
     BuildAgentConfigImpl,
     ConfigNotFoundError,
 )
-from update_with_ai.lib.agent_loop_impl import AgentLoopConfig
+from update_with_ai.lib.agent_loop_config import AgentLoopConfig
 
 PACKAGE = "agent_configs"
 NAME = "default"

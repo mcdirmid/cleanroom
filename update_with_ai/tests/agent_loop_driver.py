@@ -9,7 +9,8 @@ import json
 import datetime
 from typing import cast, Any, Dict, List
 
-from update_with_ai.lib.agent_loop_impl import AgentLoopImpl, AgentLoopConfig
+from update_with_ai.lib.agent_loop_config import AgentLoopConfig
+from update_with_ai.lib.agent_loop_impl import AgentLoopImpl
 from update_with_ai.lib.agent_loop import (
     ToolCall,
     ToolDefinition,

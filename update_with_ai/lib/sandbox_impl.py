@@ -8,15 +8,12 @@ delegates to the owning component's operation; the composition is described
 in specs/low/sandbox_impl.md.
 """
 
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from .sandbox import Sandbox, SandboxConfig
-from .file_view import FileViewConfig, VirtualName, WriteOccurred
-from .guide_delivery import GuideDeliveryConfig
-from .run_control import RunControlConfig, DiffSizeLimit, Blame
-from .file_view_impl import FileViewImpl
-from .guide_delivery_impl import GuideDeliveryImpl
-from .run_control_impl import RunControlImpl
+from .file_view import FileView, FileViewConfig, VirtualName, WriteOccurred
+from .guide_delivery import GuideDelivery, GuideDeliveryConfig
+from .run_control import RunControl, RunControlConfig, DiffSizeLimit, Blame
 from .tool_provider import (
     ToolDefinition,
     PresentedToolResult,
@@ -29,22 +26,39 @@ class SandboxImpl(Sandbox):
     """
     Implementation of the LLS Sandbox interface.
 
-    An assembler: wires together the file machinery (FileViewImpl), the
-    step-mode delivery (GuideDeliveryImpl), and the verification and
-    termination rules (RunControlImpl) from the aggregate SandboxConfig,
-    and dispatches each tool call to the owning component. Holds only
-    per-run state, in the components: the file state (file_view), the step
-    state (guide_delivery), and the verification state (run_control);
-    nothing persists across runs.
+    Composes the injected components — the file machinery (file_view), the
+    step-mode delivery (guide_delivery), and the verification and
+    termination rules (run_control) — into a single tool surface, and
+    dispatches each tool call to the owning component. The components are
+    supplied by the assembler through factories (the sandbox derives each
+    component's configuration from the aggregate SandboxConfig and applies
+    its step-mode gating policy). Holds only per-run state, in the
+    components: the file state (file_view), the step state (guide_delivery),
+    and the verification state (run_control); nothing persists across runs.
     """
 
-    def __init__(self, config: SandboxConfig, diff_size_limit: Optional[DiffSizeLimit] = None):
+    def __init__(
+        self,
+        config: SandboxConfig,
+        make_file_view: Callable[[FileViewConfig], FileView],
+        make_guide_delivery: Callable[[GuideDeliveryConfig], GuideDelivery],
+        make_run_control: Callable[[RunControlConfig, FileView, GuideDelivery], RunControl],
+        diff_size_limit: Optional[DiffSizeLimit] = None,
+    ):
         """
-        Initialize the sandbox with configuration.
+        Initialize the sandbox with configuration and the component
+        factories supplied by the assembler.
 
         Args:
             config: Configuration object containing file mappings, policies,
                 etc.
+            make_file_view: Factory constructing the file machinery from a
+                derived FileViewConfig.
+            make_guide_delivery: Factory constructing the step-mode delivery
+                from a derived GuideDeliveryConfig.
+            make_run_control: Factory constructing the verification and
+                termination rules from a derived RunControlConfig and the
+                sandbox's file machinery and step-mode delivery.
             diff_size_limit: Maximum characters a verification diff may report
                 (default: 1000 when None).
         """
@@ -68,7 +82,7 @@ class SandboxImpl(Sandbox):
         # the file mappings; None when no guide is declared.
         guide_real = config.file_mappings.get(config.guide) if config.guide else None
 
-        self.file_view = FileViewImpl(FileViewConfig(
+        self.file_view = make_file_view(FileViewConfig(
             file_mappings=config.file_mappings,
             readable_paths=readable_paths,
             writable_paths=config.writable_paths,
@@ -76,19 +90,19 @@ class SandboxImpl(Sandbox):
             search_result_limit=config.search_result_limit,
             session_start_reads_enabled=config.session_start_reads_enabled,
         ))
-        self.guide_delivery = GuideDeliveryImpl(GuideDeliveryConfig(
+        self.guide_delivery = make_guide_delivery(GuideDeliveryConfig(
             guide=guide_real,
             step_sections_enabled=config.step_sections_enabled,
         ))
-        self.run_control = RunControlImpl(
+        self.run_control = make_run_control(
             RunControlConfig(
                 verification_callback=config.verification_callback,
                 feedback_pending=config.feedback_pending,
                 blame_targets=config.blame_targets,
                 diff_size_limit=diff_size_limit if diff_size_limit is not None else 1000,
             ),
-            file_view=self.file_view,
-            guide_delivery=self.guide_delivery,
+            self.file_view,
+            self.guide_delivery,
         )
 
     def get_tool_definitions(self) -> List[ToolDefinition]:

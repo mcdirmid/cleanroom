@@ -25,7 +25,7 @@ from .agent_loop import (
     LoggerCallback,
     LogEvent,
 )
-from .agent_loop_impl import AgentLoopConfig
+from .agent_loop_config import AgentLoopConfig
 from .sandbox import SandboxConfig, Sandbox
 from .tool_provider import (
     ToolCallOutcome,

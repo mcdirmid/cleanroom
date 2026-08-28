@@ -8,10 +8,18 @@ Usage:
 
 Checks (E = error, exits nonzero; W = warning, does not affect exit code):
   E  missing dependency comment on the first line
-  E  dependency-comment entry that is not among the linted files or the --deps closure
   E  dependency comment references a spec that is not a `- <name>.md` entry (e.g. an HLS file)
+  E  dependency-comment entry that is not a specified module dep (module_deps) or an external doc (specs/external/)
+  E  module dep (module_deps) not listed in the dependency comment (the comment is exactly module_deps)
+  E  dependency-comment entry that is a file path (`- foo/bar.md`); entries are bare `<name>.md` names
+
+Dependency-comment entries resolve against the linted files, the `--deps`
+list (the specified `module_deps` md files, passed directly — no transitive
+closure), and the external dependency docs under `specs/external/` (e.g.
+`- openai_api.md` for `specs/external/openai_api.md`); entries are bare
+`<name>.md` names, never file paths.
   E  header not `# Interface LLS: <stem>` / `# Implementation LLS: <stem>`, or name/stem mismatch
-  E  `# Implementation LLS:` heading in a non-`_impl` file, or `# Interface LLS:` in an `_impl` file (a component whose HLS has no `fulfills:` line is an interface)
+  E  `# Implementation LLS:` heading in a non-`_impl`/non-`_asm` file, or `# Interface LLS:` in an `_impl`/`_asm` file (a component whose HLS has no `fulfills:` line is an interface; the one exception is an assembly spec, which uses the implementation LLS form)
   E  unknown `##` section (closed inventory: Data Types, Component-Provided Operations,
      Invariants, Non-Concerns for interfaces; Data Types, Composition, Behavioral
      Description, Invariants, Non-Concerns for implementations; term definitions
@@ -53,6 +61,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 SPECS_DIR = ROOT / "update_with_ai" / "specs" / "low"
+# External dependency docs: not low-level specs and not linted themselves,
+# but nameable as dependency-comment entries (e.g. `- openai_api.md` for
+# specs/external/openai_api.md).
+EXTERNAL_DIR = ROOT / "update_with_ai" / "specs" / "external"
 
 # Modules that are not specs and need no dependency-comment entry.
 STDLIB_MODULES = {"__future__", "abc", "collections", "dataclasses", "enum", "typing"}
@@ -163,6 +175,49 @@ def check_comment_refs(f: Path, text: str, entries: list[str]) -> None:
             err(f, f"dependency comment references {m.group(1)!r}, which is not a `- <name>.md` entry; LLS files depend only on LLS files")
 
 
+def check_no_paths(f: Path, text: str) -> None:
+    """Dependency-comment entries are bare `<name>.md` names, never file
+    paths: an entry containing a path separator (`- foo/bar.md`) is an error —
+    a file elsewhere in the repo is named by its bare stem, and the linter
+    resolves it against the external docs when it is not a linted spec."""
+    end = text.find("-->")
+    if end == -1:
+        return  # a malformed comment is reported by the caller
+    comment = text[:end]
+    for line in comment.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("- "):
+            continue
+        entry = stripped[2:].strip()
+        if "/" in entry or "\\" in entry:
+            err(f, f"dependency comment entry {entry!r} is a file path; entries are bare `<name>.md` names (e.g. `- openai_api.md` for specs/external/openai_api.md)")
+
+
+def check_comment_entries(f: Path, comment: list[str], files: list[Path], deps: list[str]) -> None:
+    """Each comment entry must name a linted file, a specified module dep
+    (the --deps list: the module_deps md files, direct only), or an external
+    dependency doc under specs/external/."""
+    resolvable = (
+        {p.name for p in files}
+        | {Path(d).name for d in deps}
+        | {p.name for p in EXTERNAL_DIR.glob("*.md")}
+    )
+    for entry in comment:
+        if entry not in resolvable:
+            err(f, f"dependency comment lists {entry}, which is not a specified module dep (add it to module_deps) or an external doc (specs/external/)")
+
+
+def check_deps_listed(f: Path, comment: list[str], deps: list[str]) -> None:
+    """The comment is exactly module_deps: every specified module dep must be
+    listed in the dependency comment (an entry that relies on transitive
+    coverage is an error — the comment names only what is directly referred
+    to in the spec)."""
+    for d in deps:
+        name = Path(d).name
+        if name.endswith(".md") and name not in comment:
+            err(f, f"module dep {name} (from module_deps) is not listed in the dependency comment")
+
+
 def python_blocks(body: str) -> list[str]:
     return re.findall(r"```python\n(.*?)```", body, re.S)
 
@@ -212,13 +267,6 @@ def check_imports(f: Path, code: str, comment: list[str]) -> None:
             err(f, f"imports '{mod}' but the dependency comment does not list {mod}.md{hint}")
 
 
-def check_comment_entries(f: Path, comment: list[str], files: list[Path], deps: list[str]) -> None:
-    """Each comment entry must name a linted file or a spec_deps closure member."""
-    resolvable = {p.name for p in files} | {Path(d).name for d in deps}
-    for entry in comment:
-        if entry not in resolvable:
-            err(f, f"dependency comment lists {entry}, which is not among the linted files or the spec_deps closure")
-
 
 def check_header(f: Path, text: str) -> None:
     first = next((p for p in parse(text) if p[0] == 1), None)
@@ -233,11 +281,15 @@ def check_header(f: Path, text: str) -> None:
     if m.group(2) != stem:
         err(f, f"LLS heading name {m.group(2)!r} does not match filename stem {stem!r}")
     # A component whose HLS has no `fulfills:` line is an interface: its LLS
-    # is an Interface LLS. Implementation LLS files are `<name>_impl.md` in `specs/low/`.
-    if m.group(1) == "Implementation" and not stem.endswith("_impl"):
-        err(f, f"'# Implementation LLS: {stem}' in a non-`_impl` file: a component whose HLS has no `fulfills:` line is an interface; its LLS is '# Interface LLS: {stem}'")
-    elif m.group(1) == "Interface" and stem.endswith("_impl"):
-        err(f, f"'# Interface LLS: {stem}' in an `_impl` file: an implementation LLS is headed '# Implementation LLS: {stem}'")
+    # is an Interface LLS. Implementation LLS files are `<name>_impl.md` in
+    # `specs/low/`; the one exception is an assembly spec (`<name>_asm.md`),
+    # which has no `fulfills:` yet still uses the implementation LLS form
+    # (it shares the implementation section inventory).
+    impl_like = stem.endswith("_impl") or stem.endswith("_asm")
+    if m.group(1) == "Implementation" and not impl_like:
+        err(f, f"'# Implementation LLS: {stem}' in a non-`_impl`/non-`_asm` file: a component whose HLS has no `fulfills:` line is an interface (unless it is an assembly); its LLS is '# Interface LLS: {stem}'")
+    elif m.group(1) == "Interface" and impl_like:
+        err(f, f"'# Interface LLS: {stem}' in an `_impl`/`_asm` file: an implementation LLS is headed '# Implementation LLS: {stem}'")
 
 
 def check_aliases(f: Path, code: str) -> None:
@@ -696,7 +748,9 @@ def main(argv: list[str]) -> int:
             comment = []
         else:
             check_comment_refs(f, text, comment)
+            check_no_paths(f, text)
             check_comment_entries(f, comment, files, deps)
+            check_deps_listed(f, comment, deps)
         parts = parse(text)
         for level, heading, body in parts:
             if level == 2 and heading == "Data Types":

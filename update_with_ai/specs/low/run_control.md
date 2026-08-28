@@ -51,7 +51,7 @@ class RunControl(Protocol):
     def blame(self, blames: list[Blame]) -> ToolCallOutcome: ...
 ```
 
-`RunControlConfig` is the client-supplied configuration for verification and termination: an optional verification callback (its success flag gates advance; it may only modify the node's lib/test BUILD file, which is not among the workspace's files), whether the run's pending messages include a feedback message, the blame targets (a mapping from each blameable artifact's virtual name to the node that owns it), and the diff size limit (the maximum characters a verification diff may report; default 1000).
+`RunControlConfig` is the client-supplied configuration for verification and termination: an optional verification callback (its success flag gates advance; it may only modify the node's lib/test BUILD file, which is not among the workspace's files), whether the session's pending messages include a feedback message, the blame targets (a mapping from each blameable artifact's virtual name to the node that owns it), and the diff size limit (the maximum characters a verification diff may report; default 1000).
 
 `BlameTarget` is the virtual name of a blameable artifact — a dependency's declared source file, addressed per the virtual name rules; run_control resolves it to the owning node via the configured `blame_targets` mapping. `Feedback` is the correction feedback on how to correct the blamed node's output. Each `Blame` pair corresponds to one feedback message delivered to the owning node.
 ## Term definitions
@@ -59,7 +59,7 @@ class RunControl(Protocol):
 - **blame** → term definition: a termination outcome that attributes the task's incompleteness to one or more dependencies and provides feedback on how to correct their outputs; blame is not failure (realized as the `Blame` type)
 - **blame target** → the `BlameTarget` alias (definition in Data Types): the virtual name of a blameable artifact — a dependency's declared source file — resolved to its owning node via the configured `blame_targets` mapping
 - **soft length bound** → term definition: the preferred maximum length of a change summary; a summary exceeding it is rejected with shortening guidance up to a grace count, then accepted when within the hard length bound (the bound values are pinned in the implementation spec)
-- **hard length bound** → term definition: the maximum length a change summary may reach; a summary exceeding it is rejected with hard-bound guidance up to a grace count, and a summary still exceeding it after the grace count fails the run
+- **hard length bound** → term definition: the maximum length a change summary may reach; a summary exceeding it is rejected with hard-bound guidance up to a grace count, and a summary still exceeding it after the grace count fails the session
 - **change message** → term definition from dag_clean_logic
 - **feedback message** → term definition from dag_clean_logic
 - **termination result** → the `TerminateSuccessResult` type from tool_provider
@@ -98,13 +98,13 @@ def get_tool_definitions(self) -> list[ToolDefinition]
 def advance(self, changes: list[dict[str, str]] = []) -> ToolCallOutcome
 ```
 
-**Purpose:** Signal the run's completion: verification, step-mode delivery, and termination sequence within the advance. The agent calls this when it has nothing more to do or considers its task complete.
+**Purpose:** Signal the session's completion: verification, step-mode delivery, and termination sequence within the advance. The agent calls this when it has nothing more to do or considers its task complete.
 
 **Preconditions:**
-- A file counts as changed only when its current content differs from its content at run start (a write that nets out to no change — e.g., an edit later undone — is not changed)
+- A file counts as changed only when its current content differs from its content at session start (a write that nets out to no change — e.g., an edit later undone — is not changed)
 - The change-message requirement applies only to the terminating advance: in step mode, an advance with step sections remaining carries no change message (per the step mode rules)
-- When the run changed files, `changes` must list one entry per changed file — `{"file": <virtual path>, "summary": <one short sentence naming the parts of the file that changed for the next reader; not the task performed, not how it was done>}` — covering every changed file, each summary non-empty and within the summary bound
-- A summary exceeding the summary bound is rejected with guidance to shorten it; persistent rejection fails the run
+- When the session changed files, `changes` must list one entry per changed file — `{"file": <virtual path>, "summary": <one short sentence naming the parts of the file that changed for the next reader; not the task performed, not how it was done>}` — covering every changed file, each summary non-empty and within the summary bound
+- A summary exceeding the summary bound is rejected with guidance to shorten it; persistent rejection fails the session
 
 **Postconditions:**
 - Verifies the run: computes the diff of the run's changes, truncated when it exceeds the diff size limit (reporting the truncated size and the full change counts); runs the verification callback when one is configured; when no callback is configured, verification is treated as passed

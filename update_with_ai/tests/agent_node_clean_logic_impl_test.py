@@ -22,7 +22,7 @@ from update_with_ai.lib.agent_loop import (
     ToolDefinition,
     ToolExecutor,
 )
-from update_with_ai.lib.agent_loop_impl import AgentLoopConfig
+from update_with_ai.lib.agent_loop_config import AgentLoopConfig
 from update_with_ai.lib.agent_node_clean_logic_impl import AgentNodeCleanLogicImpl
 from update_with_ai.lib.build_graph_storage import BuildGraphStorage, NodeDefinition
 from update_with_ai.lib.dag_storage import NodeId, NodeMessage, MessageKind, PendingMessages

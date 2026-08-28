@@ -38,20 +38,20 @@ Constructed with the `run_control` interface's `RunControlConfig`, the `file_vie
 
 The implementation:
 - Delegates verification to the injected verification callback when provided.
-- `advance` performs the run's verification internally: it computes the diff of the run's changes (the changed files and their run-start snapshots, via the configured `file_view`), truncated when it exceeds the diff size limit (reporting the truncated size and the full change counts) and, when configured, runs the injected verification callback; on a failing verification it provides feedback (never a tool failure) and the session continues; a failing verification's feedback does not include the diff.
+- `advance` performs the session's verification internally: it computes the diff of the session's changes (the changed files and their session-start snapshots, via the configured `file_view`), truncated when it exceeds the diff size limit (reporting the truncated size and the full change counts) and, when configured, runs the injected verification callback; on a failing verification it provides feedback (never a tool failure) and the session continues; a failing verification's feedback does not include the diff.
 - `advance`'s step-mode gating follows guide_delivery's output rule: on a failing verification in step mode, the output is the restated guide summary with the reason (via `guide_delivery.get_advance_output`); on a passing verification with step sections remaining, the output is the next step section; on a passing verification with no step sections remaining, `advance` proceeds to the termination machinery.
-- Change summaries are bounded by the soft length bound and the hard length bound: `advance` rejects a change message over the soft bound with shortening guidance up to a grace count, then accepts it when within the hard bound; a change message still over the hard bound after the grace count fails the run (`advance` turns into `TerminateAgentWithFailure`). The bound values are pinned in Non-Concerns.
-- A missing or out-of-bounds change message signals a `ToolFailure` that lists the changed files and shows the run's diff.
+- Change summaries are bounded by the soft length bound and the hard length bound: `advance` rejects a change message over the soft bound with shortening guidance up to a grace count, then accepts it when within the hard bound; a change message still over the hard bound after the grace count fails the session (`advance` turns into `TerminateAgentWithFailure`). The bound values are pinned in Non-Concerns.
+- A missing or out-of-bounds change message signals a `ToolFailure` that lists the changed files and shows the session's diff.
 - The feedback-pending gate is checked only when advance would otherwise signal successful termination without a change; a failing verification and the change-message requirement are checked first.
 - Sets the supersession flag on verification results, never on termination results.
 - `blame` resolves each `Blame` pair's target (a blameable artifact's virtual name) through the configured `blame_targets` mapping to the owning node's `NodeId` before forming the feedback result; each pair is one (target, feedback) feedback message — a `NodeMessage` with kind `feedback` and text the feedback — delivered to the owning node.
 - `blame` with no configured blame targets returns `ToolFailure[str]` (a precondition violation; the tool is not offered when targets are empty).
 - Forms the `TerminateAgentWithSuccess` result using `dag_clean_logic` result types:
-  - `advance` — carries `NoChangeResult()` when no file's current content differs from its run-start snapshot (writes may have occurred but net out to no change), or `ChangeResult` with messages built from `changes` when files changed; rejects a change summary for a net-unchanged file (its content equals its run-start snapshot), and directs a run whose writes all net out to report no change (advance with no changes)
+  - `advance` — carries `NoChangeResult()` when no file's current content differs from its session-start snapshot (writes may have occurred but net out to no change), or `ChangeResult` with messages built from `changes` when files changed; rejects a change summary for a net-unchanged file (its content equals its session-start snapshot), and directs a session whose writes all net out to report no change (advance with no changes)
   - `blame` (valid pairs) — carries `FeedbackResult` whose messages convert each resolved `(target, feedback)` pair into a `(NodeId, NodeMessage)` pair — the target as the `NodeId`, the feedback as a `NodeMessage` with kind `feedback` and text the feedback
 - `fail` returns `TerminateAgentWithFailure[str]` with its value pinned to `Task failed` (tests may assert it).
 - Provides the termination tools: the failure tool and the blame tool (the blame tool only when blame targets are configured); the advance tool's definition comes from guide_delivery (its parameters follow the step state).
-- Per-run state only: the diff and the verification outcome; nothing persists across runs.
+- Per-session state only: the diff and the verification outcome; nothing persists across sessions.
 - Verification-callback exceptions are outside the interface contract; this implementation reports them as `ToolFailure[str]` signals with text starting `Verification error: ` (pinned; tests may assert it).
 
 **HLS Justification:** Delegates verification to the injected callback when provided.
@@ -61,7 +61,7 @@ The implementation:
 - No state persists between runs
 - Verification results set the supersession flag; termination results never do
 - The feedback-pending gate is checked only when advance would otherwise signal successful termination without a change
-- Only valid blame pairs (targets in `blame_targets`) reach the run result
+- Only valid blame pairs (targets in `blame_targets`) reach the session result
 
 ## Non-Concerns
 

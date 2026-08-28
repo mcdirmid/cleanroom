@@ -1,5 +1,5 @@
 <!-- Dependencies (md files to read alongside this one):
-  - agent_loop_impl.md
+  - agent_loop_config.md
 -->
 
 # Interface LLS: build_agent_config
@@ -8,7 +8,7 @@
 ```python
 from dataclasses import dataclass
 from typing import Optional, Protocol, TypeAlias
-from agent_loop_impl import AgentLoopConfig
+from agent_loop_config import AgentLoopConfig
 
 DEFAULT_CONFIG_TARGET = "//agent_configs:default"
 CONFIG_TARGET_ENV = "AGENT_CONFIG_TARGET"
@@ -34,11 +34,10 @@ class BuildAgentConfig(Protocol):
     def build_agent_loop_config(self, config_target: ConfigTarget | None = None, workspace_root: Optional[str] = None) -> AgentLoopConfig: ...
 ```
 
-`AgentConfig` mirrors the generated module's `AGENT_CONFIG` dict (see
-`specs/high/build_agent_config.md`); `api_key_env` is the exact environment
+`AgentConfig` mirrors the generated module's `AGENT_CONFIG` dict; `api_key_env` is the exact environment
 variable holding the API key (empty means the plain `AGENT_API_KEY`
 variable applies). `session_start_reads` and `step_sections` are the sandbox
-gates (per `specs/high/build_agent_config.md`): whether the run's sandbox provides
+gates: whether the run's sandbox provides
 session-start reads and whether step mode is enabled (both default to
 enabled). All failures are unexpected failures, signaled as exceptions (see
 Failure Handling below).
@@ -48,7 +47,7 @@ Failure Handling below).
 - **agent configuration** → the `AgentConfig` type (definition in Data Types)
 - **config target** → the `ConfigTarget` alias (definition in Data Types)
 - **API key** → term definition: a secret credential for the language model service; an API key is never part of an agent configuration or a config target — it is provided by the caller through the environment
-- **agent-loop configuration** → the `AgentLoopConfig` type from agent_loop_impl
+- **agent-loop configuration** → the `AgentLoopConfig` type from agent_loop_config
 
 ## Component-Provided Operations
 
@@ -101,9 +100,9 @@ from the environment."
 ## Non-Concerns
 
 - Where config targets are declared (which Bazel package): the convention is
-  agent_configs/BUILD.bazel.
+  the agent_configs package.
 - The format of the generated module file: produced by the `agent_config`
-  rule (update_with_ai/agent_config.bzl), not specified here.
+  rule, not specified here.
 - The meaning of individual configuration parameters: they pass through
   unchanged.
 - **Identity fields:** `AgentConfig.label` and `AgentConfig.name` carry the
