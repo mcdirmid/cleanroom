@@ -30,7 +30,7 @@ Provides a controlled environment for agents to read, write, search, and modify 
 **Guarantees**
 
 - The tool surface composes the components' operations: file_view provides the file tools, run_control provides the termination tools, and guide_delivery provides the step-mode delivery; the composed tools are presented together.
-- The blame tool is offered only when blame targets are configured.
+- The blame tool is offered only when blame targets are configured and non-empty.
 - In a single advance, verification precedes step delivery and termination.
 - A failing verification produces feedback and no step delivery, and never terminates the session.
 - A passing verification with step sections remaining delivers the next step section.

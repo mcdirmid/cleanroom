@@ -86,13 +86,19 @@ def _set_attr_list(block: str, attr: str, values: list[str]) -> str:
     if m:
         j = block.find("]", m.end() - 1)
         return block[:m.start()] + rendered + block[j + 1:]
-    m2 = re.search(r"\bsrcs\s*=\s*\[[^\]]*\]", block)
+    m2 = re.search(r"(\bsrcs\s*=\s*\[[^\]]*\]\s*,?)", block)
     if m2:
-        insert_at = m2.end()
-    else:
-        m3 = re.search(r'\bname\s*=\s*"[^"]*"', block)
-        insert_at = m3.end() if m3 else 0
-    return block[:insert_at] + "\n    " + rendered + "," + block[insert_at:]
+        srcs_part = m2.group(1).rstrip()
+        if not srcs_part.endswith(","):
+            srcs_part += ","
+        return block[:m2.start()] + srcs_part + "\n    " + rendered + "," + block[m2.end():]
+    m3 = re.search(r'(\bname\s*=\s*"[^"]*"\s*,?)', block)
+    if m3:
+        name_part = m3.group(1).rstrip()
+        if not name_part.endswith(","):
+            name_part += ","
+        return block[:m3.start()] + name_part + "\n    " + rendered + "," + block[m3.end():]
+    return block
 
 
 def _find_block(text: str, rule: str, name: str) -> Optional[Tuple[int, int]]:
@@ -133,8 +139,16 @@ def ensure_load(text: str, names: Sequence[str]) -> str:
 
 def _new_target(rule: str, stem: str, srcs: str, deps: list[str], package: str) -> str:
     """A new rule block: name, srcs, pyright_deps (the known deps), empty
-    deps, and public visibility."""
+    deps, and public visibility (for library rules)."""
     want = ["//" + package + ":" + d for d in deps]
+    if rule == "pyright_test":
+        return (
+            rule + "(\n"
+            "    name = \"" + stem + "\",\n"
+            "    srcs = [\"" + srcs + "\"],\n"
+            "    pyright_deps = " + _render_list(want) + ",\n"
+            ")\n"
+        )
     return (
         rule + "(\n"
         "    name = \"" + stem + "\",\n"
@@ -183,7 +197,7 @@ def ensure_target(
             new_list.append(w)
     if new_list != existing:
         block = _set_attr_list(block, "pyright_deps", new_list)
-    if "visibility" not in block:
+    if rule != "pyright_test" and "visibility" not in block:
         block = _set_attr_list(block, "visibility", ["//visibility:public"])
     return text[:start] + block + text[end:]
 

@@ -31,3 +31,9 @@ filegroup(
     srcs = ["test_template.py"],
     visibility = ["//visibility:public"],
 )
+
+filegroup(
+    name = "empty",
+    srcs = ["empty_template.txt"],
+    visibility = ["//visibility:public"],
+)

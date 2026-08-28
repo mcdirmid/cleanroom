@@ -9,7 +9,7 @@ terms (from run_control): blame, blame target, soft length bound, hard length bo
 ## Deltas
 
 - Composes the three components: file_view provides the file tools, run_control provides the termination tools, and guide_delivery provides the step-mode delivery; the composed tools form the sandbox's tool registry.
-- Provides the tool registry: the file tools, the advance tool, the failure tool, and the blame tool, each as a fixed function; the blame tool is included only when blame targets are configured; the advance tool is always included.
+- Provides the tool registry: the file tools, the advance tool, the failure tool, and the blame tool, each as a fixed function; the blame tool is included only when blame targets are configured and non-empty; the advance tool is always included.
 - The write-modified query and the session-start read request are delegated to file_view.
 - [ordering] Tool calls are dispatched to the owning component: file tools to file_view; the advance, failure, and blame tools to run_control.
 - [ordering] Each advance is sequenced: a failing verification produces feedback and no step delivery; a passing verification with step sections remaining produces the next step section; a passing verification with no step sections remaining produces the termination machinery.

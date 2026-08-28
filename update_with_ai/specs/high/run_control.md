@@ -38,7 +38,9 @@ Provides verification and termination for a file-modifying agent session: verify
 - When verification fails, the session continues with feedback; advance never terminates on a failing verification.
 - Verification may maintain the node's lib/test BUILD file through the configured build linter; the BUILD file is not among the workspace's files, and such writes are not run writes and are not reported in change summaries.
 - Termination tools: advance, failure, and blame. Advance signals successful termination; a valid blame signals successful termination; the failure operation ends the session in failure.
+- The blame tool is provided only when blame targets are configured and non-empty.
 - Each (target, feedback) pair of a blame is delivered as a feedback message to the blamed artifact's owning node.
+- When blame is attempted with an invalid target, blame signals a tool failure naming the invalid target and listing the valid blame targets by their virtual names.
 - Termination is at the agent's judgment: the agent signals termination when it considers its task complete, or when it cannot be completed.
 - Advance signals successful termination when verification passes; when files were modified, it requires a change summary naming what changed in each file, directing the next reader's attention to the changes.
 - When files were modified and the change summary is missing, malformed, or incomplete, advance signals a tool failure.

@@ -356,7 +356,7 @@ class RunControlImpl(RunControl):
         """End the session in failure (agent failure)."""
         return TerminateAgentWithFailure[str]("Task failed")
 
-    def blame(self, blames: List[Blame]) -> ToolCallOutcome:
+    def blame(self, blames: List[Any]) -> ToolCallOutcome:
         """Signal termination with blame: attribute the task's incompleteness to dependencies and provide feedback on how to correct their outputs."""
         if not self.config.blame_targets:
             return ToolFailure[str]("Blame targets are not configured")
@@ -364,9 +364,26 @@ class RunControlImpl(RunControl):
         if not blames:
             return ToolFailure[str]("Blame list must not be empty")
 
-        invalid_blames = [(t, f) for (t, f) in blames if t not in self.config.blame_targets]
+        parsed_blames: List[Tuple[str, str]] = []
+        for b in blames:
+            if isinstance(b, dict):
+                t = str(b.get("target") or "")
+                f = str(b.get("feedback") or "")
+            elif isinstance(b, (tuple, list)) and len(b) == 2:
+                t = str(b[0])
+                f = str(b[1])
+            else:
+                t = ""
+                f = ""
+            parsed_blames.append((t, f))
+
+        invalid_blames = [(t, f) for (t, f) in parsed_blames if t not in self.config.blame_targets]
         if invalid_blames:
-            return ToolFailure[str](f"Blame assignment rejected for: {invalid_blames}")
+            valid_targets = list(self.config.blame_targets.keys())
+            invalid_names = [t for (t, _) in invalid_blames]
+            return ToolFailure[str](
+                f"Invalid blame target(s) {invalid_names}. Valid blame targets are: {valid_targets}"
+            )
 
         # Each target is a blameable artifact's virtual name; resolve it to
         # the owning node via the configured blame targets mapping, so the
@@ -374,7 +391,7 @@ class RunControlImpl(RunControl):
         return TerminateAgentWithSuccess(FeedbackResult(
             messages=[
                 (self.config.blame_targets[target], NodeMessage(kind="feedback", text=feedback))
-                for (target, feedback) in blames
+                for (target, feedback) in parsed_blames
             ],
         ))
 

@@ -535,6 +535,7 @@ def update_python_with_ai(name, module_deps, external_deps = [], visibility = No
                 "about any test failures."
             ),
             src = "logs/" + name + "_qa.log",
+            template = "//update_python_with_ai/templates:empty",
             guide = "//update_python_with_ai/guides:qa",
             star_deps = [":" + name + "_low"],
             feedback_deps = [":" + name + "_lib", ":" + name + "_test"],

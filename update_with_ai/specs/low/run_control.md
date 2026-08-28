@@ -31,7 +31,7 @@ BlameTarget: TypeAlias = VirtualName
 
 Feedback: TypeAlias = str
 
-Blame: TypeAlias = tuple[BlameTarget, Feedback]
+Blame: TypeAlias = tuple[BlameTarget, Feedback] | dict[str, str]
 
 VerificationCallback: TypeAlias = Callable[[], tuple[bool, str]] | None
 
@@ -84,7 +84,7 @@ def get_tool_definitions(self) -> list[ToolDefinition]
 **Preconditions:** run_control has been configured.
 
 **Postconditions:**
-- Returns the failure tool's definition (always) and the blame tool's definition (only when blame targets are configured)
+- Returns the failure tool's definition (always) and the blame tool's definition (only when blame targets are configured and non-empty)
 - The advance tool's definition is provided by guide_delivery (its parameters follow the step state); it is not among run_control's definitions
 
 **Failure Handling:** No failure conditions.
@@ -165,12 +165,12 @@ def blame(self, blames: list[Blame]) -> ToolCallOutcome
 
 **Postconditions:**
 - If all pairs are valid: returns `TerminateAgentWithSuccess` (a `Signal[T_tool]` variant) carrying a `TerminateSuccessResult` that describes feedback to dependencies (a `FeedbackResult`; one (target, feedback) pair per blamed dependency, each target resolved to its owning node's `NodeId` via `blame_targets`)
-- If any pair's target is not a key of `blame_targets`: returns `ToolFailure[T_tool]` (a `Signal[T_tool]` variant)
+- If any pair's target is not a key of `blame_targets`: returns `ToolFailure[T_tool]` naming the invalid target and listing the valid blame targets (the keys of `blame_targets`)
 - Each pair corresponds to one feedback message (a `NodeMessage` with the feedback kind) delivered to its owning node (per the feedback message rules)
 - Termination tools produce no `ToolResult` and never supersede an earlier result
 
 **Failure Handling:**
-- Invalid pairs (targets not keys of `blame_targets`): Return `ToolFailure[T_tool]` (a `Signal[T_tool]` variant) with an error message identifying the invalid pair.
+- Invalid pairs (targets not keys of `blame_targets`): Return `ToolFailure[T_tool]` (a `Signal[T_tool]` variant) with an error message identifying the invalid target and listing the valid blame targets by their virtual names.
 - Empty `blames` list: Return `ToolFailure[T_tool]` with an error message describing the empty list.
 - Blame targets not configured is a precondition violation (unexpected); the interface does not prescribe violation behavior (`blame` is not provided in the tool definitions when targets are empty).
 

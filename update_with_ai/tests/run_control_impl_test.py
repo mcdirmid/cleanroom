@@ -531,11 +531,15 @@ class TestRunControlImpl(unittest.TestCase):
         failure = self.as_tool_failure(self._run_control().blame([]))
         self.assertIn("must not be empty", failure.value)
 
-    def test_blame_invalid_target_fails(self) -> None:
+    def test_blame_target_not_in_blame_targets_fails(self) -> None:
+        # A blame pair with a target that is not a key of blame_targets returns
+        # a ToolFailure.
         failure = self.as_tool_failure(
             self._run_control().blame([("not_a_dep", "fix it")])
         )
         self.assertIn("not_a_dep", failure.value)
+        self.assertIn("agent", failure.value)
+        self.assertIn("system", failure.value)
 
     def test_blame_mixed_valid_and_invalid_fails(self) -> None:
         # If any pair's target is invalid, blame returns a ToolFailure (no
@@ -544,6 +548,8 @@ class TestRunControlImpl(unittest.TestCase):
             self._run_control().blame([("agent", "fix it"), ("nope", "redo")])
         )
         self.assertIn("nope", failure.value)
+        self.assertIn("agent", failure.value)
+        self.assertIn("system", failure.value)
 
     def test_blame_success_resolves_targets_to_owning_nodes(self) -> None:
         # Each valid (target, feedback) pair is resolved through the
@@ -552,6 +558,23 @@ class TestRunControlImpl(unittest.TestCase):
         # FeedbackResult.
         result = self.as_success(
             self._run_control().blame([("agent", "fix the output"), ("system", "redo")])
+        )
+        self.assertIsInstance(result.value, FeedbackResult)
+        assert isinstance(result.value, FeedbackResult)
+        self.assertEqual(
+            result.value.messages,
+            [
+                ("//pkg:agent", NodeMessage(kind="feedback", text="fix the output")),
+                ("//pkg:system", NodeMessage(kind="feedback", text="redo")),
+            ],
+        )
+
+    def test_blame_resolves_dict_format_to_owning_nodes(self) -> None:
+        result = self.as_success(
+            self._run_control().blame([
+                {"target": "agent", "feedback": "fix the output"},
+                {"target": "system", "feedback": "redo"},
+            ])
         )
         self.assertIsInstance(result.value, FeedbackResult)
         assert isinstance(result.value, FeedbackResult)

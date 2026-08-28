@@ -521,8 +521,9 @@ class TestToolExecutor(unittest.TestCase):
         outcome = executor("blame", {"blames": [("x", "not a dependency")]})
         self.assertIsInstance(outcome, ToolFailure)
         assert isinstance(outcome, ToolFailure)
-        # LLS: an invalid blame target returns a tool failure before the
-        # sandbox is reached; the message wording is unspecified.
+        self.assertIn("b.py", outcome.value)
+        self.assertIn("x", outcome.value)
+        self.assertNotIn("@@", outcome.value)
         self.assertEqual(sandbox.calls, [])
 
     def test_blame_valid_target_passes_through_to_sandbox(self):
@@ -535,6 +536,20 @@ class TestToolExecutor(unittest.TestCase):
         sandbox = MockSandbox(blame_outcome=blame_outcome)
         executor = self._capture_executor(node_def, sandbox)
         blames: List[Blame] = [("b.py", "fix it")]
+        outcome = executor("blame", {"blames": blames})
+        self.assertIsInstance(outcome, TerminateAgentWithSuccess)
+        self.assertIs(outcome, blame_outcome)
+        self.assertEqual(sandbox.calls, [("blame", {"blames": blames})])
+
+    def test_blame_dict_format_valid_target_passes_through(self):
+        """Dict-format blame targets from LLM tool calls reach the sandbox."""
+        node_def = _make_node_def(blame_targets={"b.py": "b"})
+        blame_outcome: ToolCallOutcome = TerminateAgentWithSuccess(
+            FeedbackResult(messages=[("b", msg("fix it", "feedback"))])
+        )
+        sandbox = MockSandbox(blame_outcome=blame_outcome)
+        executor = self._capture_executor(node_def, sandbox)
+        blames = [{"target": "b.py", "feedback": "fix it"}]
         outcome = executor("blame", {"blames": blames})
         self.assertIsInstance(outcome, TerminateAgentWithSuccess)
         self.assertIs(outcome, blame_outcome)

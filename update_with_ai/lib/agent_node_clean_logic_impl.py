@@ -113,11 +113,20 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
                 # time). An invalid target is a tool failure, not an agent
                 # failure: the agent may correct its blame and continue.
                 deps = set(self._graph.get_node_dependencies(node_id))
-                for target, _feedback in arguments.get("blames", []):
+                valid_targets = [
+                    t for t, owner in sandbox_config.blame_targets.items() if owner in deps
+                ]
+                for item in arguments.get("blames", []):
+                    if isinstance(item, dict):
+                        target = str(item.get("target") or "")
+                    elif isinstance(item, (tuple, list)) and len(item) == 2:
+                        target = str(item[0])
+                    else:
+                        target = ""
                     owner = sandbox_config.blame_targets.get(target)
                     if owner is None or owner not in deps:
                         return ToolFailure[str](
-                            f"Blame target {target} is not a dependency of {node_id}"
+                            f"Blame target '{target}' is invalid. Valid blame targets are: {valid_targets}"
                         )
             method = getattr(sandbox, name, None)
             if method is None:
@@ -232,7 +241,7 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
                 file_dirty = True
                 break
             template_content = config.templates.get(path)
-            if template_content is not None:
+            if template_content is not None and template_content.strip() != "":
                 try:
                     with open(real_path, "r", encoding="utf-8") as f:
                         if f.read() == template_content:

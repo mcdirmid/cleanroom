@@ -5,7 +5,7 @@ verification inside advance, the change-message machinery, and the
 feedback-pending gate.
 """
 
-from typing import Callable, Dict, List, Optional, Protocol, Tuple
+from typing import Callable, Dict, List, Optional, Protocol, Tuple, Union
 from dataclasses import dataclass
 from .tool_provider import (
     TerminateAgentWithFailure,
@@ -23,13 +23,12 @@ from .file_view import VirtualName
 
 # Type definitions
 # Blame targets map each blameable artifact's virtual name (a dependency's
-# declared source file) to the node that owns it; run_control resolves a
-# blame target to its owning node before forming the feedback result (see
+# declared source file) to the dependency's node (see
 # specs/low/run_control.md).
 BlameTargets = Dict[VirtualName, NodeId]
 BlameTarget = VirtualName
 Feedback = str
-Blame = Tuple[BlameTarget, Feedback]
+Blame = Union[Tuple[BlameTarget, Feedback], Dict[str, str]]
 # A verification callback runs a shell command and returns (success, output):
 # success is True when the command exited 0. run_control uses the success
 # flag to gate advance()'s termination (see specs/low/run_control.md).

@@ -129,7 +129,6 @@ pyright_test(
         "//update_with_ai/lib:tool_provider",
     ],
     deps = [],
-    visibility = ["//visibility:public"],
 )
 
 pyright_test(
@@ -141,7 +140,6 @@ pyright_test(
         "//update_with_ai/lib:tool_provider",
     ],
     deps = [],
-    visibility = ["//visibility:public"],
 )
 
 pyright_test(
@@ -159,5 +157,4 @@ pyright_test(
         "//update_with_ai/lib:tool_provider",
     ],
     deps = [],
-    visibility = ["//visibility:public"],
 )

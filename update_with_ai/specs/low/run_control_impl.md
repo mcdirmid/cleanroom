@@ -45,12 +45,13 @@ The implementation:
 - The feedback-pending gate is checked only when advance would otherwise signal successful termination without a change; a failing verification and the change-message requirement are checked first.
 - Sets the supersession flag on verification results, never on termination results.
 - `blame` resolves each `Blame` pair's target (a blameable artifact's virtual name) through the configured `blame_targets` mapping to the owning node's `NodeId` before forming the feedback result; each pair is one (target, feedback) feedback message — a `NodeMessage` with kind `feedback` and text the feedback — delivered to the owning node.
+- `blame` with an invalid target returns `ToolFailure[str]` naming the rejected target and listing the valid blame targets' virtual names.
 - `blame` with no configured blame targets returns `ToolFailure[str]` (a precondition violation; the tool is not offered when targets are empty).
 - Forms the `TerminateAgentWithSuccess` result using `dag_clean_logic` result types:
   - `advance` — carries `NoChangeResult()` when no file's current content differs from its session-start snapshot (writes may have occurred but net out to no change), or `ChangeResult` with messages built from `changes` when files changed; rejects a change summary for a net-unchanged file (its content equals its session-start snapshot), and directs a session whose writes all net out to report no change (advance with no changes)
   - `blame` (valid pairs) — carries `FeedbackResult` whose messages convert each resolved `(target, feedback)` pair into a `(NodeId, NodeMessage)` pair — the target as the `NodeId`, the feedback as a `NodeMessage` with kind `feedback` and text the feedback
 - `fail` returns `TerminateAgentWithFailure[str]` with its value pinned to `Task failed` (tests may assert it).
-- Provides the termination tools: the failure tool and the blame tool (the blame tool only when blame targets are configured); the advance tool's definition comes from guide_delivery (its parameters follow the step state).
+- Provides the termination tools: the failure tool and the blame tool (the blame tool only when blame targets are configured and non-empty); the advance tool's definition comes from guide_delivery (its parameters follow the step state).
 - Per-session state only: the diff and the verification outcome; nothing persists across sessions.
 - Verification-callback exceptions are outside the interface contract; this implementation reports them as `ToolFailure[str]` signals with text starting `Verification error: ` (pinned; tests may assert it).
 

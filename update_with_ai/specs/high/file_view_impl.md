@@ -26,7 +26,6 @@ terms (refined): virtual name
 - [state] The injected read renders the file's post-write content in the line-numbered view, restoring the file's line-numbered view state; no additional per-run state is required.
 - [state] A read sets the file's view — plain or line-numbered — per run; a write resets the view to plain, invalidating the line numbers, and the injected read that follows re-enables the line-numbered view.
 - [external] The filesystem.
-- [failure] A write that fails provides no injected read.
 
 ## Non-concerns
 
