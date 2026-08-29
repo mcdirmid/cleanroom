@@ -14,7 +14,7 @@ terms (refined): dirty, cleaning
 ## Deltas
 
 - Cleaning a node builds a sandbox from the node's sandbox configuration (via build_graph_storage), then runs the agent loop with the sandbox's tool definitions, delegating tool execution to the sandbox.
-- The node's prompt, augmented with lines naming the readable and writable files, is provided as the run's system prompt.
+- The node's prompt, augmented with lines naming the readable and writable files (and noting that reading an existing writable file requires line numbers), is provided as the run's system prompt.
 - The node's pending messages are provided as the run's user prompt, so the agent can respond to change and feedback from its dependencies.
 - The run's user prompt carries the pending messages' text and no statement of the feedback obligation; the obligation surfaces only through advance's rejection.
 - The node's sandbox is configured with whether the node's pending messages include a feedback message, so advance can enforce the feedback rule.

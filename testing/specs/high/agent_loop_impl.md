@@ -21,7 +21,7 @@ terms (refined): continuation prompt
 - If a termination reminder generator is configured, the reminder is injected at most once per run.
 - The termination reminder uses the configured generator's message when one is configured, and the default message otherwise; a configured generator produces conversation messages in the same format as other conversation messages.
 - [state] Repetition counts consecutive identical tool calls, or file-editing calls targeting the same file and line range (even with different content); any other call resets the count; the advance call is exempt and resets it; four consecutive repeats inject the loop reminder; eight signal failure.
-- Token usage (input, cached input, output, total) and request duration (seconds) are extracted for each API response; session totals and duration are tracked and reported on session termination.
+- Token usage (input, cached input, output) and request duration (seconds) are extracted for each API response; session totals and duration are tracked and reported on session termination.
 - [ordering] Logger callbacks are invoked after data is appended to history.
 - [ordering] Stubbing is applied when a result with the supersession flag set is processed, before the next request is sent; a stub set by a result is reflected in the request that follows it.
 - [ordering] The results a tool call produces are appended in the order produced; stubbing is applied per a result's flag before the next result of the same call is appended.

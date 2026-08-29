@@ -443,6 +443,7 @@ def update_python_with_ai(name, module_deps, external_deps = [], visibility = No
         template = "//update_python_with_ai/templates:lib",
         guide = "//update_python_with_ai/guides:low_to_lib",
         module_deps = [":" + name + "_low"],
+        deps = external_deps,
         silent_deps = [dep + "_lib" for dep in module_deps],
         verify = (
             "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_python_with_ai/bin/lib_lint.py " +
@@ -492,6 +493,7 @@ def update_python_with_ai(name, module_deps, external_deps = [], visibility = No
             template = "//update_python_with_ai/templates:test",
             guide = "//update_python_with_ai/guides:low_to_test",
             module_deps = [":" + name + "_low"],
+            deps = external_deps,
             silent_deps = [":" + name + "_lib"] + [dep + "_lib" for dep in module_deps],
             verify = (
                 "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_python_with_ai/bin/test_lint.py " +
@@ -538,6 +540,7 @@ def update_python_with_ai(name, module_deps, external_deps = [], visibility = No
             template = "//update_python_with_ai/templates:empty",
             guide = "//update_python_with_ai/guides:qa",
             star_deps = [":" + name + "_low"],
+            deps = external_deps,
             feedback_deps = [":" + name + "_lib", ":" + name + "_test"],
             verify = (
                 "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{}/tests:{}_test --test_output=errors --noshow_progress 2>&1 && " +

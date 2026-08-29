@@ -200,6 +200,22 @@ update_python_with_ai(
 )
 
 update_python_with_ai(
-    name = "build_asm",
-    module_deps = ["build_runner_impl", "build_agent_config", "build_graph_storage_impl", "build_agent_config_impl", "agent_loop_impl", "agent_node_clean_logic_impl", "sandbox_impl", "dag_cleaner_impl"],
+    name = "sandbox_asm",
+    module_deps = ["sandbox_impl", "file_view_impl", "guide_delivery_impl", "run_control_impl", "sandbox", "run_control"],
 )
+
+update_python_with_ai(
+    name = "dag_cleaner_asm",
+    module_deps = ["dag_cleaner_impl", "dag_cleaner", "dag_clean_logic", "build_graph_storage"],
+)
+
+update_python_with_ai(
+    name = "agent_node_clean_logic_asm",
+    module_deps = ["agent_node_clean_logic_impl", "agent_loop_impl", "build_agent_config_impl", "sandbox_asm", "dag_clean_logic", "build_graph_storage", "build_agent_config", "agent_loop"],
+)
+
+update_python_with_ai(
+    name = "build_asm",
+    module_deps = ["build_runner_impl", "build_graph_storage_impl", "agent_node_clean_logic_asm", "dag_cleaner_asm", "build_runner"],
+)
+

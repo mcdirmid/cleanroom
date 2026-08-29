@@ -45,7 +45,7 @@ Answers a user prompt through an iterative process of LLM processing and tool ex
 - Final termination is atomic: once a termination signal occurs, no further API calls or tool executions occur.
 - Each run is independent; no state persists.
 - Delegates tool execution to the provided logic.
-- If a logger callback is provided: invokes it chronologically for the events in the Events block; includes session token usage (input tokens, cached input tokens, output tokens, total tokens) and timing (duration in seconds) in session termination events; catches and ignores logger callback exceptions.
+- If a logger callback is provided: invokes it chronologically for the events in the Events block; includes session token usage (input tokens, cached input tokens, output tokens) and timing (duration in seconds) in session termination events; catches and ignores logger callback exceptions.
 
 **Assumptions**
 

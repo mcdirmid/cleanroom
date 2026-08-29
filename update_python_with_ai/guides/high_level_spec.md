@@ -12,15 +12,15 @@ The spec is ordinary English and declarative: constraints, invariants, and obser
 4. Extreme separation of concerns — one component per file; one concern per section, block, or line; deltas only.
 5. Terms defined once — each term owned by exactly one interface; other specs reference it by name and never re-define it.
 
-The section inventory is closed. An interface spec has exactly `Purpose`, `Terms`, `Contract`, `Non-concerns`; an implementation spec has exactly `Deltas`, `Non-concerns`. No other `##` section exists; no `###` headings. A file whose name contains `impl` is an implementation spec and declares `fulfills:`; every other file is an interface spec and never declares `fulfills:`.
+The section inventory is closed. An interface spec has exactly `Purpose`, `Terms`, `Contract`, `Non-concerns`; an implementation or assembly spec has exactly `Deltas`, `Non-concerns`. No other `##` section exists; no `###` headings. A file whose name contains `impl` or ends in `_asm` declares `fulfills:`; every other file is an interface spec and never declares `fulfills:`.
 
-An assembly spec (a file whose name ends in `_asm`) is a third kind: it has exactly `Deltas`, `Non-concerns`, declares no `fulfills:` and no `## Contract`, and is the only kind of module that may import implementation (`_impl`) or other assembly (`_asm`) specs — its sole role is configuration and assembly of other modules. An assembly is never tested: it implements no functionality beyond configuration and assembly, so it has no test module and no testable contract.
+An assembly spec (a file whose name ends in `_asm`) configures and assembles concrete implementations into the interface it fulfills: it has exactly `Deltas`, `Non-concerns`, declares `fulfills: <interface>` and no `## Contract`, and is the only kind of module that may import implementation (`_impl`) or other assembly (`_asm`) specs. An assembly is never tested: it implements no functionality beyond configuration and assembly, so it has no test module and no testable contract.
 
 ## Document structure
 
 - [ ] One component per file; interface, implementation, and assembly in separate specs
-- [ ] An interface spec contains no implementation content (no mechanism, no internal state, no refinements); an implementation spec contains no interface content (no Contract, no owned definitions); an assembly spec contains neither (no Contract, no owned definitions, no fulfills)
-- [ ] An implementation spec fulfills exactly one interface; an assembly spec fulfills nothing; editing preserves the kind (an interface never becomes an implementation or an assembly, or vice versa)
+- [ ] An interface spec contains no implementation content (no mechanism, no internal state, no refinements); an implementation spec contains no interface content (no Contract, no owned definitions); an assembly spec contains neither (no Contract, no owned definitions)
+- [ ] An implementation or assembly spec fulfills exactly one interface; editing preserves the kind (an interface never becomes an implementation or an assembly, or vice versa)
 - [ ] An interface longer than its implementation signals misplaced detail: mechanism and procedure belong in the implementation spec
 - [ ] The Purpose sells the component: it states what the component does and why it matters; benefits and reasons belong there, never as rationale clauses in Guarantees
 - [ ] The interface hides how it is implemented: mechanisms, internal state, algorithms, and counts belong in the implementation spec, never in the interface
@@ -30,7 +30,7 @@ An assembly spec (a file whose name ends in `_asm`) is a third kind: it has exac
 - [ ] Front matter is `key: value` lines, one per line, interface names in backticks
 - [ ] Every dependency listed: `imports: <dep> (what it provides)`; every term used but not owned listed in `terms (from <dep>): ...`
 - [ ] An implementation lists `fulfills: <interface>`, `imports:`, `terms (from ...):`, and `terms (refined): <names only>`
-- [ ] An assembly lists `imports:` and `terms (from ...):` only — never `fulfills:`; its `imports:` may name implementation (`_impl`) or assembly (`_asm`) specs, the only kind allowed to import implementations or assemblies (the concrete behavior it assembles)
+- [ ] An assembly lists `fulfills: <interface>`, `imports:`, and `terms (from ...):`; its `imports:` may name implementation (`_impl`) or assembly (`_asm`) specs, the only kind allowed to import implementations or assemblies (the concrete behavior it assembles)
 - [ ] `terms (refined):` lists names only; concrete definitions live in `[refines]` Deltas lines
 
 ## Terms
@@ -121,7 +121,7 @@ An assembly spec (a file whose name ends in `_asm`) is a third kind: it has exac
 
 - [ ] Interface sections are exactly `Purpose`, `Terms`, `Contract`, `Non-concerns`; implementation and assembly exactly `Deltas`, `Non-concerns`; no other `##` section, in canonical order
 - [ ] No `###` headings
-- [ ] A file whose name contains `impl` declares `fulfills:` and `## Deltas` and has no `## Contract`; a file whose name ends in `_asm` declares `## Deltas`, has no `## Contract`, and never declares `fulfills:` (an assembly fulfills nothing); a file with neither never declares `fulfills:` and has no Deltas
+- [ ] A file whose name contains `impl` or ends in `_asm` declares `fulfills:` and `## Deltas` and has no `## Contract`; a file with neither never declares `fulfills:` and has no Deltas
 - [ ] The `## Contract` contains **Operations**, **Guarantees**, and **Assumptions** blocks
 - [ ] `terms (owned):` is present iff `## Terms` is present
 - [ ] `terms (from X):` names an existing spec and a term `X` owns; a backticked import names an existing spec; the spec never references itself

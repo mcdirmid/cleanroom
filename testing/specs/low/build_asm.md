@@ -1,12 +1,9 @@
 <!-- Dependencies (md files to read alongside this one):
   - build_runner_impl.md
-  - build_agent_config.md
   - build_graph_storage_impl.md
-  - build_agent_config_impl.md
-  - agent_loop_impl.md
-  - agent_node_clean_logic_impl.md
-  - sandbox_impl.md
-  - dag_cleaner_impl.md
+  - agent_node_clean_logic_asm.md
+  - dag_cleaner_asm.md
+  - build_runner.md
 -->
 
 # Implementation LLS: build_asm
@@ -15,38 +12,33 @@
 ```python
 from build_runner_impl import BuildRunnerImpl
 
-class BuildAsm:
-    def build(self) -> BuildRunnerImpl: ...
+class BuildAsm(BuildRunnerImpl):
+    def __init__(self) -> None: ...
 ```
 
-Constructed with no configuration: the concrete implementations are selected
-here, at construction. `build` provides a configured interface-only
-`BuildRunnerImpl` assembled through the factories wired here (see
-Composition); the runner's operations create the components per call. This
-assembly performs configuration and assembly only and is never tested.
+Subclasses `BuildRunnerImpl` with pre-wired factories: the graph factory wraps
+`BuildGraphStorageFileImpl`, the clean-logic factory wraps `AgentNodeCleanLogicAsm`,
+and the DAG factory wraps `DagCleanerAsm`. Fulfills the `BuildRunner` protocol via
+`BuildRunnerImpl`. This assembly performs configuration and assembly only and is
+never tested.
 
 ## Composition
 
 - BuildGraphStorageFileImpl (graph storage)
-- BuildAgentConfigImpl (agent configuration loading)
-- AgentLoopImpl (agent loop)
-- AgentNodeCleanLogicImpl (clean logic)
-- FileViewImpl (file machinery, wired into the sandbox)
-- GuideDeliveryImpl (step-mode delivery, wired into the sandbox)
-- RunControlImpl (verification and termination, wired into the sandbox)
-- SandboxImpl (sandbox)
-- DagCleanerImpl (DAG cleaning)
+- AgentNodeCleanLogicAsm (agent clean logic assembly)
+- DagCleanerAsm (DAG cleaner assembly)
+- BuildRunnerImpl (build runner implementation)
 
 ## Behavioral Description
 
-- Assembles the concrete implementations at construction: the graph factory wraps `BuildGraphStorageFileImpl`; the clean-logic factory wraps `BuildAgentConfigImpl` (config-target selection, agent-configuration loading, and API-key resolution from the environment), `AgentLoopImpl`, `SandboxImpl`, and `AgentNodeCleanLogicImpl`, applying the configuration's sandbox gates to each sandbox it constructs; the DAG factory wraps `DagCleanerImpl` over the graph and the clean logic.
-- `build` provides a fresh `BuildRunnerImpl` assembled through these factories; the runner's operations create the components per call.
+- Assembles the concrete implementations and sub-assemblies at construction: passes the graph factory (`BuildGraphStorageFileImpl`), clean-logic factory (`AgentNodeCleanLogicAsm`), and DAG factory (`DagCleanerAsm`) to `super().__init__`.
+- Inherits and implements the `BuildRunner` protocol through `BuildRunnerImpl`.
 - No functionality beyond configuration and assembly is performed; this assembly is never tested.
 
 ## Invariants
 
 - The concrete implementations are selected here, at construction; the runner's operations never select components.
-- No persistent state is held across calls: each `build` call assembles a fresh runner.
+- No persistent state is held across calls: each instance is a fresh runner.
 
 ## Non-Concerns
 

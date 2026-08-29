@@ -823,10 +823,7 @@ class AgentLoopImpl(AgentLoop):
             # a run — e.g., the advance tool's definition gains the change
             # argument when the run reaches its final step — and each request
             # carries the latest definitions.
-            _getter = getattr(tool_executor, "get_tool_definitions", None)
-            current_tools: List[ToolDefinition] = (
-                _getter() if callable(_getter) else tools
-            )
+            current_tools: List[ToolDefinition] = tool_executor.get_tool_definitions()
 
             openai_messages = []
             if system_prompt:

@@ -175,7 +175,7 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
         if readable:
             file_lines.append(f"Files you can read: {', '.join(readable)}")
         if writable:
-            file_lines.append(f"Files you can write: {', '.join(writable)}")
+            file_lines.append(f"Files you can write: {', '.join(writable)} (reading an existing writable file requires include_line_numbers=True to enable editing via update_lines)")
 
         system_prompt = node_def.prompt
         if file_lines:

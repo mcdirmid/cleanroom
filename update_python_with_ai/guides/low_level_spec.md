@@ -79,12 +79,12 @@ The LLS is a stand-alone document; readers use it without the HLS. Type aliases 
 
 ## Implementation sections
 
-- [ ] An Implementation LLS section exists only when the HLS defines an implementation (an `*_impl` spec with `fulfills: <interface>`); otherwise the interface LLS stands alone
-- [ ] The implementation is declared as `class FooImpl(Foo): ...` extending the fulfilled interface's Protocol, imported from the interface's LLS and never redeclared locally; the implementation name matches the interface only when exactly one implementation will ever exist; multi-implementation interfaces use distinct names; abstract bases are named distinctly (`BaseFoo`)
+- [ ] An Implementation LLS section exists when the HLS defines an implementation (`*_impl` spec) or an assembly (`*_asm` spec), both declaring `fulfills: <interface>`; otherwise the interface LLS stands alone
+- [ ] An implementation is declared as `class FooImpl(Foo): ...` extending the fulfilled interface's Protocol; an assembly is declared as `class FooAsm(FooImpl): ...` extending the concrete implementation (which fulfills the interface Protocol) and ending with the `Asm` suffix; the base class is imported from its LLS and never redeclared locally
 - [ ] Implementation sections reference the interface contract instead of the client; implementation sections never mention "client"
 - [ ] The implementation HLS's Deltas are the semantic source: untagged behavior lines and tagged (`[ordering]`, `[boundary]`, `[state]`, `[external]`, `[failure]`) lines map onto the Behavioral Description, Invariants, and Failure Handling; `[refines]` lines pin concrete conditions and values and name the withheld precision
 - [ ] The implementation's Invariants add delta-derived guarantees only; the fulfilled interface's invariants are never restated
-- [ ] Assembler implementations list the wired concrete implementations in a Composition section (names only — not dependencies; the dependency comment still lists interfaces only)
+- [ ] Assembler implementations and assemblies list the wired concrete implementations in a Composition section (names only — not dependencies; the dependency comment lists dependencies per front matter)
 - [ ] Behavioral Description states outcomes, not mechanisms; interactions with external systems may be described in the external protocol's terms
 - [ ] The fulfilled interface's operations are documented in the interface LLS; the implementation documents them in Behavioral Description as bullets — never in an interface section, never under `### ` headings
 - [ ] Implementation-owned configuration becomes the implementation class's `__init__` parameters in the Implementation LLS Data Types (`fulfillment_impl.__init__(self, inventory: Inventory, pricing: Pricing)`); in the HLS this is the implementation's `imports:` front matter and `[external]` Deltas lines; no other `__init__` is declared
@@ -124,5 +124,5 @@ The LLS is a stand-alone document; readers use it without the HLS. Type aliases 
 - [ ] `### ` headings appear only under Component-Provided Operations
 - [ ] Term-definition headings appear between Data Types and Component-Provided Operations
 - [ ] Implementation sections never mention "client"
-- [ ] An `# Implementation LLS:` heading appears only in a `<name>_impl.md` file in `specs/low/`
+- [ ] An `# Implementation LLS:` heading appears only in a `<name>_impl.md` or `<name>_asm.md` file in `specs/low/`; an assembly class in an assembly LLS must end with the `Asm` suffix (`class FooAsm`)
 - [ ] There is no `## Config` section

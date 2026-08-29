@@ -23,8 +23,7 @@ Checks (E = error, exits nonzero; W = warning, does not affect exit code):
   E  `###` sub-heading (use a Contract block or a Deltas tag)
   E  old-format markers (Observable dataflow, Owned definitions, impl sub-sections, "**The client ...", Deltas beyond the)
   E  backticked import that is not an existing spec
-  E  interface spec without `## Contract`; implementation spec (`*_impl*`) or assembly spec (`*_asm`) without `## Deltas`
-  E  interface spec (filename without "impl") containing `fulfills:`; implementation spec (`*_impl*` filename) missing `fulfills:`; assembly spec (`*_asm`) containing `fulfills:` (assemblies fulfill nothing)
+  E  interface spec (filename without "impl" and not ending in "_asm") containing `fulfills:`; implementation or assembly spec missing `fulfills:`
   E  implementation or assembly spec containing `## Contract` (an assembly has no contract)
   E  `fulfills:` or `imports:` referencing the file itself (self-dependency)
   E  section order deviates from the canonical order for the spec kind
@@ -301,8 +300,14 @@ def check_structure(f: Path, text: str, files: list[Path] | None = None) -> tupl
         if "## Deltas" not in body:
             err(f, "implementation spec missing `## Deltas`")
     elif kind == "assembly":
-        if m is not None:
-            err(f, "assembly spec declares `fulfills:`; an assembly fulfills nothing — it assembles and configures other modules")
+        if m is None:
+            err(f, "assembly spec missing `fulfills:`; an assembly fulfills exactly one interface")
+        else:
+            target = m.group(1).strip().strip("`")
+            if target not in names:
+                err(f, f"fulfills: unknown spec '{target}'")
+            elif target == stem_of(f):
+                err(f, f"fulfills: spec cannot fulfill itself ('{target}')")
         if "## Contract" in body:
             err(f, "assembly spec contains `## Contract`; an assembly has no contract — it performs configuration and assembly only")
         if "## Deltas" not in body:

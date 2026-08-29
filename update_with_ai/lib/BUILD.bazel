@@ -187,31 +187,70 @@ pyright_library(
 )
 
 pyright_library(
-    name = "build_asm",
+    name = "sandbox_asm",
     srcs = [
-        "build_asm.py",
+        "sandbox_asm.py",
     ],
     pyright_deps = [
-        ":build_runner_impl",
-        ":dag_cleaner",
-        ":dag_clean_logic",
-        ":build_graph_storage",
-        ":agent_loop",
-        ":agent_loop_config",
-        ":build_agent_config",
-        ":build_graph_storage_impl",
-        ":build_agent_config_impl",
-        ":agent_loop_impl",
-        ":agent_node_clean_logic_impl",
-        ":file_view",
         ":file_view_impl",
-        ":guide_delivery",
         ":guide_delivery_impl",
         ":run_control",
         ":run_control_impl",
         ":sandbox",
         ":sandbox_impl",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "dag_cleaner_asm",
+    srcs = [
+        "dag_cleaner_asm.py",
+    ],
+    pyright_deps = [
+        ":build_graph_storage",
+        ":dag_clean_logic",
+        ":dag_cleaner",
         ":dag_cleaner_impl",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "agent_node_clean_logic_asm",
+    srcs = [
+        "agent_node_clean_logic_asm.py",
+    ],
+    pyright_deps = [
+        ":agent_loop",
+        ":agent_loop_config",
+        ":agent_loop_impl",
+        ":agent_node_clean_logic_impl",
+        ":build_agent_config",
+        ":build_agent_config_impl",
+        ":build_graph_storage",
+        ":dag_clean_logic",
+        ":sandbox",
+        ":sandbox_asm",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "build_asm",
+    srcs = [
+        "build_asm.py",
+    ],
+    pyright_deps = [
+        ":agent_loop",
+        ":agent_node_clean_logic_asm",
+        ":build_agent_config",
+        ":build_graph_storage",
+        ":build_graph_storage_impl",
+        ":build_runner_impl",
+        ":dag_clean_logic",
+        ":dag_cleaner",
+        ":dag_cleaner_asm",
     ],
     visibility = ["//visibility:public"],
 )

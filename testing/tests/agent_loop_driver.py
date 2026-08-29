@@ -251,10 +251,11 @@ def logger_callback(event: LogEvent, data: dict[str, Any]) -> None:
         reqs = cumulative.get("request_count", 0)
         dur = cumulative.get("total_duration_seconds", 0.0)
 
+        pct = int(round((cached_tok / in_tok) * 100)) if in_tok > 0 else 0
         print(f"  [LOG] Run terminated: {termination_value}")
         print(f"  [TOKENS] Final context size: {final_context:,} tokens")
-        print(f"  [TOKENS] Total spent: {total_tok:,} tokens ({reqs} requests, {dur:.2f}s)")
-        print(f"  [TOKENS]   - Input tokens: {in_tok:,} (cached: {cached_tok:,})")
+        print(f"  [TOKENS] Requests: {reqs} ({dur:.2f}s)")
+        print(f"  [TOKENS]   - Input tokens: {in_tok:,} ({pct}% cached)")
         print(f"  [TOKENS]   - Output tokens: {out_tok:,}")
 
     elif event == "error":
@@ -311,6 +312,18 @@ def main():
     print("  - Time: supersedes the earlier time result; the earlier result")
     print("    is stubbed in place with a static placeholder")
 
+    class DriverToolExecutor:
+        def __init__(self, tools_list: list[ToolDefinition]) -> None:
+            self._tools = tools_list
+
+        def __call__(self, name: str, arguments: dict[str, Any]) -> Any:
+            return tool_executor(name, arguments)
+
+        def get_tool_definitions(self) -> list[ToolDefinition]:
+            return self._tools
+
+    driver_executor = DriverToolExecutor(tools)
+
     for i, prompt in enumerate(prompts, 1):
         print(f"\n{'=' * 70}")
         print(f"Test #{i}")
@@ -320,7 +333,7 @@ def main():
         result = agent.run_agent(
             prompt=prompt,
             tools=tools,
-            tool_executor=tool_executor,
+            tool_executor=driver_executor,
             system_prompt=system_prompt,
             logger=logger_callback,
         )

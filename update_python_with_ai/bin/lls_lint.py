@@ -593,6 +593,18 @@ def check_protocol_last(f: Path, code: str) -> None:
         err(f, f"the interface's Protocol class must be last in the Data Types block; last class is {class_lines[-1].strip()!r}")
 
 
+def check_assembly_class(f: Path, code: str) -> None:
+    """An assembly LLS (*_asm.md) must declare its assembly class ending with the 'Asm' suffix."""
+    if not stem_of(f).endswith("_asm"):
+        return
+    class_names = [m.group(1) for m in re.finditer(r"^class ([A-Za-z_]\w*)", code, re.M)]
+    if not class_names:
+        err(f, "assembly LLS declares no class in Data Types")
+        return
+    if not any(name.endswith("Asm") for name in class_names):
+        err(f, f"assembly LLS class name must end with 'Asm' (found {class_names})")
+
+
 def check_data_types(f: Path, body: str, comment: list[str], is_impl: bool) -> None:
     blocks = python_blocks(body)
     if len(blocks) != 1:
@@ -606,7 +618,9 @@ def check_data_types(f: Path, body: str, comment: list[str], is_impl: bool) -> N
     check_dataclasses(f, code)
     check_abc(f, code)
     check_typeddict(f, code)
-    if not is_impl:
+    if is_impl:
+        check_assembly_class(f, code)
+    else:
         check_protocol_last(f, code)
 
 

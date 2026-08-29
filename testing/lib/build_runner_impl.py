@@ -78,23 +78,23 @@ def _format_compact_log(event: LogEvent, data: Dict[str, Any]) -> Optional[str]:
         s_in = session.get("input_tokens", session.get("prompt_tokens", 0))
         s_cached = session.get("cached_input_tokens", session.get("cached_prompt_tokens", 0))
         s_out = session.get("output_tokens", session.get("completion_tokens", 0))
-        s_tot = session.get("total_tokens", 0)
         s_reqs = session.get("request_count", 0)
         s_dur = session.get("total_duration_seconds", 0.0)
+        s_pct = int(round((s_cached / s_in) * 100)) if s_in > 0 else 0
 
         cum = data.get("runner_cumulative_usage", session)
         c_in = cum.get("input_tokens", cum.get("prompt_tokens", 0))
         c_cached = cum.get("cached_input_tokens", cum.get("cached_prompt_tokens", 0))
         c_out = cum.get("output_tokens", cum.get("completion_tokens", 0))
-        c_tot = cum.get("total_tokens", 0)
         c_reqs = cum.get("request_count", 0)
         c_dur = cum.get("total_duration_seconds", 0.0)
+        c_pct = int(round((c_cached / c_in) * 100)) if c_in > 0 else 0
 
         return (
             f"[agent {node}] terminated ({data.get('termination_value', '?')}); "
-            f"session: input {s_in}, input (cached) {s_cached}, output {s_out}, total {s_tot} "
+            f"session: input {s_in} ({s_pct}% cached), output {s_out} "
             f"({s_reqs} requests, {s_dur:.2f}s) | "
-            f"cumulative: input {c_in}, input (cached) {c_cached}, output {c_out}, total {c_tot} "
+            f"cumulative: input {c_in} ({c_pct}% cached), output {c_out} "
             f"({c_reqs} requests, {c_dur:.2f}s)"
         )
 
@@ -155,23 +155,23 @@ def _format_full_log(event: LogEvent, data: Dict[str, Any]) -> str:
         s_in = session.get("input_tokens", session.get("prompt_tokens", 0))
         s_cached = session.get("cached_input_tokens", session.get("cached_prompt_tokens", 0))
         s_out = session.get("output_tokens", session.get("completion_tokens", 0))
-        s_tot = session.get("total_tokens", 0)
         s_reqs = session.get("request_count", 0)
         s_dur = session.get("total_duration_seconds", 0.0)
+        s_pct = int(round((s_cached / s_in) * 100)) if s_in > 0 else 0
 
         cum = data.get("runner_cumulative_usage", session)
         c_in = cum.get("input_tokens", cum.get("prompt_tokens", 0))
         c_cached = cum.get("cached_input_tokens", cum.get("cached_prompt_tokens", 0))
         c_out = cum.get("output_tokens", cum.get("completion_tokens", 0))
-        c_tot = cum.get("total_tokens", 0)
         c_reqs = cum.get("request_count", 0)
         c_dur = cum.get("total_duration_seconds", 0.0)
+        c_pct = int(round((c_cached / c_in) * 100)) if c_in > 0 else 0
 
         return (
             f"[{node}] run_terminated: {data.get('termination_value', '?')} | "
-            f"session: input {s_in}, input (cached) {s_cached}, output {s_out}, total {s_tot} "
+            f"session: input {s_in} ({s_pct}% cached), output {s_out} "
             f"({s_reqs} requests, {s_dur:.2f}s) context {data.get('final_context_size', 0)} | "
-            f"cumulative: input {c_in}, input (cached) {c_cached}, output {c_out}, total {c_tot} "
+            f"cumulative: input {c_in} ({c_pct}% cached), output {c_out} "
             f"({c_reqs} requests, {c_dur:.2f}s)"
         )
 

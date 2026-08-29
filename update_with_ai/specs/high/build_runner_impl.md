@@ -18,7 +18,7 @@ terms (from build_runner): result
 - A change addition with no provided change text adds the change message `check`.
 - Implements change broadcast by composing the message from the target's declared source file and the provided change text, adding it to the pending set of each of the target's known reverse dependencies, then deleting the target's data.
 - [boundary] All components are created per call through the supplied factories; the implementation holds no component instances across calls.
-- Tracks cumulative token usage and duration across all agent sessions in the cleaning pass, reporting both session and cumulative totals in stdout and the log file on each session termination.
+- Tracks cumulative token usage and duration across all agent sessions in the cleaning pass, reporting both session and cumulative totals (input tokens with cached percentage and output tokens) in stdout and the log file on each session termination.
 - [state] No persistent state is held across calls.
 - [external] The component implementations supplied through the factories, the language model service, and the generated module of the selected agent_config target (config target).
 - [failure] Expected failures are provided as values (a result); the log file is always written, regardless of the result.

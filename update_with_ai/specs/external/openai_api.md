@@ -1,23 +1,14 @@
 # Using the OpenAI API
 
-How a module depends on and uses the OpenAI API to make agent prompt calls,
-per the current usage in `agent_loop_impl` (the only module that calls it).
-The `agent_loop` component declares the OpenAI API as its external boundary
-(`[external] The OpenAI API (external language model service)`, per
-`specs/high/agent_loop.md`); this file documents the mechanics so the
-`agent_loop_impl` spec itself only states that it uses OpenAI to make prompt
-calls. Not a low-level specification: it is external-dependency documentation
-(kept out of `specs/low/` so the LLS linter does not apply).
+How a module depends on and uses the OpenAI API to make agent prompt calls.
+This document describes the external OpenAI API usage conventions, message schemas, and client interaction mechanics.
 
 ## The dependency
 
-The `openai` Python package provides the client and the chat types. The
-package is a direct dependency of the consuming module's BUILD entry:
+The `openai` Python package provides the client and the chat types:
 
-- `deps = [requirement("openai")]` on the module's `pyright_library` (lib BUILD).
 - Import the client: `from openai import OpenAI`.
-- Import the chat types used for requests and responses from
-  `openai.types.chat` and its submodules:
+- Import the chat types used for requests and responses from `openai.types.chat` and its submodules:
   - `ChatCompletionSystemMessageParam`, `ChatCompletionUserMessageParam`,
     `ChatCompletionAssistantMessageParam`, `ChatCompletionToolMessageParam` —
     the four message roles accepted by the completions endpoint.
@@ -27,8 +18,7 @@ package is a direct dependency of the consuming module's BUILD entry:
 
 ## Client construction
 
-One client is constructed per run, from the run's `AgentLoopConfig` (see
-`agent_loop_config`): the service endpoint, credentials, and request timeout.
+A client is constructed from the agent loop configuration: the service endpoint, credentials, and request timeout.
 
 ```python
 self._client = OpenAI(
@@ -43,7 +33,7 @@ state (each request carries the full conversation).
 
 ## Conversation messages
 
-The loop keeps the conversation as its own `HistoryEntry` dicts
+The loop maintains the conversation history as dictionary entries
 (`{"role": ..., "content": ...}` and, for assistant messages, `tool_calls`).
 Before each request they are converted to the OpenAI message-param types:
 
@@ -55,24 +45,15 @@ Before each request they are converted to the OpenAI message-param types:
   before it is sent, so nothing internal reaches the service.
 - The system prompt, when provided, is prepended as a `system` message.
 
-The OpenAI response message is converted back into a `HistoryEntry`
-(`_convert_openai_message_to_dict`), so the loop's conversation stays in its
-own format end to end.
+The OpenAI response message is converted back into a conversation dictionary entry, so the loop's conversation stays in its own format end to end.
 
 ## Tool definitions
 
-The loop's `ToolDefinition` dicts (`{"type": "function", "function":
-{"name", "description", "parameters"}}`) are passed through as
-`ChatCompletionToolParam` values. When any tools are provided, the request
-also sets `tool_choice = "auto"` so the model may call any of them. The tool
-definitions are re-fetched before each request, so a tool's definition may
-change during the run (the sandbox's advance tool gains its `change`
-argument on the final step).
+The loop's tool definitions (`{"type": "function", "function": {"name", "description", "parameters"}}`) are passed through as `ChatCompletionToolParam` values. When any tools are provided, the request also sets `tool_choice = "auto"` so the model may call any of them. The tool definitions are re-fetched before each request, accommodating tool definitions that change during a run.
 
 ## The prompt call
 
-Each request is a single chat-completion call with the full conversation,
-model, and processing parameters:
+Each request is a single chat-completion call with the full conversation, model, and processing parameters:
 
 ```python
 response = self._client.chat.completions.create(
@@ -84,9 +65,7 @@ response = self._client.chat.completions.create(
 )
 ```
 
-An exception from the call is an API failure: the loop returns
-`(error, history)` (a loop failure) with the error text logged; no state is
-changed. There are no retries.
+An exception from the call is an API failure: the loop returns a failure result with the error text logged; no state is changed. There are no retries.
 
 ## The response
 
@@ -108,35 +87,17 @@ The response is consumed from `response.choices[0]`:
   and the cumulative totals along with elapsed request duration (measured
   via `time.perf_counter()`) for its logger events.
 
-An empty `response.choices` is an API failure (loop failure), as is a
-`"stop"` response with no content.
+An empty `response.choices` is an API failure, as is a `"stop"` response with no content.
 
 ## Consuming the response
 
-- **Tool calls:** each tool call is converted to the loop's `ToolCall` dict
-  and executed through the tool executor; the results are appended as
-  `tool` messages, and the loop continues with a follow-up request.
-- **`finish_reason == "stop"`:** the model stopped without signaling
-  termination. Since there is no free-text final answer, a termination
-  reminder is injected and the loop continues; the run completes only via a
-  termination tool or the iteration limit.
-- **`finish_reason == "length"`:** the response was truncated at the
-  generation limit. Any tool calls in the truncated response are dropped
-  (never executed), the truncated content is appended, and the loop resumes
-  with a follow-up request after appending the continuation prompt (the
-  configured one, or the pinned default). A truncated response whose content
-  is a single repeated character (a degenerate response) signals a loop
-  failure instead of resuming.
-- **Stubbing and prefix caching:** when a tool result's supersedes flag is
-  set, the earlier result for the same file or tool command is replaced in
-  place with the static stub, so the conversation prefix up to the most
-  recent live result stays byte-identical across requests, preserving the
-  model service's prefix caching.
+- **Tool calls:** each tool call is converted to the loop's internal tool call representation and executed through the tool executor; the results are appended as `tool` messages, and the loop continues with a follow-up request.
+- **`finish_reason == "stop"`:** the model stopped without signaling termination. Since there is no free-text final answer, a termination reminder is injected and the loop continues; the run completes only via a termination tool or the iteration limit.
+- **`finish_reason == "length"`:** the response was truncated at the generation limit. Any tool calls in the truncated response are dropped (never executed), the truncated content is appended, and the loop resumes with a follow-up request after appending the continuation prompt. A truncated response whose content is a single repeated character (a degenerate response) signals a loop failure instead of resuming.
+- **Stubbing and prefix caching:** when a tool result's supersedes flag is set, the earlier result for the same file or tool command is replaced in place with a static stub, so the conversation prefix up to the most recent live result stays byte-identical across requests, preserving the model service's prefix caching.
 
 ## Notes and non-goals
 
-- The service endpoint, model, and credentials come from the run's
-  `AgentLoopConfig`; nothing is hardcoded in the calling module.
-- Retry behavior is unspecified: any API exception is a loop failure.
-- The exact SDK version is pinned by the workspace's Python requirements;
-  the call shape above is the current usage and may evolve with the SDK.
+- The service endpoint, model, and credentials come from configuration; nothing is hardcoded in the calling module.
+- Retry behavior is unspecified: any API exception is an unhandled failure.
+- The call shape above is the current usage and may evolve with SDK versions.

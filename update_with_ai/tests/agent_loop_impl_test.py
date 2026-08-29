@@ -82,6 +82,37 @@ def make_tool_definitions() -> List[ToolDefinition]:
     ]
 
 
+
+class TestToolExecutor:
+    """Wrapper implementing the ToolExecutor Protocol (__call__ + get_tool_definitions)."""
+
+    def __init__(
+        self,
+        fn: Any,
+        tools: Optional[List[ToolDefinition]] = None,
+    ) -> None:
+        self._fn = fn
+        self._tools = list(tools) if tools is not None else make_tool_definitions()
+
+    def __call__(self, name: str, arguments: Dict[str, Any]) -> Any:
+        return self._fn(name, arguments)
+
+    def get_tool_definitions(self) -> List[ToolDefinition]:
+        return self._tools
+
+
+def make_tool_executor(
+    fn: Any,
+    tools: Optional[List[ToolDefinition]] = None,
+) -> Any:
+    """Wrap a callable in a TestToolExecutor implementing the ToolExecutor Protocol."""
+    if isinstance(fn, TestToolExecutor):
+        return fn
+    if hasattr(fn, "get_tool_definitions") and callable(getattr(fn, "get_tool_definitions")):
+        return fn
+    return TestToolExecutor(fn, tools)
+
+
 def make_tool_call(
     name: str, call_id: str, args: Dict[str, Any]
 ) -> ChatCompletionMessageFunctionToolCall:
@@ -197,7 +228,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = agent.run_agent(
             prompt="update the spec",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
             logger=logger,
         )
         history = self.assert_success(result)
@@ -246,7 +277,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = agent.run_agent(
             prompt="update the spec",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
             logger=logger,
         )
         history = self.assert_success(result)
@@ -282,7 +313,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = agent.run_agent(
             prompt="update the spec",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
             logger=logger,
         )
 
@@ -330,7 +361,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = agent.run_agent(
             prompt="update the spec",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
             logger=logger,
         )
 
@@ -379,7 +410,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = agent.run_agent(
             prompt="update the spec",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
             logger=logger,
         )
 
@@ -426,7 +457,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = agent.run_agent(
             prompt="do it",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
             logger=logger,
         )
         history = self.assert_success(result)
@@ -452,7 +483,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="What is the capital of France?",
             tools=[],
-            tool_executor=lambda name, arguments: self.inline_result("unused"),
+            tool_executor=make_tool_executor(lambda name, arguments: self.inline_result("unused"), tools=[]),
             logger=logger,
         )
 
@@ -504,7 +535,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="What's the weather in San Francisco?",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
         )
 
         history = self.assert_success(result)
@@ -546,7 +577,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Finish the task",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
         )
 
         assert isinstance(result, tuple)
@@ -575,7 +606,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Finish the task",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
         )
 
         assert isinstance(result, tuple)
@@ -598,7 +629,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Hello",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
+            tool_executor=make_tool_executor(lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(), tools=[]),
         )
 
         assert isinstance(result, tuple)
@@ -640,7 +671,7 @@ class TestAgentLoopImpl(unittest.TestCase):
                 result = self.agent.run_agent(
                     prompt="Hello",
                     tools=[],
-                    tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
+                    tool_executor=make_tool_executor(lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(), tools=[]),
                 )
                 assert isinstance(result, tuple)
                 error, history = result
@@ -666,7 +697,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Solve it",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
+            tool_executor=make_tool_executor(lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(), tools=[]),
         )
 
         history = self.assert_success(result)
@@ -727,7 +758,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Weather?",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
         )
 
         history = self.assert_success(result)
@@ -762,7 +793,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Go",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
+            tool_executor=make_tool_executor(lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(), tools=[]),
         )
 
         history = self.assert_success(result)
@@ -790,7 +821,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Go",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
+            tool_executor=make_tool_executor(lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(), tools=[]),
         )
 
         assert isinstance(result, tuple)
@@ -818,7 +849,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Go",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
+            tool_executor=make_tool_executor(lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(), tools=[]),
         )
 
         assert isinstance(result, tuple)
@@ -842,7 +873,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = agent.run_agent(
             prompt="Go",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
+            tool_executor=make_tool_executor(lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(), tools=[]),
         )
 
         history = self.assert_success(result)
@@ -869,7 +900,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = agent.run_agent(
             prompt="Go",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
+            tool_executor=make_tool_executor(lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(), tools=[]),
         )
 
         assert isinstance(result, tuple)
@@ -903,7 +934,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Go",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
+            tool_executor=make_tool_executor(lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(), tools=[]),
             logger=logger,
         )
 
@@ -937,7 +968,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="What's the weather?",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
         )
 
         assert isinstance(result, tuple)
@@ -964,7 +995,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = agent.run_agent(
             prompt="What's the weather?",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
         )
 
         assert isinstance(result, tuple)
@@ -998,7 +1029,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="What's the weather?",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
         )
 
         history = self.assert_success(result)
@@ -1052,7 +1083,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = agent.run_agent(
             prompt="Edit foo.txt",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
             logger=logger,
         )
 
@@ -1091,7 +1122,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Do something",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
         )
 
         history = self.assert_success(result)
@@ -1129,7 +1160,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Read the file twice",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
             logger=logger,
         )
 
@@ -1180,7 +1211,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Read foo.txt twice",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
             logger=logger,
         )
 
@@ -1238,7 +1269,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Read both files",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
         )
 
         history = self.assert_success(result)
@@ -1270,7 +1301,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Verify twice",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
         )
 
         history = self.assert_success(result)
@@ -1327,7 +1358,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Edit foo.txt",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
             logger=logger,
         )
 
@@ -1416,7 +1447,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Go",
             tools=make_tool_definitions(),
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
+            tool_executor=make_tool_executor(lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue()),
             session_start_results=[session_read],
             logger=logger,
         )
@@ -1474,7 +1505,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Build it",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
+            tool_executor=make_tool_executor(lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(), tools=[]),
             system_prompt="You are a builder.",
         )
 
@@ -1498,7 +1529,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
+            tool_executor=make_tool_executor(lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(), tools=[]),
             system_prompt="Act on the files.",
         )
 
@@ -1538,7 +1569,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = agent.run_agent(
             prompt="Do something",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
+            tool_executor=make_tool_executor(lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(), tools=[]),
             logger=logger,
         )
 
@@ -1605,7 +1636,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Read the file",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
         )
 
         history = self.assert_success(result)
@@ -1653,7 +1684,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Read the file",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
         )
 
         history = self.assert_success(result)
@@ -1690,7 +1721,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Hi",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
+            tool_executor=make_tool_executor(lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(), tools=[]),
             logger=logger,
         )
 
@@ -1729,7 +1760,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Hi",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
+            tool_executor=make_tool_executor(lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(), tools=[]),
             logger=logger,
         )
 
@@ -1775,7 +1806,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Weather?",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
             logger=logger,
         )
 
@@ -1824,7 +1855,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         result = self.agent.run_agent(
             prompt="Test",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
             logger=logger,
         )
 
@@ -1885,7 +1916,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         first = self.agent.run_agent(
             prompt="Read a.txt",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
         )
         self.assert_success(first)
 
@@ -1900,7 +1931,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         second = self.agent.run_agent(
             prompt="Re-read a.txt",
             tools=make_tool_definitions(),
-            tool_executor=executor,
+            tool_executor=make_tool_executor(executor),
             session_start_results=[session_read],
         )
         history = self.assert_success(second)
@@ -1920,7 +1951,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         first = self.agent.run_agent(
             prompt="Question one",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
+            tool_executor=make_tool_executor(lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(), tools=[]),
         )
 
         self.mock_client.chat.completions.create.return_value = make_response(
@@ -1929,7 +1960,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         second = self.agent.run_agent(
             prompt="Question two",
             tools=[],
-            tool_executor=lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(),
+            tool_executor=make_tool_executor(lambda name, arguments: TerminateAgentWithSuccess(NoChangeResult()) if name == "advance" else Continue(), tools=[]),
         )
 
         assert isinstance(first, tuple)

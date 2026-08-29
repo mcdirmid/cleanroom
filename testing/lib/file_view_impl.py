@@ -112,8 +112,8 @@ class FileViewImpl(FileView):
                 "Reading a writable file makes its content the file's current content in the "
                 "conversation (an earlier read of the same file is replaced by a stub). "
                 "Line numbers are metadata, not file content: reading "
-                "a writable file that already exists REQUIRES include_line_numbers=True (a "
-                "plain read is rejected); line numbers also serve update_lines edits.",
+                "a writable file that already exists REQUIRES include_line_numbers=True to enable editing via update_lines (a "
+                "plain read without include_line_numbers=True is rejected); reads of read-only files provide plain content (include_line_numbers=False).",
                 {
                     "file_path": {"type": "string", "description": "Virtual path to the file"},
                     "include_line_numbers": {"type": "boolean", "description": "Prefix each line with its line number; REQUIRED when reading a writable file that already exists; line numbers serve update_lines edits and are allowed only for writable files (default: false)", "default": False}
@@ -121,7 +121,7 @@ class FileViewImpl(FileView):
             ),
             self._create_tool_definition(
                 "replace",
-                "Replace text in a file (content-based search and replace: takes file_path, old_str, new_str, expect_multiple): replaces exactly one occurrence of old_str with new_str; fails when old_str is absent or matches more than once unless expect_multiple=True (then replaces all occurrences). old_str and new_str are limited to 200 characters each — use update_lines for larger changes (requires the line-numbered view). After an edit the file is automatically re-read, so the file's updated content (with line numbers) appears in the conversation immediately after the edit.",
+                "Replace short text in a file (content-based search and replace: takes file_path, old_str, new_str, expect_multiple). Only for short one-line phrase replacements — old_str and new_str are strictly limited to at most 200 characters each. For multi-line edits, functions, classes, or block updates, always use update_lines instead (which operates on line ranges and requires include_line_numbers=True). Replaces exactly one occurrence of old_str with new_str; fails when old_str is absent or matches more than once unless expect_multiple=True (then replaces all occurrences). After an edit the file is automatically re-read with line numbers.",
                 {
                     "file_path": {"type": "string", "description": "Virtual path to the file"},
                     "old_str": {"type": "string", "description": "Exact text to find"},
@@ -131,7 +131,7 @@ class FileViewImpl(FileView):
             ),
             self._create_tool_definition(
                 "update_lines",
-                "Replace, delete, or insert lines by 1-indexed line range (takes file_path, start_line, end_line, new_str — does NOT take old_str): replaces lines start_line..end_line with new_str; start_line > end_line inserts new_str before start_line; empty new_str deletes the range. Requires the line-numbered view: call read_file(file_path, include_line_numbers=true) first; after a write the automatic re-read provides the line-numbered view. Line numbers are 1-indexed and current only in the most recent read.",
+                "Replace, delete, or insert lines by 1-indexed line range (takes file_path, start_line, end_line, new_str — does NOT take old_str). Preferred tool for modifying functions, classes, and multi-line blocks: replaces lines start_line..end_line with new_str; start_line > end_line inserts new_str before start_line; empty new_str deletes the range. Requires the line-numbered view: call read_file(file_path, include_line_numbers=True) first; after a write the automatic re-read provides the line-numbered view. Line numbers are 1-indexed and current only in the most recent read.",
                 {
                     "file_path": {"type": "string", "description": "Virtual path to the file"},
                     "start_line": {"type": "integer", "description": "1-indexed start line (inclusive); between 1 and len(file)+1"},

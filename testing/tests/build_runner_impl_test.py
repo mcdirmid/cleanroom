@@ -312,7 +312,7 @@ class TestLogFormatters(unittest.TestCase):
         assert line is not None
         self.assertNotIn("\n", line)
         self.assertIn("no_change", line)
-        self.assertIn("input 100, input (cached) 80, output 50, total 150", line)
+        self.assertIn("input 100 (80% cached), output 50", line)
         self.assertIn("3 requests, 3.60s", line)
 
     def test_compact_error(self) -> None:
@@ -416,7 +416,7 @@ class TestLogFormatters(unittest.TestCase):
         )
         self.assertIn("run_terminated", line)
         self.assertIn("no_change", line)
-        self.assertIn("input 100, input (cached) 80, output 50, total 150", line)
+        self.assertIn("input 100 (80% cached), output 50", line)
         self.assertIn("context 10", line)
 
     def test_full_error(self) -> None:

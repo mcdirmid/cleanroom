@@ -64,7 +64,7 @@ Orchestrates the full agent pipeline — graph resolution, message persistence, 
 
 **Logging**
 
-- Provides compact one-line summaries of run events to standard output; on agent session termination, reports the agent session's token usage and elapsed duration alongside cumulative totals across all agent sessions in the pass.
+- Provides compact one-line summaries of run events to standard output; on agent session termination, reports the agent session's token usage (input tokens with cached percentage and output tokens) and elapsed duration alongside cumulative totals across all agent sessions in the pass.
 - Provides a verbose transcript to a log file whose path is determined by a configured environment variable or a default location (the Bazel workspace directory when running under Bazel, otherwise the current working directory).
 - The transcript records each request's conversation state.
 

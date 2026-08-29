@@ -28,7 +28,7 @@ This guide does not apply to assembly specs (`<name>_asm.md`): an assembly perfo
 - [ ] Every Behavioral Description bullet has one or more outcome tests (return value; observable state through a fresh instance; a failure that leaves the previous state intact; atomicity)
 - [ ] Stateful behavior asserted through the public operations or a fresh instance, never through internals
 - [ ] Every expected failure signal named in the LLS has a test that triggers its condition and asserts the signal
-- [ ] Error-message wording asserted only when the LLS pins the string; otherwise only the signal type is asserted
+- [ ] Error-message, warning, and reminder wording asserted only when the LLS pins the string in Non-Concerns; otherwise only the signal type or event occurrence is asserted
 - [ ] Invariants tested across operation sequences (a fresh instance behaves freshly; state unchanged after a failing operation; resolved-path effects)
 - [ ] Pinned non-concerns asserted; open non-concerns never tested
 
@@ -56,7 +56,7 @@ This guide does not apply to assembly specs (`<name>_asm.md`): an assembly perfo
 - [ ] No tests for open non-concerns (ordering, algorithm choice, representation, log/text format, message wording, chunk boundaries)
 - [ ] No tests for unexpected failures not listed as concerns (precondition violations, filesystem errors, state corruption)
 - [ ] No tests for internal mechanisms the LLS does not state (cache internals, temporary-file steps) unless pinned in a Non-Concern
-- [ ] No exact error-message wording unless the LLS pins the string for testing
+- [ ] No exact error, warning, or reminder wording asserted unless the LLS explicitly pins the string in Non-Concerns
 - [ ] No assertions on unmandated path representations, bare unextended identifier/target fragments, or formats outside the LLS contract
 - [ ] No tests of the HLS; the LLS is the contract
 
