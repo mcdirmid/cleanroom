@@ -30,13 +30,13 @@ from typing import Any, Dict, List, Optional
 
 from unittest.mock import Mock, patch
 
-from testing.lib.build_node_loader import BuildNode
-from testing.lib.build_node_loader_impl import (
+from lib.build_node_loader import BuildNode
+from lib.build_node_loader_impl import (
     BuildNodeImpl,
     BuildNodeLoaderImpl,
     _resolve_manifest_path,
 )
-from testing.lib.tool_provider import Continue, ToolCallOutcome, ToolFailure, ToolResult
+from lib.tool_provider import Continue, ToolCallOutcome, ToolFailure, ToolResult
 
 
 def _noop_executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome:
@@ -60,7 +60,7 @@ PROVIDER_B_DEFINITION = {
 }
 
 PROVIDER_A_SOURCE = """\
-from testing.lib.tool_provider import ToolResult
+from lib.tool_provider import ToolResult
 
 
 class ToolProviderA:
@@ -74,7 +74,7 @@ class ToolProviderA:
 """ % (PROVIDER_A_DEFINITION,)
 
 PROVIDER_B_SOURCE = """\
-from testing.lib.tool_provider import ToolResult
+from lib.tool_provider import ToolResult
 
 
 class ToolProviderB:
@@ -127,7 +127,7 @@ class _TempRunfilesTestCase(unittest.TestCase):
         self.runfiles = Path(self.tmp)
         self.loader = BuildNodeLoaderImpl()
         self._runfiles_patcher = patch(
-            "testing.lib.build_node_loader_impl._get_runfiles_path",
+            "lib.build_node_loader_impl._get_runfiles_path",
             return_value=self.runfiles,
         )
         self._runfiles_patcher.start()

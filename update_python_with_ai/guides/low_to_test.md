@@ -13,9 +13,12 @@ This guide does not apply to assembly specs (`<name>_asm.md`): an assembly perfo
 ## Module layout
 
 - [ ] One test module per implementation LLS: `specs/low/csv_inventory_impl.md` → `tests/csv_inventory_impl_test.py`
+- [ ] Imports of library modules use `from lib.<module> import ...` (never prefixing the workspace directory name)
 - [ ] The module uses `unittest`, ending with `if __name__ == "__main__": unittest.main()`
 - [ ] Tests are grouped into classes by concern (success routing, failure handling, invariants, config)
-- [ ] Write incrementally: append one test class per edit (a `replace_lines` inserting a class), never the whole file in one edit — an edit that exceeds the response limit is lost, and the file must be re-read
+- [ ] Write incrementally and make targeted edits: append one test class per edit (using `update_lines` to insert classes), and use `update_lines` to fix or update individual test methods; never rewrite or regenerate the whole file in one edit (which risks truncation and wastes tokens)
+- [ ] The test node has write access only to its test file (`tests/<name>_test.py`); library implementation files (`lib/<name>.py`) are strictly read-only and never modified by the test node
+- [ ] Each file change summary in `advance(changes=[...])` is at most 200 characters (one short sentence)
 
 ## What to test
 
@@ -36,6 +39,10 @@ This guide does not apply to assembly specs (`<name>_asm.md`): an assembly perfo
 - [ ] Preconditions are enforced by the mocks, never tested directly (precondition violations are unexpected failures)
 - [ ] Interaction is asserted through recorded calls: which dependency operations were called, in what order, with what arguments
 - [ ] External boundaries are mocked with fixtures aligned to the interface types the LLS declares; boundary preconditions enforced the same way
+- [ ] File fixtures exist on disk or are mocked: when a component takes a file path to read at initialization or during execution, tests must supply a real fixture file (e.g. created via `tempfile.NamedTemporaryFile` with test content) or mock the file-reading boundary, never passing a non-existent dummy path string
+- [ ] Mock targets patch where looked up: when patching standard library functions or submodules used by a module, patch the attribute on the module under test (`patch('lib.<module>.<symbol>')`, e.g. `patch('lib.guide_delivery_impl.os.path.isfile', ...)`), never the global stdlib module (`os.path.isfile`). Global builtins target `builtins.<name>` (e.g. `builtins.open`)
+- [ ] Synthetic fixtures conform strictly to spec delimiters: helper functions generating test files (guides, markdown, CSV, JSON) must produce the exact delimiters and heading structures the LLS defines (e.g. `## <heading>` for guide step sections, OpenAI tool call schema format), never bare unstructured strings
+- [ ] Consistent patch scoping: when multiple patches are needed for construction/execution, nest `with patch(...):` blocks inside the test or use `setUp`/`tearDown`, ensuring every `@patch` decorator has a corresponding mock parameter on the test method
 
 ## The bias rule
 
@@ -50,6 +57,7 @@ This guide does not apply to assembly specs (`<name>_asm.md`): an assembly perfo
 - [ ] No tests for unexpected failures not listed as concerns (precondition violations, filesystem errors, state corruption)
 - [ ] No tests for internal mechanisms the LLS does not state (cache internals, temporary-file steps) unless pinned in a Non-Concern
 - [ ] No exact error-message wording unless the LLS pins the string for testing
+- [ ] No assertions on unmandated path representations, bare unextended identifier/target fragments, or formats outside the LLS contract
 - [ ] No tests of the HLS; the LLS is the contract
 
 ## Common pitfalls
@@ -57,6 +65,9 @@ This guide does not apply to assembly specs (`<name>_asm.md`): an assembly perfo
 - [ ] No tests that read the implementation and transcribe its behavior
 - [ ] No weakened assertions to match observed behavior
 - [ ] No mocks of the system under test
+- [ ] No global stdlib patches (e.g. `@patch('os.path.isfile')` instead of `@patch('lib.<module>.os.path.isfile')`)
+- [ ] No fixtures missing spec-defined structural delimiters (e.g. markdown heading syntax)
+- [ ] No assertions on unmandated path fragments or unextended labels not specified by the LLS
 - [ ] No precondition tests (preconditions are enforced by the mocks, not tested)
 - [ ] No open-non-concern tests (pin the aspect in the LLS first, or drop the assertion)
 - [ ] No imports outside the LLS closure (the test imports only within its spec's dependency closure)

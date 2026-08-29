@@ -29,17 +29,15 @@ pyright_test(
     name = "sandbox_impl_test",
     srcs = ["sandbox_impl_test.py"],
     pyright_deps = [
-        "//testing/lib:tool_provider",
-        "//testing/lib:sandbox",
-        "//testing/lib:sandbox_impl",
+        "//testing/lib:tool_provider", 
+        "//testing/lib:sandbox", 
+        "//testing/lib:sandbox_impl", 
         "//testing/lib:file_view",
         "//testing/lib:guide_delivery",
         "//testing/lib:run_control",
         "//testing/lib:file_view_impl",
         "//testing/lib:guide_delivery_impl",
         "//testing/lib:run_control_impl",
-        "//testing/lib:dag_clean_logic",
-        "//testing/lib:dag_storage",
     ],
 )
 

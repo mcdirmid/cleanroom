@@ -29,12 +29,12 @@ import tempfile
 import unittest
 from typing import Any, Dict, List, Optional, Tuple
 
-from update_with_ai.lib.sandbox import SandboxConfig
-from update_with_ai.lib.sandbox_impl import SandboxImpl
-from update_with_ai.lib.file_view import FileViewConfig
-from update_with_ai.lib.guide_delivery import GuideDeliveryConfig
-from update_with_ai.lib.run_control import RunControlConfig
-from update_with_ai.lib.tool_provider import (
+from lib.sandbox import SandboxConfig
+from lib.sandbox_impl import SandboxImpl
+from lib.file_view import FileViewConfig
+from lib.guide_delivery import GuideDeliveryConfig
+from lib.run_control import RunControlConfig
+from lib.tool_provider import (
     PresentedToolResult,
     ToolDefinition,
     ToolFailure,
@@ -67,12 +67,12 @@ class _StubFileView:
         self._record("read_file", file_path, include_line_numbers)
         return self.read_result
 
-    def edit_file(self, file_path: Any, old_str: Any, new_str: Any, expect_multiple: Any = False) -> Any:
-        self._record("edit_file", file_path, old_str, new_str, expect_multiple)
+    def replace(self, file_path: Any, old_str: Any, new_str: Any, expect_multiple: Any = False) -> Any:
+        self._record("replace", file_path, old_str, new_str, expect_multiple)
         return self.read_result
 
-    def replace_lines(self, file_path: Any, start_line: Any, end_line: Any, new_str: Any) -> Any:
-        self._record("replace_lines", file_path, start_line, end_line, new_str)
+    def update_lines(self, file_path: Any, start_line: Any, end_line: Any, new_str: Any) -> Any:
+        self._record("update_lines", file_path, start_line, end_line, new_str)
         return self.read_result
 
     def search_files(self, path: Any, pattern: Any, offset: Any = 0, limit: Any = None) -> Any:
@@ -94,6 +94,10 @@ class _StubFileView:
     def get_current_content(self, file_path: Any) -> Any:
         self._record("get_current_content", file_path)
         return None
+
+    def sanitize_paths(self, text: str) -> str:
+        self._record("sanitize_paths", text)
+        return text
 
 
 class _StubGuideDelivery:
@@ -277,14 +281,14 @@ class TestDelegation(unittest.TestCase):
         self.h.sandbox.read_file("a.txt")
         self.assertEqual(self.h.file_view.calls, [("read_file", ("a.txt", False))])
 
-    def test_edit_file_delegates(self) -> None:
-        result = self.h.sandbox.edit_file("a.txt", "old", "new", expect_multiple=True)
-        self.assertEqual(self.h.file_view.calls, [("edit_file", ("a.txt", "old", "new", True))])
+    def test_replace_delegates(self) -> None:
+        result = self.h.sandbox.replace("a.txt", "old", "new", expect_multiple=True)
+        self.assertEqual(self.h.file_view.calls, [("replace", ("a.txt", "old", "new", True))])
         self.assertIs(result, self.h.file_view.read_result)
 
-    def test_replace_lines_delegates(self) -> None:
-        result = self.h.sandbox.replace_lines("a.txt", 1, 3, "content")
-        self.assertEqual(self.h.file_view.calls, [("replace_lines", ("a.txt", 1, 3, "content"))])
+    def test_update_lines_delegates(self) -> None:
+        result = self.h.sandbox.update_lines("a.txt", 1, 3, "content")
+        self.assertEqual(self.h.file_view.calls, [("update_lines", ("a.txt", 1, 3, "content"))])
         self.assertIs(result, self.h.file_view.read_result)
 
     def test_search_files_delegates(self) -> None:
@@ -371,9 +375,9 @@ class TestSmoke(unittest.TestCase):
     the factories compose into a working sandbox."""
 
     def test_reads_real_file_through_default_wiring(self) -> None:
-        from update_with_ai.lib.file_view_impl import FileViewImpl
-        from update_with_ai.lib.guide_delivery_impl import GuideDeliveryImpl
-        from update_with_ai.lib.run_control_impl import RunControlImpl
+        from lib.file_view_impl import FileViewImpl
+        from lib.guide_delivery_impl import GuideDeliveryImpl
+        from lib.run_control_impl import RunControlImpl
 
         tmp = tempfile.mkdtemp()
         try:

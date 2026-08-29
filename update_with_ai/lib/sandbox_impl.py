@@ -134,17 +134,17 @@ class SandboxImpl(Sandbox):
             )
         return self.file_view.read_file(file_path, include_line_numbers)
 
-    def edit_file(self, file_path: VirtualName, old_str: str, new_str: str,
-                  expect_multiple: bool = False) -> ToolCallOutcome:
+    def replace(self, file_path: VirtualName, old_str: str, new_str: str,
+                expect_multiple: bool = False) -> ToolCallOutcome:
         """Replace text in a file (content-based search and replace)."""
-        return self.file_view.edit_file(file_path, old_str, new_str, expect_multiple)
+        return self.file_view.replace(file_path, old_str, new_str, expect_multiple)
 
-    def replace_lines(self, file_path: VirtualName, start_line: int, end_line: int,
-                      new_str: str) -> ToolCallOutcome:
+    def update_lines(self, file_path: VirtualName, start_line: int, end_line: int,
+                     new_str: str) -> ToolCallOutcome:
         """Replace, delete, or insert lines by 1-indexed line range."""
-        return self.file_view.replace_lines(file_path, start_line, end_line, new_str)
+        return self.file_view.update_lines(file_path, start_line, end_line, new_str)
 
-    def search_files(self, path: VirtualName, pattern: str,
+    def search_files(self, path: VirtualName = ".", pattern: str = "",
                      offset: Optional[int] = None,
                      limit: Optional[int] = None) -> ToolCallOutcome:
         """Search for a pattern in files; render matches only for read-only files."""

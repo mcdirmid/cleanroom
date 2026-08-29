@@ -35,7 +35,7 @@ Provides verification and termination for a file-modifying agent session: verify
 **Guarantees**
 
 - Verification runs as part of the advance operation; verification passes when no verification callback is configured, and is delegated to the callback when one is configured.
-- When verification fails, the session continues with feedback; advance never terminates on a failing verification.
+- When verification fails, the session continues with feedback; advance never terminates on a failing verification; verification failure output delivered to the agent sanitizes any host filesystem paths, sandbox paths, or package prefixes, presenting files only by their virtual names.
 - Verification may maintain the node's lib/test BUILD file through the configured build linter; the BUILD file is not among the workspace's files, and such writes are not run writes and are not reported in change summaries.
 - Termination tools: advance, failure, and blame. Advance signals successful termination; a valid blame signals successful termination; the failure operation ends the session in failure.
 - The blame tool is provided only when blame targets are configured and non-empty.
@@ -45,7 +45,7 @@ Provides verification and termination for a file-modifying agent session: verify
 - Advance signals successful termination when verification passes; when files were modified, it requires a change summary naming what changed in each file, directing the next reader's attention to the changes.
 - When files were modified and the change summary is missing, malformed, or incomplete, advance signals a tool failure.
 - Change summaries are bounded; a summary exceeding the bound is rejected with guidance; persistent rejection fails the session.
-- When the session's pending messages include a feedback message, advance that would otherwise signal successful termination without a change signals a tool failure with a reason directing the agent to change, blame, or fail; the session continues.
+- When the session's pending messages include a feedback message and no files were modified, advance that would otherwise signal successful termination without a change warns once that feedback was given, allowing a subsequent advance call without changes to signal successful termination.
 
 **Assumptions**
 

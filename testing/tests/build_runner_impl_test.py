@@ -44,21 +44,21 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 from unittest.mock import patch
 from typing import cast
 
-from testing.lib.build_runner_impl import (
+from lib.build_runner_impl import (
     BuildRunnerImpl,
     _format_compact_log,
     _format_full_log,
 )
-from testing.lib.build_graph_storage import BuildGraphStorage, GraphConfig
-from testing.lib.build_graph_storage_impl import BuildGraphStorageFileImpl
-from testing.lib.dag_cleaner import CleaningResult
-from testing.lib.dag_clean_logic import (
+from lib.build_graph_storage import BuildGraphStorage, GraphConfig
+from lib.build_graph_storage_impl import BuildGraphStorageFileImpl
+from lib.dag_cleaner import CleaningResult
+from lib.dag_clean_logic import (
     DagCleanLogic,
     CleanResult,
     NoChangeResult,
     FailureResult,
 )
-from testing.lib.dag_storage import NodeMessage, MessageKind
+from lib.dag_storage import NodeMessage, MessageKind
 
 
 def msg(text: str, kind: str = "change") -> NodeMessage:
@@ -210,7 +210,7 @@ class _RunDagHarness:
                     {
                         "tool_calls": [
                             {"id": "c1", "type": "function",
-                             "function": {"name": "edit_file", "arguments": "{}"}}
+                             "function": {"name": "replace", "arguments": "{}"}}
                         ]
                     },
                 )
@@ -262,12 +262,22 @@ class TestLogFormatters(unittest.TestCase):
     """
 
     NODE = "@@//tests/example:sample_node_1"
-    USAGE: Dict[str, int] = {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
-    CUMULATIVE: Dict[str, int] = {
-        "prompt_tokens": 100,
-        "completion_tokens": 50,
+    USAGE: Dict[str, Any] = {
+        "input_tokens": 10,
+        "cached_input_tokens": 0,
+        "non_cached_input_tokens": 10,
+        "output_tokens": 5,
+        "total_tokens": 15,
+        "duration_seconds": 1.2,
+    }
+    CUMULATIVE: Dict[str, Any] = {
+        "input_tokens": 100,
+        "cached_input_tokens": 80,
+        "non_cached_input_tokens": 20,
+        "output_tokens": 50,
         "total_tokens": 150,
         "request_count": 3,
+        "total_duration_seconds": 3.6,
     }
 
     def test_compact_tool_called(self) -> None:
@@ -277,7 +287,7 @@ class TestLogFormatters(unittest.TestCase):
             {
                 "node_id": self.NODE,
                 "tool_calls": [
-                    {"function": {"name": "edit_file", "arguments": "{}"}},
+                    {"function": {"name": "replace", "arguments": "{}"}},
                     {"function": {"name": "read_file", "arguments": "{}"}},
                 ],
             },
@@ -285,20 +295,16 @@ class TestLogFormatters(unittest.TestCase):
         assert line is not None
         self.assertNotIn("\n", line)
         self.assertIn("sample_node_1", line)
-        self.assertIn("edit_file", line)
+        self.assertIn("replace", line)
         self.assertIn("read_file", line)
 
     def test_compact_api_response(self) -> None:
-        """api_response gets a one-line token-usage summary."""
-        line = _format_compact_log("api_response", {"node_id": self.NODE, "usage": self.USAGE})
-        assert line is not None
-        self.assertNotIn("\n", line)
-        self.assertIn("prompt 10", line)
-        self.assertIn("completion 5", line)
-        self.assertIn("total 15", line)
+        """api_response is skipped on stdout."""
+        line = _format_compact_log("api_response", {"node_id": self.NODE})
+        assert line is None
 
     def test_compact_run_terminated(self) -> None:
-        """run_terminated gets a one-line summary with the termination value."""
+        """run_terminated gets a one-line summary with session and cumulative token usage."""
         line = _format_compact_log(
             "run_terminated",
             {"node_id": self.NODE, "termination_value": "no_change", "cumulative_usage": self.CUMULATIVE},
@@ -306,7 +312,8 @@ class TestLogFormatters(unittest.TestCase):
         assert line is not None
         self.assertNotIn("\n", line)
         self.assertIn("no_change", line)
-        self.assertIn("3 requests", line)
+        self.assertIn("input 100, input (cached) 80, output 50, total 150", line)
+        self.assertIn("3 requests, 3.60s", line)
 
     def test_compact_error(self) -> None:
         """error gets a one-line summary with the error text."""
@@ -360,7 +367,7 @@ class TestLogFormatters(unittest.TestCase):
         )
 
     def test_full_tool_result(self) -> None:
-        from testing.lib.tool_provider import ToolResult
+        from lib.tool_provider import ToolResult
 
         line = _format_full_log(
             "tool_result",
@@ -380,17 +387,15 @@ class TestLogFormatters(unittest.TestCase):
             "tool_called",
             {
                 "node_id": self.NODE,
-                "tool_calls": [{"function": {"name": "edit_file", "arguments": "{}"}}],
+                "tool_calls": [{"function": {"name": "replace", "arguments": "{}"}}],
             },
         )
         self.assertIn("tool_called", line)
-        self.assertIn("edit_file", line)
+        self.assertIn("replace", line)
 
     def test_full_api_response(self) -> None:
-        line = _format_full_log("api_response", {"node_id": self.NODE, "usage": self.USAGE})
+        line = _format_full_log("api_response", {"node_id": self.NODE})
         self.assertIn("api_response", line)
-        self.assertIn("prompt 10", line)
-        self.assertIn("total 15", line)
 
     def test_full_reminder_injected(self) -> None:
         line = _format_full_log(
@@ -411,6 +416,8 @@ class TestLogFormatters(unittest.TestCase):
         )
         self.assertIn("run_terminated", line)
         self.assertIn("no_change", line)
+        self.assertIn("input 100, input (cached) 80, output 50, total 150", line)
+        self.assertIn("context 10", line)
 
     def test_full_error(self) -> None:
         line = _format_full_log("error", {"node_id": self.NODE, "error": "boom"})
@@ -869,7 +876,7 @@ class TestSigintHandling(unittest.TestCase):
         raises KeyboardInterrupt (the interrupt is never ignored)."""
         code = (
             "import sys, time\n"
-            "import testing.lib.build_runner_impl  # installs the SIGINT handler\n"
+            "import lib.build_runner_impl  # installs the SIGINT handler\n"
             "print('ready', flush=True)\n"
             "while True:\n"
             "    time.sleep(0.05)\n"

@@ -12,6 +12,9 @@ The module's types mirror the LLS's Data Types block; every operation implements
 - [ ] An interface module (for a spec with no `_impl` LLS) defines the interface's Protocol and types only; it never defines an implementation class — an implementation class appears only in the module of an implementation LLS (`<name>_impl.py`)
 - [ ] An assembly module (for a `_asm` LLS) defines the assembly class only: it performs configuration and assembly of other modules and no other functionality, provides the assembled result (e.g. `build()`), and has no test module (an assembly is never tested)
 - [ ] The implementation subclasses the interface's Protocol class, per the LLS (`class CsvInventoryImpl(Inventory): ...`)
+- [ ] Write incrementally and make targeted edits: for initial implementation, write imports, helpers, and base structure first, then append methods and classes across multiple edits (using `update_lines`); for modifications and bug fixes, use `update_lines` to replace specific line ranges based on the latest numbered read, never rewriting or regenerating the entire file in one edit (which risks truncation and wastes tokens)
+- [ ] The lib node has write access only to its library implementation file (`lib/<name>.py`); test files (`tests/<name>_test.py`) are strictly read-only
+- [ ] Each file change summary in `advance(changes=[...])` is at most 200 characters (one short sentence)
 
 ## Imports
 

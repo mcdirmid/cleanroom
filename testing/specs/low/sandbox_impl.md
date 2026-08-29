@@ -19,7 +19,7 @@ class SandboxImpl(Sandbox):
     def __init__(self, config: SandboxConfig, make_file_view: Callable[[FileViewConfig], FileView], make_guide_delivery: Callable[[GuideDeliveryConfig], GuideDelivery], make_run_control: Callable[[RunControlConfig, FileView, GuideDelivery], RunControl], diff_size_limit: DiffSizeLimit | None = None): ...
 ```
 
-Constructed with the `sandbox` interface's aggregate `SandboxConfig`, factories that construct the file machinery, the step-mode delivery, and the verification and termination rules (the concrete implementations are supplied by the assembler), and an optional diff size limit — the maximum characters a verification diff may report (default 1000, see Non-Concerns); it bundles no imported capabilities. Implements the `Sandbox` Protocol, providing all operations: `get_tool_definitions`, `get_session_start_reads`, `read_file`, `edit_file`, `replace_lines`, `search_files`, `advance`, `fail`, `blame`, and `get_write_occurred`.
+Constructed with the `sandbox` interface's aggregate `SandboxConfig`, factories that construct the file machinery, the step-mode delivery, and the verification and termination rules (the concrete implementations are supplied by the assembler), and an optional diff size limit — the maximum characters a verification diff may report (default 1000, see Non-Concerns); it bundles no imported capabilities. Implements the `Sandbox` Protocol, providing all operations: `get_tool_definitions`, `get_session_start_reads`, `read_file`, `replace`, `update_lines`, `search_files`, `advance`, `fail`, `blame`, and `get_write_occurred`.
 
 ## Composition
 

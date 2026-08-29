@@ -38,9 +38,9 @@ class FileViewImpl(FileView):
     the agent loop applies the stubbing.
     """
 
-    # edit_file supports only short search/replace strings: a whole-file swap
-    # must go through replace_lines (which requires the line-numbered view).
-    MAX_EDIT_LENGTH = 100
+    # replace supports only short search/replace strings: a whole-file swap
+    # must go through update_lines (which requires the line-numbered view).
+    MAX_EDIT_LENGTH = 200
 
     def __init__(self, config: FileViewConfig):
         """
@@ -113,15 +113,15 @@ class FileViewImpl(FileView):
                 "conversation (an earlier read of the same file is replaced by a stub). "
                 "Line numbers are metadata, not file content: reading "
                 "a writable file that already exists REQUIRES include_line_numbers=True (a "
-                "plain read is rejected); line numbers also serve replace_lines edits.",
+                "plain read is rejected); line numbers also serve update_lines edits.",
                 {
                     "file_path": {"type": "string", "description": "Virtual path to the file"},
-                    "include_line_numbers": {"type": "boolean", "description": "Prefix each line with its line number; REQUIRED when reading a writable file that already exists; line numbers serve replace_lines edits and are allowed only for writable files (default: false)", "default": False}
+                    "include_line_numbers": {"type": "boolean", "description": "Prefix each line with its line number; REQUIRED when reading a writable file that already exists; line numbers serve update_lines edits and are allowed only for writable files (default: false)", "default": False}
                 }
             ),
             self._create_tool_definition(
-                "edit_file",
-                "Replace text in a file (content-based search and replace): replaces exactly one occurrence of old_str with new_str; fails when old_str is absent or matches more than once unless expect_multiple=True (then replaces all occurrences). old_str and new_str are limited to 100 characters each — use replace_lines for larger changes (requires the line-numbered view). After an edit the file is automatically re-read, so the file's updated content (with line numbers) appears in the conversation immediately after the edit.",
+                "replace",
+                "Replace text in a file (content-based search and replace: takes file_path, old_str, new_str, expect_multiple): replaces exactly one occurrence of old_str with new_str; fails when old_str is absent or matches more than once unless expect_multiple=True (then replaces all occurrences). old_str and new_str are limited to 200 characters each — use update_lines for larger changes (requires the line-numbered view). After an edit the file is automatically re-read, so the file's updated content (with line numbers) appears in the conversation immediately after the edit.",
                 {
                     "file_path": {"type": "string", "description": "Virtual path to the file"},
                     "old_str": {"type": "string", "description": "Exact text to find"},
@@ -130,8 +130,8 @@ class FileViewImpl(FileView):
                 }
             ),
             self._create_tool_definition(
-                "replace_lines",
-                "Replace, delete, or insert lines by 1-indexed line range: replaces lines start_line..end_line with new_str; start_line > end_line inserts new_str before start_line; empty new_str deletes the range. Requires the line-numbered view: call read_file(file_path, include_line_numbers=true) first; after a write the automatic re-read provides the line-numbered view. Line numbers are 1-indexed and current only in the most recent read.",
+                "update_lines",
+                "Replace, delete, or insert lines by 1-indexed line range (takes file_path, start_line, end_line, new_str — does NOT take old_str): replaces lines start_line..end_line with new_str; start_line > end_line inserts new_str before start_line; empty new_str deletes the range. Requires the line-numbered view: call read_file(file_path, include_line_numbers=true) first; after a write the automatic re-read provides the line-numbered view. Line numbers are 1-indexed and current only in the most recent read.",
                 {
                     "file_path": {"type": "string", "description": "Virtual path to the file"},
                     "start_line": {"type": "integer", "description": "1-indexed start line (inclusive); between 1 and len(file)+1"},
@@ -142,13 +142,14 @@ class FileViewImpl(FileView):
             ),
             self._create_tool_definition(
                 "search_files",
-                "Search for a pattern in files. Renders matches only for read-only files; matches in writable files are counted in the note but never shown (their content is not supported and would go stale).",
+                "Search for a pattern in files. Takes optional path (virtual file name, or '.' / '/' to search all readable files; default: '.'), pattern, and optional offset/limit. Renders matches only for read-only files; matches in writable files are counted in the note but never shown (their content is not supported and would go stale).",
                 {
-                    "path": {"type": "string", "description": "Virtual path to search"},
                     "pattern": {"type": "string", "description": "Regex pattern to search for"},
+                    "path": {"type": "string", "description": "Virtual path to search, or '.' / '/' to search all readable files (default: '.')", "default": "."},
                     "offset": {"type": "integer", "description": "Match offset to start from (default: 0)", "default": 0},
                     "limit": {"type": "integer", "description": f"Maximum rendered matches to return (1..{self.config.search_result_limit}); if omitted, returns all rendered matches, which fails if more than {self.config.search_result_limit} exist. Each result includes a note reporting how many rendered matches remain and the offset to continue from."}
-                }
+                },
+                required=["pattern"],
             ),
         ])
 
@@ -208,7 +209,7 @@ class FileViewImpl(FileView):
                 f"Files you can read: {self._readable_list()}"
             )
 
-        # Line numbers exist to serve replace_lines edits, which require a
+        # Line numbers exist to serve update_lines edits, which require a
         # writable file; a line-numbered read of a read-only file is an
         # argument error.
         if include_line_numbers and file_path not in self.config.writable_paths:
@@ -227,7 +228,7 @@ class FileViewImpl(FileView):
         # A writable file that already exists on disk is only readable in the
         # line-numbered view: the agent must buy into line numbers (they are
         # metadata, not file content), which also guarantees the numbered
-        # view that replace_lines requires. A plain read fails with guidance.
+        # view that update_lines requires. A plain read fails with guidance.
         if (
             file_path in self.config.writable_paths
             and not include_line_numbers
@@ -248,7 +249,7 @@ class FileViewImpl(FileView):
             return self._error_response(f"Error reading file: {str(e)}")
 
         # A read sets the file's view for the run (plain or line-numbered);
-        # the view persists across writes and gates replace_lines.
+        # the view persists across writes and gates update_lines.
         self._file_views[file_path] = include_line_numbers
 
         content = self._render_lines(lines, include_line_numbers)
@@ -295,7 +296,7 @@ class FileViewImpl(FileView):
                      status: str) -> ToolCallOutcome:
         """Snapshot pre-write content, write the file, and update per-run state.
 
-        Shared by the editing tools (edit_file, replace_lines): a successful
+        Shared by the editing tools (replace, update_lines): a successful
         edit is a file write — it sets the write-occurred flag and records the
         changed file. The outcome is a sequence of two results: the write
         confirmation (a `ToolResult` whose content is the operation's status,
@@ -378,8 +379,8 @@ class FileViewImpl(FileView):
             lines = lines[:-1]
         return lines, trailing
 
-    def edit_file(self, file_path: VirtualName, old_str: str, new_str: str,
-                  expect_multiple: bool = False) -> ToolCallOutcome:
+    def replace(self, file_path: VirtualName, old_str: str, new_str: str,
+                expect_multiple: bool = False) -> ToolCallOutcome:
         """Replace text in a file (content-based search and replace)."""
         if file_path not in self.config.file_mappings:
             return self._error_response(
@@ -400,9 +401,9 @@ class FileViewImpl(FileView):
             )
         if len(old_str) > self.MAX_EDIT_LENGTH or len(new_str) > self.MAX_EDIT_LENGTH:
             return self._error_response(
-                f"edit_file supports only short old_str and new_str (at most "
+                f"replace supports only short old_str and new_str (at most "
                 f"{self.MAX_EDIT_LENGTH} characters each; got old_str="
-                f"{len(old_str)}, new_str={len(new_str)}). Use replace_lines "
+                f"{len(old_str)}, new_str={len(new_str)}). Use update_lines "
                 f"for larger edits (requires the line-numbered view: "
                 f"read_file(file_path, include_line_numbers=True))."
             )
@@ -410,7 +411,7 @@ class FileViewImpl(FileView):
         real_path = self.config.file_mappings[file_path]
         if not os.path.exists(real_path):
             return self._error_response(
-                f"File '{file_path}' does not exist; edit_file and replace_lines modify existing files only"
+                f"File '{file_path}' does not exist; replace and update_lines modify existing files only"
             )
         try:
             with open(real_path, 'r', encoding='utf-8') as f:
@@ -434,8 +435,8 @@ class FileViewImpl(FileView):
             message = f"Replaced 1 occurrence in {file_path}"
         return self._apply_write(file_path, real_path, new_content, message)
 
-    def replace_lines(self, file_path: VirtualName, start_line: int, end_line: int,
-                      new_str: str) -> ToolCallOutcome:
+    def update_lines(self, file_path: VirtualName, start_line: int, end_line: int,
+                     new_str: str) -> ToolCallOutcome:
         """Replace, delete, or insert lines by 1-indexed line range."""
         if file_path not in self.config.file_mappings:
             return self._error_response(
@@ -450,7 +451,7 @@ class FileViewImpl(FileView):
         if not isinstance(start_line, int) or not isinstance(end_line, int):
             return self._error_response("start_line and end_line must be integers")
 
-        # replace_lines operates on 1-indexed line numbers: the file's current
+        # update_lines operates on 1-indexed line numbers: the file's current
         # view must be line-numbered (the agent enabled line numbers by reading
         # with include_line_numbers=True). A write resets the view to plain —
         # the line numbers are invalidated until the next numbered read — so
@@ -459,7 +460,7 @@ class FileViewImpl(FileView):
         if not self._file_views.get(file_path, False):
             return ToolFailure(
                 value=(
-                    f"replace_lines requires the line-numbered view: call "
+                    f"update_lines requires the line-numbered view: call "
                     f"read_file('{file_path}', include_line_numbers=True) to "
                     f"re-enable it (a write invalidated the line numbers); the "
                     f"file's current view is plain"
@@ -469,7 +470,7 @@ class FileViewImpl(FileView):
         real_path = self.config.file_mappings[file_path]
         if not os.path.exists(real_path):
             return self._error_response(
-                f"File '{file_path}' does not exist; edit_file and replace_lines modify existing files only"
+                f"File '{file_path}' does not exist; replace and update_lines modify existing files only"
             )
         try:
             with open(real_path, 'r', encoding='utf-8') as f:
@@ -479,6 +480,16 @@ class FileViewImpl(FileView):
 
         lines, trailing = self._split_lines(content)
         n = len(lines)
+        if n == 0:
+            if start_line == 1 and end_line in (0, 1):
+                new_lines = [new_str] if new_str else []
+                message = f"Inserted content before line 1 in {file_path}"
+                content = new_str if new_str else ""
+                return self._apply_write(file_path, real_path, content, message)
+            else:
+                return self._error_response(
+                    f"File '{file_path}' is empty (0 lines): use start_line=1, end_line=0 (or end_line=1) to insert content"
+                )
         if not (1 <= start_line <= n + 1):
             return self._error_response(
                 f"start_line must be between 1 and {n + 1} (file has {n} lines)"
@@ -508,23 +519,37 @@ class FileViewImpl(FileView):
             content = ""
         return self._apply_write(file_path, real_path, content, message)
 
-    def search_files(self, path: VirtualName, pattern: str,
+    def search_files(self, path: VirtualName = ".", pattern: str = "",
                      offset: Optional[int] = None,
                      limit: Optional[int] = None) -> ToolCallOutcome:
         """Search for a pattern in files; render matches only for read-only files."""
-        # Check if path exists in mappings first
-        if path not in self.config.file_mappings:
-            return self._error_response(
-                f"File path '{path}' not found in mappings. "
-                f"Files you can read: {self._readable_list()}"
-            )
-
-        # Then check readability
-        if path not in self.config.readable_paths:
-            return self._error_response(
-                f"Path '{path}' is not readable. "
-                f"Files you can read: {self._readable_list()}"
-            )
+        # Determine files to search based on path scope
+        if path in (".", "/", ""):
+            search_virtuals = sorted(set(self.config.readable_paths))
+        elif path in self.config.file_mappings:
+            if path not in self.config.readable_paths:
+                return self._error_response(
+                    f"Path '{path}' is not readable. "
+                    f"Files you can read: {self._readable_list()}"
+                )
+            real_path = self.config.file_mappings[path]
+            if not os.path.exists(real_path):
+                return self._error_response(f"Path '{real_path}' does not exist")
+            search_virtuals = [path]
+        else:
+            # Check if path matches directory prefix of readable files
+            norm_prefix = path.rstrip("/") + "/"
+            matching = [
+                v for v in self.config.readable_paths
+                if v.startswith(norm_prefix) or v == path.rstrip("/")
+            ]
+            if matching:
+                search_virtuals = sorted(set(matching))
+            else:
+                return self._error_response(
+                    f"File path '{path}' not found in mappings. "
+                    f"Files you can read: {self._readable_list()}"
+                )
 
         # Validate parameters
         if offset is not None and offset < 0:
@@ -542,20 +567,19 @@ class FileViewImpl(FileView):
         except re.error as e:
             return self._error_response(f"Invalid regex pattern: {str(e)}")
 
-        # Resolve path
-        real_path = self.config.file_mappings[path]
-        if not os.path.exists(real_path):
-            return self._error_response(f"Path '{real_path}' does not exist")
-
         if offset is None:
             offset = 0
 
-        # Perform search; matches are (virtual_name, text) pairs so matches in
-        # writable files can be suppressed (their content would go stale).
-        try:
-            matches = self._perform_search(real_path, pattern)
-        except Exception as e:
-            return self._error_response(f"Error searching: {str(e)}")
+        # Perform search across all scoped files; matches are (virtual_name, text) pairs
+        matches: List[Tuple[str, str]] = []
+        for vpath in search_virtuals:
+            real_path = self.config.file_mappings.get(vpath)
+            if not real_path or not os.path.exists(real_path):
+                continue
+            try:
+                matches.extend(self._perform_search(real_path, pattern))
+            except Exception as e:
+                return self._error_response(f"Error searching '{vpath}': {str(e)}")
 
         rendered: List[str] = []
         suppressed = 0
@@ -652,19 +676,30 @@ class FileViewImpl(FileView):
         """Comma-separated list of virtual file names the agent may write."""
         return ", ".join(sorted(set(self.config.writable_paths)))
 
-    def _virtualize_paths(self, message: str) -> str:
-        """
-        Replace real on-disk paths in a message with their virtual names.
-
-        The agent only ever sees virtual file names (e.g. 'foo.txt'), so error
-        text that embeds the resolved absolute path (like "File '/Users/.../
-        tests/example/foo.txt' does not exist") is rewritten to use the
-        virtual name ('foo.txt') before being returned to the agent.
-        """
+    def sanitize_paths(self, text: str) -> str:
+        """Translate referenced disk paths, workspace paths, and package prefixes in text into virtual names."""
+        if not text:
+            return text
+        result = text
         for real_path in self._real_paths_sorted:
-            if real_path in message:
-                message = message.replace(real_path, self._real_to_virtual[real_path])
-        return message
+            vname = self._real_to_virtual[real_path]
+            # Replace full absolute path
+            result = result.replace(real_path, vname)
+            # Replace relative subpaths (e.g. testing/lib/foo.py or lib/foo.py)
+            parts = real_path.replace("\\", "/").split("/")
+            for i in range(1, len(parts)):
+                subpath = "/".join(parts[i:])
+                if subpath and subpath in result:
+                    result = result.replace(subpath, vname)
+            # Replace Bazel target formats if present (e.g. //testing/lib:stem)
+            stem = os.path.splitext(os.path.basename(real_path))[0]
+            if stem:
+                result = re.sub(r"//[a-zA-Z0-9_/]+:" + re.escape(stem) + r"\b", vname, result)
+        return result
+
+    def _virtualize_paths(self, message: str) -> str:
+        """Alias for sanitize_paths."""
+        return self.sanitize_paths(message)
 
     def _perform_search(self, path: str, pattern: str) -> List[Tuple[str, str]]:
         """Perform a recursive search for pattern in files.

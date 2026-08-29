@@ -109,4 +109,36 @@ mkdir -p "$tmp/c5/lib"
 check "c5 target" "$tmp/c5/lib/BUILD.bazel" 'name = "module5"'
 check "c5 empty deps" "$tmp/c5/lib/BUILD.bazel" 'pyright_deps = \[\]'
 
+# Case 6: non-relative sibling import -> rejected with error.
+mkdir -p "$tmp/c6/lib"
+cat > "$tmp/c6/lib/sibling.py" <<'EOF'
+class Sibling:
+    pass
+EOF
+cat > "$tmp/c6/lib/main.py" <<'EOF'
+from sibling import Sibling
+EOF
+if ( cd "$tmp/c6" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/main.py 2>/dev/null ); then
+    echo "FAIL: c6 expected failure when sibling imported without dot" >&2
+    fail=1
+else
+    echo "PASS: c6 rejected non-relative sibling import"
+fi
+
+# Case 7: relative sibling import -> accepted.
+mkdir -p "$tmp/c7/lib"
+cat > "$tmp/c7/lib/sibling.py" <<'EOF'
+class Sibling:
+    pass
+EOF
+cat > "$tmp/c7/lib/main.py" <<'EOF'
+from .sibling import Sibling
+EOF
+if ( cd "$tmp/c7" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/main.py ); then
+    echo "PASS: c7 accepted relative sibling import"
+else
+    echo "FAIL: c7 expected success with relative sibling import" >&2
+    fail=1
+fi
+
 exit "$fail"

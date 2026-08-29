@@ -18,6 +18,10 @@ import os
 import sys
 
 from build_lint_common import (
+    check_test_dry_run,
+    check_test_imports,
+    check_test_mocks,
+    check_test_structure,
     ensure_load,
     ensure_target,
     load_line,
@@ -77,6 +81,21 @@ def main() -> int:
             sys.stderr.write(
                 f"{args.module_path}: error: test module must end with 'if __name__ == \"__main__\": unittest.main()'\n"
             )
+            return 1
+        all_errors = (
+            check_test_imports(args.lib_pkg, args.module_path)
+            + check_test_mocks(args.module_path)
+            + check_test_structure(args.module_path)
+        )
+        if all_errors:
+            for err in all_errors:
+                sys.stderr.write(err + "\n")
+            return 1
+
+        dry_run_errors = check_test_dry_run(args.lib_pkg, args.module_path)
+        if dry_run_errors:
+            for err in dry_run_errors:
+                sys.stderr.write(err + "\n")
             return 1
     return 0
 

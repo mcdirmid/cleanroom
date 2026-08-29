@@ -35,6 +35,14 @@ def _pyright_test_impl(ctx):
             for f in dep.files.to_list():
                 if f.path.endswith(".py"):
                     dep_paths.append(f.dirname)
+                    parent = "/".join(f.dirname.split("/")[:-1])
+                    if parent:
+                        dep_paths.append(parent)
+    
+    for f in ctx.files.srcs:
+        parent = "/".join(f.dirname.split("/")[:-1])
+        if parent:
+            dep_paths.append(parent)
     
     unique_dep_paths = sorted(set(dep_paths))
     
@@ -114,7 +122,7 @@ def _deduplicate_list(lst):
             result.append(item)
     return result
 
-def pyright_library(name, srcs, deps = [], pyright_deps = [], **kwargs):
+def pyright_library(name, srcs, deps = [], pyright_deps = [], imports = [".."], **kwargs):
     """Create a Python library with type checking."""
     
     # Create the actual py_library
@@ -122,6 +130,7 @@ def pyright_library(name, srcs, deps = [], pyright_deps = [], **kwargs):
         name = name,
         srcs = srcs,
         deps = deps + pyright_deps,
+        imports = imports,
         **kwargs
     )
     
@@ -157,7 +166,7 @@ def pyright_library(name, srcs, deps = [], pyright_deps = [], **kwargs):
             tags = ["type_check"],
         )
 
-def pyright_test(name, srcs, deps = [], pyright_deps = [], **kwargs):
+def pyright_test(name, srcs, deps = [], pyright_deps = [], imports = [".."], **kwargs):
     """Create a Python test with type checking."""
     
     # Create the actual py_test
@@ -165,6 +174,7 @@ def pyright_test(name, srcs, deps = [], pyright_deps = [], **kwargs):
         name = name,
         srcs = srcs,
         deps = deps + pyright_deps,
+        imports = imports,
         **kwargs
     )
     
@@ -200,7 +210,7 @@ def pyright_test(name, srcs, deps = [], pyright_deps = [], **kwargs):
             tags = ["type_check"],
         )
 
-def pyright_binary(name, srcs, main, deps = [], pyright_deps = [], **kwargs):
+def pyright_binary(name, srcs, main, deps = [], pyright_deps = [], imports = [".."], **kwargs):
     """Create a Python binary with type checking."""
     
     # Create the actual py_binary
@@ -209,6 +219,7 @@ def pyright_binary(name, srcs, main, deps = [], pyright_deps = [], **kwargs):
         srcs = srcs,
         main = main,
         deps = deps + pyright_deps,
+        imports = imports,
         **kwargs
     )
     

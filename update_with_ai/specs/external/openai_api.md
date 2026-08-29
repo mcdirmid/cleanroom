@@ -101,8 +101,12 @@ The response is consumed from `response.choices[0]`:
   stopped at the generation limit — the truncation signal), or other
   service-specific reasons.
 - `response.usage` — per-request token counts (`prompt_tokens`,
-  `completion_tokens`, `total_tokens`); the loop tracks these and the
-  cumulative totals for its logger events.
+  `completion_tokens`, `total_tokens`), prompt token details
+  (`prompt_tokens_details.cached_tokens`), and completion token details
+  (`completion_tokens_details.reasoning_tokens`); non-cached prompt tokens
+  are computed as `prompt_tokens - cached_tokens`. The loop tracks these
+  and the cumulative totals along with elapsed request duration (measured
+  via `time.perf_counter()`) for its logger events.
 
 An empty `response.choices` is an API failure (loop failure), as is a
 `"stop"` response with no content.

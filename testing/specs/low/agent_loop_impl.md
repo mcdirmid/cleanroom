@@ -53,9 +53,9 @@ timeout); the implementation bundles no imported capabilities.
 
 The implementation produces one of the outcomes specified by the `agent_loop` interface. On a normal run:
 - It maintains the conversation (a list of `HistoryEntry`) and the stubbing state — the mapping from each file or tool command to its current live (non-stubbed) result — for the duration of the run.
-- It sends the system prompt (when provided), the conversation, and the tools to the OpenAI API, tracks cumulative usage, and appends assistant responses.
+- It sends the system prompt (when provided), the conversation, and the tools to the OpenAI API, measures request duration in seconds, extracts token usage (input, cached input, non-cached input, output, total), tracks session cumulative usage and total duration, and appends assistant responses; session cumulative usage and duration are emitted on run_terminated.
 - It interprets the API response: if the response contains tool calls, it delegates to `tool_executor` and routes the results; if the response stops with free text and no tool calls (there is no final answer), it injects the termination reminder (the configured generator's message, or the pinned default) and continues the loop.
-- It detects loop repetition: when the same tool call (name and arguments) repeats 4 consecutive times, it injects a reminder urging progress (edit or terminate) once per run, and continues. When `replace_lines` targets the same file and line range 4 consecutive times (even with different content), it injects a range-specific reminder (text pinned in Non-Concerns) urging a fresh numbered read and offering to finish the run; at most one reminder is injected per run across both detectors. When either repetition count reaches 8 consecutive, the run returns `(error, history)` (a loop failure) instead of continuing — a degenerate loop ends the run rather than spinning to the iteration limit (error texts pinned in Non-Concerns).
+- It detects loop repetition: when the same tool call (name and arguments) repeats 4 consecutive times, it injects a reminder urging progress (edit or terminate) once per run, and continues. When `update_lines` targets the same file and line range 4 consecutive times (even with different content), it injects a range-specific reminder (text pinned in Non-Concerns) urging a fresh numbered read and offering to finish the run; at most one reminder is injected per run across both detectors. When either repetition count reaches 8 consecutive, the run returns `(error, history)` (a loop failure) instead of continuing — a degenerate loop ends the run rather than spinning to the iteration limit (error texts pinned in Non-Concerns).
 
 **Tool-result stubbing:**
 
@@ -82,7 +82,7 @@ A truncated response whose content is degenerate — non-empty and all character
 
 **Error Handling:**
 
-Returns `(error, history)` on any failure. Logger callback exceptions are caught and ignored. A response whose finish reason is `content_filter` is an incomplete response and returns `(error, history)` with error text pinned to `Incomplete response: content_filter`. A degenerate truncated response returns `(error, history)` with error text pinned to `Degenerate truncated response: single character repeated`. A degenerate loop — the same tool call (name and arguments) repeated 8 consecutive times, or `replace_lines` targeting the same file and line range 8 consecutive times — returns `(error, history)` with error text pinned to `Degenerate loop: same tool call repeated 8 consecutive times` (identical calls) or `Degenerate loop: replace_lines targeted the same file and line range 8 consecutive times` (same-range edits).
+Returns `(error, history)` on any failure. Logger callback exceptions are caught and ignored. A response whose finish reason is `content_filter` is an incomplete response and returns `(error, history)` with error text pinned to `Incomplete response: content_filter`. A degenerate truncated response returns `(error, history)` with error text pinned to `Degenerate truncated response: single character repeated`. A degenerate loop — the same tool call (name and arguments) repeated 8 consecutive times, or `update_lines` targeting the same file and line range 8 consecutive times — returns `(error, history)` with error text pinned to `Degenerate loop: same tool call repeated 8 consecutive times` (identical calls) or `Degenerate loop: update_lines targeted the same file and line range 8 consecutive times` (same-range edits).
 
 **HLS Justification:** Exports the agent loop and uses the OpenAI API.
 
@@ -91,7 +91,7 @@ Returns `(error, history)` on any failure. Logger callback exceptions are caught
 - No state persists between calls
 - When a result's `supersedes` flag is set, the earlier non-stubbed result for the same file or tool command is replaced in place with the static stub; stubbed messages keep their positions
 - A stub is static once set: a stubbed message's content never changes for the remainder of the run
-- A degenerate loop (8 consecutive identical tool calls, or 8 consecutive `replace_lines` calls on the same file and line range) fails the run
+- A degenerate loop (8 consecutive identical tool calls, or 8 consecutive `update_lines` calls on the same file and line range) fails the run
 - At most one reminder injected per run
 
 ## Non-Concerns
@@ -102,4 +102,4 @@ Returns `(error, history)` on any failure. Logger callback exceptions are caught
 - **Default termination reminder:** Pinned to `You must signal termination by calling advance(), fail(), or blame() to end the run.` — used when `termination_reminder_generator` is `None`; tests may assert it.
 - **Stub text:** Pinned to `Content removed because newer version is available.` — the content replacing a superseded result in place; tests may assert it.
 - **Same-range reminder text:** Pinned to `You have edited lines {start}-{end} of '{file}' {count} times in a row without progress. Re-read the file (read_file('{file}', include_line_numbers=True)) and reassess, or finish the run with advance(), fail(), or blame().` — tests may assert its substance (the range, the file, `include_line_numbers=True`, and the finish-the-run option).
-- **Degenerate-loop error texts:** Pinned to `Degenerate loop: same tool call repeated 8 consecutive times` (the identical-call detector) and `Degenerate loop: replace_lines targeted the same file and line range 8 consecutive times` (the same-range detector) — tests may assert them.
+- **Degenerate-loop error texts:** Pinned to `Degenerate loop: same tool call repeated 8 consecutive times` (the identical-call detector) and `Degenerate loop: update_lines targeted the same file and line range 8 consecutive times` (the same-range detector) — tests may assert them.

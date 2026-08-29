@@ -541,8 +541,8 @@ def update_python_with_ai(name, module_deps, external_deps = [], visibility = No
             feedback_deps = [":" + name + "_lib", ":" + name + "_test"],
             verify = (
                 "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{}/tests:{}_test --test_output=errors --noshow_progress 2>&1 && " +
-                "if [ -s {} ]; then echo 'QA log {} is not empty; empty it and call advance again.'; exit 1; fi"
-            ).format(_parent_pkg, name, _qa_log_path, _qa_log_path),
+                "if [ -s {} ]; then echo 'QA log is not empty: delete all lines (0 bytes, remove any headers) and call advance again.'; exit 1; fi"
+            ).format(_parent_pkg, name, _qa_log_path),
             visibility = visibility,
         )
     return ":" + name

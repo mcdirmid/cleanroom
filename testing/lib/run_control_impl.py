@@ -35,7 +35,7 @@ from .dag_storage import NodeId, NodeMessage
 # it when within the hard bound; a change message still over the hard
 # bound after its grace count turns advance() into a hard failure. Pinned
 # in specs/low/run_control_impl.md, Non-Concerns.
-SOFT_CHANGE_SUMMARY_LENGTH = 200
+SOFT_CHANGE_SUMMARY_LENGTH = 300
 HARD_CHANGE_SUMMARY_LENGTH = 500
 SUMMARY_LENGTH_GRACE = 4
 
@@ -79,6 +79,7 @@ class RunControlImpl(RunControl):
         # summary; per-run state only (fresh run_control per run).
         self._summary_soft_rejections: int = 0
         self._summary_hard_rejections: int = 0
+        self._feedback_warned: bool = False
 
     def get_tool_definitions(self) -> List[ToolDefinition]:
         """Return the termination tools' definitions."""
@@ -141,8 +142,9 @@ class RunControlImpl(RunControl):
             except Exception as e:
                 return ToolFailure[str](f"Verification error: {str(e)}")
             if not success:
+                sanitized_output = self.file_view.sanitize_paths(output) if output else ""
                 step_output = self.guide_delivery.get_advance_output(
-                    verification_passed=False, failure_reason=output
+                    verification_passed=False, failure_reason=sanitized_output
                 )
                 if step_output is not None:
                     # In step mode, a failing verification restates the guide
@@ -153,9 +155,9 @@ class RunControlImpl(RunControl):
                 # Outside step mode, the output is a ToolResult with the
                 # failure details and guidance.
                 content = (
-                    (output + "\n\n" if output else "")
+                    (sanitized_output + "\n\n" if sanitized_output else "")
                     + "Verification failed; fix the reported issues by "
-                    "changing files (edit_file/replace_lines) "
+                    "changing files (replace/update_lines) "
                     "and then call advance() again, or call blame() or "
                     "fail() to end the run."
                 )
@@ -201,15 +203,16 @@ class RunControlImpl(RunControl):
                     "at run start. Call advance() with no changes to report "
                     "no change."
                 )
-            if self.config.feedback_pending:
+            if self.config.feedback_pending and not self._feedback_warned:
                 # The run is processing feedback (per the run_control
-                # contract): advance cannot terminate without a change. The
-                # session continues; the agent must change files (and report
-                # the change), or call blame() or fail() to end the run.
+                # contract): warn the agent once that feedback was given and
+                # not responded to with file changes. If the agent believes no
+                # change is needed, calling advance() again will proceed.
+                self._feedback_warned = True
                 return ToolFailure[str](
-                    "Cannot advance without a change: the run is processing "
-                    "feedback, so it must change files and report the change "
-                    "in advance(), or call blame() or fail() to end the run."
+                    "Warning: feedback was given and not responded to with file changes. "
+                    "If you believe no changes are needed, call advance() again to proceed, "
+                    "or change files and report the change in advance(), or call blame() or fail() to end the run."
                 )
             return TerminateAgentWithSuccess(NoChangeResult())
 

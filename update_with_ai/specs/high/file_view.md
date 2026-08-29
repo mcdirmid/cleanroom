@@ -36,18 +36,19 @@ Provides the file machinery of a controlled workspace: virtual-name addressing, 
 - Permissions are enforced for all operations.
 - Signals whether any file write has occurred.
 - Files are addressed to the agent by their virtual names, never by their paths.
+- Path sanitization maps any host filesystem paths, sandbox paths, or package prefixes to their corresponding virtual names.
 - Files with the same final path component have distinct virtual names: each retains just enough of its path to differ from every other file's virtual name.
 - Reads, writes, edits, searches, session-start reads, and error messages name files by their virtual names.
 - A read provides the file's entire content; reads are not paginated and are not bounded by a size limit.
 - Content-based editing: search-and-replace of short text, bounded in length; longer changes go through line-range editing.
 - Line-range editing: replace, delete, insert.
-- Recursive searching within a specified path.
+- Recursive searching within a specified path (or across all readable files when the path specifies a root, directory prefix, is empty, or is omitted).
 - Search results beyond the search result limit signal a tool failure advising offset/limit pagination; the limit bounds rendered matches only.
 - Search results render matches only for files that are not writable; matches in writable files are reported as counts without content.
 - An edit's replacement applies atomically (all or nothing).
 - Reads of writable files provide line numbers, enabling line-range edits; a plain read of an existing writable file is rejected; reads of non-writable files provide plain content.
 - Line-range edits require a numbered read; attempting one without it signals a tool failure.
-- Line-range edits accept 1-indexed line numbers within the file's current bounds.
+- Line-range edits accept 1-indexed line numbers within the file's current bounds (allowing insertion into empty files).
 - Stubbing replaces superseded tool results with placeholders, keeping the conversation focused on current state.
 - After a successful file write, the file's current content appears in the conversation.
 - A write that fails does not provide the file's content.
@@ -56,6 +57,7 @@ Provides the file machinery of a controlled workspace: virtual-name addressing, 
 - A session-start read renders the file's content plain and never supersedes an earlier result.
 - Files with templates are initialized from their template content at run start.
 - Template initialization is not a file write: it never signals that the filesystem was modified and is never a changed file.
+- Tool definitions state each tool's purpose, parameters, bounds, and preconditions, contrasting content-based editing with line-range editing.
 - Error messages identify the violated policy or the failing operation; errors leave the filesystem unchanged.
 
 **Assumptions**

@@ -4,7 +4,7 @@ Tests for the FileViewImpl implementation.
 Written from the LLS (specs/low/file_view_impl.md, specs/low/file_view.md,
 specs/low/tool_provider.md): the file machinery's virtual-name addressing,
 readable/writable policy enforcement, plain vs line-numbered views, the file
-tools (read_file, edit_file, replace_lines, search_files), template
+tools (read_file, replace, update_lines, search_files), template
 initialization, session-start reads, injected re-reads, supersession flags,
 the write-occurred flag, the search result limit, and error messages naming
 virtual names.
@@ -30,10 +30,11 @@ import tempfile
 import unittest
 from typing import Any, Optional, Tuple
 
-from update_with_ai.lib.file_view import FileViewConfig
-from update_with_ai.lib.file_view_impl import FileViewImpl
-from update_with_ai.lib.tool_provider import (
+from lib.file_view import FileViewConfig
+from lib.file_view_impl import FileViewImpl
+from lib.tool_provider import (
     PresentedToolResult,
+    ToolCallOutcome,
     ToolResult,
     ToolFailure,
 )
@@ -135,7 +136,6 @@ class TestFileViewImpl(unittest.TestCase):
     def as_tool_failure(self, outcome: Any) -> ToolFailure:
         assert isinstance(outcome, ToolFailure), f"Expected ToolFailure, got {outcome!r}"
         return outcome
-
     def assert_supersedes(self, outcome: Any, supersedes: bool) -> ToolResult:
         """Assert the outcome is a ToolResult with the given supersedes flag."""
         result = self.as_tool_result(outcome)
@@ -144,31 +144,31 @@ class TestFileViewImpl(unittest.TestCase):
         )
         return result
 
-    def _numbered_read(self, view: FileViewImpl) -> None:
+    def _numbered_read(self, view: FileViewImpl, file_path: str = "test.txt") -> None:
         self.assert_supersedes(
-            view.read_file("test.txt", include_line_numbers=True), True
+            view.read_file(file_path, include_line_numbers=True), True
         )
 
     # ------------------------------------------------------------------
-    # get_tool_definitions
+    # Tool definitions
     # ------------------------------------------------------------------
 
     def test_get_tool_definitions_returns_exactly_the_file_tools(self) -> None:
         # The file machinery provides exactly the four file tools (LLS
-        # get_tool_definitions): read_file, edit_file, replace_lines, and
+        # get_tool_definitions): read_file, replace, update_lines, and
         # search_files — nothing else.
         names = [d["function"]["name"] for d in self._file_view().get_tool_definitions()]
-        self.assertEqual(sorted(names), ["edit_file", "read_file", "replace_lines", "search_files"])
+        self.assertEqual(sorted(names), ["read_file", "replace", "search_files", "update_lines"])
 
-    def test_replace_lines_definition_marks_all_parameters_required(self) -> None:
-        # LLS (specs/low/file_view.md replace_lines): the tool definition's
+    def test_update_lines_definition_marks_all_parameters_required(self) -> None:
+        # LLS (specs/low/file_view.md update_lines): the tool definition's
         # schema marks file_path, start_line, end_line, and new_str as
         # required, so the model cannot omit them.
-        replace_def = next(
+        update_def = next(
             d for d in self._file_view().get_tool_definitions()
-            if d["function"]["name"] == "replace_lines"
+            if d["function"]["name"] == "update_lines"
         )
-        schema = replace_def["function"]["parameters"]
+        schema = update_def["function"]["parameters"]
         self.assertEqual(
             sorted(schema["required"]),
             ["end_line", "file_path", "new_str", "start_line"],
@@ -177,7 +177,7 @@ class TestFileViewImpl(unittest.TestCase):
             self.assertIn(param, schema["properties"])
 
     # ------------------------------------------------------------------
-    # read_file
+    # read_file: readable/writable policies, views, supersession
     # ------------------------------------------------------------------
 
     def test_read_file_readonly_plain_never_supersedes(self) -> None:
@@ -215,7 +215,7 @@ class TestFileViewImpl(unittest.TestCase):
         self.assertIn("(line-numbered)", result.note)
 
     def test_read_file_include_line_numbers_requires_writable(self) -> None:
-        # include_line_numbers serves replace_lines edits, which require a
+        # include_line_numbers serves update_lines edits, which require a
         # writable file; a numbered read of a read-only file is rejected.
         view = self._file_view(
             file_mappings={"ro.txt": self.ro_path},
@@ -230,7 +230,6 @@ class TestFileViewImpl(unittest.TestCase):
     def test_read_file_policy_not_in_mappings(self) -> None:
         failure = self.as_tool_failure(self._file_view().read_file("nope.txt"))
         self.assertIn("nope.txt", failure.value)
-
     def test_read_file_policy_not_readable(self) -> None:
         view = self._file_view(
             file_mappings={"a.txt": self.test_file_path},
@@ -314,7 +313,7 @@ class TestFileViewImpl(unittest.TestCase):
         # supersedes set), in that order.
         view = self._file_view()
         confirmation, injected = self.as_write_outcome(
-            view.edit_file("test.txt", "This is a test", "New content")
+            view.replace("test.txt", "This is a test", "New content")
         )
         self.assertEqual(confirmation.content, "Replaced 1 occurrence in test.txt")
         self.assertEqual(confirmation.note, "")
@@ -336,7 +335,7 @@ class TestFileViewImpl(unittest.TestCase):
         # the injected read).
         view = self._file_view()
         confirmation, injected = self.as_write_outcome(
-            view.edit_file("test.txt", "This is a test", "New content")
+            view.replace("test.txt", "This is a test", "New content")
         )
         self.assertNotIn("Line 1", confirmation.content)
         self.assertNotIn("Hello World", confirmation.content)
@@ -349,143 +348,143 @@ class TestFileViewImpl(unittest.TestCase):
         view = self._file_view()
         self._numbered_read(view)
         self.as_write_outcome(
-            view.edit_file("test.txt", "This is a test", "New content")
+            view.replace("test.txt", "This is a test", "New content")
         )
         result = self.assert_supersedes(
-            view.replace_lines("test.txt", 2, 2, "Line 2: replaced"), True
+            view.update_lines("test.txt", 2, 2, "Line 2: replaced"), True
         )
         self.assertEqual(result.content, "Replaced lines 2-2 in test.txt")
         with open(self.test_file_path, "r", encoding="utf-8") as f:
             self.assertIn("Line 2: replaced", f.read())
 
     def test_write_that_fails_provides_no_injected_read(self) -> None:
-        # A write that fails provides no injected read: edit_file on a file
+        # A write that fails provides no injected read: replace on a file
         # that does not exist is a ToolFailure, not a result sequence.
         view = self._file_view()
         failure = self.as_tool_failure(
-            view.edit_file("new.txt", "x", "y")
+            view.replace("new.txt", "x", "y")
         )
         self.assertIn("does not exist", failure.value)
         self.assertFalse(view.get_write_occurred())
 
     # ------------------------------------------------------------------
-    # edit_file
+    # replace
     # ------------------------------------------------------------------
 
-    def test_edit_file_replaces_single_occurrence(self) -> None:
+    def test_replace_replaces_single_occurrence(self) -> None:
         view = self._file_view()
         result = self.assert_supersedes(
-            view.edit_file("test.txt", "This is a test", "New content"), True
+            view.replace("test.txt", "This is a test", "New content"), True
         )
         self.assertEqual(result.content, "Replaced 1 occurrence in test.txt")
         self.assertTrue(view.get_write_occurred())
         with open(self.test_file_path, "r", encoding="utf-8") as f:
             self.assertIn("Line 2: New content", f.read())
 
-    def test_edit_file_expect_multiple_replaces_all(self) -> None:
+    def test_replace_expect_multiple_replaces_all(self) -> None:
         view = self._file_view()
         result = self.assert_supersedes(
-            view.edit_file("test.txt", "Line", "Row", expect_multiple=True), True
+            view.replace("test.txt", "Line", "Row", expect_multiple=True), True
         )
         self.assertEqual(result.content, "Replaced 4 occurrences in test.txt")
         with open(self.test_file_path, "r", encoding="utf-8") as f:
             self.assertNotIn("Line", f.read())
 
-    def test_edit_file_identical_old_and_new_fails(self) -> None:
+    def test_replace_identical_old_and_new_fails(self) -> None:
         # old_str identical to new_str would change nothing: rejected as an
         # invalid argument.
         failure = self.as_tool_failure(
-            self._file_view().edit_file("test.txt", "x", "x")
+            self._file_view().replace("test.txt", "x", "x")
         )
         self.assertIn("identical", failure.value)
 
-    def test_edit_file_empty_old_str_fails(self) -> None:
+    def test_replace_empty_old_str_fails(self) -> None:
         failure = self.as_tool_failure(
-            self._file_view().edit_file("test.txt", "", "x")
+            self._file_view().replace("test.txt", "", "x")
         )
         self.assertIn("non-empty", failure.value)
 
-    def test_edit_file_overlong_strings_fail_recommending_replace_lines(self) -> None:
-        # edit_file is for short search/replace pairs only: an old_str or
-        # new_str over 100 characters fails, advising replace_lines (which
+    def test_replace_overlong_strings_fail_recommending_update_lines(self) -> None:
+        # replace is for short search/replace pairs only: an old_str or
+        # new_str over 200 characters fails, advising update_lines (which
         # requires the line-numbered view). No write occurs.
         view = self._file_view()
         overlong_old = self.as_tool_failure(
-            view.edit_file("test.txt", "x" * 101, "y")
+            view.replace("test.txt", "x" * 201, "y")
         )
-        self.assertIn("100 characters", overlong_old.value)
-        self.assertIn("replace_lines", overlong_old.value)
+        self.assertIn("200 characters", overlong_old.value)
+        self.assertIn("update_lines", overlong_old.value)
         self.assertFalse(view.get_write_occurred())
 
         overlong_new = self.as_tool_failure(
-            view.edit_file("test.txt", "Line 1", "y" * 101)
+            view.replace("test.txt", "Line 1", "y" * 201)
         )
-        self.assertIn("100 characters", overlong_new.value)
-        self.assertIn("replace_lines", overlong_new.value)
+        self.assertIn("200 characters", overlong_new.value)
+        self.assertIn("update_lines", overlong_new.value)
 
-    def test_edit_file_old_str_not_found_fails(self) -> None:
+    def test_replace_old_str_not_found_fails(self) -> None:
         failure = self.as_tool_failure(
-            self._file_view().edit_file("test.txt", "no such text", "x")
+            self._file_view().replace("test.txt", "no such text", "x")
         )
         self.assertIn("not found", failure.value)
 
-    def test_edit_file_multiple_matches_fail_without_expect_multiple(self) -> None:
+    def test_replace_multiple_matches_fail_without_expect_multiple(self) -> None:
         failure = self.as_tool_failure(
-            self._file_view().edit_file("test.txt", "Line", "Row")
+            self._file_view().replace("test.txt", "Line", "Row")
         )
         self.assertIn("matches", failure.value)
 
-    def test_edit_file_does_not_modify_missing_file(self) -> None:
-        # edit_file modifies existing files only: a mapped-but-missing
+    def test_replace_does_not_modify_missing_file(self) -> None:
+        # replace modifies existing files only: a mapped-but-missing
         # writable file is not created.
         view = self._file_view()
         failure = self.as_tool_failure(
-            view.edit_file("new.txt", "x", "y")
+            view.replace("new.txt", "x", "y")
         )
         self.assertIn("does not exist", failure.value)
         self.assertFalse(os.path.exists(self.new_file_path))
         self.assertFalse(view.get_write_occurred())
 
-    def test_edit_file_policy_not_writable_fails(self) -> None:
+    def test_replace_policy_not_writable_fails(self) -> None:
         view = self._file_view(
             file_mappings={"a.txt": self.test_file_path},
             readable_paths=["a.txt"],
             writable_paths=[],
         )
-        failure = self.as_tool_failure(view.edit_file("a.txt", "x", "y"))
+        failure = self.as_tool_failure(view.replace("a.txt", "x", "y"))
         self.assertIn("not writable", failure.value)
 
     # ------------------------------------------------------------------
-    # replace_lines
+    # update_lines
     # ------------------------------------------------------------------
 
-    def test_replace_lines_requires_line_numbered_view(self) -> None:
+    def test_update_lines_requires_line_numbered_view(self) -> None:
         # No numbered read: the file's current view is plain and the edit is
         # refused, advising a numbered read. The failure supersedes nothing
         # and removes nothing (no write occurs).
         view = self._file_view()
         failure = self.as_tool_failure(
-            view.replace_lines("test.txt", 1, 1, "x")
+            view.update_lines("test.txt", 1, 1, "x")
         )
         self.assertIn("include_line_numbers=True", failure.value)
         self.assertFalse(view.get_write_occurred())
 
-    def test_replace_lines_replaces_range(self) -> None:
+    def test_update_lines_replaces_range(self) -> None:
         view = self._file_view()
         self._numbered_read(view)
         result = self.assert_supersedes(
-            view.replace_lines("test.txt", 2, 2, "Line 2: replaced"), True
+            view.update_lines("test.txt", 2, 2, "Line 2: replaced"), True
         )
         self.assertEqual(result.content, "Replaced lines 2-2 in test.txt")
         self.assertTrue(view.get_write_occurred())
         with open(self.test_file_path, "r", encoding="utf-8") as f:
             self.assertIn("Line 2: replaced", f.read())
 
-    def test_replace_lines_deletes_range(self) -> None:
+    def test_update_lines_deletes_range(self) -> None:
         view = self._file_view()
         self._numbered_read(view)
         result = self.assert_supersedes(
-            view.replace_lines("test.txt", 2, 3, ""), True
+            view.update_lines("test.txt", 2, 3, ""), True
         )
         self.assertEqual(result.content, "Deleted lines 2-3 in test.txt")
         with open(self.test_file_path, "r", encoding="utf-8") as f:
@@ -494,37 +493,101 @@ class TestFileViewImpl(unittest.TestCase):
         self.assertNotIn("Line 3:", file_content)
         self.assertIn("Line 4: Final line", file_content)
 
-    def test_replace_lines_inserts_before_line(self) -> None:
+    def test_update_lines_inserts_before_line(self) -> None:
         # start_line > end_line inserts new_str before start_line (no lines
         # removed).
         view = self._file_view()
         self._numbered_read(view)
         result = self.assert_supersedes(
-            view.replace_lines("test.txt", 2, 1, "inserted"), True
+            view.update_lines("test.txt", 2, 1, "inserted"), True
         )
         self.assertEqual(result.content, "Inserted content before line 2 in test.txt")
         with open(self.test_file_path, "r", encoding="utf-8") as f:
             self.assertIn("inserted", f.read())
 
-    def test_replace_lines_out_of_bounds_fails_with_line_count(self) -> None:
+    def test_update_lines_out_of_bounds_fails_with_line_count(self) -> None:
         view = self._file_view()
         self._numbered_read(view)
         failure = self.as_tool_failure(
-            view.replace_lines("test.txt", 99, 100, "x")
+            view.update_lines("test.txt", 99, 100, "x")
         )
         self.assertIn("between", failure.value)
         self.assertIn("4 lines", failure.value)
 
-    def test_replace_lines_non_integer_lines_fail(self) -> None:
+    def test_update_lines_non_integer_lines_fail(self) -> None:
         view = self._file_view()
         failure = self.as_tool_failure(
-            view.replace_lines("test.txt", "1", "1", "x")
+            view.update_lines("test.txt", "1", "1", "x")
         )
         self.assertIn("integers", failure.value)
+
+    def test_update_lines_empty_file_insert(self) -> None:
+        empty_path = os.path.join(self.temp_dir, "empty.txt")
+        with open(empty_path, "w", encoding="utf-8") as f:
+            f.write("")
+        view = self._file_view(
+            file_mappings={"empty.txt": empty_path},
+            readable_paths=["empty.txt"],
+            writable_paths=["empty.txt"],
+        )
+        self._numbered_read(view, "empty.txt")
+        # Insertion with start_line=1, end_line=0
+        confirm = self.assert_supersedes(
+            view.update_lines("empty.txt", 1, 0, "inserted line"), True
+        )
+        self.assertIn("Inserted content", confirm.content)
+        with open(empty_path, "r", encoding="utf-8") as f:
+            self.assertEqual(f.read(), "inserted line")
+
+        # Insertion with start_line=1, end_line=1 on empty file
+        with open(empty_path, "w", encoding="utf-8") as f:
+            f.write("")
+        self._numbered_read(view, "empty.txt")
+        confirm2 = self.assert_supersedes(
+            view.update_lines("empty.txt", 1, 1, "inserted line 2"), True
+        )
+        self.assertIn("Inserted content", confirm2.content)
+        with open(empty_path, "r", encoding="utf-8") as f:
+            self.assertEqual(f.read(), "inserted line 2")
 
     # ------------------------------------------------------------------
     # search_files
     # ------------------------------------------------------------------
+
+    def test_search_files_root_and_prefix_paths(self) -> None:
+        sub = os.path.join(self.temp_dir, "sub")
+        os.makedirs(sub, exist_ok=True)
+        a_path = os.path.join(sub, "a.txt")
+        b_path = os.path.join(sub, "b.txt")
+        with open(a_path, "w", encoding="utf-8") as f:
+            f.write("target needle in a\n")
+        with open(b_path, "w", encoding="utf-8") as f:
+            f.write("target needle in b\n")
+        view = self._file_view(
+            file_mappings={"sub/a.txt": a_path, "sub/b.txt": b_path},
+            readable_paths=["sub/a.txt", "sub/b.txt"],
+            writable_paths=[],
+        )
+        # Search using "." searches all readable files
+        res_dot = self.assert_supersedes(view.search_files(".", "needle"), False)
+        self.assertIn("a.txt:1:", res_dot.content)
+        self.assertIn("b.txt:1:", res_dot.content)
+        self.assertIn("2 matches total", res_dot.note)
+
+        # Search with omitted path defaults to "."
+        res_default = self.assert_supersedes(view.search_files(pattern="needle"), False)
+        self.assertIn("a.txt:1:", res_default.content)
+        self.assertIn("b.txt:1:", res_default.content)
+
+        # Search using "/" searches all readable files
+        res_slash = self.assert_supersedes(view.search_files("/", "needle"), False)
+        self.assertIn("a.txt:1:", res_slash.content)
+        self.assertIn("b.txt:1:", res_slash.content)
+
+        # Search using directory prefix "sub"
+        res_prefix = self.assert_supersedes(view.search_files("sub", "needle"), False)
+        self.assertIn("a.txt:1:", res_prefix.content)
+        self.assertIn("b.txt:1:", res_prefix.content)
 
     def test_search_files_renders_only_non_writable_matches(self) -> None:
         # Rendered matches are matches found in files that are not writable;
@@ -634,7 +697,7 @@ class TestFileViewImpl(unittest.TestCase):
         view = self._file_view()
         self.assertFalse(view.get_write_occurred())
         self.assert_supersedes(
-            view.edit_file("test.txt", "This is a test", "New content"), True
+            view.replace("test.txt", "This is a test", "New content"), True
         )
         self.assertTrue(view.get_write_occurred())
         self.assertTrue(view.get_write_occurred())
@@ -662,13 +725,13 @@ class TestFileViewImpl(unittest.TestCase):
         self.assertEqual(view.get_changed_files(), [])
         self.assertIsNone(view.get_run_start_snapshot("test.txt"))
         self.assert_supersedes(
-            view.edit_file("test.txt", "This is a test", "New content"), True
+            view.replace("test.txt", "This is a test", "New content"), True
         )
         self.assert_supersedes(
-            view.edit_file("second.txt", "Second line one", "Second: first"), True
+            view.replace("second.txt", "Second line one", "Second: first"), True
         )
         self.assert_supersedes(
-            view.edit_file("test.txt", "New content", "Newer content"), True
+            view.replace("test.txt", "New content", "Newer content"), True
         )
         self.assertEqual(view.get_changed_files(), ["test.txt", "second.txt"])
         self.assertEqual(
@@ -684,12 +747,12 @@ class TestFileViewImpl(unittest.TestCase):
         # mode (a line edit is refused until a numbered read).
         view1 = self._file_view()
         self.assert_supersedes(
-            view1.edit_file("test.txt", "This is a test", "New content"), True
+            view1.replace("test.txt", "This is a test", "New content"), True
         )
         view2 = self._file_view()
         self.assertFalse(view2.get_write_occurred())
         self.assertEqual(view2.get_changed_files(), [])
-        failure = self.as_tool_failure(view2.replace_lines("test.txt", 1, 1, "x"))
+        failure = self.as_tool_failure(view2.update_lines("test.txt", 1, 1, "x"))
         self.assertIn("include_line_numbers=True", failure.value)
 
 
@@ -762,7 +825,7 @@ class TestTemplateInitialization(unittest.TestCase):
         read = view.read_file("artifact.md", include_line_numbers=True)
         assert isinstance(read, list) and read
         self.assertTrue(read[0].supersedes)
-        view.replace_lines("artifact.md", 2, 2, "Filled in.")
+        view.update_lines("artifact.md", 2, 2, "Filled in.")
         self.assertEqual(
             view.get_run_start_snapshot("artifact.md"),
             self.template_content,
@@ -854,6 +917,15 @@ class TestVirtualNameAddressing(unittest.TestCase):
         assert isinstance(failure, ToolFailure)
         self.assertIn("adir", failure.value)
         self.assertNotIn(self.temp_dir, failure.value)
+
+    def test_sanitize_paths_replaces_full_and_relative_paths(self) -> None:
+        fv = self._file_view()
+        text = f"Error in {self.real_path} and pkg/subpkg/real_name.txt and //testing/lib:real_name"
+        sanitized = fv.sanitize_paths(text)
+        self.assertIn("alias.txt", sanitized)
+        self.assertNotIn(self.real_path, sanitized)
+        self.assertNotIn("pkg/subpkg/real_name.txt", sanitized)
+        self.assertNotIn("//testing/lib:real_name", sanitized)
 
 
 if __name__ == "__main__":

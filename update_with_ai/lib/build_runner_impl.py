@@ -71,22 +71,31 @@ def _format_compact_log(event: LogEvent, data: Dict[str, Any]) -> Optional[str]:
         return f"[agent {node}] tool calls: {', '.join(names)}"
 
     if event == "api_response":
-        usage = data.get("usage", {})
-        return (
-            f"[agent {node}] tokens: prompt {usage.get('prompt_tokens', 0)} | "
-            f"completion {usage.get('completion_tokens', 0)} | "
-            f"total {usage.get('total_tokens', 0)}"
-        )
-
+        return None
 
     if event == "run_terminated":
-        cumulative = data.get("cumulative_usage", {})
+        session = data.get("cumulative_usage", {})
+        s_in = session.get("input_tokens", session.get("prompt_tokens", 0))
+        s_cached = session.get("cached_input_tokens", session.get("cached_prompt_tokens", 0))
+        s_out = session.get("output_tokens", session.get("completion_tokens", 0))
+        s_tot = session.get("total_tokens", 0)
+        s_reqs = session.get("request_count", 0)
+        s_dur = session.get("total_duration_seconds", 0.0)
+
+        cum = data.get("runner_cumulative_usage", session)
+        c_in = cum.get("input_tokens", cum.get("prompt_tokens", 0))
+        c_cached = cum.get("cached_input_tokens", cum.get("cached_prompt_tokens", 0))
+        c_out = cum.get("output_tokens", cum.get("completion_tokens", 0))
+        c_tot = cum.get("total_tokens", 0)
+        c_reqs = cum.get("request_count", 0)
+        c_dur = cum.get("total_duration_seconds", 0.0)
+
         return (
-            f"[agent {node}] terminated ({data.get('termination_value', '?')}); cumulative: "
-            f"prompt {cumulative.get('prompt_tokens', 0)} | "
-            f"completion {cumulative.get('completion_tokens', 0)} | "
-            f"total {cumulative.get('total_tokens', 0)} "
-            f"({cumulative.get('request_count', 0)} requests)"
+            f"[agent {node}] terminated ({data.get('termination_value', '?')}); "
+            f"session: input {s_in}, input (cached) {s_cached}, output {s_out}, total {s_tot} "
+            f"({s_reqs} requests, {s_dur:.2f}s) | "
+            f"cumulative: input {c_in}, input (cached) {c_cached}, output {c_out}, total {c_tot} "
+            f"({c_reqs} requests, {c_dur:.2f}s)"
         )
 
     if event == "error":
@@ -136,26 +145,34 @@ def _format_full_log(event: LogEvent, data: Dict[str, Any]) -> str:
         return f"[{node}] tool_called: {'; '.join(parts)}"
 
     if event == "api_response":
-        usage = data.get("usage", {})
-        return (
-            f"[{node}] api_response: prompt {usage.get('prompt_tokens', 0)} | "
-            f"completion {usage.get('completion_tokens', 0)} | "
-            f"total {usage.get('total_tokens', 0)}"
-        )
+        return f"[{node}] api_response"
 
     if event == "reminder_injected":
         return f"[{node}] reminder_injected: {data.get('message', '')}"
 
-
     if event == "run_terminated":
-        cumulative = data.get("cumulative_usage", {})
+        session = data.get("cumulative_usage", {})
+        s_in = session.get("input_tokens", session.get("prompt_tokens", 0))
+        s_cached = session.get("cached_input_tokens", session.get("cached_prompt_tokens", 0))
+        s_out = session.get("output_tokens", session.get("completion_tokens", 0))
+        s_tot = session.get("total_tokens", 0)
+        s_reqs = session.get("request_count", 0)
+        s_dur = session.get("total_duration_seconds", 0.0)
+
+        cum = data.get("runner_cumulative_usage", session)
+        c_in = cum.get("input_tokens", cum.get("prompt_tokens", 0))
+        c_cached = cum.get("cached_input_tokens", cum.get("cached_prompt_tokens", 0))
+        c_out = cum.get("output_tokens", cum.get("completion_tokens", 0))
+        c_tot = cum.get("total_tokens", 0)
+        c_reqs = cum.get("request_count", 0)
+        c_dur = cum.get("total_duration_seconds", 0.0)
+
         return (
             f"[{node}] run_terminated: {data.get('termination_value', '?')} | "
-            f"cumulative: prompt {cumulative.get('prompt_tokens', 0)} "
-            f"completion {cumulative.get('completion_tokens', 0)} "
-            f"total {cumulative.get('total_tokens', 0)} "
-            f"({cumulative.get('request_count', 0)} requests) "
-            f"context {data.get('final_context_size', 0)}"
+            f"session: input {s_in}, input (cached) {s_cached}, output {s_out}, total {s_tot} "
+            f"({s_reqs} requests, {s_dur:.2f}s) context {data.get('final_context_size', 0)} | "
+            f"cumulative: input {c_in}, input (cached) {c_cached}, output {c_out}, total {c_tot} "
+            f"({c_reqs} requests, {c_dur:.2f}s)"
         )
 
     if event == "error":
@@ -251,7 +268,41 @@ class BuildRunnerImpl(BuildRunner):
         log_file = open(log_path, "w", encoding="utf-8")
         print(f"Agent log: {log_path}")
 
+        runner_cumulative_usage: Dict[str, Any] = {
+            "input_tokens": 0,
+            "cached_input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "request_count": 0,
+            "total_duration_seconds": 0.0,
+        }
+
         def _agent_logger(event: LogEvent, data: Dict[str, Any]) -> None:
+            if event == "run_terminated":
+                session = data.get("cumulative_usage", {})
+                runner_cumulative_usage["input_tokens"] += session.get(
+                    "input_tokens", session.get("prompt_tokens", 0)
+                )
+                runner_cumulative_usage["cached_input_tokens"] += session.get(
+                    "cached_input_tokens", session.get("cached_prompt_tokens", 0)
+                )
+                runner_cumulative_usage["output_tokens"] += session.get(
+                    "output_tokens", session.get("completion_tokens", 0)
+                )
+                runner_cumulative_usage["total_tokens"] += session.get(
+                    "total_tokens", 0
+                )
+                runner_cumulative_usage["request_count"] += session.get(
+                    "request_count", 0
+                )
+                runner_cumulative_usage["total_duration_seconds"] = round(
+                    runner_cumulative_usage["total_duration_seconds"]
+                    + session.get("total_duration_seconds", 0.0),
+                    3,
+                )
+                data = dict(data)
+                data["runner_cumulative_usage"] = dict(runner_cumulative_usage)
+
             line = _format_compact_log(event, data)
             if line is not None:
                 print(line)

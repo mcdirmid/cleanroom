@@ -7,6 +7,7 @@ Provides the agent loop implementation using the OpenAI API.
 """
 
 import json
+import time
 from typing import Any, cast, List, Dict, Optional, Tuple, Union
 
 from openai import OpenAI
@@ -86,7 +87,7 @@ class AgentLoopImpl(AgentLoop):
         # Per-run loop-repetition state (reset at each run_agent; no state
         # persists between runs): consecutive identical tool calls (same name
         # and arguments) trigger a reminder so the agent cannot spin forever
-        # on the same call; consecutive replace_lines calls targeting the same
+        # on the same call; consecutive update_lines calls targeting the same
         # file and line range (even with different content) trigger a
         # range-specific reminder so the agent cannot spin on stale line
         # numbers. At most one reminder is injected per run.
@@ -331,47 +332,83 @@ class AgentLoopImpl(AgentLoop):
         messages.append(new_message)
         self._invoke_logger(logger, "message_added", {"message": new_message})
 
-    def _extract_usage(self, response: Any) -> Usage:
-        """Extract per-request token usage from an OpenAI API response."""
+    def _extract_usage(self, response: Any, duration_seconds: float = 0.0) -> Usage:
+        """Extract per-request token usage and timing from an OpenAI API response."""
         if hasattr(response, "usage") and response.usage is not None:
+            input_tokens = getattr(response.usage, "prompt_tokens", 0) or 0
+            output_tokens = getattr(response.usage, "completion_tokens", 0) or 0
+            total_tokens = getattr(response.usage, "total_tokens", 0) or 0
+
+            # Extract cached input tokens from prompt_tokens_details if present
+            cached_tokens = 0
+            details = getattr(response.usage, "prompt_tokens_details", None)
+            if details is not None:
+                if isinstance(details, dict):
+                    cached_tokens = details.get("cached_tokens", 0) or 0
+                else:
+                    cached_tokens = getattr(details, "cached_tokens", 0) or 0
+
+            non_cached_tokens = max(0, input_tokens - cached_tokens)
             return {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens,
+                "input_tokens": input_tokens,
+                "cached_input_tokens": cached_tokens,
+                "non_cached_input_tokens": non_cached_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": total_tokens,
+                "duration_seconds": round(duration_seconds, 3),
+                "prompt_tokens": input_tokens,
+                "cached_prompt_tokens": cached_tokens,
+                "non_cached_prompt_tokens": non_cached_tokens,
+                "completion_tokens": output_tokens,
             }
         return {}
 
     def _update_cumulative_usage(self, cumulative: CumulativeUsage, usage: Usage) -> CumulativeUsage:
-        """Update cumulative usage with per-request usage."""
+        """Update cumulative usage with per-request usage and timing."""
+        input_tok = usage.get("input_tokens", usage.get("prompt_tokens", 0))
+        cached_tok = usage.get("cached_input_tokens", usage.get("cached_prompt_tokens", 0))
+        non_cached_tok = usage.get("non_cached_input_tokens", usage.get("non_cached_prompt_tokens", 0))
+        output_tok = usage.get("output_tokens", usage.get("completion_tokens", 0))
+        total_tok = usage.get("total_tokens", 0)
+
+        cum_input = cumulative.get("input_tokens", cumulative.get("prompt_tokens", 0)) + input_tok
+        cum_cached = cumulative.get("cached_input_tokens", cumulative.get("cached_prompt_tokens", 0)) + cached_tok
+        cum_non_cached = cumulative.get("non_cached_input_tokens", cumulative.get("non_cached_prompt_tokens", 0)) + non_cached_tok
+        cum_output = cumulative.get("output_tokens", cumulative.get("completion_tokens", 0)) + output_tok
+        cum_total = cumulative.get("total_tokens", 0) + total_tok
+
         return {
-            "prompt_tokens": cumulative.get("prompt_tokens", 0) + usage.get("prompt_tokens", 0),
-            "completion_tokens": cumulative.get("completion_tokens", 0) + usage.get("completion_tokens", 0),
-            "total_tokens": cumulative.get("total_tokens", 0) + usage.get("total_tokens", 0),
+            "input_tokens": cum_input,
+            "cached_input_tokens": cum_cached,
+            "non_cached_input_tokens": cum_non_cached,
+            "output_tokens": cum_output,
+            "total_tokens": cum_total,
             "request_count": cumulative.get("request_count", 0) + 1,
+            "total_duration_seconds": round(cumulative.get("total_duration_seconds", 0.0) + usage.get("duration_seconds", 0.0), 3),
+            "prompt_tokens": cum_input,
+            "cached_prompt_tokens": cum_cached,
+            "non_cached_prompt_tokens": cum_non_cached,
+            "completion_tokens": cum_output,
         }
 
-    def _log_api_response(self, logger: Optional[LoggerCallback], response: Any) -> None:
-        """Log API response with per-request token usage."""
+    def _log_api_response(self, logger: Optional[LoggerCallback]) -> None:
+        """Log API response event without token spam."""
         if logger is None:
             return
 
-        usage = self._extract_usage(response)
-        self._invoke_logger(logger, "api_response", {"usage": usage})
+        self._invoke_logger(logger, "api_response", {})
 
     def _log_response_truncated(
         self,
         logger: Optional[LoggerCallback],
         message: HistoryEntry,
-        usage: Usage,
+        usage: Optional[Usage] = None,
     ) -> None:
-        """Log a truncated response (the model stopped at the generation limit)."""
+        """Log response truncated event."""
         if logger is None:
             return
 
-        self._invoke_logger(logger, "response_truncated", {
-            "message": message,
-            "usage": usage,
-        })
+        self._invoke_logger(logger, "response_truncated", {"message": message})
 
     def _log_run_terminated(
         self,
@@ -438,7 +475,7 @@ class AgentLoopImpl(AgentLoop):
         reminder = (
             f"You have called '{tool_name}' with the same arguments {count} "
             f"times in a row. Review the latest tool results and make progress: "
-            f"change the file (edit_file/replace_lines) or finish "
+            f"change the file (replace/update_lines) or finish "
             f"the run with advance(), fail(), or blame()."
         )
         reminder_message: HistoryEntry = {"role": "user", "content": reminder}
@@ -457,7 +494,7 @@ class AgentLoopImpl(AgentLoop):
         end_line: Any,
         count: int,
     ) -> None:
-        """Inject a reminder when replace_lines targets the same range repeatedly."""
+        """Inject a reminder when update_lines targets the same range repeatedly."""
         reminder = (
             f"You have edited lines {start_line}-{end_line} of '{file_path}' "
             f"{count} times in a row without progress. Re-read the file "
@@ -556,11 +593,11 @@ class AgentLoopImpl(AgentLoop):
                 self._log_error(logger, error_msg, last_usage, cumulative_usage)
                 return (True, (error_msg, messages))
 
-            # Same-range repetition: replace_lines targeting the same file and
+            # Same-range repetition: update_lines targeting the same file and
             # line range repeatedly — even with different new_str, which the
             # identical-call check above misses — injects a range-specific
             # reminder so the agent cannot spin on stale line numbers.
-            if name == "replace_lines":
+            if name == "update_lines":
                 range_signature = (
                     arguments.get("file_path"),
                     arguments.get("start_line"),
@@ -591,7 +628,7 @@ class AgentLoopImpl(AgentLoop):
                 # specs/low/agent_loop_impl.md).
                 if self._loop_range_count >= 8 and range_signature[0] is not None:
                     error_msg = (
-                        "Degenerate loop: replace_lines targeted the same file "
+                        "Degenerate loop: update_lines targeted the same file "
                         "and line range 8 consecutive times"
                     )
                     self._log_error(logger, error_msg, last_usage, cumulative_usage)
@@ -729,7 +766,7 @@ class AgentLoopImpl(AgentLoop):
           - Tool executor raises an exception
           - Maximum iterations exceeded
           - Degenerate loop: the same tool call (name and arguments) repeats
-            8 consecutive times, or replace_lines targets the same file and
+            8 consecutive times, or update_lines targets the same file and
             line range 8 consecutive times (even with different content)
         - Tool failures (ToolFailure from the tool executor) are recoverable: the
           failure message is appended and the loop continues
@@ -764,10 +801,17 @@ class AgentLoopImpl(AgentLoop):
         iterations = 0
         last_usage: Optional[Usage] = None
         cumulative_usage: CumulativeUsage = {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
+            "input_tokens": 0,
+            "cached_input_tokens": 0,
+            "non_cached_input_tokens": 0,
+            "output_tokens": 0,
             "total_tokens": 0,
             "request_count": 0,
+            "total_duration_seconds": 0.0,
+            "prompt_tokens": 0,
+            "cached_prompt_tokens": 0,
+            "non_cached_prompt_tokens": 0,
+            "completion_tokens": 0,
         }
 
         while iterations < self._config.max_iterations:
@@ -804,20 +848,22 @@ class AgentLoopImpl(AgentLoop):
                 api_params["tools"] = cast(List[ChatCompletionToolParam], current_tools)
                 api_params["tool_choice"] = "auto"
 
+            t0 = time.perf_counter()
             try:
                 response = self._client.chat.completions.create(**api_params)
             except Exception as e:
                 error_msg = f"API call failed: {str(e)}"
                 self._log_error(logger, error_msg, last_usage, cumulative_usage)
                 return (error_msg, messages)
+            duration_seconds = time.perf_counter() - t0
 
             # Extract and track usage
-            usage = self._extract_usage(response)
+            usage = self._extract_usage(response, duration_seconds)
             last_usage = usage
             cumulative_usage = self._update_cumulative_usage(cumulative_usage, usage)
 
-            # Log API response with usage
-            self._log_api_response(logger, response)
+            # Log API response
+            self._log_api_response(logger)
 
             if not response.choices or len(response.choices) == 0:
                 error_msg = "API returned empty response"

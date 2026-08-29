@@ -28,8 +28,8 @@ import sys
 from dataclasses import fields
 from typing import List, Optional, Tuple
 
-from update_with_ai.lib.agent_loop_config import AgentLoopConfig
-from update_with_ai.lib.build_agent_config import (
+from .agent_loop_config import AgentLoopConfig
+from .build_agent_config import (
     API_KEY_ENV,
     CONFIG_TARGET_ENV,
     DEFAULT_CONFIG_TARGET,

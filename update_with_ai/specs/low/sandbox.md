@@ -43,9 +43,9 @@ class Sandbox(Protocol):
     def get_tool_definitions(self) -> list[ToolDefinition]: ...
     def get_session_start_reads(self) -> list[PresentedToolResult]: ...
     def read_file(self, file_path: VirtualName, include_line_numbers: bool = False) -> ToolCallOutcome: ...
-    def edit_file(self, file_path: VirtualName, old_str: str, new_str: str, expect_multiple: bool = False) -> ToolCallOutcome: ...
-    def replace_lines(self, file_path: VirtualName, start_line: int, end_line: int, new_str: str) -> ToolCallOutcome: ...
-    def search_files(self, path: VirtualName, pattern: str, offset: int | None = None, limit: int | None = None) -> ToolCallOutcome: ...
+    def replace(self, file_path: VirtualName, old_str: str, new_str: str, expect_multiple: bool = False) -> ToolCallOutcome: ...
+    def update_lines(self, file_path: VirtualName, start_line: int, end_line: int, new_str: str) -> ToolCallOutcome: ...
+    def search_files(self, path: VirtualName = ".", pattern: str = "", offset: int | None = None, limit: int | None = None) -> ToolCallOutcome: ...
     def advance(self, changes: list[dict[str, str]] = []) -> ToolCallOutcome: ...
     def fail(self) -> ToolCallOutcome: ...
     def blame(self, blames: list[Blame]) -> ToolCallOutcome: ...
@@ -134,38 +134,38 @@ def read_file(self, file_path: VirtualName, include_line_numbers: bool = False) 
 **HLS Justification:** "Execute a tool call."
 
 
-### `edit_file`
+### `replace`
 
 ```python
-def edit_file(self, file_path: VirtualName, old_str: str, new_str: str,
-              expect_multiple: bool = False) -> ToolCallOutcome
+def replace(self, file_path: VirtualName, old_str: str, new_str: str,
+            expect_multiple: bool = False) -> ToolCallOutcome
 ```
 
 **Purpose:** Replace text in a file by content-based search and replace.
 
-**Preconditions:** Per `file_view.edit_file` (the file machinery's rules apply).
+**Preconditions:** Per `file_view.replace` (the file machinery's rules apply).
 
-**Postconditions:** Delegates to `file_view.edit_file`; the file_view rules apply (per the file_view LLS).
+**Postconditions:** Delegates to `file_view.replace`; the file_view rules apply (per the file_view LLS).
 
-**Failure Handling:** Per `file_view.edit_file`'s failure signals, returned as-is.
+**Failure Handling:** Per `file_view.replace`'s failure signals, returned as-is.
 
 **HLS Justification:** "Execute a tool call."
 
 
-### `replace_lines`
+### `update_lines`
 
 ```python
-def replace_lines(self, file_path: VirtualName, start_line: int, end_line: int,
-                  new_str: str) -> ToolCallOutcome
+def update_lines(self, file_path: VirtualName, start_line: int, end_line: int,
+                 new_str: str) -> ToolCallOutcome
 ```
 
 **Purpose:** Replace, delete, or insert lines in a file by 1-indexed line range.
 
-**Preconditions:** Per `file_view.replace_lines` (the file machinery's rules apply).
+**Preconditions:** Per `file_view.update_lines` (the file machinery's rules apply).
 
-**Postconditions:** Delegates to `file_view.replace_lines`; the file_view rules apply (per the file_view LLS).
+**Postconditions:** Delegates to `file_view.update_lines`; the file_view rules apply (per the file_view LLS).
 
-**Failure Handling:** Per `file_view.replace_lines`'s failure signals, returned as-is.
+**Failure Handling:** Per `file_view.update_lines`'s failure signals, returned as-is.
 
 **HLS Justification:** "Execute a tool call."
 
@@ -173,7 +173,7 @@ def replace_lines(self, file_path: VirtualName, start_line: int, end_line: int,
 ### `search_files`
 
 ```python
-def search_files(self, path: VirtualName, pattern: str,
+def search_files(self, path: VirtualName = ".", pattern: str = "",
                  offset: int | None = None,
                  limit: int | None = None) -> ToolCallOutcome
 ```

@@ -63,8 +63,8 @@ class FileView(Protocol):
 
     def get_tool_definitions(self) -> List[ToolDefinition]:
         """
-        Return the file tools' definitions: read_file, edit_file,
-        replace_lines, and search_files, each following the JSON schema
+        Return the file tools' definitions: read_file, replace,
+        update_lines, and search_files, each following the JSON schema
         format expected by the model.
 
         Always succeeds.
@@ -116,8 +116,8 @@ class FileView(Protocol):
         """
         ...
 
-    def edit_file(self, file_path: VirtualName, old_str: str, new_str: str,
-                  expect_multiple: bool = False) -> ToolCallOutcome:
+    def replace(self, file_path: VirtualName, old_str: str, new_str: str,
+                expect_multiple: bool = False) -> ToolCallOutcome:
         """
         Replace text in a file (content-based search and replace).
 
@@ -127,9 +127,9 @@ class FileView(Protocol):
 
         Args:
             file_path: Virtual path to the file
-            old_str: Exact text to find (must be non-empty; at most 100
-                characters — use replace_lines for larger changes)
-            new_str: Replacement text (at most 100 characters)
+            old_str: Exact text to find (must be non-empty; at most 200
+                characters — use update_lines for larger changes)
+            new_str: Replacement text (at most 200 characters)
             expect_multiple: If True, replace all occurrences of old_str
 
         Returns:
@@ -151,8 +151,8 @@ class FileView(Protocol):
         """
         ...
 
-    def replace_lines(self, file_path: VirtualName, start_line: int, end_line: int,
-                      new_str: str) -> ToolCallOutcome:
+    def update_lines(self, file_path: VirtualName, start_line: int, end_line: int,
+                     new_str: str) -> ToolCallOutcome:
         """
         Replace, delete, or insert lines by 1-indexed line range.
 
@@ -186,7 +186,7 @@ class FileView(Protocol):
         """
         ...
 
-    def search_files(self, path: VirtualName, pattern: str,
+    def search_files(self, path: VirtualName = ".", pattern: str = "",
                      offset: Optional[int] = None,
                      limit: Optional[int] = None) -> ToolCallOutcome:
         """
@@ -245,4 +245,8 @@ class FileView(Protocol):
 
     def get_current_content(self, file_path: VirtualName) -> Optional[str]:
         """The file's current content on disk; None when unreadable."""
+        ...
+
+    def sanitize_paths(self, text: str) -> str:
+        """Translate referenced disk paths, workspace paths, and package prefixes in text into virtual names."""
         ...

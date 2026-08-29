@@ -39,6 +39,7 @@ terms (refined): dirty, cleaning
 - [external] build_graph_storage (node definitions), agent_loop (agent run), sandbox (tool definitions and execution), and the language model service.
 - [failure] Agent failures and tool-execution failures signal failure, leaving pending messages unchanged.
 - [failure] An invalid blame target (a virtual name that resolves to no owning node, or whose owning node is not a dependency of the node) signals a tool failure naming the invalid target and listing the valid blame targets (never internal target labels), not an agent failure: the agent may correct its blame and continue.
+- [failure] A tool call with invalid parameters signals a tool failure naming the tool and its valid parameters, not an agent failure: the agent may correct its parameters and continue.
 - [refines] dirty -> pending messages, a writable output file without an empty template missing on disk, or a writable output file whose content is exactly its non-empty template's content.
 - [refines] cleaning -> running the node's agent.
 

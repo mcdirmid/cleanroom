@@ -9,9 +9,9 @@ import json
 import datetime
 from typing import cast, Any, Dict, List
 
-from update_with_ai.lib.agent_loop_config import AgentLoopConfig
-from update_with_ai.lib.agent_loop_impl import AgentLoopImpl
-from update_with_ai.lib.agent_loop import (
+from lib.agent_loop_config import AgentLoopConfig
+from lib.agent_loop_impl import AgentLoopImpl
+from lib.agent_loop import (
     ToolCall,
     ToolDefinition,
     LoggerCallback,
@@ -19,8 +19,8 @@ from update_with_ai.lib.agent_loop import (
     Usage,
     CumulativeUsage,
 )
-from update_with_ai.lib.dag_clean_logic import ChangeResult
-from update_with_ai.lib.tool_provider import (
+from lib.dag_clean_logic import ChangeResult
+from lib.tool_provider import (
     ToolResult,
     ToolCallOutcome,
     TerminateAgentWithSuccess,
@@ -232,11 +232,7 @@ def logger_callback(event: LogEvent, data: dict[str, Any]) -> None:
             print(f"       supersedes={supersedes}")
 
     elif event == "api_response":
-        usage = data.get("usage", {})
-        prompt = usage.get("prompt_tokens", 0)
-        completion = usage.get("completion_tokens", 0)
-        total = usage.get("total_tokens", 0)
-        print(f"  [TOKENS] Context: {prompt:,} tokens | Response: {completion:,} | Cost: {total:,} tokens")
+        pass
 
     elif event == "reminder_injected":
         message = data.get("message", "")
@@ -248,12 +244,18 @@ def logger_callback(event: LogEvent, data: dict[str, Any]) -> None:
         cumulative = data.get("cumulative_usage", {})
         final_context = data.get("final_context_size", 0)
 
+        in_tok = cumulative.get("input_tokens", cumulative.get("prompt_tokens", 0))
+        cached_tok = cumulative.get("cached_input_tokens", cumulative.get("cached_prompt_tokens", 0))
+        out_tok = cumulative.get("output_tokens", cumulative.get("completion_tokens", 0))
+        total_tok = cumulative.get("total_tokens", 0)
+        reqs = cumulative.get("request_count", 0)
+        dur = cumulative.get("total_duration_seconds", 0.0)
+
         print(f"  [LOG] Run terminated: {termination_value}")
         print(f"  [TOKENS] Final context size: {final_context:,} tokens")
-        print(f"  [TOKENS] Total spent: {cumulative.get('total_tokens', 0):,} tokens")
-        print(f"  [TOKENS]   - Prompt tokens: {cumulative.get('prompt_tokens', 0):,}")
-        print(f"  [TOKENS]   - Completion tokens: {cumulative.get('completion_tokens', 0):,}")
-        print(f"  [TOKENS]   - API calls: {cumulative.get('request_count', 0)}")
+        print(f"  [TOKENS] Total spent: {total_tok:,} tokens ({reqs} requests, {dur:.2f}s)")
+        print(f"  [TOKENS]   - Input tokens: {in_tok:,} (cached: {cached_tok:,})")
+        print(f"  [TOKENS]   - Output tokens: {out_tok:,}")
 
     elif event == "error":
         error = data.get("error", "unknown error")

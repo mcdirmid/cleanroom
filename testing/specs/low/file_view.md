@@ -43,10 +43,11 @@ class FileView(Protocol):
     def get_tool_definitions(self) -> list[ToolDefinition]: ...
     def get_session_start_reads(self) -> list[PresentedToolResult]: ...
     def read_file(self, file_path: VirtualName, include_line_numbers: bool = False) -> ToolCallOutcome: ...
-    def edit_file(self, file_path: VirtualName, old_str: str, new_str: str, expect_multiple: bool = False) -> ToolCallOutcome: ...
-    def replace_lines(self, file_path: VirtualName, start_line: int, end_line: int, new_str: str) -> ToolCallOutcome: ...
-    def search_files(self, path: VirtualName, pattern: str, offset: int | None = None, limit: int | None = None) -> ToolCallOutcome: ...
+    def replace(self, file_path: VirtualName, old_str: str, new_str: str, expect_multiple: bool = False) -> ToolCallOutcome: ...
+    def update_lines(self, file_path: VirtualName, start_line: int, end_line: int, new_str: str) -> ToolCallOutcome: ...
+    def search_files(self, path: VirtualName = ".", pattern: str = "", offset: int | None = None, limit: int | None = None) -> ToolCallOutcome: ...
     def get_write_occurred(self) -> WriteOccurred: ...
+    def sanitize_paths(self, text: str) -> str: ...
 ```
 
 `FileViewConfig` is the client-supplied configuration for the file machinery: file mappings (each file's virtual name to its full path), the readable and writable virtual names, the templates (a mapping from writable virtual names to their template content), the search result limit (the maximum rendered matches a single search may return), and whether session-start reads are enabled.
@@ -77,7 +78,7 @@ def get_tool_definitions(self) -> list[ToolDefinition]
 
 **Preconditions:** file_view has been configured with file mappings and readable/writable paths.
 
-**Postconditions:** Returns a list containing exactly the `read_file`, `edit_file`, `replace_lines`, and `search_files` tool definitions. Each definition follows the JSON schema format expected by the model (as defined in `tool_provider`).
+**Postconditions:** Returns a list containing exactly the `read_file`, `replace`, `update_lines`, and `search_files` tool definitions. Each definition follows the JSON schema format expected by the model (as defined in `tool_provider`).
 
 **Failure Handling:** No failure conditions.
 
@@ -115,7 +116,7 @@ def read_file(self, file_path: VirtualName, include_line_numbers: bool = False) 
 
 **Preconditions:**
 - `file_path` must exist in `file_mappings` and be in `readable_paths`
-- `include_line_numbers` may be `True` only when `file_path` is in `writable_paths` (line numbers serve `replace_lines` edits)
+- `include_line_numbers` may be `True` only when `file_path` is in `writable_paths` (line numbers serve `update_lines` edits)
 - `include_line_numbers` must be `True` when `file_path` is in `writable_paths` and the file already exists on disk (a plain read of an existing writable file is rejected; line numbers are metadata, not file content)
 
 **Postconditions:**
@@ -135,18 +136,18 @@ def read_file(self, file_path: VirtualName, include_line_numbers: bool = False) 
 **HLS Justification:** A read provides the file's entire content; a writable-file read supersedes the file's earlier result, keeping the conversation current.
 
 
-### `edit_file`
+### `replace`
 
 ```python
-def edit_file(self, file_path: VirtualName, old_str: str, new_str: str,
-              expect_multiple: bool = False) -> ToolCallOutcome
+def replace(self, file_path: VirtualName, old_str: str, new_str: str,
+            expect_multiple: bool = False) -> ToolCallOutcome
 ```
 
 **Purpose:** Replace text in a file by content-based search and replace.
 
 **Preconditions:**
 - `file_path` must exist in `file_mappings` and be in `writable_paths`
-- `old_str` must be non-empty and at most 100 characters; `new_str` must be at most 100 characters (edit_file is for short search/replace pairs; whole-file and large edits go through `replace_lines`)
+- `old_str` must be non-empty and at most 200 characters; `new_str` must be at most 200 characters (replace is for short search/replace pairs; whole-file and large edits go through `update_lines`)
 - The file must exist on disk (edits modify existing files only)
 
 **Postconditions:**
@@ -158,7 +159,7 @@ def edit_file(self, file_path: VirtualName, old_str: str, new_str: str,
 
 **Failure Handling:**
 - Policy violation (file_path not in writable_paths or file_mappings) → Return `ToolFailure[T_tool]` with the error message identifying the violated policy.
-- Invalid arguments (empty `old_str`; `old_str` identical to `new_str` — the edit would change nothing; `old_str` or `new_str` exceeding 100 characters) → Return `ToolFailure[T_tool]` with the error message describing the argument error; an over-length string error advises `replace_lines` (which requires the line-numbered view).
+- Invalid arguments (empty `old_str`; `old_str` identical to `new_str` — the edit would change nothing; `old_str` or `new_str` exceeding 200 characters) → Return `ToolFailure[T_tool]` with the error message describing the argument error; an over-length string error advises `update_lines` (which requires the line-numbered view).
 - `old_str` absent from the file → Return `ToolFailure[T_tool]` stating it was not found.
 - More than one match with `expect_multiple` `False` → Return `ToolFailure[T_tool]` stating the match count and advising `expect_multiple=True` or a narrower `old_str`.
 - Filesystem errors are unhandled (no contract specified in this interface spec).
@@ -166,21 +167,21 @@ def edit_file(self, file_path: VirtualName, old_str: str, new_str: str,
 **HLS Justification:** Content-based editing: search-and-replace of short text, bounded in length; longer changes go through line-range editing.
 
 
-### `replace_lines`
+### `update_lines`
 
 ```python
-def replace_lines(self, file_path: VirtualName, start_line: int, end_line: int,
-                  new_str: str) -> ToolCallOutcome
+def update_lines(self, file_path: VirtualName, start_line: int, end_line: int,
+                 new_str: str) -> ToolCallOutcome
 ```
 
 **Purpose:** Replace, delete, or insert lines in a file by 1-indexed line range. The tool definition for this operation marks all four parameters (`file_path`, `start_line`, `end_line`, `new_str`) as required in its JSON schema (`required` list).
 
 **Preconditions:**
 - `file_path` must exist in `file_mappings` and be in `writable_paths`
-- `start_line` must be between 1 and `len(file) + 1`; `end_line` must be between 0 and `len(file)`
+- `start_line` must be between 1 and `len(file) + 1`; `end_line` must be between 0 and `len(file)` (for an empty 0-line file, `start_line=1` with `end_line=0` or `end_line=1` is accepted to insert content)
 - `start_line` and `end_line` must be integers
 - The file must exist on disk (edits modify existing files only)
-- The file's current view must be line-numbered (a write resets the view to plain; the injected read after a write re-enables the line-numbered view, so a `replace_lines` may follow a write without a further read)
+- The file's current view must be line-numbered (a write resets the view to plain; the injected read after a write re-enables the line-numbered view, so an `update_lines` may follow a write without a further read)
 
 **Postconditions:**
 - Lines `start_line` through `end_line` (inclusive) are replaced with `new_str`; `start_line > end_line` inserts `new_str` before line `start_line` (no lines removed); empty `new_str` deletes the range; a trailing newline is preserved when the file had one and lines remain
@@ -201,7 +202,7 @@ def replace_lines(self, file_path: VirtualName, start_line: int, end_line: int,
 ### `search_files`
 
 ```python
-def search_files(self, path: VirtualName, pattern: str,
+def search_files(self, path: VirtualName = ".", pattern: str = "",
                  offset: int | None = None,
                  limit: int | None = None) -> ToolCallOutcome
 ```
@@ -209,7 +210,7 @@ def search_files(self, path: VirtualName, pattern: str,
 **Purpose:** Search for a pattern in files using the virtual path provided by the agent.
 
 **Preconditions:**
-- `path` must be in `readable_paths`
+- `path` (defaulting to `"."`) must be in `readable_paths`, or be a root / prefix path (`"."`, `"/"`, `""`)
 - `pattern` must be a valid regex pattern
 - If `offset` provided, must be non-negative
 - If `limit` provided, must be positive and must not exceed the search result limit
@@ -217,12 +218,12 @@ def search_files(self, path: VirtualName, pattern: str,
 **Postconditions:**
 - Returns up to `limit` rendered matches (or all rendered matches when `limit` is omitted and the total fits within the search result limit) as string in `content`, paged from `offset`
 - Rendered matches are matches found in files that are not writable; matches found in writable files are never rendered
-- Searches recursively within the specified path
+- Searches recursively within the specified path (or across all readable files when `path` is `"."`, `"/"`, or `""`)
 - `supersedes` is `False` (search results never supersede an earlier result)
 - The result's `note` reports the total rendered matches, how many remain after this page, the offset to continue from, and the count of suppressed matches in writable files
 
 **Failure Handling:**
-- Policy violation (path not in readable_paths) → Return `ToolFailure[T_tool]` with the error message identifying the violated policy.
+- Policy violation (path not in readable_paths and not a recognized root/prefix path) → Return `ToolFailure[T_tool]` with the error message identifying the violated policy.
 - Invalid pattern (not a valid regex) → Return `ToolFailure[T_tool]` with the error message describing the pattern error.
 - Invalid parameters (negative offset, zero limit, limit above the search result limit, or an omitted limit whose rendered matches exceed the search result limit) → Return `ToolFailure[T_tool]` with the error message describing the parameter error and advising offset/limit pagination.
 - Filesystem errors are unhandled (no contract specified in this interface spec).
@@ -246,6 +247,23 @@ def get_write_occurred(self) -> WriteOccurred
 
 **HLS Justification:** "Query whether any file write has occurred."
 
+
+### `sanitize_paths`
+
+```python
+def sanitize_paths(self, text: str) -> str
+```
+
+**Purpose:** Translate referenced disk paths, workspace paths, and package prefixes in text into virtual names.
+
+**Preconditions:** None.
+
+**Postconditions:** Returns text with any occurrence of configured disk paths, relative workspace paths, or package prefixes replaced by their corresponding virtual names.
+
+**Failure Handling:** Always succeeds.
+
+**HLS Justification:** "Path sanitization maps any host filesystem paths, sandbox paths, or package prefixes to their corresponding virtual names."
+
 ## Invariants
 
 - No state persists across runs
@@ -257,7 +275,7 @@ def get_write_occurred(self) -> WriteOccurred
 - A result supersedes at most one earlier result (at most one non-stubbed result exists per file at any time)
 - A write or edit supersedes the file's earlier read result; the injected read provides the file's current content in the conversation
 - An edit's replacement applies atomically (all or nothing): a replacement is never partially applied
-- `replace_lines` requires the line-numbered view
+- `update_lines` requires the line-numbered view
 - Search results never render matches from writable files
 - A tool result never carries the stub text
 

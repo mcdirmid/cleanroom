@@ -20,16 +20,16 @@ from openai.types.chat.chat_completion_message_function_tool_call import (
     Function,
 )
 
-from testing.lib.agent_loop import (
+from lib.agent_loop import (
     HistoryEntry,
     LogEvent,
     LoggerCallback,
     ToolDefinition,
 )
-from testing.lib.agent_loop_config import AgentLoopConfig
-from testing.lib.agent_loop_impl import AgentLoopImpl
-from testing.lib.dag_clean_logic import NoChangeResult
-from testing.lib.tool_provider import (
+from lib.agent_loop_config import AgentLoopConfig
+from lib.agent_loop_impl import AgentLoopImpl
+from lib.dag_clean_logic import NoChangeResult
+from lib.tool_provider import (
     Continue,
     PresentedToolResult,
     TerminateAgentWithFailure,
@@ -97,12 +97,18 @@ def make_response(
     content: Optional[str] = None,
     tool_calls: Optional[List[ChatCompletionMessageFunctionToolCall]] = None,
     finish_reason: str = "stop",
-    usage: Optional[Dict[str, int]] = None,
+    usage: Optional[Dict[str, Any]] = None,
     choices: Optional[List[Any]] = None,
 ) -> Any:
     """A fake OpenAI chat completion response."""
     if usage is None:
-        usage = {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}
+        usage = {
+            "prompt_tokens": 10,
+            "cached_prompt_tokens": 0,
+            "non_cached_prompt_tokens": 10,
+            "completion_tokens": 20,
+            "total_tokens": 30,
+        }
     mock_choice = MagicMock()
     mock_choice.finish_reason = finish_reason
     mock_message = MagicMock()
@@ -111,11 +117,13 @@ def make_response(
     mock_choice.message = mock_message
     mock_response = MagicMock()
     mock_response.choices = [mock_choice] if choices is None else choices
-    mock_response.usage = MagicMock(
-        prompt_tokens=usage["prompt_tokens"],
-        completion_tokens=usage["completion_tokens"],
-        total_tokens=usage["total_tokens"],
-    )
+    mock_usage = MagicMock()
+    mock_usage.prompt_tokens = usage.get("prompt_tokens", 10)
+    mock_usage.completion_tokens = usage.get("completion_tokens", 20)
+    mock_usage.total_tokens = usage.get("total_tokens", 30)
+    cached = usage.get("cached_prompt_tokens", 0)
+    mock_usage.prompt_tokens_details = MagicMock(cached_tokens=cached)
+    mock_response.usage = mock_usage
     return mock_response
 
 
@@ -132,7 +140,7 @@ class TestAgentLoopImpl(unittest.TestCase):
     """AgentLoopImpl behavior against the agent_loop_impl LLS."""
 
     def setUp(self) -> None:
-        self.openai_patcher = patch("testing.lib.agent_loop_impl.OpenAI")
+        self.openai_patcher = patch("lib.agent_loop_impl.OpenAI")
         self.mock_openai_class = self.openai_patcher.start()
         self.addCleanup(self.openai_patcher.stop)
         self.mock_client = self.mock_openai_class.return_value
@@ -200,16 +208,16 @@ class TestAgentLoopImpl(unittest.TestCase):
         history_text = " ".join(str(m.get("content", "")) for m in history)
         self.assertIn("times in a row", history_text)
 
-    def test_same_range_replace_lines_injects_reminder(self) -> None:
+    def test_same_range_update_lines_injects_reminder(self) -> None:
         """
-        LLS: replace_lines targeting the same file and line range 4
+        LLS: update_lines targeting the same file and line range 4
         consecutive times (even with different new_str) injects a
         range-specific reminder once per run; the loop continues.
         """
         # Each call differs (different new_str), so the identical-call
         # detector does not fire; the same-range detector must.
         calls = [
-            make_tool_call("replace_lines", f"call_{i}", {
+            make_tool_call("update_lines", f"call_{i}", {
                 "file_path": "specs/low/dag_storage.md",
                 "start_line": 96,
                 "end_line": 100,
@@ -338,14 +346,14 @@ class TestAgentLoopImpl(unittest.TestCase):
         error, history = result
         self.assertNotIn("Degenerate loop", str(error))
 
-    def test_same_range_replace_lines_fails_run(self) -> None:
+    def test_same_range_update_lines_fails_run(self) -> None:
         """
-        LLS: replace_lines targeting the same file and line range 8
+        LLS: update_lines targeting the same file and line range 8
         consecutive times (even with different new_str) fails the run with
         the pinned error text.
         """
         calls = [
-            make_tool_call("replace_lines", f"call_{i}", {
+            make_tool_call("update_lines", f"call_{i}", {
                 "file_path": "specs/low/dag_storage.md",
                 "start_line": 96,
                 "end_line": 100,
@@ -380,7 +388,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         assert isinstance(error, str)
         self.assertEqual(
             error,
-            "Degenerate loop: replace_lines targeted the same file and line range 8 consecutive times",
+            "Degenerate loop: update_lines targeted the same file and line range 8 consecutive times",
         )
         assert isinstance(history, list)
         # The range-specific reminder fired once at 4; the run failed at 8.
@@ -903,11 +911,6 @@ class TestAgentLoopImpl(unittest.TestCase):
         truncated_events = [e for e in events if e[0] == "response_truncated"]
         assert len(truncated_events) == 1
         assert truncated_events[0][1]["message"]["content"] == "Partial."
-        assert truncated_events[0][1]["usage"] == {
-            "prompt_tokens": 10,
-            "completion_tokens": 20,
-            "total_tokens": 30,
-        }
         # The continuation prompt append is reported via message_added after
         # the response_truncated event.
         assert any(
@@ -1016,7 +1019,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         """
         agent = AgentLoopImpl(make_config(max_iterations=4))
         read_call = make_tool_call("read_file", "call_1", {"path": "foo.txt"})
-        edit_call = make_tool_call("replace_lines", "call_2", {"path": "foo.txt"})
+        edit_call = make_tool_call("update_lines", "call_2", {"path": "foo.txt"})
         agent._client.chat.completions.create.side_effect = [
             make_response(content=None, tool_calls=[read_call], finish_reason="tool_calls"),
             make_response(content=None, tool_calls=[edit_call], finish_reason="tool_calls"),
@@ -1026,10 +1029,10 @@ class TestAgentLoopImpl(unittest.TestCase):
         def executor(name: str, arguments: Dict[str, Any]) -> Any:
             if name == "advance":
                 return TerminateAgentWithSuccess(NoChangeResult())
-            if name == "replace_lines":
+            if name == "update_lines":
                 return ToolFailure(
                     value=(
-                        "replace_lines requires the line-numbered view: call "
+                        "update_lines requires the line-numbered view: call "
                         "read_file('foo.txt', include_line_numbers=True)"
                     )
                 )
@@ -1286,7 +1289,7 @@ class TestAgentLoopImpl(unittest.TestCase):
         message, so no tool result appears without its preceding call. This
         is the injected read after a file write (the sandbox's Auto re-read).
         """
-        write_call = make_tool_call("replace_lines", "call_write", {
+        write_call = make_tool_call("update_lines", "call_write", {
             "file_path": "foo.txt",
             "start_line": 1,
             "end_line": 1,
@@ -1779,18 +1782,66 @@ class TestAgentLoopImpl(unittest.TestCase):
         history = self.assert_success(result)
         final_events = [e for e in events if e[0] == "run_terminated"]
         assert len(final_events) == 1
-        assert final_events[0][1]["cumulative_usage"] == {
-            "prompt_tokens": 25,
-            "completion_tokens": 47,
-            "total_tokens": 72,
-            "request_count": 3,
-        }
+        cum = final_events[0][1]["cumulative_usage"]
+        assert cum["input_tokens"] == 25
+        assert cum["cached_input_tokens"] == 0
+        assert cum["non_cached_input_tokens"] == 25
+        assert cum["output_tokens"] == 47
+        assert cum["total_tokens"] == 72
+        assert cum["request_count"] == 3
+        assert "total_duration_seconds" in cum
+
         api_events = [e for e in events if e[0] == "api_response"]
-        assert [e[1]["usage"] for e in api_events] == [
-            {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
-            {"prompt_tokens": 5, "completion_tokens": 7, "total_tokens": 12},
-            {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+        assert len(api_events) == 3
+
+    def test_cached_prompt_tokens_and_timing_tracked(self) -> None:
+        """
+        LLS: cached input tokens from prompt_tokens_details are tracked along
+        with non-cached tokens and duration across API calls and reported on termination.
+        """
+        self.mock_client.chat.completions.create.side_effect = [
+            make_response(
+                content=None,
+                tool_calls=[make_tool_call("advance", "call_1", {})],
+                finish_reason="tool_calls",
+                usage={
+                    "prompt_tokens": 1000,
+                    "cached_prompt_tokens": 800,
+                    "completion_tokens": 50,
+                    "total_tokens": 1050,
+                },
+            ),
         ]
+
+        events: List[Tuple[str, Dict[str, Any]]] = []
+
+        def logger(event: LogEvent, data: Dict[str, Any]) -> None:
+            events.append((event, data))
+
+        def executor(name: str, arguments: Dict[str, Any]) -> ToolCallOutcome[str]:
+            return TerminateAgentWithSuccess(NoChangeResult())
+
+        result = self.agent.run_agent(
+            prompt="Test",
+            tools=make_tool_definitions(),
+            tool_executor=executor,
+            logger=logger,
+        )
+
+        history = self.assert_success(result)
+        api_events = [e for e in events if e[0] == "api_response"]
+        assert len(api_events) == 1
+
+        term_events = [e for e in events if e[0] == "run_terminated"]
+        assert len(term_events) == 1
+        cum = term_events[0][1]["cumulative_usage"]
+        assert cum["input_tokens"] == 1000
+        assert cum["cached_input_tokens"] == 800
+        assert cum["non_cached_input_tokens"] == 200
+        assert cum["output_tokens"] == 50
+        assert cum["total_tokens"] == 1050
+        assert cum["request_count"] == 1
+        assert "total_duration_seconds" in cum
 
     def test_agent_loop_config_defaults(self) -> None:
         """

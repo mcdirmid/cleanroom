@@ -22,18 +22,18 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from unittest import mock
 
-from update_with_ai.lib.build_graph_storage import (
+from lib.build_graph_storage import (
     GraphConfig,
     NodeDefinition,
     NodeId,
     PackageDirectory,
 )
-from update_with_ai.lib.build_graph_storage_impl import (
+from lib.build_graph_storage_impl import (
     BaseBuildGraphStorageImpl,
     BuildGraphStorageFileImpl,
 )
-from update_with_ai.lib.dag_storage import NodeMessage, MessageKind, PendingMessages
-from update_with_ai.lib.sandbox import SandboxConfig
+from lib.dag_storage import NodeMessage, MessageKind, PendingMessages
+from lib.sandbox import SandboxConfig
 from typing import cast
 
 HARNESS_FILE = ".update_with_ai.textproto"
@@ -451,7 +451,7 @@ class TestMessageFileOperations(unittest.TestCase):
             return real_replace(src, dst)
 
         with mock.patch(
-            "update_with_ai.lib.build_graph_storage_impl.os.replace", side_effect=_recording_replace
+            "lib.build_graph_storage_impl.os.replace", side_effect=_recording_replace
         ):
             self.graph.add_messages("node_a", [msg("msg")])
 
@@ -466,7 +466,7 @@ class TestMessageFileOperations(unittest.TestCase):
         self.graph.add_messages("node_a", [msg("old")])
 
         with mock.patch(
-            "update_with_ai.lib.build_graph_storage_impl.os.replace",
+            "lib.build_graph_storage_impl.os.replace",
             side_effect=OSError("replace failed"),
         ):
             with self.assertRaises(OSError):

@@ -20,10 +20,10 @@ from .tool_provider import (
 
 
 # The change-summary length bounds the advance tool's description mentions:
-# pinned in specs/low/run_control_impl.md, Non-Concerns (soft bound 200
+# pinned in specs/low/run_control_impl.md, Non-Concerns (soft bound 300
 # characters, hard bound 500 characters). The description wording itself is
 # unspecified (guide_delivery.md, Non-Concerns); the numbers are advisory.
-SOFT_CHANGE_SUMMARY_LENGTH = 200
+SOFT_CHANGE_SUMMARY_LENGTH = 300
 HARD_CHANGE_SUMMARY_LENGTH = 500
 
 

@@ -21,6 +21,7 @@ import os
 import sys
 
 from build_lint_common import (
+    check_sibling_imports,
     ensure_load,
     ensure_target,
     load_line,
@@ -67,6 +68,12 @@ def main() -> int:
     deps = transitive_closure(package, roots)
     text = ensure_target(text, RULE, stem, srcs, deps, package)
     write_text(args.build_path, text)
+
+    import_errors = check_sibling_imports(package, args.module_path)
+    if import_errors:
+        for err in import_errors:
+            sys.stderr.write(err + "\n")
+        return 1
     return 0
 
 

@@ -23,21 +23,21 @@ import tempfile
 import unittest
 from typing import Any, Dict, List, Optional, Tuple
 
-from update_with_ai.lib.run_control import RunControlConfig
-from update_with_ai.lib.run_control_impl import RunControlImpl
-from update_with_ai.lib.file_view import FileViewConfig
-from update_with_ai.lib.file_view_impl import FileViewImpl
-from update_with_ai.lib.guide_delivery import GuideDeliveryConfig
-from update_with_ai.lib.guide_delivery_impl import GuideDeliveryImpl
-from update_with_ai.lib.tool_provider import (
+from lib.run_control import RunControlConfig
+from lib.run_control_impl import RunControlImpl
+from lib.file_view import FileViewConfig
+from lib.file_view_impl import FileViewImpl
+from lib.guide_delivery import GuideDeliveryConfig
+from lib.guide_delivery_impl import GuideDeliveryImpl
+from lib.tool_provider import (
     PresentedToolResult,
     ToolResult,
     ToolFailure,
     TerminateAgentWithSuccess,
     TerminateAgentWithFailure,
 )
-from update_with_ai.lib.dag_clean_logic import ChangeResult, FeedbackResult, NoChangeResult
-from update_with_ai.lib.dag_storage import NodeMessage
+from lib.dag_clean_logic import ChangeResult, FeedbackResult, NoChangeResult
+from lib.dag_storage import NodeMessage
 
 GUIDE = (
     "# Guide: Converting\n\n"
@@ -168,7 +168,7 @@ class TestRunControlImpl(unittest.TestCase):
     def _edit(self, control: RunControlImpl, old: str = "This is a test",
               new: str = "New content") -> None:
         self.assert_supersedes(
-            control.file_view.edit_file("test.txt", old, new), True
+            control.file_view.replace("test.txt", old, new), True
         )
 
     # ------------------------------------------------------------------
@@ -337,7 +337,7 @@ class TestRunControlImpl(unittest.TestCase):
         control = self._run_control()
         self._edit(control)
         self.assert_supersedes(
-            control.file_view.edit_file("second.txt", "Second line one", "Second: first"),
+            control.file_view.replace("second.txt", "Second line one", "Second: first"),
             True,
         )
         failure = self.as_tool_failure(control.advance(
@@ -362,16 +362,16 @@ class TestRunControlImpl(unittest.TestCase):
         self.assertIsInstance(result.value, NoChangeResult)
 
     def test_advance_soft_bound_rejection_guidance(self) -> None:
-        # A summary over the soft bound (200) is rejected with shortening
+        # A summary over the soft bound (300) is rejected with shortening
         # guidance naming the soft bound and directing a short sentence
         # naming the parts of the file that changed.
         control = self._run_control()
         self._edit(control)
         failure = self.as_tool_failure(control.advance(
-            changes=[{"file": "test.txt", "summary": "x" * 201}]
+            changes=[{"file": "test.txt", "summary": "x" * 301}]
         ))
         self.assertIn("short sentence", failure.value)
-        self.assertIn("200", failure.value)
+        self.assertIn("300", failure.value)
         self.assertIn("parts of the file that changed", failure.value)
 
     def test_advance_soft_grace_accepts_within_hard_bound(self) -> None:
@@ -382,7 +382,7 @@ class TestRunControlImpl(unittest.TestCase):
         self._edit(control)
         for _ in range(4):
             self.as_tool_failure(control.advance(
-                changes=[{"file": "test.txt", "summary": "x" * 201}]
+                changes=[{"file": "test.txt", "summary": "x" * 301}]
             ))
         outcome = control.advance(
             changes=[{"file": "test.txt", "summary": "y" * 480}]
@@ -426,14 +426,17 @@ class TestRunControlImpl(unittest.TestCase):
     # advance: the feedback-pending gate
     # ------------------------------------------------------------------
 
-    def test_advance_feedback_pending_no_change_fails(self) -> None:
+    def test_advance_feedback_pending_no_change_warns_then_succeeds(self) -> None:
         # When feedback is pending and advance would otherwise signal
-        # successful termination without a change, advance returns a tool
-        # failure directing the agent to change, blame, or fail; the session
-        # continues (no termination signal is produced).
-        failure = self.as_tool_failure(self._run_control(feedback_pending=True).advance())
-        self.assertIn("feedback", failure.value)
-        self.assertIn("blame() or fail()", failure.value)
+        # successful termination without a change, the first advance returns a
+        # tool failure warning that feedback was not responded to; the second
+        # advance without changes succeeds with NoChangeResult.
+        control = self._run_control(feedback_pending=True)
+        failure = self.as_tool_failure(control.advance())
+        self.assertIn("Warning: feedback was given", failure.value)
+        self.assertIn("advance() again", failure.value)
+        result = self.as_success(control.advance())
+        self.assertIsInstance(result.value, NoChangeResult)
 
     def test_advance_feedback_pending_gate_checked_after_change_message(self) -> None:
         # The feedback-pending gate is checked only when advance would
@@ -606,7 +609,7 @@ class TestRunControlImpl(unittest.TestCase):
         self._edit(control1)
         for _ in range(4):
             self.as_tool_failure(control1.advance(
-                changes=[{"file": "test.txt", "summary": "x" * 201}]
+                changes=[{"file": "test.txt", "summary": "x" * 301}]
             ))
         self.as_success(control1.advance(
             changes=[{"file": "test.txt", "summary": "y" * 480}]

@@ -12,7 +12,7 @@ writes.
 import unittest
 from typing import Dict, List, Tuple
 
-from update_with_ai.lib.dag_storage import (
+from lib.dag_storage import (
     NodeId,
     NodeMessage,
     MessageKind,
@@ -21,7 +21,7 @@ from update_with_ai.lib.dag_storage import (
     KnownReverseDependencies,
     DagStorage,
 )
-from update_with_ai.lib.dag_clean_logic import (
+from lib.dag_clean_logic import (
     CleanResult,
     DagCleanLogic,
     ChangeResult,
@@ -29,8 +29,8 @@ from update_with_ai.lib.dag_clean_logic import (
     NoChangeResult,
     FailureResult,
 )
-from update_with_ai.lib.dag_cleaner import CleaningResult
-from update_with_ai.lib.dag_cleaner_impl import DagCleanerImpl
+from lib.dag_cleaner import CleaningResult
+from lib.dag_cleaner_impl import DagCleanerImpl
 from typing import cast
 
 

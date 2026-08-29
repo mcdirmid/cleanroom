@@ -146,9 +146,14 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
                     if fn.get("name") == name:
                         props = fn.get("parameters", {}).get("properties", {})
                         params = ", ".join(sorted(props))
-                        break
+                hint = ""
+                err_str = str(e)
+                if name == "update_lines" and "old_str" in err_str:
+                    hint = " (note: 'old_str' belongs to replace; update_lines takes start_line, end_line, new_str, file_path)"
+                elif name == "replace" and ("start_line" in err_str or "end_line" in err_str):
+                    hint = " (note: line numbers belong to update_lines; replace takes file_path, old_str, new_str)"
                 return ToolFailure[str](
-                    f"Invalid parameters for {name}: {e} — valid parameters: {params}"
+                    f"Invalid parameters for {name}: {e} — valid parameters: {params}{hint}"
                 )
             except Exception as e:
                 return ToolFailure[str](str(e))

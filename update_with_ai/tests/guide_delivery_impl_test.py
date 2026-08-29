@@ -25,9 +25,9 @@ import tempfile
 import unittest
 from typing import List, Optional
 
-from update_with_ai.lib.guide_delivery import GuideDeliveryConfig
-from update_with_ai.lib.guide_delivery_impl import GuideDeliveryImpl
-from update_with_ai.lib.tool_provider import (
+from lib.guide_delivery import GuideDeliveryConfig
+from lib.guide_delivery_impl import GuideDeliveryImpl
+from lib.tool_provider import (
     PresentedToolResult,
     ToolResult,
 )

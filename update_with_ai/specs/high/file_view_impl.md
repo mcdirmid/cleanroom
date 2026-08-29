@@ -9,6 +9,7 @@ terms (refined): virtual name
 ## Deltas
 
 - [refines] virtual name -> the implementation addresses every configured file by its virtual name — the file's final path component, or the shortest path suffix unique among the configured files — and never presents a file's full path to the agent: reads, writes, edits, searches, session-start reads, and error messages name files by virtual name.
+- Provides path sanitization mapping configured disk paths, relative workspace paths, and package prefixes to their corresponding virtual names.
 - Uses the filesystem directly for all file operations.
 - Provides the file tools, each as a fixed function: reading the entire file, writing, content-based editing, line-range editing, searching.
 - A read of a writable file supersedes the earlier result for that file; a write, a content-based edit, and a line-range edit supersede the earlier result for that file.

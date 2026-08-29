@@ -31,17 +31,17 @@ from pathlib import Path
 from typing import Dict, Iterator, Optional
 from unittest.mock import patch
 
-from update_with_ai.lib.build_agent_config import (
+from lib.build_agent_config import (
     AgentConfig,
     BuildAgentConfig,
     DEFAULT_CONFIG_TARGET,
 )
-from update_with_ai.lib.build_agent_config_impl import (
+from lib.build_agent_config_impl import (
     ApiKeyNotFoundError,
     BuildAgentConfigImpl,
     ConfigNotFoundError,
 )
-from update_with_ai.lib.agent_loop_config import AgentLoopConfig
+from lib.agent_loop_config import AgentLoopConfig
 
 PACKAGE = "agent_configs"
 NAME = "default"

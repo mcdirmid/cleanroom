@@ -6,6 +6,7 @@ Written from the LLS alone; the implementation Python file is not consulted.
 import unittest
 from typing import Any, Dict, List  # TODO: adjust imports to what the LLS requires
 
+# TODO: import library modules under test using: from lib.<module> import ...
 # TODO: implement the dependency interfaces as mocks from their LLSs (the
 # transitive closure in the LLS dependency comment); each mock records calls,
 # returns scripted results, and enforces the interface's preconditions.

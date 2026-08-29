@@ -15,31 +15,31 @@ import tempfile
 import unittest
 from typing import Any, Dict, List, Optional, Tuple, cast
 
-from testing.lib.agent_loop import (
+from lib.agent_loop import (
     AgentLoop,
     AgentResult,
     LoggerCallback,
     ToolDefinition,
     ToolExecutor,
 )
-from testing.lib.agent_loop_config import AgentLoopConfig
-from testing.lib.agent_node_clean_logic_impl import AgentNodeCleanLogicImpl
-from testing.lib.build_graph_storage import BuildGraphStorage, NodeDefinition
-from testing.lib.dag_storage import NodeId, NodeMessage, MessageKind, PendingMessages
-from testing.lib.dag_clean_logic import (
+from lib.agent_loop_config import AgentLoopConfig
+from lib.agent_node_clean_logic_impl import AgentNodeCleanLogicImpl
+from lib.build_graph_storage import BuildGraphStorage, NodeDefinition
+from lib.dag_storage import NodeId, NodeMessage, MessageKind, PendingMessages
+from lib.dag_clean_logic import (
     CleanResult,
     ChangeResult,
     FeedbackResult,
     NoChangeResult,
     FailureResult,
 )
-from testing.lib.sandbox import Blame, Sandbox, SandboxConfig
+from lib.sandbox import Blame, Sandbox, SandboxConfig
 
 
 def msg(text: str, kind: str = "change") -> NodeMessage:
     """Test helper: build a NodeMessage (per specs/low/dag_storage.md)."""
     return NodeMessage(kind=cast(MessageKind, kind), text=text)
-from testing.lib.tool_provider import (
+from lib.tool_provider import (
     PresentedToolResult,
     TerminateAgentWithFailure,
     TerminateAgentWithSuccess,
@@ -169,10 +169,10 @@ class MockSandbox(Sandbox):
         )
         return ToolResult(content="file contents", supersedes=False)
 
-    def replace_lines(self, file_path: str, start_line: int, end_line: int,
-                      new_str: str) -> ToolCallOutcome:
+    def update_lines(self, file_path: str, start_line: int, end_line: int,
+                     new_str: str) -> ToolCallOutcome:
         self._record(
-            "replace_lines",
+            "update_lines",
             {"file_path": file_path, "start_line": start_line,
              "end_line": end_line, "new_str": new_str},
         )
@@ -181,7 +181,7 @@ class MockSandbox(Sandbox):
             supersedes=True,
         )
 
-    def search_files(self, path: str, pattern: str) -> ToolCallOutcome:
+    def search_files(self, path: str = ".", pattern: str = "") -> ToolCallOutcome:
         self._record("search_files", {"path": path, "pattern": pattern})
         return ToolResult(content="[]", supersedes=False)
 
@@ -618,8 +618,8 @@ class TestToolExecutor(unittest.TestCase):
             {
                 "type": "function",
                 "function": {
-                    "name": "replace_lines",
-                    "description": "replace lines by range",
+                    "name": "update_lines",
+                    "description": "update lines by range",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -636,7 +636,7 @@ class TestToolExecutor(unittest.TestCase):
         sandbox = MockSandbox(tool_defs=defs)
         executor = self._capture_executor(node_def, sandbox)
         outcome = executor(
-            "replace_lines",
+            "update_lines",
             {"file_path": "foo.txt", "start_line": 1, "end_line": 1, "content": "x"},
         )
         self.assertIsInstance(outcome, ToolFailure)

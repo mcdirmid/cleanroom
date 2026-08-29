@@ -76,7 +76,7 @@ class Sandbox(Protocol):
         Return the list of tool definitions available in the current sandbox configuration.
 
         Tools are conditionally included based on configuration:
-        - Always: read_file, edit_file, replace_lines,
+        - Always: read_file, replace, update_lines,
           search_files, advance, fail
         - Conditional: blame (if blame targets non-empty)
 
@@ -133,8 +133,8 @@ class Sandbox(Protocol):
         """
         ...
 
-    def edit_file(self, file_path: VirtualName, old_str: str, new_str: str,
-                  expect_multiple: bool = False) -> ToolCallOutcome:
+    def replace(self, file_path: VirtualName, old_str: str, new_str: str,
+                expect_multiple: bool = False) -> ToolCallOutcome:
         """
         Replace text in a file (content-based search and replace).
 
@@ -144,9 +144,9 @@ class Sandbox(Protocol):
 
         Args:
             file_path: Virtual path to the file
-            old_str: Exact text to find (must be non-empty; at most 100
-                characters — use replace_lines for larger changes)
-            new_str: Replacement text (at most 100 characters)
+            old_str: Exact text to find (must be non-empty; at most 200
+                characters — use update_lines for larger changes)
+            new_str: Replacement text (at most 200 characters)
             expect_multiple: If True, replace all occurrences of old_str
 
         Returns:
@@ -168,8 +168,8 @@ class Sandbox(Protocol):
         """
         ...
 
-    def replace_lines(self, file_path: VirtualName, start_line: int, end_line: int,
-                      new_str: str) -> ToolCallOutcome:
+    def update_lines(self, file_path: VirtualName, start_line: int, end_line: int,
+                     new_str: str) -> ToolCallOutcome:
         """
         Replace, delete, or insert lines by 1-indexed line range.
 
@@ -203,7 +203,7 @@ class Sandbox(Protocol):
         """
         ...
 
-    def search_files(self, path: VirtualName, pattern: str,
+    def search_files(self, path: VirtualName = ".", pattern: str = "",
                      offset: Optional[int] = None,
                      limit: Optional[int] = None) -> ToolCallOutcome:
         """
