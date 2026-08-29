@@ -1,6 +1,7 @@
 <!-- Dependencies (md files to read alongside this one):
   - sandbox_impl.md
-  - file_view_impl.md
+  - file_reader_impl.md
+  - file_editor_impl.md
   - guide_delivery_impl.md
   - run_control_impl.md
   - sandbox.md
@@ -28,6 +29,7 @@ Subclasses `SandboxImpl` with pre-wired tool implementations: supplies the file 
 - FileViewImpl (file machinery)
 - GuideDeliveryImpl (step-mode delivery)
 - RunControlImpl (verification and termination)
+- ChangeSummaryValidatorImpl (change summary validation)
 
 ## Behavioral Description
 

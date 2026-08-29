@@ -1,6 +1,6 @@
 <!-- Dependencies (md files to read alongside this one):
   - tool_provider.md
-  - file_view.md
+  - file_editor.md
   - guide_delivery.md
 -->
 
@@ -47,7 +47,7 @@ A data class Protocol that bundles static node metadata with the `ToolProvider` 
 - **tool result** → the `ToolResult` type from tool_provider
 - **signal** → the `Signal` alias from tool_provider
 - **tool failure** → the `ToolFailure` type from tool_provider
-- **template** → term definition from file_view
+- **template** → term definition from file_editor
 - **guide** → term definition from guide_delivery
 
 ## Component-Provided Operations

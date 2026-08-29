@@ -14,6 +14,8 @@ ToolName: TypeAlias = str
 
 ToolArguments: TypeAlias = dict[str, Any]
 
+ToolCall: TypeAlias = dict[str, Any]
+
 ToolDefinition: TypeAlias = dict[str, Any]
 
 ToolResultContent: TypeAlias = Any
@@ -101,6 +103,7 @@ Executes a single tool call and returns a sequence of one or more tool results o
 - **termination result** → the `TerminateSuccessResult` type (definition in Data Types)
 - **tool failure** → the `ToolFailure` type (definition in Data Types)
 - **session** → term definition: the sequence of tool calls and outcomes of a single run, continuing until a termination signal is produced
+- **tool call** → the `ToolCall` alias (definition in Data Types)
 
 ## Component-Provided Operations
 

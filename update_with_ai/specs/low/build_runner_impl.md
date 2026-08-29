@@ -1,11 +1,13 @@
 <!-- Dependencies (md files to read alongside this one):
   - build_runner.md
+  - runner_logger.md
   - dag_storage.md
   - dag_cleaner.md
   - dag_clean_logic.md
   - build_graph_storage.md
   - agent_loop.md
   - build_agent_config.md
+  - conversation_history.md
 -->
 
 # Implementation LLS: build_runner_impl
@@ -14,17 +16,18 @@
 ```python
 from typing import Callable, List, Optional, TypeAlias
 from build_runner import BuildRunner
-from dag_storage import NodeId, NodeMessage
+from dag_storage import NodeMessage
 from dag_cleaner import DagCleaner, CleaningResult
 from dag_clean_logic import DagCleanLogic, CleanResult, ChangeResult, FeedbackResult, NoChangeResult, FailureResult
 from build_graph_storage import BuildGraphStorage, GraphConfig
-from agent_loop import LogEvent, LoggerCallback
+from conversation_history import LoggerCallback
 from build_agent_config import ConfigTarget
+from runner_logger import RunnerLogger
 
 CleanLogicFactory: TypeAlias = Callable[[BuildGraphStorage, str, Optional[ConfigTarget], Optional[LoggerCallback]], DagCleanLogic]
 
 class BuildRunnerImpl(BuildRunner):
-    def __init__(self, graph_factory: Callable[[GraphConfig], BuildGraphStorage], clean_logic_factory: CleanLogicFactory, dag_factory: Callable[[BuildGraphStorage, DagCleanLogic], DagCleaner]): ...
+    def __init__(self, graph_factory: Callable[[GraphConfig], BuildGraphStorage], clean_logic_factory: CleanLogicFactory, dag_factory: Callable[[BuildGraphStorage, DagCleanLogic], DagCleaner], runner_logger: RunnerLogger): ...
 ```
 
 `CleanLogicFactory` constructs the per-run clean logic from the graph, the

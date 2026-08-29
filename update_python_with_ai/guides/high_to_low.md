@@ -4,21 +4,21 @@
 
 The artifact is the LLS for a component: it conforms to the LLS structure this guide states (a conformant LLS passes the low-level-spec linter), and it aligns with the component's HLS — the HLS and its closure. The LLS is the HLS elaborated, never replaced: it inlines the HLS's effective constraint set (its own lines plus the transitive closure of every spec it references), adds the concrete types, signatures, preconditions, postconditions, and failure signals the HLS omits, and pins what the HLS withholds (opaque values, open contents, hooks).
 
-The conversion reads the immediate HLS and the immediate LLS closure — the `specs/low/` files the dependency comment lists. The HLS closure's files are not read: their constraints are already elaborated in those LLS files. Adaptation is minimally invasive: the LLS is changed in place, and conformant content is left exactly as it is; the file is not rewritten, and no section is restructured unless a deviation requires it. Each deviation is fixed with the smallest change that resolves it; a file that is a template is filled in.
+The conversion reads the immediate HLS and the immediate LLS closure — the `low/<name>.md` files the dependency comment lists. The HLS closure's files are not read: their constraints are already elaborated in those LLS files. Adaptation is minimally invasive: the LLS is changed in place, and conformant content is left exactly as it is; the file is not rewritten, and no section is restructured unless a deviation requires it. Each deviation is fixed with the smallest change that resolves it; a file that is a template is filled in.
 
 Every LLS statement traces to the HLS's effective constraint set: the LLS adds no behavior the closure does not imply, and implementation details appear only as necessary to fulfill HLS guarantees. Each HLS fact appears in exactly one LLS location, never duplicated. A fact the HLS states and the LLS cannot express is a conversion error; a fact implied but never stated is a traceability gap. HLS ambiguity is never resolved silently: a narrowed reading is recorded with a justification under the affected operation's Failure Handling or in Non-Concerns, never in invented structure. The LLS is a stand-alone document; readers use it without the HLS. Type aliases are camelCase with the first letter capitalized (`PendingShipment`, never `pendingShipment` or `pending_shipment`), defined in the Data Types Python block, and used in operation signatures; an HLS-owned term is never dropped. The LLS contains no markdown links. An implementation LLS contains only the implementation sections — `## Data Types`, optional `## Composition`, `## Behavioral Description`, `## Invariants`, `## Non-Concerns` — never interface sections such as `## Component-Provided Operations`. Each checklist section governs the document region it names, in document order.
 
 ## Front matter
 
 - [ ] A component whose HLS has no `fulfills:` line is an interface — its LLS is `# Interface LLS: <name>`, never an Implementation LLS; an implementation LLS exists when the HLS defines an implementation (`*_impl.md`) or an assembly (`*_asm.md`), both of which declare `fulfills: <interface>`; a file may declare any number of interface and implementation sections
-- [ ] Filenames use underscores; no hyphens anywhere — high- and low-level specs are distinguished by directory (`specs/high/` vs `specs/low/`), not by filename suffix
+- [ ] Filenames use underscores; no hyphens anywhere — high- and low-level specs are distinguished by directory (`high/<name>.md` vs `low/<name>.md`), not by filename suffix
 - [ ] The dependency comment is the file's first line — the LLS's only front matter: no `terms (owned):` or `terms (from X):` section; a `terms (from X):` entry becomes a dependency-comment entry
 - [ ] LLS dependencies are expressed through interfaces, never implementation LLS files; a type is imported from its owner's LLS, never through a re-exporting interface
 - [ ] The one exception: an assembly LLS's dependency comment lists the implementation (`- <name>_impl.md`) and assembly (`- <name>_asm.md`) LLS files it assembles — the only LLS kind permitted to depend on implementation or assembly LLS files; its Data Types imports the types of the assembled modules from those files
 - [ ] The comment lists the LLS of every interface named in the converted HLS's front matter — `imports:`, `fulfills:`, `terms (from X):` — a prose-only concept reference is still a dependency
 - [ ] A component named in LLS prose but not in the HLS front matter is added to the comment; an entry is spurious only when it is neither imported, nor referenced, nor named in the front matter
 - [ ] An import `from <module> import ...` maps to the comment entry `- <module>.md`: the module name is the entry's name with the `.md` suffix removed
-- [ ] Type-level imports come from the immediate LLS closure — the `specs/low/` files the conversion reads; a type-level dependency outside it is a traceability violation, recorded rather than imported or defined
+- [ ] Type-level imports come from the immediate LLS closure — the `low/<name>.md` files the conversion reads; a type-level dependency outside it is a traceability violation, recorded rather than imported or defined
 - [ ] An imported type counts as used when it appears in a signature, in prose, or as part of the fulfilled contract; a Composition section may name concrete implementations without making them dependencies
 
 ## Data Types
@@ -108,7 +108,7 @@ Every LLS statement traces to the HLS's effective constraint set: the LLS adds n
 - [ ] Section headings are exactly `# Interface LLS: <name>` and `# Implementation LLS: <name>` matching the filename stem
 - [ ] Interface subsections are `## Data Types`, `## Component-Provided Operations`, `## Invariants`; implementation subsections are `## Data Types`, `## Composition`, `## Behavioral Description`, `## Invariants`, `## Non-Concerns`; no other `##` section; sections appear in that order
 - [ ] The interface section contains `## Data Types`, `## Component-Provided Operations`, and `## Invariants`; the implementation section contains `## Data Types`, `## Behavioral Description`, and `## Invariants`
-- [ ] The dependency comment is the file's first line — the LLS's only front matter — and lists each dependency as one `- <name>.md` entry; it never names an HLS file (an HLS lives in `specs/high/`); every non-stdlib import appears in it
+- [ ] The dependency comment is the file's first line — the LLS's only front matter — and lists each dependency as one `- <name>.md` entry; it never names an HLS file (an HLS has the virtual name `high/<name>.md`); every non-stdlib import appears in it
 - [ ] The Data Types section opens with exactly one Python code block; the interface's Protocol class is last
 - [ ] Every type alias is `X: TypeAlias = ...`; never a bare `X = ...` except string constants and `TypeVar` declarations
 - [ ] The Data Types block imports every `typing`, `dataclasses`, or `enum` name it uses (`from typing import Protocol, TypeAlias, Sequence`); a typing name is never assumed — it is imported exactly like any other name
@@ -126,5 +126,6 @@ Every LLS statement traces to the HLS's effective constraint set: the LLS adds n
 - [ ] `### ` headings appear only under Component-Provided Operations
 - [ ] Term-definition headings appear between Data Types and Component-Provided Operations
 - [ ] Implementation sections never mention "client"
-- [ ] An `# Implementation LLS:` heading appears only in a `<name>_impl.md` or `<name>_asm.md` file in `specs/low/`
+- [ ] No markdown links (`[text](...)`) anywhere in the document
+- [ ] An `# Implementation LLS:` heading appears only in a `<name>_impl.md` or `<name>_asm.md` file (virtual name `low/<name>_impl.md` or `low/<name>_asm.md`)
 - [ ] There is no `## Config` section

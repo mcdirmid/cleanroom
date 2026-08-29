@@ -2,9 +2,11 @@
   - tool_provider.md
   - dag_clean_logic.md
   - dag_storage.md
-  - file_view.md
+  - file_reader.md
+  - file_editor.md
   - guide_delivery.md
   - run_control.md
+  - change_summary_validator.md
 -->
 
 # Implementation LLS: run_control_impl
@@ -12,8 +14,10 @@
 ## Data Types
 ```python
 from run_control import RunControl, RunControlConfig, Blame
-from file_view import FileView
+from file_reader import FileReader
+from file_editor import FileEditor
 from guide_delivery import GuideDelivery
+from change_summary_validator import ChangeSummaryValidator
 from tool_provider import (
     TerminateAgentWithFailure,
     TerminateAgentWithSuccess,
@@ -27,8 +31,10 @@ class RunControlImpl(RunControl):
     def __init__(
         self,
         config: RunControlConfig,
-        file_view: FileView,
+        file_reader: FileReader,
+        file_editor: FileEditor,
         guide_delivery: GuideDelivery,
+        validator: ChangeSummaryValidator | None = None,
     ): ...
 ```
 
@@ -38,7 +44,7 @@ Constructed with the `run_control` interface's `RunControlConfig`, the `file_vie
 
 The implementation:
 - Delegates verification to the injected verification callback when provided.
-- `advance` performs the session's verification internally: it computes the diff of the session's changes (the changed files and their session-start snapshots, via the configured `file_view`), truncated when it exceeds the diff size limit (reporting the truncated size and the full change counts) and, when configured, runs the injected verification callback; on a failing verification it provides feedback (never a tool failure) and the session continues; a failing verification's feedback does not include the diff and sanitizes any referenced paths to virtual names through `file_view.sanitize_paths`.
+- `advance` performs the session's verification internally: it computes the diff of the session's changes (the changed files and their session-start snapshots, via the configured `file_editor`), truncated when it exceeds the diff size limit (reporting the truncated size and the full change counts) and, when configured, runs the injected verification callback; on a failing verification it provides feedback (never a tool failure) and the session continues; a failing verification's feedback does not include the diff and sanitizes any referenced paths to virtual names through `file_reader.sanitize_paths`.
 - `advance`'s step-mode gating follows guide_delivery's output rule: on a failing verification in step mode, the output is the restated guide summary with the reason (via `guide_delivery.get_advance_output`); on a passing verification with step sections remaining, the output is the next step section; on a passing verification with no step sections remaining, `advance` proceeds to the termination machinery.
 - Change summaries are bounded by the soft length bound and the hard length bound: `advance` rejects a change message over the soft bound with shortening guidance up to a grace count, then accepts it when within the hard bound; a change message still over the hard bound after the grace count fails the session (`advance` turns into `TerminateAgentWithFailure`). The bound values are pinned in Non-Concerns.
 - A missing or out-of-bounds change message signals a `ToolFailure` that lists the changed files and shows the session's diff.

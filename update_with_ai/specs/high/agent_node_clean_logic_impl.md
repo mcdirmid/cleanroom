@@ -1,14 +1,16 @@
 # agent_node_clean_logic_impl
 
 fulfills: dag_clean_logic
-imports: build_graph_storage (node definitions), dag_storage (messages), agent_loop (agent runs), sandbox (tool definitions and execution)
+imports: build_graph_storage (node definitions), dag_storage (messages), agent_loop (agent runs), sandbox (tool definitions and execution), conversation_history (system prompt)
 terms (from dag_clean_logic): dirty, cleaning, change message, feedback message
 terms (from dag_storage): node, dependency, pending message
-terms (from agent_loop): run, system prompt
+terms (from agent_loop): run
+terms (from conversation_history): system prompt
 terms (from run_control): blame, blame target
-terms (from file_view): file write, session-start read, template, virtual name
+terms (from file_reader): virtual name, session-start read
+terms (from file_editor): file write, template
 terms (from guide_delivery): guide, guide summary, step section, step mode
-terms (from tool_provider): tool definition, tool failure
+terms (from tool_provider): tool definition, tool failure, tool call
 terms (refined): dirty, cleaning
 
 ## Deltas

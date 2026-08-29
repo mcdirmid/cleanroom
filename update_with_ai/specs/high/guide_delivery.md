@@ -12,7 +12,7 @@ Provides the guide's delivery to the agent: when step mode is enabled, the guide
 
 - Guide: the declared guide input — a readable file the node declares separately from its dependencies, at most one per run, in the guide format: its first line is `# Guide: <title>` and its first `##` heading is `## Summary`.
 - Guide summary: the guide's first part — the content from the guide's first line through the end of its `## Summary` section.
-- Step section: a checklist section of the guide — a part of the guide after the guide summary, delimited by `## <name>` headings, delivered after an advance that passed verification.
+- Step section: a checklist section of the guide — a part of the guide after the guide summary, delimited by `## <name>` headings (excluding the `## Lint checks` section, which is skipped in step mode), delivered after an advance that passed verification.
 - Step mode: a configuration in which the guide is not readable and its content reaches the agent only through the advance operation: the guide summary at run start, then the step sections one at a time after successful advances.
 
 ## Contract
@@ -34,6 +34,7 @@ Provides the guide's delivery to the agent: when step mode is enabled, the guide
 - When step mode is enabled, the guide is not readable: its content reaches the agent only through the advance operation's outputs.
 - In step mode, the guide is not presented among the readable files: file lists shown to the agent do not name the guide.
 - In step mode, the guide is revealed incrementally: advance delivers one section at a time.
+- In step mode, the `## Lint checks` section is skipped and never delivered as a step section.
 - A failing verification prevents progressing to the next section, requiring correction before continuing.
 - A readable file that is not the guide is unaffected by step mode.
 - Termination cannot occur until all guide sections are delivered and verification passes.

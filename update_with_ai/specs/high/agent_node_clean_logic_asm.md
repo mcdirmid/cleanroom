@@ -1,7 +1,7 @@
 # agent_node_clean_logic_asm
 
 fulfills: dag_clean_logic
-imports: agent_node_clean_logic_impl (clean logic), agent_loop_impl (agent loop), build_agent_config_impl (agent configuration loading), sandbox_asm (sandbox assembly)
+imports: agent_node_clean_logic_impl (clean logic), agent_loop_asm (agent loop), build_agent_config_impl (agent configuration loading), sandbox_asm (sandbox assembly), agent_node_tool_executor_impl (tool execution)
 terms (from build_agent_config): agent configuration, config target, API key
 
 ## Deltas

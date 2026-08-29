@@ -726,6 +726,18 @@ def check_sections(f: Path, parts: list[tuple[int, str, list[str]]], comment: li
             err(f, "implementation LLS mentions 'client'")
 
 
+def check_markdown_links(f: Path, text: str) -> None:
+    """Markdown links [text](url) are prohibited in LLS files (guide: Final sweep)."""
+    # Exclude leading HTML comment if any
+    body = text
+    end = text.find("-->")
+    if end != -1:
+        body = text[end + 3:]
+    m = re.search(r"\[([^\]]+)\]\(([^)]+)\)", body)
+    if m:
+        err(f, f"markdown link {m.group(0)!r} present; markdown links are prohibited in LLS files")
+
+
 # ---------------------------------------------------------------- main
 
 def main(argv: list[str]) -> int:
@@ -766,6 +778,7 @@ def main(argv: list[str]) -> int:
             check_comment_entries(f, comment, files, deps)
             check_deps_listed(f, comment, deps)
         parts = parse(text)
+        check_markdown_links(f, text)
         for level, heading, body in parts:
             if level == 2 and heading == "Data Types":
                 continue  # handled per section kind in check_sections

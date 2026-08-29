@@ -141,4 +141,19 @@ else
     fail=1
 fi
 
+# Case 8: unittest.main() in library module -> rejected with error.
+mkdir -p "$tmp/c8/lib"
+cat > "$tmp/c8/lib/main.py" <<'EOF'
+import unittest
+
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c8" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/main.py 2>/dev/null ); then
+    echo "FAIL: c8 expected failure when unittest.main present in library module" >&2
+    fail=1
+else
+    echo "PASS: c8 rejected unittest.main in library module"
+fi
+
 exit "$fail"

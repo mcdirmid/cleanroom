@@ -19,6 +19,7 @@ import sys
 
 from build_lint_common import (
     check_test_dry_run,
+    check_test_impl_imports,
     check_test_imports,
     check_test_mocks,
     check_test_structure,
@@ -84,6 +85,7 @@ def main() -> int:
             return 1
         all_errors = (
             check_test_imports(args.lib_pkg, args.module_path)
+            + check_test_impl_imports(args.lib_pkg, args.module_path)
             + check_test_mocks(args.module_path)
             + check_test_structure(args.module_path)
         )

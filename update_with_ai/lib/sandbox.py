@@ -2,12 +2,9 @@
 """
 Interface definitions for the LLS Sandbox.
 
-The sandbox is a facade: it composes the file machinery (file_view), the
-step-mode guide delivery (guide_delivery), and the verification and
-termination rules (run_control) into a single tool surface. The component
-types are owned by their defining interfaces (file_view, guide_delivery,
-run_control) and re-exported here so existing imports of
-`update_with_ai.lib.sandbox` keep working.
+The sandbox is a facade: it composes the read machinery (file_reader),
+the write machinery (file_editor), the step-mode guide delivery (guide_delivery),
+and the verification and termination rules (run_control) into a single tool surface.
 """
 
 from typing import List, Optional, Protocol
@@ -17,13 +14,19 @@ from .tool_provider import (
     PresentedToolResult,
     ToolCallOutcome,
 )
-from .file_view import (
+from .file_reader import (
     FileMapping,
     FilePath,
+    FileReader,
+    FileReaderConfig,
     ReadablePaths,
     SearchResultLimit,
-    TemplateMapping,
     VirtualName,
+)
+from .file_editor import (
+    FileEditor,
+    FileEditorConfig,
+    TemplateMapping,
     WritablePaths,
     WriteOccurred,
 )
@@ -38,7 +41,6 @@ from .run_control import (
 
 @dataclass
 class SandboxConfig:
-    """Client-supplied configuration for the sandbox: file mappings, readable and writable paths, blame targets, limits, whether session-start reads are enabled, the guide and whether step mode is enabled, whether feedback is pending, the templates (default: empty), and an optional verification callback."""
     file_mappings: FileMapping
     readable_paths: ReadablePaths
     writable_paths: WritablePaths
@@ -53,264 +55,37 @@ class SandboxConfig:
 
 
 class Sandbox(Protocol):
-    """
-    Interface for the LLS Sandbox.
-
-    A component that provides secure file system operations and tool
-    definitions for agent interactions. Stubbing follows tool_provider
-    semantics: when a result's supersedes flag is set, the earlier
-    non-stubbed result for the same file or tool command is replaced by a
-    placeholder, keeping the conversation focused on current state; a result
-    with the flag unset supersedes nothing, and at most one earlier result is
-    superseded per result.
-
-    Each tool operation produces a ToolCallOutcome: a sequence of one or
-    more tool results (ToolResult or PresentedToolResult values) on success,
-    or a Signal (Continue, a TerminateAgentWith* signal, or ToolFailure).
-    After a successful file write, the file's current content appears in the
-    conversation.
-    """
-
     def get_tool_definitions(self) -> List[ToolDefinition]:
-        """
-        Return the list of tool definitions available in the current sandbox configuration.
-
-        Tools are conditionally included based on configuration:
-        - Always: read_file, replace, update_lines,
-          search_files, advance, fail
-        - Conditional: blame (if blame targets non-empty)
-
-        Returns:
-            List of tool definitions following JSON schema format.
-
-        Always succeeds.
-        """
         ...
 
     def get_session_start_reads(self) -> List[PresentedToolResult]:
-        """
-        Return the session-start reads: the plain reads of the read-only
-        files and, in step mode, the guide's presentation, for rendering at
-        the beginning of a run before the model's first turn.
-
-        When session-start reads are enabled, returns a session-start read
-        for every file that is readable but not writable, sorted by virtual
-        name; each is a PresentedToolResult pairing the read_file call with
-        its plain read result (supersedes unset). When disabled, returns an
-        empty list. In step mode, the guide's presentation (the pre-injected
-        advance call) follows the reads. Requesting the session-start reads
-        changes no sandbox state.
-        """
         ...
 
     def read_file(self, file_path: VirtualName,
                   include_line_numbers: bool = False) -> ToolCallOutcome:
-        """
-        Read a file's entire content using the virtual name provided by the
-        agent.
-
-        Args:
-            file_path: Virtual path to the file
-            include_line_numbers: Prefix each line with its line number
-                (default: false). REQUIRED when reading a writable file that
-                already exists on disk: a plain read of such a file fails
-                advising the line-numbered view (line numbers are metadata,
-                not file content). Allowed only for writable files.
-
-        Returns:
-            A one-result sequence: a ToolResult with the (optionally
-            line-numbered) content on success, or ToolFailure on policy or
-            parameter violations.
-
-        Routing:
-            supersedes is True when the file is writable (the read supersedes
-            the earlier result for that file); False when the file is not
-            writable — reads of readable files are never stubbed.
-
-        Note:
-            The result's note reports the file's line count and view.
-            Reads are not paginated and are not bounded by a size limit.
-        """
         ...
 
     def replace(self, file_path: VirtualName, old_str: str, new_str: str,
                 expect_multiple: bool = False) -> ToolCallOutcome:
-        """
-        Replace text in a file (content-based search and replace).
-
-        Replaces exactly one occurrence of old_str with new_str; fails when
-        old_str is absent or matches more than once unless expect_multiple=True,
-        which replaces all occurrences.
-
-        Args:
-            file_path: Virtual path to the file
-            old_str: Exact text to find (must be non-empty; at most 200
-                characters — use update_lines for larger changes)
-            new_str: Replacement text (at most 200 characters)
-            expect_multiple: If True, replace all occurrences of old_str
-
-        Returns:
-            A sequence of two results on success — the write confirmation (a
-            ToolResult with supersedes set) and the injected read (a
-            PresentedToolResult with the file's full numbered content) — or
-            ToolFailure on policy or argument violations (including when the
-            file does not exist or either string exceeds the length limit).
-
-        Routing:
-            A file write: supersedes is True (the write confirmation
-            supersedes the earlier result for the file; the injected read
-            supersedes the write confirmation and re-enables the line-numbered
-            view). Sets write_occurred flag.
-
-        Note:
-            The write confirmation's content and note are a minimal structured
-            status; no file content is echoed in it.
-        """
         ...
 
     def update_lines(self, file_path: VirtualName, start_line: int, end_line: int,
                      new_str: str) -> ToolCallOutcome:
-        """
-        Replace, delete, or insert lines by 1-indexed line range.
-
-        Replaces lines start_line..end_line (inclusive) with new_str;
-        start_line > end_line inserts new_str before start_line; empty
-        new_str deletes the range.
-
-        Args:
-            file_path: Virtual path to the file
-            start_line: 1-indexed start line (inclusive), 1..len(file)+1
-            end_line: 1-indexed end line (inclusive), 0..len(file)
-            new_str: Replacement content
-
-        Returns:
-            A sequence of two results on success — the write confirmation (a
-            ToolResult with supersedes set) and the injected read (a
-            PresentedToolResult with the file's full numbered content) — or
-            ToolFailure on policy or argument violations (including when the
-            file does not exist or the file's current view is not
-            line-numbered).
-
-        Routing:
-            A file write: supersedes is True (the write confirmation
-            supersedes the earlier result for the file; the injected read
-            supersedes the write confirmation and re-enables the line-numbered
-            view). Sets write_occurred flag.
-
-        Note:
-            The write confirmation's content and note are a minimal structured
-            status; no file content is echoed in it.
-        """
         ...
 
     def search_files(self, path: VirtualName = ".", pattern: str = "",
                      offset: Optional[int] = None,
                      limit: Optional[int] = None) -> ToolCallOutcome:
-        """
-        Search for a pattern in files using the virtual path provided by the agent.
-
-        Args:
-            path: Virtual path to search (recursive)
-            pattern: Regex pattern to search for
-            offset: Match offset to start from (default: 0)
-            limit: Maximum rendered matches to return (must not exceed the
-                search result limit); if omitted, returns all rendered
-                matches, which fails when more than the search result limit
-                exist.
-
-        Returns:
-            ToolResult with search results in content on success, or
-            ToolFailure on policy, parameter, or pattern violations.
-
-        Routing:
-            supersedes is always False (search results never supersede an
-            earlier result). Rendered matches are matches found in files that
-            are not writable; matches found in writable files are reported as
-            counts in the note without content, so search results in the
-            conversation never become stale.
-
-        Note:
-            The result's note reports the total rendered matches, how many
-            remain, the offset to continue from, and the count of suppressed
-            matches in writable files.
-        """
         ...
 
     def advance(self, changes: list[dict[str, str]] = []) -> ToolCallOutcome:
-        """
-        Signal the run's completion: advance signals successful termination
-        when verification passes, or provides feedback on a failing
-        verification.
-
-        Verifies the run: runs the verification callback when one is
-        configured; when no callback is configured, verification is treated
-        as passed. On a failing verification, provides feedback (a ToolResult
-        with the failure details and guidance; not a tool failure) and the
-        session continues — advance never terminates on a failing
-        verification. On a passing verification, signals successful
-        termination.
-
-        Args:
-            changes: One entry per changed file — {"file": <virtual path>,
-                "summary": one short sentence naming the parts of the file
-                that changed for the next reader; not the task performed, not
-                how it was done}. Required when the run changed files; a
-                missing, malformed, or incomplete summary signals a
-                ToolFailure.
-
-        Returns:
-            On a failing verification: a ToolResult with the feedback (the
-            session continues). On a passing verification:
-            TerminateAgentWithSuccess carrying a TerminateSuccessResult (no
-            change, or change when the run changed files). Termination tools
-            produce no ToolResult and never supersede an earlier result; the
-            change-message requirement applies only to the terminating
-            advance.
-        """
         ...
 
     def fail(self) -> ToolCallOutcome:
-        """
-        End the session in failure (agent failure).
-
-        Returns:
-            TerminateAgentWithFailure[T_tool]. A correctly-invoked fail is
-            not a ToolFailure (ToolFailure signals a failed tool call).
-            Termination tools produce no ToolResult and never supersede an earlier
-            update.
-        """
         ...
 
     def blame(self, blames: List[Blame]) -> ToolCallOutcome:
-        """
-        Signal termination with blame: attribute the task's incompleteness to
-        dependencies and provide feedback on how to correct their outputs.
-
-        Args:
-            blames: List of (target, feedback) pairs; each target is the
-                    virtual name of a blameable artifact (a dependency's
-                    declared source file), and each pair is one feedback
-                    message to that artifact's owning node.
-
-        Returns:
-            TerminateAgentWithSuccess carrying a TerminateSuccessResult (the
-            implementation resolves each target to its owning node and forms a
-            feedback result from the pairs) if all pairs are valid, or
-            ToolFailure[T_tool] if any target is invalid. Termination tools
-            produce no ToolResult and never supersede an earlier update.
-
-        Preconditions:
-            Blame targets must be configured and non-empty.
-            Each pair's target must be a key of blame_targets.
-        """
         ...
 
     def get_write_occurred(self) -> WriteOccurred:
-        """
-        Return whether the agent has modified the filesystem during the current run.
-
-        Returns:
-            True if any file write operation succeeded during the current run,
-            False otherwise.
-        """
         ...

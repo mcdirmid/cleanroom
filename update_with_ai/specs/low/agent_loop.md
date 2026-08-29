@@ -1,5 +1,7 @@
 <!-- Dependencies (md files to read alongside this one):
   - tool_provider.md
+  - conversation_history.md
+  - loop_guard.md
 -->
 
 # Interface LLS: agent_loop
@@ -7,36 +9,20 @@
 ## Data Types
 ```python
 from typing import Any, Callable, Literal, Union, Protocol, TypeAlias
-from tool_provider import ToolDefinition, ToolResult, PresentedToolResult, Signal, Continue, TerminateAgentWithSuccess, TerminateAgentWithFailure, ToolFailure, ToolExecutor, T_tool
-
-ToolCall: TypeAlias = dict[str, Any]
+from tool_provider import ToolDefinition, ToolResult, PresentedToolResult, Signal, Continue, TerminateAgentWithSuccess, TerminateAgentWithFailure, ToolFailure, ToolExecutor, T_tool, ToolCall
+from conversation_history import ConversationHistory, HistoryEntry, LogEvent, LoggerCallback, RenderedMessage
+from loop_guard import LoopGuard, LoopDecision
 
 Usage: TypeAlias = dict[str, Any]
 
 CumulativeUsage: TypeAlias = dict[str, Any]
 
-HistoryEntry: TypeAlias = dict[str, Any]
-
-ConversationHistory: TypeAlias = list[HistoryEntry]
-
 AgentResult: TypeAlias = Union[
-    tuple[TerminateAgentWithSuccess, ConversationHistory],
-    tuple[TerminateAgentWithFailure[T_tool], ConversationHistory],
-    tuple[str, ConversationHistory],
+    tuple[TerminateAgentWithSuccess, list[HistoryEntry]],
+    tuple[TerminateAgentWithFailure[T_tool], list[HistoryEntry]],
+    tuple[str, list[HistoryEntry]],
 ]
 
-LogEvent: TypeAlias = Literal[
-    "message_added",
-    "message_stubbed",
-    "tool_called",
-    "tool_result",
-    "api_response",
-    "response_truncated",
-    "reminder_injected",
-    "run_terminated",
-    "error",
-]
-LoggerCallback: TypeAlias = Callable[[LogEvent, dict[str, Any]], None]
 TerminationReminderGenerator: TypeAlias = Callable[[], str]
 
 class AgentLoop(Protocol):
@@ -72,12 +58,15 @@ A conversation history entry: the data appended to the conversation (user prompt
 
 - **run** → term definition: a single agent execution session, realized as the `run_agent` operation
 - **termination value** → term definition: the opaque value of a successful termination signal; it enters via tool execution and exits via the run result unchanged — the loop does not inspect, transform, or interpret it (the `T_tool` type variable from tool_provider)
-- **conversation** → the `ConversationHistory` alias (definition in Data Types)
-- **conversation message** → the `HistoryEntry` alias (definition in Data Types)
-- **system prompt** → term definition: the static opening section of the conversation context, supplied per run; it is never modified during the run
+- **conversation** → term definition: the sequence of history entries accumulated during a run
+- **conversation message** → the `HistoryEntry` alias from conversation_history
+- **history entry** → the `HistoryEntry` alias from conversation_history
+- **rendered message** → the `RenderedMessage` alias from conversation_history
+- **system prompt** → term definition from conversation_history
 - **truncated response** → term definition: a model response that stops because the generation limit was reached, before completing naturally; it is not a complete answer
 - **continuation prompt** → term definition: the message appended to the conversation so that generation resumes from where a truncated response stopped
-- **degenerate response** → term definition: a truncated response whose content is a single character repeated; it carries no meaningful content and is not resumed
+- **degenerate response** → term definition from loop_guard
+- **loop reminder** → term definition from loop_guard
 - **tool definition** → the `ToolDefinition` alias from tool_provider
 - **tool result** → the `ToolResult` type from tool_provider
 - **supersession flag** → term definition from tool_provider
@@ -85,6 +74,8 @@ A conversation history entry: the data appended to the conversation (user prompt
 - **signal** → the `Signal` alias from tool_provider
 - **termination result** → the `TerminateSuccessResult` type from tool_provider
 - **tool failure** → the `ToolFailure` type from tool_provider
+- **tool call** → the `ToolCall` alias from tool_provider
+- **session** → term definition from tool_provider
 
 ## Component-Provided Operations
 
@@ -145,7 +136,7 @@ def run_agent(self, prompt: str, tools: list[ToolDefinition], tool_executor: Too
 **Logger Events (invoked after data appended to history):**
 
 | Event | When | Data Fields |
-|-------|------|-------------|
+|---|---|---|
 | `message_added` | Message appended | `message`: HistoryEntry |
 | `message_stubbed` | Tool result stubbed | `stubbed_message`: HistoryEntry, `replacement_message`: HistoryEntry |
 | `tool_called` | Model requests tools | `tool_calls`: list[ToolCall] |

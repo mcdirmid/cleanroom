@@ -1,8 +1,11 @@
 <!-- Dependencies (md files to read alongside this one):
   - build_runner_impl.md
   - build_graph_storage_impl.md
+  - build_message_store_impl.md
+  - manifest_node_loader_impl.md
+  - runner_logger_impl.md
   - agent_node_clean_logic_asm.md
-  - dag_cleaner_asm.md
+  - dag_cleaner_impl.md
   - build_runner.md
 -->
 
@@ -18,7 +21,7 @@ class BuildAsm(BuildRunnerImpl):
 
 Subclasses `BuildRunnerImpl` with pre-wired factories: the graph factory wraps
 `BuildGraphStorageFileImpl`, the clean-logic factory wraps `AgentNodeCleanLogicAsm`,
-and the DAG factory wraps `DagCleanerAsm`. Fulfills the `BuildRunner` protocol via
+and the DAG factory wraps `DagCleanerImpl`. Fulfills the `BuildRunner` protocol via
 `BuildRunnerImpl`. This assembly performs configuration and assembly only and is
 never tested.
 
@@ -26,12 +29,12 @@ never tested.
 
 - BuildGraphStorageFileImpl (graph storage)
 - AgentNodeCleanLogicAsm (agent clean logic assembly)
-- DagCleanerAsm (DAG cleaner assembly)
+- DagCleanerImpl (DAG cleaner implementation)
 - BuildRunnerImpl (build runner implementation)
 
 ## Behavioral Description
 
-- Assembles the concrete implementations and sub-assemblies at construction: passes the graph factory (`BuildGraphStorageFileImpl`), clean-logic factory (`AgentNodeCleanLogicAsm`), and DAG factory (`DagCleanerAsm`) to `super().__init__`.
+- Assembles the concrete implementations and sub-assemblies at construction: passes the graph factory (`BuildGraphStorageFileImpl`), clean-logic factory (`AgentNodeCleanLogicAsm`), and DAG factory (`DagCleanerImpl`) to `super().__init__`.
 - Inherits and implements the `BuildRunner` protocol through `BuildRunnerImpl`.
 - No functionality beyond configuration and assembly is performed; this assembly is never tested.
 

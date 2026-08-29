@@ -1,7 +1,8 @@
 <!-- Dependencies (md files to read alongside this one):
   - dag_storage.md
   - sandbox.md
-  - file_view.md
+  - file_reader.md
+  - file_editor.md
   - guide_delivery.md
   - run_control.md
 -->
@@ -40,7 +41,7 @@ The client-supplied configuration, as listed in the `build_graph_storage` interf
 
 The directory containing a node's BUILD file; also where the node's messages are stored.
 
-The agent prompt and sandbox configuration declared by a node's target. The sandbox configuration is a `sandbox.SandboxConfig`: its `file_mappings` keys are each file's virtual name (per file_view) — the node's declared source, its silent sources, the declared sources of its deps and star-dep closure, and the guide — so the agent addresses every file by virtual name.
+The agent prompt and sandbox configuration declared by a node's target. The sandbox configuration is a `sandbox.SandboxConfig`: its `file_mappings` keys are each file's virtual name (per file_reader) — the node's declared source, its silent sources, the declared sources of its deps and star-dep closure, and the guide — so the agent addresses every file by virtual name.
 
 `BuildGraphStorage` fulfills the `DagStorage` Protocol — pending messages, message clearing, node dependencies, and known reverse dependencies per `dag_storage.md` — and additionally resolves node definitions and package directories.
 
@@ -58,10 +59,10 @@ The agent prompt and sandbox configuration declared by a node's target. The sand
 - **reverse dependency** → term definition from dag_storage
 - **subgraph** → term definition from dag_storage
 - **blame target** → the `BlameTarget` alias from run_control
-- **template** → term definition from file_view
+- **template** → term definition from file_editor
 - **guide** → term definition from guide_delivery
 - **step mode** → term definition from guide_delivery
-- **virtual name** → term definition from file_view
+- **virtual name** → term definition from file_reader
 
 ## Component-Provided Operations
 

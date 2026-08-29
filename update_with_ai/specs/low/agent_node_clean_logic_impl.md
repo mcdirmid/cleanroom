@@ -6,9 +6,12 @@
   - agent_loop_config.md
   - sandbox.md
   - tool_provider.md
-  - file_view.md
+  - file_reader.md
+  - file_editor.md
   - guide_delivery.md
   - run_control.md
+  - conversation_history.md
+  - agent_node_tool_executor.md
 -->
 
 # Implementation LLS: agent_node_clean_logic_impl
@@ -16,12 +19,14 @@
 ## Data Types
 ```python
 from typing import Callable
-from dag_clean_logic import DagCleanLogic, CleanResult, ChangeResult, FeedbackResult, NoChangeResult, FailureResult
+from dag_clean_logic import DagCleanLogic, CleanResult, ChangeResult, FeedbackResult, NoChangeResult
 from dag_storage import NodeMessage
 from build_graph_storage import BuildGraphStorage
-from agent_loop import AgentLoop, AgentResult, LoggerCallback
+from agent_loop import AgentLoop, AgentResult
+from conversation_history import LoggerCallback
 from agent_loop_config import AgentLoopConfig
 from sandbox import Sandbox, SandboxConfig
+from agent_node_tool_executor import AgentNodeToolExecutor
 from tool_provider import ToolDefinition, ToolExecutor, ToolFailure, TerminateSuccessResult, TerminateAgentWithSuccess, TerminateAgentWithFailure
 
 class AgentNodeCleanLogicImpl(DagCleanLogic):
@@ -31,6 +36,7 @@ class AgentNodeCleanLogicImpl(DagCleanLogic):
         agent_loop_config: AgentLoopConfig,
         make_sandbox: Callable[[SandboxConfig], Sandbox],
         make_agent_loop: Callable[[AgentLoopConfig], AgentLoop],
+        make_tool_executor: Callable[[Sandbox], AgentNodeToolExecutor] | None = None,
         logger: LoggerCallback | None = None,
     ): ...
 ```

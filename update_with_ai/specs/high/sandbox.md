@@ -1,10 +1,11 @@
 # sandbox
 
-imports: tool_provider (tool definitions, results, signals, stubbing), dag_storage (dependency), dag_clean_logic (change message, feedback message), file_view (file machinery), guide_delivery (step mode), run_control (verification and termination)
-terms (from tool_provider): tool definition, tool result, tool failure, supersession flag, stub, termination result, signal
+imports: tool_provider (tool definitions, results, signals, stubbing), dag_storage (dependency), dag_clean_logic (change message, feedback message), file_reader (read machinery), file_editor (write machinery), guide_delivery (step mode), run_control (verification and termination)
+terms (from tool_provider): tool definition, tool result, tool failure, supersession flag, stub, termination result, signal, tool call
 terms (from dag_storage): dependency
 terms (from dag_clean_logic): change message, feedback message
-terms (from file_view): virtual name, template, session-start read
+terms (from file_reader): virtual name, session-start read
+terms (from file_editor): template
 terms (from guide_delivery): guide, step mode, step section
 terms (from run_control): blame, blame target, soft length bound, hard length bound
 terms (owned):

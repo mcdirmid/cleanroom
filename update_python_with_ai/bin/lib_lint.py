@@ -21,6 +21,8 @@ import os
 import sys
 
 from build_lint_common import (
+    check_impl_imports,
+    check_lib_structure,
     check_sibling_imports,
     ensure_load,
     ensure_target,
@@ -69,9 +71,12 @@ def main() -> int:
     text = ensure_target(text, RULE, stem, srcs, deps, package)
     write_text(args.build_path, text)
 
+    structure_errors = check_lib_structure(args.module_path)
     import_errors = check_sibling_imports(package, args.module_path)
-    if import_errors:
-        for err in import_errors:
+    impl_errors = check_impl_imports(args.module_path)
+    all_errors = structure_errors + import_errors + impl_errors
+    if all_errors:
+        for err in all_errors:
             sys.stderr.write(err + "\n")
         return 1
     return 0

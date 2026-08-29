@@ -8,7 +8,7 @@ Defines types and operations for the agent loop component.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Literal, Protocol, Union, List, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Protocol, Tuple, Union
 from .tool_provider import (
     ToolDefinition,
     ToolResult,
@@ -20,27 +20,10 @@ from .tool_provider import (
     ToolFailure,
     ToolExecutor,
     T_tool,
+    ToolCall,
 )
-
-HistoryEntry = Dict[str, Any]
-"""
-A conversation history entry: the data appended to the conversation (user
-prompt, assistant response, tool call, tool result) for a particular turn.
-The format is determined by the language model API.
-"""
-
-ToolCall = Dict[str, Any]
-"""
-A tool request from the model:
-{
-    "id": str,
-    "type": "function",
-    "function": {
-        "name": str,
-        "arguments": str  # JSON string of parameter values
-    }
-}
-"""
+from .conversation_history import HistoryEntry, LogEvent, LoggerCallback, ConversationHistory
+from .loop_guard import LoopGuard, LoopDecision
 
 Usage = Dict[str, Any]
 """

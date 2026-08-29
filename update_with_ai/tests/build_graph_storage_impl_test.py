@@ -1,26 +1,12 @@
 """
-Tests for the build_graph_storage_impl component (LLS: build_graph_storage_impl,
-with dependencies specs/low/dag_storage.md, specs/low/build_graph_storage.md, specs/low/sandbox.md).
-
-Covers the BaseBuildGraphStorageImpl base-class behavior (message-file operations,
-dependency retrieval with the reverse-dependency recording side effect,
-definition/package-directory resolution) and the manifest-driven
-BuildGraphStorageFileImpl concrete implementation: sandbox configuration
-derived from manifests, package directory resolution, manifest synthesis for
-declared dependencies lacking their own manifest, and configuration validation.
+Tests for the BuildGraphStorage implementation.
 """
 
-from __future__ import annotations
-
-import json
 import os
 import shutil
 import tempfile
 import unittest
-from contextlib import contextmanager
-from pathlib import Path
-from typing import Dict, List, Optional
-from unittest import mock
+from typing import Dict, List, Optional, Set, cast
 
 from lib.build_graph_storage import (
     GraphConfig,
@@ -32,20 +18,22 @@ from lib.build_graph_storage_impl import (
     BaseBuildGraphStorageImpl,
     BuildGraphStorageFileImpl,
 )
-from lib.dag_storage import NodeMessage, MessageKind, PendingMessages
+from lib.build_message_store import BuildMessageStore, PackageMessageData
+from lib.manifest_node_loader import ManifestNodeLoader, LoadedGraphManifests
+from lib.dag_storage import (
+    NodeMessage,
+    MessageKind,
+    PendingMessages,
+    KnownReverseDependencies,
+)
 from lib.sandbox import SandboxConfig
-from typing import cast
-
-HARNESS_FILE = ".update_with_ai.textproto"
 
 
 def msg(text: str, kind: str = "change") -> NodeMessage:
-    """Test helper: build a NodeMessage (per specs/low/dag_storage.md)."""
     return NodeMessage(kind=cast(MessageKind, kind), text=text)
 
 
 def _make_definition(prompt: str) -> NodeDefinition:
-    """Build a NodeDefinition with an (empty) sandbox config."""
     return NodeDefinition(
         prompt=prompt,
         sandbox_config=SandboxConfig(
@@ -58,23 +46,95 @@ def _make_definition(prompt: str) -> NodeDefinition:
     )
 
 
-class _MockGraphStorageImpl(BaseBuildGraphStorageImpl):
-    """Minimal concrete BaseBuildGraphStorageImpl used to exercise the base class."""
+class _MockMessageStore(BuildMessageStore):
+    """In-memory Mock replicating BuildMessageStore dataflow."""
 
+    def __init__(self) -> None:
+        self.pending: Dict[NodeId, List[NodeMessage]] = {}
+        self.reverse_deps: Dict[NodeId, List[NodeId]] = {}
+        self.calls: List[tuple] = []
+
+    def read_package_messages(self, package_dir: PackageDirectory) -> PackageMessageData:
+        self.calls.append(("read_package_messages", package_dir))
+        return PackageMessageData(pending_messages=dict(self.pending), known_reverse_dependencies=dict(self.reverse_deps))
+
+    def write_package_messages(self, package_dir: PackageDirectory, data: PackageMessageData) -> None:
+        self.calls.append(("write_package_messages", package_dir, data))
+        self.pending.update(data.pending_messages)
+        self.reverse_deps.update(data.known_reverse_dependencies)
+
+    def get_pending_messages(self, package_dir: PackageDirectory, node_id: NodeId) -> PendingMessages:
+        self.calls.append(("get_pending_messages", package_dir, node_id))
+        return list(self.pending.get(node_id, []))
+
+    def add_pending_message(self, package_dir: PackageDirectory, node_id: NodeId, message: NodeMessage) -> None:
+        self.calls.append(("add_pending_message", package_dir, node_id, message))
+        self.pending.setdefault(node_id, []).append(message)
+
+    def set_pending_messages(self, package_dir: PackageDirectory, node_id: NodeId, messages: PendingMessages) -> None:
+        self.calls.append(("set_pending_messages", package_dir, node_id, messages))
+        self.pending[node_id] = list(messages)
+
+    def clear_pending_messages(self, package_dir: PackageDirectory, node_id: NodeId) -> None:
+        self.calls.append(("clear_pending_messages", package_dir, node_id))
+        self.pending.pop(node_id, None)
+
+    def delete_node_messages(self, package_dir: PackageDirectory, node_id: NodeId) -> None:
+        self.calls.append(("delete_node_messages", package_dir, node_id))
+        self.pending.pop(node_id, None)
+        self.reverse_deps.pop(node_id, None)
+
+    def get_known_reverse_dependencies(self, package_dir: PackageDirectory, node_id: NodeId) -> KnownReverseDependencies:
+        self.calls.append(("get_known_reverse_dependencies", package_dir, node_id))
+        return list(self.reverse_deps.get(node_id, []))
+
+    def add_known_reverse_dependency(self, package_dir: PackageDirectory, node_id: NodeId, reverse_dependency: NodeId) -> None:
+        self.calls.append(("add_known_reverse_dependency", package_dir, node_id, reverse_dependency))
+        rd_list = self.reverse_deps.setdefault(node_id, [])
+        if reverse_dependency not in rd_list:
+            rd_list.append(reverse_dependency)
+
+    def clear_known_reverse_dependencies(self, package_dir: PackageDirectory, node_id: NodeId) -> None:
+        self.calls.append(("clear_known_reverse_dependencies", package_dir, node_id))
+        self.reverse_deps.pop(node_id, None)
+
+
+class _MockManifestLoader(ManifestNodeLoader):
+    """Mock replicating ManifestNodeLoader dataflow."""
+
+    def __init__(self, manifests: Optional[LoadedGraphManifests] = None) -> None:
+        self.manifests = manifests or LoadedGraphManifests(
+            node_definitions={},
+            node_dependencies={},
+            package_directories={},
+            propagating_dependencies={},
+            silent_dependencies={},
+        )
+        self.calls: List[tuple] = []
+
+    def resolve_graph(self, config: GraphConfig) -> LoadedGraphManifests:
+        self.calls.append(("resolve_graph", config))
+        return self.manifests
+
+
+class _MockGraphStorageImpl(BaseBuildGraphStorageImpl):
     def __init__(
         self,
         adjacency: Dict[NodeId, List[NodeId]],
         definitions: Optional[Dict[NodeId, NodeDefinition]] = None,
         package_dirs: Optional[Dict[NodeId, PackageDirectory]] = None,
         propagating: Optional[Dict[NodeId, List[NodeId]]] = None,
+        message_store: Optional[BuildMessageStore] = None,
     ) -> None:
         self._adjacency = adjacency
         self._definitions = definitions or {}
         self._package_dirs = package_dirs or {}
-        # By default every dependency propagates; pass `propagating` to model
-        # dependencies whose changes do not propagate (silent deps).
         self._propagating = propagating if propagating is not None else adjacency
-        super().__init__(GraphConfig(graph_source="mock-graph-source"))
+        super().__init__(
+            GraphConfig(graph_source="mock-graph-source"),
+            message_store=message_store or _MockMessageStore(),
+            manifest_loader=_MockManifestLoader(),
+        )
 
     def _build_adjacency(self) -> Dict[NodeId, List[NodeId]]:
         return self._adjacency
@@ -90,25 +150,19 @@ class _MockGraphStorageImpl(BaseBuildGraphStorageImpl):
 
 
 def _make_pkg_dir(root: str, name: str) -> str:
-    """Create and return a real package directory under the temp root."""
     d = os.path.join(root, name)
     os.makedirs(d, exist_ok=True)
     return d
 
 
 class TestBaseBuildGraphStorageImplConfig(unittest.TestCase):
-    """Config validation for the BaseBuildGraphStorageImpl base class."""
-
-    def test_config_without_graph_source_or_workspace_root_raises_value_error(self):
-        """GraphConfig must provide at least one of graph_source or workspace_root."""
+    def test_config_without_graph_source_or_workspace_root_raises_value_error(self) -> None:
         with self.assertRaises(ValueError) as ctx:
-            BaseBuildGraphStorageImpl(GraphConfig())
+            BaseBuildGraphStorageImpl(GraphConfig(), message_store=_MockMessageStore(), manifest_loader=_MockManifestLoader())
         self.assertIn("graph_source", str(ctx.exception))
 
 
 class TestBaseBuildGraphStorageImplResolution(unittest.TestCase):
-    """Base-class resolution behavior (definitions, package dirs, dependencies)."""
-
     def setUp(self) -> None:
         self._tmp_root = tempfile.mkdtemp(prefix="bgsi_resolve_")
         self.pkg_a = _make_pkg_dir(self._tmp_root, "pkg_a")
@@ -133,36 +187,75 @@ class TestBaseBuildGraphStorageImplResolution(unittest.TestCase):
             },
         )
 
-    def test_resolve_node_definition_returns_prompt_and_sandbox_config(self):
+    def test_resolve_node_definition_returns_prompt_and_sandbox_config(self) -> None:
         graph = self._graph()
         definition = graph.resolve_node_definition("//pkg:a")
         self.assertEqual(definition.prompt, "prompt-a")
         self.assertIsInstance(definition.sandbox_config, SandboxConfig)
 
-    def test_resolve_package_directory_returns_directory(self):
+    def test_resolve_package_directory_returns_directory(self) -> None:
         graph = self._graph()
         self.assertEqual(graph.resolve_package_directory("//pkg:a"), self.pkg_a)
 
-    def test_get_node_dependencies_returns_dependencies(self):
+    def test_get_node_dependencies_returns_dependencies(self) -> None:
         graph = self._graph()
         self.assertEqual(
             graph.get_node_dependencies("//pkg:a"), ["//pkg:b", "//pkg:c"]
         )
-        self.assertEqual(graph.get_node_dependencies("//pkg:c"), [])
 
-    def test_get_known_reverse_dependencies_empty_when_none_recorded(self):
-        graph = self._graph()
-        self.assertEqual(graph.get_known_reverse_dependencies("//pkg:b"), [])
+    def test_get_propagating_dependencies_returns_propagating_subset(self) -> None:
+        graph = _MockGraphStorageImpl(
+            adjacency={"//pkg:a": ["//pkg:b", "//pkg:c"]},
+            propagating={"//pkg:a": ["//pkg:b"]},
+            package_dirs={"//pkg:a": self.pkg_a, "//pkg:b": self.pkg_b},
+        )
+        self.assertEqual(graph.get_propagating_dependencies("//pkg:a"), ["//pkg:b"])
 
 
-class TestReverseDependencyRecording(unittest.TestCase):
-    """dag_storage contract: get_node_dependencies records the node as a known
-    reverse dependency of each propagating dependency (at most once);
-    dependencies whose changes do not propagate are not recorded; recordings
-    persist."""
-
+class TestBaseBuildGraphStorageImplSubgraphs(unittest.TestCase):
     def setUp(self) -> None:
-        self._tmp_root = tempfile.mkdtemp(prefix="bgsi_revdep_")
+        self._tmp_root = tempfile.mkdtemp(prefix="bgsi_subgraph_")
+        self.pkg_a = _make_pkg_dir(self._tmp_root, "pkg_a")
+        self.pkg_b = _make_pkg_dir(self._tmp_root, "pkg_b")
+        self.pkg_c = _make_pkg_dir(self._tmp_root, "pkg_c")
+        self.pkg_d = _make_pkg_dir(self._tmp_root, "pkg_d")
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self._tmp_root, ignore_errors=True)
+
+    def test_get_subgraph_closure_order_is_topological(self) -> None:
+        graph = _MockGraphStorageImpl(
+            adjacency={
+                "//pkg:a": ["//pkg:b", "//pkg:c"],
+                "//pkg:b": ["//pkg:d"],
+                "//pkg:c": ["//pkg:d"],
+                "//pkg:d": [],
+            },
+            package_dirs={
+                "//pkg:a": self.pkg_a,
+                "//pkg:b": self.pkg_b,
+                "//pkg:c": self.pkg_c,
+                "//pkg:d": self.pkg_d,
+            },
+        )
+        subgraph = graph.get_subgraph("//pkg:a")
+        self.assertEqual(set(subgraph), {"//pkg:a", "//pkg:b", "//pkg:c", "//pkg:d"})
+        self.assertLess(subgraph.index("//pkg:d"), subgraph.index("//pkg:b"))
+        self.assertLess(subgraph.index("//pkg:d"), subgraph.index("//pkg:c"))
+        self.assertLess(subgraph.index("//pkg:b"), subgraph.index("//pkg:a"))
+        self.assertLess(subgraph.index("//pkg:c"), subgraph.index("//pkg:a"))
+
+    def test_get_subgraph_isolated_node_returns_single_node(self) -> None:
+        graph = _MockGraphStorageImpl(
+            adjacency={"//pkg:a": []},
+            package_dirs={"//pkg:a": self.pkg_a},
+        )
+        self.assertEqual(graph.get_subgraph("//pkg:a"), ["//pkg:a"])
+
+
+class TestDynamicReverseDependencyRecording(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp_root = tempfile.mkdtemp(prefix="bgsi_rdep_")
         self.pkg_a = _make_pkg_dir(self._tmp_root, "pkg_a")
         self.pkg_b = _make_pkg_dir(self._tmp_root, "pkg_b")
         self.pkg_c = _make_pkg_dir(self._tmp_root, "pkg_c")
@@ -170,45 +263,9 @@ class TestReverseDependencyRecording(unittest.TestCase):
     def tearDown(self) -> None:
         shutil.rmtree(self._tmp_root, ignore_errors=True)
 
-    def _graph(self) -> BaseBuildGraphStorageImpl:
-        return _MockGraphStorageImpl(
-            adjacency={
-                "//pkg:a": ["//pkg:b", "//pkg:c"],
-                "//pkg:b": [],
-                "//pkg:c": [],
-            },
-            definitions={},
-            package_dirs={
-                "//pkg:a": self.pkg_a,
-                "//pkg:b": self.pkg_b,
-                "//pkg:c": self.pkg_c,
-            },
-        )
-
-    def test_get_node_dependencies_records_node_as_reverse_dependency(self):
-        graph = self._graph()
-        graph.get_node_dependencies("//pkg:a")
-
-        self.assertEqual(
-            graph.get_known_reverse_dependencies("//pkg:b"), ["//pkg:a"]
-        )
-        self.assertEqual(
-            graph.get_known_reverse_dependencies("//pkg:c"), ["//pkg:a"]
-        )
-        self.assertEqual(graph.get_known_reverse_dependencies("//pkg:a"), [])
-
-    def test_non_propagating_dependencies_are_not_recorded(self):
-        """dag_storage LLS: a node is recorded as a reverse dependency only of
-        its propagating dependencies; dependencies whose changes do not
-        propagate to it (silent deps) are not recorded."""
+    def test_get_node_dependencies_records_known_reverse_dependency(self) -> None:
         graph = _MockGraphStorageImpl(
             adjacency={
-                "//pkg:a": ["//pkg:b", "//pkg:c"],
-                "//pkg:b": [],
-                "//pkg:c": [],
-            },
-            propagating={
-                # c is an adjacency dependency of a but does not propagate.
                 "//pkg:a": ["//pkg:b"],
                 "//pkg:b": [],
                 "//pkg:c": [],
@@ -227,1017 +284,32 @@ class TestReverseDependencyRecording(unittest.TestCase):
         )
         self.assertEqual(graph.get_known_reverse_dependencies("//pkg:c"), [])
 
-    def test_repeated_recordings_are_deduplicated(self):
-        # dag_storage LLS: a node is recorded at most once per dependency;
-        # repeated recordings do not add duplicates.
-        graph = self._graph()
-        graph.get_node_dependencies("//pkg:a")
-        graph.get_node_dependencies("//pkg:a")
-        graph.get_node_dependencies("//pkg:a")
 
-        self.assertEqual(
-            graph.get_known_reverse_dependencies("//pkg:b"), ["//pkg:a"]
-        )
-
-    def test_recordings_persist_across_instances(self):
-        # The recording is stored in the dependency's message file, so a fresh
-        # instance sees the recorded reverse dependency.
-        graph = self._graph()
-        graph.get_node_dependencies("//pkg:a")
-
-        fresh = self._graph()
-        self.assertEqual(
-            fresh.get_known_reverse_dependencies("//pkg:b"), ["//pkg:a"]
-        )
-
-
-class TestMessageFileOperations(unittest.TestCase):
-    """Message-file operations per specs/low/dag_storage.md and the impl LLS."""
-
+class TestMessageOperationsDelegation(unittest.TestCase):
     def setUp(self) -> None:
-        self._tmp_root = tempfile.mkdtemp(prefix="bgsi_store_")
-        self.pkg_a = _make_pkg_dir(self._tmp_root, "pkg_a")
-        self.pkg_b = _make_pkg_dir(self._tmp_root, "pkg_b")
-        self.pkg_other = _make_pkg_dir(self._tmp_root, "pkg_other")
+        self.temp_dir = tempfile.mkdtemp()
+        self.pkg_dir = _make_pkg_dir(self.temp_dir, "pkg")
         self.graph = _MockGraphStorageImpl(
-            adjacency={"node_a": [], "node_b": ["node_a"], "other": []},
-            definitions={},
-            package_dirs={
-                "node_a": self.pkg_a,
-                "node_b": self.pkg_b,
-                "other": self.pkg_other,
-            },
+            adjacency={"//pkg:target": []},
+            package_dirs={"//pkg:target": self.pkg_dir},
         )
 
     def tearDown(self) -> None:
-        shutil.rmtree(self._tmp_root, ignore_errors=True)
-
-    def harness_file(self, node_id: NodeId) -> str:
-        return os.path.join(self.graph.resolve_package_directory(node_id), HARNESS_FILE)
-
-    # -- get_pending_messages ------------------------------------------------
-
-    def test_get_pending_messages_missing_file_returns_empty(self):
-        """LLS: a missing .update_with_ai.textproto reads as empty and is not created."""
-        self.assertEqual(self.graph.get_pending_messages("node_a"), [])
-        self.assertFalse(os.path.exists(self.harness_file("node_a")))
-
-    def test_get_pending_messages_missing_node_entry_returns_empty(self):
-        """LLS: an absent node entry reads as an empty list."""
-        self.graph.add_messages("other", [msg("msg")])
-        self.assertEqual(self.graph.get_pending_messages("node_a"), [])
-
-    def test_get_pending_messages_returns_stored_messages(self):
-        """LLS: returns the node's pending messages (with their kinds) exactly
-        as stored."""
-        self.graph.add_messages("node_a", [msg("msg1"), msg("msg2")])
-        self.assertEqual(
-            self.graph.get_pending_messages("node_a"), [msg("msg1"), msg("msg2")]
-        )
-
-    def test_get_pending_messages_returns_stored_kinds(self):
-        """LLS: the message kind is persisted with the message and read back
-        exactly as stored."""
-        self.graph.add_messages(
-            "node_a",
-            [msg("a dependency changed"), msg("fix your output", "feedback")],
-        )
-        self.assertEqual(
-            self.graph.get_pending_messages("node_a"),
-            [msg("a dependency changed"), msg("fix your output", "feedback")],
-        )
-
-    # -- add_messages --------------------------------------------------------
-
-    def test_add_messages_appends_to_pending_set_and_persists(self):
-        """LLS: add_messages appends to the node's pending set and persists."""
-        self.graph.add_messages("node_a", [msg("msg1")])
-        self.graph.add_messages("node_a", [msg("msg2"), msg("msg3")])
-
-        self.assertEqual(
-            self.graph.get_pending_messages("node_a"),
-            [msg("msg1"), msg("msg2"), msg("msg3")],
-        )
-        self.assertTrue(os.path.isfile(self.harness_file("node_a")))
-
-    def test_add_messages_visible_to_new_store_instance(self):
-        """LLS: a new store instance reading the same directory sees the messages."""
-        self.graph.add_messages("node_a", [msg("msg1")])
-
-        fresh = _MockGraphStorageImpl(
-            adjacency={"node_a": [], "node_b": []},
-            definitions={},
-            package_dirs={"node_a": self.pkg_a, "node_b": self.pkg_b},
-        )
-
-        self.assertEqual(fresh.get_pending_messages("node_a"), [msg("msg1")])
-
-    # -- clear_pending_messages ----------------------------------------------
-
-    def test_clear_pending_messages_removes_messages_keeps_reverse_dependencies(self):
-        """LLS: clear_pending_messages removes only the node's pending
-        messages; its known reverse dependencies remain."""
-        self.graph.add_messages("node_a", [msg("msg1"), msg("msg2")])
-        # node_b depends on node_a; resolving node_b's dependencies records
-        # node_b as a known reverse dependency of node_a.
-        self.graph.get_node_dependencies("node_b")
-        self.assertEqual(
-            self.graph.get_known_reverse_dependencies("node_a"), ["node_b"]
-        )
-
-        self.graph.clear_pending_messages("node_a")
-
-        self.assertEqual(self.graph.get_pending_messages("node_a"), [])
-        self.assertEqual(
-            self.graph.get_known_reverse_dependencies("node_a"), ["node_b"]
-        )
-
-    def test_clear_pending_messages_node_with_no_entry_is_unchanged(self):
-        """LLS: clearing a node with no entry (or no pending messages) writes
-        nothing: the message file is not created or modified."""
-        self.graph.clear_pending_messages("node_a")
-        self.assertFalse(os.path.exists(self.harness_file("node_a")))
-
-    # -- delete_node_data -----------------------------------------------------
-
-    def test_delete_node_data_removes_messages_and_reverse_dependencies(self):
-        """LLS: delete_node_data deletes the node's data — both its pending
-        messages and its known reverse dependencies."""
-        self.graph.add_messages("node_a", [msg("msg1"), msg("msg2")])
-        # node_b depends on node_a; resolving node_b's dependencies records
-        # node_b as a known reverse dependency of node_a.
-        self.graph.get_node_dependencies("node_b")
-        self.assertEqual(
-            self.graph.get_known_reverse_dependencies("node_a"), ["node_b"]
-        )
-
-        self.graph.delete_node_data("node_a")
-
-        self.assertEqual(self.graph.get_pending_messages("node_a"), [])
-        self.assertEqual(self.graph.get_known_reverse_dependencies("node_a"), [])
-
-    def test_delete_node_data_leaves_other_nodes_untouched(self):
-        """LLS: deleting one node's entry leaves other nodes' entries intact."""
-        self.graph.add_messages("node_a", [msg("a")])
-        self.graph.add_messages("node_b", [msg("b")])
-
-        self.graph.delete_node_data("node_a")
-
-        self.assertEqual(self.graph.get_pending_messages("node_a"), [])
-        self.assertEqual(self.graph.get_pending_messages("node_b"), [msg("b")])
-
-    # -- file naming and layout ---------------------------------------------
-
-    def test_harness_file_is_update_with_ai_textproto_in_package_dir(self):
-        """LLS: a single file named .update_with_ai.textproto in the node's package directory."""
-        self.graph.add_messages("node_a", [msg("msg")])
-
-        messages_file = self.harness_file("node_a")
-        self.assertEqual(os.path.dirname(messages_file), self.pkg_a)
-        self.assertEqual(os.path.basename(messages_file), HARNESS_FILE)
-        self.assertTrue(os.path.isfile(messages_file))
-
-    def test_single_messages_file_per_package_directory(self):
-        """LLS: one .update_with_ai.textproto per package directory holds all nodes in it."""
-        shared = _make_pkg_dir(self._tmp_root, "shared_pkg")
-        graph = _MockGraphStorageImpl(
-            adjacency={"node_a": [], "node_b": []},
-            definitions={},
-            package_dirs={"node_a": shared, "node_b": shared},
-        )
-
-        graph.add_messages("node_a", [msg("a")])
-        graph.add_messages("node_b", [msg("b")])
-
-        self.assertEqual(graph.get_pending_messages("node_a"), [msg("a")])
-        self.assertEqual(graph.get_pending_messages("node_b"), [msg("b")])
-
-    def test_different_packages_have_separate_message_files(self):
-        """LLS: each package directory holds its own .update_with_ai.textproto."""
-        self.graph.add_messages("node_a", [msg("a")])
-        self.graph.add_messages("node_b", [msg("b")])
-
-        self.assertNotEqual(self.pkg_a, self.pkg_b)
-        self.assertEqual(
-            len(list(Path(self.pkg_a).glob(HARNESS_FILE))), 1
-        )
-        self.assertEqual(
-            len(list(Path(self.pkg_b).glob(HARNESS_FILE))), 1
-        )
-
-    def test_message_file_is_protobuf_text_format(self):
-        """LLS: the message file content is the update_with_ai message in the
-        protobuf text format (nodes/key/value, quoted strings)."""
-        self.graph.add_messages("node_a", [msg("hello world")])
-
-        with open(self.harness_file("node_a")) as f:
-            content = f.read()
-        self.assertIn("nodes {", content)
-        self.assertIn('key: "node_a"', content)
-        self.assertIn("messages {", content)
-        self.assertIn('kind: "change"', content)
-        self.assertIn('text: "hello world"', content)
-
-    # -- atomic writes -------------------------------------------------------
-
-    def test_write_uses_temp_file_and_atomic_replace(self):
-        """LLS: writes go to a temporary file, then atomically replaced onto .update_with_ai.textproto."""
-        messages_file = self.harness_file("node_a")
-        calls: List[tuple] = []
-        real_replace = os.replace
-
-        def _recording_replace(src: str, dst: str) -> None:
-            calls.append((src, dst))
-            return real_replace(src, dst)
-
-        with mock.patch(
-            "lib.build_graph_storage_impl.os.replace", side_effect=_recording_replace
-        ):
-            self.graph.add_messages("node_a", [msg("msg")])
-
-        self.assertEqual(len(calls), 1)
-        src, dst = calls[0]
-        self.assertEqual(dst, messages_file)
-        self.assertNotEqual(src, messages_file)  # written via a temp file
-        self.assertFalse(os.path.exists(src))  # temp file consumed by the replace
-
-    def test_write_failure_before_replace_leaves_previous_file_unchanged(self):
-        """LLS: a failed replace leaves the previous message file unchanged."""
-        self.graph.add_messages("node_a", [msg("old")])
-
-        with mock.patch(
-            "lib.build_graph_storage_impl.os.replace",
-            side_effect=OSError("replace failed"),
-        ):
-            with self.assertRaises(OSError):
-                self.graph.add_messages("node_a", [msg("new")])
-
-        self.assertEqual(self.graph.get_pending_messages("node_a"), [msg("old")])
-
-    @unittest.skipIf(os.geteuid() == 0, "root bypasses directory write permissions")
-    def test_write_failure_read_only_dir_leaves_file_unchanged(self):
-        """LLS: a failure before replacement (unwritable dir) leaves the file unchanged."""
-        self.graph.add_messages("node_a", [msg("old")])
-        os.chmod(self.pkg_a, 0o500)
-        try:
-            with self.assertRaises(OSError):
-                self.graph.add_messages("node_a", [msg("new")])
-        finally:
-            os.chmod(self.pkg_a, 0o700)
-
-        self.assertEqual(self.graph.get_pending_messages("node_a"), [msg("old")])
-
-    # -- persistence / no in-memory state -----------------------------------
-
-    def test_no_in_memory_state_reads_reflect_file(self):
-        """LLS: the message file is the sole state; another instance's writes are visible."""
-        self.graph.add_messages("node_a", [msg("m1")])
-
-        other = _MockGraphStorageImpl(
-            adjacency={"node_a": [], "node_b": []},
-            definitions={},
-            package_dirs={"node_a": self.pkg_a, "node_b": self.pkg_b},
-        )
-        other.add_messages("node_a", [msg("m2")])
-
-        self.assertEqual(
-            self.graph.get_pending_messages("node_a"), [msg("m1"), msg("m2")]
-        )
-
-    def test_messages_persist_across_component_restarts(self):
-        """LLS: messages persist across component restarts (message file on disk)."""
-        self.graph.add_messages("node_a", [msg("m1"), msg("m2")])
-
-        restarted = _MockGraphStorageImpl(
-            adjacency={"node_a": [], "node_b": []},
-            definitions={},
-            package_dirs={"node_a": self.pkg_a, "node_b": self.pkg_b},
-        )
-        self.assertEqual(restarted.get_pending_messages("node_a"), [msg("m1"), msg("m2")])
-
-        restarted.add_messages("node_a", [msg("m3")])
-        self.assertEqual(
-            self.graph.get_pending_messages("node_a"),
-            [msg("m1"), msg("m2"), msg("m3")],
-        )
-
-
-class _Workspace:
-    """A temporary workspace with manifest-defined nodes.
-
-    Node graph (labels and manifest contents):
-
-      //pkg_a:a  deps=["//pkg_c:c"], src="a1.txt",
-                 silent_srcs=["a_priv.txt"], verify="echo verification-output"
-      //pkg_b:b  deps=["//pkg_a:a"], silent_deps=["//pkg_c:c"],
-                 feedback_deps=["//pkg_a:a"],
-                 src="b1.txt", silent_srcs=["b_priv.txt"]
-      //pkg_c:c  src="c_only.txt"
-      //pkg_d:d  feedback_deps=["//pkg_a:a"], src="d1.txt"
-      //pkg_e:e  star_deps=["//pkg_a:a"], src="e1.txt"
-                 (a's regular dep c is NOT followed: the star closure
-                  traverses star deps only, so c's src is not readable by e)
-      //pkg_f:f  star_deps=["//pkg_e:e"], src="f1.txt"
-                 (star-over-star: f's closure covers e and a, never c)
-    """
-
-    def __init__(self) -> None:
-        self._tmp = tempfile.mkdtemp(prefix="cleanroom_graph_storage_impl_test_")
-        self.root = Path(self._tmp)
-
-    def write_manifest(
-        self,
-        pkg: str,
-        name: str,
-        label: str,
-        prompt: str,
-        src: str = "",
-        silent_srcs: Optional[List[str]] = None,
-        deps: Optional[List[str]] = None,
-        silent_deps: Optional[List[str]] = None,
-        feedback_deps: Optional[List[str]] = None,
-        star_deps: Optional[List[str]] = None,
-        verify: Optional[str] = None,
-        template: Optional[str] = None,
-        guide: Optional[str] = None,
-    ) -> None:
-        pkg_dir = self.root / pkg
-        pkg_dir.mkdir(parents=True, exist_ok=True)
-        # When a template is given, write the template file under the
-        # workspace's templates/ dir and store its workspace-relative path in
-        # the manifest (resolved at runtime against the workspace root).
-        template_rel: Optional[str] = None
-        if template is not None:
-            template_dir = self.root / "templates"
-            template_dir.mkdir(parents=True, exist_ok=True)
-            template_file = template_dir / f"{name}_template.md"
-            template_file.write_text(template, encoding="utf-8")
-            template_rel = f"templates/{name}_template.md"
-        manifest = {
-            "label": label,
-            "name": name,
-            "prompt": prompt,
-            "tools": [],
-            "deps": deps or [],
-            "silent_deps": silent_deps or [],
-            "feedback_deps": feedback_deps or [],
-            "star_deps": star_deps or [],
-            "src": src,
-            "template": template_rel,
-            "guide": guide,
-            "silent_srcs": silent_srcs or [],
-            "verify": verify,
-        }
-        (pkg_dir / f"{name}_manifest.json").write_text(
-            json.dumps(manifest), encoding="utf-8"
-        )
-        if src:
-            (pkg_dir / src).touch()
-        for silent_src in silent_srcs or []:
-            (pkg_dir / silent_src).touch()
-
-    def populate(self) -> None:
-        """Write the manifest graph described in the class docstring."""
-        self.write_manifest(
-            "pkg_a",
-            "a",
-            "//pkg_a:a",
-            "prompt for a",
-            src="a1.txt",
-            silent_srcs=["a_priv.txt"],
-            deps=["//pkg_c:c"],
-            verify="echo verification-output",
-        )
-        self.write_manifest(
-            "pkg_b",
-            "b",
-            "//pkg_b:b",
-            "prompt for b",
-            src="b1.txt",
-            silent_srcs=["b_priv.txt"],
-            deps=["//pkg_a:a"],
-            silent_deps=["//pkg_c:c"],
-            feedback_deps=["//pkg_a:a"],
-        )
-        self.write_manifest(
-            "pkg_c",
-            "c",
-            "//pkg_c:c",
-            "prompt for c",
-            src="c_only.txt",
-        )
-        self.write_manifest(
-            "pkg_d",
-            "d",
-            "//pkg_d:d",
-            "prompt for d",
-            src="d1.txt",
-            feedback_deps=["//pkg_a:a"],
-        )
-        self.write_manifest(
-            "pkg_e",
-            "e",
-            "//pkg_e:e",
-            "prompt for e",
-            src="e1.txt",
-            star_deps=["//pkg_a:a"],
-        )
-        self.write_manifest(
-            "pkg_f",
-            "f",
-            "//pkg_f:f",
-            "prompt for f",
-            src="f1.txt",
-            star_deps=["//pkg_e:e"],
-        )
-
-    def close(self) -> None:
-        shutil.rmtree(self._tmp, ignore_errors=True)
-
-
-class TestBuildGraphStorageFileImpl(unittest.TestCase):
-    """Tests for the manifest-driven BuildGraphStorageFileImpl."""
-
-    @contextmanager
-    def _workspace(self):
-        ws = _Workspace()
-        try:
-            ws.populate()
-            yield ws
-        finally:
-            ws.close()
-
-    def _build_graph(self, ws: _Workspace) -> BuildGraphStorageFileImpl:
-        """Build the graph with BUILD_WORKSPACE_DIRECTORY absent so package
-        directories resolve deterministically inside the temp workspace."""
-        with mock.patch.dict(os.environ):
-            os.environ.pop("BUILD_WORKSPACE_DIRECTORY", None)
-            return BuildGraphStorageFileImpl(
-                GraphConfig(workspace_root=str(ws.root))
-            )
-
-    def test_graph_source_only_config_raises_value_error(self):
-        """BuildGraphStorageFileImpl requires workspace_root (graph_source-only rejected)."""
-        with self.assertRaises(ValueError) as ctx:
-            BuildGraphStorageFileImpl(GraphConfig(graph_source="//some:artifact"))
-        self.assertIn("workspace_root", str(ctx.exception))
-
-    def test_config_without_workspace_root_raises_value_error(self):
-        with self.assertRaises(ValueError) as ctx:
-            BuildGraphStorageFileImpl(GraphConfig())
-        self.assertIn("workspace_root", str(ctx.exception))
-
-    def test_resolve_node_definition_returns_prompt_and_sandbox_config(self):
-        with self._workspace() as ws:
-            graph = self._build_graph(ws)
-            definition = graph.resolve_node_definition("//pkg_a:a")
-            self.assertEqual(definition.prompt, "prompt for a")
-            self.assertIsInstance(definition.sandbox_config, SandboxConfig)
-            self.assertEqual(
-                graph.resolve_node_definition("//pkg_b:b").prompt, "prompt for b"
-            )
-
-    def test_readable_paths_are_own_src_plus_dep_srcs(self):
-        with self._workspace() as ws:
-            graph = self._build_graph(ws)
-            # b's readable: own src (b1) + own silent src (b_priv) + deps'
-            # srcs (a's a1). c is b's silent dep: its src (c_only) is not
-            # readable at all.
-            self.assertCountEqual(
-                graph.resolve_node_definition("//pkg_b:b").sandbox_config.readable_paths,
-                ["b1.txt", "b_priv.txt", "a1.txt"],
-            )
-            # a's readable: own src (a1) + own silent src (a_priv) + deps'
-            # srcs (c's c_only).
-            self.assertCountEqual(
-                graph.resolve_node_definition("//pkg_a:a").sandbox_config.readable_paths,
-                ["a1.txt", "a_priv.txt", "c_only.txt"],
-            )
-
-    def test_readable_paths_exclude_silent_dep_srcs(self):
-        """A silent dep's srcs are not readable: c is b's silent dep, so
-        c_only.txt (c's src) is neither readable nor mapped for b."""
-        with self._workspace() as ws:
-            graph = self._build_graph(ws)
-            b_readable = graph.resolve_node_definition(
-                "//pkg_b:b"
-            ).sandbox_config.readable_paths
-            b_mappings = graph.resolve_node_definition(
-                "//pkg_b:b"
-            ).sandbox_config.file_mappings
-            self.assertNotIn("c_only.txt", b_readable)
-            self.assertNotIn("c_only.txt", b_mappings)
-
-    def test_own_silent_srcs_readable_deps_silent_srcs_not(self):
-        """A node's own silent_srcs are readable (so the agent can read and
-        edit them — e.g. the package BUILD file); its deps' silent_srcs are
-        not readable."""
-        with self._workspace() as ws:
-            graph = self._build_graph(ws)
-            b_readable = graph.resolve_node_definition(
-                "//pkg_b:b"
-            ).sandbox_config.readable_paths
-            a_readable = graph.resolve_node_definition(
-                "//pkg_a:a"
-            ).sandbox_config.readable_paths
-            self.assertIn("b_priv.txt", b_readable)    # own silent_srcs
-            self.assertNotIn("a_priv.txt", b_readable)  # dep's silent_srcs
-            self.assertIn("a_priv.txt", a_readable)    # own silent_srcs
-
-    def test_feedback_deps_are_included_in_deps(self):
-        """A feedback dep is automatically a dep: d declares only feedback_deps
-        ["//pkg_a:a"], so a's srcs are readable, a is in d's adjacency, and a
-        is d's only blame target."""
-        with self._workspace() as ws:
-            graph = self._build_graph(ws)
-            d_readable = graph.resolve_node_definition(
-                "//pkg_d:d"
-            ).sandbox_config.readable_paths
-            self.assertCountEqual(d_readable, ["d1.txt", "a1.txt"])
-            self.assertEqual(graph.get_node_dependencies("//pkg_d:d"), ["//pkg_a:a"])
-
-    def test_star_deps_transitive_closure_src_are_readable(self):
-        """A star dep's closure over star deps is readable: e's star dep a
-        has no star deps of its own, so e reads a's src but NOT c's — a
-        regular dep of a star dep is never followed (the closure traverses
-        star deps only)."""
-        with self._workspace() as ws:
-            graph = self._build_graph(ws)
-            e_readable = graph.resolve_node_definition(
-                "//pkg_e:e"
-            ).sandbox_config.readable_paths
-            self.assertCountEqual(e_readable, ["e1.txt", "a1.txt"])
-            self.assertNotIn("c_only.txt", e_readable)
-            # Star-dep srcs map to their package directories; closure nodes'
-            # silent_srcs are not readable.
-            e_mappings = graph.resolve_node_definition(
-                "//pkg_e:e"
-            ).sandbox_config.file_mappings
-            self.assertEqual(
-                e_mappings["a1.txt"], str(ws.root / "pkg_a" / "a1.txt")
-            )
-            self.assertNotIn("a_priv.txt", e_readable)
-            # Writable set is unchanged: only own src + own silent_srcs.
-            e_writable = graph.resolve_node_definition(
-                "//pkg_e:e"
-            ).sandbox_config.writable_paths
-            self.assertCountEqual(e_writable, ["e1.txt"])
-
-    def test_star_deps_close_over_star_deps_not_deps(self):
-        """Star-over-star traversal: f's star dep e has star dep a, so f
-        reads e's and a's srcs; a's regular dep c is still never followed."""
-        with self._workspace() as ws:
-            graph = self._build_graph(ws)
-            f_readable = graph.resolve_node_definition(
-                "//pkg_f:f"
-            ).sandbox_config.readable_paths
-            self.assertCountEqual(
-                f_readable, ["f1.txt", "e1.txt", "a1.txt"]
-            )
-            self.assertNotIn("c_only.txt", f_readable)
-
-    def test_star_deps_are_included_in_deps(self):
-        """A star dep is automatically a dep: e declares only star_deps
-        ["//pkg_a:a"], so a is in e's adjacency and is a propagating dep."""
-        with self._workspace() as ws:
-            graph = self._build_graph(ws)
-            self.assertEqual(graph.get_node_dependencies("//pkg_e:e"), ["//pkg_a:a"])
-            # Star deps are propagating: retrieving e's deps recorded e as
-            # a's reverse dependency (a changes propagate to e).
-            self.assertEqual(
-                graph.get_known_reverse_dependencies("//pkg_a:a"), ["//pkg_e:e"]
-            )
-
-    def test_star_closure_follows_star_deps_only(self):
-        """A star closure traverses star deps only: r stars s (s has
-        deps=[t] and silent_deps=[u]); neither t's nor u's srcs are readable
-        — regular and silent deps of a star dep are never followed."""
-        ws = _Workspace()
-        try:
-            ws.write_manifest("pkg_t", "t", "//pkg_t:t", "pt", src="t1.txt")
-            ws.write_manifest("pkg_u", "u", "//pkg_u:u", "pu", src="u1.txt")
-            ws.write_manifest(
-                "pkg_s",
-                "s",
-                "//pkg_s:s",
-                "ps",
-                src="s1.txt",
-                deps=["//pkg_t:t"],
-                silent_deps=["//pkg_u:u"],
-            )
-            ws.write_manifest(
-                "pkg_r",
-                "r",
-                "//pkg_r:r",
-                "pr",
-                src="r1.txt",
-                star_deps=["//pkg_s:s"],
-            )
-            graph = self._build_graph(ws)
-            r_readable = graph.resolve_node_definition(
-                "//pkg_r:r"
-            ).sandbox_config.readable_paths
-            self.assertCountEqual(r_readable, ["r1.txt", "s1.txt"])
-            self.assertNotIn("t1.txt", r_readable)
-            self.assertNotIn("u1.txt", r_readable)
-        finally:
-            ws.close()
-
-    def test_plain_deps_transitive_srcs_are_not_readable(self):
-        """Closure is only via star deps: a plain dep's transitive deps'
-        srcs are not readable. v deps=[s]; t (s's dep) is not readable."""
-        ws = _Workspace()
-        try:
-            ws.write_manifest("pkg_t", "t", "//pkg_t:t", "pt", src="t1.txt")
-            ws.write_manifest(
-                "pkg_s",
-                "s",
-                "//pkg_s:s",
-                "ps",
-                src="s1.txt",
-                deps=["//pkg_t:t"],
-            )
-            ws.write_manifest(
-                "pkg_v",
-                "v",
-                "//pkg_v:v",
-                "pv",
-                src="v1.txt",
-                deps=["//pkg_s:s"],
-            )
-            graph = self._build_graph(ws)
-            v_readable = graph.resolve_node_definition(
-                "//pkg_v:v"
-            ).sandbox_config.readable_paths
-            self.assertCountEqual(v_readable, ["v1.txt", "s1.txt"])
-            self.assertNotIn("t1.txt", v_readable)
-        finally:
-            ws.close()
-
-    def test_star_dep_without_manifest_contributes_nothing(self):
-        """A star dep whose manifest is not loaded is synthesized (no srcs):
-        the node resolves and its readable set gains nothing."""
-        with self._workspace() as ws:
-            ws.write_manifest(
-                "pkg_f",
-                "f",
-                "//pkg_f:f",
-                "pf",
-                src="f1.txt",
-                star_deps=["//missing:m"],
-            )
-            graph = self._build_graph(ws)
-            f_readable = graph.resolve_node_definition(
-                "//pkg_f:f"
-            ).sandbox_config.readable_paths
-            self.assertCountEqual(f_readable, ["f1.txt"])
-            # The missing star dep is synthesized into a resolvable node.
-            self.assertEqual(
-                graph.resolve_package_directory("//missing:m"),
-                str(ws.root / "missing"),
-            )
-
-    def test_writable_paths_are_own_srcs_plus_own_silent_srcs(self):
-        with self._workspace() as ws:
-            graph = self._build_graph(ws)
-            b_writable = graph.resolve_node_definition(
-                "//pkg_b:b"
-            ).sandbox_config.writable_paths
-            self.assertCountEqual(b_writable, ["b1.txt", "b_priv.txt"])
-            # Deps' srcs (and deps' silent_srcs) are not writable.
-            self.assertNotIn("a1.txt", b_writable)
-            self.assertNotIn("a_priv.txt", b_writable)
-            a_writable = graph.resolve_node_definition(
-                "//pkg_a:a"
-            ).sandbox_config.writable_paths
-            self.assertCountEqual(a_writable, ["a1.txt", "a_priv.txt"])
-            self.assertNotIn("c_only.txt", a_writable)  # c's src, not writable
-
-    def test_blame_targets_are_feedback_deps(self):
-        """Only feedback deps may receive feedback: b's blame targets map its
-        feedback dep a's declared source (a1.txt, by virtual name) to a; its
-        silent dep c is not a blame target."""
-        with self._workspace() as ws:
-            graph = self._build_graph(ws)
-            self.assertEqual(
-                graph.resolve_node_definition("//pkg_b:b").sandbox_config.blame_targets,
-                {"a1.txt": "//pkg_a:a"},
-            )
-            self.assertEqual(
-                graph.resolve_node_definition("//pkg_d:d").sandbox_config.blame_targets,
-                {"a1.txt": "//pkg_a:a"},
-            )
-            # No feedback deps declared -> no blame targets (deps and silent
-            # deps alone do not make targets blameable).
-            self.assertEqual(
-                graph.resolve_node_definition("//pkg_a:a").sandbox_config.blame_targets,
-                {},
-            )
-            self.assertEqual(
-                graph.resolve_node_definition("//pkg_c:c").sandbox_config.blame_targets,
-                {},
-            )
-
-    def test_file_mappings_map_bare_names_to_real_paths(self):
-        with self._workspace() as ws:
-            graph = self._build_graph(ws)
-            b_mappings = graph.resolve_node_definition(
-                "//pkg_b:b"
-            ).sandbox_config.file_mappings
-            self.assertEqual(
-                b_mappings["b1.txt"], str(ws.root / "pkg_b" / "b1.txt")
-            )
-            self.assertEqual(
-                b_mappings["b_priv.txt"], str(ws.root / "pkg_b" / "b_priv.txt")
-            )
-            self.assertEqual(
-                b_mappings["a1.txt"], str(ws.root / "pkg_a" / "a1.txt")
-            )
-            # b's silent dep c's src is not mapped (not readable).
-            self.assertNotIn("c_only.txt", b_mappings)
-            # a's dep src maps into its own package dir
-            a_mappings = graph.resolve_node_definition(
-                "//pkg_a:a"
-            ).sandbox_config.file_mappings
-            self.assertEqual(
-                a_mappings["c_only.txt"], str(ws.root / "pkg_c" / "c_only.txt")
-            )
-
-    def test_file_mappings_own_files_win_on_name_collision(self):
-        """x's own src wins over its dep y's src on a name collision."""
-        ws = _Workspace()
-        try:
-            ws.write_manifest("pkg_y", "y", "//pkg_y:y", "py", src="dup.txt")
-            ws.write_manifest(
-                "pkg_x",
-                "x",
-                "//pkg_x:x",
-                "px",
-                src="dup.txt",
-                deps=["//pkg_y:y"],
-            )
-            graph = self._build_graph(ws)
-            x_mappings = graph.resolve_node_definition(
-                "//pkg_x:x"
-            ).sandbox_config.file_mappings
-            self.assertEqual(
-                x_mappings["dup.txt"], str(ws.root / "pkg_x" / "dup.txt")
-            )
-            # y itself still maps its own src into its own package dir.
-            y_mappings = graph.resolve_node_definition(
-                "//pkg_y:y"
-            ).sandbox_config.file_mappings
-            self.assertEqual(
-                y_mappings["dup.txt"], str(ws.root / "pkg_y" / "dup.txt")
-            )
-        finally:
-            ws.close()
-
-    def test_template_content_lands_in_sandbox_config(self):
-        """A manifest-declared template is read at initialization: the node's
-        sandbox config maps its declared src to the template file's content."""
-        ws = _Workspace()
-        try:
-            ws.write_manifest(
-                "pkg_g",
-                "g",
-                "//pkg_g:g",
-                "pg",
-                src="g1.txt",
-                template="# g1 placeholder\nTODO: fill me in\n",
-            )
-            ws.write_manifest(
-                "pkg_h",
-                "h",
-                "//pkg_h:h",
-                "ph",
-                src="h1.txt",
-            )
-            graph = self._build_graph(ws)
-            templates = graph.resolve_node_definition(
-                "//pkg_g:g"
-            ).sandbox_config.templates
-            self.assertEqual(
-                templates, {"g1.txt": "# g1 placeholder\nTODO: fill me in\n"}
-            )
-            # A node without a template has an empty templates mapping.
-            self.assertEqual(
-                graph.resolve_node_definition(
-                    "//pkg_h:h"
-                ).sandbox_config.templates,
-                {},
-            )
-        finally:
-            ws.close()
-
-    def test_guide_wired_into_sandbox_config_and_adjacency(self):
-        """A manifest-declared guide: the guide node is a dependency (cleaned
-        before the node), its declared source is mapped and readable, and the
-        sandbox config carries the guide's virtual name."""
-        ws = _Workspace()
-        try:
-            ws.write_manifest(
-                "pkg_g",
-                "g",
-                "//pkg_g:g",
-                "pg",
-                src="g1.txt",
-            )
-            ws.write_manifest(
-                "pkg_guide",
-                "the_guide",
-                "//pkg_guide:the_guide",
-                "guide prompt",
-                src="guide.md",
-            )
-            ws.write_manifest(
-                "pkg_h",
-                "h",
-                "//pkg_h:h",
-                "ph",
-                src="h1.txt",
-                guide="//pkg_guide:the_guide",
-            )
-            graph = self._build_graph(ws)
-            h_def = graph.resolve_node_definition("//pkg_h:h")
-            # The guide's source is mapped and readable; the config carries it.
-            self.assertEqual(h_def.sandbox_config.guide, "guide.md")
-            self.assertIn("guide.md", h_def.sandbox_config.readable_paths)
-            self.assertEqual(
-                h_def.sandbox_config.file_mappings["guide.md"],
-                str(ws.root / "pkg_guide" / "guide.md"),
-            )
-            # The guide node is a dependency of the node (cleaned before it).
-            self.assertEqual(
-                graph.get_node_dependencies("//pkg_h:h"),
-                ["//pkg_guide:the_guide"],
-            )
-            # A node without a guide has guide=None.
-            self.assertIsNone(
-                graph.resolve_node_definition("//pkg_g:g").sandbox_config.guide
-            )
-        finally:
-            ws.close()
-
-    def test_get_node_dependencies_returns_deps_plus_silent_deps(self):
-        with self._workspace() as ws:
-            graph = self._build_graph(ws)
-            self.assertEqual(
-                graph.get_node_dependencies("//pkg_b:b"),
-                ["//pkg_a:a", "//pkg_c:c"],
-            )
-            self.assertEqual(
-                graph.get_node_dependencies("//pkg_a:a"), ["//pkg_c:c"]
-            )
-            self.assertEqual(graph.get_node_dependencies("//pkg_c:c"), [])
-            # d declares only feedback deps; they are its dependencies.
-            self.assertEqual(
-                graph.get_node_dependencies("//pkg_d:d"), ["//pkg_a:a"]
-            )
-
-    def test_get_node_dependencies_records_reverse_dependencies(self):
-        with self._workspace() as ws:
-            graph = self._build_graph(ws)
-            graph.get_node_dependencies("//pkg_b:b")
-
-            # a is b's dep (propagating): b is recorded as a's reverse dep.
-            self.assertEqual(
-                graph.get_known_reverse_dependencies("//pkg_a:a"), ["//pkg_b:b"]
-            )
-            # c is b's silent dep: b is NOT recorded as c's reverse dep, so
-            # c's changes do not propagate to b (b does not become dirty).
-            self.assertEqual(graph.get_known_reverse_dependencies("//pkg_c:c"), [])
-            self.assertEqual(graph.get_known_reverse_dependencies("//pkg_b:b"), [])
-
-    def test_silent_deps_are_dependencies_but_do_not_propagate_changes(self):
-        """A silent dep is still a dependency (adjacency, cleaned before the
-        node) but does not record the node as a reverse dependency."""
-        with self._workspace() as ws:
-            graph = self._build_graph(ws)
-            # c is b's silent dep: it is in b's dependencies...
-            self.assertEqual(
-                graph.get_node_dependencies("//pkg_b:b"),
-                ["//pkg_a:a", "//pkg_c:c"],
-            )
-            # ...but b is not recorded as c's reverse dependency.
-            self.assertEqual(graph.get_known_reverse_dependencies("//pkg_c:c"), [])
-            # a is b's (propagating) dep: b is recorded.
-            self.assertEqual(
-                graph.get_known_reverse_dependencies("//pkg_a:a"), ["//pkg_b:b"]
-            )
-            # Feedback deps propagate too: d declares a as a feedback dep, so
-            # d is recorded as a's reverse dependency when d's deps resolve.
-            graph.get_node_dependencies("//pkg_d:d")
-            self.assertEqual(
-                graph.get_known_reverse_dependencies("//pkg_a:a"),
-                ["//pkg_b:b", "//pkg_d:d"],
-            )
-
-    def test_resolve_package_directory_returns_manifest_directory(self):
-        with self._workspace() as ws:
-            graph = self._build_graph(ws)
-            self.assertEqual(
-                graph.resolve_package_directory("//pkg_b:b"), str(ws.root / "pkg_b")
-            )
-            self.assertEqual(
-                graph.resolve_package_directory("//pkg_a:a"), str(ws.root / "pkg_a")
-            )
-
-    def test_package_directory_maps_onto_build_workspace_directory(self):
-        """BUILD_WORKSPACE_DIRECTORY maps manifest dirs onto the real source tree."""
-        fake_real_root = tempfile.mkdtemp(prefix="cleanroom_fake_root_")
-        try:
-            with self._workspace() as ws, mock.patch.dict(
-                os.environ, {"BUILD_WORKSPACE_DIRECTORY": fake_real_root}
-            ):
-                graph = BuildGraphStorageFileImpl(
-                    GraphConfig(workspace_root=str(ws.root))
-                )
-                self.assertEqual(
-                    graph.resolve_package_directory("//pkg_b:b"),
-                    os.path.join(fake_real_root, "pkg_b"),
-                )
-        finally:
-            shutil.rmtree(fake_real_root, ignore_errors=True)
-
-    def test_declared_dependency_without_manifest_is_synthesized(self):
-        """A declared dependency lacking its own manifest is synthesized from its
-        label: it resolves to a node (package dir from the label's package
-        path), and the recording side effect writes to its package's message file."""
-        with self._workspace() as ws:
-            # a2 declares //pkg_x:phantom, which has no manifest of its own.
-            ws.write_manifest(
-                "pkg_a",
-                "a2",
-                "//pkg_a:a2",
-                "prompt for a2",
-                deps=["//pkg_x:phantom"],
-            )
-            (ws.root / "pkg_x").mkdir()  # the phantom's package exists on disk
-
-            graph = self._build_graph(ws)
-
-            self.assertEqual(
-                graph.get_node_dependencies("//pkg_a:a2"), ["//pkg_x:phantom"]
-            )
-            # The phantom resolves to a node with a package dir from its label.
-            self.assertEqual(
-                graph.resolve_package_directory("//pkg_x:phantom"),
-                str(ws.root / "pkg_x"),
-            )
-            # The recording side effect reached the phantom's message file.
-            self.assertEqual(
-                graph.get_known_reverse_dependencies("//pkg_x:phantom"),
-                ["//pkg_a:a2"],
-            )
-
-    def test_synthesis_handles_canonical_at_prefix_labels(self):
-        """Manifest labels use Bazel's canonical @@// form; a synthesized
-        dependency's package dir is derived from the label's package path."""
-        with self._workspace() as ws:
-            ws.write_manifest(
-                "pkg_a",
-                "a3",
-                "@@//pkg_a:a3",
-                "prompt for a3",
-                deps=["@@//pkg_x:phantom"],
-            )
-            (ws.root / "pkg_x").mkdir()  # the phantom's package exists on disk
-
-            graph = self._build_graph(ws)
-
-            self.assertEqual(
-                graph.get_node_dependencies("@@//pkg_a:a3"), ["@@//pkg_x:phantom"]
-            )
-            self.assertEqual(
-                graph.resolve_package_directory("@@//pkg_x:phantom"),
-                str(ws.root / "pkg_x"),
-            )
-            self.assertEqual(
-                graph.get_known_reverse_dependencies("@@//pkg_x:phantom"),
-                ["@@//pkg_a:a3"],
-            )
-
-    def test_verification_callback_runs_shell_command(self):
-        """The manifest's verify shell command backs the verification callback."""
-        with self._workspace() as ws:
-            graph = self._build_graph(ws)
-            callback = graph.resolve_node_definition(
-                "//pkg_a:a"
-            ).sandbox_config.verification_callback
-            self.assertIsNotNone(callback)
-            if callback is not None:
-                success, output = callback()
-                self.assertTrue(success)
-                self.assertEqual(output.strip(), "verification-output")
-
-    def test_verification_callback_none_without_verify(self):
-        with self._workspace() as ws:
-            graph = self._build_graph(ws)
-            callback = graph.resolve_node_definition(
-                "//pkg_b:b"
-            ).sandbox_config.verification_callback
-            self.assertIsNone(callback)
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def test_add_get_clear_messages(self) -> None:
+        target = "//pkg:target"
+        self.graph.add_messages(target, [msg("hello", "change")])
+        self.assertEqual(len(self.graph.get_pending_messages(target)), 1)
+
+        self.graph.clear_pending_messages(target)
+        self.assertEqual(self.graph.get_pending_messages(target), [])
+
+    def test_delete_node_data(self) -> None:
+        target = "//pkg:target"
+        self.graph.add_messages(target, [msg("hello", "change")])
+        self.graph.delete_node_data(target)
+        self.assertEqual(self.graph.get_pending_messages(target), [])
 
 
 if __name__ == "__main__":

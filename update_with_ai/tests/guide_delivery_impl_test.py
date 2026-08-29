@@ -255,6 +255,39 @@ class TestGuideDeliveryImpl(unittest.TestCase):
         assert output is not None
         self.assertIn("Checklist: Imports", output.result.content)
 
+    def test_lint_checks_section_skipped_in_step_mode(self) -> None:
+        # In step mode, the `## Lint checks` section is skipped and never
+        # delivered as a step section.
+        guide_with_lint = os.path.join(self.temp_dir, "guide_lint.md")
+        with open(guide_with_lint, "w", encoding="utf-8") as f:
+            f.write(
+                "# Guide: Converting\n\n"
+                "## Summary\n\n"
+                "Summary content here.\n\n"
+                "## Checklist: Section 1\n\n"
+                "- [ ] Item 1\n\n"
+                "## Lint checks\n\n"
+                "- [ ] Lint check 1\n\n"
+                "## Checklist: Section 2\n\n"
+                "- [ ] Item 2\n"
+            )
+        delivery = self._delivery(guide=guide_with_lint)
+        # Should have exactly 2 step sections (Section 1 and Section 2), Lint checks skipped
+        first = delivery.get_advance_output(verification_passed=True)
+        assert first is not None
+        self.assertIn("Checklist: Section 1", first.result.content)
+        self.assertNotIn("Lint checks", first.result.content)
+
+        second = delivery.get_advance_output(verification_passed=True)
+        assert second is not None
+        self.assertIn("Checklist: Section 2", second.result.content)
+        self.assertNotIn("Lint checks", second.result.content)
+
+        # No more sections remain
+        self.assertFalse(delivery.has_step_sections_remaining())
+        third = delivery.get_advance_output(verification_passed=True)
+        self.assertIsNone(third)
+
 
 if __name__ == "__main__":
     unittest.main()

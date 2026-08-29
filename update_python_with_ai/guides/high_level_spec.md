@@ -16,6 +16,8 @@ The section inventory is closed. An interface spec has exactly `Purpose`, `Terms
 
 An assembly spec (a file whose name ends in `_asm`) configures and assembles concrete implementations into the interface it fulfills: it has exactly `Deltas`, `Non-concerns`, declares `fulfills: <interface>` and no `## Contract`, and is the only kind of module that may import implementation (`_impl`) or other assembly (`_asm`) specs. An assembly is never tested: it implements no functionality beyond configuration and assembly, so it has no test module and no testable contract.
 
+Adaptation is minimally invasive: the spec is changed in place, conformant content is left untouched, and each deviation is fixed with the smallest change that resolves it; a rewrite preserving every fact is reported as no change.
+
 ## Document structure
 
 - [ ] One component per file; interface, implementation, and assembly in separate specs
@@ -112,17 +114,13 @@ An assembly spec (a file whose name ends in `_asm`) configures and assembles con
 - [ ] Every guarantee is testable from the specs alone
 - [ ] Boundaries to the un-specified are declared: an external service or human operator is grounded by declaration, the integration point pinned in the implementation spec
 
-## Conformance editing
-
-- [ ] Only non-conforming content is changed; conformant lines untouched; a rewrite preserving every fact is reported as no change
-- [ ] The claimed change appears in the diff; output is verified against input
-
 ## Lint checks
 
 - [ ] Interface sections are exactly `Purpose`, `Terms`, `Contract`, `Non-concerns`; implementation and assembly exactly `Deltas`, `Non-concerns`; no other `##` section, in canonical order
 - [ ] No `###` headings
 - [ ] A file whose name contains `impl` or ends in `_asm` declares `fulfills:` and `## Deltas` and has no `## Contract`; a file with neither never declares `fulfills:` and has no Deltas
 - [ ] The `## Contract` contains **Operations**, **Guarantees**, and **Assumptions** blocks
+- [ ] Contract blocks are bold lines (`**Operations**`, `**Guarantees**`, `**Assumptions**`, `**Inputs**`) with no colon suffix
 - [ ] `terms (owned):` is present iff `## Terms` is present
 - [ ] `terms (from X):` names an existing spec and a term `X` owns; a backticked import names an existing spec; the spec never references itself
 - [ ] A multi-word term used in the body is owned, referenced, or refined
@@ -130,7 +128,7 @@ An assembly spec (a file whose name ends in `_asm`) configures and assembles con
 - [ ] No "returns" anywhere — "provides", "signals", "delegates"
 - [ ] No pseudo-code literals (`` `True`/`False`/`None` ``)
 - [ ] Implementation sections never mention "client"
-- [ ] Deltas tags come from the known set: `[ordering]`, `[boundary]`, `[state]`, `[external]`, `[failure]`, `[refines]`
+- [ ] Deltas tags come from the known set: `[ordering]`, `[boundary]`, `[state]`, `[external]`, `[failure]`, `[refines]`, with no colon suffix
 - [ ] No Deltas line restates the fulfilled contract ("per the `<interface>` contract")
 
 ## Common pitfalls

@@ -1,3 +1,4 @@
+import difflib
 """
 Tests for the RunControlImpl implementation.
 
@@ -25,10 +26,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from lib.run_control import RunControlConfig
 from lib.run_control_impl import RunControlImpl
-from lib.file_view import FileViewConfig
-from lib.file_view_impl import FileViewImpl
-from lib.guide_delivery import GuideDeliveryConfig
-from lib.guide_delivery_impl import GuideDeliveryImpl
+from lib.file_reader import FileReader
+from lib.file_editor import FileEditor
+from lib.guide_delivery import GuideDelivery
+from lib.change_summary_validator import ChangeSummaryValidator, ClaimedChanges, ValidationOutcome
+from lib.tool_provider import ToolDefinition
 from lib.tool_provider import (
     PresentedToolResult,
     ToolResult,
@@ -48,6 +50,198 @@ GUIDE = (
     "## Checklist: Contracts\n\n"
     "- [ ] Signatures match the LLS\n"
 )
+
+
+
+
+class _MockFileReader(FileReader):
+    def __init__(self, files: Dict[str, str], readable_paths: List[str]) -> None:
+        self.files = dict(files)
+        self.readable_paths = list(readable_paths)
+
+    def get_readable_paths(self) -> List[str]:
+        return list(self.readable_paths)
+
+    def is_readable(self, path: str) -> bool:
+        return path in self.readable_paths
+
+    def resolve_path(self, path: str) -> str:
+        return path
+
+    def read_file(self, path: str, line_numbers: bool = True) -> PresentedToolResult:
+        if path not in self.files:
+            return [ToolFailure(f"File not found: {path}")]
+        return [ToolResult(content=self.files[path])]
+
+    def get_file_size(self, path: str) -> int:
+        return len(self.files.get(path, ""))
+
+    def sanitize_paths(self, text: str) -> str:
+        return text
+
+
+class _MockFileEditor(FileEditor):
+    def __init__(self, files: Dict[str, str], writable_paths: List[str]) -> None:
+        self.snapshots = dict(files)
+        self.current = dict(files)
+        self.writable_paths = list(writable_paths)
+        self.changed_files: Set[str] = set()
+        self.write_occurred = False
+
+    def get_tool_definitions(self) -> List[ToolDefinition]:
+        return []
+
+    def replace(self, file_path: str, old_str: str, new_str: str, expect_multiple: bool = False) -> ToolCallOutcome:
+        if file_path not in self.writable_paths:
+            return ToolFailure(f"Not writable: {file_path}")
+        content = self.current.get(file_path, "")
+        if old_str not in content:
+            return ToolFailure("old_str not found")
+        self.current[file_path] = content.replace(old_str, new_str, 1 if not expect_multiple else -1)
+        self.changed_files.add(file_path)
+        self.write_occurred = True
+        return ToolResult(content="Replaced", supersedes=True)
+
+    def update_lines(self, file_path: str, start_line: int, end_line: int, new_str: str) -> ToolCallOutcome:
+        self.changed_files.add(file_path)
+        self.write_occurred = True
+        return ToolResult(content="Updated", supersedes=True)
+
+    def get_write_occurred(self) -> bool:
+        return self.write_occurred
+
+    def get_changed_files(self) -> List[str]:
+        return sorted(self.changed_files)
+
+    def get_run_start_snapshot(self, file_path: str) -> Optional[str]:
+        return self.snapshots.get(file_path)
+
+    def get_current_content(self, file_path: str) -> Optional[str]:
+        return self.current.get(file_path)
+
+    def is_writable(self, file_path: str) -> bool:
+        return file_path in self.writable_paths
+
+
+class _MockGuideDelivery(GuideDelivery):
+    def __init__(self, guide: Optional[str] = None, step_sections_enabled: bool = False) -> None:
+        self.guide = guide
+        self.step_sections_enabled = step_sections_enabled
+        self.step_count = 2 if (guide and step_sections_enabled) else 0
+        self.current_step = 0
+
+    def get_tool_definitions(self) -> List[ToolDefinition]:
+        return []
+
+    def get_session_start_reads(self) -> List[PresentedToolResult]:
+        return []
+
+    def has_step_sections_remaining(self) -> bool:
+        return self.step_sections_enabled and self.current_step < self.step_count
+
+    def get_advance_output(self, verification_passed: bool, failure_reason: Optional[str] = None) -> Optional[PresentedToolResult]:
+        if not self.step_sections_enabled:
+            return None
+        if not verification_passed:
+            content = f"The artifact conforms to this guide.\n\n{failure_reason}\n\nVerification failed; correct the reported issues before calling advance() again, or call blame() or fail() to end the run."
+            return PresentedToolResult(
+                name="advance",
+                arguments={},
+                result=ToolResult(content=content, supersedes=True, note="Verification failed."),
+            )
+        if self.current_step < self.step_count:
+            self.current_step += 1
+            section = "Checklist: Imports" if self.current_step == 1 else "Checklist: Contracts"
+            return PresentedToolResult(name="advance", arguments={}, result=ToolResult(content=f"## {section}\n\nContent", supersedes=True))
+        return None
+
+    def sanitize_paths(self, text: str) -> str:
+        return text
+
+
+
+class _MockChangeSummaryValidator(ChangeSummaryValidator):
+    def __init__(self, file_editor: FileEditor, diff_size_limit: int = 1000) -> None:
+        self.file_editor = file_editor
+        self.diff_size_limit = diff_size_limit
+        self.calls: List[tuple] = []
+        self._soft_rejections: int = 0
+        self._hard_rejections: int = 0
+
+    def compute_diff_summary(self) -> str:
+        self.calls.append(("compute_diff_summary", ()))
+        chunks = []
+        for f in self.file_editor.get_changed_files():
+            snapshot = self.file_editor.get_run_start_snapshot(f)
+            current = self.file_editor.get_current_content(f)
+            if snapshot != current:
+                orig_lines = snapshot.splitlines(keepends=True) if snapshot is not None else []
+                new_lines = current.splitlines(keepends=True) if current is not None else []
+                diff = list(difflib.unified_diff(orig_lines, new_lines, fromfile=f"a/{f}", tofile=f"b/{f}"))
+                chunks.append(f"### diff for {f}\n" + "".join(diff))
+        diff_text = "\n".join(chunks)
+        if len(diff_text) > self.diff_size_limit:
+            total_chars = len(diff_text)
+            diff_text = diff_text[:self.diff_size_limit] + f"\n... [diff truncated: showing {self.diff_size_limit} of {total_chars} characters]"
+        return diff_text
+
+    def get_effective_changes(self) -> List[str]:
+        effectively_changed: List[str] = []
+        for file_path in self.file_editor.get_changed_files():
+            current = self.file_editor.get_current_content(file_path)
+            if current != self.file_editor.get_run_start_snapshot(file_path):
+                effectively_changed.append(file_path)
+        return effectively_changed
+
+    def validate_change_summaries(self, changes: ClaimedChanges) -> ValidationOutcome:
+        self.calls.append(("validate_change_summaries", (changes,)))
+        changes = changes or []
+        effectively_changed = self.get_effective_changes()
+        if not effectively_changed:
+            if changes:
+                return ToolFailure[str]("Cannot advance: the run wrote files but net-changed nothing — each file's current content equals its content at run start. Call advance() with no changes to report no change.")
+            return None
+        if not changes:
+            msg_text = (
+                f"Cannot advance: the run changed files ({', '.join(effectively_changed)}). "
+                "Call advance(changes=[{file, summary}, ...]) with one entry per changed file — "
+                "each summary one short sentence on what changed in that file (not how it was done) — "
+                "so the next agent knows what changed, or call fail() or blame() to end the run.\n\n"
+                f"The run's diff:\n{self.compute_diff_summary()}"
+            )
+            return ToolFailure[str](msg_text)
+
+        claimed_files = [c.get("file", "") for c in changes]
+
+        for entry in changes:
+            fn = entry.get("file", "")
+            sm = entry.get("summary", "")
+            if not fn or not sm or not sm.strip():
+                return ToolFailure[str]("Cannot advance: each change entry must have a non-empty 'file' and a non-empty one-sentence 'summary' of what changed in that file.")
+            if fn not in effectively_changed:
+                return ToolFailure[str](f"Cannot advance: '{fn}' was not changed by this run; report only the changed files ({', '.join(effectively_changed)}).")
+            length = len(sm.strip())
+            if length > 500:
+                if self._hard_rejections >= 4:
+                    raise RuntimeError(f"the change summary for '{fn}' could not be shortened to the hard limit (500 characters) after repeated attempts.")
+                self._hard_rejections += 1
+                return ToolFailure[str](f"Cannot advance: the summary for '{fn}' is {length} characters (max 500 — the hard limit). Shorten it to at most 500 characters: name the parts of the file that changed in one short sentence, dropping how it was done, then call advance() again with the shortened summary.")
+            if length > 300:
+                if self._soft_rejections < 4:
+                    self._soft_rejections += 1
+                    return ToolFailure[str](f"Cannot advance: the summary for '{fn}' is {length} characters (aim for at most 300). Shorten it to at most 300 characters: name the parts of the file that changed in one short sentence, so the next agent knows what to pay attention to when updating further artifacts, dropping how it was done, then call advance() again with the shortened summary.")
+
+        missing = [f for f in effectively_changed if f not in claimed_files]
+        if missing:
+            return ToolFailure[str](f"Cannot advance: changes list is missing entries for changed files: {', '.join(missing)}")
+
+        self._soft_rejections = 0
+        self._hard_rejections = 0
+        return None
+
+    def reset_validator_state(self) -> None:
+        self._soft_rejections = 0
+        self._hard_rejections = 0
 
 
 class TestRunControlImpl(unittest.TestCase):
@@ -104,19 +298,17 @@ class TestRunControlImpl(unittest.TestCase):
         FileViewImpl (the changed-file and diff information the termination
         rules read) and a real GuideDeliveryImpl (the step-state gating the
         advance rules consult)."""
-        file_view = FileViewImpl(FileViewConfig(
-            file_mappings=self.file_mappings,
-            readable_paths=self.readable_paths,
-            writable_paths=self.writable_paths,
-            templates={},
-            search_result_limit=5,
-            session_start_reads_enabled=True,
-        ))
+        files = {
+            "test.txt": "Line 1: Hello World\nLine 2: This is a test\nLine 3: Another line\nLine 4: Final line\n",
+            "second.txt": "Second line one\nSecond line two\n",
+            "ro.txt": "Read only line 1\n",
+            "new.txt": "",
+        }
+        file_reader = _MockFileReader(files, self.readable_paths)
+        file_editor = _MockFileEditor(files, self.writable_paths)
         guide_real = self.guide_path if guide == "guide.md" else guide
-        guide_delivery = GuideDeliveryImpl(GuideDeliveryConfig(
-            guide=guide_real,
-            step_sections_enabled=step_sections,
-        ))
+        guide_delivery = _MockGuideDelivery(guide_real, step_sections)
+        validator = _MockChangeSummaryValidator(file_editor=file_editor, diff_size_limit=diff_size_limit)
         return RunControlImpl(
             RunControlConfig(
                 verification_callback=verification_callback,
@@ -124,8 +316,10 @@ class TestRunControlImpl(unittest.TestCase):
                 blame_targets=blame_targets if blame_targets is not None else self.blame_targets,
                 diff_size_limit=diff_size_limit,
             ),
-            file_view=file_view,
+            file_reader=file_reader,
+            file_editor=file_editor,
             guide_delivery=guide_delivery,
+            validator=validator,
         )
 
     def tearDown(self) -> None:
@@ -168,7 +362,7 @@ class TestRunControlImpl(unittest.TestCase):
     def _edit(self, control: RunControlImpl, old: str = "This is a test",
               new: str = "New content") -> None:
         self.assert_supersedes(
-            control.file_view.replace("test.txt", old, new), True
+            control.file_editor.replace("test.txt", old, new), True
         )
 
     # ------------------------------------------------------------------
@@ -337,7 +531,7 @@ class TestRunControlImpl(unittest.TestCase):
         control = self._run_control()
         self._edit(control)
         self.assert_supersedes(
-            control.file_view.replace("second.txt", "Second line one", "Second: first"),
+            control.file_editor.replace("second.txt", "Second line one", "Second: first"),
             True,
         )
         failure = self.as_tool_failure(control.advance(

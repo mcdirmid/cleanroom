@@ -1,9 +1,9 @@
 # run_control
 
-imports: tool_provider (tool results, signals), dag_clean_logic (change message, feedback message, termination-result types), dag_storage (node message), file_view (virtual name)
-terms (from tool_provider): tool failure
+imports: tool_provider (tool results, signals), dag_clean_logic (change message, feedback message, termination-result types), dag_storage (node message), file_reader (virtual name)
+terms (from tool_provider): tool failure, tool call
 terms (from dag_clean_logic): feedback message
-terms (from file_view): virtual name
+terms (from file_reader): virtual name
 terms (owned): blame, blame target, soft length bound, hard length bound
 
 ## Purpose

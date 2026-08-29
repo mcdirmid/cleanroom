@@ -79,13 +79,34 @@ update_python_with_ai(
 # ---------------------------------------------------------------------------
 
 update_python_with_ai(
-    name = "file_view",
+    name = "file_reader",
     module_deps = ["tool_provider"],
 )
 
 update_python_with_ai(
-    name = "file_view_impl",
-    module_deps = ["file_view", "tool_provider"],
+    name = "file_reader_impl",
+    module_deps = ["file_reader", "tool_provider"],
+)
+
+update_python_with_ai(
+    name = "file_editor",
+    module_deps = ["file_reader", "tool_provider"],
+)
+
+update_python_with_ai(
+    name = "file_editor_impl",
+    module_deps = ["file_editor", "file_reader", "tool_provider"],
+)
+
+
+update_python_with_ai(
+    name = "change_summary_validator",
+    module_deps = ["tool_provider"],
+)
+
+update_python_with_ai(
+    name = "change_summary_validator_impl",
+    module_deps = ["change_summary_validator", "file_editor", "tool_provider"],
 )
 
 update_python_with_ai(
@@ -100,23 +121,42 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "run_control",
-    module_deps = ["tool_provider", "dag_clean_logic", "dag_storage", "file_view", "guide_delivery"],
+    module_deps = ["tool_provider", "dag_clean_logic", "dag_storage", "file_reader", "guide_delivery"],
 )
 
 update_python_with_ai(
     name = "run_control_impl",
-    module_deps = ["run_control", "tool_provider", "dag_clean_logic", "dag_storage", "file_view", "guide_delivery"],
+    module_deps = ["run_control", "tool_provider", "dag_clean_logic", "dag_storage", "file_reader", "file_editor", "guide_delivery"],
 )
 
 # ---------------------------------------------------------------------------
-# sandbox / agent_loop (sandbox imports agent_loop's run term and composes
-# file_view, guide_delivery, and run_control; agent_loop builds on
-# tool_provider only)
+# conversation_history / loop_guard / agent_loop
 # ---------------------------------------------------------------------------
 
 update_python_with_ai(
-    name = "agent_loop",
+    name = "conversation_history",
     module_deps = ["tool_provider"],
+)
+
+update_python_with_ai(
+    name = "conversation_history_impl",
+    module_deps = ["conversation_history", "tool_provider"],
+    external_deps = [":openai_api"],
+)
+
+update_python_with_ai(
+    name = "loop_guard",
+    module_deps = ["tool_provider"],
+)
+
+update_python_with_ai(
+    name = "loop_guard_impl",
+    module_deps = ["loop_guard", "tool_provider", "agent_loop_config"],
+)
+
+update_python_with_ai(
+    name = "agent_loop",
+    module_deps = ["tool_provider", "conversation_history", "loop_guard"],
 )
 
 update_python_with_ai(
@@ -126,8 +166,13 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "agent_loop_impl",
-    module_deps = ["agent_loop", "agent_loop_config", "tool_provider"],
+    module_deps = ["agent_loop", "agent_loop_config", "tool_provider", "conversation_history", "loop_guard"],
     external_deps = [":openai_api"],
+)
+
+update_python_with_ai(
+    name = "agent_loop_asm",
+    module_deps = ["agent_loop_impl", "conversation_history_impl", "loop_guard_impl", "agent_loop_config"],
 )
 
 # External dependency doc node: brings a non-spec file (the OpenAI API usage
@@ -142,12 +187,12 @@ update_with_ai(
 
 update_python_with_ai(
     name = "sandbox",
-    module_deps = ["tool_provider", "dag_storage", "dag_clean_logic", "file_view", "guide_delivery", "run_control"],
+    module_deps = ["tool_provider", "dag_storage", "dag_clean_logic", "file_reader", "file_editor", "guide_delivery", "run_control"],
 )
 
 update_python_with_ai(
     name = "sandbox_impl",
-    module_deps = ["sandbox", "file_view", "guide_delivery", "run_control"],
+    module_deps = ["sandbox", "file_reader", "file_editor", "guide_delivery", "run_control"],
 )
 
 # ---------------------------------------------------------------------------
@@ -156,7 +201,7 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "build_node_loader",
-    module_deps = ["tool_provider", "file_view", "guide_delivery"],
+    module_deps = ["tool_provider", "file_editor", "guide_delivery"],
 )
 
 update_python_with_ai(
@@ -165,8 +210,28 @@ update_python_with_ai(
 )
 
 update_python_with_ai(
+    name = "build_message_store",
+    module_deps = ["dag_storage", "build_graph_storage"],
+)
+
+update_python_with_ai(
+    name = "build_message_store_impl",
+    module_deps = ["build_message_store", "dag_storage", "build_graph_storage"],
+)
+
+update_python_with_ai(
+    name = "manifest_node_loader",
+    module_deps = ["dag_storage", "build_graph_storage", "sandbox", "run_control", "file_reader", "file_editor", "guide_delivery"],
+)
+
+update_python_with_ai(
+    name = "manifest_node_loader_impl",
+    module_deps = ["manifest_node_loader", "dag_storage", "build_graph_storage", "sandbox", "run_control", "file_reader", "file_editor", "guide_delivery"],
+)
+
+update_python_with_ai(
     name = "build_graph_storage",
-    module_deps = ["dag_storage", "sandbox", "run_control", "file_view", "guide_delivery"],
+    module_deps = ["dag_storage", "sandbox", "run_control", "file_reader", "file_editor", "guide_delivery"],
 )
 
 update_python_with_ai(
@@ -181,41 +246,57 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "build_graph_storage_impl",
-    module_deps = ["build_graph_storage", "dag_storage", "sandbox", "run_control", "file_view", "guide_delivery", "build_node_loader"],
+    module_deps = ["build_graph_storage", "dag_storage", "build_message_store", "manifest_node_loader", "sandbox", "run_control", "file_reader", "file_editor", "guide_delivery", "build_node_loader"],
+)
+
+
+update_python_with_ai(
+    name = "agent_node_tool_executor",
+    module_deps = ["tool_provider"],
+)
+
+update_python_with_ai(
+    name = "agent_node_tool_executor_impl",
+    module_deps = ["agent_node_tool_executor", "sandbox", "tool_provider"],
 )
 
 update_python_with_ai(
     name = "agent_node_clean_logic_impl",
-    module_deps = ["dag_clean_logic", "build_graph_storage", "dag_storage", "agent_loop", "agent_loop_config", "sandbox", "run_control", "file_view", "guide_delivery", "tool_provider"],
+    module_deps = ["dag_clean_logic", "build_graph_storage", "dag_storage", "agent_loop", "agent_loop_config", "sandbox", "run_control", "file_reader", "file_editor", "guide_delivery", "tool_provider", "conversation_history"],
+)
+
+update_python_with_ai(
+    name = "runner_logger",
+    module_deps = ["agent_loop", "conversation_history"],
+)
+
+update_python_with_ai(
+    name = "runner_logger_impl",
+    module_deps = ["runner_logger", "agent_loop", "conversation_history"],
 )
 
 update_python_with_ai(
     name = "build_runner",
-    module_deps = ["dag_cleaner", "dag_storage", "dag_clean_logic", "build_agent_config", "sandbox", "guide_delivery", "run_control", "build_node_loader"],
+    module_deps = ["dag_cleaner", "dag_storage", "dag_clean_logic", "build_agent_config", "sandbox", "guide_delivery", "run_control", "build_node_loader", "runner_logger"],
 )
 
 update_python_with_ai(
     name = "build_runner_impl",
-    module_deps = ["build_runner", "dag_storage", "dag_cleaner", "dag_clean_logic", "build_graph_storage", "agent_loop", "build_agent_config"],
+    module_deps = ["build_runner", "dag_storage", "dag_cleaner", "dag_clean_logic", "build_graph_storage", "agent_loop", "build_agent_config", "conversation_history", "runner_logger"],
 )
 
 update_python_with_ai(
     name = "sandbox_asm",
-    module_deps = ["sandbox_impl", "file_view_impl", "guide_delivery_impl", "run_control_impl", "sandbox", "run_control"],
-)
-
-update_python_with_ai(
-    name = "dag_cleaner_asm",
-    module_deps = ["dag_cleaner_impl", "dag_cleaner", "dag_clean_logic", "build_graph_storage"],
+    module_deps = ["sandbox_impl", "file_reader_impl", "file_editor_impl", "guide_delivery_impl", "run_control_impl", "sandbox", "run_control"],
 )
 
 update_python_with_ai(
     name = "agent_node_clean_logic_asm",
-    module_deps = ["agent_node_clean_logic_impl", "agent_loop_impl", "build_agent_config_impl", "sandbox_asm", "dag_clean_logic", "build_graph_storage", "build_agent_config", "agent_loop"],
+    module_deps = ["agent_node_clean_logic_impl", "agent_loop_asm", "build_agent_config_impl", "sandbox_asm", "dag_clean_logic", "build_graph_storage", "build_agent_config", "agent_loop", "conversation_history"],
 )
 
 update_python_with_ai(
     name = "build_asm",
-    module_deps = ["build_runner_impl", "build_graph_storage_impl", "agent_node_clean_logic_asm", "dag_cleaner_asm", "build_runner"],
+    module_deps = ["build_runner_impl", "build_graph_storage_impl", "agent_node_clean_logic_asm", "dag_cleaner_impl", "build_runner"],
 )
 

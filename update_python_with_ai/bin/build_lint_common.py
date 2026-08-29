@@ -287,6 +287,103 @@ def check_sibling_imports(modules_dir: str, file_path: str) -> list[str]:
     return errors
 
 
+def check_impl_imports(file_path: str) -> list[str]:
+    """Check that non-assembly library modules do not import any Impl classes or *_impl modules.
+    Only assembly modules (*_asm.py) are permitted to import implementation classes or modules."""
+    errors: list[str] = []
+    base = os.path.basename(file_path)
+    if not base.endswith(".py") or base.endswith("_asm.py"):
+        return errors
+    if not os.path.exists(file_path):
+        return errors
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=file_path)
+    except (OSError, SyntaxError):
+        return errors
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                name = alias.name.split(".")[-1]
+                if name.endswith("Impl") or name.endswith("_impl"):
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: non-assembly module must not import implementation class or module '{alias.name}'"
+                    )
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                mod_name = node.module.split(".")[-1]
+                if mod_name.endswith("_impl"):
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: non-assembly module must not import from implementation module '{node.module}'"
+                    )
+            for alias in node.names:
+                if alias.name.endswith("Impl"):
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: non-assembly module must not import implementation class '{alias.name}'"
+                    )
+    return errors
+
+
+def check_lib_structure(file_path: str) -> list[str]:
+    """Check that library modules do not contain test runner boilerplate."""
+    errors: list[str] = []
+    if not os.path.exists(file_path):
+        return errors
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            text = f.read()
+    except (OSError, UnicodeDecodeError):
+        return errors
+    if "unittest.main()" in text:
+        errors.append(
+            f"{file_path}: error: library module must not call 'unittest.main()'; test runners belong in test modules only"
+        )
+    return errors
+
+
+def check_test_impl_imports(lib_pkg: str, file_path: str) -> list[str]:
+    """Check that a test module (<target>_test.py) only imports from its target module (<target>)
+    and does not import any other implementation module (*_impl.py) or foreign Impl class."""
+    errors: list[str] = []
+    base = os.path.basename(file_path)
+    if not base.endswith("_test.py"):
+        return errors
+    target_stem = base[:-8]
+    if not os.path.exists(file_path):
+        return errors
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=file_path)
+    except (OSError, SyntaxError):
+        return errors
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                mod_name = alias.name.split(".")[-1]
+                if mod_name.endswith("_impl") and mod_name != target_stem:
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: test module must only import target implementation module '{target_stem}', but imports '{alias.name}'"
+                    )
+                elif alias.name.endswith("Impl") and mod_name != target_stem:
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: test module must not import foreign implementation class '{alias.name}'"
+                    )
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                mod_name = node.module.split(".")[-1]
+                if mod_name.endswith("_impl") and mod_name != target_stem:
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: test module must only import target implementation module '{target_stem}', but imports from '{node.module}'"
+                    )
+                elif mod_name != target_stem:
+                    for alias in node.names:
+                        if alias.name.endswith("Impl"):
+                            errors.append(
+                                f"{file_path}:{node.lineno}: error: test module must not import foreign implementation class '{alias.name}' from '{node.module}'"
+                            )
+    return errors
+
+
 def check_test_imports(lib_pkg: str, file_path: str) -> list[str]:
     """Check that imports in a test module from the lib package use 'lib.<name>' syntax,
     and not full package prefixes (e.g. testing.lib or update_with_ai.lib) or bare imports."""

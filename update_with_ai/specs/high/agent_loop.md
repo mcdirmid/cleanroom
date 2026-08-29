@@ -1,8 +1,10 @@
 # agent_loop
 
-imports: tool_provider (tool definitions, results, signals)
-terms (from tool_provider): tool definition, tool result, supersession flag, stub, signal, termination result, tool failure
-terms (owned): run, termination value, conversation, conversation message, system prompt, truncated response, continuation prompt, degenerate response
+imports: tool_provider (tool definitions, results, signals, tool call, session), conversation_history (conversation history, history entry, rendered message, system prompt), loop_guard (loop reminder, degenerate response)
+terms (from tool_provider): tool definition, tool result, supersession flag, stub, signal, termination result, tool failure, tool call, session
+terms (from conversation_history): conversation history, history entry, rendered message, system prompt
+terms (from loop_guard): loop reminder, degenerate response
+terms (owned): run, termination value, conversation, conversation message, truncated response, continuation prompt, cumulative usage
 
 ## Purpose
 
@@ -18,6 +20,7 @@ Answers a user prompt through an iterative process of LLM processing and tool ex
 - Truncated response: a model response that stops because the generation limit was reached, before completing naturally; it is not a complete answer.
 - Continuation prompt: the message appended to the conversation so that generation resumes from where a truncated response stopped.
 - Degenerate response: a truncated response whose content is a single character repeated; it carries no meaningful content and is not resumed.
+- Cumulative usage: the total tokens consumed and requests made across turns in a run.
 
 ## Contract
 

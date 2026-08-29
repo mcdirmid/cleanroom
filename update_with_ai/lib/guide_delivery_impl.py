@@ -258,7 +258,8 @@ class GuideDeliveryImpl(GuideDelivery):
         The guide summary is the content from the guide's first line through
         the end of its `## Summary` section (the guide's first `##` heading);
         each step section is a `## <name>`-delimited part of the guide after
-        the summary, in the guide's section order.
+        the summary, in the guide's section order, excluding the `## Lint checks`
+        section which is skipped in step mode.
         """
         lines = content.split("\n")
         headings = [
@@ -272,6 +273,9 @@ class GuideDeliveryImpl(GuideDelivery):
         for idx in range(1, len(headings)):
             start = headings[idx]
             end = headings[idx + 1] if idx + 1 < len(headings) else len(lines)
+            heading_line = lines[start].strip()
+            if heading_line == "## Lint checks":
+                continue
             sections.append("\n".join(lines[start:end]))
         return summary, sections
 

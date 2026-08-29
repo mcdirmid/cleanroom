@@ -14,18 +14,23 @@ Every guide follows this structure:
 - The first `##` heading is the Summary; every `##` after it is a checklist point; no other `##` headings exist.
 - The boundary is positional: the Summary runs to the second `##` heading; each checklist section runs to the next `##` heading or end of file.
 - Checklist sections contain only `- [ ] <item>` lines.
+- If the artifact has a linter, a `## Lint checks` section describes what is checked.
 - The guide reads coherently whole (Summary then sections in order) and sectioned (Summary first, then one section at a time).
 
 ## Guide structure
 
 - [ ] File is `# Guide: <title>` → `## Summary` → `## <section>` headings, in that order
 - [ ] The first `##` heading is the Summary; every subsequent `##` heading is a checklist point; no other `##` headings
+- [ ] If the artifact has a linter, a section titled `## Lint checks` describes what the linter checks
 - [ ] Checklist sections contain only `- [ ] <item>` lines — no prose, no nested headings
 - [ ] The guide reads coherently whole and sectioned
 
 ## Summary
 
-- [ ] The Summary states the guide's subject declaratively: an alignment guide names the artifact and its source ("The module implements `specs/low/<name>.md`"); a conformance guide names the artifact ("The artifact conforms to this guide")
+- [ ] The Summary states the guide's subject declaratively: an alignment guide names the artifact and its source ("The module implements `low/<name>.md`"); a conformance guide names the artifact ("The artifact conforms to this guide")
+- [ ] File references never use file paths; only virtual file names are used (except when files share names, where the directory prefix is appended, mainly `low/<name>.md` and `high/<name>.md`)
+- [ ] Rules governing the editing process, tool usage, incremental editing strategy, or write permissions belong in the `## Summary` (which is visible before editing begins and throughout all steps in step mode); checklist items verify the artifact after changes are made and show up too late to control how editing is done
+- [ ] Applicability restrictions and not-applicable conditions (e.g. only applying to implementation specs whose name ends in `_impl.md`) are never in the Summary; they belong in `## Lint checks`
 - [ ] No directive framing — never "ensure", "produce", "transform" (the file pre-exists; the prompt triggers, the guide constrains)
 - [ ] Build-critical requirements come first (BUILD entries, required structure) — nothing builds without them
 - [ ] The guide's requirements are satisfiable from the guide alone: no reliance on the artifact's starting state — the file's existing content (a template, a prior version) is at most an efficiency boost, never the source of required structure
@@ -38,15 +43,20 @@ Every guide follows this structure:
 ## Checklist sections
 
 - [ ] Each item is one independently verifiable constraint on the artifact; no cross-item reasoning ("see above")
+- [ ] Checklist items constrain the post-edit artifact state (what the artifact contains), never the editing process or tool mechanics (how editing is performed) — process, tool, and editing constraints belong in `## Summary`
 - [ ] Items carry the precision: exact spellings, required forms, conformance checks — never style preferences the source already dictates
 - [ ] Each item is checkable given the Summary, the section, and the artifact
 - [ ] Sections are ordered fine-grain-first (layout, imports, types, contracts, pitfalls)
-- [ ] Linter-verified points live in their own `## Lint checks` section, which contains only points the linter verifies — no judgment points
+- [ ] File references in all sections use virtual file names and never expose file paths (unless disambiguation is required for same-named files, using `low/<name>.md` and `high/<name>.md`)
+- [ ] If the artifact has a linter, a `## Lint checks` section (with the exact title "Lint checks") describes what is checked
+- [ ] All checklist items that can be deterministically verified by verifying the presence or absence of a specific string, marker, or token belong in `## Lint checks` (and are implemented by the artifact's linter), never in judgment-based content sections
+- [ ] The `## Lint checks` section contains only linter-verified checks and applicability constraints (e.g., target spec must end in `_impl.md`) — no human judgment points
 - [ ] A point only partly linter-verified is split: the linter-verified part goes in `## Lint checks`, the judgment part stays in its content section
 
 ## Step mode
 
 - [ ] In step mode the reader sees the Summary and one section at a time; earlier sections are stubbed — each section is self-sufficient: a rule the section depends on appears in that section or in the Summary
+- [ ] Checklist sections are delivered after edits are made and an advance is called: they cannot control how editing is done because they show up too late; all editing workflow and tool rules live in `## Summary`
 - [ ] A rule with no document region (it constrains the whole artifact) lives in the Summary, never in a section
 - [ ] All items in a section concern one step of producing the artifact; if the items split into two concerns, split the section
 - [ ] If one item can undo another, they are one item stating both constraints, or two items in the same section with the clobbered rule first
@@ -85,6 +95,9 @@ Every guide follows this structure:
 - [ ] One-read test: given the whole guide in one read, the reader produces the required structure and applies the rules
 - [ ] No-trigger test: no sentence directs the reader to do something the prompt already drives ("ensure", "produce", "call advance")
 - [ ] Capability test: every action the guide names is one the reader can perform with its tools — no test runs, no shell, no unreadable files
+- [ ] Path test: no file paths appear anywhere in the guide; only virtual file names appear (with directory prefixes only for disambiguation such as `low/<name>.md` and `high/<name>.md`)
+- [ ] Linter test: if a linter exists for the artifact, a section titled `## Lint checks` lists all automated and applicability checks, and no applicability rules appear in the Summary
+- [ ] Deterministic test: every check verifiable by verifying presence or absence of a specific string or token is listed in `## Lint checks`
 
 ## Common pitfalls
 
@@ -92,7 +105,12 @@ Every guide follows this structure:
 - [ ] Chunk-fragile structure — tables, header-dependent lines, "as above" — one fact per line; lists over tables
 - [ ] Ambiguity — "should", "can optionally" — "must", "never", "only"
 - [ ] Buried rules — the load-bearing constraint after examples — front-load; examples after rules
+- [ ] Exposing file paths — using filesystem paths (e.g. `specs/low/<name>.md`) instead of virtual file names (`low/<name>.md`)
+- [ ] Applicability in Summary — stating not-applicable conditions or spec filters in the Summary instead of `## Lint checks`
 - [ ] Mixed lint/judgment points — a point the linter half-checks left whole — split: the linter part in `## Lint checks`, the judgment part in its content section
+- [ ] Deterministic checks outside Lint checks — placing string-presence or string-absence checks in content sections instead of `## Lint checks`
+- [ ] Process rules in checklist — placing editing strategy, tool usage, or step-by-step modification rules in checklist sections instead of `## Summary` where they are visible before editing
+- [ ] Missing Lint checks section — omitting `## Lint checks` when a linter is present
 - [ ] Implicit requirements — required structure shown only by example — say "must contain"; list the structure
 - [ ] Over-general rules — a prohibition without its exception — state the exception beside the rule
 - [ ] Rule-breaking examples — a snippet that violates the guide — every example must conform

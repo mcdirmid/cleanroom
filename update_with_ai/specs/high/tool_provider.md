@@ -1,12 +1,14 @@
 # tool_provider
 
-terms (owned): tool definition, tool result, presented tool result, supersession flag, stub, signal, termination result, tool failure, session
+terms (owned): tool definition, tool result, presented tool result, supersession flag, stub, signal, termination result, tool failure, session, tool call
 
 ## Purpose
 
 Provides tool definitions and executes tool calls, standardizing how tools are defined, how results are structured, and how termination and tool failure are signaled.
 
 ## Terms
+
+- Tool call: an invocation requested by the model naming a tool and its arguments.
 
 - Tool definition: a JSON schema describing a tool's name, parameters, and purpose, in the tool-calling dialect accepted by the language model.
 - Tool result: a structured outcome produced by executing a tool call — the content produced, a supersession flag, and an optional note carrying producer-generated guidance for the model. The note does not replace the content; the consuming agent loop renders it into the model-visible message.

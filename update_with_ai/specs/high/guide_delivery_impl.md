@@ -7,7 +7,7 @@ terms (from guide_delivery): guide, guide summary, step section, step mode
 
 ## Deltas
 
-- Reads the declared guide's content at run start and splits it into its guide summary and step sections, following the guide format; the guide's content is available only through the step-delivery rules.
+- Reads the declared guide's content at run start and splits it into its guide summary and step sections, following the guide format, skipping the `## Lint checks` section in step mode; the guide's content is available only through the step-delivery rules.
 - In step mode, excludes the guide from the readable files: reads of the guide are rejected and the guide is never provided whole.
 - Pre-injects the advance call providing the step-mode output (the guide summary and the ensure instruction) as a presented tool result at run start, before the agent's first turn.
 - Maintains the step-section pointer: a passing verification advances it; a failing verification does not; the pointer gates which output the advance tool provides.

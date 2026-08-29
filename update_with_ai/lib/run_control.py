@@ -18,7 +18,7 @@ from .tool_provider import (
 )
 from .dag_storage import NodeId, NodeMessage
 from .dag_clean_logic import ChangeResult, FeedbackResult, NoChangeResult
-from .file_view import VirtualName
+from .file_reader import VirtualName
 
 
 # Type definitions

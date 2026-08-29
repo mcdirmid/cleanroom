@@ -3,7 +3,8 @@
 imports: dag_storage (contract fulfilled with Bazel workspace data), sandbox (node definitions)
 terms (from dag_storage): node, message, pending message, dependency, propagating dependency, reverse dependency, subgraph
 terms (from run_control): blame target
-terms (from file_view): template, virtual name
+terms (from file_reader): virtual name
+terms (from file_editor): template
 terms (from guide_delivery): guide, step mode
 terms (owned): node definition, package directory, silent dependency, star dependency
 

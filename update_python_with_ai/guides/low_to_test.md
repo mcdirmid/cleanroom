@@ -2,23 +2,21 @@
 
 ## Summary
 
-The artifact is the test module for an implementation: `<component-name>_test.py` in `tests/`, written from the implementation LLS and its dependency closure alone — the implementation Python file is never consulted. Tests written from the LLS catch implementation drift: when a test fails, the implementation is wrong, unless the test misread the LLS. A file that is a template is filled in.
+The artifact is the test module for an implementation: `<component-name>_test.py`, written from the implementation LLS and its dependency closure alone — the implementation Python file is never consulted. Tests written from the LLS catch implementation drift: when a test fails, the implementation is wrong, unless the test misread the LLS. A file that is a template is filled in.
 
 The LLS is the only contract: the tests cover its postconditions, invariants, and expected failure signals, and nothing else — no internal mechanisms, no exact message wording, no unspecified ordering, no behavior outside the contract. When in doubt, do not test it. The HLS is not part of the test contract; the LLS is self-contained.
 
-Read the implementation LLS and the transitive closure of its dependency comment: every LLS in the comment, every LLS in their comments, until no new files remain — dependency mocks implement the dependency interfaces exactly from their own LLSs. Extract the testable claims: Data Types (construction, fields, defaults, `Literal` discriminators); Config (fields, defaults, mock wiring); Behavioral Description (each bullet → outcome tests); Failure Handling (each expected failure signal → a test); Invariants (sequence tests); Non-Concerns (pinned only).
+The implementation LLS and the transitive closure of its dependency comment are the source of testable claims: every LLS in the comment, every LLS in their comments, until no new files remain — dependency mocks implement the dependency interfaces exactly from their own LLSs. Testable claims are extracted from: Data Types (construction, fields, defaults, `Literal` discriminators); Config (fields, defaults, mock wiring); Behavioral Description (each bullet → outcome tests); Failure Handling (each expected failure signal → a test); Invariants (sequence tests); Non-Concerns (pinned only).
 
-This guide does not apply to assembly specs (`<name>_asm.md`): an assembly performs no functionality beyond configuration and assembly of other modules, so it has no test module (per high_level_spec.md, an assembly is never tested).
+Editing is incremental and targeted: test methods are added or updated one at a time, never adding or updating more than one test method in the same `update_lines` call; the entire file is never rewritten or regenerated in one edit (which risks truncation and wastes tokens). The test node has write access only to its test file (`<name>_test.py`); library implementation files (`<name>.py`) are strictly read-only. Each file change summary in `advance(changes=[...])` is at most 200 characters (one short sentence).
 
 ## Module layout
 
-- [ ] One test module per implementation LLS: `specs/low/csv_inventory_impl.md` → `tests/csv_inventory_impl_test.py`
+- [ ] One test module per implementation LLS: `low/csv_inventory_impl.md` → `csv_inventory_impl_test.py`
+- [ ] A test module (`<name>_impl_test.py`) imports only its target implementation module (`<name>_impl`) and interface protocols; it must never import from foreign `*_impl` modules or import foreign `*Impl` classes
 - [ ] Imports of library modules use `from lib.<module> import ...` (never prefixing the workspace directory name)
 - [ ] The module uses `unittest`, ending with `if __name__ == "__main__": unittest.main()`
 - [ ] Tests are grouped into classes by concern (success routing, failure handling, invariants, config)
-- [ ] Write incrementally and make targeted edits: append one test class per edit (using `update_lines` to insert classes), and use `update_lines` to fix or update individual test methods; never rewrite or regenerate the whole file in one edit (which risks truncation and wastes tokens)
-- [ ] The test node has write access only to its test file (`tests/<name>_test.py`); library implementation files (`lib/<name>.py`) are strictly read-only and never modified by the test node
-- [ ] Each file change summary in `advance(changes=[...])` is at most 200 characters (one short sentence)
 
 ## What to test
 
@@ -34,6 +32,7 @@ This guide does not apply to assembly specs (`<name>_asm.md`): an assembly perfo
 
 ## Mocks
 
+- [ ] Dependency interfaces are mocked from their LLSs (the closure) using protocol stubs or mock classes, never using foreign implementation classes (`*Impl`)
 - [ ] Dependency interfaces are mocked from their LLSs (the closure), never the system under test
 - [ ] Each mock records calls, returns scripted results, and enforces the interface's preconditions (raises when the component under test violates one)
 - [ ] Preconditions are enforced by the mocks, never tested directly (precondition violations are unexpected failures)
@@ -60,6 +59,19 @@ This guide does not apply to assembly specs (`<name>_asm.md`): an assembly perfo
 - [ ] No assertions on unmandated path representations, bare unextended identifier/target fragments, or formats outside the LLS contract
 - [ ] No tests of the HLS; the LLS is the contract
 
+## Lint checks
+
+- [ ] Applies only to low-level implementation specs ending in `_impl.md` (does not apply to interface specs or assembly specs ending in `_asm.md`)
+- [ ] The test module ends with `if __name__ == "__main__": unittest.main()`
+- [ ] Imports of library modules use `from lib.<module> import ...` and are resolvable
+- [ ] Global standard library patches (e.g. `@patch('os.path.isfile')`) are prohibited; patches target `lib.<module>.<symbol>` where looked up, or `builtins.<name>`
+- [ ] Every `@patch` decorator has a corresponding mock parameter on the test method
+- [ ] The test module only imports from its target implementation module (`<name>_impl`) and never imports from foreign `*_impl` modules or imports foreign `*Impl` classes
+- [ ] The module under test is never mocked
+- [ ] The test module defines at least one `unittest.TestCase` subclass with at least one test method starting with `test_`
+- [ ] Dry-run test collection passes and discovers test methods
+- [ ] The package BUILD file contains the `pyright_test` target with required dependencies
+
 ## Common pitfalls
 
 - [ ] No tests that read the implementation and transcribe its behavior
@@ -71,3 +83,4 @@ This guide does not apply to assembly specs (`<name>_asm.md`): an assembly perfo
 - [ ] No precondition tests (preconditions are enforced by the mocks, not tested)
 - [ ] No open-non-concern tests (pin the aspect in the LLS first, or drop the assertion)
 - [ ] No imports outside the LLS closure (the test imports only within its spec's dependency closure)
+- [ ] No imports of foreign implementation modules or `*Impl` classes (mock dependency protocols instead)

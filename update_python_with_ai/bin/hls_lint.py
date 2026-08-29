@@ -359,11 +359,13 @@ def check_deltas(f: Path, body: str) -> None:
         stripped = line.strip()
         if not stripped:
             continue
-        m = re.match(r"^-\s*\[([^\]]*)\]", stripped)
+        m = re.match(r"^-\s*\[([^\]]*)\](?::)?", stripped)
         if m:
             tag = m.group(1)
             if tag not in DELTAS_TAGS:
                 err(f, f"unknown Deltas tag [{tag}]; allowed: {sorted(DELTAS_TAGS)} — {stripped[:70]}")
+            if re.match(r"^-\s*\[[^\]]+\]:", stripped):
+                err(f, f"Deltas tag [{tag}] must not have a colon suffix: {stripped[:70]}")
         if not stripped.startswith("|") and re.search(r"per the .*contract", stripped, re.I):
             err(f, f"Deltas line restates the fulfilled contract; deltas only: {stripped[:80]}")
 
@@ -459,6 +461,9 @@ def check_contract_blocks(f: Path, text: str, is_impl: bool) -> None:
     for block in ("**Operations**", "**Guarantees**", "**Assumptions**"):
         if block not in contract:
             err(f, f"## Contract is missing its '{block}' block")
+    for m in re.finditer(r"\*\*([A-Za-z]+)\*\*:", contract):
+        block_name = m.group(1)
+        err(f, f"Contract block '**{block_name}**:' must not have a colon suffix; use '**{block_name}**'")
 
 
 def check_sync(f: Path, fm: str, deps: list[str]) -> None:

@@ -2,16 +2,6 @@
 lib/build_asm.py
 
 Assembly of the cleanroom components into the interface-only build runner.
-
-Performs configuration and assembly only: subclasses BuildRunnerImpl and wires
-the concrete implementations and sub-assemblies (file-backed graph storage,
-agent clean logic assembly, DAG cleaner assembly) at construction.
-Implements no functionality beyond assembly, and is never tested.
-
-Library usage:
-    from update_with_ai.lib.build_asm import BuildAsm
-    runner = BuildAsm()
-    success, err = runner.run_dag(root_node, workspace_root)
 """
 
 from __future__ import annotations
@@ -19,8 +9,11 @@ from __future__ import annotations
 from .build_runner_impl import BuildRunnerImpl
 from .build_graph_storage import GraphConfig
 from .build_graph_storage_impl import BuildGraphStorageFileImpl
+from .build_message_store_impl import BuildMessageStoreImpl
+from .manifest_node_loader_impl import ManifestNodeLoaderImpl
+from .runner_logger_impl import RunnerLoggerImpl
 from .agent_node_clean_logic_asm import AgentNodeCleanLogicAsm
-from .dag_cleaner_asm import DagCleanerAsm
+from .dag_cleaner_impl import DagCleanerImpl
 
 
 class BuildAsm(BuildRunnerImpl):
@@ -30,8 +23,15 @@ class BuildAsm(BuildRunnerImpl):
     """
 
     def __init__(self) -> None:
+        message_store = BuildMessageStoreImpl()
+        manifest_loader = ManifestNodeLoaderImpl()
+        runner_logger = RunnerLoggerImpl()
         super().__init__(
-            graph_factory=lambda config: BuildGraphStorageFileImpl(config=config),
+            graph_factory=lambda config: BuildGraphStorageFileImpl(
+                config=config,
+                message_store=message_store,
+                manifest_loader=manifest_loader,
+            ),
             clean_logic_factory=lambda graph, ws_root, cfg_target, logger: (
                 AgentNodeCleanLogicAsm(
                     graph=graph,
@@ -40,7 +40,8 @@ class BuildAsm(BuildRunnerImpl):
                     logger=logger,
                 )
             ),
-            dag_factory=lambda graph, clean_logic: DagCleanerAsm(
+            dag_factory=lambda graph, clean_logic: DagCleanerImpl(
                 storage=graph, clean_logic=clean_logic
             ),
+            runner_logger=runner_logger,
         )

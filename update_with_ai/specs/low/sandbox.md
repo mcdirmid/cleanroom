@@ -2,7 +2,8 @@
   - tool_provider.md
   - dag_storage.md
   - dag_clean_logic.md
-  - file_view.md
+  - file_reader.md
+  - file_editor.md
   - guide_delivery.md
   - run_control.md
 -->
@@ -14,12 +15,14 @@
 from dataclasses import dataclass, field
 from typing import Protocol, TypeAlias
 from tool_provider import PresentedToolResult, ToolCallOutcome, ToolDefinition
-from file_view import (
+from file_reader import (
     FileMapping,
     ReadablePaths,
     SearchResultLimit,
-    TemplateMapping,
     VirtualName,
+)
+from file_editor import (
+    TemplateMapping,
     WritablePaths,
     WriteOccurred,
 )
@@ -54,15 +57,15 @@ class Sandbox(Protocol):
 
 `SandboxConfig` is the aggregate client-supplied configuration for the sandbox: file mappings (each file's virtual name to its full path), the readable and writable virtual names, the blame targets (a mapping from each blameable artifact's virtual name to the node that owns it), the search result limit, whether session-start reads are enabled (default: enabled), the guide (default: none — the declared guide's virtual name, a file in `file_mappings`), whether step mode is enabled (default: enabled), whether feedback is pending (default: false), the templates (default: empty), and an optional verification callback.
 
-The sandbox is a facade: it composes the file machinery (`file_view`), the step-mode guide delivery (`guide_delivery`), and the verification and termination rules (`run_control`) into a single tool surface. Each operation below delegates to the owning component's operation; the composition itself is described in the implementation spec.
+The sandbox is a facade: it composes the file machinery (`file_reader` and `file_editor`), the step-mode guide delivery (`guide_delivery`), and the verification and termination rules (`run_control`) into a single tool surface. Each operation below delegates to the owning component's operation; the composition itself is described in the implementation spec.
 ## Term definitions
 
-- **virtual name** → the `VirtualName` alias from file_view
-- **file write** → term definition from file_view
-- **line-numbered view** → term definition from file_view
-- **injected read** → term definition from file_view
-- **session-start read** → term definition from file_view
-- **template** → term definition from file_view
+- **virtual name** → the `VirtualName` alias from file_reader
+- **file write** → term definition from file_editor
+- **line-numbered view** → term definition from file_reader
+- **injected read** → term definition from file_editor
+- **session-start read** → term definition from file_reader
+- **template** → term definition from file_editor
 - **guide** → term definition from guide_delivery
 - **guide summary** → term definition from guide_delivery
 - **step section** → term definition from guide_delivery
@@ -93,7 +96,7 @@ def get_tool_definitions(self) -> list[ToolDefinition]
 
 **Preconditions:** The sandbox has been configured with the aggregate `SandboxConfig`.
 
-**Postconditions:** Delegates to the components' tool definitions and composes them into one list (per the composition described in the implementation spec): the file tools from `file_view.get_tool_definitions`, the advance tool from `guide_delivery.get_tool_definitions` (its parameters per the step state), and the termination tools from `run_control.get_tool_definitions` — the failure tool always, the blame tool only when blame targets are configured. Each definition follows the JSON schema format expected by the model (as defined in `tool_provider`).
+**Postconditions:** Delegates to the components' tool definitions and composes them into one list (per the composition described in the implementation spec): the file tools from `file_reader.get_tool_definitions` and `file_editor.get_tool_definitions`, the advance tool from `guide_delivery.get_tool_definitions` (its parameters per the step state), and the termination tools from `run_control.get_tool_definitions` — the failure tool always, the blame tool only when blame targets are configured. Each definition follows the JSON schema format expected by the model (as defined in `tool_provider`).
 
 **Failure Handling:** No failure conditions.
 
@@ -110,7 +113,7 @@ def get_session_start_reads(self) -> list[PresentedToolResult]
 
 **Preconditions:** None.
 
-**Postconditions:** Delegates to `file_view.get_session_start_reads` (the plain reads of the read-only files) and `guide_delivery.get_session_start_reads` (the guide's presentation at session start — in step mode, the pre-injected advance call); the results are presented together before the model's first turn; requesting them changes no sandbox state.
+**Postconditions:** Delegates to `file_reader.get_session_start_reads` (the plain reads of the read-only files) and `guide_delivery.get_session_start_reads` (the guide's presentation at session start — in step mode, the pre-injected advance call); the results are presented together before the model's first turn; requesting them changes no sandbox state.
 
 **Failure Handling:** Always succeeds; filesystem errors reading a readable file are unhandled.
 
@@ -125,11 +128,11 @@ def read_file(self, file_path: VirtualName, include_line_numbers: bool = False) 
 
 **Purpose:** Read a file's entire content using the virtual name provided by the agent.
 
-**Preconditions:** Per `file_view.read_file` (the file machinery's rules apply).
+**Preconditions:** Per `file_reader.read_file` (the file machinery's rules apply).
 
-**Postconditions:** Delegates to `file_view.read_file`; the file_view rules apply (per the file_view LLS).
+**Postconditions:** Delegates to `file_reader.read_file`; the component rules apply (per the file_reader and file_editor LLS).
 
-**Failure Handling:** Per `file_view.read_file`'s failure signals, returned as-is.
+**Failure Handling:** Per `file_reader.read_file`'s failure signals, returned as-is.
 
 **HLS Justification:** "Execute a tool call."
 
@@ -143,11 +146,11 @@ def replace(self, file_path: VirtualName, old_str: str, new_str: str,
 
 **Purpose:** Replace text in a file by content-based search and replace.
 
-**Preconditions:** Per `file_view.replace` (the file machinery's rules apply).
+**Preconditions:** Per `file_editor.replace` (the file machinery's rules apply).
 
-**Postconditions:** Delegates to `file_view.replace`; the file_view rules apply (per the file_view LLS).
+**Postconditions:** Delegates to `file_editor.replace`; the component rules apply (per the file_reader and file_editor LLS).
 
-**Failure Handling:** Per `file_view.replace`'s failure signals, returned as-is.
+**Failure Handling:** Per `file_editor.replace`'s failure signals, returned as-is.
 
 **HLS Justification:** "Execute a tool call."
 
@@ -161,11 +164,11 @@ def update_lines(self, file_path: VirtualName, start_line: int, end_line: int,
 
 **Purpose:** Replace, delete, or insert lines in a file by 1-indexed line range.
 
-**Preconditions:** Per `file_view.update_lines` (the file machinery's rules apply).
+**Preconditions:** Per `file_editor.update_lines` (the file machinery's rules apply).
 
-**Postconditions:** Delegates to `file_view.update_lines`; the file_view rules apply (per the file_view LLS).
+**Postconditions:** Delegates to `file_editor.update_lines`; the component rules apply (per the file_reader and file_editor LLS).
 
-**Failure Handling:** Per `file_view.update_lines`'s failure signals, returned as-is.
+**Failure Handling:** Per `file_editor.update_lines`'s failure signals, returned as-is.
 
 **HLS Justification:** "Execute a tool call."
 
@@ -180,11 +183,11 @@ def search_files(self, path: VirtualName = ".", pattern: str = "",
 
 **Purpose:** Search for a pattern in files using the virtual path provided by the agent.
 
-**Preconditions:** Per `file_view.search_files` (the file machinery's rules apply).
+**Preconditions:** Per `file_reader.search_files` (the file machinery's rules apply).
 
-**Postconditions:** Delegates to `file_view.search_files`; the file_view rules apply (per the file_view LLS).
+**Postconditions:** Delegates to `file_reader.search_files`; the component rules apply (per the file_reader and file_editor LLS).
 
-**Failure Handling:** Per `file_view.search_files`'s failure signals, returned as-is.
+**Failure Handling:** Per `file_reader.search_files`'s failure signals, returned as-is.
 
 **HLS Justification:** "Execute a tool call."
 
@@ -250,7 +253,7 @@ def get_write_occurred(self) -> WriteOccurred
 
 **Preconditions:** None.
 
-**Postconditions:** Delegates to `file_view.get_write_occurred`: returns `True` if any file write has succeeded during the current session; `False` otherwise.
+**Postconditions:** Delegates to `file_editor.get_write_occurred`: returns `True` if any file write has succeeded during the current session; `False` otherwise.
 
 **Failure Handling:** Always succeeds.
 
@@ -260,7 +263,7 @@ def get_write_occurred(self) -> WriteOccurred
 
 - The session begins when the sandbox is configured and ends when the agent signals termination
 - No state persists across runs
-- The tool surface composes the components' operations: file_view provides the file tools, run_control provides the termination tools, and guide_delivery provides the step-mode delivery; the composed tools are presented together
+- The tool surface composes the components' operations: file_reader and file_editor provide the file tools, run_control provides the termination tools, and guide_delivery provides the step-mode delivery; the composed tools are presented together
 - The blame tool is offered only when blame targets are configured
 - In a single advance, verification precedes step delivery and termination
 - A failing verification produces feedback and no step delivery, and never terminates the run
@@ -268,7 +271,7 @@ def get_write_occurred(self) -> WriteOccurred
 - A passing verification with no step sections remaining proceeds to the termination machinery
 - The change summary applies only when advance terminates: in step mode, an advance with step sections remaining carries no change summary
 - The feedback obligation is not disclosed to the agent before advance is attempted without a change; it surfaces only through advance's rejection
-- Errors leave the filesystem unchanged (per file_view and run_control)
+- Errors leave the filesystem unchanged (per file_reader, file_editor, and run_control)
 
 ## Non-Concerns
 

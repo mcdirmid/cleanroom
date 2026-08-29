@@ -27,7 +27,7 @@ class GuideDelivery(Protocol):
 
 - **guide** → term definition: the declared guide input — a readable file the node declares separately from its dependencies, at most one per run, in the guide format: its first line is `# Guide: <title>` and its first `##` heading is `## Summary`
 - **guide summary** → term definition: the guide's first part — the content from the guide's first line through the end of its `## Summary` section
-- **step section** → term definition: a checklist section of the guide — a part of the guide after the guide summary, delimited by `## <name>` headings, delivered after an advance that passed verification
+- **step section** → term definition: a checklist section of the guide — a part of the guide after the guide summary, delimited by `## <name>` headings (excluding any `## Lint checks` section, which is skipped in step mode), delivered after an advance that passed verification
 - **step mode** → term definition: a configuration in which the guide is not readable and its content reaches the agent only through the advance operation: the guide summary at run start, then the step sections one at a time after successful advances; in step mode the guide is not presented among the readable files (file lists shown to the agent do not name the guide), and a readable file that is not the guide is unaffected by step mode
 - **presented tool result** → the `PresentedToolResult` type from tool_provider
 - **tool result** → the `ToolResult` type from tool_provider
@@ -107,7 +107,7 @@ def has_step_sections_remaining(self) -> bool
 **Preconditions:** None.
 
 **Postconditions:**
-- Returns `True` when step mode is enabled, a guide is configured, and the step-section pointer has not reached the end of the guide's step sections; `False` otherwise (step mode disabled, no guide, or all sections delivered)
+- Returns `True` when step mode is enabled, a guide is configured, and the step-section pointer has not reached the end of the guide's step sections (excluding `## Lint checks`); `False` otherwise (step mode disabled, no guide, or all sections delivered)
 - Requesting changes no guide_delivery state
 
 **Failure Handling:** Always succeeds.
@@ -118,6 +118,7 @@ def has_step_sections_remaining(self) -> bool
 
 - In step mode, the guide's content reaches the agent only through the advance operation's outputs
 - In step mode, the guide is not presented among the readable files: file lists shown to the agent do not name the guide
+- In step mode, the `## Lint checks` section is skipped and never delivered as a step section
 - A failing verification prevents progressing to the next section (the step-section pointer does not advance on a failing verification)
 - Termination cannot occur until all guide sections are delivered and verification passes
 - In step mode, the guide summary is always visible: each advance output supersedes the previous advance output, so at most one step section is live

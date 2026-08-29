@@ -3,7 +3,7 @@
 fulfills: build_node_loader
 imports: tool_provider (tool definitions and execution), agent_loop (prompt running)
 terms (from build_node_loader): manifest, loaded node, node prompt, dependency node, tool provider, feedback deps
-terms (from tool_provider): tool definition, tool result, signal, tool failure
+terms (from tool_provider): tool definition, tool result, signal, tool failure, tool call
 terms (from agent_loop): run
 
 ## Deltas

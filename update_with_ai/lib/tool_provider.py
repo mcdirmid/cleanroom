@@ -18,6 +18,7 @@ of this type.
 
 ToolName = str
 ToolArguments = Dict[str, Any]
+ToolCall = Dict[str, Any]
 ToolDefinition = Dict[str, Any]  # JSON schema format
 ToolResultContent = Any
 

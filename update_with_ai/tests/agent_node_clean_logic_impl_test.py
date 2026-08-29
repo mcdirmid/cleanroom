@@ -23,6 +23,7 @@ from lib.agent_loop import (
     ToolExecutor,
 )
 from lib.agent_loop_config import AgentLoopConfig
+from lib.agent_node_tool_executor import AgentNodeToolExecutor
 from lib.agent_node_clean_logic_impl import AgentNodeCleanLogicImpl
 from lib.build_graph_storage import BuildGraphStorage, NodeDefinition
 from lib.dag_storage import NodeId, NodeMessage, MessageKind, PendingMessages
@@ -124,6 +125,26 @@ class MockBuildGraphStorage(BuildGraphStorage):
 
     def get_known_reverse_dependencies(self, node_id: NodeId) -> List[NodeId]:
         return []
+
+
+
+class _MockAgentNodeToolExecutor(AgentNodeToolExecutor):
+    def __init__(self, sandbox: Sandbox) -> None:
+        self.sandbox = sandbox
+        self.calls: List[tuple] = []
+
+    def get_tool_definitions(self) -> List[ToolDefinition]:
+        return self.sandbox.get_tool_definitions()
+
+    def execute_tool(self, name: str, args: Dict[str, Any]) -> ToolCallOutcome:
+        self.calls.append(("execute_tool", name, args))
+        method = getattr(self.sandbox, name, None)
+        if method is None:
+            return ToolFailure[str](f"Tool {name} not found")
+        return method(**args) if args else method()
+
+    def get_session_start_reads(self) -> List[PresentedToolResult]:
+        return self.sandbox.get_session_start_reads()
 
 
 class MockSandbox(Sandbox):
@@ -516,135 +537,6 @@ class TestIsDirty(unittest.TestCase):
             )
             self.assertTrue(impl.is_dirty("a", [msg("a real message")]))
             self.assertEqual(graph.get_pending_messages("a"), [])
-
-
-class TestToolExecutor(unittest.TestCase):
-    """The ToolExecutor passed to run_agent dispatches by name to the sandbox,
-    with blame-target dependency validation first."""
-
-    def _capture_executor(self, node_def: NodeDefinition, sandbox: MockSandbox):
-        agent_loop = MockAgentLoop(result=(TerminateAgentWithSuccess(NoChangeResult()), []))
-        graph = MockBuildGraphStorage(
-            definitions={"a": node_def}, dependencies={"a": ["b"]}
-        )
-        impl = AgentNodeCleanLogicImpl(
-            graph=graph,
-            agent_loop_config=_agent_loop_config(),
-            make_sandbox=lambda sc: sandbox,
-            make_agent_loop=lambda cfg: agent_loop,
-        )
-        impl.clean("a", [])
-        assert agent_loop.last_run is not None
-        return agent_loop.last_run["tool_executor"]
-
-    def test_blame_invalid_target_is_tool_failure_not_reaching_sandbox(self):
-        """A blame target that resolves to no owning node, or whose owning
-        node is not a dependency, returns ToolFailure[str] without invoking
-        the sandbox's blame tool."""
-        node_def = _make_node_def(blame_targets={"b.py": "b"})
-        sandbox = MockSandbox()
-        executor = self._capture_executor(node_def, sandbox)
-        outcome = executor("blame", {"blames": [("x", "not a dependency")]})
-        self.assertIsInstance(outcome, ToolFailure)
-        assert isinstance(outcome, ToolFailure)
-        self.assertIn("b.py", outcome.value)
-        self.assertIn("x", outcome.value)
-        self.assertNotIn("@@", outcome.value)
-        self.assertEqual(sandbox.calls, [])
-
-    def test_blame_valid_target_passes_through_to_sandbox(self):
-        """A blame target whose owning node is a dependency reaches the
-        sandbox, and the sandbox's outcome is returned unchanged."""
-        node_def = _make_node_def(blame_targets={"b.py": "b"})
-        blame_outcome: ToolCallOutcome = TerminateAgentWithSuccess(
-            FeedbackResult(messages=[("b", msg("fix it", "feedback"))])
-        )
-        sandbox = MockSandbox(blame_outcome=blame_outcome)
-        executor = self._capture_executor(node_def, sandbox)
-        blames: List[Blame] = [("b.py", "fix it")]
-        outcome = executor("blame", {"blames": blames})
-        self.assertIsInstance(outcome, TerminateAgentWithSuccess)
-        self.assertIs(outcome, blame_outcome)
-        self.assertEqual(sandbox.calls, [("blame", {"blames": blames})])
-
-    def test_blame_dict_format_valid_target_passes_through(self):
-        """Dict-format blame targets from LLM tool calls reach the sandbox."""
-        node_def = _make_node_def(blame_targets={"b.py": "b"})
-        blame_outcome: ToolCallOutcome = TerminateAgentWithSuccess(
-            FeedbackResult(messages=[("b", msg("fix it", "feedback"))])
-        )
-        sandbox = MockSandbox(blame_outcome=blame_outcome)
-        executor = self._capture_executor(node_def, sandbox)
-        blames = [{"target": "b.py", "feedback": "fix it"}]
-        outcome = executor("blame", {"blames": blames})
-        self.assertIsInstance(outcome, TerminateAgentWithSuccess)
-        self.assertIs(outcome, blame_outcome)
-        self.assertEqual(sandbox.calls, [("blame", {"blames": blames})])
-
-    def test_dispatches_single_calls_by_name_to_sandbox(self):
-        """Non-blame calls dispatch to the sandbox method of the same name."""
-        node_def = _make_node_def()
-        sandbox = MockSandbox()
-        executor = self._capture_executor(node_def, sandbox)
-        outcome = executor(
-            "read_file", {"file_path": "foo.txt", "include_line_numbers": True}
-        )
-        self.assertIsInstance(outcome, ToolResult)
-        self.assertEqual(
-            sandbox.calls,
-            [
-                (
-                    "read_file",
-                    {"file_path": "foo.txt", "include_line_numbers": True},
-                )
-            ],
-        )
-
-    def test_unknown_tool_is_tool_failure(self):
-        """An unknown tool name is a ToolFailure[str] (per tool_provider)."""
-        node_def = _make_node_def()
-        sandbox = MockSandbox()
-        executor = self._capture_executor(node_def, sandbox)
-        outcome = executor("no_such_tool", {})
-        self.assertIsInstance(outcome, ToolFailure)
-        assert isinstance(outcome, ToolFailure)
-        self.assertIn("no_such_tool", outcome.value)
-        self.assertEqual(sandbox.calls, [])
-
-    def test_wrong_parameter_name_lists_valid_parameters(self):
-        """A parameter-name slip (e.g. 'content' instead of 'new_str')
-        becomes a ToolFailure naming the tool's valid parameters."""
-        defs: List[ToolDefinition] = [
-            {
-                "type": "function",
-                "function": {
-                    "name": "update_lines",
-                    "description": "update lines by range",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "file_path": {"type": "string"},
-                            "start_line": {"type": "integer"},
-                            "end_line": {"type": "integer"},
-                            "new_str": {"type": "string"},
-                        },
-                    },
-                },
-            }
-        ]
-        node_def = _make_node_def()
-        sandbox = MockSandbox(tool_defs=defs)
-        executor = self._capture_executor(node_def, sandbox)
-        outcome = executor(
-            "update_lines",
-            {"file_path": "foo.txt", "start_line": 1, "end_line": 1, "content": "x"},
-        )
-        self.assertIsInstance(outcome, ToolFailure)
-        assert isinstance(outcome, ToolFailure)
-        self.assertIn("valid parameters", outcome.value)
-        self.assertIn("new_str", outcome.value)
-        self.assertIn("content", outcome.value)
-        self.assertEqual(sandbox.calls, [])
 
 
 class TestRunStructure(unittest.TestCase):

@@ -1,8 +1,8 @@
 # build_node_loader
 
-imports: tool_provider (tool definitions and execution), file_view (template), guide_delivery (guide)
-terms (from tool_provider): tool definition, tool result, signal, tool failure
-terms (from file_view): template
+imports: tool_provider (tool definitions and execution), file_editor (template), guide_delivery (guide)
+terms (from tool_provider): tool definition, tool result, signal, tool failure, tool call
+terms (from file_editor): template
 terms (from guide_delivery): guide
 terms (owned): manifest, loaded node, node prompt, dependency node, tool provider, feedback deps
 

@@ -2,7 +2,7 @@
   - tool_provider.md
   - dag_clean_logic.md
   - dag_storage.md
-  - file_view.md
+  - file_reader.md
   - guide_delivery.md
 -->
 
@@ -23,7 +23,7 @@ from tool_provider import (
 )
 from dag_storage import NodeId, NodeMessage
 from dag_clean_logic import ChangeResult, FeedbackResult, NoChangeResult
-from file_view import VirtualName
+from file_reader import VirtualName
 
 BlameTargets: TypeAlias = dict[VirtualName, NodeId]
 
@@ -65,7 +65,7 @@ class RunControl(Protocol):
 - **termination result** → the `TerminateSuccessResult` type from tool_provider
 - **tool failure** → the `ToolFailure` type from tool_provider
 - **supersession flag** → term definition from tool_provider
-- **virtual name** → term definition from file_view
+- **virtual name** → term definition from file_reader
 - **guide** → term definition from guide_delivery
 - **guide summary** → term definition from guide_delivery
 - **step section** → term definition from guide_delivery
@@ -108,7 +108,7 @@ def advance(self, changes: list[dict[str, str]] = []) -> ToolCallOutcome
 
 **Postconditions:**
 - Verifies the run: computes the diff of the run's changes, truncated when it exceeds the diff size limit (reporting the truncated size and the full change counts); runs the verification callback when one is configured; when no callback is configured, verification is treated as passed
-- On a failing verification: returns feedback, never a tool failure, and the session continues; advance never terminates on a failing verification; verification failure output is sanitized through `file_view.sanitize_paths` so all disk paths and workspace package prefixes appear only as virtual names; in step mode, the output is the restated guide summary with the reason verification failed (per guide_delivery's output rule, `get_advance_output`), and the next step section is not delivered; outside step mode, the output is a `ToolResult` with `supersedes` set carrying the verification failure details and guidance to change files and call `advance` again, or call `blame` or `fail` to end the run
+- On a failing verification: returns feedback, never a tool failure, and the session continues; advance never terminates on a failing verification; verification failure output is sanitized through `file_reader.sanitize_paths` so all disk paths and workspace package prefixes appear only as virtual names; in step mode, the output is the restated guide summary with the reason verification failed (per guide_delivery's output rule, `get_advance_output`), and the next step section is not delivered; outside step mode, the output is a `ToolResult` with `supersedes` set carrying the verification failure details and guidance to change files and call `advance` again, or call `blame` or `fail` to end the run
 - On a passing verification (or no callback): in step mode with step sections remaining, delivers the next step section (per guide_delivery's output rule, `get_advance_output`); with no step sections remaining, proceeds to the termination machinery
 - The termination machinery: returns `TerminateAgentWithSuccess` (a `Signal[T_tool]` variant) carrying a `TerminateSuccessResult` describing the session outcome: a `NoChangeResult` when no file's current content differs from its run-start content (writes may have occurred but net out), or a `ChangeResult` whose messages are built from `changes` when files changed
 - When `feedback_pending` is set and the run would otherwise signal successful termination without a change (no file's current content differs from its run-start content and no change message is provided), the first advance call returns `ToolFailure` warning that feedback was pending and not responded to; if called again without changes, advance signals successful termination with `NoChangeResult`
