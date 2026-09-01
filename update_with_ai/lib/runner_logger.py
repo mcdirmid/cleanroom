@@ -1,21 +1,20 @@
-# lib/runner_logger.py
-"""
-Interface definitions for the LLS RunnerLogger.
-"""
+"""Runner logger interface and log event definition."""
 
-from typing import Any, Callable, Dict, Optional, Protocol, Tuple
-from .conversation_history import LogEvent, LoggerCallback
+from typing import Protocol, TypeAlias
+from dataclasses import dataclass
+
+EventName: TypeAlias = str
+EventSummary: TypeAlias = str
+TranscriptEntry: TypeAlias = str
+
+
+@dataclass(frozen=True)
+class LogEvent:
+    name: EventName
+    summary: EventSummary
+    transcript: TranscriptEntry
 
 
 class RunnerLogger(Protocol):
-    def resolve_log_path(self) -> str:
-        ...
-
-    def format_compact_log(self, event: LogEvent, data: Dict[str, Any]) -> Optional[str]:
-        ...
-
-    def format_full_log(self, event: LogEvent, data: Dict[str, Any]) -> str:
-        ...
-
-    def create_agent_logger(self, log_path: str) -> Tuple[LoggerCallback, Callable[[], None]]:
+    def log(self, event: LogEvent) -> None:
         ...

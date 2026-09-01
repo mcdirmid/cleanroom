@@ -55,8 +55,9 @@ class <Name>Impl(<Name>): ...
 - **<Aspect>:** <TODO: pinned choice — justification.>
 
 <!--
-TODO: work through this template section by section per update_python_with_ai/guides/high_to_low.md:
+TODO: work through this template section by section:
   - the LLS inlines the full HLS closure; every statement traces to the HLS
   - replace every TODO marker; keep the template's required structure
   - remove this comment block when the document is complete
 -->
+

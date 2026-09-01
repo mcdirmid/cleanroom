@@ -6,184 +6,150 @@
 
 ## Data Types
 ```python
-from typing import Any, Callable, Literal, Protocol, TypeAlias
-from tool_provider import ToolResult, PresentedToolResult, ToolCall
+from typing import Protocol, TypeAlias, Sequence, Mapping, Any, Optional, Union
+from dataclasses import dataclass
+from tool_provider import ToolResult, Tool
 
-HistoryEntry: TypeAlias = dict[str, Any]
+MessageRole: TypeAlias = str
+MessageContent: TypeAlias = str
+MetadataField: TypeAlias = str
+MetadataContent: TypeAlias = Any
+MetadataMapping: TypeAlias = Mapping[MetadataField, MetadataContent]
 
-LogEvent: TypeAlias = Literal[
-    "message_added",
-    "message_stubbed",
-    "tool_called",
-    "tool_result",
-    "api_response",
-    "response_truncated",
-    "run_terminated",
-    "reminder_injected",
-    "error",
-]
+@dataclass(frozen=True)
+class HistoryMessage:
+    role: MessageRole
+    content: MessageContent
+    metadata: Optional[MetadataMapping] = None
 
-LoggerCallback: TypeAlias = Callable[[LogEvent, dict[str, Any]], None]
+@dataclass(frozen=True)
+class HistoryStub(HistoryMessage):
+    role: MessageRole = "tool"
+    content: MessageContent = "..."
 
-RenderedMessage: TypeAlias = dict[str, Any]
-
-StubMapping: TypeAlias = dict[tuple[str, str], int]
+@dataclass(frozen=True)
+class ModelRequest:
+    messages: Sequence[HistoryMessage]
+    tools: Optional[Sequence[Tool]] = None
 
 class ConversationHistory(Protocol):
-    def reset(self) -> None: ...
-    def initialize(self, prompt: str, session_start_results: list[PresentedToolResult] | None = None, logger: LoggerCallback | None = None) -> None: ...
-    def append_message(self, message: HistoryEntry, logger: LoggerCallback | None = None) -> None: ...
-    def add_tool_result(self, tool_call: ToolCall | None, result: ToolResult | PresentedToolResult, logger: LoggerCallback | None = None) -> None: ...
-    def get_history(self) -> list[HistoryEntry]: ...
-    def get_rendered_messages(self, system_prompt: str | None = None) -> list[RenderedMessage]: ...
+    def initialize(self, initial_messages: Sequence[HistoryMessage]) -> None: ...
+    def append(self, item: Union[HistoryMessage, ToolResult]) -> None: ...
+    def get_model_request(self) -> ModelRequest: ...
+    def get_messages(self) -> Sequence[HistoryMessage]: ...
+
+class ConversationHistoryFactory(Protocol):
+    def create_conversation_history(self) -> ConversationHistory: ...
 ```
 
-A rendered message is a dictionary formatted for the language model chat completion request, with internal metadata fields removed and tool result notes rendered into visible content.
-
-A stub mapping associates a target key (file path or tool command) with the index of its current live tool result in the conversation history.
+- `MessageRole` → corresponds to message role (system, user, assistant, tool).
+- `MessageContent` → corresponds to content of a message.
+- `MetadataField` → corresponds to metadata field name.
+- `MetadataContent` → corresponds to metadata value content.
+- `MetadataMapping` → corresponds to message metadata mapping.
+- `HistoryMessage` → corresponds to *message*: an entry in a *conversation history*.
+- `HistoryStub` → corresponds to *stub*: a placeholder *message* replacing superseded content in a *conversation history*.
+- `ModelRequest` → corresponds to *model request*: a formatted sequence of *messages* prepared for transmission to a language model.
+- `ConversationHistory` → corresponds to *conversation history*: a chronological sequence of *messages* for an agent run.
+- `ConversationHistoryFactory` → corresponds to *conversation history factory*: a provider that constructs fresh *conversation histories*.
 
 ## Term definitions
 
-- **conversation history** → the `list[HistoryEntry]` sequence returned by `get_history`
-- **history entry** → the `HistoryEntry` alias (definition in Data Types)
-- **rendered message** → the `RenderedMessage` alias (definition in Data Types)
-- **stub mapping** → the `StubMapping` alias (definition in Data Types)
-- **system prompt** → term definition from high/conversation_history.md
-- **tool result** → the `ToolResult` type from tool_provider
-- **supersession flag** → the `supersedes` boolean field of ToolResult from tool_provider
-- **presented tool result** → the `PresentedToolResult` type from tool_provider
-- **stub** → term definition from tool_provider
-- **tool call** → the `ToolCall` alias from tool_provider
-- **session** → term definition from tool_provider
+- **message** → the `HistoryMessage` alias
+- **stub** → the `HistoryStub` alias
+- **model request** → the `ModelRequest` alias
+- **conversation history** → term definition: a chronological sequence of *messages* for an agent run
+- **conversation history factory** → term definition: a provider that constructs fresh *conversation histories*
 
 ## Component-Provided Operations
-
-### `reset`
-
-```python
-def reset(self) -> None
-```
-
-**Purpose:** Resets the conversation history, stub mappings, and synthetic call counters to an empty state.
-
-**Preconditions:** None
-
-**Postconditions:**
-- History entries list is empty
-- Stub mapping is empty
-- Synthetic tool call counter is zero
-
-**Failure Handling:** None
-
-**HLS Justification:** "No history state persists across runs."
 
 ### `initialize`
 
 ```python
-def initialize(self, prompt: str, session_start_results: list[PresentedToolResult] | None = None, logger: LoggerCallback | None = None) -> None
+def initialize(self, initial_messages: Sequence[HistoryMessage]) -> None: ...
 ```
 
-**Purpose:** Initializes a fresh conversation for a run with an optional user prompt and session-start results.
+**Purpose:** (ConversationHistory) Initializes a fresh conversation history with starting messages.
 
-**Preconditions:**
-- `prompt` is a string (if non-empty, appended as the initial user message)
-- `session_start_results` when provided is a list of `PresentedToolResult` values
+**Preconditions:** None.
 
 **Postconditions:**
-- Resets previous run state
-- If `prompt` is non-empty, appends a user message `{"role": "user", "content": prompt}` to history and emits `message_added` logger event
-- If `session_start_results` are provided, each result is presented with its tool call and appended to history, applying in-place stubbing if configured
+- Sets history entries to `initial_messages` in chronological order.
 
-**Failure Handling:** None
+**Failure Handling:** Always succeeds.
 
-**HLS Justification:** "Initialize the conversation history with an optional user prompt and session-start tool results."
+**HLS Justification:** "Initial *messages* can initialize a *conversation history*."
 
-### `append_message`
+### `append`
 
 ```python
-def append_message(self, message: HistoryEntry, logger: LoggerCallback | None = None) -> None
+def append(self, item: Union[HistoryMessage, ToolResult]) -> None: ...
 ```
 
-**Purpose:** Appends a message entry to the conversation history and notifies the logger.
+**Purpose:** (ConversationHistory) Appends a message or tool result to the conversation history, replacing superseded results with stubs in place.
 
-**Preconditions:**
-- `message` contains a valid role and optional content or tool calls
+**Preconditions:** None.
 
 **Postconditions:**
-- Appends the message to the conversation history
-- Emits `message_added` logger event
+- Appends `item` in chronological order.
+- If `item` is a `ToolResult` that supersedes an earlier result for the same resource, the earlier result is replaced in place with a `Stub`.
 
-**Failure Handling:** None
+**Failure Handling:** Always succeeds.
 
-**HLS Justification:** "Append a user message, assistant message, or reminder message to the conversation history."
+**HLS Justification:** "Appending *messages* and *tool results* adds them to a *conversation history* in chronological order."
 
-### `add_tool_result`
+### `get_model_request`
 
 ```python
-def add_tool_result(self, tool_call: ToolCall | None, result: ToolResult | PresentedToolResult, logger: LoggerCallback | None = None) -> None
+def get_model_request(self) -> ModelRequest: ...
 ```
 
-**Purpose:** Appends a tool result to the conversation history, replacing any prior superseded result in place.
+**Purpose:** (ConversationHistory) Formats the conversation history into a model request ready for language model transmission.
 
-**Preconditions:**
-- `result` is a `ToolResult` or `PresentedToolResult`
-- If `result` is a `ToolResult`, `tool_call` must not be None
+**Preconditions:** None.
 
 **Postconditions:**
-- If `result` is a `PresentedToolResult`, generates a synthetic tool call identifier and appends an assistant tool call message before the tool message
-- Constructs the tool message with role `tool`, `tool_call_id`, `content`, and internal metadata (`_note`, `_tool_name`, `_arguments`)
-- If the result's `supersedes` flag is set: replaces the content of the earlier live result for the same key in place with static stub text, marks it stubbed, drops its note, and emits `message_stubbed` logger event
-- Appends the new tool message to history and emits `message_added` logger event
+- Returns a `ModelRequest` containing chronological messages with internal metadata stripped.
 
-**Failure Handling:** None
+**Failure Handling:** Always succeeds.
 
-**HLS Justification:** "Append a tool result or presented tool result to the conversation history, updating the stub mapping and replacing any superseded prior result in place."
+**HLS Justification:** "A *conversation history* provides a *model request* for a language model."
 
-### `get_history`
+### `get_messages`
 
 ```python
-def get_history(self) -> list[HistoryEntry]
+def get_messages(self) -> Sequence[HistoryMessage]: ...
 ```
 
-**Purpose:** Provides the full list of conversation history entries in chronological order.
+**Purpose:** (ConversationHistory) Retrieves the unformatted sequence of messages in history.
 
-**Preconditions:** None
+**Preconditions:** None.
 
 **Postconditions:**
-- Returns the conversation history list
+- Returns the chronological sequence of history messages.
 
-**Failure Handling:** None
+**Failure Handling:** Always succeeds.
 
-**HLS Justification:** "Provide the conversation history entries."
+**HLS Justification:** "A *conversation history* is a chronological sequence of *messages*."
 
-### `get_rendered_messages`
+### `create_conversation_history`
 
 ```python
-def get_rendered_messages(self, system_prompt: str | None = None) -> list[RenderedMessage]
+def create_conversation_history(self) -> ConversationHistory: ...
 ```
 
-**Purpose:** Formats the conversation history into rendered message dictionaries ready for language model requests.
+**Purpose:** (ConversationHistoryFactory) Creates a fresh conversation history instance.
 
-**Preconditions:**
-- `system_prompt` when provided is a string
+**Preconditions:** None.
 
 **Postconditions:**
-- Returns rendered message dictionaries with internal metadata stripped
-- If `system_prompt` is provided, prepends a system message
-- In tool messages, appends `_note` to visible content when present
+- Returns a fresh `ConversationHistory`.
 
-**Failure Handling:** None
+**Failure Handling:** Always succeeds.
 
-**HLS Justification:** "Provide rendered messages formatted for the language model request."
+**HLS Justification:** "Creating a *conversation history* through a *conversation history factory* yields a fresh *conversation history*."
 
 ## Invariants
 
-- Chronological message ordering is preserved
-- Append-only except for in-place stubbing of superseded tool results
-- A stubbed message's content never changes once set
-- No state persists across runs
-
-## Non-Concerns
-
-- **Stub text:** The exact wording of the static stub text is unspecified.
-- **Metadata field naming:** The naming convention for internal metadata fields is an implementation detail.
+- HistoryMessage history is strictly append-only except for in-place supersession stubbing.
+- In-place stubbing preserves prompt caching prefix alignment.

@@ -1,35 +1,36 @@
-"""
-lib/loop_guard.py
+"""Loop guard interface and repetition monitors."""
 
-Loop Guard Interface Protocol.
-"""
+from typing import Protocol, TypeAlias, Optional, Union
+from dataclasses import dataclass
+from .tool_provider import ToolArguments, ToolResult, ToolFailure, ToolName
 
-from __future__ import annotations
+ReminderThreshold: TypeAlias = int
+FatalThreshold: TypeAlias = int
+FilePath: TypeAlias = str
+LineRange: TypeAlias = tuple[int, int]
 
-from typing import Any, Protocol, TypeAlias, Tuple, Optional
-from .tool_provider import ToolCall
 
-LoopDecision: TypeAlias = Tuple[bool, Optional[str], Optional[str]]
+@dataclass(frozen=True)
+class LoopGuardConfig:
+    reminder_threshold: ReminderThreshold = 3
+    fatal_threshold: FatalThreshold = 6
+
+
+LoopReminder: TypeAlias = ToolResult
+LoopFailure: TypeAlias = ToolFailure
 
 
 class LoopGuard(Protocol):
-    """
-    Protocol for detecting repetition loops, range spins, degenerate outputs,
-    and providing termination reminders.
-    """
-
-    def reset(self) -> None:
-        """Reset repetition tracking state and reminder flags."""
+    def record_tool_call(
+        self, tool_name: ToolName, arguments: ToolArguments
+    ) -> Optional[Union[LoopReminder, LoopFailure]]:
         ...
 
-    def record_tool_call(self, tool_call: ToolCall) -> LoopDecision:
-        """Evaluate a tool call for identical call repetition and range repetition."""
+    def record_file_edit(
+        self, file_path: FilePath, line_range: LineRange
+    ) -> Optional[Union[LoopReminder, LoopFailure]]:
         ...
 
-    def check_degenerate_response(self, content: Optional[str]) -> bool:
-        """Check if a truncated model response consists of a single character repeated."""
+    def reset_progress(self) -> None:
         ...
 
-    def get_termination_reminder(self) -> str:
-        """Provide termination reminder text when model stops without tool calls."""
-        ...

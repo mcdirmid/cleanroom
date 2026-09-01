@@ -1,137 +1,107 @@
-"""
-tests/loop_guard_impl_test.py
-
-Comprehensive unit tests for LoopGuardImpl against its low-level spec
-and the LoopGuard Protocol.
-"""
+"""Tests for loop_guard_impl derived from LLS."""
 
 import unittest
-from lib.tool_provider import ToolCall
-from lib.agent_loop_config import AgentLoopConfig
+from lib.loop_guard import LoopGuardConfig, LoopReminder, LoopFailure
 from lib.loop_guard_impl import LoopGuardImpl
 
 
-class TestLoopGuardImpl(unittest.TestCase):
-    def setUp(self) -> None:
-        self.config = AgentLoopConfig(
-            base_url="http://localhost",
-            api_key="key",
-            model="model",
-            termination_reminder_generator=lambda: "Custom termination reminder.",
+class LoopGuardImplTest(unittest.TestCase):
+    def test_dataclass_defaults(self) -> None:
+        """Tests Data Types: LoopGuardConfig dataclass instantiation."""
+        cfg = LoopGuardConfig(reminder_threshold=3, fatal_threshold=6)
+        self.assertEqual(cfg.reminder_threshold, 3)
+        self.assertEqual(cfg.fatal_threshold, 6)
+
+    def test_default_thresholds_behavior(self) -> None:
+        """Tests Config: default constructor uses reminder threshold 3 and fatal threshold 6."""
+        guard = LoopGuardImpl()
+        # 1 and 2 calls -> None
+        self.assertIsNone(guard.record_tool_call("read_file", {"file_name": "a.py"}))
+        self.assertIsNone(guard.record_tool_call("read_file", {"file_name": "a.py"}))
+        # 3 calls -> LoopReminder
+        self.assertIsInstance(
+            guard.record_tool_call("read_file", {"file_name": "a.py"}),
+            LoopReminder,
         )
-        self.guard = LoopGuardImpl(config=self.config)
+        # 4 and 5 calls -> LoopReminder
+        self.assertIsInstance(
+            guard.record_tool_call("read_file", {"file_name": "a.py"}),
+            LoopReminder,
+        )
+        self.assertIsInstance(
+            guard.record_tool_call("read_file", {"file_name": "a.py"}),
+            LoopReminder,
+        )
+        # 6 calls -> LoopFailure
+        self.assertIsInstance(
+            guard.record_tool_call("read_file", {"file_name": "a.py"}),
+            LoopFailure,
+        )
 
-    def test_identical_tool_call_repetition_thresholds(self) -> None:
-        call: ToolCall = {
-            "id": "call_1",
-            "type": "function",
-            "function": {"name": "read_file", "arguments": '{"file_path": "a.py"}'},
-        }
-        for _ in range(3):
-            stop, reminder, err = self.guard.record_tool_call(call)
-            self.assertFalse(stop)
-            self.assertIsNone(reminder)
-            self.assertIsNone(err)
+    def test_identical_tool_call_thresholds_all_sides(self) -> None:
+        """Tests all sides of identical tool call thresholds:
+        1. Below reminder threshold -> returns None.
+        2. Exactly at reminder threshold -> returns LoopReminder.
+        3. Above reminder but below fatal -> returns LoopReminder.
+        4. At fatal threshold -> returns LoopFailure.
+        5. Forward progress resets repetition counts back to zero.
+        """
+        cfg = LoopGuardConfig(reminder_threshold=2, fatal_threshold=4)
+        guard = LoopGuardImpl(cfg)
 
-        # 4th call injects reminder
-        stop, reminder, err = self.guard.record_tool_call(call)
-        self.assertFalse(stop)
-        self.assertIsNotNone(reminder)
-        self.assertIn("read_file", reminder or "")
-        self.assertIsNone(err)
+        # Call 1 (below reminder)
+        res1 = guard.record_tool_call("read_file", {"file_name": "a.py"})
+        self.assertIsNone(res1)
 
-        # 5th to 7th calls do not re-inject reminder
-        for _ in range(3):
-            stop, reminder, err = self.guard.record_tool_call(call)
-            self.assertFalse(stop)
-            self.assertIsNone(reminder)
-            self.assertIsNone(err)
+        # Call 2 (at reminder threshold)
+        res2 = guard.record_tool_call("read_file", {"file_name": "a.py"})
+        self.assertIsInstance(res2, LoopReminder)
 
-        # 8th call triggers degenerate failure
-        stop, reminder, err = self.guard.record_tool_call(call)
-        self.assertTrue(stop)
-        self.assertIsNone(reminder)
-        self.assertIn("Degenerate loop: same tool call repeated 8 consecutive times", err or "")
+        # Call 3 (above reminder, below fatal)
+        res3 = guard.record_tool_call("read_file", {"file_name": "a.py"})
+        self.assertIsInstance(res3, LoopReminder)
 
-    def test_distinct_tool_calls_do_not_trigger_reminder(self) -> None:
-        for i in range(10):
-            call: ToolCall = {
-                "id": f"call_{i}",
-                "type": "function",
-                "function": {"name": "read_file", "arguments": f'{{"file_path": "a{i}.py"}}'},
-            }
-            stop, reminder, err = self.guard.record_tool_call(call)
-            self.assertFalse(stop)
-            self.assertIsNone(reminder)
-            self.assertIsNone(err)
+        # Call 4 (at fatal threshold)
+        res4 = guard.record_tool_call("read_file", {"file_name": "a.py"})
+        self.assertIsInstance(res4, LoopFailure)
 
-    def test_same_range_update_lines_repetition_thresholds(self) -> None:
-        call: ToolCall = {
-            "id": "call_1",
-            "type": "function",
-            "function": {
-                "name": "update_lines",
-                "arguments": '{"file_path": "a.py", "start_line": 10, "end_line": 20, "new_str": "v1"}',
-            },
-        }
-        for i in range(3):
-            call["function"]["arguments"] = f'{{"file_path": "a.py", "start_line": 10, "end_line": 20, "new_str": "v{i}"}}'
-            stop, reminder, err = self.guard.record_tool_call(call)
-            self.assertFalse(stop)
-            self.assertIsNone(reminder)
+        # Progress reset
+        guard.reset_progress()
+        res_reset = guard.record_tool_call("read_file", {"file_name": "a.py"})
+        self.assertIsNone(res_reset)
 
-        call["function"]["arguments"] = '{"file_path": "a.py", "start_line": 10, "end_line": 20, "new_str": "v4"}'
-        stop, reminder, err = self.guard.record_tool_call(call)
-        self.assertFalse(stop)
-        self.assertIsNotNone(reminder)
-        self.assertIn("edited lines 10-20 of 'a.py'", reminder or "")
+    def test_distinct_tool_calls_do_not_increment_repetition(self) -> None:
+        """Tests Invariants: distinct tool calls or arguments do not increment repetition counter."""
+        cfg = LoopGuardConfig(reminder_threshold=2, fatal_threshold=4)
+        guard = LoopGuardImpl(cfg)
 
-        # Up to 7th: no repeat reminder
-        for i in range(5, 8):
-            call["function"]["arguments"] = f'{{"file_path": "a.py", "start_line": 10, "end_line": 20, "new_str": "v{i}"}}'
-            stop, reminder, err = self.guard.record_tool_call(call)
-            self.assertFalse(stop)
-            self.assertIsNone(reminder)
+        # Call with different arguments
+        self.assertIsNone(guard.record_tool_call("read_file", {"file_name": "a.py"}))
+        self.assertIsNone(guard.record_tool_call("read_file", {"file_name": "b.py"}))
+        self.assertIsNone(guard.record_tool_call("read_file", {"file_name": "a.py"}))
 
-        # 8th edit on same range fails
-        call["function"]["arguments"] = '{"file_path": "a.py", "start_line": 10, "end_line": 20, "new_str": "v8"}'
-        stop, reminder, err = self.guard.record_tool_call(call)
-        self.assertTrue(stop)
-        self.assertIn("targeted the same file and line range 8 consecutive times", err or "")
+        # Call with different tool names
+        self.assertIsNone(guard.record_tool_call("search_files", {"query": "test"}))
+        self.assertIsNone(guard.record_tool_call("read_file", {"file_name": "a.py"}))
 
-    def test_advance_resets_tracking(self) -> None:
-        call: ToolCall = {
-            "id": "call_1",
-            "type": "function",
-            "function": {"name": "read_file", "arguments": '{"file_path": "a.py"}'},
-        }
-        for _ in range(3):
-            self.guard.record_tool_call(call)
+    def test_line_range_edit_repetition(self) -> None:
+        """Tests identical line-range edit repetition detection and boundary conditions."""
+        cfg = LoopGuardConfig(reminder_threshold=2, fatal_threshold=3)
+        guard = LoopGuardImpl(cfg)
 
-        advance_call: ToolCall = {
-            "id": "call_adv",
-            "type": "function",
-            "function": {"name": "advance", "arguments": "{}"},
-        }
-        self.guard.record_tool_call(advance_call)
+        guard.record_file_edit("a.py", (1, 10))
+        res_remind = guard.record_file_edit("a.py", (1, 10))
+        self.assertIsInstance(res_remind, LoopReminder)
 
-        # After advance, counter is reset: 3 more calls do not trigger 4-count reminder
-        for _ in range(3):
-            stop, reminder, _ = self.guard.record_tool_call(call)
-            self.assertFalse(stop)
-            self.assertIsNone(reminder)
+        # Different line range resets repetition
+        res_diff = guard.record_file_edit("a.py", (11, 20))
+        self.assertIsNone(res_diff)
 
-    def test_check_degenerate_response(self) -> None:
-        self.assertTrue(self.guard.check_degenerate_response("aaaa"))
-        self.assertTrue(self.guard.check_degenerate_response("\n\n\n"))
-        self.assertFalse(self.guard.check_degenerate_response("abcd"))
-        self.assertFalse(self.guard.check_degenerate_response(""))
-        self.assertFalse(self.guard.check_degenerate_response(None))
-
-    def test_get_termination_reminder(self) -> None:
-        self.assertEqual(self.guard.get_termination_reminder(), "Custom termination reminder.")
-        default_guard = LoopGuardImpl()
-        self.assertIn("advance(), fail(), or blame()", default_guard.get_termination_reminder())
+        # Consecutive edits to new range
+        res_remind2 = guard.record_file_edit("a.py", (11, 20))
+        self.assertIsInstance(res_remind2, LoopReminder)
+        res_fatal = guard.record_file_edit("a.py", (11, 20))
+        self.assertIsInstance(res_fatal, LoopFailure)
 
 
 if __name__ == "__main__":

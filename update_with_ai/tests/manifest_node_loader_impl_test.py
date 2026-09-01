@@ -1,129 +1,190 @@
-"""
-Tests for the ManifestNodeLoaderImpl implementation.
-"""
+"""Tests for manifest_node_loader_impl derived from LLS."""
 
-import json
-import os
-import shutil
-import tempfile
 import unittest
-from pathlib import Path
-
-from lib.build_graph_storage import GraphConfig
-from lib.manifest_node_loader_impl import (
-    ManifestNodeLoaderImpl,
-    _virtual_names,
-)
-
-
-class TestVirtualNames(unittest.TestCase):
-    def test_empty(self) -> None:
-        self.assertEqual(_virtual_names([]), {})
-
-    def test_single_element(self) -> None:
-        self.assertEqual(_virtual_names(["a/b/c.txt"]), {"a/b/c.txt": "c.txt"})
-
-    def test_no_collisions(self) -> None:
-        paths = ["pkg1/a.txt", "pkg2/b.txt"]
-        self.assertEqual(_virtual_names(paths), {"pkg1/a.txt": "a.txt", "pkg2/b.txt": "b.txt"})
-
-    def test_collisions_disambiguated(self) -> None:
-        paths = ["pkg1/sub/a.txt", "pkg2/sub/a.txt", "pkg3/other/a.txt"]
-        v = _virtual_names(paths)
-        self.assertEqual(v["pkg1/sub/a.txt"], "pkg1/sub/a.txt")
-        self.assertEqual(v["pkg2/sub/a.txt"], "pkg2/sub/a.txt")
-        self.assertEqual(v["pkg3/other/a.txt"], "other/a.txt")
+from typing import Sequence, Optional, Dict, List
+from lib.dag_storage import NodeId, DagMessage, PendingMessage, NodeData
+from lib.sandbox import SandboxConfig
+from lib.node_id_utils import NodeIdUtils, NodeDirectory
+from lib.build_graph_storage import BuildGraphStorage, NodeDefinition
+from lib.manifest_node_loader_impl import ManifestLoaderImpl
 
 
-class TestManifestNodeLoaderImpl(unittest.TestCase):
+class StubNodeIdUtils(NodeIdUtils):
+    def canonicalize_node_id(self, raw_id: str, current_context: str = "") -> NodeId:
+        s = raw_id.strip()
+        if s.startswith("//"):
+            return s if ":" in s else f"{s}:{s[2:]}"
+        if s.startswith(":"):
+            return f"//pkg{s}"
+        return f"//{s}:{s}"
+
+    def extract_node_directory(self, node: NodeId, workspace_root: str = "") -> NodeDirectory:
+        s = node.strip()
+        if s.startswith("//"):
+            pkg = s[2:].split(":")[0]
+            return pkg
+        return ""
+
+
+class StubBuildGraphStorage(BuildGraphStorage):
+    def __init__(self) -> None:
+        self.deps: Dict[NodeId, List[NodeId]] = {}
+        self.rdeps: Dict[NodeId, List[NodeId]] = {}
+        self.sandbox_configs: Dict[NodeId, SandboxConfig] = {}
+        self.task_prompts: Dict[NodeId, Optional[str]] = {}
+        self.node_definitions: Dict[NodeId, Optional[NodeDefinition]] = {}
+        self.node_data: Dict[NodeId, NodeData] = {}
+        self.dirty_nodes: Dict[NodeId, bool] = {}
+
+    def set_dependencies(self, node: NodeId, deps: Sequence[NodeId]) -> None:
+        self.deps[node] = list(deps)
+
+    def get_dependencies(self, node: NodeId) -> Sequence[NodeId]:
+        return self.deps.get(node, [])
+
+    def get_reverse_dependencies(self, node: NodeId) -> Sequence[NodeId]:
+        return self.rdeps.get(node, [])
+
+    def get_pending_messages(self, node: NodeId) -> Sequence[PendingMessage]:
+        return []
+
+    def queue_pending_messages(self, node: NodeId, messages: Sequence[DagMessage]) -> None:
+        pass
+
+    def clear_pending_messages(self, node: NodeId) -> None:
+        pass
+
+    def record_node_data(self, node: NodeId, data: NodeData) -> None:
+        self.node_data[node] = data
+
+    def get_node_data(self, node: NodeId) -> Optional[NodeData]:
+        return self.node_data.get(node)
+
+    def mark_dirty(self, node: NodeId) -> None:
+        self.dirty_nodes[node] = True
+
+    def is_dirty(self, node: NodeId) -> bool:
+        return self.dirty_nodes.get(node, False)
+
+    def set_sandbox_config(self, node: NodeId, config: SandboxConfig) -> None:
+        self.sandbox_configs[node] = config
+
+    def get_sandbox_config(self, node: NodeId) -> SandboxConfig:
+        return self.sandbox_configs[node]
+
+    def set_task_prompt(self, node: NodeId, prompt: Optional[str]) -> None:
+        self.task_prompts[node] = prompt
+
+    def get_task_prompt(self, node: NodeId) -> Optional[str]:
+        return self.task_prompts.get(node)
+
+    def set_node_definition(self, node: NodeId, definition: Optional[NodeDefinition]) -> None:
+        self.node_definitions[node] = definition
+
+    def get_node_definition(self, node: NodeId) -> Optional[NodeDefinition]:
+        return self.node_definitions.get(node)
+
+
+class ManifestLoaderImplTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp_dir = tempfile.mkdtemp()
-        self.workspace_root = os.path.join(self.temp_dir, "ws")
-        os.makedirs(self.workspace_root, exist_ok=True)
-        self.loader = ManifestNodeLoaderImpl()
+        self.node_id_utils = StubNodeIdUtils()
 
-    def tearDown(self) -> None:
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
+    def test_load_manifest_populates_dependencies_and_canonicalizes_labels(self) -> None:
+        """Tests CUJ for parsing manifest and registering canonical target nodes and dependencies in storage."""
+        storage = StubBuildGraphStorage()
+        loader = ManifestLoaderImpl(node_id_utils=self.node_id_utils)
+        manifest_json = """{
+            "label": ":target_a",
+            "deps": ["//pkg_b:target_b"],
+            "dependency_paths": [
+                {"label": "//pkg_b:target_b", "path": "pkg_b/target_b.py"}
+            ]
+        }"""
+        defs = loader.load_manifest(manifest_json, storage)
+        self.assertEqual(len(defs), 1)
+        self.assertEqual(storage.get_dependencies("//pkg:target_a"), ["//pkg_b:target_b"])
+        # Target_b was declared as dependency; synthesized empty definition should exist
+        self.assertIsNotNone(storage.get_node_definition("//pkg_b:target_b"))
 
-    def _write_manifest(self, pkg_rel: str, filename: str, data: dict) -> str:
-        pkg_path = os.path.join(self.workspace_root, pkg_rel)
-        os.makedirs(pkg_path, exist_ok=True)
-        full_path = os.path.join(pkg_path, filename)
-        with open(full_path, "w", encoding="utf-8") as f:
-            json.dump(data, f)
-        return full_path
+    def test_load_manifest_resolves_src_and_silent_srcs_to_rw_files(self) -> None:
+        """Tests that declared src and silent_srcs are resolved relative to package directory into read_write_files."""
+        storage = StubBuildGraphStorage()
+        loader = ManifestLoaderImpl(node_id_utils=self.node_id_utils)
+        manifest_json = """{
+            "label": "//update_with_ai/specs:dag_storage_lib",
+            "src": "dag_storage.py",
+            "silent_srcs": ["dag_storage_meta.json"],
+            "template": "templates/dag_storage.py.tpl",
+            "prompt": "Implement dag_storage"
+        }"""
+        defs = loader.load_manifest(manifest_json, storage)
+        self.assertEqual(len(defs), 1)
+        cfg = defs[0].sandbox_config
+        self.assertIn("dag_storage.py", cfg.read_write_files)
+        self.assertIn("dag_storage_meta.json", cfg.read_write_files)
+        self.assertEqual(
+            cfg.templates.get("dag_storage.py"),
+            "templates/dag_storage.py.tpl",
+        )
+        self.assertEqual(cfg.file_mappings.get("dag_storage.py"), "update_with_ai/specs/dag_storage.py")
+        self.assertEqual(defs[0].prompt, "Implement dag_storage")
 
-    def test_basic_manifest_loading(self) -> None:
-        self._write_manifest("pkg1", "target_manifest.json", {
-            "label": "//pkg1:target",
-            "prompt": "Test prompt 1",
-            "src": "target.py",
-            "silent_srcs": [],
-            "deps": [],
-            "silent_deps": [],
-            "feedback_deps": [],
-            "star_deps": [],
-        })
-
-        res = self.loader.resolve_graph(GraphConfig(workspace_root=self.workspace_root))
-        self.assertIn("//pkg1:target", res.node_definitions)
-        defn = res.node_definitions["//pkg1:target"]
-        self.assertEqual(defn.prompt, "Test prompt 1")
-        self.assertIn("target.py", defn.sandbox_config.file_mappings)
-        self.assertEqual(res.package_directories["//pkg1:target"], os.path.join(self.workspace_root, "pkg1"))
-
-    def test_star_dependency_closure(self) -> None:
-        self._write_manifest("pkgA", "nodeA_manifest.json", {
-            "label": "//pkgA:nodeA",
-            "prompt": "Node A",
-            "src": "a.py",
-            "star_deps": ["//pkgB:nodeB"],
-        })
-        self._write_manifest("pkgB", "nodeB_manifest.json", {
-            "label": "//pkgB:nodeB",
-            "prompt": "Node B",
-            "src": "b.py",
-            "star_deps": ["//pkgC:nodeC"],
-        })
-        self._write_manifest("pkgC", "nodeC_manifest.json", {
-            "label": "//pkgC:nodeC",
-            "prompt": "Node C",
-            "src": "c.py",
-        })
-
-        res = self.loader.resolve_graph(GraphConfig(workspace_root=self.workspace_root))
-        defnA = res.node_definitions["//pkgA:nodeA"]
-        # Node A should have read access to b.py and c.py via transitive star-deps!
-        self.assertIn("b.py", defnA.sandbox_config.readable_paths)
-        self.assertIn("c.py", defnA.sandbox_config.readable_paths)
-
-    def test_feedback_deps_and_blame_targets(self) -> None:
-        self._write_manifest("dep", "dep_manifest.json", {
-            "label": "//dep:target",
-            "prompt": "Dep prompt",
-            "src": "dep.py",
-        })
-        self._write_manifest("consumer", "consumer_manifest.json", {
-            "label": "//consumer:target",
-            "prompt": "Consumer prompt",
+    def test_load_manifest_resolves_deps_and_star_deps_to_ro_files(self) -> None:
+        """Tests that direct deps and star_deps resolve their source files into read_only_files via dependency_paths."""
+        storage = StubBuildGraphStorage()
+        loader = ManifestLoaderImpl(node_id_utils=self.node_id_utils)
+        manifest_json = """{
+            "label": "//pkg:consumer",
             "src": "consumer.py",
-            "feedback_deps": ["//dep:target"],
-        })
+            "deps": ["//pkg_a:lib_a"],
+            "star_deps": ["//pkg_b:lib_b"],
+            "silent_deps": ["//pkg_silent:lib_silent"],
+            "dependency_paths": [
+                {"label": "//pkg_a:lib_a", "path": "pkg_a/lib_a.py"},
+                {"label": "//pkg_b:lib_b", "path": "pkg_b/lib_b.py"},
+                {"label": "//pkg_silent:lib_silent", "path": "pkg_silent/lib_silent.py"}
+            ]
+        }"""
+        defs = loader.load_manifest(manifest_json, storage)
+        cfg = defs[0].sandbox_config
 
-        res = self.loader.resolve_graph(GraphConfig(workspace_root=self.workspace_root))
-        consumer_defn = res.node_definitions["//consumer:target"]
-        self.assertEqual(consumer_defn.sandbox_config.blame_targets.get("dep.py"), "//dep:target")
+        # Direct dep and star dep sources are in read_only_files
+        self.assertIn("lib_a.py", cfg.read_only_files)
+        self.assertIn("lib_b.py", cfg.read_only_files)
+        self.assertEqual(cfg.file_mappings.get("lib_a.py"), "pkg_a/lib_a.py")
+        self.assertEqual(cfg.file_mappings.get("lib_b.py"), "pkg_b/lib_b.py")
 
-    def test_synthetic_manifest_for_missing_deps(self) -> None:
-        self._write_manifest("pkg", "target_manifest.json", {
+        # Silent dep source must NOT be in read_only_files
+        self.assertNotIn("lib_silent.py", cfg.read_only_files)
+        self.assertNotIn("pkg_silent/lib_silent.py", cfg.read_only_files)
+
+        # But silent dep is registered as a dependency in storage
+        all_deps = storage.get_dependencies("//pkg:consumer")
+        self.assertIn("//pkg_a:lib_a", all_deps)
+        self.assertIn("//pkg_silent:lib_silent", all_deps)
+
+    def test_load_manifest_derives_minimal_virtual_file_names(self) -> None:
+        """Tests virtual file name derivation: bare names when unique, minimal parent suffixes on collision."""
+        storage = StubBuildGraphStorage()
+        loader = ManifestLoaderImpl(node_id_utils=self.node_id_utils)
+        manifest_json = """{
             "label": "//pkg:target",
-            "prompt": "Prompt",
-            "deps": ["//external:dep"],
-        })
+            "src": "helpers.py",
+            "deps": ["//other:helpers", "//cfg:settings"],
+            "dependency_paths": [
+                {"label": "//other:helpers", "path": "tests/unit/helpers.py"},
+                {"label": "//cfg:settings", "path": "config/settings.py"}
+            ]
+        }"""
+        defs = loader.load_manifest(manifest_json, storage)
+        mappings = defs[0].sandbox_config.file_mappings
 
-        res = self.loader.resolve_graph(GraphConfig(workspace_root=self.workspace_root))
-        self.assertIn("//external:dep", res.node_definitions)
-        self.assertEqual(res.node_dependencies["//pkg:target"], ["//external:dep"])
+        # config/settings.py has no collision -> settings.py
+        self.assertEqual(mappings.get("settings.py"), "config/settings.py")
+
+        # pkg/helpers.py vs tests/unit/helpers.py collides on helpers.py -> disambiguated
+        self.assertEqual(mappings.get("pkg/helpers.py"), "pkg/helpers.py")
+        self.assertEqual(mappings.get("unit/helpers.py"), "tests/unit/helpers.py")
 
 
 if __name__ == "__main__":

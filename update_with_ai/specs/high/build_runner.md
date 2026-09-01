@@ -1,74 +1,31 @@
 # build_runner
 
-imports: dag_cleaner (topological cleaning), dag_storage (messages), dag_clean_logic (change and feedback), build_agent_config (agent configuration), sandbox (sandbox configuration), guide_delivery (step mode), run_control (blame), runner_logger (verbose transcript)
-terms (from dag_storage): node, pending message, subgraph
-terms (from dag_clean_logic): dirty, cleaning, change message, feedback message
-terms (from build_node_loader): manifest
-terms (from build_agent_config): agent configuration, config target
-terms (from guide_delivery): step mode
-terms (from run_control): blame
-terms (from runner_logger): verbose transcript
-terms (owned): result
+imports: dag_storage, dag_cleaner, dag_node_cleaner, runner_logger, manifest_node_loader
+types from dag_storage: dag storage, node, message, pending message
+types from dag_cleaner: dag cleaner
+types from dag_node_cleaner: node cleaner, change message, feedback message
+types from runner_logger: runner logger, log event
+types from manifest_node_loader: manifest loader
 
 ## Purpose
 
-Orchestrates the full agent pipeline — graph resolution, message persistence, agent execution, and topological cleaning — as a single executable unit.
+Orchestrates complete multi-node build and cleaning passes from workspace targets to final artifact completion.
 
-## Terms
+Running multi-stage agent workflows requires coordinating target loading, dirty state evaluation, and topological cleaning across the graph. The build runner will be invoked by Starlark rules to coordinate this end-to-end lifecycle: loading workspace targets into graph storage, dispatching topological cleaning passes, routing feedback across node boundaries, and capturing progress through structured runner logging.
 
-- Result: the outcome of a cleaning operation: success (no messages, change, or feedback produced) or failure.
+## Types
 
-## Contract
+- A *build runner* is an orchestration service that executes topological build and cleaning passes across workspace *nodes*
+- A *cleaning pass* is an execution run that cleans dirty *nodes* across a target subgraph
+- A *build result* is the final outcome of a *cleaning pass*, reporting overall success or failure
 
-**Inputs**
+## Behavior
 
-- A root node label.
-- A workspace root.
-- An optional config target (selecting the agent configuration).
-- For feedback injection: feedback messages.
-- For change addition: a change text.
-- For change broadcast: a change text.
-
-**Operations**
-
-- Run a topological cleaning pass starting from a root node.
-- Inject feedback messages to a specific node's message store (marking the node dirty for a subsequent run).
-- Add a change message to a specific node's message store (marking the node dirty for a subsequent run).
-- Broadcast a change from a specific node to its known reverse dependencies.
-- Provide a config target selecting the agent configuration for the cleaning pass; when none is provided, the agent configuration is selected by the environment (AGENT_CONFIG_TARGET) and then the //agent_configs:default convention.
-
-**Guarantees**
-
-- On success: provides a clean result — no messages, a change result, or a feedback result (all nodes in the subgraph cleaned).
-- On failure — the offending node's messages remain unchanged, previously cleaned nodes retain changes, and processing halts — when:
-  - a node's cleaning failed;
-  - a termination limit was exceeded (message cycle or non-clearing dirty state);
-  - feedback targets a node outside the subgraph;
-  - the graph contains a cycle (the subgraph cannot be topologically ordered).
-- All output (changes and feedback) is delivered to the appropriate target nodes' message stores.
-- Assembles its components internally; the client provides no component instances.
-- Applies the agent configuration to each node's sandbox configuration: whether session-start reads are enabled and whether step mode is enabled.
-- Exposes only the cleaning, feedback, change-addition, and change-broadcast operations, not component APIs.
-- A successful feedback injection adds each message to the target node's pending messages as a feedback message (marking the node dirty; when cleaned, the node must change, blame, or fail) and provides a no-change result.
-- A successful change addition adds a change message to the target node's pending messages (marking the node dirty for a subsequent cleaning pass); the node may succeed without changing.
-- A change addition with no provided change text adds a default change message.
-- A change broadcast adds a change message to the pending set of each of the target's known reverse dependencies.
-- The broadcast message is the target's declared source file name followed by the provided change text.
-- A change broadcast clears the target's pending messages and known reverse dependencies.
-- A feedback injection, a change addition, or a change broadcast for a node that does not exist in the graph signals failure, leaving state unchanged.
-- Expected failures are provided as values (a result); unexpected failures — assembly failures such as agent-configuration resolution failure or a missing manifest — are signaled as exceptions and are outside the value contract.
-
-**Assumptions**
-
-- The root node is a valid node label.
-- The workspace root points to a valid workspace with manifest files.
-
-**Logging**
-
-- Provides compact one-line summaries of run events to standard output; on agent session termination, reports the agent session's token usage (input tokens with cached percentage and output tokens) and elapsed duration alongside cumulative totals across all agent sessions in the pass.
-- Provides a verbose transcript to a log file whose path is determined by a configured environment variable or a default location (the Bazel workspace directory when running under Bazel, otherwise the current working directory).
-- The transcript records each request's conversation state.
-
-## Non-concerns
-
-- Error message wording: the exact wording of failure reasons is unspecified.
+- A *build runner* resolves target manifests and loads workspace target graphs into *dag storage* using a *manifest loader*.
+- A *build runner* executes a *cleaning pass* over an acyclic subgraph rooted at a target *node*.
+- A *build runner* cleans dirty *nodes* in topological order using a *dag cleaner*.
+- A *build runner* marks a target *node* dirty by injecting a non-triggering check *change message*.
+- A *build runner* injects a caller-supplied *feedback message* into a target *node*.
+- A *build runner* broadcasts a caller-supplied *change message* from a *node* to all of its reverse dependencies.
+- A *build runner* logs execution events to standard output and transcript files using a *runner logger*.
+- A *build runner* produces a *build result* upon pass completion.

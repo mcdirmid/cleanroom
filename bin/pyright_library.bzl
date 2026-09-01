@@ -122,8 +122,26 @@ def _deduplicate_list(lst):
             result.append(item)
     return result
 
+def _ensure_type_check_suite():
+    """Ensure a package-level type_check test_suite exists."""
+    if not native.existing_rule("type_check"):
+        native.test_suite(
+            name = "type_check",
+            tags = ["type_check"],
+        )
+
+def type_check(name = "type_check", tags = ["type_check"], **kwargs):
+    """Test suite that includes all direct _type_check tests in the package."""
+    if not native.existing_rule(name):
+        native.test_suite(
+            name = name,
+            tags = tags,
+            **kwargs
+        )
+
 def pyright_library(name, srcs, deps = [], pyright_deps = [], imports = [".."], **kwargs):
     """Create a Python library with type checking."""
+    _ensure_type_check_suite()
     
     # Create the actual py_library
     py_library(
@@ -163,11 +181,12 @@ def pyright_library(name, srcs, deps = [], pyright_deps = [], imports = [".."], 
         native.test_suite(
             name = name + "_type_check_all",
             tests = transitive_checks,
-            tags = ["type_check"],
+            tags = ["type_check_transition", "type_check_transitions"],
         )
 
 def pyright_test(name, srcs, deps = [], pyright_deps = [], imports = [".."], **kwargs):
     """Create a Python test with type checking."""
+    _ensure_type_check_suite()
     
     # Create the actual py_test
     py_test(
@@ -207,11 +226,12 @@ def pyright_test(name, srcs, deps = [], pyright_deps = [], imports = [".."], **k
         native.test_suite(
             name = name + "_type_check_all",
             tests = transitive_checks,
-            tags = ["type_check"],
+            tags = ["type_check_transition", "type_check_transitions"],
         )
 
 def pyright_binary(name, srcs, main, deps = [], pyright_deps = [], imports = [".."], **kwargs):
     """Create a Python binary with type checking."""
+    _ensure_type_check_suite()
     
     # Create the actual py_binary
     py_binary(
@@ -252,7 +272,7 @@ def pyright_binary(name, srcs, main, deps = [], pyright_deps = [], imports = [".
         native.test_suite(
             name = name + "_type_check_all",
             tests = transitive_checks,
-            tags = ["type_check"],
+            tags = ["type_check_transition", "type_check_transitions"],
         )
 
 # Define the rule

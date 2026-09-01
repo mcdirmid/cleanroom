@@ -1,170 +1,86 @@
-"""
-Tests for ChangeSummaryValidatorImpl.
-"""
+"""Tests for change_summary_validator_impl derived from LLS."""
 
 import unittest
-from typing import Dict, List, Optional, Set
-
-from lib.change_summary_validator_impl import (
-    ChangeSummaryValidatorImpl,
-    HARD_CHANGE_SUMMARY_LENGTH,
-    SOFT_CHANGE_SUMMARY_LENGTH,
-    SUMMARY_LENGTH_GRACE,
-)
-from lib.file_editor import FileEditor
-from lib.tool_provider import ToolDefinition, ToolCallOutcome, ToolFailure
+from lib.change_summary_validator import NetChange
+from lib.change_summary_validator_impl import ChangeValidatorImpl
 
 
-class _MockFileEditor(FileEditor):
-    def __init__(
-        self,
-        files: Optional[Dict[str, str]] = None,
-        snapshots: Optional[Dict[str, str]] = None,
-        changed_files: Optional[List[str]] = None,
-    ) -> None:
-        self.files = dict(files or {})
-        self.snapshots = dict(snapshots or {})
-        self.changed_files = list(changed_files or [])
-
-    def get_tool_definitions(self) -> List[ToolDefinition]:
-        return []
-
-    def replace(self, file_path: str, old_str: str, new_str: str, expect_multiple: bool = False) -> ToolCallOutcome:
-        return ToolFailure[str]("not implemented")
-
-    def update_lines(self, file_path: str, start_line: int, end_line: int, new_str: str) -> ToolCallOutcome:
-        return ToolFailure[str]("not implemented")
-
-    def get_write_occurred(self) -> bool:
-        return bool(self.changed_files)
-
-    def get_changed_files(self) -> List[str]:
-        return list(self.changed_files)
-
-    def get_run_start_snapshot(self, file_path: str) -> Optional[str]:
-        return self.snapshots.get(file_path)
-
-    def get_current_content(self, file_path: str) -> Optional[str]:
-        return self.files.get(file_path)
-
-    def is_writable(self, file_path: str) -> bool:
-        return True
-
-
-class TestChangeSummaryValidatorImpl(unittest.TestCase):
-    def test_effective_changes_detects_modified_files(self) -> None:
-        editor = _MockFileEditor(
-            files={"a.txt": "new content", "b.txt": "same"},
-            snapshots={"a.txt": "old content", "b.txt": "same"},
-            changed_files=["a.txt", "b.txt"],
+class ChangeSummaryValidatorImplTest(unittest.TestCase):
+    def test_net_change_dataclass(self) -> None:
+        """Tests Data Types: NetChange dataclass instantiation and field values."""
+        change = NetChange(
+            file_name="module.py",
+            initial_content="def old(): pass",
+            current_content="def new(): pass",
         )
-        validator = ChangeSummaryValidatorImpl(file_editor=editor)
-        self.assertEqual(validator.get_effective_changes(), ["a.txt"])
+        self.assertEqual(change.file_name, "module.py")
+        self.assertEqual(change.initial_content, "def old(): pass")
+        self.assertEqual(change.current_content, "def new(): pass")
 
-    def test_compute_diff_summary_formats_diff(self) -> None:
-        editor = _MockFileEditor(
-            files={"a.txt": "line 1\nline 2 new\n"},
-            snapshots={"a.txt": "line 1\nline 2 old\n"},
-            changed_files=["a.txt"],
-        )
-        validator = ChangeSummaryValidatorImpl(file_editor=editor, diff_size_limit=500)
-        diff = validator.compute_diff_summary()
-        self.assertIn("-line 2 old", diff)
-        self.assertIn("+line 2 new", diff)
+    def test_default_constructor(self) -> None:
+        """Tests Config: ChangeValidatorImpl default constructor."""
+        validator = ChangeValidatorImpl()
+        self.assertIsNotNone(validator)
 
-    def test_validate_no_changes_when_net_unchanged_succeeds(self) -> None:
-        editor = _MockFileEditor(
-            files={"a.txt": "same"},
-            snapshots={"a.txt": "same"},
-            changed_files=["a.txt"],
-        )
-        validator = ChangeSummaryValidatorImpl(file_editor=editor)
-        self.assertIsNone(validator.validate_change_summaries([]))
+    def test_validate_change_summary_all_sides_of_boundary(self) -> None:
+        """Tests all sides of boundary for validating change summary:
+        1. Empty net changes -> None (no summary required)
+        2. Populated net changes + matching summary -> None
+        3. Populated net changes + empty summary -> Error string
+        4. Populated net changes + missing file summary -> Error string
+        """
+        validator = ChangeValidatorImpl()
+        changes = [NetChange(file_name="foo.py", initial_content="a", current_content="b")]
 
-    def test_validate_claims_when_net_unchanged_fails(self) -> None:
-        editor = _MockFileEditor(
-            files={"a.txt": "same"},
-            snapshots={"a.txt": "same"},
-            changed_files=["a.txt"],
-        )
-        validator = ChangeSummaryValidatorImpl(file_editor=editor)
-        result = validator.validate_change_summaries([{"file": "a.txt", "summary": "changed"}])
-        self.assertIsInstance(result, ToolFailure)
-        assert isinstance(result, ToolFailure)
-        self.assertIn("net-changed nothing", result.value)
+        # Side 1: empty net changes
+        self.assertIsNone(validator.validate_change_summary("summary", []))
 
-    def test_validate_missing_changes_when_files_modified_fails(self) -> None:
-        editor = _MockFileEditor(
-            files={"a.txt": "new"},
-            snapshots={"a.txt": "old"},
-            changed_files=["a.txt"],
-        )
-        validator = ChangeSummaryValidatorImpl(file_editor=editor)
-        result = validator.validate_change_summaries([])
-        self.assertIsInstance(result, ToolFailure)
-        assert isinstance(result, ToolFailure)
-        self.assertIn("Cannot advance: the run changed files", result.value)
+        # Side 2: matching summary
+        self.assertIsNone(validator.validate_change_summary("Updated foo.py", changes))
 
-    def test_validate_missing_or_extra_claimed_files_fails(self) -> None:
-        editor = _MockFileEditor(
-            files={"a.txt": "new", "b.txt": "new"},
-            snapshots={"a.txt": "old", "b.txt": "old"},
-            changed_files=["a.txt", "b.txt"],
-        )
-        validator = ChangeSummaryValidatorImpl(file_editor=editor)
-        # Missing b.txt
-        res1 = validator.validate_change_summaries([{"file": "a.txt", "summary": "changed a"}])
-        self.assertIsInstance(res1, ToolFailure)
-        assert isinstance(res1, ToolFailure)
-        self.assertIn("missing entries for changed files: b.txt", res1.value)
+        # Side 3: empty summary with changes
+        self.assertIsNotNone(validator.validate_change_summary("", changes))
 
-        # Extra c.txt
-        res2 = validator.validate_change_summaries([
-            {"file": "a.txt", "summary": "changed a"},
-            {"file": "b.txt", "summary": "changed b"},
-            {"file": "c.txt", "summary": "changed c"},
-        ])
-        self.assertIsInstance(res2, ToolFailure)
-        assert isinstance(res2, ToolFailure)
-        self.assertIn("claims changes for files that did not net-change: c.txt", res2.value)
+        # Side 4: non-matching summary
+        self.assertIsNotNone(validator.validate_change_summary("Updated bar.py", changes))
 
-    def test_validate_soft_limit_grace_period(self) -> None:
-        editor = _MockFileEditor(
-            files={"a.txt": "new"},
-            snapshots={"a.txt": "old"},
-            changed_files=["a.txt"],
-        )
-        validator = ChangeSummaryValidatorImpl(file_editor=editor)
-        long_summary = "x" * (SOFT_CHANGE_SUMMARY_LENGTH + 10)
+    def test_validate_change_summary_length_bounds(self) -> None:
+        """Tests summary length bound behavior:
+        1. Valid summary under 2,000 chars -> None.
+        2. Summary exceeding hard bound (4,000 chars) -> returns ValidationFeedback.
+        """
+        validator = ChangeValidatorImpl()
+        changes = [NetChange(file_name="foo.py", initial_content="a", current_content="b")]
 
-        # Soft rejections up to grace count
-        for _ in range(SUMMARY_LENGTH_GRACE):
-            res = validator.validate_change_summaries([{"file": "a.txt", "summary": long_summary}])
-            self.assertIsInstance(res, ToolFailure)
-            assert isinstance(res, ToolFailure)
-            self.assertIn("verbose", res.value)
+        # Under 2000 chars
+        summary_short = "Updated foo.py with new implementation details."
+        self.assertIsNone(validator.validate_change_summary(summary_short, changes))
 
-        # Next attempt accepted
-        accepted = validator.validate_change_summaries([{"file": "a.txt", "summary": long_summary}])
-        self.assertIsNone(accepted)
+        # Exceeding hard bound (4000 chars)
+        summary_long = "Updated foo.py " + ("x" * 4001)
+        self.assertIsNotNone(validator.validate_change_summary(summary_long, changes))
 
-    def test_validate_hard_limit_raises_runtime_error_after_grace(self) -> None:
-        editor = _MockFileEditor(
-            files={"a.txt": "new"},
-            snapshots={"a.txt": "old"},
-            changed_files=["a.txt"],
-        )
-        validator = ChangeSummaryValidatorImpl(file_editor=editor)
-        very_long = "x" * (HARD_CHANGE_SUMMARY_LENGTH + 10)
+    def test_compute_diff_summary_truncation_boundary(self) -> None:
+        """Tests all sides of diff truncation boundary:
+        1. Short diff within max_diff_chars -> full diff returned
+        2. Large diff exceeding max_diff_chars -> truncated at max_diff_chars
+        """
+        validator = ChangeValidatorImpl(max_diff_chars=50)
+        short_change = [NetChange(file_name="f.py", initial_content="1", current_content="2")]
+        diff_short = validator.compute_diff_summary(short_change)
+        self.assertLessEqual(len(diff_short), 50)
 
-        for _ in range(SUMMARY_LENGTH_GRACE):
-            res = validator.validate_change_summaries([{"file": "a.txt", "summary": very_long}])
-            self.assertIsInstance(res, ToolFailure)
-            assert isinstance(res, ToolFailure)
-            self.assertIn("too long", res.value)
+        long_change = [NetChange(file_name="long_file_name_with_extra_details.py", initial_content="x" * 100, current_content="y" * 100)]
+        diff_long = validator.compute_diff_summary(long_change)
+        self.assertLessEqual(len(diff_long), 50)
 
-        with self.assertRaises(RuntimeError):
-            validator.validate_change_summaries([{"file": "a.txt", "summary": very_long}])
+    def test_validate_change_summary_rejects_net_zero_modifications(self) -> None:
+        """Tests Invariants: rejects change summaries claiming changes on files with net-zero modifications."""
+        validator = ChangeValidatorImpl()
+        net_zero = [NetChange(file_name="same.py", initial_content="hello", current_content="hello")]
+        # Claiming modification on net-zero modified file returns error string
+        err = validator.validate_change_summary("Modified same.py", net_zero)
+        self.assertIsNotNone(err)
 
 
 if __name__ == "__main__":

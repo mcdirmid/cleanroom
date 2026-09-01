@@ -1,42 +1,19 @@
-# lib/sandbox_asm.py
-"""
-Assembly of the sandbox component.
-"""
+"""Sandbox assembler constructing hermetic sandbox instances."""
 
-from __future__ import annotations
-
-from typing import Optional
-
-from .sandbox import SandboxConfig
-from .sandbox_impl import SandboxImpl
-from .file_reader_impl import FileReaderImpl
-from .file_editor_impl import FileEditorImpl
-from .guide_delivery_impl import GuideDeliveryImpl
-from .change_summary_validator_impl import ChangeSummaryValidatorImpl
-from .run_control import DiffSizeLimit
-from .run_control_impl import RunControlImpl
+from .sandbox_impl import SandboxFactoryImpl
+from .file_reader_impl import FileReaderFactoryImpl
+from .file_editor_impl import FileEditorFactoryImpl
+from .guide_delivery_impl import GuideDeliveryFactoryImpl
+from .run_control_impl import RunControlFactoryImpl
+from .change_summary_validator_impl import ChangeValidatorImpl
 
 
-class SandboxAsm(SandboxImpl):
-    def __init__(
-        self,
-        config: SandboxConfig,
-        diff_size_limit: Optional[DiffSizeLimit] = None,
-    ) -> None:
+class SandboxAsm(SandboxFactoryImpl):
+    def __init__(self) -> None:
         super().__init__(
-            config=config,
-            make_file_reader=lambda frc: FileReaderImpl(config=frc),
-            make_file_editor=lambda fec, fr: FileEditorImpl(config=fec, file_reader=fr),
-            make_guide_delivery=lambda gdc: GuideDeliveryImpl(config=gdc),
-            make_run_control=lambda rcc, fr, fe, gd: RunControlImpl(
-                rcc,
-                file_reader=fr,
-                file_editor=fe,
-                guide_delivery=gd,
-                validator=ChangeSummaryValidatorImpl(
-                    file_editor=fe,
-                    diff_size_limit=rcc.diff_size_limit,
-                ),
-            ),
-            diff_size_limit=diff_size_limit,
+            file_reader_factory=FileReaderFactoryImpl(),
+            file_editor_factory=FileEditorFactoryImpl(),
+            run_control_factory=RunControlFactoryImpl(change_validator=ChangeValidatorImpl()),
+            guide_delivery_factory=GuideDeliveryFactoryImpl(),
         )
+

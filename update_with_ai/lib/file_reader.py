@@ -1,52 +1,46 @@
-# lib/file_reader.py
-"""
-Interface definitions for the LLS FileReader.
-"""
+"""File reader interface and configuration."""
 
-from typing import Dict, List, Optional, Protocol, Tuple, TypeAlias
+from typing import Protocol, TypeAlias, Sequence, Optional
 from dataclasses import dataclass
-from .tool_provider import (
-    ToolDefinition,
-    PresentedToolResult,
-    ToolCallOutcome,
+from .tool_provider import Tool, ToolProvider, ToolResult, ToolFailure
+from .virtual_file_name import (
+    VirtualFileName,
+    VirtualFileMapping,
+    UnsanitizedContent,
+    SanitizedContent,
 )
 
-VirtualName: TypeAlias = str
-FilePath: TypeAlias = str
-FileMapping: TypeAlias = Dict[VirtualName, FilePath]
-ReadablePaths: TypeAlias = List[VirtualName]
-SearchResultLimit: TypeAlias = int
+HostPath: TypeAlias = str
+ReadOnlyFile: TypeAlias = VirtualFileName
+ReadWriteFile: TypeAlias = VirtualFileName
 
 
-@dataclass
+@dataclass(frozen=True)
 class FileReaderConfig:
-    file_mappings: FileMapping
-    readable_paths: ReadablePaths
-    search_result_limit: SearchResultLimit = 5
-    session_start_reads_enabled: bool = True
+    read_only_files: Sequence[ReadOnlyFile]
+    read_write_files: Sequence[ReadWriteFile]
+    file_mappings: VirtualFileMapping
+    step_mode_guide: Optional[VirtualFileName] = None
+    search_result_limit: Optional[int] = None
 
 
-class FileReader(Protocol):
-    def get_tool_definitions(self) -> List[ToolDefinition]:
+SessionStartRead: TypeAlias = ToolResult
+
+
+class FileReader(ToolProvider, Protocol):
+    def get_read_tool(self) -> Tool:
         ...
 
-    def get_session_start_reads(self) -> List[PresentedToolResult]:
+    def get_search_tool(self) -> Tool:
         ...
 
-    def read_file(self, file_path: VirtualName,
-                  include_line_numbers: bool = False) -> ToolCallOutcome:
+    def get_session_start_reads(self) -> Sequence[SessionStartRead]:
         ...
 
-    def search_files(self, path: VirtualName = ".", pattern: str = "",
-                     offset: Optional[int] = None,
-                     limit: Optional[int] = None) -> ToolCallOutcome:
+    def sanitize_paths(self, content: UnsanitizedContent) -> SanitizedContent:
         ...
 
-    def sanitize_paths(self, text: str) -> str:
-        ...
 
-    def resolve_path(self, file_path: VirtualName) -> Optional[str]:
-        ...
-
-    def is_readable(self, file_path: VirtualName) -> bool:
+class FileReaderFactory(Protocol):
+    def create_file_reader(self, config: FileReaderConfig) -> FileReader:
         ...

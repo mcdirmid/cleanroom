@@ -104,9 +104,8 @@ class TestBazelMacrosIntegration(unittest.TestCase):
         
         content = example_path.read_text()
         
-        # Verify the example uses update_with_ai and bazel_ai_graph_dag
+        # Verify the example uses update_with_ai
         self.assertIn("update_with_ai", content)
-        self.assertIn("bazel_ai_graph_dag", content)
         
         # Verify new attributes are used
         self.assertIn("silent_deps", content)

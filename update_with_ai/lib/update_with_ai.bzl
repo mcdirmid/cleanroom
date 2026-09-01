@@ -76,20 +76,27 @@ def _update_with_ai_impl(ctx):
         if dep_label not in _seen:
             _all_deps.append(dep_label)
             _seen[dep_label] = True
+    # The guide node is automatically included in deps so it is cleaned before
+    # this node and its manifest reaches the graph for runtime loading.
+    if ctx.attr.guide:
+        guide_label = str(ctx.attr.guide.label)
+        if guide_label not in _seen:
+            _all_deps.append(guide_label)
+            _seen[guide_label] = True
 
-    # Build the manifest
+    # Build the manifest with apparent canonical labels
     manifest_content = {
-        "label": str(ctx.label),
+        "label": _apparent_label(ctx.label),
         "name": ctx.attr.name,
         "prompt": ctx.attr.prompt,
         "tools": [str(t) for t in ctx.attr.tools],
-        "deps": _all_deps,
-        "silent_deps": [str(dep.label) for dep in ctx.attr.silent_deps],
-        "feedback_deps": [str(dep.label) for dep in ctx.attr.feedback_deps],
-        "star_deps": [str(dep.label) for dep in ctx.attr.star_deps],
+        "deps": [_apparent_label(dep_label) for dep_label in _all_deps],
+        "silent_deps": [_apparent_label(dep.label) for dep in ctx.attr.silent_deps],
+        "feedback_deps": [_apparent_label(dep.label) for dep in ctx.attr.feedback_deps],
+        "star_deps": [_apparent_label(dep.label) for dep in ctx.attr.star_deps],
         "src": ctx.attr.src,
         "template": ctx.file.template.short_path if ctx.file.template else None,
-        "guide": str(ctx.attr.guide.label) if ctx.attr.guide else None,
+        "guide": _apparent_label(ctx.attr.guide.label) if ctx.attr.guide else None,
         "silent_srcs": [str(s) for s in ctx.attr.silent_srcs],
         "verify": ctx.attr.verify if ctx.attr.verify else None,
         "dependency_paths": deps_data,
@@ -108,14 +115,53 @@ def _update_with_ai_impl(ctx):
         ),
     ]
 
+# ============================================================================
+# Aspect: collect all transitive node manifests for runfiles
+# ============================================================================
+
+def _collect_manifests_impl(target, ctx):
+    """Collect the target's own manifest plus all transitive node manifests.
+
+    Bazel runfiles are explicit, not transitive: a node target's runfiles
+    contain only its own manifest, so a *_clean binary would not see the
+    manifests of its deps' deps. This aspect walks the node graph (deps,
+    silent_deps, feedback_deps, star_deps, guide) and returns every *_manifest.json
+    reachable, so consumers (the clean rule, the lint test rule) can put the
+    full transitive manifest set into runfiles for run-time graph loading.
+    """
+    own = [
+        f
+        for f in target[DefaultInfo].files.to_list()
+        if f.basename.endswith("_manifest.json")
+    ]
+    transitive = []
+    for attr_name in ("deps", "silent_deps", "feedback_deps", "star_deps", "guide"):
+        val = getattr(ctx.rule.attr, attr_name, None)
+        if val == None:
+            continue
+        dep_list = val if type(val) == "list" else [val]
+        for dep in dep_list:
+            if OutputGroupInfo in dep:
+                manifests = getattr(dep[OutputGroupInfo], "manifests", None)
+                if manifests != None:
+                    transitive.append(manifests)
+    return [OutputGroupInfo(manifests = depset(own, transitive = transitive))]
+
+_collect_manifests = aspect(
+    implementation = _collect_manifests_impl,
+    attr_aspects = ["deps", "silent_deps", "feedback_deps", "star_deps", "guide"],
+)
+
 # Rule definition (private name)
 _update_with_ai_rule = rule(
     implementation = _update_with_ai_impl,
     attrs = {
         "prompt": attr.string(
-            mandatory = True,
+            mandatory = False,
+            default = "",
             doc = "The agent prompt for this node",
         ),
+
         "tools": attr.label_list(
             doc = "List of tool targets",
         ),
@@ -139,6 +185,7 @@ _update_with_ai_rule = rule(
             doc = "Optional file label whose content initializes the declared source file at run start when the file does not exist on disk; the manifest stores the template file's repo-relative path and the runtime reads its content",
         ),
         "guide": attr.label(
+            aspects = [_collect_manifests],
             doc = "Optional node target whose declared source is the run's guide: a readable file in the guide format (# Guide: ... ## Summary ...). The guide node is cleaned before this node; the guide's readable and delivery treatment follows the agent configuration's step-sections gate (when step mode is enabled the guide is not readable and its content reaches the agent only through advance outputs).",
         ),
         "silent_srcs": attr.string_list(
@@ -158,7 +205,7 @@ _update_with_ai_rule = rule(
 
 def update_with_ai(
         name,
-        prompt,
+        prompt = "",
         tools = [],
         deps = [],
         silent_deps = [],
@@ -338,39 +385,6 @@ def update_with_ai(
     )
 
 # ============================================================================
-# Aspect: collect all transitive node manifests for runfiles
-# ============================================================================
-
-def _collect_manifests_impl(target, ctx):
-    """Collect the target's own manifest plus all transitive node manifests.
-
-    Bazel runfiles are explicit, not transitive: a node target's runfiles
-    contain only its own manifest, so a *_clean binary would not see the
-    manifests of its deps' deps. This aspect walks the node graph (deps,
-    silent_deps, feedback_deps, star_deps) and returns every *_manifest.json
-    reachable, so consumers (the clean rule, the lint test rule) can put the
-    full transitive manifest set into runfiles for run-time graph loading.
-    """
-    own = [
-        f
-        for f in target[DefaultInfo].files.to_list()
-        if f.basename.endswith("_manifest.json")
-    ]
-    transitive = []
-    for attr_name in ("deps", "silent_deps", "feedback_deps", "star_deps"):
-        for dep in getattr(ctx.rule.attr, attr_name, []):
-            if OutputGroupInfo in dep:
-                manifests = getattr(dep[OutputGroupInfo], "manifests", None)
-                if manifests != None:
-                    transitive.append(manifests)
-    return [OutputGroupInfo(manifests = depset(own, transitive = transitive))]
-
-_collect_manifests = aspect(
-    implementation = _collect_manifests_impl,
-    attr_aspects = ["deps", "silent_deps", "feedback_deps", "star_deps"],
-)
-
-# ============================================================================
 # Rule: update_ai_node_clean (generates a clean target per node)
 # ============================================================================
 
@@ -431,7 +445,14 @@ def _update_ai_node_clean_impl(ctx):
         "if not _runfiles_root:",
         "    _runfiles_root = os.getcwd()",
         "sys.path.insert(0, _runfiles_root)",
-        "from update_with_ai.lib.build_asm import BuildAsm",
+        "try:",
+        "    from update_with_ai.lib.build_asm import BuildAsm",
+        "    from update_with_ai.lib.manifest_node_loader_impl import ManifestLoaderImpl",
+        "    from update_with_ai.lib.bazel_node_id_utils_impl import BazelNodeIdUtilsImpl",
+        "except ImportError:",
+        "    from lib.build_asm import BuildAsm",
+        "    from lib.manifest_node_loader_impl import ManifestLoaderImpl",
+        "    from lib.bazel_node_id_utils_impl import BazelNodeIdUtilsImpl",
         "",
         "def main():",
         "    args = sys.argv[1:]",
@@ -460,7 +481,7 @@ def _update_ai_node_clean_impl(ctx):
         '        if os.path.isdir(os.path.join(base, "_main")):',
         '            _runfiles_root = os.path.join(base, "_main")',
         "            break",
-        "    workspace_root = rest[0] if rest else (_runfiles_root or os.getcwd())",
+        "    workspace_root = rest[0] if rest else (os.environ.get(\"BUILD_WORKSPACE_DIRECTORY\", \"\") or _runfiles_root or os.getcwd())",
         "",
         "    # Find the manifest in runfiles",
         "    _manifest_path = None",
@@ -478,12 +499,17 @@ def _update_ai_node_clean_impl(ctx):
         "        _manifest_path = os.path.join(_script_dir, manifest_name)",
         "",
         "    with open(_manifest_path) as f:",
-        '        node_label = json.load(f).get("label")',
+        "        manifest_raw = f.read()",
+        "        node_label = json.loads(manifest_raw).get(\"label\")",
         "",
-        "    runner = BuildAsm()",
+        "    runner = BuildAsm(config_target=resolved_config, workspace_root=workspace_root)",
+        "    loader = ManifestLoaderImpl(BazelNodeIdUtilsImpl())",
+        "    loader.load_manifest(manifest_raw, runner.storage)",
+        "",
         '    print(f"Agent config: {resolved_config}")',
         "    try:",
-        "        result = runner.run_dag(node_label, workspace_root, config_target=resolved_config)",
+        "        res = runner.run_cleaning_pass(node_label)",
+        "        result = res.success",
         "    except KeyboardInterrupt:",
         '        print("Interrupted.", file=sys.stderr)',
         "        sys.exit(130)",
@@ -491,7 +517,9 @@ def _update_ai_node_clean_impl(ctx):
         "        success, error = result",
         "        sys.exit(0 if success else 1)",
         "    else:",
-        "        sys.exit(0)",
+        "        if not result:",
+        '            print(f"Error: {res.summary}", file=sys.stderr)',
+        "        sys.exit(0 if result else 1)",
         "",
         'if __name__ == "__main__":',
         "    main()",
@@ -619,7 +647,6 @@ def _update_ai_node_feedback_impl(ctx):
         "    _runfiles_root = os.getcwd()",
         "sys.path.insert(0, _runfiles_root)",
         "from update_with_ai.lib.build_asm import BuildAsm",
-        "from update_with_ai.lib.dag_clean_logic import FailureResult",
         "",
         "def main():",
         "    messages = sys.argv[1:]",
@@ -629,7 +656,7 @@ def _update_ai_node_feedback_impl(ctx):
         '        if os.path.isdir(os.path.join(base, "_main")):',
         '            _runfiles_root = os.path.join(base, "_main")',
         "            break",
-        "    workspace_root = _runfiles_root or os.getcwd()",
+        "    workspace_root = os.environ.get(\"BUILD_WORKSPACE_DIRECTORY\", \"\") or _runfiles_root or os.getcwd()",
         "",
         "    # Find the manifest in runfiles",
         "    _manifest_path = None",
@@ -654,9 +681,11 @@ def _update_ai_node_feedback_impl(ctx):
         '        print("Usage: bazel run <this target> -- \\"feedback message\\" [more...]", file=sys.stderr)',
         "        sys.exit(1)",
         "",
-        "    runner = BuildAsm()",
+        "    runner = BuildAsm(workspace_root=workspace_root)",
         "    try:",
-        "        result = runner.inject_feedback(node_label, workspace_root, messages)",
+        "        for msg in messages:",
+        "            runner.inject_node_feedback(node_label, msg)",
+        "        result = True",
         "    except KeyboardInterrupt:",
         '        print("Interrupted.", file=sys.stderr)',
         "        sys.exit(130)",
@@ -753,7 +782,7 @@ def _update_ai_node_dirty_impl(ctx):
         '        if os.path.isdir(os.path.join(base, "_main")):',
         '            _runfiles_root = os.path.join(base, "_main")',
         "            break",
-        "    workspace_root = _runfiles_root or os.getcwd()",
+        "    workspace_root = os.environ.get(\"BUILD_WORKSPACE_DIRECTORY\", \"\") or _runfiles_root or os.getcwd()",
         "",
         "    # Find the manifest in runfiles",
         "    _manifest_path = None",
@@ -773,9 +802,10 @@ def _update_ai_node_dirty_impl(ctx):
         "    with open(_manifest_path) as f:",
         "        node_label = json.load(f).get('label')",
         "",
-        "    runner = BuildAsm()",
+        "    runner = BuildAsm(workspace_root=workspace_root)",
         "    try:",
-        "        result = runner.add_change(node_label, workspace_root, change)",
+        "        runner.mark_node_dirty(node_label, change)",
+        "        result = True",
         "    except KeyboardInterrupt:",
         '        print("Interrupted.", file=sys.stderr)',
         "        sys.exit(130)",
@@ -874,7 +904,7 @@ def _update_ai_node_change_impl(ctx):
         '        if os.path.isdir(os.path.join(base, "_main")):',
         '            _runfiles_root = os.path.join(base, "_main")',
         "            break",
-        "    workspace_root = _runfiles_root or os.getcwd()",
+        "    workspace_root = os.environ.get(\"BUILD_WORKSPACE_DIRECTORY\", \"\") or _runfiles_root or os.getcwd()",
         "",
         "    # Find the manifest in runfiles",
         "    _manifest_path = None",
@@ -894,9 +924,10 @@ def _update_ai_node_change_impl(ctx):
         "    with open(_manifest_path) as f:",
         "        node_label = json.load(f).get('label')",
         "",
-        "    runner = BuildAsm()",
+        "    runner = BuildAsm(workspace_root=workspace_root)",
         "    try:",
-        "        result = runner.broadcast_change(node_label, workspace_root, change)",
+        "        runner.broadcast_node_change(node_label, change)",
+        "        result = True",
         "    except KeyboardInterrupt:",
         '        print("Interrupted.", file=sys.stderr)',
         "        sys.exit(130)",

@@ -1,48 +1,41 @@
 <!-- Dependencies (md files to read alongside this one):
-  - sandbox_impl.md
-  - file_reader_impl.md
   - file_editor_impl.md
+  - file_reader_impl.md
   - guide_delivery_impl.md
   - run_control_impl.md
+  - change_summary_validator_impl.md
   - sandbox.md
-  - run_control.md
+  - sandbox_impl.md
 -->
 
 # Implementation LLS: sandbox_asm
 
 ## Data Types
 ```python
-from typing import Optional
-from sandbox_impl import SandboxImpl
-from sandbox import SandboxConfig
-from run_control import DiffSizeLimit
+from sandbox_impl import SandboxFactoryImpl
+from file_reader_impl import FileReaderFactoryImpl
+from file_editor_impl import FileEditorFactoryImpl
+from run_control_impl import RunControlFactoryImpl
+from change_summary_validator_impl import ChangeValidatorImpl
+from guide_delivery_impl import GuideDeliveryFactoryImpl
 
-class SandboxAsm(SandboxImpl):
-    def __init__(self, config: SandboxConfig, diff_size_limit: Optional[DiffSizeLimit] = None) -> None: ...
+class SandboxAsm(SandboxFactoryImpl):
+    def __init__(self) -> None: ...
 ```
-
-Subclasses `SandboxImpl` with pre-wired tool implementations: supplies the file machinery (`FileViewImpl`), step-mode delivery (`GuideDeliveryImpl`), and verification and termination rules (`RunControlImpl`) at construction. Fulfills the `Sandbox` protocol via `SandboxImpl`. This assembly performs configuration and assembly only and is never tested.
 
 ## Composition
 
-- SandboxImpl (sandbox)
-- FileViewImpl (file machinery)
-- GuideDeliveryImpl (step-mode delivery)
-- RunControlImpl (verification and termination)
-- ChangeSummaryValidatorImpl (change summary validation)
+- FileReaderFactoryImpl
+- FileEditorFactoryImpl
+- RunControlFactoryImpl
+- ChangeValidatorImpl
+- GuideDeliveryFactoryImpl
+- SandboxFactoryImpl
 
 ## Behavioral Description
 
-- Assembles the concrete tool implementations at construction: supplies factories wrapping `FileViewImpl` (file machinery), `GuideDeliveryImpl` (step-mode delivery), and `RunControlImpl` (verification and termination) to `super().__init__`.
-- Inherits and implements the `Sandbox` protocol through `SandboxImpl`.
-- No functionality beyond configuration and assembly is performed; this assembly is never tested.
+- `SandboxAsm` constructs and wires `FileReaderFactoryImpl`, `FileEditorFactoryImpl`, `RunControlFactoryImpl` (configured with `ChangeValidatorImpl`), and `GuideDeliveryFactoryImpl` directly within `__init__` before delegating to `super().__init__()`.
 
 ## Invariants
 
-- The concrete implementations are selected here, at construction; operations never select components.
-- No persistent state is held across calls: each instance is a fresh sandbox.
-
-## Non-Concerns
-
-- **Consumption:** how the assembled sandbox is used is unspecified here.
-- **Selection policy:** the concrete implementations wired here are a default assembly; other selections may differ.
+- Sub-components are pre-wired hermetically per session.

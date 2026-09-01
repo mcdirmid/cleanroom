@@ -1,82 +1,49 @@
 <!-- Dependencies (md files to read alongside this one):
   - dag_storage.md
-  - dag_clean_logic.md
+  - dag_node_cleaner.md
 -->
 
 # Interface LLS: dag_cleaner
 
 ## Data Types
 ```python
-from typing import Protocol, TypeAlias
-from dag_storage import NodeId
-from dag_clean_logic import CleanResult
-
-CleaningResult: TypeAlias = tuple[bool, CleanResult]
+from typing import Protocol
+from dag_storage import DagStorage, NodeId
+from dag_node_cleaner import NodeCleaner
 
 class DagCleaner(Protocol):
-    def clean_subgraph(self, target_node: NodeId) -> CleaningResult: ...
+    def clean_subgraph(self, root: NodeId, storage: DagStorage, cleaner: NodeCleaner) -> None: ...
 ```
 
-Represents the outcome of cleaning: `(True, success)`, `(True, change_result)`, `(True, feedback_result)`, or `(False, failure_result)`.
+- `DagCleaner` → corresponds to *dag cleaner*: an orchestration service that cleans subgraphs in a *dag storage* using a *node cleaner*.
 
 ## Term definitions
 
-- **node** → the `NodeId` alias from dag_storage
-- **dependency** → the `NodeDependencies` alias from dag_storage
-- **pending message** → the `PendingMessages` alias from dag_storage
-- **subgraph** → term definition from dag_storage
-- **reverse dependency** → term definition from dag_storage
-- **dirty** → term definition from dag_clean_logic
-- **cleaning** → term definition from dag_clean_logic
-- **change message** → term definition from dag_clean_logic
-- **feedback message** → term definition from dag_clean_logic
+- **dag cleaner** → term definition: an orchestration service that cleans subgraphs in a *dag storage* using a *node cleaner*
 
 ## Component-Provided Operations
 
 ### `clean_subgraph`
 
 ```python
-def clean_subgraph(self, target_node: NodeId) -> CleaningResult
+def clean_subgraph(self, root: NodeId, storage: DagStorage, cleaner: NodeCleaner) -> None: ...
 ```
 
-**Purpose:** Clean all dirty nodes in the subgraph rooted at `target_node` (the target node and all nodes reachable through its direct and indirect dependencies, as defined in `dag_storage.md`) until none remain.
+**Purpose:** (DagCleaner) Cleans an acyclic subgraph rooted at a target node in topological order.
 
 **Preconditions:**
-- `target_node` exists in the graph.
-- The graph topology, as provided through `dag_storage`, does not change during cleaning.
-- No concurrent calls (undefined behavior).
-- No node receives a message while being cleaned (undefined behavior).
+- The subgraph rooted at `root` must be acyclic.
 
 **Postconditions:**
-- All dirty nodes in the subgraph are cleaned.
-- Nodes that become dirty during cleaning are processed before completion.
-- Cleaning proceeds in topological order (dependencies before dependents).
-- A node is not cleaned while any dependency is dirty.
-- Each node's cleaning is atomic (it provides messages or signals failure, never both).
-- Change messages delivered to all known reverse dependencies of the node (as provided by `dag_storage`); feedback messages delivered to specified dependencies (within the subgraph).
-- After routing, a node whose cleaning produced a `ChangeResult` has its pending messages and known reverse dependencies deleted.
-- After cleaning, a node whose cleaning produced a `NoChangeResult` has its pending messages cleared; its known reverse dependencies remain.
-- A node whose cleaning produced a `FeedbackResult` keeps its pending messages and known reverse dependencies.
-- Cleaning always terminates (guarded by a single total bound on clean operations).
-- Returns `(True, CleanResult)` on success (indicating no messages, a `ChangeResult`, or a `FeedbackResult`); otherwise `(False, FailureResult)` where the `CleanResult` variant is a `FailureResult`.
-- On failure: the offending node's messages remain unchanged; previously cleaned nodes retain changes; processing halts.
+- Dirty nodes are cleaned in strict dependency-first topological order.
+- Routes change messages produced by cleaned nodes to downstream reverse dependencies.
+- Routes feedback messages produced by cleaned nodes to upstream dependencies.
 
-**Failure Handling:**
-- If the graph topology contains a cycle, returns `(False, FailureResult)`; state is unchanged (no node data deleted, no messages routed).
-- If feedback targets a node outside the subgraph, returns `(False, FailureResult)`; the offending node's messages remain unchanged and processing halts.
+**Failure Handling:** Node cleaning failures halt pass execution and leave incomplete nodes dirty.
 
-**HLS Justification:** "The client may request cleaning of a subgraph rooted at a target node."
-
+**HLS Justification:** "A *dag cleaner* can clean an acyclic subgraph rooted at a target *node* in a *dag storage*."
 
 ## Invariants
 
-- Only nodes in the subgraph are cleaned; nodes outside may receive messages but are not cleaned.
-- The topological order is fixed for the operation.
-- Cleaning always terminates (bounded by a single total bound on clean operations).
-- No cross-restart state: all state is per-run; nodes are dirty from message delivery until cleaned.
-
-
-## Non-Concerns
-
-- **Cycle-detection algorithm:** The algorithm used to detect cycles (e.g., topological sort failure vs. explicit DFS) is unspecified. The returned FailureResult does not include an error message specifying whether the cycle was detected (e.g., by topological sort failure) or any other detail.
-
+- Dependencies are guaranteed clean before dependent nodes execute.
+- Routing change and feedback messages marks affected destination nodes dirty.

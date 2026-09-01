@@ -1,29 +1,26 @@
 <!-- Dependencies (md files to read alongside this one):
+  - virtual_file_name.md
   - change_summary_validator.md
-  - file_editor.md
-  - tool_provider.md
 -->
 
 # Implementation LLS: change_summary_validator_impl
 
 ## Data Types
 ```python
-from change_summary_validator import ChangeSummaryValidator
-from file_editor import FileEditor
+from change_summary_validator import ChangeValidator
 
-class ChangeSummaryValidatorImpl(ChangeSummaryValidator):
-    def __init__(self, file_editor: FileEditor, diff_size_limit: int = 1000) -> None: ...
+class ChangeValidatorImpl(ChangeValidator):
+    def __init__(self, max_diff_chars: int = 4000) -> None: ...
 ```
 
 ## Behavioral Description
 
-Implements `ChangeSummaryValidator` over a collaborator `FileEditor` and configured diff size limit.
-Checks that claimed change summaries name each net-changed file and no net-unchanged files.
-Rejects missing, malformed, or fabricated change summaries with tool failures.
-Maintains a grace counter per session for change summaries exceeding bounds.
-Formats diff summaries with line-by-line differences up to the configured limit.
+- Compares initial baseline file content with current content to identify net changes.
+- Formats unified diffs comparing initial file content against current file content, truncating line diffs exceeding `max_diff_chars`.
+- Verifies that all net-changed files are described in the change summary.
+- Rejects change summaries exceeding the soft length bound (2,000 characters) up to a grace limit (3,000 characters) before rejecting at the hard bound (4,000 characters).
 
 ## Invariants
 
-- Soft length bound is 300 characters, hard length bound is 500 characters, grace count is 4.
-- Diff summaries are truncated at diff_size_limit.
+- Rejects change summaries claiming changes on files with net-zero modifications.
+- Rejects change summaries that omit net-modified files or exceed length bounds.

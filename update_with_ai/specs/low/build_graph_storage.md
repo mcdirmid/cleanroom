@@ -1,123 +1,100 @@
 <!-- Dependencies (md files to read alongside this one):
+  - virtual_file_name.md
   - dag_storage.md
   - sandbox.md
-  - file_reader.md
-  - file_editor.md
-  - guide_delivery.md
-  - run_control.md
+  - build_agent_config.md
 -->
 
 # Interface LLS: build_graph_storage
 
 ## Data Types
 ```python
+from typing import Protocol, TypeAlias, Optional
 from dataclasses import dataclass
 from dag_storage import DagStorage, NodeId
 from sandbox import SandboxConfig
-from typing import Protocol, TypeAlias
+from build_agent_config import ConfigTarget
 
-GraphSource: TypeAlias = str
+TaskPrompt: TypeAlias = str
 
-@dataclass
-class GraphConfig:
-    graph_source: GraphSource | None = None
-    workspace_root: str | None = None
-
-PackageDirectory: TypeAlias = str
-
-@dataclass
+@dataclass(frozen=True)
 class NodeDefinition:
-    prompt: str
     sandbox_config: SandboxConfig
+    prompt: Optional[TaskPrompt] = None
+    config_target: Optional[ConfigTarget] = None
 
 class BuildGraphStorage(DagStorage, Protocol):
-    def resolve_node_definition(self, node_id: NodeId) -> NodeDefinition: ...
-    def resolve_package_directory(self, node_id: NodeId) -> PackageDirectory: ...
+    def get_sandbox_config(self, node: NodeId) -> SandboxConfig: ...
+    def get_task_prompt(self, node: NodeId) -> Optional[TaskPrompt]: ...
+    def get_node_definition(self, node: NodeId) -> Optional[NodeDefinition]: ...
 ```
 
-A label identifying the configured source of graph data — either a precomputed graph artifact path or a workspace root directory. The actual resolution mechanism is unspecified.
-
-The client-supplied configuration, as listed in the `build_graph_storage` interface contract: either a graph source or a workspace root. At least one of `graph_source` or `workspace_root` must be provided; when only the workspace root is provided, the graph is derived from it.
-
-The directory containing a node's BUILD file; also where the node's messages are stored.
-
-The agent prompt and sandbox configuration declared by a node's target. The sandbox configuration is a `sandbox.SandboxConfig`: its `file_mappings` keys are each file's virtual name (per file_reader) — the node's declared source, its silent sources, the declared sources of its deps and star-dep closure, and the guide — so the agent addresses every file by virtual name.
-
-`BuildGraphStorage` fulfills the `DagStorage` Protocol — pending messages, message clearing, node dependencies, and known reverse dependencies per `dag_storage.md` — and additionally resolves node definitions and package directories.
+- `TaskPrompt` → corresponds to *task prompt*: an instruction describing the work required to clean a *node*.
+- `NodeDefinition` → corresponds to *node definition*: metadata describing target *sandbox configurations*, *task prompts*, *config targets*, guides, verification checks, and dependency blame mappings for a *node*.
+- `BuildGraphStorage` → corresponds to *build graph storage*: a *dag storage* backed by workspace build target manifests.
 
 ## Term definitions
 
-- **node definition** → the `NodeDefinition` type (definition in Data Types)
-- **package directory** → the `PackageDirectory` alias (definition in Data Types)
-- **silent dependency** → term definition: a dependency a node declares as silent; a silent dependency is a dependency (cleaned before the declaring node) whose changes do not propagate to the declaring node
-- **star dependency** → term definition: a dependency a node declares as a star dependency; a star dependency is a dependency (cleaned before the declaring node) whose declared source, and the declared source of every node reachable from it through star dependencies (never through non-star dependencies or silent dependencies), are readable by the declaring node
-- **node** → the `NodeId` alias from dag_storage
-- **message** → the `NodeMessage` type from dag_storage
-- **pending message** → the `PendingMessages` alias from dag_storage
-- **dependency** → the `NodeDependencies` alias from dag_storage
-- **propagating dependency** → term definition from dag_storage
-- **reverse dependency** → term definition from dag_storage
-- **subgraph** → term definition from dag_storage
-- **blame target** → the `BlameTarget` alias from run_control
-- **template** → term definition from file_editor
-- **guide** → term definition from guide_delivery
-- **step mode** → term definition from guide_delivery
-- **virtual name** → term definition from file_reader
+- **task prompt** → the `TaskPrompt` alias
+- **node definition** → the `NodeDefinition` alias
+- **build graph storage** → term definition: a *dag storage* backed by workspace build target manifests
 
 ## Component-Provided Operations
 
-### `resolve_node_definition`
+### `get_sandbox_config`
 
 ```python
-def resolve_node_definition(self, node_id: NodeId) -> NodeDefinition
+def get_sandbox_config(self, node: NodeId) -> SandboxConfig: ...
 ```
 
-**Purpose:** Return the agent prompt and sandbox configuration declared by a node's target.
+**Purpose:** (BuildGraphStorage) Retrieves the sandbox configuration (file permissions, templates, mappings) for a specific workspace node.
 
 **Preconditions:**
-- `node_id` is a valid Bazel target label
-- The node ID resolves to a target with a complete definition
+- `node` is a valid node in the storage graph.
 
 **Postconditions:**
-- Returns a `NodeDefinition` containing the node's agent prompt and sandbox configuration as declared by the target
+- Returns the complete `SandboxConfig` declared for the target node.
 
-**Failure Handling:**
-- No expected failure conditions other than graph-source failures, which signal failure without side effects (see Invariants). The only caller obligation is the precondition: `node_id` is a valid Bazel target label. Violations are unexpected; the interface does not prescribe violation behavior.
+**Failure Handling:** Always succeeds when preconditions are met.
 
-**HLS Justification:** "Query a node's definition (the agent prompt and sandbox configuration)."
+**HLS Justification:** "A *build graph storage* provides *task prompts*, *node definitions*, and *sandbox configurations* for declared *nodes*."
 
-
-### `resolve_package_directory`
+### `get_task_prompt`
 
 ```python
-def resolve_package_directory(self, node_id: NodeId) -> PackageDirectory
+def get_task_prompt(self, node: NodeId) -> Optional[TaskPrompt]: ...
 ```
 
-**Purpose:** Return the directory containing the node's BUILD file.
+**Purpose:** (BuildGraphStorage) Retrieves the declared task prompt for a specific workspace node.
 
 **Preconditions:**
-- `node_id` is a valid Bazel target label
+- `node` is a valid node in the storage graph.
 
 **Postconditions:**
-- Returns the package directory as the directory containing the node's BUILD file
-- Also the directory where the node's messages are stored
+- Returns the declared `TaskPrompt` for the target node, or `None` if no prompt was configured.
 
-**Failure Handling:**
-- No expected failure conditions other than graph-source failures, which signal failure without side effects (see Invariants). The only caller obligation is the precondition: `node_id` is a valid Bazel target label. Violations are unexpected; the interface does not prescribe violation behavior.
+**Failure Handling:** Always succeeds when preconditions are met.
 
-**HLS Justification:** "Query a node's package directory."
+**HLS Justification:** "A *build graph storage* provides *task prompts*, *node definitions*, and *sandbox configurations* for declared *nodes*."
 
+### `get_node_definition`
+
+```python
+def get_node_definition(self, node: NodeId) -> Optional[NodeDefinition]: ...
+```
+
+**Purpose:** (BuildGraphStorage) Retrieves the complete node definition for a declared workspace node.
+
+**Preconditions:**
+- `node` is a valid node in the storage graph.
+
+**Postconditions:**
+- Returns the declared `NodeDefinition` for the target node, or `None` if undefined.
+
+**Failure Handling:** Always succeeds when preconditions are met.
+
+**HLS Justification:** "A *build graph storage* provides *task prompts*, *node definitions*, and *sandbox configurations* for declared *nodes*."
 
 ## Invariants
 
-- Queries are read-only; no workspace modification occurs
-- Each query provides a consistent view of the graph
-- Graph-source failures signal failure without side effects
-- The graph topology is acyclic (an assumption; verification is not specified)
-
-
-## Non-Concerns
-
-- **Graph-source mechanism:** How the graph is read from the configured source is unspecified.
-
-
+- Sandbox configurations provide disjoint read-write permissions across independent targets.

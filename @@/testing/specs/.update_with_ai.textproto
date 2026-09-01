@@ -1,0 +1,27 @@
+node_entry {
+  node_id: "@@//testing/specs:dag_storage_lib"
+  message {
+    kind: "message"
+    text: "check"
+  }
+  message {
+    kind: "message"
+    text: "dirty"
+  }
+  message {
+    kind: "message"
+    text: "check"
+  }
+  message {
+    kind: "message"
+    text: "dirty"
+  }
+  message {
+    kind: "message"
+    text: "check"
+  }
+  message {
+    kind: "message"
+    text: "dirty"
+  }
+}

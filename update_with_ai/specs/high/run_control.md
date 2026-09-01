@@ -1,58 +1,35 @@
 # run_control
 
-imports: tool_provider (tool results, signals), dag_clean_logic (change message, feedback message, termination-result types), dag_storage (node message), file_reader (virtual name)
-terms (from tool_provider): tool failure, tool call
-terms (from dag_clean_logic): feedback message
-terms (from file_reader): virtual name
-terms (owned): blame, blame target, soft length bound, hard length bound
+imports: tool_provider, virtual_file_name, dag_storage, dag_node_cleaner, change_summary_validator
+types from tool_provider: tool, tool provider, tool result, tool failure, termination outcome
+types from virtual_file_name: virtual file name
+types from dag_storage: node
+types from dag_node_cleaner: feedback message, change message
+types from change_summary_validator: change validator, change summary
 
 ## Purpose
 
-Provides verification and termination for a file-modifying agent session: verifying session state, bounding change summaries, and signaling successful or failing termination through the advance, failure, and blame operations. Enforces the feedback rule when a feedback message is pending.
+Enforces task verification, bounds change summaries, and routes blame feedback to upstream dependencies.
 
-## Terms
+Agents frequently claim completion without testing changes or fail when upstream inputs are flawed. Run control gates termination on verification, requires concise change summaries for file edits, and provides a blame tool to route actionable feedback to responsible dependency nodes rather than failing the run.
 
-- Blame: a termination outcome that attributes the task's incompleteness to one or more dependencies and provides feedback on how to correct their outputs; blame is not failure.
-- Blame target: an artifact the agent may blame — a dependency's declared source file, addressed by its virtual name.
-- Soft length bound: the preferred maximum length of a change summary; a summary exceeding it is rejected with shortening guidance up to a grace count, then accepted when within the hard length bound.
-- Hard length bound: the maximum length a change summary may reach; a summary exceeding it is rejected with hard-bound guidance up to a grace count, and a summary still exceeding it after the grace count turns success into failure.
+## Types
 
-## Contract
+- An *advance tool* is a *tool* that verifies session state, validates *change summaries*, and produces a *termination outcome* on success
+- A *fail tool* is a *tool* that terminates an agent run in failure
+- A *blame tool* is a *tool* that attributes incomplete tasks to dependency *nodes* and routes *feedback messages*
+- A *blame target* is a source file addressed by a *virtual file name* owned by a dependency *node*
+- A *run controller* is a *tool provider* providing an *advance tool*, a *fail tool*, and an optional *blame tool*
+- A *run control factory* is a provider that constructs *run controllers* configured for specific sessions
 
-**Inputs**
+## Behavior
 
-- Configured: an optional verification callback; whether the session's pending messages include a feedback message; the blame targets (a mapping from each blameable artifact's virtual name to the node that owns it; may be empty); the diff size limit (the maximum characters a verification diff may report).
-- Per call: a tool call (tool name and arguments, per tool_provider).
-
-**Operations**
-
-- Verify the session.
-- Check a change summary.
-- Blame.
-- Fail.
-- Complete the session.
-
-**Guarantees**
-
-- Verification runs as part of the advance operation; verification passes when no verification callback is configured, and is delegated to the callback when one is configured.
-- When verification fails, the session continues with feedback; advance never terminates on a failing verification; verification failure output delivered to the agent sanitizes any host filesystem paths, sandbox paths, or package prefixes, presenting files only by their virtual names.
-- Verification may maintain the node's lib/test BUILD file through the configured build linter; the BUILD file is not among the workspace's files, and such writes are not run writes and are not reported in change summaries.
-- Termination tools: advance, failure, and blame. Advance signals successful termination; a valid blame signals successful termination; the failure operation ends the session in failure.
-- The blame tool is provided only when blame targets are configured and non-empty.
-- Each (target, feedback) pair of a blame is delivered as a feedback message to the blamed artifact's owning node.
-- When blame is attempted with an invalid target, blame signals a tool failure naming the invalid target and listing the valid blame targets by their virtual names.
-- Termination is at the agent's judgment: the agent signals termination when it considers its task complete, or when it cannot be completed.
-- Advance signals successful termination when verification passes; when files were modified, it requires a change summary naming what changed in each file, directing the next reader's attention to the changes.
-- When files were modified and the change summary is missing, malformed, or incomplete, advance signals a tool failure.
-- Change summaries are bounded; a summary exceeding the bound is rejected with guidance; persistent rejection fails the session.
-- When the session's pending messages include a feedback message and no files were modified, advance that would otherwise signal successful termination without a change warns once that feedback was given, allowing a subsequent advance call without changes to signal successful termination.
-
-**Assumptions**
-
-- The verification callback, if provided, has no side effects on the workspace; it may only modify the node's lib/test BUILD file (maintained by the build linter), which is not among the workspace's files.
-- The consumer routes termination signals and stubs the earlier result when a result's flag is set, identifying it by the verification command.
-
-## Non-concerns
-
-- Advance tool description: the advance tool's description wording is unspecified; the tool's contract is defined by the verification, termination, and step-mode rules.
-- Bound values: the soft and hard length bound values and the grace count are unspecified here; they are pinned in the implementation spec.
+- Creating a *run controller* through a *run control factory* yields a *run controller* configured with verification checks and *blame targets*.
+- A *run controller* provides an *advance tool*, a *fail tool*, and a *blame tool* when *blame targets* are configured.
+- A *run controller* validates *change summaries* using a *change validator* when workspace file modifications occurred.
+- Executing an *advance tool* verifies session state; advancing without modifying workspace files and without passing verification checks produces a *tool failure* with feedback and prevents termination.
+- Executing an *advance tool* when workspace file modifications occurred and verification passes produces a *termination outcome* carrying a *change message*.
+- Executing an *advance tool* when no workspace file modifications occurred and verification passes produces a *termination outcome* without a *change message*.
+- Executing a *fail tool* produces a *termination outcome* communicating that the run failed.
+- Executing a *blame tool* with valid *blame targets* produces a *termination outcome* carrying *feedback messages* addressed to the owning dependency *nodes*.
+- Executing a *blame tool* with an invalid target produces a *tool failure* listing valid *blame targets*.

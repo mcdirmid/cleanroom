@@ -1,311 +1,318 @@
-# lib/manifest_node_loader_impl.py
-"""
-Implementation of the LLS ManifestNodeLoader interface.
-"""
+"""Manifest node loader parsing JSON declarations into graph storage."""
 
-from typing import Any, Dict, List, Optional, Tuple
-import json
 import os
-import subprocess
-from pathlib import Path
+from typing import Sequence, List, Dict, Optional, Set
 
-from .build_graph_storage import NodeDefinition, PackageDirectory, GraphConfig
-from .dag_storage import NodeId, NodeDependencies
-from .manifest_node_loader import ManifestNodeLoader, LoadedGraphManifests
-from .file_reader import FileMapping, ReadablePaths, VirtualName
-from .file_editor import TemplateMapping, WritablePaths
-from .run_control import BlameTargets, VerificationCallback
+from .node_id_utils import NodeIdUtils
+from .virtual_file_name import VirtualFileMapperFactory
+from .build_graph_storage import BuildGraphStorage, NodeDefinition
 from .sandbox import SandboxConfig
+from .manifest_node_loader import ManifestLoader, ManifestContent
+from .json_manifest_ext import (
+    JsonManifest,
+    parse_json_manifest,
+    load_json_manifest,
+    locate_manifest_file,
+)
+from .guide_delivery import TaskGuide, StepSection
 
 
-def _virtual_names(paths: List[str]) -> Dict[str, str]:
+def _derive_virtual_file_names(paths: Sequence[str]) -> Dict[str, str]:
+    """Derives minimal unique virtual file names for a sequence of workspace file paths."""
     if not paths:
         return {}
-    parts = [p.split("/") for p in paths]
-    result: Dict[str, str] = {}
-    for i, orig in enumerate(paths):
-        p = parts[i]
-        for length in range(1, len(p) + 1):
-            cand = "/".join(p[-length:])
-            collisions = [
-                j for j, other in enumerate(parts)
-                if j != i and len(other) >= length and "/".join(other[-length:]) == cand
-            ]
-            if not collisions:
-                result[orig] = cand
+
+    unique_paths = list(dict.fromkeys(paths))
+    parsed = []
+    for p in unique_paths:
+        norm = os.path.normpath(p).replace("\\", "/")
+        parts = [part for part in norm.split("/") if part and part != "."]
+        parsed.append((p, parts if parts else [norm]))
+
+    mapping: Dict[str, str] = {}
+    for orig_path, parts in parsed:
+        k = 1
+        while k <= len(parts):
+            candidate = "/".join(parts[-k:])
+            collides = False
+            for other_path, other_parts in parsed:
+                if other_path != orig_path:
+                    other_suffix = "/".join(other_parts[-k:]) if k <= len(other_parts) else "/".join(other_parts)
+                    if other_suffix == candidate:
+                        collides = True
+                        break
+            if not collides:
+                mapping[candidate] = orig_path
                 break
+            k += 1
         else:
-            result[orig] = orig
-    return result
+            mapping["/".join(parts)] = orig_path
+
+    return mapping
 
 
-def _build_sandbox_config(
-    manifest: Dict[str, Any],
-    file_mappings: FileMapping,
-    readable_paths: ReadablePaths,
-    writable_paths: WritablePaths,
-    templates: TemplateMapping,
-    guide: Optional[VirtualName],
-    blame_targets: BlameTargets,
-) -> SandboxConfig:
-    vcmd = manifest.get("verification_command")
-    callback: VerificationCallback = None
-    if vcmd:
-        def make_cb(cmd: str) -> VerificationCallback:
-            def cb() -> Tuple[bool, str]:
-                try:
-                    proc = subprocess.run(
-                        cmd, shell=True, capture_output=True, text=True, timeout=120
+def _parse_guide_sections(content: str) -> TaskGuide:
+    lines = content.splitlines()
+    summary_lines: List[str] = []
+    sections: List[StepSection] = []
+    current_title: Optional[str] = None
+    current_lines: List[str] = []
+    index = 0
+    in_summary = True
+
+    for line in lines:
+        if line.startswith("## "):
+            heading = line[3:].strip()
+            if in_summary:
+                in_summary = False
+            else:
+                if current_title and not current_title.lower().startswith("lint checks"):
+                    sections.append(
+                        StepSection(
+                            index=index,
+                            title=current_title,
+                            content="\n".join(current_lines).strip(),
+                        )
                     )
-                    return proc.returncode == 0, proc.stdout + proc.stderr
-                except Exception as e:
-                    return False, str(e)
-            return cb
-        callback = make_cb(vcmd)
+                    index += 1
+            current_title = heading
+            current_lines = []
+        elif in_summary:
+            summary_lines.append(line)
+        else:
+            current_lines.append(line)
 
-    return SandboxConfig(
-        file_mappings=file_mappings,
-        readable_paths=readable_paths,
-        writable_paths=writable_paths,
-        blame_targets=blame_targets,
-        search_result_limit=manifest.get("search_result_limit", 5),
-        session_start_reads_enabled=manifest.get("session_start_reads_enabled", True),
-        guide=guide,
-        step_sections_enabled=manifest.get("step_sections_enabled", True),
-        feedback_pending=manifest.get("feedback_pending", False),
-        templates=templates,
-        verification_callback=callback,
-    )
-
-
-def _synthesized_manifest(label: NodeId) -> Dict[str, Any]:
-    return {
-        "label": label,
-        "prompt": f"Generated synthetic node for dependency {label}",
-        "src": "",
-        "silent_srcs": [],
-        "deps": [],
-        "silent_deps": [],
-        "star_deps": [],
-        "feedback_deps": [],
-        "tools": [],
-        "search_result_limit": 5,
-        "session_start_reads_enabled": True,
-        "step_sections_enabled": True,
-        "feedback_pending": False,
-    }
-
-
-def _synthesized_definition() -> NodeDefinition:
-    return NodeDefinition(
-        prompt="Generated synthetic node",
-        sandbox_config=SandboxConfig(
-            file_mappings={},
-            readable_paths=[],
-            writable_paths=[],
-            blame_targets={},
-            search_result_limit=5,
-            session_start_reads_enabled=True,
-            step_sections_enabled=True,
-            feedback_pending=False,
-            templates={},
-            verification_callback=None,
-        ),
-    )
-
-
-def _package_dir_from_label(label: NodeId, workspace_root: Path) -> str:
-    clean = label.lstrip("/")
-    if ":" in clean:
-        pkg_part, _ = clean.split(":", 1)
-    else:
-        pkg_part = clean
-    return str(workspace_root / pkg_part)
-
-
-class ManifestNodeLoaderImpl(ManifestNodeLoader):
-    def resolve_graph(self, config: GraphConfig) -> LoadedGraphManifests:
-        if config.workspace_root is None:
-            raise ValueError("ManifestNodeLoader requires workspace_root in config")
-
-        workspace_root = Path(config.workspace_root)
-        real_root = Path(
-            os.environ.get("BUILD_WORKSPACE_DIRECTORY") or workspace_root
+    if current_title and not in_summary and not current_title.lower().startswith("lint checks"):
+        sections.append(
+            StepSection(
+                index=index,
+                title=current_title,
+                content="\n".join(current_lines).strip(),
+            )
         )
 
-        manifests = list(workspace_root.rglob("*_manifest.json"))
-        raw: Dict[NodeId, Any] = {}
-        pkg_dirs: Dict[NodeId, PackageDirectory] = {}
+    return TaskGuide(
+        summary="\n".join(summary_lines).strip(),
+        sections=tuple(sections),
+    )
 
-        for json_path in manifests:
-            with open(json_path) as f:
-                manifest = json.load(f)
-            node_id: NodeId = manifest["label"]
-            rel_pkg = json_path.parent.relative_to(workspace_root)
-            pkg_dirs[node_id] = str(real_root / rel_pkg)
-            raw[node_id] = manifest
 
-        definitions: Dict[NodeId, NodeDefinition] = {}
-        adjacency: Dict[NodeId, List[NodeId]] = {}
-        propagating_deps: Dict[NodeId, List[NodeId]] = {}
-        silent_deps_map: Dict[NodeId, List[NodeId]] = {}
-        package_dirs: Dict[NodeId, PackageDirectory] = {}
+class ManifestLoaderImpl(ManifestLoader):
+    """Implementation of ManifestLoader using NodeIdUtils and JsonManifest."""
 
-        for node_id, manifest in raw.items():
-            raw_deps: List[NodeId] = list(manifest.get("deps", []))
-            feedback_deps: List[NodeId] = list(manifest.get("feedback_deps", []))
-            star_deps: List[NodeId] = [str(sd) for sd in manifest.get("star_deps", [])]
-            deps: List[NodeId] = list(raw_deps)
-            for fd in feedback_deps:
-                if fd not in deps:
-                    deps.append(fd)
-            for sd in star_deps:
-                if sd not in deps:
-                    deps.append(sd)
+    def __init__(
+        self,
+        node_id_utils: NodeIdUtils,
+        virtual_file_mapper_factory: Optional[VirtualFileMapperFactory] = None,
+    ) -> None:
+        self.node_id_utils = node_id_utils
+        self.virtual_file_mapper_factory = virtual_file_mapper_factory
 
-            dep_srcs: Dict[str, str] = {}
-            for dep in deps:
-                dep_manifest = raw.get(dep)
-                if dep_manifest is None:
-                    continue
-                dep_pkg = pkg_dirs.get(dep)
-                if dep_pkg is None:
-                    continue
-                dep_src: str = str(dep_manifest.get("src") or "")
-                if dep_src:
-                    dep_srcs.setdefault(dep_src, dep_pkg)
+    def load_manifest(
+        self, content: ManifestContent, storage: BuildGraphStorage
+    ) -> Sequence[NodeDefinition]:
+        manifest = parse_json_manifest(content)
+        canonical_label = self.node_id_utils.canonicalize_node_id(manifest.label, "")
+        pkg_dir = self.node_id_utils.extract_node_directory(canonical_label, "")
 
-            closure: List[NodeId] = []
-            closure_seen: set = set()
-            queue: List[NodeId] = list(star_deps)
-            while queue:
-                lbl = queue.pop(0)
-                if lbl in closure_seen:
-                    continue
-                closure_seen.add(lbl)
-                closure.append(lbl)
-                dep_manifest = raw.get(lbl)
-                if dep_manifest is None:
-                    continue
-                follow: List[NodeId] = list(dep_manifest.get("star_deps", []))
-                queue.extend(follow)
+        ws_dir = os.environ.get("BUILD_WORKSPACE_DIRECTORY", "")
+        search_dirs = [
+            os.environ.get("RUNFILES_DIR", ""),
+            os.environ.get("BAZEL_RUNFILES", ""),
+            ws_dir,
+            os.path.join(ws_dir, "bazel-bin") if ws_dir else "",
+            os.path.join(os.getcwd(), "bazel-bin"),
+            os.getcwd(),
+        ]
+        expanded_dirs: List[str] = []
+        for d in search_dirs:
+            if d:
+                expanded_dirs.append(d)
+                main_sub = os.path.join(d, "_main")
+                if os.path.isdir(main_sub):
+                    expanded_dirs.append(main_sub)
 
-            for lbl in closure:
-                dep_manifest = raw.get(lbl)
-                if dep_manifest is None:
-                    continue
-                dep_pkg = pkg_dirs.get(lbl)
-                if dep_pkg is None:
-                    continue
-                dep_src = str(dep_manifest.get("src") or "")
-                if dep_src:
-                    dep_srcs.setdefault(dep_src, dep_pkg)
+        known_dep_paths: Dict[str, str] = {
+            dp.label: dp.path for dp in manifest.dependency_paths
+        }
 
-            own_src: str = str(manifest.get("src") or "")
-            own_silent_srcs: List[str] = [str(s) for s in manifest.get("silent_srcs", [])]
-            pkg_dir = pkg_dirs[node_id]
+        manifest_cache: Dict[str, Optional[JsonManifest]] = {
+            canonical_label: manifest
+        }
 
-            guide_label: Optional[NodeId] = manifest.get("guide")  # pyright: ignore[reportArgumentType]
-            guide_src: Optional[str] = None
-            files: Dict[str, str] = {
-                s: os.path.join(d, s) for s, d in dep_srcs.items()
-            }
-            if own_src:
-                files[own_src] = os.path.join(pkg_dir, own_src)
-            for s in own_silent_srcs:
-                files[s] = os.path.join(pkg_dir, s)
-            if guide_label:
-                guide_manifest = raw.get(guide_label)
-                guide_pkg = pkg_dirs.get(guide_label)
-                if guide_manifest is not None and guide_pkg is not None:
-                    gs = str(guide_manifest.get("src") or "")
-                    if gs:
-                        files[gs] = os.path.join(guide_pkg, gs)
-                        guide_src = gs
+        def get_dep_manifest(dep_label: str) -> Optional[JsonManifest]:
+            canonical_dep = self.node_id_utils.canonicalize_node_id(dep_label, "")
+            if canonical_dep in manifest_cache:
+                return manifest_cache[canonical_dep]
 
-            virtual_of = _virtual_names(list(files.keys()))
+            clean_label = canonical_dep
+            if clean_label.startswith("@@"):
+                clean_label = clean_label[2:]
+            elif clean_label.startswith("@") and "//" in clean_label:
+                clean_label = clean_label[clean_label.index("//"):]
+            if clean_label.startswith("//"):
+                clean_label = clean_label[2:]
 
-            file_mappings: FileMapping = {
-                virtual_of[s]: real for s, real in files.items()
-            }
-            readable_paths = ([virtual_of[own_src]] if own_src else []) + [
-                virtual_of[s] for s in own_silent_srcs
-            ] + [
-                virtual_of[s] for s in dep_srcs if s != own_src
-            ]
-            writable_paths = ([virtual_of[own_src]] if own_src else []) + [
-                virtual_of[s] for s in own_silent_srcs
-            ]
+            pkg_manifest = clean_label.replace(":", "/") + "_manifest.json"
+            dep_name = canonical_dep.split(":")[-1] if ":" in canonical_dep else canonical_dep
+            bare_manifest = f"{dep_name}_manifest.json"
 
-            templates: Dict[str, str] = {}
-            template_rel = manifest.get("template")
-            if template_rel and own_src:
-                template_path = real_root / str(template_rel)
-                if os.path.exists(template_path):
-                    with open(template_path, "r", encoding="utf-8") as f:
-                        templates[virtual_of[own_src]] = f.read()
+            for manifest_name in (pkg_manifest, bare_manifest):
+                found_path = locate_manifest_file(manifest_name, expanded_dirs)
+                if found_path:
+                    try:
+                        loaded = load_json_manifest(found_path)
+                        manifest_cache[canonical_dep] = loaded
+                        return loaded
+                    except Exception:
+                        pass
 
-            guide_virtual: Optional[str] = (
-                virtual_of.get(guide_src) if guide_src else None
-            )
-            if guide_virtual and guide_virtual not in readable_paths:
-                readable_paths.append(guide_virtual)
+            manifest_cache[canonical_dep] = None
+            return None
 
-            blame_targets: Dict[str, str] = {}
-            for fd in manifest.get("feedback_deps", []):
-                fd_manifest = raw.get(fd)
-                if fd_manifest is None:
-                    continue
-                fd_src = str(fd_manifest.get("src") or "")
-                if fd_src and fd_src in virtual_of:
-                    blame_targets[virtual_of[fd_src]] = fd
+        def resolve_dep_src(dep_label: str) -> Optional[str]:
+            if dep_label in known_dep_paths:
+                return known_dep_paths[dep_label]
+            canonical_dep = self.node_id_utils.canonicalize_node_id(dep_label, "")
+            if canonical_dep in known_dep_paths:
+                return known_dep_paths[canonical_dep]
 
-            definitions[node_id] = NodeDefinition(
-                prompt=manifest["prompt"],
-                sandbox_config=_build_sandbox_config(
-                    manifest,
-                    file_mappings=file_mappings,
-                    readable_paths=readable_paths,
-                    writable_paths=writable_paths,
-                    templates=templates,
-                    guide=guide_virtual,
-                    blame_targets=blame_targets,
-                ),
-            )
+            dep_m = get_dep_manifest(dep_label)
+            if dep_m and dep_m.src:
+                dep_pkg = self.node_id_utils.extract_node_directory(canonical_dep, "")
+                if dep_pkg and not os.path.isabs(dep_m.src):
+                    return os.path.normpath(os.path.join(dep_pkg, dep_m.src))
+                return dep_m.src
 
-            silent_deps: List[NodeId] = list(manifest.get("silent_deps", []))
-            all_deps: List[NodeId] = deps + silent_deps
-            if guide_label and guide_label not in all_deps:
-                all_deps.append(guide_label)
+            return None
 
-            adjacency[node_id] = all_deps
-            propagating_deps[node_id] = deps
-            silent_deps_map[node_id] = silent_deps
-            package_dirs[node_id] = pkg_dir
+        rw_files: List[str] = []
+        templates: Dict[str, str] = {}
 
-        declared_deps: List[NodeId] = []
-        for manifest in raw.values():
-            declared_deps.extend(manifest.get("deps", []))
-            declared_deps.extend(manifest.get("silent_deps", []))
-            declared_deps.extend(manifest.get("star_deps", []))
-            guide_label = manifest.get("guide")
-            if guide_label:
-                declared_deps.append(guide_label)
+        if manifest.src:
+            src_path = os.path.normpath(os.path.join(pkg_dir, manifest.src)) if pkg_dir and not os.path.isabs(manifest.src) else manifest.src
+            rw_files.append(src_path)
+            if manifest.template:
+                templates[src_path] = manifest.template
 
-        for dep in declared_deps:
-            if dep in raw or dep in definitions:
+        for s in manifest.silent_srcs:
+            s_path = os.path.normpath(os.path.join(pkg_dir, s)) if pkg_dir and not os.path.isabs(s) else s
+            if s_path not in rw_files:
+                rw_files.append(s_path)
+
+        ro_files: List[str] = []
+
+        for d in manifest.deps:
+            canonical_d = self.node_id_utils.canonicalize_node_id(d, "")
+            dep_src = resolve_dep_src(canonical_d)
+            if dep_src and dep_src not in ro_files and dep_src not in rw_files:
+                ro_files.append(dep_src)
+
+        visited_star_deps: Set[str] = set()
+        star_queue: List[str] = list(manifest.star_deps)
+        while star_queue:
+            curr_star = star_queue.pop(0)
+            canonical_star = self.node_id_utils.canonicalize_node_id(curr_star, "")
+            if canonical_star in visited_star_deps:
                 continue
-            raw[dep] = _synthesized_manifest(dep)
-            definitions[dep] = _synthesized_definition()
-            adjacency[dep] = []
-            propagating_deps[dep] = []
-            silent_deps_map[dep] = []
-            package_dirs[dep] = _package_dir_from_label(dep, real_root)
+            visited_star_deps.add(canonical_star)
 
-        return LoadedGraphManifests(
-            node_definitions=definitions,
-            node_dependencies=adjacency,
-            package_directories=package_dirs,
-            propagating_dependencies=propagating_deps,
-            silent_dependencies=silent_deps_map,
+            star_src = resolve_dep_src(canonical_star)
+            if star_src and star_src not in ro_files and star_src not in rw_files:
+                ro_files.append(star_src)
+
+            star_m = get_dep_manifest(canonical_star)
+            if star_m:
+                for next_star in star_m.star_deps:
+                    if next_star not in visited_star_deps:
+                        star_queue.append(next_star)
+
+        task_guide: Optional[TaskGuide] = None
+        step_mode_guide_name: Optional[str] = None
+        if manifest.guide:
+            guide_src = resolve_dep_src(manifest.guide)
+            if guide_src:
+                step_mode_guide_name = guide_src
+                for search_base in [""] + expanded_dirs:
+                    candidate = os.path.join(search_base, guide_src) if search_base else guide_src
+                    if os.path.isfile(candidate):
+                        try:
+                            with open(candidate, "r", encoding="utf-8") as gf:
+                                task_guide = _parse_guide_sections(gf.read())
+                            break
+                        except Exception:
+                            pass
+                if not task_guide:
+                    task_guide = TaskGuide(summary=guide_src, sections=())
+
+        for fd in manifest.feedback_deps:
+            canonical_fd = self.node_id_utils.canonicalize_node_id(fd, "")
+            fd_src = resolve_dep_src(canonical_fd)
+            if fd_src and fd_src not in ro_files and fd_src not in rw_files:
+                ro_files.append(fd_src)
+
+        all_accessible = list(dict.fromkeys(rw_files + ro_files))
+        if self.virtual_file_mapper_factory:
+            mapper = self.virtual_file_mapper_factory.create_mapper(all_accessible)
+            file_mappings = mapper.get_mappings()
+        else:
+            file_mappings = _derive_virtual_file_names(all_accessible)
+
+        ro_virtual = [
+            next((v for v, h in file_mappings.items() if h == ro), ro)
+            for ro in ro_files
+        ]
+        rw_virtual = [
+            next((v for v, h in file_mappings.items() if h == rw), rw)
+            for rw in rw_files
+        ]
+        templates_virtual = {
+            next((v for v, h in file_mappings.items() if h == orig_k), orig_k): tmpl
+            for orig_k, tmpl in templates.items()
+        }
+
+        sandbox_config = SandboxConfig(
+            file_mappings=file_mappings,
+            read_only_files=tuple(ro_virtual),
+            read_write_files=tuple(rw_virtual),
+            templates=templates_virtual,
+            guide=task_guide,
+            step_mode_guide_name=step_mode_guide_name,
         )
+
+        all_canonical_deps = [
+            self.node_id_utils.canonicalize_node_id(d, "") for d in manifest.deps
+        ]
+        for sd in manifest.silent_deps:
+            canonical_sd = self.node_id_utils.canonicalize_node_id(sd, "")
+            if canonical_sd not in all_canonical_deps:
+                all_canonical_deps.append(canonical_sd)
+
+        if hasattr(storage, "set_sandbox_config"):
+            getattr(storage, "set_sandbox_config")(canonical_label, sandbox_config)
+        if hasattr(storage, "set_dependencies"):
+            getattr(storage, "set_dependencies")(canonical_label, all_canonical_deps)
+        if manifest.prompt and hasattr(storage, "set_task_prompt"):
+            getattr(storage, "set_task_prompt")(canonical_label, manifest.prompt)
+
+        node_def = NodeDefinition(
+            sandbox_config=sandbox_config,
+            prompt=manifest.prompt if manifest.prompt else None,
+            config_target=None,
+        )
+        if hasattr(storage, "set_node_definition"):
+            getattr(storage, "set_node_definition")(canonical_label, node_def)
+
+        for d in all_canonical_deps:
+            if hasattr(storage, "get_node_definition") and getattr(storage, "get_node_definition")(d) is None:
+                empty_cfg = SandboxConfig(
+                    file_mappings={},
+                    read_only_files=(),
+                    read_write_files=(),
+                    templates={},
+                )
+                empty_def = NodeDefinition(sandbox_config=empty_cfg)
+                if hasattr(storage, "set_node_definition"):
+                    getattr(storage, "set_node_definition")(d, empty_def)
+
+        return [node_def]

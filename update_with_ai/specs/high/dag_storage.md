@@ -1,45 +1,24 @@
 # dag_storage
 
-terms (owned): node, message, message kind, pending message, dependency, propagating dependency, reverse dependency, subgraph
-
 ## Purpose
 
-Provides persistent storage for messages addressed to nodes and access to graph topology: a node's dependencies and its known reverse dependencies. State persists across component restarts, and storage operations are atomic per node.
+Maintains dependency graph structure, dirty tracking, and pending message state across task nodes.
 
-## Terms
+Multi-step agent workflows require precise dirty state tracking and inter-node communication. DAG storage manages graph topology and unhandled messages, distinguishing propagating dependencies from non-propagating dependencies to prevent unnecessary downstream re-executions while ensuring affected dependents are accurately marked dirty.
 
-- Node: a vertex in the graph; messages are addressed to nodes.
-- Message: a string addressed to a node; every message carries a kind.
-- Message kind: the stored distinction among messages, one of two kinds — change or feedback; the kind is stored with the message and read back exactly as stored.
-- Pending message: a message delivered to a node and not cleaned since delivery.
-- Dependency: A depends on B -> A has an outgoing edge to B.
-- Propagating dependency: a dependency whose changes propagate to the depending node; retrieving a node's dependencies records the node as a reverse dependency of each of its propagating dependencies, and of no other dependency.
-- Reverse dependency: a node recorded as depending on another; recording happens when a node retrieves a dependency, at most once per dependency, and only for its propagating dependencies (repeated retrievals add no duplicates).
-- Subgraph: a target node (included) plus all nodes reachable through its direct and indirect dependencies.
+## Types
 
-## Contract
+- A *node* is an opaque string identifier addressing an identifiable unit of work within a *dag storage*
+- A *dag storage* is a service that maintains a directed acyclic graph of *nodes* and their *dependencies*
+- A *dependency* is a relationship from a dependent *node* to a prerequisite *node*
+- A *propagating dependency* is a *dependency* where changes to the prerequisite mark the dependent dirty
+- A *reverse dependency* is a relationship from a prerequisite *node* to a dependent *node*
+- A *message* is a communication record passed between *nodes* in a *dag storage*
+- A *pending message* is an unhandled *message* queued at a *node* in a *dag storage*
 
-**Operations**
+## Behavior
 
-- Read pending messages for a node.
-- Add messages to a node's pending set.
-- Clear a node's pending messages.
-- Delete a node's data (its pending messages and its known reverse dependencies).
-- Retrieve a node's dependencies.
-- Retrieve a node's known reverse dependencies.
-
-**Guarantees**
-
-- Messages and reverse dependencies persist across restarts.
-- Read, write, clear, and delete operations are atomic per node.
-- Messages are provided exactly as stored, with their kinds; dependencies as declared; reverse dependencies exactly as recorded.
-- Clearing removes only the node's pending messages; its known reverse dependencies remain.
-- Retrieving a node's dependencies records the node as a reverse dependency of each of its propagating dependencies, at most once per dependency.
-
-**Assumptions**
-
-- A node exists in the graph before its messages, dependencies, or reverse dependencies are accessed.
-
-## Non-concerns
-
-- Storage failures: assumed not to occur; if they do, behavior is undefined.
+- A *dag storage* maintains *nodes*, *dependencies*, *reverse dependencies*, and *pending messages*.
+- A *dag storage* records and retrieves data associated with a *node*.
+- A *dag storage* marks a *node* dirty when its prerequisite in a *propagating dependency* changes.
+- *Pending messages* can be queued at and cleared from a *node* in a *dag storage*.

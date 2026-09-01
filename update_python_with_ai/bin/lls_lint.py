@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-lls_lint.py — lint low-level specification files per update_python_with_ai/guides/low_level_spec.md.
+lls_lint.py — lint low-level specification files per update_python_with_ai/guides/high_to_low.md.
+
 
 Usage:
     python3 update_python_with_ai/bin/lls_lint.py [files...]     # default: all *.md under specs/low/
@@ -61,10 +62,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 SPECS_DIR = ROOT / "update_with_ai" / "specs" / "low"
-# External dependency docs: not low-level specs and not linted themselves,
-# but nameable as dependency-comment entries (e.g. `- openai_api.md` for
-# specs/external/openai_api.md).
-EXTERNAL_DIR = ROOT / "update_with_ai" / "specs" / "external"
 
 # Modules that are not specs and need no dependency-comment entry.
 STDLIB_MODULES = {"__future__", "abc", "collections", "dataclasses", "enum", "typing"}
@@ -84,7 +81,17 @@ IMPL_SECTIONS = {
     "Invariants": 3,
     "Non-Concerns": 4,
 }
+EXTERNAL_SECTIONS = {
+    "Data Types": 0,
+    "Format Specification": 1,
+    "External API": 1,
+    "Component-Provided Operations": 1,
+    "Behavioral Description": 1,
+    "Invariants": 2,
+    "Non-Concerns": 3,
+}
 TERM_DEF_RE = re.compile(r"^(Term definitions|.*\(term definition\))$")
+
 
 # Guide: never generic `Message`, `Result`, `Status`, `Data`.
 BANNED_TYPE_NAMES = {"Message", "Result", "Status", "Data"}
@@ -190,21 +197,16 @@ def check_no_paths(f: Path, text: str) -> None:
             continue
         entry = stripped[2:].strip()
         if "/" in entry or "\\" in entry:
-            err(f, f"dependency comment entry {entry!r} is a file path; entries are bare `<name>.md` names (e.g. `- openai_api.md` for specs/external/openai_api.md)")
+            err(f, f"dependency comment entry {entry!r} is a file path; entries are bare `<name>.md` names (e.g. `- openai_ext.md`)")
 
 
 def check_comment_entries(f: Path, comment: list[str], files: list[Path], deps: list[str]) -> None:
-    """Each comment entry must name a linted file, a specified module dep
-    (the --deps list: the module_deps md files, direct only), or an external
-    dependency doc under specs/external/."""
-    resolvable = (
-        {p.name for p in files}
-        | {Path(d).name for d in deps}
-        | {p.name for p in EXTERNAL_DIR.glob("*.md")}
-    )
+    """Each comment entry must name a linted file or a specified module dep
+    (the --deps list: the module_deps md files, direct only)."""
+    resolvable = {p.name for p in files} | {Path(d).name for d in deps}
     for entry in comment:
         if entry not in resolvable:
-            err(f, f"dependency comment lists {entry}, which is not a specified module dep (add it to module_deps) or an external doc (specs/external/)")
+            err(f, f"dependency comment lists {entry}, which is not a specified module dep (add it to module_deps)")
 
 
 def check_deps_listed(f: Path, comment: list[str], deps: list[str]) -> None:
@@ -271,25 +273,31 @@ def check_imports(f: Path, code: str, comment: list[str]) -> None:
 def check_header(f: Path, text: str) -> None:
     first = next((p for p in parse(text) if p[0] == 1), None)
     if first is None:
-        err(f, "missing '# Interface LLS: <name>' / '# Implementation LLS: <name>' heading")
+        err(f, "missing '# Interface LLS: <name>' / '# Implementation LLS: <name>' / '# External LLS: <name>' heading")
         return
-    m = re.match(r"^(Interface|Implementation) LLS: (.+)$", first[1])
+    m = re.match(r"^(Interface|Implementation|External) LLS: (.+)$", first[1])
     if m is None:
-        err(f, f"first top-level heading must be '# Interface LLS: <name>' or '# Implementation LLS: <name>': {first[1]!r}")
+        err(f, f"first top-level heading must be '# Interface LLS: <name>', '# Implementation LLS: <name>', or '# External LLS: <name>': {first[1]!r}")
         return
     stem = stem_of(f)
     if m.group(2) != stem:
         err(f, f"LLS heading name {m.group(2)!r} does not match filename stem {stem!r}")
     # A component whose HLS has no `fulfills:` line is an interface: its LLS
-    # is an Interface LLS. Implementation LLS files are `<name>_impl.md` in
-    # `specs/low/`; the one exception is an assembly spec (`<name>_asm.md`),
-    # which has no `fulfills:` yet still uses the implementation LLS form
-    # (it shares the implementation section inventory).
+    # is an Interface LLS (or External LLS for _ext). Implementation LLS files
+    # are `<name>_impl.md` in `specs/low/`; the assembly specs (`<name>_asm.md`)
+    # use the implementation LLS form.
+    is_ext = stem.endswith("_ext")
     impl_like = stem.endswith("_impl") or stem.endswith("_asm")
-    if m.group(1) == "Implementation" and not impl_like:
-        err(f, f"'# Implementation LLS: {stem}' in a non-`_impl`/non-`_asm` file: a component whose HLS has no `fulfills:` line is an interface (unless it is an assembly); its LLS is '# Interface LLS: {stem}'")
-    elif m.group(1) == "Interface" and impl_like:
-        err(f, f"'# Interface LLS: {stem}' in an `_impl`/`_asm` file: an implementation LLS is headed '# Implementation LLS: {stem}'")
+    if is_ext:
+        if m.group(1) != "External":
+            err(f, f"'# {m.group(1)} LLS: {stem}' in a `_ext` file: an external LLS is headed '# External LLS: {stem}'")
+    elif impl_like:
+        if m.group(1) != "Implementation":
+            err(f, f"'# {m.group(1)} LLS: {stem}' in an `_impl`/`_asm` file: an implementation LLS is headed '# Implementation LLS: {stem}'")
+    else:
+        if m.group(1) != "Interface":
+            err(f, f"'# {m.group(1)} LLS: {stem}' in a standard interface file: an interface LLS is headed '# Interface LLS: {stem}'")
+
 
 
 def check_aliases(f: Path, code: str) -> None:
@@ -369,20 +377,24 @@ def check_typeddict(f: Path, code: str) -> None:
 
 
 def protocol_methods(code: str) -> set[str] | None:
-    """Method names declared by the interface's Protocol class (the last class).
+    """Method names declared by all Protocol classes in the Data Types block.
 
     Returns None when the block declares no class at all (check_protocol_last
     reports the missing Protocol separately).
     """
     lines = code.splitlines()
-    starts = [i for i, l in enumerate(lines) if re.match(r"^class ", l)]
-    if not starts:
+    if not any(re.match(r"^class ", l) for l in lines):
         return None
     methods: set[str] = set()
-    for l in lines[starts[-1] + 1:]:
-        m = re.match(r"^\s+def ([A-Za-z_]\w*)\(", l)
-        if m:
-            methods.add(m.group(1))
+    in_protocol = False
+    for l in lines:
+        if re.match(r"^class ", l):
+            in_protocol = "Protocol" in l
+            continue
+        if in_protocol:
+            m = re.match(r"^\s+def ([A-Za-z_]\w*)\(", l)
+            if m:
+                methods.add(m.group(1))
     return methods
 
 
@@ -605,7 +617,7 @@ def check_assembly_class(f: Path, code: str) -> None:
         err(f, f"assembly LLS class name must end with 'Asm' (found {class_names})")
 
 
-def check_data_types(f: Path, body: str, comment: list[str], is_impl: bool) -> None:
+def check_data_types(f: Path, body: str, comment: list[str], is_impl: bool, is_ext: bool) -> None:
     blocks = python_blocks(body)
     if len(blocks) != 1:
         err(f, f"## Data Types must open with exactly one Python code block (found {len(blocks)})")
@@ -620,7 +632,7 @@ def check_data_types(f: Path, body: str, comment: list[str], is_impl: bool) -> N
     check_typeddict(f, code)
     if is_impl:
         check_assembly_class(f, code)
-    else:
+    elif not is_ext:
         check_protocol_last(f, code)
 
 
@@ -680,25 +692,42 @@ def check_operation_signatures(f: Path, body: str) -> None:
 
 def check_sections(f: Path, parts: list[tuple[int, str, list[str]]], comment: list[str]) -> None:
     for h1, subs in grouped_sections(parts):
-        if not h1.startswith(("Interface LLS:", "Implementation LLS:")):
+        if not h1.startswith(("Interface LLS:", "Implementation LLS:", "External LLS:")):
             continue  # header problems are reported by check_header
         is_impl = h1.startswith("Implementation LLS:")
-        allowed = IMPL_SECTIONS if is_impl else INTERFACE_SECTIONS
+        is_ext = h1.startswith("External LLS:")
+        if is_ext:
+            allowed = EXTERNAL_SECTIONS
+            kind_str = "external"
+        elif is_impl:
+            allowed = IMPL_SECTIONS
+            kind_str = "implementation"
+        else:
+            allowed = INTERFACE_SECTIONS
+            kind_str = "interface"
+
         names = [h for h, _ in subs]
         for h in names:
             if h not in allowed and not TERM_DEF_RE.match(h):
-                err(f, f"unknown section '## {h}' in an {'implementation' if is_impl else 'interface'} LLS")
+                err(f, f"unknown section '## {h}' in an {kind_str} LLS")
         def pos(h: str) -> int | None:
             if h in allowed:
                 return allowed[h]
             return 1 if TERM_DEF_RE.match(h) else None
         positions = [pos(h) for h in names]
         if None not in positions and positions != sorted(positions):
-            err(f, f"section order {names} deviates from the canonical order for an {'implementation' if is_impl else 'interface'} LLS")
-        for required in (["Data Types", "Component-Provided Operations", "Invariants"]
-                         if not is_impl else ["Data Types", "Behavioral Description", "Invariants"]):
-            if required not in names:
-                err(f, f"{'implementation' if is_impl else 'interface'} LLS section missing '## {required}'")
+            err(f, f"section order {names} deviates from the canonical order for an {kind_str} LLS")
+        if is_ext:
+            if "Data Types" not in names:
+                err(f, "external LLS section missing '## Data Types'")
+        elif is_impl:
+            for required in ["Data Types", "Behavioral Description", "Invariants"]:
+                if required not in names:
+                    err(f, f"implementation LLS section missing '## {required}'")
+        else:
+            for required in ["Data Types", "Component-Provided Operations", "Invariants"]:
+                if required not in names:
+                    err(f, f"interface LLS section missing '## {required}'")
         dt_code = ""
         ops_body = ""
         for h, body in subs:
@@ -713,10 +742,10 @@ def check_sections(f: Path, parts: list[tuple[int, str, list[str]]], comment: li
                 if re.search(r"^### ", body, re.M):
                     err(f, f"`### ` heading inside '## {h}'; `### ` headings appear only under Component-Provided Operations")
                 if h == "Data Types":
-                    check_data_types(f, body, comment, is_impl)
+                    check_data_types(f, body, comment, is_impl, is_ext)
                     blocks = python_blocks(body)
                     dt_code = blocks[0] if blocks else ""
-        if not is_impl and dt_code and ops_body:
+        if not is_impl and not is_ext and dt_code and ops_body:
             methods = protocol_methods(dt_code)
             if methods is not None:
                 for name, _ in op_chunks(ops_body):
@@ -724,6 +753,7 @@ def check_sections(f: Path, parts: list[tuple[int, str, list[str]]], comment: li
                         err(f, f"operation '{name}' is documented but not a method of the interface's Protocol class")
         if is_impl and re.search(r"\bclient\b", "\n".join(b for _, b in subs), re.I):
             err(f, "implementation LLS mentions 'client'")
+
 
 
 def check_markdown_links(f: Path, text: str) -> None:

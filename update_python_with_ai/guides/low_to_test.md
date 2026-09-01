@@ -4,11 +4,7 @@
 
 The artifact is the test module for an implementation: `<component-name>_test.py`, written from the implementation LLS and its dependency closure alone — the implementation Python file is never consulted. Tests written from the LLS catch implementation drift: when a test fails, the implementation is wrong, unless the test misread the LLS. A file that is a template is filled in.
 
-The LLS is the only contract: the tests cover its postconditions, invariants, and expected failure signals, and nothing else — no internal mechanisms, no exact message wording, no unspecified ordering, no behavior outside the contract. When in doubt, do not test it. The HLS is not part of the test contract; the LLS is self-contained.
-
-The implementation LLS and the transitive closure of its dependency comment are the source of testable claims: every LLS in the comment, every LLS in their comments, until no new files remain — dependency mocks implement the dependency interfaces exactly from their own LLSs. Testable claims are extracted from: Data Types (construction, fields, defaults, `Literal` discriminators); Config (fields, defaults, mock wiring); Behavioral Description (each bullet → outcome tests); Failure Handling (each expected failure signal → a test); Invariants (sequence tests); Non-Concerns (pinned only).
-
-Editing is incremental and targeted: test methods are added or updated one at a time, never adding or updating more than one test method in the same `update_lines` call; the entire file is never rewritten or regenerated in one edit (which risks truncation and wastes tokens). The test node has write access only to its test file (`<name>_test.py`); library implementation files (`<name>.py`) are strictly read-only. Each file change summary in `advance(changes=[...])` is at most 200 characters (one short sentence).
+The LLS is the only contract: tests cover its postconditions, invariants, and expected failure signals, extracting claims from Data Types, Config, Behavioral Description, Failure Handling, and Invariants. Test editing is incremental and targeted, updating or adding test methods one at a time via `update_lines` without regenerating the whole file. When calling `advance(change_summary="...")`, the summary is at most 200 characters (one short sentence).
 
 ## Module layout
 
@@ -26,16 +22,18 @@ Editing is incremental and targeted: test methods are added or updated one at a 
 - [ ] Every Behavioral Description bullet has one or more outcome tests (return value; observable state through a fresh instance; a failure that leaves the previous state intact; atomicity)
 - [ ] Stateful behavior asserted through the public operations or a fresh instance, never through internals
 - [ ] Every expected failure signal named in the LLS has a test that triggers its condition and asserts the signal
-- [ ] Error-message, warning, and reminder wording asserted only when the LLS pins the string in Non-Concerns; otherwise only the signal type or event occurrence is asserted
+- [ ] Error-message, warning, and reminder wording asserted only when the LLS pins the exact string; otherwise only the signal type or event occurrence is asserted
 - [ ] Invariants tested across operation sequences (a fresh instance behaves freshly; state unchanged after a failing operation; resolved-path effects)
-- [ ] Pinned non-concerns asserted; open non-concerns never tested
+- [ ] Every test method documents its purpose in a docstring stating the tested edge case or CUJ, checked postconditions or invariants, and confirming no caller preconditions are violated as tests
+- [ ] All edge cases are covered; for every covered edge case, tests exist exercising all sides of the boundary (e.g. exactly at threshold, one below, and one above; empty vs populated; matching vs non-matching)
+- [ ] All stated behavioral requirements and failure signals are covered; unmandated implementation choices are never asserted
 
 ## Mocks
 
 - [ ] Dependency interfaces are mocked from their LLSs (the closure) using protocol stubs or mock classes, never using foreign implementation classes (`*Impl`)
 - [ ] Dependency interfaces are mocked from their LLSs (the closure), never the system under test
 - [ ] Each mock records calls, returns scripted results, and enforces the interface's preconditions (raises when the component under test violates one)
-- [ ] Preconditions are enforced by the mocks, never tested directly (precondition violations are unexpected failures)
+- [ ] Preconditions are verified in caller tests via mock enforcement, never in callee tests (callees assume satisfied preconditions; violations are unexpected failures)
 - [ ] Interaction is asserted through recorded calls: which dependency operations were called, in what order, with what arguments
 - [ ] External boundaries are mocked with fixtures aligned to the interface types the LLS declares; boundary preconditions enforced the same way
 - [ ] File fixtures exist on disk or are mocked: when a component takes a file path to read at initialization or during execution, tests must supply a real fixture file (e.g. created via `tempfile.NamedTemporaryFile` with test content) or mock the file-reading boundary, never passing a non-existent dummy path string
@@ -52,10 +50,10 @@ Editing is incremental and targeted: test methods are added or updated one at a 
 
 ## What not to test
 
-- [ ] No tests for open non-concerns (ordering, algorithm choice, representation, log/text format, message wording, chunk boundaries)
-- [ ] No tests for unexpected failures not listed as concerns (precondition violations, filesystem errors, state corruption)
-- [ ] No tests for internal mechanisms the LLS does not state (cache internals, temporary-file steps) unless pinned in a Non-Concern
-- [ ] No exact error, warning, or reminder wording asserted unless the LLS explicitly pins the string in Non-Concerns
+- [ ] No tests for unmandated choices (ordering, algorithm choice, representation, log/text format, message wording, chunk boundaries) unless explicitly pinned in the LLS
+- [ ] No tests for unsatisfied preconditions (preconditions are tested in caller tests via mock enforcement, never in callee tests) or unexpected failures (every exception is an unexpected failure; unexpected failures do not need to be covered in tests unless the specification explicitly states otherwise)
+- [ ] No tests for internal mechanisms the LLS does not state (cache internals, temporary-file steps)
+- [ ] No exact error, warning, or reminder wording asserted unless the LLS explicitly pins the exact string
 - [ ] No assertions on unmandated path representations, bare unextended identifier/target fragments, or formats outside the LLS contract
 - [ ] No tests of the HLS; the LLS is the contract
 
@@ -80,7 +78,7 @@ Editing is incremental and targeted: test methods are added or updated one at a 
 - [ ] No global stdlib patches (e.g. `@patch('os.path.isfile')` instead of `@patch('lib.<module>.os.path.isfile')`)
 - [ ] No fixtures missing spec-defined structural delimiters (e.g. markdown heading syntax)
 - [ ] No assertions on unmandated path fragments or unextended labels not specified by the LLS
-- [ ] No precondition tests (preconditions are enforced by the mocks, not tested)
-- [ ] No open-non-concern tests (pin the aspect in the LLS first, or drop the assertion)
+- [ ] No precondition tests in callee suites (preconditions are tested in caller tests via mock enforcement, never in the callee itself)
+- [ ] No tests for unmandated implementation choices (pin the aspect in the LLS first, or drop the assertion)
 - [ ] No imports outside the LLS closure (the test imports only within its spec's dependency closure)
 - [ ] No imports of foreign implementation modules or `*Impl` classes (mock dependency protocols instead)

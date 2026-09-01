@@ -1,203 +1,263 @@
-"""
-Tests for the FileEditorImpl implementation.
-"""
+"""Tests for file_editor_impl derived from LLS."""
 
 import os
 import shutil
 import tempfile
 import unittest
-from typing import Any, Optional, Tuple
-
-from lib.file_reader import FileReader
+from lib.tool_provider import ToolResult, ToolFailure
 from lib.file_editor import FileEditorConfig
-from lib.file_editor_impl import FileEditorImpl
-from lib.tool_provider import (
-    PresentedToolResult,
-    ToolCallOutcome,
-    ToolResult,
-    ToolFailure,
-)
+from lib.file_editor_impl import FileEditorFactoryImpl
 
 
-
-class _MockFileReader(FileReader):
-    def __init__(self, file_mappings: dict[str, str], readable_paths: list[str]) -> None:
-        self.file_mappings = file_mappings
-        self.readable_paths = readable_paths
-        self.calls: list[tuple[str, Any]] = []
-
-    def get_readable_paths(self) -> list[str]:
-        self.calls.append(("get_readable_paths", ()))
-        return list(self.readable_paths)
-
-    def is_readable(self, path: str) -> bool:
-        self.calls.append(("is_readable", (path,)))
-        return path in self.readable_paths
-
-    def resolve_path(self, path: str) -> str:
-        self.calls.append(("resolve_path", (path,)))
-        if path not in self.readable_paths:
-            raise ValueError(f"Path not readable: {path}")
-        return self.file_mappings.get(path, path)
-
-    def read_file(self, path: str, line_numbers: bool = True) -> PresentedToolResult:
-        self.calls.append(("read_file", (path, line_numbers)))
-        if path not in self.readable_paths:
-            return [ToolFailure(f"Path not readable: {path}")]
-        real_path = self.file_mappings.get(path, path)
-        if not os.path.exists(real_path):
-            return [ToolFailure(f"File not found: {path}")]
-        with open(real_path, "r", encoding="utf-8") as f:
-            content = f.read()
-        return [ToolResult(content=content)]
-
-    def get_file_size(self, path: str) -> int:
-        self.calls.append(("get_file_size", (path,)))
-        real_path = self.file_mappings.get(path, path)
-        return os.path.getsize(real_path) if os.path.exists(real_path) else 0
-
-
-class TestFileEditorImpl(unittest.TestCase):
+class FileEditorImplTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp_dir = tempfile.mkdtemp()
-
-        self.test_file_path = os.path.join(self.temp_dir, "test.txt")
-        with open(self.test_file_path, "w", encoding="utf-8") as f:
-            f.write("Line 1: Hello World\n")
-            f.write("Line 2: This is a test\n")
-            f.write("Line 3: Another line\n")
-            f.write("Line 4: Final line\n")
-
-        self.second_path = os.path.join(self.temp_dir, "second.txt")
-        with open(self.second_path, "w", encoding="utf-8") as f:
-            f.write("Second line one\n")
-            f.write("Second line two\n")
-
-        self.ro_path = os.path.join(self.temp_dir, "ro.txt")
-        with open(self.ro_path, "w", encoding="utf-8") as f:
-            f.write("Read only line 1\n")
-            f.write("Read only line 2\n")
-
-        self.new_file_path = os.path.join(self.temp_dir, "new.txt")
-
-        self.file_mappings = {
-            "test.txt": self.test_file_path,
-            "second.txt": self.second_path,
-            "ro.txt": self.ro_path,
-            "new.txt": self.new_file_path,
-        }
-        self.readable_paths = ["test.txt", "second.txt", "ro.txt", "new.txt"]
-        self.writable_paths = ["test.txt", "second.txt", "new.txt"]
-
-        self.reader = _MockFileReader(
-            file_mappings=self.file_mappings,
-            readable_paths=self.readable_paths,
-        )
+        self.test_dir = tempfile.mkdtemp()
+        self.target_host_file = os.path.join(self.test_dir, "file.txt")
+        with open(self.target_host_file, "w") as f:
+            f.write("Line 1\nLine 2\nLine 3\n")
+        self.virtual_file = "file.txt"
+        self.factory = FileEditorFactoryImpl()
 
     def tearDown(self) -> None:
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
+        shutil.rmtree(self.test_dir, ignore_errors=True)
 
-    def _file_editor(
-        self,
-        writable_paths: Optional[list] = None,
-        templates: Optional[dict] = None,
-    ) -> FileEditorImpl:
-        return FileEditorImpl(
-            FileEditorConfig(
-                writable_paths=writable_paths if writable_paths is not None else self.writable_paths,
-                templates=templates if templates is not None else {},
-            ),
-            file_reader=self.reader,
+    def test_tool_metadata(self) -> None:
+        """Tests that replace and update_lines specify required tool metadata."""
+        editor = self.factory.create_file_editor(FileEditorConfig(file_mappings={}, templates={}, read_write_files=[]))
+        replace_meta = editor.get_replacement_tool().get_metadata()
+        self.assertEqual(replace_meta.name, "replace")
+        self.assertTrue("file_name" in replace_meta.parameters_schema or "file_name" in replace_meta.parameters_schema.get("properties", {}))
+
+        line_meta = editor.get_line_update_tool().get_metadata()
+        self.assertEqual(line_meta.name, "update_lines")
+        self.assertTrue("file_name" in line_meta.parameters_schema or "file_name" in line_meta.parameters_schema.get("properties", {}))
+        self.assertTrue("start_line" in line_meta.parameters_schema or "start_line" in line_meta.parameters_schema.get("properties", {}))
+        self.assertTrue("end_line" in line_meta.parameters_schema or "end_line" in line_meta.parameters_schema.get("properties", {}))
+
+    def test_replacement_tool_exact_match_and_failures(self) -> None:
+        """Tests replacement tool boundary sides:
+        1. Unique target content -> replaced successfully.
+        2. Non-matching target content -> ToolFailure.
+        3. Ambiguous multiple match content -> ToolFailure.
+        4. Target text exceeding 100,000 characters -> ToolFailure.
+        """
+        cfg = FileEditorConfig(
+            read_write_files=[self.virtual_file],
+            file_mappings={self.virtual_file: self.target_host_file},
+            templates={},
         )
+        editor = self.factory.create_file_editor(cfg)
+        replace_tool = editor.get_replacement_tool()
 
-    def test_get_tool_definitions(self) -> None:
-        editor = self._file_editor()
-        defs = editor.get_tool_definitions()
-        names = [d["function"]["name"] for d in defs]
-        self.assertEqual(sorted(names), ["replace", "update_lines"])
+        # Success
+        res = replace_tool.execute({
+            "file_name": self.virtual_file,
+            "target_content": "Line 2",
+            "replacement_content": "Updated Line 2",
+        })
+        self.assertIsInstance(res, ToolResult)
+        with open(self.target_host_file) as f:
+            self.assertEqual(f.read(), "Line 1\nUpdated Line 2\nLine 3\n")
 
-    def test_replace_single_occurrence(self) -> None:
-        editor = self._file_editor()
-        self.assertFalse(editor.get_write_occurred())
+        # Non-matching failure
+        res_fail = replace_tool.execute({
+            "file_name": self.virtual_file,
+            "target_content": "Non existent string",
+            "replacement_content": "New",
+        })
+        self.assertIsInstance(res_fail, ToolFailure)
 
-        outcome = editor.replace("test.txt", old_str="Hello World", new_str="Cleanroom")
-        self.assertIsInstance(outcome, list)
-        self.assertEqual(len(outcome), 2)
-        confirm, injected = outcome
-        self.assertIsInstance(confirm, ToolResult)
-        self.assertTrue(confirm.supersedes)
-        self.assertIsInstance(injected, PresentedToolResult)
-        self.assertTrue(injected.result.supersedes)
-        self.assertIn("Cleanroom", injected.result.content)
+        # Exceeding size limit failure
+        huge_text = "x" * 100001
+        res_huge = replace_tool.execute({
+            "file_name": self.virtual_file,
+            "target_content": huge_text,
+            "replacement_content": "New",
+        })
+        self.assertIsInstance(res_huge, ToolFailure)
 
-        self.assertTrue(editor.get_write_occurred())
-        self.assertEqual(editor.get_changed_files(), ["test.txt"])
-        self.assertIn("Hello World", str(editor.get_run_start_snapshot("test.txt")))
+    def test_line_update_tool_bounds(self) -> None:
+        """Tests line update tool bounds:
+        1. Valid 1-indexed range -> replaced successfully.
+        2. Out-of-bounds start/end -> ToolFailure.
+        """
+        cfg = FileEditorConfig(
+            read_write_files=[self.virtual_file],
+            file_mappings={self.virtual_file: self.target_host_file},
+            templates={},
+        )
+        editor = self.factory.create_file_editor(cfg)
+        line_tool = editor.get_line_update_tool()
 
-    def test_replace_read_only_fails(self) -> None:
-        editor = self._file_editor(writable_paths=["test.txt"])
-        outcome = editor.replace("ro.txt", old_str="Read only", new_str="Write")
-        self.assertIsInstance(outcome, ToolFailure)
-        self.assertIn("read-only", outcome.value)
+        res = line_tool.execute({
+            "file_name": self.virtual_file,
+            "start_line": 1,
+            "end_line": 2,
+            "replacement_text": "Replaced lines 1 and 2\n",
+        })
+        self.assertIsInstance(res, ToolResult)
+        with open(self.target_host_file) as f:
+            self.assertEqual(f.read(), "Replaced lines 1 and 2\nLine 3\n")
 
-    def test_replace_overlong_string(self) -> None:
-        editor = self._file_editor()
-        overlong = "x" * 201
-        outcome = editor.replace("test.txt", old_str=overlong, new_str="bar")
-        self.assertIsInstance(outcome, ToolFailure)
-        self.assertIn("replace supports strings up to 200 chars", outcome.value)
+        # Out-of-bounds
+        res_oob = line_tool.execute({
+            "file_name": self.virtual_file,
+            "start_line": 100,
+            "end_line": 200,
+            "replacement_text": "Invalid",
+        })
+        self.assertIsInstance(res_oob, ToolFailure)
 
-    def test_replace_empty_old_str(self) -> None:
-        editor = self._file_editor()
-        outcome = editor.replace("test.txt", old_str="", new_str="bar")
-        self.assertIsInstance(outcome, ToolFailure)
-        self.assertIn("empty", outcome.value)
+    def test_line_update_insertion_and_deletion(self) -> None:
+        """Tests line update invariants:
+        1. start_line > end_line performs insertion at start_line without deleting lines.
+        2. empty replacement_text deletes the specified line range.
+        """
+        cfg = FileEditorConfig(
+            read_write_files=[self.virtual_file],
+            file_mappings={self.virtual_file: self.target_host_file},
+            templates={},
+        )
+        editor = self.factory.create_file_editor(cfg)
+        line_tool = editor.get_line_update_tool()
 
-    def test_update_lines_requires_line_numbered_view_if_not_read(self) -> None:
-        editor = self._file_editor()
-        outcome = editor.update_lines("test.txt", start_line=1, end_line=1, new_str="Replaced\n")
-        self.assertIsInstance(outcome, ToolFailure)
-        self.assertIn("requires line-numbered view", outcome.value)
+        # Insertion: start_line=2, end_line=1 -> insert before line 2
+        res_insert = line_tool.execute({
+            "file_name": self.virtual_file,
+            "start_line": 2,
+            "end_line": 1,
+            "replacement_text": "Inserted Line\n",
+        })
+        self.assertFalse(isinstance(res_insert, ToolFailure), getattr(res_insert, "feedback", ""))
+        self.assertIsInstance(res_insert, ToolResult)
+        with open(self.target_host_file) as f:
+            self.assertEqual(f.read(), "Line 1\nInserted Line\nLine 2\nLine 3\n")
 
-    def test_update_lines_after_injected_read(self) -> None:
-        editor = self._file_editor()
-        editor.replace("test.txt", old_str="Hello World", new_str="World")
-        # Injected read enabled line numbers!
-        outcome = editor.update_lines("test.txt", start_line=2, end_line=2, new_str="Line 2: Updated\n")
-        self.assertIsInstance(outcome, list)
-        self.assertEqual(len(outcome), 2)
-        injected = outcome[1]
-        self.assertIn("Line 2: Updated", injected.result.content)
+        # Deletion: delete line 2 ("Inserted Line\n")
+        res_del = line_tool.execute({
+            "file_name": self.virtual_file,
+            "start_line": 2,
+            "end_line": 2,
+            "replacement_text": "",
+        })
+        self.assertIsInstance(res_del, ToolResult)
+        with open(self.target_host_file) as f:
+            self.assertEqual(f.read(), "Line 1\nLine 2\nLine 3\n")
 
-    def test_update_lines_delete(self) -> None:
-        editor = self._file_editor()
-        editor.replace("test.txt", old_str="Hello World", new_str="World")
-        outcome = editor.update_lines("test.txt", start_line=1, end_line=2, new_str="")
-        self.assertIsInstance(outcome, list)
-        injected = outcome[1]
-        self.assertNotIn("Line 1", injected.result.content)
+    def test_materialize_templates_does_not_overwrite_existing(self) -> None:
+        """Tests template materialization:
+        1. Missing file -> writes starter template.
+        2. Existing file -> preserves existing content without overwrite.
+        """
+        missing_host_file = os.path.join(self.test_dir, "missing.txt")
+        cfg = FileEditorConfig(
+            read_write_files=[self.virtual_file, "missing.txt"],
+            file_mappings={
+                self.virtual_file: self.target_host_file,
+                "missing.txt": missing_host_file,
+            },
+            templates={
+                self.virtual_file: "Template overwrite attempt",
+                "missing.txt": "Starter template content",
+            },
+        )
+        editor = self.factory.create_file_editor(cfg)
+        editor.materialize_templates()
 
-    def test_update_lines_insert(self) -> None:
-        editor = self._file_editor()
-        editor.replace("test.txt", old_str="Hello World", new_str="World")
-        outcome = editor.update_lines("test.txt", start_line=2, end_line=1, new_str="Inserted line\n")
-        self.assertIsInstance(outcome, list)
-        injected = outcome[1]
-        self.assertIn("Inserted line", injected.result.content)
+        self.assertTrue(os.path.isfile(missing_host_file))
+        with open(missing_host_file) as f:
+            self.assertEqual(f.read(), "Starter template content")
 
-    def test_template_initialization_on_missing_file(self) -> None:
-        editor = self._file_editor(templates={"new.txt": "Initial template content\n"})
-        self.assertTrue(os.path.exists(self.new_file_path))
-        with open(self.new_file_path, "r", encoding="utf-8") as f:
-            content = f.read()
-        self.assertEqual(content, "Initial template content\n")
-        self.assertFalse(editor.get_write_occurred())
+        with open(self.target_host_file) as f:
+            self.assertNotIn("Template overwrite attempt", f.read())
 
-    def test_template_preserves_existing_file(self) -> None:
-        editor = self._file_editor(templates={"test.txt": "Overwritten content\n"})
-        with open(self.test_file_path, "r", encoding="utf-8") as f:
-            content = f.read()
-        self.assertIn("Line 1: Hello World", content)
+    def test_replacement_tool_not_read_write_or_missing(self) -> None:
+        """Tests that replace tool returns ToolFailure for undeclared or missing files."""
+        cfg = FileEditorConfig(
+            read_write_files=[self.virtual_file],
+            file_mappings={self.virtual_file: self.target_host_file},
+            templates={},
+        )
+        editor = self.factory.create_file_editor(cfg)
+        tool = editor.get_replacement_tool()
+
+        # Not in read_write_files
+        res_not_rw = tool.execute({
+            "file_name": "other.txt",
+            "target_content": "Line",
+            "replacement_content": "New",
+        })
+        self.assertIsInstance(res_not_rw, ToolFailure)
+        self.assertTrue(bool(res_not_rw.feedback))
+
+        # In read_write_files but missing on disk
+        missing_host = os.path.join(self.test_dir, "missing_on_disk.txt")
+        cfg2 = FileEditorConfig(
+            read_write_files=["missing_on_disk.txt"],
+            file_mappings={"missing_on_disk.txt": missing_host},
+            templates={},
+        )
+        tool2 = self.factory.create_file_editor(cfg2).get_replacement_tool()
+        res_missing = tool2.execute({
+            "file_name": "missing_on_disk.txt",
+            "target_content": "Line",
+            "replacement_content": "New",
+        })
+        self.assertIsInstance(res_missing, ToolFailure)
+        self.assertTrue(bool(res_missing.feedback))
+
+    def test_replacement_tool_multiple_occurrences_fails(self) -> None:
+        """Tests that replace tool fails when target_content matches multiple locations."""
+        multi_file = os.path.join(self.test_dir, "multi.txt")
+        with open(multi_file, "w") as f:
+            f.write("duplicate\nfoo\nduplicate\n")
+
+        cfg = FileEditorConfig(
+            read_write_files=["multi.txt"],
+            file_mappings={"multi.txt": multi_file},
+            templates={},
+        )
+        editor = self.factory.create_file_editor(cfg)
+        res = editor.get_replacement_tool().execute({
+            "file_name": "multi.txt",
+            "target_content": "duplicate",
+            "replacement_content": "single",
+        })
+        self.assertIsInstance(res, ToolFailure)
+        self.assertTrue(bool(res.feedback))
+
+    def test_line_update_not_read_write_or_missing(self) -> None:
+        """Tests that update_lines tool returns ToolFailure for undeclared or missing files."""
+        cfg = FileEditorConfig(
+            read_write_files=[self.virtual_file],
+            file_mappings={self.virtual_file: self.target_host_file},
+            templates={},
+        )
+        editor = self.factory.create_file_editor(cfg)
+        tool = editor.get_line_update_tool()
+
+        res_not_rw = tool.execute({
+            "file_name": "other.txt",
+            "start_line": 1,
+            "end_line": 1,
+            "replacement_text": "New",
+        })
+        self.assertIsInstance(res_not_rw, ToolFailure)
+
+        missing_host = os.path.join(self.test_dir, "missing_on_disk.txt")
+        cfg2 = FileEditorConfig(
+            read_write_files=["missing_on_disk.txt"],
+            file_mappings={"missing_on_disk.txt": missing_host},
+            templates={},
+        )
+        tool2 = self.factory.create_file_editor(cfg2).get_line_update_tool()
+        res_missing = tool2.execute({
+            "file_name": "missing_on_disk.txt",
+            "start_line": 1,
+            "end_line": 1,
+            "replacement_text": "New",
+        })
+        self.assertIsInstance(res_missing, ToolFailure)
 
 
 if __name__ == "__main__":

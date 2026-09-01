@@ -1,7 +1,8 @@
-"""Tests for <name> per its implementation LLS (see update_python_with_ai/guides/low_to_test.md).
+"""Tests for <name> per its implementation LLS.
 
 Written from the LLS alone; the implementation Python file is not consulted.
 """
+
 
 import unittest
 from typing import Any, Dict, List  # TODO: adjust imports to what the LLS requires

@@ -1,73 +1,27 @@
-"""
-Interface LLS: build_graph_storage
-Fulfills the dag_storage contract with data from the Bazel workspace, and
-additionally resolves node definitions and package directories.
-"""
+"""Build graph storage interface providing node sandbox configurations."""
 
-from __future__ import annotations
-from typing import Protocol
+from typing import Protocol, TypeAlias, Optional
 from dataclasses import dataclass
-from .dag_storage import NodeId, DagStorage
+from .dag_storage import DagStorage, NodeId
 from .sandbox import SandboxConfig
+from .build_agent_config import ConfigTarget
+
+TaskPrompt: TypeAlias = str
 
 
-GraphSource = str
-
-
-@dataclass
-class GraphConfig:
-    """Client-supplied configuration: either a graph source or a workspace root."""
-    graph_source: GraphSource | None = None
-    workspace_root: str | None = None
-
-
-PackageDirectory = str
-
-
-@dataclass
+@dataclass(frozen=True)
 class NodeDefinition:
-    """The agent prompt and sandbox configuration declared by a node's target."""
-    prompt: str
     sandbox_config: SandboxConfig
+    prompt: Optional[TaskPrompt] = None
+    config_target: Optional[ConfigTarget] = None
 
 
 class BuildGraphStorage(DagStorage, Protocol):
-    """Interface for the LLS BuildGraphStorage: fulfills DagStorage and
-    additionally resolves node definitions and package directories."""
-
-    def resolve_node_definition(self, node_id: NodeId) -> NodeDefinition:
-        """
-        Return the agent prompt and sandbox configuration declared by a node's target.
-
-        Preconditions:
-        - node_id is a valid Bazel target label
-        - The node ID resolves to a target with a complete definition
-
-        Postconditions:
-        - Returns a NodeDefinition containing the node's agent prompt
-          and sandbox configuration as declared by the target
-
-        Failure Handling:
-        - No failure conditions; all valid node IDs resolve to complete definitions.
-
-        HLS Justification: "Query a node's definition (the agent prompt and sandbox configuration)."
-        """
+    def get_sandbox_config(self, node: NodeId) -> SandboxConfig:
         ...
 
-    def resolve_package_directory(self, node_id: NodeId) -> PackageDirectory:
-        """
-        Return the directory containing the node's BUILD file.
+    def get_task_prompt(self, node: NodeId) -> Optional[TaskPrompt]:
+        ...
 
-        Preconditions:
-        - node_id is a valid Bazel target label
-
-        Postconditions:
-        - Returns the package directory as the directory containing the node's BUILD file
-        - Also the directory where the node's messages are stored
-
-        Failure Handling:
-        - No failure conditions; all valid node IDs have a package directory.
-
-        HLS Justification: "Query a node's package directory."
-        """
+    def get_node_definition(self, node: NodeId) -> Optional[NodeDefinition]:
         ...

@@ -1,46 +1,35 @@
 # file_reader
 
-imports: tool_provider (tool results, tool failure, tool call)
-terms (from tool_provider): tool result, tool failure, tool call, supersession flag
-terms (owned): virtual name, line-numbered view, session-start read
+imports: tool_provider, virtual_file_name
+types from tool_provider: tool, tool provider, tool result, tool failure
+types from virtual_file_name: virtual file name
 
 ## Purpose
 
-Provides read-only file access and search across readable files: virtual-name addressing, full-content reading with plain or line-numbered views, pattern search, session-start reads, and path sanitization. Enforces read permissions.
+Provides safe, token-efficient workspace file inspection and path sanitization.
 
-## Terms
+Agents require tools to locate and inspect files without exposing real host paths, leaking environment details, or making unanchored edits. File reader virtualizes file reading and pattern searching, sanitizing host paths in outputs into virtual file names. To ensure edit safety while conserving context, writable files are formatted with explicit line numbers for precise targeting, read-only references are presented plainly without formatting overhead, agents explicitly specify line-numbering intent when requesting file reads, and declared startup files are pre-injected to eliminate discovery turns.
 
-- Virtual name: the virtual file path used by the agent to identify files in the controlled workspace.
-- Line-numbered view: a view of a file's content where each line is prefixed with its 1-indexed line number.
-- Session-start read: a pre-injected plain read of a non-writable readable file presented before the agent's first turn.
+## Types
 
-## Contract
+- A *read-only file* is a file addressed by a *virtual file name* accessible for reading in plain content form
+- A *read-write file* is a file addressed by a *virtual file name* accessible for reading in line-numbered form and modification
+- A *file reader configuration* is a set of declared *read-only files*, *read-write files*, and host path mappings
+- A *file read tool* is a *tool* that reads content from a *read-only file* or *read-write file* identified by a *virtual file name*
+- A *file search tool* is a *tool* that searches file contents matching a pattern
+- A *file reader* is a *tool provider* providing a *file read tool* and a *file search tool*
+- A *file reader factory* is a provider that constructs *file readers* configured for specific sessions
+- A *session-start read* is a *tool result* generated from a *read-only file* before the first agent turn
 
-**Inputs**
+## Behavior
 
-- Per read or search: a virtual file path, regex pattern, offset, limit, or line-numbering flag.
-
-**Operations**
-
-- Read a file's content by virtual name.
-- Search for a regex pattern across readable files.
-- Provide session-start reads for non-writable files.
-- Sanitize error messages and output by replacing real on-disk paths with virtual names.
-
-**Guarantees**
-
-- Reads of non-writable files provide plain content; reading an existing writable file requires the line-numbered view.
-- Search provides matches only in read-only files; matches in writable files are reported as counts without content.
-- Reads of read-only files and search results never set the supersession flag.
-- Session-start reads are sorted by virtual name and skip missing or writable files.
-- Sanitize paths replaces real on-disk paths with virtual names.
-- No state persists across sessions.
-
-**Assumptions**
-
-- Files are UTF-8 encoded.
-
-## Non-concerns
-
-- File writing and modification: handled by file_editor.
-- Template initialization: handled by file_editor.
+- A *file reader configuration* defines declared *read-only files*, declared *read-write files*, and mappings to host paths anchored to workspace roots.
+- Creating a *file reader* through a *file reader factory* yields a *file reader* configured from a *file reader configuration*.
+- A *file reader* provides a *file read tool* and a *file search tool* configured from a *file reader configuration*.
+- Executing a *file read tool* with an unmapped or nonexistent *virtual file name* produces a *tool failure* listing all available *virtual file names*.
+- Executing a *file read tool* on a guide configured for progressive step delivery produces a *tool failure* explaining that the guide is delivered progressively via advance execution.
+- Executing a *file read tool* on a *read-write file* requires requesting line numbers and produces content with line numbers.
+- Executing a *file read tool* on a *read-only file* requires omitting line numbers and produces plain content without line numbers.
+- Executing a *file search tool* produces matching lines and locations within accessible files formatted with *virtual file names*.
+- A *file reader* produces *session-start reads* for declared *read-only files*.
+- Transforming text through a *file reader* replaces host paths with *virtual file names*.

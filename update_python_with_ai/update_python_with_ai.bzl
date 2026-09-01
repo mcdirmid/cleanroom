@@ -47,7 +47,8 @@ def _apparent_label_str(label):
 # deps, and the transitive closure lives in the node's star_deps for
 # run-time reading. hls_lint validates high-level specs per
 # update_python_with_ai/guides/high_level_spec.md; lls_lint validates
-# low-level specs per update_python_with_ai/guides/low_level_spec.md.
+# low-level specs per update_python_with_ai/guides/high_to_low.md.
+
 
 def _spec_lint_test_impl(ctx):
     """Implementation of a spec-lint test rule: a test that lints a spec file.
@@ -156,7 +157,7 @@ def _spec_lint_test_impl(ctx):
     runfiles = ctx.runfiles(
         files = (
             [ctx.file._linter] + ctx.files._corpus + src_files +
-            ctx.files.spec_deps + ctx.files.dep_srcs + ctx.files._external_corpus
+            ctx.files.spec_deps + ctx.files.dep_srcs
         ),
         transitive_files = transitive_manifests,
     )
@@ -192,10 +193,6 @@ _hls_lint_test = rule(
             default = Label("//update_with_ai/specs:high_specs"),
             doc = "Canonical spec corpus used for term-ownership reference resolution",
         ),
-        "_external_corpus": attr.label(
-            default = Label("//update_with_ai/specs:external_specs"),
-            doc = "External dependency docs (specs/external/*.md); in runfiles (unused by hls_lint)",
-        ),
     },
 )
 
@@ -223,21 +220,18 @@ _lls_lint_test = rule(
             default = True,
             doc = "True when --deps comes from dep_srcs directly (lls_lint); False when it comes from the spec_deps manifest closure walk (hls_lint)",
         ),
-        "_external_corpus": attr.label(
-            default = Label("//update_with_ai/specs:external_specs"),
-            doc = "External dependency docs (specs/external/*.md); in runfiles so the linter's external-doc resolution finds them in the sandbox",
-        ),
         "_corpus": attr.label(
             default = Label("//update_with_ai/specs:low_specs"),
             doc = "Canonical low-level spec corpus (runfiles only)",
         ),
     },
 )
+
 # ============================================================================
 # Macro: update_python_with_ai (specification nodes)
 # ============================================================================
 
-def _update_python_with_ai(name, prompt, src, deps = [], module_deps = [], star_deps = [], feedback_deps = [], silent_deps = [], silent_srcs = [], template = None, guide = None, verify = "", visibility = None):
+def _update_python_with_ai(name, prompt = "", src = "", deps = [], module_deps = [], star_deps = [], feedback_deps = [], silent_deps = [], silent_srcs = [], template = None, guide = None, verify = "", visibility = None):
     """Create a spec node by delegating to update_with_ai.
 
     The single common spec-node entry: forwards the spec-specific arguments
@@ -299,16 +293,12 @@ def _update_python_with_ai(name, prompt, src, deps = [], module_deps = [], star_
     )
     return ":" + name
 
-def update_python_with_ai(name, module_deps, external_deps = [], visibility = None):
+def update_python_with_ai(name, module_deps, visibility = None):
     """Create a spec node for each root in spec_dep_roots.
 
     Args:
         name: Target name prefix (e.g. "dag_storage").
         module_deps: List of dependency spec/module labels (e.g. [":dag_clean_logic"]); each is a readable spec dependency and a pyright_dep of the module.
-        external_deps: List of external-dependency doc node labels (update_with_ai
-            targets, e.g. [":openai_api"]); added to the _low node's deps and the
-            _low_lint's --deps directly (no transitive closure; the doc files are
-            readable but their own deps are not pulled in).
         visibility: Optional visibility applied to all generated targets
             (node, *_clean, *_feedback, *_prompt); needed for cross-package
             deps.
@@ -343,6 +333,7 @@ def update_python_with_ai(name, module_deps, external_deps = [], visibility = No
         srcs = ["high/" + name + ".md"],
         spec_deps = hls_spec_deps,
         dep_srcs = native.glob(["high/" + dep.split(":")[-1] + ".md" for dep in module_deps], allow_empty = True),
+        tags = ["high_lint", "high"],
     )
     lls_spec_deps = [dep + "_low" for dep in module_deps]
     _update_python_with_ai(
@@ -360,7 +351,7 @@ def update_python_with_ai(name, module_deps, external_deps = [], visibility = No
         template = "//update_python_with_ai/templates:lls",
         guide = "//update_python_with_ai/guides:high_to_low",
         module_deps = lls_spec_deps,
-        deps = [":" + name + "_high"] + external_deps,
+        deps = [":" + name + "_high"],
         verify = "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{}:{}_low_lint --test_output=errors --noshow_progress 2>&1".format(
             native.package_name(),
             name,
@@ -376,12 +367,13 @@ def update_python_with_ai(name, module_deps, external_deps = [], visibility = No
     # writes the spec, which is when the node's verify tool gates on it. The
     # lint's --deps are the module_deps md files directly (no transitive
     # closure: the comment lists the direct deps, and the closure lives in the
-    # node's star_deps) plus the external-doc files.
+    # node's star_deps).
     if native.glob(["low/" + name + ".md"], allow_empty = True):
         _lls_lint_test(
             name = name + "_low_lint",
             srcs = ["low/" + name + ".md"],
             dep_srcs = native.glob(["low/" + dep.split(":")[-1] + ".md" for dep in module_deps], allow_empty = True),
+            tags = ["low_lint", "low"],
         )
 
     # The lib and tests directories are one level up from this package (the
@@ -400,8 +392,9 @@ def update_python_with_ai(name, module_deps, external_deps = [], visibility = No
     # types only; an implementation spec's module subclasses the interface's
     # Protocol per the LLS; an assembly spec's module (name ending in _asm)
     # performs configuration and assembly of other modules only, is never
-    # tested, and has no _test or _qa node (the test/qa nodes below are
-    # created only for _impl names).
+    # tested, and has no _test or _qa node; an external spec's module (name
+    # ending in _ext) defines shared type aliases and constants, anchors
+    # third-party deps, and has no _test or _qa node.
     if name.endswith("_impl"):
         _lib_kind_clause = (
             "This is an implementation module: it subclasses the interface's " +
@@ -414,6 +407,13 @@ def update_python_with_ai(name, module_deps, external_deps = [], visibility = No
             "concrete implementations into the configured interface-only " +
             "components and provides the assembled result. It implements no " +
             "interface and is never tested (no test module exists for it)."
+        )
+    elif name.endswith("_ext"):
+        _lib_kind_clause = (
+            "This is an external module: it defines shared type aliases and " +
+            "constants, anchors external third-party dependencies, and never " +
+            "defines an implementation class. It is never tested directly " +
+            "(no test module exists for it)."
         )
     else:
         _lib_kind_clause = (
@@ -443,7 +443,6 @@ def update_python_with_ai(name, module_deps, external_deps = [], visibility = No
         template = "//update_python_with_ai/templates:lib",
         guide = "//update_python_with_ai/guides:low_to_lib",
         module_deps = [":" + name + "_low"],
-        deps = external_deps,
         silent_deps = [dep + "_lib" for dep in module_deps],
         verify = (
             "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_python_with_ai/bin/lib_lint.py " +
@@ -493,7 +492,6 @@ def update_python_with_ai(name, module_deps, external_deps = [], visibility = No
             template = "//update_python_with_ai/templates:test",
             guide = "//update_python_with_ai/guides:low_to_test",
             module_deps = [":" + name + "_low"],
-            deps = external_deps,
             silent_deps = [":" + name + "_lib"] + [dep + "_lib" for dep in module_deps],
             verify = (
                 "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_python_with_ai/bin/test_lint.py " +
@@ -540,7 +538,6 @@ def update_python_with_ai(name, module_deps, external_deps = [], visibility = No
             template = "//update_python_with_ai/templates:empty",
             guide = "//update_python_with_ai/guides:qa",
             star_deps = [":" + name + "_low"],
-            deps = external_deps,
             feedback_deps = [":" + name + "_lib", ":" + name + "_test"],
             verify = (
                 "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{}/tests:{}_test --test_output=errors --noshow_progress 2>&1 && " +
@@ -548,4 +545,18 @@ def update_python_with_ai(name, module_deps, external_deps = [], visibility = No
             ).format(_parent_pkg, name, _qa_log_path),
             visibility = visibility,
         )
+    elif name.endswith("_asm"):
+        # The QA aggregation node for assemblies: has no prompt and no src file.
+        # It depends on the _qa targets of all composed implementations and
+        # sub-assemblies so that cleaning this node verifies the whole composite subsystem.
+        _qa_deps = [dep + "_qa" for dep in module_deps if dep.endswith("_impl") or dep.endswith("_asm")]
+        _update_python_with_ai(
+            name = name + "_qa",
+            prompt = "",
+            src = "",
+            deps = _qa_deps,
+            visibility = visibility,
+        )
     return ":" + name
+
+

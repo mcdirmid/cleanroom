@@ -1,251 +1,203 @@
-# lib/file_reader_impl.py
-"""
-Implementation of the LLS file_reader interface.
-"""
+"""File reader implementation with line numbering and path sanitization."""
 
 import os
 import re
-from typing import Any, Dict, List, Optional, Tuple
-
+from typing import Sequence, List, Dict, Tuple, Optional
+from .tool_provider import (
+    Tool,
+    ToolMetadata,
+    ToolResult,
+    ToolFailure,
+    ToolOutcome,
+    ToolArguments,
+)
 from .file_reader import (
     FileReader,
+    FileReaderFactory,
     FileReaderConfig,
-    VirtualName,
-)
-from .tool_provider import (
-    ToolDefinition,
-    ToolResult,
-    PresentedToolResult,
-    ToolCallOutcome,
-    ToolFailure,
+    SessionStartRead,
+    UnsanitizedContent,
+    SanitizedContent,
 )
 
 
-class FileReaderImpl(FileReader):
-    """
-    Implementation of the LLS FileReader interface.
-    """
+def _resolve_disk_path(path: str) -> Optional[str]:
+    if not path:
+        return None
+    if os.path.isfile(path):
+        return path
+    ws = os.environ.get("BUILD_WORKSPACE_DIRECTORY", "")
+    if ws:
+        cand = os.path.join(ws, path)
+        if os.path.isfile(cand):
+            return cand
+    runfiles = os.environ.get("RUNFILES_DIR") or os.environ.get("BAZEL_RUNFILES")
+    if runfiles:
+        for sub in ["", "_main"]:
+            cand = os.path.join(runfiles, sub, path) if sub else os.path.join(runfiles, path)
+            if os.path.isfile(cand):
+                return cand
+    return None
 
-    def __init__(self, config: FileReaderConfig):
+
+class FileReaderFactoryImpl(FileReaderFactory):
+    def create_file_reader(self, config: FileReaderConfig) -> FileReader:
+        return _FileReaderImpl(config)
+
+
+class _FileReaderImpl(FileReader):
+    def __init__(self, config: FileReaderConfig) -> None:
         self.config = config
 
-        self._real_to_virtual: Dict[str, str] = {}
-        for virtual, real in self.config.file_mappings.items():
-            if real:
-                self._real_to_virtual.setdefault(real, virtual)
-        self._real_paths_sorted: List[str] = sorted(
-            self._real_to_virtual.keys(), key=len, reverse=True
-        )
+    def get_read_tool(self) -> Tool:
+        class ReadTool:
+            def __init__(self, parent: _FileReaderImpl) -> None:
+                self.parent = parent
 
-    def resolve_path(self, file_path: VirtualName) -> Optional[str]:
-        return self.config.file_mappings.get(file_path)
-
-    def is_readable(self, file_path: VirtualName) -> bool:
-        return file_path in self.config.readable_paths
-
-    def get_tool_definitions(self) -> List[ToolDefinition]:
-        return [
-            self._create_tool_definition(
-                "read_file",
-                "Read a file's ENTIRE content (files are small; reads are never paginated). "
-                "Reading a writable file makes its content the file's current content in the "
-                "conversation (an earlier read of the same file is replaced by a stub). "
-                "Line numbers are metadata, not file content: reading "
-                "a writable file that already exists REQUIRES include_line_numbers=True to enable editing via update_lines (a "
-                "plain read without include_line_numbers=True is rejected); reads of read-only files provide plain content (include_line_numbers=False).",
-                {
-                    "file_path": {"type": "string", "description": "Virtual path to the file"},
-                    "include_line_numbers": {"type": "boolean", "description": "Prefix each line with its line number; REQUIRED when reading a writable file that already exists; line numbers serve update_lines edits and are allowed only for writable files (default: false)", "default": False}
-                }
-            ),
-            self._create_tool_definition(
-                "search_files",
-                "Search for a pattern in files. Takes optional path (virtual file name, or '.' / '/' to search all readable files; default: '.'), pattern, and optional offset/limit. Renders matches only for read-only files; matches in writable files are counted in the note but never shown (their content is not supported and would go stale).",
-                {
-                    "pattern": {"type": "string", "description": "Regex pattern to search for"},
-                    "path": {"type": "string", "description": "Virtual path to search, or '.' / '/' to search all readable files (default: '.')", "default": "."},
-                    "offset": {"type": "integer", "description": "Match offset to start from (default: 0)", "default": 0},
-                    "limit": {"type": "integer", "description": f"Maximum rendered matches to return (1..{self.config.search_result_limit}); if omitted, returns all rendered matches, which fails if more than {self.config.search_result_limit} exist. Each result includes a note reporting how many rendered matches remain and the offset to continue from."}
-                },
-                required=["pattern"]
-            )
-        ]
-
-    def get_session_start_reads(self) -> List[PresentedToolResult]:
-        if not self.config.session_start_reads_enabled:
-            return []
-
-        session_reads: List[PresentedToolResult] = []
-        for virtual_name in sorted(self.config.readable_paths):
-            real_path = self.config.file_mappings.get(virtual_name)
-            if not real_path or not os.path.exists(real_path):
-                continue
-            with open(real_path, "r", encoding="utf-8") as f:
-                content = f.read()
-
-            session_reads.append(PresentedToolResult(
-                name="read_file",
-                arguments={"file_path": virtual_name},
-                result=ToolResult(
-                    content=content,
-                    supersedes=False,
-                    note=f"session-start read: {virtual_name}",
-                ),
-            ))
-        return session_reads
-
-    @staticmethod
-    def _render_lines(lines: List[str], numbered: bool) -> str:
-        if not numbered:
-            return "".join(lines)
-        return "".join(f"{i + 1:6d} | {line}" for i, line in enumerate(lines))
-
-    def read_file(self, file_path: VirtualName,
-                  include_line_numbers: bool = False) -> ToolCallOutcome:
-        if file_path not in self.config.file_mappings:
-            return self._error_response(
-                f"File '{file_path}' does not exist. Readable files are: {self._readable_list()}"
-            )
-
-        if not self.is_readable(file_path):
-            return self._error_response(
-                f"File '{file_path}' is not readable. Readable files are: {self._readable_list()}"
-            )
-
-        real_path = self.config.file_mappings[file_path]
-        if not os.path.exists(real_path):
-            return self._error_response(
-                f"File '{file_path}' does not exist yet. Use update_lines to create it."
-            )
-
-        with open(real_path, "r", encoding="utf-8") as f:
-            content = f.read()
-
-        lines = content.splitlines(keepends=True)
-        rendered = self._render_lines(lines, include_line_numbers)
-        view_name = "numbered" if include_line_numbers else "plain"
-        note = f"{file_path} ({len(lines)} lines, {view_name} view)"
-
-        return [ToolResult(
-            content=rendered,
-            supersedes=False,
-            note=note,
-        )]
-
-    def search_files(self, path: VirtualName = ".", pattern: str = "",
-                     offset: Optional[int] = None,
-                     limit: Optional[int] = None) -> ToolCallOutcome:
-        if not pattern:
-            return self._error_response("Missing required parameter: pattern")
-
-        try:
-            regex = re.compile(pattern)
-        except re.error as e:
-            return self._error_response(f"Invalid regex pattern: {e}")
-
-        clean_path = "." if path in ("/", "") else path
-
-        if clean_path != ".":
-            if clean_path not in self.config.file_mappings:
-                return self._error_response(
-                    f"Path '{clean_path}' does not exist. Readable files are: {self._readable_list()}"
-                )
-            if not self.is_readable(clean_path):
-                return self._error_response(
-                    f"Path '{clean_path}' is not readable. Readable files are: {self._readable_list()}"
+            def get_metadata(self) -> ToolMetadata:
+                return ToolMetadata(
+                    name="read_file",
+                    purpose="Read content from a workspace file",
+                    parameters_schema={
+                        "file_name": "string",
+                        "line_numbers": "boolean",
+                    },
                 )
 
-        if limit is not None and (limit < 1 or limit > self.config.search_result_limit):
-            return self._error_response(
-                f"limit must be between 1 and {self.config.search_result_limit}; got {limit}"
-            )
+            def execute(self, arguments: ToolArguments) -> ToolOutcome:
+                vname = str(arguments.get("file_name", "") or arguments.get("target_file", ""))
+                line_numbers = arguments.get("line_numbers")
+                line_numbers_bool = (line_numbers is True or str(line_numbers).strip().lower() == "true")
 
-        raw_matches = self._perform_search(clean_path, pattern)
-        rendered_matches = raw_matches
+                if self.parent.config.step_mode_guide:
+                    if vname == self.parent.config.step_mode_guide or vname == os.path.basename(self.parent.config.step_mode_guide):
+                        return ToolFailure(feedback=f"Guide {vname} is delivered progressively through advance() and cannot be read directly.")
 
-        total_matches = len(rendered_matches)
-        start_offset = 0 if offset is None else offset
+                # Resolve host path
+                readable_files = sorted(list(self.parent.config.file_mappings.keys())) if self.parent.config.file_mappings else sorted(list(self.parent.config.read_only_files) + list(self.parent.config.read_write_files))
+                host_path = self.parent.config.file_mappings.get(vname)
+                if not host_path:
+                    if vname in self.parent.config.read_only_files or vname in self.parent.config.read_write_files:
+                        host_path = vname
+                    else:
+                        return ToolFailure(feedback=f"File {vname} is not mapped or accessible. Available readable files: {readable_files}")
 
-        if limit is None:
-            if total_matches > self.config.search_result_limit:
-                return self._error_response(
-                    f"Search produced {total_matches} matches, which exceeds the limit of {self.config.search_result_limit}. "
-                    f"Please refine your pattern or use offset and limit (e.g. limit={self.config.search_result_limit}, offset=0) to paginate."
+                is_rw = (vname in self.parent.config.read_write_files) or (host_path in self.parent.config.read_write_files)
+                is_ro = (vname in self.parent.config.read_only_files) or (host_path in self.parent.config.read_only_files)
+
+                if not is_rw and not is_ro:
+                    return ToolFailure(feedback=f"File {vname} is not in declared read-only or read-write set. Available readable files: {readable_files}")
+
+                if is_rw:
+                    if not line_numbers_bool:
+                        return ToolFailure(feedback=f"Reading read-write file {vname} requires line_numbers=True")
+                elif is_ro:
+                    if line_numbers_bool:
+                        return ToolFailure(feedback=f"Reading read-only file {vname} requires line_numbers=False or omitted")
+
+                disk_path = _resolve_disk_path(host_path)
+                if not disk_path:
+                    return ToolFailure(feedback=f"File {vname} ({host_path}) not found on disk. Available readable files: {readable_files}")
+
+                try:
+                    with open(disk_path, "r", encoding="utf-8") as f:
+                        lines = f.readlines()
+                except Exception as e:
+                    return ToolFailure(feedback=f"Error reading {vname}: {e}")
+
+                if is_rw:
+                    formatted_lines = [f"{i}: {line}" for i, line in enumerate(lines, start=1)]
+                    content = "".join(formatted_lines)
+                else:
+                    content = "".join(lines)
+
+                return ToolResult(content=content)
+
+        return ReadTool(self)
+
+    def get_search_tool(self) -> Tool:
+        class SearchTool:
+            def __init__(self, parent: _FileReaderImpl) -> None:
+                self.parent = parent
+
+            def get_metadata(self) -> ToolMetadata:
+                return ToolMetadata(
+                    name="search_files",
+                    purpose="Search regex patterns across workspace files",
+                    parameters_schema={"pattern": "string"},
                 )
-            selected = rendered_matches[start_offset:]
-            remaining = 0
-            next_offset = None
-        else:
-            selected = rendered_matches[start_offset:start_offset + limit]
-            remaining = max(0, total_matches - (start_offset + len(selected)))
-            next_offset = (start_offset + len(selected)) if remaining > 0 else None
 
-        if not selected:
-            content = "No matches found."
-        else:
-            formatted: List[str] = []
-            for virt, line_text in selected:
-                formatted.append(f"{virt}: {line_text}")
-            content = "\n".join(formatted)
+            def execute(self, arguments: ToolArguments) -> ToolOutcome:
+                pattern_str = str(arguments.get("pattern", "") or arguments.get("query", ""))
+                try:
+                    regex = re.compile(pattern_str)
+                except re.error as e:
+                    return ToolFailure(feedback=f"Invalid regex pattern '{pattern_str}': {e}")
 
-        notes = [f"{len(selected)} of {total_matches} matches shown"]
-        if remaining > 0 and next_offset is not None:
-            notes.append(f"{remaining} remaining; continue with offset={next_offset}")
-        note = "; ".join(notes)
+                results: List[str] = []
+                # Search across all accessible files
+                all_files: List[Tuple[str, bool]] = []
+                for f in self.parent.config.read_write_files:
+                    all_files.append((f, True))
+                for f in self.parent.config.read_only_files:
+                    all_files.append((f, False))
 
-        return [ToolResult(content=content, supersedes=False, note=note)]
+                for vname, is_rw in all_files:
+                    host_path = self.parent.config.file_mappings.get(vname, vname)
+                    disk_path = _resolve_disk_path(host_path)
+                    if not disk_path:
+                        continue
+                    try:
+                        with open(disk_path, "r", encoding="utf-8") as f:
+                            lines = f.readlines()
+                    except Exception:
+                        continue
 
-    def _perform_search(self, path: str, pattern: str) -> List[Tuple[str, str]]:
-        regex = re.compile(pattern)
-        matches: List[Tuple[str, str]] = []
-
-        if path == ".":
-            for virt in sorted(self.config.readable_paths):
-                real = self.config.file_mappings.get(virt)
-                if real and os.path.exists(real):
-                    with open(real, "r", encoding="utf-8", errors="replace") as f:
-                        for line in f:
+                    if is_rw:
+                        # Report match count on writable files
+                        match_count = sum(1 for line in lines if regex.search(line))
+                        if match_count > 0:
+                            results.append(f"{vname}: {match_count} matches")
+                    else:
+                        # Report matching lines on read-only files
+                        for i, line in enumerate(lines, start=1):
                             if regex.search(line):
-                                matches.append((virt, line.rstrip("\r\n")))
-        else:
-            real = self.config.file_mappings.get(path)
-            if real and os.path.exists(real):
-                with open(real, "r", encoding="utf-8", errors="replace") as f:
-                    for line in f:
-                        if regex.search(line):
-                            matches.append((path, line.rstrip("\r\n")))
-        return matches
+                                results.append(f"{vname}:{i}: {line.rstrip()}")
 
-    def sanitize_paths(self, text: str) -> str:
-        result = text
-        for real_path in self._real_paths_sorted:
-            virtual = self._real_to_virtual[real_path]
-            result = result.replace(real_path, virtual)
-        return result
+                if self.parent.config.search_result_limit and len(results) > self.parent.config.search_result_limit:
+                    results = results[:self.parent.config.search_result_limit]
+                    results.append("... (results truncated)")
 
-    def _create_tool_definition(self, name: str, description: str,
-                                properties: Dict[str, Any],
-                                required: Optional[List[str]] = None) -> ToolDefinition:
-        schema: Dict[str, Any] = {
-            "type": "object",
-            "properties": properties,
-        }
-        if required is not None:
-            schema["required"] = required
-        return {
-            "type": "function",
-            "function": {
-                "name": name,
-                "description": description,
-                "parameters": schema,
-            },
-        }
+                return ToolResult(content="\n".join(results) if results else "No matches found")
 
-    def _error_response(self, error_message: str) -> ToolFailure[str]:
-        return ToolFailure(value=self._virtualize_paths(error_message))
+        return SearchTool(self)
 
-    def _readable_list(self) -> str:
-        return ", ".join(sorted(self.config.readable_paths))
+    def get_session_start_reads(self) -> Sequence[SessionStartRead]:
+        reads: List[SessionStartRead] = []
+        for vname in self.config.read_only_files:
+            host_path = self.config.file_mappings.get(vname, vname)
+            disk_path = _resolve_disk_path(host_path)
+            if disk_path:
+                try:
+                    with open(disk_path, "r", encoding="utf-8") as f:
+                        content = f.read()
+                    reads.append(SessionStartRead(content=content))
+                except Exception:
+                    pass
+        return reads
 
-    def _virtualize_paths(self, message: str) -> str:
-        return self.sanitize_paths(message)
+    def sanitize_paths(self, content: UnsanitizedContent) -> SanitizedContent:
+        # Sort host paths by length descending
+        sorted_mappings = sorted(
+            self.config.file_mappings.items(),
+            key=lambda item: len(item[1]),
+            reverse=True,
+        )
+        res = content
+        for vname, host_path in sorted_mappings:
+            if host_path:
+                res = res.replace(host_path, vname)
+        return res
+
+    def get_tools(self) -> Sequence[Tool]:
+        return [self.get_read_tool(), self.get_search_tool()]

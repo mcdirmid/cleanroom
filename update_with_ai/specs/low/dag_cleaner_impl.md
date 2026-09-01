@@ -1,47 +1,28 @@
 <!-- Dependencies (md files to read alongside this one):
-  - dag_cleaner.md
   - dag_storage.md
-  - dag_clean_logic.md
+  - dag_node_cleaner.md
+  - dag_cleaner.md
 -->
 
 # Implementation LLS: dag_cleaner_impl
 
 ## Data Types
 ```python
-from dag_storage import DagStorage, NodeId, NodeMessage, PendingMessages
-from dag_clean_logic import DagCleanLogic, CleanResult
-from dag_cleaner import DagCleaner, CleaningResult
+from dag_cleaner import DagCleaner
 
 class DagCleanerImpl(DagCleaner):
-    def __init__(self, storage: DagStorage, clean_logic: DagCleanLogic): ...
+    def __init__(self, max_iterations: int = 100) -> None: ...
 ```
-
-Constructed with `dag_storage` (message persistence and graph access) and `dag_clean_logic` (message processing and dirtiness determination).
 
 ## Behavioral Description
 
-`DagCleanerImpl` implements the `DagCleaner` Protocol's `clean_subgraph` operation.
-
-- **`clean_subgraph`** — Returns `(True, CleanResult)` on successful cleaning (no messages, change, or feedback result) or `(False, FailureResult)` on failure (including cycles). Traverses the subgraph in topological order (dependencies before dependents) by following node dependencies through `dag_storage`, validates feedback targets, detects cycles, and applies cleaning with bounds on total invocations (defending against message cycles). On failure: halts immediately without deleting node data. On success: routes change messages to the node's known reverse dependencies (skipping any known reverse dependency that is not in the graph) and feedback messages to the specified dependencies, through `dag_storage`; then, per the result: a `ChangeResult` deletes the node's data (pending messages and known reverse dependencies), a `NoChangeResult` clears the node's pending messages (its known reverse dependencies remain), and a `FeedbackResult` removes no stored data.
-
-- **Failure handling:** Returns a failure result (not deleting node data) when `dag_clean_logic.clean` returns failure; when the total clean count exceeds the bound (`len(subgraph_nodes) * (len(subgraph_nodes) + 1)`; reaching the bound with no dirty nodes remaining is success, not failure); when feedback targets a node outside the subgraph; or when a cycle is detected in the graph topology.
-- Messages may be empty strings; multiple identical messages are allowed (no deduplication is performed).
-
-**HLS Justification:** Implements the dag_cleaner interface, using dag_storage and dag_clean_logic.
+- `DagCleanerImpl` computes topological order across reachable dependency nodes from `root`.
+- Cleans dirty nodes in topological order, ensuring each node is cleaned only when all of its dependencies are clean.
+- A cleaned node with change messages broadcasts those messages to its recorded reverse dependencies in `DagStorage`, then clears its node data.
+- A cleaned node with feedback messages routes them to target dependencies and retains its data in `DagStorage`.
+- Re-evaluates node dirty states until all nodes in the subgraph are clean or execution exceeds `max_iterations`.
+- When cleaning exceeds `max_iterations`, halts pass execution with an unexpected failure.
 
 ## Invariants
 
-- No caching; all state reads and writes, including graph access, go through `dag_storage`.
-- Subgraph cleaning as a whole is not atomic: successfully cleaned nodes retain their changes even if a later node fails.
-- Self-loops (cycles of length 1) are detected during cycle detection.
-
-## Non-Concerns
-
-- **Cycle detection algorithm:** Cycle detection is by topological-sort failure (no topological order exists); the FailureResult returned does not include detail about the detection method.
-- **Node ordering within the same topological level:** Any deterministic ordering is acceptable as long as all dependencies are processed before their dependents.
-- **Message ordering within a node's pending list:** The order of messages in a node's pending list is not semantically meaningful.
-- **FailureResult on failure:** A `FailureResult` is always produced on failure (including self-loops); it carries no detail about the failure.
-- **Termination bound formula:** the total clean count is bounded by `len(subgraph_nodes) * (len(subgraph_nodes) + 1)` — a concrete formula for the interface's single total bound, which leaves the formula open.
-- **Unknown routing targets:** a known reverse dependency absent from the graph is skipped; detection relies on the storage's behavior for unknown nodes, which dag_storage declares undefined — the skip is pinned here so the coupling is explicit.
-- **Atomicity of routing+deletion:** Not required; messages are added to routing targets immediately after successful processing, and the node's data is deleted after routing (a change result) or its pending messages cleared (a no-change result); a feedback result removes no stored data.
-
+- Cleaning is sequential per topological layer.

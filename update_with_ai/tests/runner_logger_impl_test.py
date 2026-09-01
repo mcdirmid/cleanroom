@@ -1,100 +1,81 @@
-"""
-Tests for RunnerLoggerImpl.
-"""
+"""Tests for runner_logger_impl derived from LLS."""
 
+import contextlib
+import io
 import os
 import shutil
 import tempfile
 import unittest
-from typing import Any, Dict
-
-from lib.runner_logger_impl import (
-    RunnerLoggerImpl,
-    _format_compact_log,
-    _format_full_log,
-)
-from lib.tool_provider import ToolResult
+from lib.runner_logger import LogEvent
+from lib.runner_logger_impl import RunnerLoggerImpl
 
 
-class TestLogFormatters(unittest.TestCase):
-    def test_compact_log_tool_called(self) -> None:
-        data = {
-            "node_id": "//pkg:target",
-            "tool_calls": [{"function": {"name": "read_file"}}, {"function": {"name": "replace"}}],
-        }
-        res = _format_compact_log("tool_called", data)
-        self.assertEqual(res, "[agent //pkg:target] tool calls: read_file, replace")
+class RunnerLoggerImplTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.test_dir = tempfile.mkdtemp()
+        self.log_file = os.path.join(self.test_dir, "events.log")
 
-    def test_compact_log_api_response_is_none(self) -> None:
-        res = _format_compact_log("api_response", {"node_id": "//pkg:target"})
-        self.assertIsNone(res)
+    def tearDown(self) -> None:
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+        # Cleanup default log file if created in current working directory
+        if os.path.isfile("agent_loop.log"):
+            try:
+                os.remove("agent_loop.log")
+            except OSError:
+                pass
 
-    def test_compact_log_run_terminated(self) -> None:
-        data = {
-            "node_id": "//pkg:target",
-            "termination_value": "success",
-            "cumulative_usage": {
-                "input_tokens": 100,
-                "cached_input_tokens": 50,
-                "output_tokens": 20,
-                "request_count": 2,
-                "total_duration_seconds": 1.5,
-            },
-        }
-        res = _format_compact_log("run_terminated", data)
-        self.assertIsNotNone(res)
-        self.assertIn("terminated (success)", res)
-        self.assertIn("50% cached", res)
+    def test_log_event_dataclass(self) -> None:
+        """Tests Data Types: LogEvent dataclass instantiation and fields."""
+        event = LogEvent(
+            name="test_event",
+            summary="short summary",
+            transcript="detailed transcript line",
+        )
+        self.assertEqual(event.name, "test_event")
+        self.assertEqual(event.summary, "short summary")
+        self.assertEqual(event.transcript, "detailed transcript line")
 
-    def test_compact_log_error(self) -> None:
-        data = {"node_id": "//pkg:target", "error": "Something went wrong"}
-        res = _format_compact_log("error", data)
-        self.assertEqual(res, "[agent //pkg:target] ERROR: Something went wrong")
+    def test_log_unbuffered_disk_writes(self) -> None:
+        """Tests CUJ for logging structured events to an unbuffered disk transcript file.
 
-    def test_full_log_message_added(self) -> None:
-        data = {
-            "node_id": "//pkg:target",
-            "message": {"role": "user", "content": "Hello agent"},
-        }
-        res = _format_full_log("message_added", data)
-        self.assertEqual(res, "[//pkg:target] message_added (user): Hello agent")
+        Checks postconditions: writes full transcript entries immediately to disk.
+        """
+        logger = RunnerLoggerImpl(transcript_file_path=self.log_file)
+        logger.log(LogEvent(name="start", summary="Cleaning pass start", transcript="Full transcript line 1"))
+        logger.log(LogEvent(name="finish", summary="Cleaning pass finish", transcript="Full transcript line 2"))
 
-    def test_full_log_tool_result(self) -> None:
-        data = {
-            "node_id": "//pkg:target",
-            "results": [ToolResult(content="File content", supersedes=True)],
-        }
-        res = _format_full_log("tool_result", data)
-        self.assertIn("tool_result (1)", res)
-        self.assertIn("supersedes=True", res)
+        self.assertTrue(os.path.isfile(self.log_file))
+        with open(self.log_file) as f:
+            content = f.read()
+        self.assertIn("Full transcript line 1", content)
+        self.assertIn("Full transcript line 2", content)
 
-    def test_create_agent_logger_lifecycle(self) -> None:
-        tmp_dir = tempfile.mkdtemp()
-        try:
-            log_path = os.path.join(tmp_dir, "test.log")
-            logger_impl = RunnerLoggerImpl()
-            agent_logger, closer = logger_impl.create_agent_logger(log_path)
+    def test_log_prints_summary_to_stdout(self) -> None:
+        """Tests that logger prints single-line compact event summary directly to standard output."""
+        logger = RunnerLoggerImpl(transcript_file_path=self.log_file)
+        event = LogEvent(name="step", summary="Executed step 1", transcript="Detailed step 1 logs")
 
-            agent_logger("tool_called", {
-                "node_id": "//pkg:target",
-                "tool_calls": [{"function": {"name": "read_file"}}],
-            })
-            closer()
+        stdout_capture = io.StringIO()
+        with contextlib.redirect_stdout(stdout_capture):
+            logger.log(event)
 
-            with open(log_path, "r", encoding="utf-8") as f:
-                content = f.read()
-            self.assertIn("read_file", content)
-        finally:
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+        output = stdout_capture.getvalue()
+        self.assertIn("Executed step 1", output)
 
+    def test_clears_existing_log_file_at_initialization(self) -> None:
+        """Tests that RunnerLoggerImpl clears pre-existing transcript log file content upon initialization."""
+        with open(self.log_file, "w", encoding="utf-8") as f:
+            f.write("Old previous run log content\n")
+        _ = RunnerLoggerImpl(transcript_file_path=self.log_file)
+        with open(self.log_file, "r", encoding="utf-8") as f:
+            content = f.read()
+        self.assertEqual(content, "")
 
+    def test_default_initialization_logs_event(self) -> None:
+        """Tests initializing RunnerLoggerImpl without explicit transcript_file_path logs events successfully."""
+        logger = RunnerLoggerImpl()
+        logger.log(LogEvent(name="info", summary="Default summary", transcript="Default transcript line"))
 
-class TestSigintHandling(unittest.TestCase):
-    def test_sigint_handler_raises_keyboard_interrupt(self) -> None:
-        import signal
-        from lib.runner_logger_impl import _sigint_handler
-        with self.assertRaises(KeyboardInterrupt):
-            _sigint_handler(signal.SIGINT, None)
 
 if __name__ == "__main__":
     unittest.main()

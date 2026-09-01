@@ -1,45 +1,34 @@
 # manifest_node_loader
 
-imports: build_graph_storage (node definition, package directory, silent dependency, star dependency), sandbox (file mappings, readable paths, writable paths, blame targets, templates)
-terms (from build_graph_storage): node definition, package directory, silent dependency, star dependency
-terms (from run_control): blame target
-terms (from file_reader): virtual name
-terms (from file_editor): template
-terms (from guide_delivery): guide, step mode
-terms (from dag_storage): node, dependency, propagating dependency
-terms (owned): manifest resolution, synthetic definition
+imports: dag_storage, sandbox, virtual_file_name, node_id_utils, build_graph_storage, build_agent_config
+types from dag_storage: node, dependency, propagating dependency
+types from sandbox: sandbox configuration
+types from virtual_file_name: virtual file name
+types from node_id_utils: node identifier utility
+types from build_graph_storage: build graph storage, node definition, task prompt
+types from build_agent_config: config target
 
 ## Purpose
 
-Discovers, parses, and translates build-time target manifests into runtime graph structures, node definitions, and sandbox configurations.
+Discovers and translates build system target manifests into runtime graph structures and sandbox configurations.
 
-## Terms
+Target execution requires resolving build metadata into executable nodes and virtual workspace mappings. The build system emits declarative target manifests describing source files, silent source files, dependencies, silent dependencies, guides, templates, and verification checks. Manifest node loader reads these manifests, constructs dependency graphs using node identifier utilities, and generates isolated sandbox configurations with minimally disambiguated virtual file mappings, read-write source files, and read-only dependency files.
 
-- Manifest resolution: the process of reading JSON manifest files from a workspace directory and resolving all dependency edges and file paths.
-- Synthetic definition: a generated node definition for a declared dependency that lacks a build manifest of its own.
+## Types
 
-## Contract
+- A *manifest loader* is a service that resolves *manifests* into graph structures and *sandbox configurations*
+- A *manifest* is a structured build artifact written by the build system carrying node reference fields and file path fields for a workspace target (such as target node label, task prompt, declared source file, silent source files, template, direct dependencies, silent dependencies, star dependencies, feedback dependencies, guide target, verification check, and configuration target)
 
-**Inputs**
+## Behavior
 
-- A workspace root directory and a root target label.
-
-**Operations**
-
-- Resolve the full dependency graph and per-node definitions starting from a root target.
-- Construct a sandbox configuration from manifest data.
-
-**Guarantees**
-
-- Resolves declared sources, silent sources, templates, and guides for all reachable nodes.
-- Computes transitive closures for star dependencies.
-- Synthesizes definitions for targets lacking explicit manifests so all declared dependencies resolve cleanly.
-- Maps files to virtual names with collision avoidance.
-
-**Assumptions**
-
-- Manifest files are accessible on disk.
-
-## Non-concerns
-
-- File content verification: handled by sandbox and run_control.
+- A *manifest* carries node reference fields addressing target *nodes* and file path fields addressing workspace files.
+- A *manifest loader* loads *manifests* to resolve target *nodes*, *dependencies*, *node definitions*, *task prompts*, *config targets*, and *sandbox configurations* using a *node identifier utility*, populating a *build graph storage*.
+- A *manifest loader* resolves declared source files and templates from *manifests* into writable files and templates in a *sandbox configuration*.
+- A *manifest loader* resolves declared silent source files from *manifests* into writable files in a *sandbox configuration* while excluding them from dependent read-only files.
+- A *manifest loader* resolves declared direct dependencies into declared read-only files, and star dependencies into transitive read-only file closures in a *sandbox configuration*.
+- A *manifest loader* resolves declared silent dependencies as non-propagating *dependencies* in a *build graph storage* while excluding their source files from read-only files.
+- A *manifest loader* resolves declared guide targets into task guides in a *sandbox configuration*.
+- A *manifest loader* resolves declared feedback dependencies into blame targets mapped to their owning dependency *nodes* in a *sandbox configuration*.
+- A *manifest loader* resolves declared verification checks into a *sandbox configuration*.
+- A *manifest loader* generates *sandbox configurations* with minimally disambiguated *virtual file names* for target *nodes*.
+- A *manifest loader* synthesizes definitions for declared dependencies lacking explicit *manifests*.

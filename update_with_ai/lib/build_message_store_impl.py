@@ -1,259 +1,157 @@
-# lib/build_message_store_impl.py
-"""
-Implementation of the LLS BuildMessageStore interface.
-"""
+"""Build message store implementation with textproto persistence."""
 
-from typing import Dict, List, Optional, Tuple, cast
 import os
-
-from .dag_storage import NodeId, NodeMessage, MessageKind, PendingMessages, KnownReverseDependencies
-from .build_graph_storage import PackageDirectory
-from .build_message_store import BuildMessageStore, PackageMessageData
-
-HARNESS_FILE = ".update_with_ai.textproto"
-
-
-def _proto_quote(s: str) -> str:
-    out = ['"']
-    for ch in s:
-        code = ord(ch)
-        if ch == "\\":
-            out.append("\\\\")
-        elif ch == '"':
-            out.append('\\"')
-        elif ch == "\n":
-            out.append("\\n")
-        elif ch == "\r":
-            out.append("\\r")
-        elif ch == "\t":
-            out.append("\\t")
-        elif code < 0x20 or code == 0x7F:
-            out.append("\\x{:02x}".format(code))
-        else:
-            out.append(ch)
-    out.append('"')
-    return "".join(out)
+import tempfile
+from typing import Sequence, Optional, List, Dict
+from .dag_storage import NodeId, DagMessage, PendingMessage, NodeData
+from .node_id_utils import NodeIdUtils, NodeDirectory, WorkspaceRootPath
+from .build_message_store import BuildMessageStore
+from .update_with_ai_proto_ext import ProtoPackageStore, ProtoNodeEntry, ProtoMessage
 
 
-def _proto_unquote(token: str) -> str:
-    body = token[1:-1]
-    out: List[str] = []
-    i = 0
-    while i < len(body):
-        ch = body[i]
-        if ch != "\\":
-            out.append(ch)
-            i += 1
+def _parse_textproto(content: str) -> Dict[str, ProtoNodeEntry]:
+    entries: Dict[str, ProtoNodeEntry] = {}
+    current_node: Optional[str] = None
+    messages: List[ProtoMessage] = []
+    rdeps: List[str] = []
+    in_message = False
+    msg_kind = ""
+    msg_text = ""
+
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
             continue
-        i += 1
-        if i >= len(body):
-            break
-        esc = body[i]
-        i += 1
-        simple = {
-            "n": "\n", "r": "\r", "t": "\t", "a": "\a", "b": "\b",
-            "f": "\f", "v": "\v", "\\": "\\", "'": "'", '"': '"', "?": "?",
-        }
-        if esc in simple:
-            out.append(simple[esc])
-        elif esc == "x":
-            hex_digits = body[i:i + 2]
-            out.append(chr(int(hex_digits, 16)))
-            i += 2
-        elif esc.isdigit():
-            oct_digits = body[i:i + 3]
-            out.append(chr(int(oct_digits, 8)))
-            i += 3
-        else:
-            out.append(esc)
-    return "".join(out)
+        if line.startswith("node_entry {"):
+            current_node = None
+            messages = []
+            rdeps = []
+        elif line.startswith("node_id:"):
+            val = line.split(":", 1)[1].strip().strip('"')
+            current_node = val
+        elif line.startswith("message {"):
+            in_message = True
+            msg_kind = ""
+            msg_text = ""
+        elif in_message and line.startswith("kind:"):
+            msg_kind = line.split(":", 1)[1].strip().strip('"')
+        elif in_message and line.startswith("text:"):
+            msg_text = line.split(":", 1)[1].strip().strip('"')
+        elif in_message and line.startswith("}"):
+            messages.append(ProtoMessage(kind=msg_kind, text=msg_text))
+            in_message = False
+        elif line.startswith("reverse_dependency:"):
+            val = line.split(":", 1)[1].strip().strip('"')
+            rdeps.append(val)
+        elif line.startswith("}"):
+            if current_node:
+                entries[current_node] = ProtoNodeEntry(
+                    messages=list(messages), reverse_dependencies=list(rdeps)
+                )
+            current_node = None
+            messages = []
+            rdeps = []
+
+    return entries
+
+
+def _serialize_textproto(entries: Dict[str, ProtoNodeEntry]) -> str:
+    lines: List[str] = []
+    for node_id, entry in entries.items():
+        lines.append("node_entry {")
+        lines.append(f'  node_id: "{node_id}"')
+        for msg in entry.messages:
+            lines.append("  message {")
+            lines.append(f'    kind: "{msg.kind}"')
+            lines.append(f'    text: "{msg.text}"')
+            lines.append("  }")
+        for rdep in entry.reverse_dependencies:
+            lines.append(f'  reverse_dependency: "{rdep}"')
+        lines.append("}")
+    return "\n".join(lines) + ("\n" if lines else "")
 
 
 class BuildMessageStoreImpl(BuildMessageStore):
-    def read_package_messages(self, package_dir: PackageDirectory) -> PackageMessageData:
-        path = os.path.join(package_dir, HARNESS_FILE)
-        if not os.path.exists(path):
+    def __init__(self, workspace_root: WorkspaceRootPath, node_id_utils: NodeIdUtils) -> None:
+        self.workspace_root = workspace_root
+        self.node_id_utils = node_id_utils
+        self._node_data: Dict[NodeId, NodeData] = {}
+
+    def get_package_directory(self, node: NodeId) -> NodeDirectory:
+        return self.node_id_utils.extract_node_directory(node, self.workspace_root)
+
+    def _proto_file_for_node(self, node: NodeId) -> str:
+        pkg_dir = self.get_package_directory(node)
+        return os.path.join(pkg_dir, ".update_with_ai.textproto")
+
+    def _read_package_store(self, node: NodeId) -> Dict[str, ProtoNodeEntry]:
+        proto_file = self._proto_file_for_node(node)
+        if not os.path.isfile(proto_file):
             return {}
+        with open(proto_file, "r", encoding="utf-8") as f:
+            return _parse_textproto(f.read())
 
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                content = f.read()
-        except OSError:
-            return {}
+    def _write_package_store(
+        self, node: NodeId, entries: Dict[str, ProtoNodeEntry]
+    ) -> None:
+        proto_file = self._proto_file_for_node(node)
+        pkg_dir = os.path.dirname(proto_file)
+        os.makedirs(pkg_dir, exist_ok=True)
+        content = _serialize_textproto(entries)
+        # Atomic write
+        temp_file = proto_file + ".tmp"
+        with open(temp_file, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(temp_file, proto_file)
 
-        return self._parse_textproto(content)
-
-    def write_package_messages(self, package_dir: PackageDirectory, data: PackageMessageData) -> None:
-        path = os.path.join(package_dir, HARNESS_FILE)
-        if not data:
-            if os.path.exists(path):
-                try:
-                    os.remove(path)
-                except OSError:
-                    pass
-            return
-
-        lines: List[str] = []
-        for node in sorted(data.keys()):
-            pending, rev_deps = data[node]
-            lines.append("nodes {")
-            lines.append(f"  label: {_proto_quote(node)}")
-            for msg in pending:
-                lines.append("  pending_messages {")
-                lines.append(f"    kind: {msg.kind}")
-                lines.append(f"    text: {_proto_quote(msg.text)}")
-                lines.append("  }")
-            for rev in sorted(rev_deps):
-                lines.append(f"  known_reverse_dependencies: {_proto_quote(rev)}")
-            lines.append("}")
-        text = "\n".join(lines) + "\n"
-
-        os.makedirs(package_dir, exist_ok=True)
-        tmp_path = path + ".tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            f.write(text)
-        os.replace(tmp_path, path)
-
-    def _parse_textproto(self, text: str) -> PackageMessageData:
-        result: PackageMessageData = {}
-        tokens = self._tokenize(text)
-        idx = 0
-
-        def next_token() -> Optional[str]:
-            nonlocal idx
-            if idx < len(tokens):
-                tok = tokens[idx]
-                idx += 1
-                return tok
-            return None
-
-        while idx < len(tokens):
-            tok = next_token()
-            if tok != "nodes":
-                continue
-            if next_token() != "{":
-                continue
-
-            label: Optional[str] = None
-            pending: List[NodeMessage] = []
-            rev_deps: List[str] = []
-
-            while idx < len(tokens):
-                t = next_token()
-                if t == "}":
-                    break
-                elif t == "label:":
-                    val = next_token()
-                    if val and val.startswith('"'):
-                        label = _proto_unquote(val)
-                elif t == "known_reverse_dependencies:":
-                    val = next_token()
-                    if val and val.startswith('"'):
-                        rev_deps.append(_proto_unquote(val))
-                elif t == "pending_messages":
-                    if next_token() == "{":
-                        kind: str = "change"
-                        msg_text: str = ""
-                        while idx < len(tokens):
-                            mt = next_token()
-                            if mt == "}":
-                                break
-                            elif mt == "kind:":
-                                kind = next_token() or "change"
-                            elif mt == "text:":
-                                val = next_token()
-                                if val and val.startswith('"'):
-                                    msg_text = _proto_unquote(val)
-                        pending.append(NodeMessage(kind=cast(MessageKind, kind), text=msg_text))
-
-            if label:
-                result[label] = (pending, rev_deps)
-
-        return result
-
-
-    def _tokenize(self, text: str) -> List[str]:
-        tokens: List[str] = []
-        i = 0
-        n = len(text)
-        while i < n:
-            ch = text[i]
-            if ch.isspace():
-                i += 1
-                continue
-            if ch == "#":
-                while i < n and text[i] != "\n":
-                    i += 1
-                continue
-            if ch in ("{", "}"):
-                tokens.append(ch)
-                i += 1
-                continue
-            if ch == '"':
-                start = i
-                i += 1
-                while i < n:
-                    if text[i] == "\\" and i + 1 < n:
-                        i += 2
-                    elif text[i] == '"':
-                        i += 1
-                        break
-                    else:
-                        i += 1
-                tokens.append(text[start:i])
-                continue
-
-            start = i
-            while i < n and not text[i].isspace() and text[i] not in ("{", "}", "#", '"'):
-                i += 1
-            tokens.append(text[start:i])
-        return tokens
-
-    def get_pending_messages(self, package_dir: PackageDirectory, node: NodeId) -> PendingMessages:
-        data = self.read_package_messages(package_dir)
-        if node in data:
-            return list(data[node][0])
+    def get_dependencies(self, node: NodeId) -> Sequence[NodeId]:
         return []
 
-    def add_pending_message(self, package_dir: PackageDirectory, node: NodeId, message: NodeMessage) -> None:
-        data = self.read_package_messages(package_dir)
-        pending, rev_deps = data.get(node, ([], []))
-        data[node] = (pending + [message], rev_deps)
-        self.write_package_messages(package_dir, data)
-
-    def set_pending_messages(self, package_dir: PackageDirectory, node: NodeId, messages: PendingMessages) -> None:
-        data = self.read_package_messages(package_dir)
-        _, rev_deps = data.get(node, ([], []))
-        data[node] = (list(messages), rev_deps)
-        self.write_package_messages(package_dir, data)
-
-    def clear_pending_messages(self, package_dir: PackageDirectory, node: NodeId) -> None:
-        data = self.read_package_messages(package_dir)
-        if node in data:
-            data[node] = ([], data[node][1])
-            self.write_package_messages(package_dir, data)
-
-    def delete_node_messages(self, package_dir: PackageDirectory, node: NodeId) -> None:
-        data = self.read_package_messages(package_dir)
-        if node in data:
-            del data[node]
-            self.write_package_messages(package_dir, data)
-
-    def get_known_reverse_dependencies(self, package_dir: PackageDirectory, node: NodeId) -> KnownReverseDependencies:
-        data = self.read_package_messages(package_dir)
-        if node in data:
-            return list(data[node][1])
+    def get_reverse_dependencies(self, node: NodeId) -> Sequence[NodeId]:
+        entries = self._read_package_store(node)
+        entry = entries.get(node)
+        if entry:
+            return entry.reverse_dependencies
         return []
 
-    def add_known_reverse_dependency(self, package_dir: PackageDirectory, node: NodeId, reverse_dep: NodeId) -> None:
-        data = self.read_package_messages(package_dir)
-        pending, rev_deps = data.get(node, ([], []))
-        if reverse_dep not in rev_deps:
-            data[node] = (pending, rev_deps + [reverse_dep])
-            self.write_package_messages(package_dir, data)
+    def get_pending_messages(self, node: NodeId) -> Sequence[PendingMessage]:
+        entries = self._read_package_store(node)
+        entry = entries.get(node)
+        if not entry:
+            return []
+        return [DagMessage(content=m.text) for m in entry.messages]
 
-    def clear_known_reverse_dependencies(self, package_dir: PackageDirectory, node: NodeId) -> None:
-        data = self.read_package_messages(package_dir)
-        if node in data:
-            data[node] = (data[node][0], [])
-            self.write_package_messages(package_dir, data)
+    def queue_pending_messages(
+        self, node: NodeId, messages: Sequence[DagMessage]
+    ) -> None:
+        entries = self._read_package_store(node)
+        current = entries.get(node)
+        cur_msgs = list(current.messages) if current else []
+        cur_rdeps = list(current.reverse_dependencies) if current else []
+        for m in messages:
+            cur_msgs.append(ProtoMessage(kind="message", text=m.content))
+        entries[node] = ProtoNodeEntry(
+            messages=cur_msgs, reverse_dependencies=cur_rdeps
+        )
+        self._write_package_store(node, entries)
+
+    def clear_pending_messages(self, node: NodeId) -> None:
+        entries = self._read_package_store(node)
+        if node in entries:
+            current = entries[node]
+            entries[node] = ProtoNodeEntry(
+                messages=[], reverse_dependencies=current.reverse_dependencies
+            )
+            self._write_package_store(node, entries)
+
+    def record_node_data(self, node: NodeId, data: NodeData) -> None:
+        self._node_data[node] = data
+
+    def get_node_data(self, node: NodeId) -> Optional[NodeData]:
+        return self._node_data.get(node)
+
+    def mark_dirty(self, node: NodeId) -> None:
+        self.queue_pending_messages(node, [DagMessage(content="dirty")])
+
+    def is_dirty(self, node: NodeId) -> bool:
+        return len(self.get_pending_messages(node)) > 0

@@ -1,238 +1,148 @@
-"""
-Implementation of the LLS run_control interface.
+"""Run control implementation with advance, fail, and blame tools."""
 
-Delegates verification to the injected verification callback when provided;
-advance performs the run's verification internally, then sequences the step-mode
-output and termination machinery. Delegates diff computation and change summary
-validation to change_summary_validator.
-"""
-
-from typing import Any, Dict, List, Optional, Union
-
-from .run_control import RunControl, RunControlConfig, Blame
-from .file_reader import FileReader
-from .file_editor import FileEditor
-from .guide_delivery import GuideDelivery
-from .change_summary_validator import ChangeSummaryValidator
+from typing import Optional, Callable, Tuple, Sequence, List, TypeAlias
 from .tool_provider import (
-    ToolDefinition,
+    Tool,
+    ToolMetadata,
     ToolResult,
-    PresentedToolResult,
-    ToolCallOutcome,
-    TerminateAgentWithSuccess,
-    TerminateAgentWithFailure,
     ToolFailure,
+    TerminationOutcome,
+    ToolOutcome,
+    ToolArguments,
 )
-from .dag_clean_logic import ChangeResult, FeedbackResult, NoChangeResult
-from .dag_storage import NodeId, NodeMessage
+from .run_control import RunController, RunControlFactory, RunControlConfig
+from .dag_node_cleaner import ChangeMessage, FeedbackMessage
+from .change_summary_validator import ChangeValidator
+
+VerificationResult: TypeAlias = Tuple[bool, str]
+VerificationFn: TypeAlias = Callable[[], VerificationResult]
 
 
-class RunControlImpl(RunControl):
-    """
-    Implementation of the LLS RunControl interface.
-    """
+class RunControlFactoryImpl(RunControlFactory):
+    def __init__(self, change_validator: Optional[ChangeValidator] = None) -> None:
+        self._change_validator = change_validator
 
+    def create_run_control(
+        self,
+        config: RunControlConfig,
+        verification_fn: Optional[VerificationFn] = None,
+        workspace_dirty_check_fn: Optional[Callable[[], bool]] = None,
+        change_validator: Optional[ChangeValidator] = None,
+    ) -> RunController:
+        validator = change_validator if change_validator is not None else self._change_validator
+        return _RunControllerImpl(
+            config=config,
+            verification_fn=verification_fn,
+            workspace_dirty_check_fn=workspace_dirty_check_fn,
+            change_validator=validator,
+        )
+
+
+class _RunControllerImpl(RunController):
     def __init__(
         self,
         config: RunControlConfig,
-        file_reader: FileReader,
-        file_editor: FileEditor,
-        guide_delivery: GuideDelivery,
-        validator: Optional[ChangeSummaryValidator] = None,
-    ):
+        verification_fn: Optional[VerificationFn] = None,
+        workspace_dirty_check_fn: Optional[Callable[[], bool]] = None,
+        change_validator: Optional[ChangeValidator] = None,
+    ) -> None:
         self.config = config
-        self.file_reader = file_reader
-        self.file_editor = file_editor
-        self.guide_delivery = guide_delivery
-        self.validator = validator
-        self._feedback_warned: bool = False
+        self.verification_fn = verification_fn
+        self.workspace_dirty_check_fn = workspace_dirty_check_fn
+        self.change_validator = change_validator
 
-    def get_tool_definitions(self) -> List[ToolDefinition]:
-        """Return the termination tools' definitions."""
-        definitions = [
-            self._create_tool_definition(
-                "fail",
-                "Signal failed termination",
-                {}
-            )
-        ]
+    def get_advance_tool(self) -> Tool:
+        class AdvanceTool:
+            def __init__(self, parent: _RunControllerImpl) -> None:
+                self.parent = parent
 
-        if self.config.blame_targets:
-            definitions.append(
-                self._create_tool_definition(
-                    "blame",
-                    "Signal termination with blame: attribute the task's incompleteness to dependencies and provide feedback on how to correct their outputs",
-                    {
-                        "blames": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "target": {
-                                        "type": "string",
-                                        "description": "Target to blame (virtual name)",
-                                    },
-                                    "feedback": {
-                                        "type": "string",
-                                        "description": "Feedback on how to correct output",
-                                    },
-                                },
-                                "required": ["target", "feedback"],
-                                "additionalProperties": False,
-                            },
-                            "description": "Blame pairs (target, feedback)",
-                        }
-                    },
-                    required=["blames"],
+            def get_metadata(self) -> ToolMetadata:
+                return ToolMetadata(
+                    name="advance",
+                    purpose="Verify session state and advance/complete",
+                    parameters_schema={"change_summary": "string"},
                 )
-            )
 
-        return definitions
+            def execute(self, arguments: ToolArguments) -> ToolOutcome:
+                summary = str(arguments.get("change_summary", "")).strip()
+                if self.parent.change_validator is not None:
+                    err = self.parent.change_validator.validate_change_summary(summary, [])
+                    if err:
+                        return ToolFailure(feedback=err)
 
-    def advance(self, changes: List[Dict[str, str]] = []) -> ToolCallOutcome:
-        changes = changes or []
+                is_dirty = bool(self.parent.workspace_dirty_check_fn and self.parent.workspace_dirty_check_fn())
+                has_verification = self.parent.verification_fn is not None
 
-        # 1. Verification callback
-        if self.config.verification_callback is not None:
-            try:
-                success, output = self.config.verification_callback()
-            except Exception as e:
-                return ToolFailure[str](f"Verification error: {str(e)}")
-            if not success:
-                sanitized_output = self.file_reader.sanitize_paths(output) if output else ""
-                step_output = self.guide_delivery.get_advance_output(
-                    verification_passed=False, failure_reason=sanitized_output
+                if is_dirty:
+                    if self.parent.config.change_summary_required:
+                        if not summary:
+                            return ToolFailure(
+                                feedback="Change summary is required when files were modified."
+                            )
+                elif not has_verification and self.parent.change_validator is None and not summary:
+                    return ToolFailure(
+                        feedback="No workspace files were modified and no verification check was configured. Please implement the requested changes before advancing."
+                    )
+
+                if has_verification and self.parent.verification_fn:
+                    ok, msg = self.parent.verification_fn()
+                    if not ok:
+                        return ToolFailure(feedback=f"Verification failed: {msg}")
+                return TerminationOutcome(content="Advanced and completed")
+
+        return AdvanceTool(self)
+
+    def get_fail_tool(self) -> Tool:
+        class FailTool:
+            def __init__(self, parent: _RunControllerImpl) -> None:
+                self.parent = parent
+
+            def get_metadata(self) -> ToolMetadata:
+                return ToolMetadata(
+                    name="fail",
+                    purpose="Terminate run in failure",
+                    parameters_schema={"explanation": "string"},
                 )
-                if step_output is not None:
-                    return [step_output.result]
-                content = (
-                    (sanitized_output + "\n\n" if sanitized_output else "")
-                    + "Verification failed; fix the reported issues by "
-                    "changing files (replace/update_lines) "
-                    "and then call advance() again, or call blame() or "
-                    "fail() to end the run."
+
+            def execute(self, arguments: ToolArguments) -> ToolOutcome:
+                return TerminationOutcome(
+                    content=str(arguments.get("explanation", "") or arguments.get("reason", "Failed"))
                 )
-                return [ToolResult(
-                    content=content,
-                    supersedes=True,
-                    note="Verification failed.",
-                )]
 
-        # 2. Step mode sections remaining
-        if self.guide_delivery.has_step_sections_remaining():
-            output = self.guide_delivery.get_advance_output(verification_passed=True)
-            assert output is not None
-            return [output]
+        return FailTool(self)
 
-        # 3. Change summary validation
-        effectively_changed: List[str] = []
-        if self.validator is not None:
-            try:
-                val_error = self.validator.validate_change_summaries(changes)
-                if val_error is not None:
-                    return val_error
-            except RuntimeError as re:
-                return TerminateAgentWithFailure[str](f"Task failed: {str(re)}")
-            effectively_changed = self.validator.get_effective_changes()
-        else:
-            for file_path in self.file_editor.get_changed_files():
-                current = self.file_editor.get_current_content(file_path)
-                if current != self.file_editor.get_run_start_snapshot(file_path):
-                    effectively_changed.append(file_path)
-
-        if not effectively_changed:
-            if changes:
-                return ToolFailure[str](
-                    "Cannot advance: the run wrote files but net-changed "
-                    "nothing — each file's current content equals its content "
-                    "at run start. Call advance() with no changes to report "
-                    "no change."
-                )
-            if self.config.feedback_pending and not self._feedback_warned:
-                self._feedback_warned = True
-                return ToolFailure[str](
-                    "Warning: feedback was given and not responded to with file changes. "
-                    "If you believe no changes are needed, call advance() again to proceed, "
-                    "or change files and report the change in advance(), or call blame() or fail() to end the run."
-                )
-            return TerminateAgentWithSuccess(NoChangeResult())
-
-        if not changes:
-            return ToolFailure[str](
-                f"Cannot advance: the run changed files ({', '.join(effectively_changed)}). "
-                "Call advance(changes=[{file, summary}, ...]) with one entry per changed file."
-            )
-
-        messages = [
-            NodeMessage(
-                kind="change",
-                text=f"{entry.get('file', '')}: {entry.get('summary', '').strip()}",
-            )
-            for entry in changes
-        ]
-        return TerminateAgentWithSuccess(ChangeResult(messages=messages))
-
-    def fail(self, reason: str = "") -> ToolCallOutcome:
-        return TerminateAgentWithFailure[str]("Task failed")
-
-    def blame(
-        self,
-        blames: Optional[List[Union[Dict[str, str], Blame]]] = None,
-        targets: Optional[List[Union[Dict[str, str], Blame]]] = None,
-    ) -> ToolCallOutcome:
-        pairs = blames if blames is not None else targets
+    def get_blame_tool(self) -> Optional[Tool]:
         if not self.config.blame_targets:
-            return ToolFailure[str]("Blame is not configured for this run.")
+            return None
 
-        if not pairs:
-            return ToolFailure[str]("Cannot blame: blames list must not be empty.")
+        class BlameTool:
+            def __init__(self, parent: _RunControllerImpl) -> None:
+                self.parent = parent
 
-        valid_targets = sorted(self.config.blame_targets.keys())
-        messages: List[tuple[NodeId, NodeMessage]] = []
-
-        for pair in pairs:
-            if isinstance(pair, dict):
-                target = pair.get("target", "")
-                feedback = pair.get("feedback", "").strip()
-            elif isinstance(pair, (tuple, list)) and len(pair) == 2:
-                target = pair[0]
-                feedback = pair[1].strip()
-            else:
-                target = ""
-                feedback = ""
-
-            if not target or not feedback:
-                return ToolFailure[str](
-                    "Cannot blame: each blame entry must have a non-empty 'target' and non-empty 'feedback'."
+            def get_metadata(self) -> ToolMetadata:
+                return ToolMetadata(
+                    name="blame",
+                    purpose="Attribute failure to dependency file",
+                    parameters_schema={"target": "string", "explanation": "string"},
                 )
 
-            if target not in self.config.blame_targets:
-                return ToolFailure[str](
-                    f"Cannot blame: invalid target '{target}'. Valid blame targets: {', '.join(valid_targets)}"
+            def execute(self, arguments: ToolArguments) -> ToolOutcome:
+                target_file = str(arguments.get("target", "") or arguments.get("file_name", ""))
+                targets = self.parent.config.blame_targets or {}
+                if target_file not in targets:
+                    return ToolFailure(
+                        feedback=f"Invalid blame target {target_file}. Valid: {list(targets.keys())}"
+                    )
+                dep_node = targets[target_file]
+                return TerminationOutcome(
+                    content=f"Blamed {dep_node} via {target_file}"
                 )
 
-            owning_node = self.config.blame_targets[target]
-            messages.append((owning_node, NodeMessage(kind="feedback", text=feedback)))
+        return BlameTool(self)
 
-        return TerminateAgentWithSuccess(FeedbackResult(messages=messages))
-
-    def _create_tool_definition(
-        self,
-        name: str,
-        description: str,
-        properties: Dict[str, Any],
-        required: Optional[List[str]] = None,
-    ) -> ToolDefinition:
-        return {
-            "type": "function",
-            "function": {
-                "name": name,
-                "description": description,
-                "parameters": {
-                    "type": "object",
-                    "properties": properties,
-                    "required": required or [],
-                    "additionalProperties": False,
-                },
-            },
-        }
+    def get_tools(self) -> Sequence[Tool]:
+        tools: List[Tool] = [self.get_advance_tool(), self.get_fail_tool()]
+        blame = self.get_blame_tool()
+        if blame:
+            tools.append(blame)
+        return tools

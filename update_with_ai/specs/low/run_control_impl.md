@@ -1,80 +1,44 @@
 <!-- Dependencies (md files to read alongside this one):
   - tool_provider.md
-  - dag_clean_logic.md
+  - virtual_file_name.md
   - dag_storage.md
-  - file_reader.md
-  - file_editor.md
-  - guide_delivery.md
-  - run_control.md
+  - dag_node_cleaner.md
   - change_summary_validator.md
+  - run_control.md
 -->
 
 # Implementation LLS: run_control_impl
 
 ## Data Types
 ```python
-from run_control import RunControl, RunControlConfig, Blame
-from file_reader import FileReader
-from file_editor import FileEditor
-from guide_delivery import GuideDelivery
-from change_summary_validator import ChangeSummaryValidator
-from tool_provider import (
-    TerminateAgentWithFailure,
-    TerminateAgentWithSuccess,
-    ToolFailure,
-    T_tool,
-)
-from dag_clean_logic import ChangeResult, FeedbackResult, NoChangeResult
-from dag_storage import NodeId, NodeMessage
+from typing import Optional
+from dag_node_cleaner import ChangeMessage, FeedbackMessage
+from change_summary_validator import ChangeValidator
+from run_control import RunController, RunControlFactory, RunControlConfig
 
-class RunControlImpl(RunControl):
-    def __init__(
-        self,
-        config: RunControlConfig,
-        file_reader: FileReader,
-        file_editor: FileEditor,
-        guide_delivery: GuideDelivery,
-        validator: ChangeSummaryValidator | None = None,
-    ): ...
+class _RunControllerImpl(RunController):
+    def __init__(self, config: RunControlConfig, change_validator: Optional[ChangeValidator] = None) -> None: ...
+
+class RunControlFactoryImpl(RunControlFactory):
+    def __init__(self) -> None: ...
 ```
-
-Constructed with the `run_control` interface's `RunControlConfig`, the `file_view` interface (for the changed-file and diff information the termination rules read) and the `guide_delivery` interface (for the step-state gating the advance rules consult). Implements the `RunControl` Protocol, providing all operations: `get_tool_definitions`, `advance`, `fail`, and `blame`.
 
 ## Behavioral Description
 
-The implementation:
-- Delegates verification to the injected verification callback when provided.
-- `advance` performs the session's verification internally: it computes the diff of the session's changes (the changed files and their session-start snapshots, via the configured `file_editor`), truncated when it exceeds the diff size limit (reporting the truncated size and the full change counts) and, when configured, runs the injected verification callback; on a failing verification it provides feedback (never a tool failure) and the session continues; a failing verification's feedback does not include the diff and sanitizes any referenced paths to virtual names through `file_reader.sanitize_paths`.
-- `advance`'s step-mode gating follows guide_delivery's output rule: on a failing verification in step mode, the output is the restated guide summary with the reason (via `guide_delivery.get_advance_output`); on a passing verification with step sections remaining, the output is the next step section; on a passing verification with no step sections remaining, `advance` proceeds to the termination machinery.
-- Change summaries are bounded by the soft length bound and the hard length bound: `advance` rejects a change message over the soft bound with shortening guidance up to a grace count, then accepts it when within the hard bound; a change message still over the hard bound after the grace count fails the session (`advance` turns into `TerminateAgentWithFailure`). The bound values are pinned in Non-Concerns.
-- A missing or out-of-bounds change message signals a `ToolFailure` that lists the changed files and shows the session's diff.
-- The feedback-pending gate is checked only when advance would otherwise signal successful termination without a change; the first advance call without changes warns with a tool failure directing the agent to act on the feedback or advance again if no change is needed; the next advance call without changes terminates with `NoChangeResult`.
-- Sets the supersession flag on verification results, never on termination results.
-- `blame` resolves each `Blame` pair's target (a blameable artifact's virtual name) through the configured `blame_targets` mapping to the owning node's `NodeId` before forming the feedback result; each pair is one (target, feedback) feedback message — a `NodeMessage` with kind `feedback` and text the feedback — delivered to the owning node.
-- `blame` with an invalid target returns `ToolFailure[str]` naming the rejected target and listing the valid blame targets' virtual names.
-- `blame` with no configured blame targets returns `ToolFailure[str]` (a precondition violation; the tool is not offered when targets are empty).
-- Forms the `TerminateAgentWithSuccess` result using `dag_clean_logic` result types:
-  - `advance` — carries `NoChangeResult()` when no file's current content differs from its session-start snapshot (writes may have occurred but net out to no change), or `ChangeResult` with messages built from `changes` when files changed; rejects a change summary for a net-unchanged file (its content equals its session-start snapshot), and directs a session whose writes all net out to report no change (advance with no changes)
-  - `blame` (valid pairs) — carries `FeedbackResult` whose messages convert each resolved `(target, feedback)` pair into a `(NodeId, NodeMessage)` pair — the target as the `NodeId`, the feedback as a `NodeMessage` with kind `feedback` and text the feedback
-- `fail` returns `TerminateAgentWithFailure[str]` with its value pinned to `Task failed` (tests may assert it).
-- Provides the termination tools: the failure tool and the blame tool (the blame tool only when blame targets are configured and non-empty); the advance tool's definition comes from guide_delivery (its parameters follow the step state).
-- Per-session state only: the diff and the verification outcome; nothing persists across sessions.
-- Verification-callback exceptions are outside the interface contract; this implementation reports them as `ToolFailure[str]` signals with text starting `Verification error: ` (pinned; tests may assert it).
-
-**HLS Justification:** Delegates verification to the injected callback when provided.
+- `RunControlFactoryImpl.create_run_control` constructs a `RunController` configured with verification commands, dependency blame targets, and a `ChangeValidator`.
+- The `advance` tool specifies metadata with the name `advance` and accepts an optional change summary parameter.
+- The `fail` tool specifies metadata with the name `fail` and accepts an explanation parameter.
+- The `blame` tool specifies metadata with the name `blame` and accepts target and explanation parameters.
+- Executing the `advance` tool runs configured verification checks; advancing without modifying workspace files and without passing verification checks produces a `ToolFailure` with feedback and prevents termination.
+- When workspace file modifications occurred, the `advance` tool requires a change summary validated by a `ChangeValidator` within configured length bounds.
+- Executing the `advance` tool produces a `TerminationOutcome` carrying a `ChangeMessage` only when workspace files were modified, and without a `ChangeMessage` when unmodified and verification passed.
+- Executing the `fail` tool produces a `TerminationOutcome` communicating that the run failed.
+- Executing the `blame tool` resolves the blamed `VirtualFileName` to its owning dependency `NodeId` and forms a `TerminationOutcome` carrying a `FeedbackMessage`.
+- Executing the `blame tool` with an invalid target produces a `ToolFailure` listing all valid blame targets.
 
 ## Invariants
 
-- No state persists between runs
-- Verification results set the supersession flag; termination results never do
-- The feedback-pending gate is checked only when advance would otherwise signal successful termination without a change
-- Only valid blame pairs (targets in `blame_targets`) reach the session result
-
-## Non-Concerns
-
-- **Change summary length bounds:** Soft bound pinned to 300 characters, hard bound pinned to 500 characters, grace pinned to 4 rejections per run for each bound; tests may assert the soft/hard rejection messages and the grace transitions (a summary within the hard bound accepted on the advance call after 4 soft-limit rejections; a summary over the hard bound turning `advance` into `TerminateAgentWithFailure` on the advance call after 4 hard-limit rejections).
-- **Diff size limit:** The `RunControlConfig` field default is pinned to 1000 characters; the truncation footer is pinned to `... diff truncated: showing <limit> of <full> chars ...`; tests may assert it.
-- **`fail` failure value:** `fail` returns `TerminateAgentWithFailure[str]` with its value pinned to `Task failed`; tests may assert it.
-- **T_tool resolution:** The implementation resolves `T_tool` (from `tool_provider`) to `str` in failure signals (`ToolFailure[str]`, `TerminateAgentWithFailure[str]`).
-- **Error message wording:** error messages identify the violated policy or the failing operation; their exact wording is unspecified.
-- **Diff presentation:** the exact rendering of the verification diff and its truncation report is unspecified.
+- Termination tools emit terminal outcomes that conclude the session.
+- Advancing requires either validated file modifications or passing verification checks.
+- Change messages are emitted only when workspace files were modified.
+- Invalid blame attempts list all valid configured blame targets.

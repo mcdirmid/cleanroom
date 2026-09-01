@@ -1,28 +1,31 @@
 <!-- Dependencies (md files to read alongside this one):
+  - virtual_file_name.md
   - dag_storage.md
+  - sandbox.md
   - build_graph_storage.md
   - build_message_store.md
-  - manifest_node_loader.md
 -->
 
 # Implementation LLS: build_graph_storage_impl
 
 ## Data Types
 ```python
-from build_graph_storage import BuildGraphStorage, GraphConfig
+from build_graph_storage import BuildGraphStorage
 from build_message_store import BuildMessageStore
-from manifest_node_loader import ManifestNodeLoader
 
-class BaseBuildGraphStorageImpl(BuildGraphStorage):
-    def __init__(self, config: GraphConfig, message_store: BuildMessageStore, manifest_loader: ManifestNodeLoader) -> None: ...
-
-class BuildGraphStorageFileImpl(BaseBuildGraphStorageImpl):
-    def __init__(self, config: GraphConfig, message_store: BuildMessageStore, manifest_loader: ManifestNodeLoader) -> None: ...
+class BuildGraphStorageImpl(BuildGraphStorage):
+    def __init__(self, message_store: BuildMessageStore) -> None: ...
 ```
 
 ## Behavioral Description
-Implements BuildGraphStorage by coordinating `BuildMessageStore` for message persistence and `ManifestNodeLoader` for manifest resolution.
+
+- Stores target node definitions, dependency graphs, and sandbox configurations in memory.
+- Delegates pending message queueing, retrieval, clearing, and reverse dependency lookups to `BuildMessageStore`.
+- Virtual file mappings assign distinct virtual file names for all declared readable and writable files of a node.
+- Propagating dependencies exclude silent dependencies declared on a node, ensuring non-propagating dependencies do not mark dependents dirty.
+- Provides thread-safe atomic queries for node dependencies and sandbox configurations.
 
 ## Invariants
-- Graph resolution delegates to ManifestNodeLoader.
-- Message file read/write operations delegate to BuildMessageStore.
+
+- Configurations are immutable once loaded.
+- Propagating dependencies exclude silent dependencies declared on a node.

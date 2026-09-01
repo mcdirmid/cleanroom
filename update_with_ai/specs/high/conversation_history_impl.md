@@ -1,19 +1,18 @@
 # conversation_history_impl
 
-fulfills: conversation_history
-imports: tool_provider (tool results, presented tool results, tool call, session)
-terms (from conversation_history): conversation history, history entry, rendered message, stub mapping, system prompt
-terms (from tool_provider): tool result, supersession flag, presented tool result, stub, tool call, session
+imports: tool_provider, conversation_history
+types from tool_provider: tool result
+types from conversation_history: conversation history factory, conversation history, message, stub, model request
+implements: conversation history factory
 
-## Deltas
+## Purpose
 
-- Formats messages for the OpenAI chat completion API (user, assistant, tool, and system message parameters).
-- Strips internal metadata fields (prefixed with an underscore) when converting history entries to OpenAI parameters.
-- [state] Tracks the mapping between each file path or tool command and its current live tool result index; replaces earlier results with static stub text upon supersession.
-- [ordering] A presented tool result carries its tool call; the implementation generates a fresh synthetic tool call identifier and appends an assistant tool call message immediately before appending the tool message.
-- [state] Resets all message lists, stub mappings, and synthetic call counters on initialization so no state persists between sessions.
-- [external] The OpenAI API (openai_api) message parameter schemas.
+Formats conversation history according to model provider role schemas, stripping internal underscore-prefixed metadata and inserting synthetic tool calls to preserve API role alternation invariants.
 
-## Non-concerns
+## Behavior
 
-- Stub text: the static stub text replaces superseded content in place.
+- Creating a *conversation history* through a *conversation history factory* yields a fresh *conversation history*.
+- *Messages* in a *model request* are formatted according to model provider roles for system, user, assistant, and tool messages.
+- *Messages* in a *model request* omit internal metadata fields starting with an underscore.
+- Tool result notes are included in visible tool *message* content within a *model request*.
+- An unprompted presented *tool result* is preceded in a *conversation history* by a synthetic assistant tool invocation *message* addressing the corresponding tool name.

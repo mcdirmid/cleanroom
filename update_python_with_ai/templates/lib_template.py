@@ -30,7 +30,8 @@ class <Name>Impl(<Interface>):  # implementation module: delete when this is an 
         raise NotImplementedError
 
 
-# TODO: work through this module per update_python_with_ai/guides/low_to_lib.md:
+# TODO: work through this module:
 #   - the LLS is the contract; implement every operation, invariant, and pin
 #   - keep the module layout and stubs the template provides; replace placeholders
 #   - expected failures use the LLS's return signals; unexpected failures propagate
+

@@ -6,6 +6,8 @@ A guide is read by an LLM that produces an artifact satisfying the guide's const
 
 The reader is an LLM consuming the guide through tool reads; it has only the current message and the artifact, and it takes every sentence literally. Every line must be actionable.
 
+The Summary drives the initial write or edit in one or at most two concise paragraphs: it states the high-level subject and core constraints completely so the initial revision is accurate in substance, without detailing fine-grained checks that checklist sections verify. Because linters run immediately upon advancing, structural problems are exposed early, keeping the Summary light and focused on core constraints rather than deep rule duplication.
+
 A guide never triggers. The prompt asks for alignment or conformance with the guide and the other input files, and it drives the loop; the guide stakes constraints and requirements only. Directive verbs aimed at the reader ("ensure", "produce", "apply", "verify the checklist", "call advance") are prohibited; declarative constraints ("the module must", "X matches Y") are the rule.
 
 Every guide follows this structure:
@@ -28,6 +30,7 @@ Every guide follows this structure:
 ## Summary
 
 - [ ] The Summary states the guide's subject declaratively: an alignment guide names the artifact and its source ("The module implements `low/<name>.md`"); a conformance guide names the artifact ("The artifact conforms to this guide")
+- [ ] The Summary is concise (one or at most two paragraphs), stating complete high-level requirements so the initial write or edit is accurate in substance, while leaving fine-grained rules to checklist sections
 - [ ] File references never use file paths; only virtual file names are used (except when files share names, where the directory prefix is appended, mainly `low/<name>.md` and `high/<name>.md`)
 - [ ] Rules governing the editing process, tool usage, incremental editing strategy, or write permissions belong in the `## Summary` (which is visible before editing begins and throughout all steps in step mode); checklist items verify the artifact after changes are made and show up too late to control how editing is done
 - [ ] Applicability restrictions and not-applicable conditions (e.g. only applying to implementation specs whose name ends in `_impl.md`) are never in the Summary; they belong in `## Lint checks`
@@ -37,6 +40,7 @@ Every guide follows this structure:
 - [ ] No instruction to run or interpret verification; verification is transparent and the reader's only verification action is calling `advance`
 - [ ] No instruction to do what the reader cannot do — the reader's capabilities are fixed (file reads, edits, and advance; no execution, no shell, no test runs); a capability the reader lacks is never stated as a requirement and never as a prohibition — the reader already knows it lacks it
 - [ ] No reference to files the reader cannot read (other guides, HLS files, implementations); a label in the source material that names an unreadable file gets one sentence saying it carries no requirements
+- [ ] External domain knowledge and foreign formats (third-party APIs, foreign serialization formats, runtime identifiers) are excluded from guides; external boundaries are specified in dedicated external boundary specifications (`low/<name>_ext.md`)
 - [ ] Templates mentioned at most once ("a file that is a template is filled in")
 - [ ] No meta-commentary, no rationale, no examples — state the constraint
 

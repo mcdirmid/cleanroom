@@ -1,7 +1,7 @@
 # <name>
 
-imports: <dep> (what it provides)              # optional
-terms (from <dep>): ...                        # optional
+imports: <dep1>, <dep2>                         # optional
+terms from <dep>: ...                           # optional
 terms (owned): ...                             # optional
 
 ## Purpose
@@ -41,10 +41,11 @@ terms (owned): ...                             # optional
 <TODO: fill in or delete the section>
 
 <!--
-TODO: work through this template section by section per update_python_with_ai/guides/high_level_spec.md:
+TODO: work through this template section by section:
   - replace every TODO marker with content derived from the source materials
   - the section inventory is closed (interfaces: Purpose/Terms/Contract/Non-concerns)
   - the HLS is declarative: no mechanism, no "returns", one fact per line
-  - every term used is owned or listed in `terms (from ...)`
+  - every term used is owned or listed in `terms from <dep>:`
   - remove this comment block when the document is complete
 -->
+

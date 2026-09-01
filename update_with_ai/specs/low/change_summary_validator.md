@@ -1,101 +1,83 @@
 <!-- Dependencies (md files to read alongside this one):
-  - tool_provider.md
+  - virtual_file_name.md
 -->
 
 # Interface LLS: change_summary_validator
 
 ## Data Types
 ```python
-from typing import Any, Dict, List, Optional, Protocol, TypeAlias
-from tool_provider import ToolFailure
+from typing import Protocol, TypeAlias, Sequence, Optional
+from dataclasses import dataclass
+from virtual_file_name import VirtualFileName
 
-ClaimedChanges: TypeAlias = Optional[List[Dict[str, str]]]
-ValidationOutcome: TypeAlias = Optional[ToolFailure[str]]
+ChangeSummary: TypeAlias = str
+DiffSummary: TypeAlias = str
+FileContent: TypeAlias = str
+ValidationFeedback: TypeAlias = str
 
-class ChangeSummaryValidator(Protocol):
-    def compute_diff_summary(self) -> str: ...
-    def get_effective_changes(self) -> List[str]: ...
-    def validate_change_summaries(self, changes: ClaimedChanges) -> ValidationOutcome: ...
-    def reset_validator_state(self) -> None: ...
+@dataclass(frozen=True)
+class NetChange:
+    file_name: VirtualFileName
+    initial_content: FileContent
+    current_content: FileContent
+
+class ChangeValidator(Protocol):
+    def validate_change_summary(self, summary: ChangeSummary, net_changes: Sequence[NetChange]) -> Optional[ValidationFeedback]: ...
+    def compute_diff_summary(self, net_changes: Sequence[NetChange]) -> DiffSummary: ...
 ```
+
+- `ChangeSummary` → corresponds to *change summary*: a description of modifications made to workspace files.
+- `DiffSummary` → corresponds to *diff summary*: a formatted representation of line changes across modified files.
+- `FileContent` → corresponds to file content string.
+- `ValidationFeedback` → corresponds to validation feedback error string.
+- `NetChange` → corresponds to *net change*: an observable difference between a file's initial content and its current content.
+- `ChangeValidator` → corresponds to *change validator*: a service that verifies *change summaries* against net file modifications.
 
 ## Term definitions
 
-- **change validation** → term definition: checking that claimed changed files match actual modified files whose current content differs from their initial run-start content
-- **diff summary** → term definition: a formatted representation of line-by-line file changes across modified files
-- **net change** → term definition: an effective modification where a file's current content differs from its initial content at run start; a file written back to its initial content is net-unchanged
+- **change summary** → the `ChangeSummary` alias
+- **diff summary** → the `DiffSummary` alias
+- **net change** → the `NetChange` alias
+- **change validator** → term definition: a service that verifies *change summaries* against net file modifications
 
 ## Component-Provided Operations
+
+### `validate_change_summary`
+
+```python
+def validate_change_summary(self, summary: ChangeSummary, net_changes: Sequence[NetChange]) -> Optional[ValidationFeedback]: ...
+```
+
+**Purpose:** (ChangeValidator) Validates that a change summary accurately describes all net-changed files and does not claim changes for net-unchanged files.
+
+**Preconditions:** None.
+
+**Postconditions:**
+- Returns `None` if validation passes.
+- Returns a corrective feedback error string if summary is inaccurate or exceeds length bounds.
+
+**Failure Handling:** Discrepancies return actionable feedback strings for agent self-correction.
+
+**HLS Justification:** "A *change validator* verifies that a *change summary* describes all *net changes* across workspace files."
 
 ### `compute_diff_summary`
 
 ```python
-def compute_diff_summary(self) -> str
+def compute_diff_summary(self, net_changes: Sequence[NetChange]) -> DiffSummary: ...
 ```
 
-**Purpose:** Compute a unified diff summary across modified files up to the configured limit.
+**Purpose:** (ChangeValidator) Produces a formatted line-by-line diff representation across modified files.
 
 **Preconditions:** None.
 
 **Postconditions:**
-- Returns formatted diff string showing line changes.
+- Returns a truncated `DiffSummary` representing line changes.
 
-**Failure Handling:** None.
+**Failure Handling:** Always succeeds.
 
-**HLS Justification:** "Produces a formatted diff summary truncated at the configured diff size limit."
-
-### `get_effective_changes`
-
-```python
-def get_effective_changes(self) -> List[str]
-```
-
-**Purpose:** Return list of paths whose current content differs from their run-start snapshot.
-
-**Preconditions:** None.
-
-**Postconditions:**
-- Returns list of net-changed file virtual names.
-
-**Failure Handling:** None.
-
-**HLS Justification:** "A write that nets out to no change is detected as net-unchanged."
-
-### `validate_change_summaries`
-
-```python
-def validate_change_summaries(self, changes: ClaimedChanges) -> ValidationOutcome
-```
-
-**Purpose:** Validate claimed change summaries against effective changes, soft bounds, and hard bounds.
-
-**Preconditions:** None.
-
-**Postconditions:**
-- Returns `None` if valid, or `ToolFailure[str]` with guidance if invalid.
-
-**Failure Handling:** Returns ToolFailure when invalid.
-
-**HLS Justification:** "Enforces the soft length bound and hard length bound with a grace count."
-
-### `reset_validator_state`
-
-```python
-def reset_validator_state(self) -> None
-```
-
-**Purpose:** Reset per-run validation state.
-
-**Preconditions:** None.
-
-**Postconditions:**
-- Resets rejection and grace counters.
-
-**Failure Handling:** None.
-
-**HLS Justification:** "State is per-run only."
+**HLS Justification:** "A *change validator* produces a *diff summary* of modified files."
 
 ## Invariants
 
-- A net-unchanged file is never accepted in claimed changes.
-- Summaries exceeding bounds receive shortening guidance up to the grace count.
+- Net-unchanged files written back to initial content are rejected if claimed as changes.
+- Diff outputs are bounded by configured character limits.

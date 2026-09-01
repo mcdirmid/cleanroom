@@ -1,20 +1,18 @@
 # guide_delivery_impl
 
-fulfills: guide_delivery
-imports: tool_provider (presented tool result)
-terms (from tool_provider): presented tool result, tool result
-terms (from guide_delivery): guide, guide summary, step section, step mode
+imports: tool_provider, guide_delivery
+types from tool_provider: tool result
+types from guide_delivery: guide delivery factory, guide delivery, guide, step section, step delivery
+implements: guide delivery factory
 
-## Deltas
+## Purpose
 
-- Reads the declared guide's content at run start and splits it into its guide summary and step sections, following the guide format, skipping the `## Lint checks` section in step mode; the guide's content is available only through the step-delivery rules.
-- In step mode, excludes the guide from the readable files: reads of the guide are rejected and the guide is never provided whole.
-- Pre-injects the advance call providing the step-mode output (the guide summary and the ensure instruction) as a presented tool result at run start, before the agent's first turn.
-- Maintains the step-section pointer: a passing verification advances it; a failing verification does not; the pointer gates which output the advance tool provides.
-- Provides the advance tool's definition without the change-message argument while step sections remain; when verification passes with no step sections remaining, the definition includes it.
-- [ordering] In step mode, each advance output is composed at delivery time from the guide summary, the ensure instruction, and the pointer's current selection (a step section or the failure reason).
-- [state] Per-run state only: the step state (the guide, its split, and the step-section pointer); nothing persists across runs.
+Implements step delivery by splitting Markdown heading sections, skipping lint check sections to keep the agent focused on code modification steps.
 
-## Non-concerns
+## Behavior
 
-- Step-delivery mechanism: the exact mechanism for tracking the step-section pointer is unspecified.
+- Creating a *guide delivery* through a *guide delivery factory* yields a *guide delivery* initialized from a *guide*.
+- A *guide delivery* splits a *guide* into its summary and *step sections* following standard guide format headings, skipping lint check sections (headed by `## Lint checks`) during step delivery.
+- The initial *guide* summary is pre-injected as a *step delivery* before the first agent turn.
+- A *guide delivery* advances to the next *step section* upon successful verification and delivers it via *step delivery*.
+- A failing verification retains the current *step section* in the *guide delivery* without advancement.

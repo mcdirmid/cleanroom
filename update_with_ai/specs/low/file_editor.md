@@ -1,146 +1,122 @@
 <!-- Dependencies (md files to read alongside this one):
-  - file_reader.md
   - tool_provider.md
+  - file_reader.md
+  - virtual_file_name.md
 -->
 
 # Interface LLS: file_editor
 
 ## Data Types
 ```python
-from typing import Any, Protocol, TypeAlias
+from typing import Protocol, TypeAlias, Sequence, Mapping
 from dataclasses import dataclass
-from file_reader import VirtualName
-from tool_provider import ToolDefinition, ToolCallOutcome
+from tool_provider import Tool, ToolProvider, ToolFailure
+from file_reader import ReadWriteFile
+from virtual_file_name import VirtualFileMapping
 
-WritablePaths: TypeAlias = list[VirtualName]
-TemplateMapping: TypeAlias = dict[VirtualName, str]
-WriteOccurred: TypeAlias = bool
+FileTemplate: TypeAlias = str
+TemplateMapping: TypeAlias = Mapping[ReadWriteFile, FileTemplate]
 
-@dataclass
+@dataclass(frozen=True)
 class FileEditorConfig:
-    writable_paths: WritablePaths
-    templates: TemplateMapping | None = None
+    read_write_files: Sequence[ReadWriteFile]
+    file_mappings: VirtualFileMapping
+    templates: TemplateMapping
 
-class FileEditor(Protocol):
-    def get_tool_definitions(self) -> list[ToolDefinition]: ...
-    def replace(self, file_path: VirtualName, old_str: str, new_str: str, expect_multiple: bool = False) -> ToolCallOutcome: ...
-    def update_lines(self, file_path: VirtualName, start_line: int, end_line: int, new_str: str) -> ToolCallOutcome: ...
-    def get_write_occurred(self) -> WriteOccurred: ...
-    def get_changed_files(self) -> list[VirtualName]: ...
-    def get_run_start_snapshot(self, file_path: VirtualName) -> str | None: ...
-    def get_current_content(self, file_path: VirtualName) -> str | None: ...
-    def is_writable(self, file_path: VirtualName) -> bool: ...
+class FileEditor(ToolProvider, Protocol):
+    def get_replacement_tool(self) -> Tool: ...
+    def get_line_update_tool(self) -> Tool: ...
+    def materialize_templates(self) -> None: ...
+
+class FileEditorFactory(Protocol):
+    def create_file_editor(self, config: FileEditorConfig) -> FileEditor: ...
 ```
+
+- `FileTemplate` → corresponds to *template*: initial content for a *read-write file*.
+- `TemplateMapping` → corresponds to template mappings.
+- `FileEditorConfig` → corresponds to file editor configuration.
+- `FileEditor` → corresponds to *file editor*: a *tool provider* providing a *text replacement tool* and a *line update tool*.
+- `FileEditorFactory` → corresponds to *file editor factory*: a provider that constructs *file editors* configured for specific sessions.
 
 ## Term definitions
 
-- **virtual name** → the `VirtualName` alias from file_reader
-- **line-numbered view** → term definition from file_reader
-- **file write** → term definition: a mutation operation (replace or update_lines) that alters a writable file on disk
-- **injected read** → term definition: an automatic re-read of a file with line numbers injected into the conversation following a successful write
-- **template** → the `TemplateMapping` alias (definition in Data Types)
-- **tool result** → the `ToolResult` type from tool_provider
-- **supersession flag** → term definition from tool_provider
-- **tool failure** → the `ToolFailure` type from tool_provider
-- **tool call** → the `ToolCall` alias from tool_provider
+- **template** → the `FileTemplate` alias
+- **text replacement tool** → term definition: a *tool* (returned by `get_replacement_tool`) that replaces matching text within a *read-write file*
+- **line update tool** → term definition: a *tool* (returned by `get_line_update_tool`) that replaces a range of lines within a *read-write file*
+- **file editor** → term definition: a *tool provider* providing a *text replacement tool* and a *line update tool*
+- **file editor factory** → term definition: a provider that constructs *file editors* configured for specific sessions
 
 ## Component-Provided Operations
 
-### `get_tool_definitions`
+### `get_replacement_tool`
 
 ```python
-def get_tool_definitions(self) -> list[ToolDefinition]
+def get_replacement_tool(self) -> Tool: ...
 ```
 
-**Purpose:** Return the edit tool definitions (`replace`, `update_lines`).
+**Purpose:** (FileEditor) Retrieves the text replacement tool instance.
 
 **Preconditions:** None.
 
 **Postconditions:**
-- Returns JSON schema definitions for `replace` and `update_lines`.
+- Returns a `Tool` that replaces exact matching text in a target `ReadWriteFile`.
 
-**Failure Handling:** Always succeeds.
+**Failure Handling:** Unmapped or non-writable `VirtualFileName`, ambiguous (multiple matches), or absent target text produces a `ToolFailure`.
 
-**HLS Justification:** "Request tool definitions (per tool_provider)."
+**HLS Justification:** "Executing a *file editor* tool with an unmapped or non-writable *virtual file name* produces a *tool failure*."
 
-### `replace`
-
-```python
-def replace(self, file_path: VirtualName, old_str: str, new_str: str, expect_multiple: bool = False) -> ToolCallOutcome
-```
-
-**Purpose:** Replace short text in a file (content-based replacement up to 200 characters).
-
-**Preconditions:**
-- `file_path` is a writable file.
-- `old_str` and `new_str` do not exceed 200 characters.
-
-**Postconditions:**
-- On success: returns write confirmation and injected line-numbered read (both with `supersedes=True`), sets `write_occurred`, records changed file.
-
-**Failure Handling:** Returns `ToolFailure` on length limit violation, missing old string, multiple matches without `expect_multiple`, or permissions.
-
-**HLS Justification:** "Replace short text in a file (content-based replacement up to 200 characters)."
-
-### `update_lines`
+### `get_line_update_tool`
 
 ```python
-def update_lines(self, file_path: VirtualName, start_line: int, end_line: int, new_str: str) -> ToolCallOutcome
+def get_line_update_tool(self) -> Tool: ...
 ```
 
-**Purpose:** Replace, delete, or insert lines by 1-indexed line range.
-
-**Preconditions:**
-- `file_path` is a writable file and currently in line-numbered view.
-- `start_line` and `end_line` are valid 1-indexed line numbers.
-
-**Postconditions:**
-- On success: returns write confirmation and injected line-numbered read (both with `supersedes=True`), sets `write_occurred`, records changed file.
-
-**Failure Handling:** Returns `ToolFailure` if not writable, not in line-numbered view, or invalid line range.
-
-**HLS Justification:** "Update lines in a file by 1-indexed line range (replacement, deletion, or insertion)."
-
-### `get_write_occurred`
-
-```python
-def get_write_occurred(self) -> WriteOccurred
-```
-
-**Purpose:** Return whether any file write succeeded during the session.
+**Purpose:** (FileEditor) Retrieves the line range update tool instance.
 
 **Preconditions:** None.
 
 **Postconditions:**
-- Returns True if any write succeeded; False otherwise.
+- Returns a `Tool` that replaces a bounded line range in a target `ReadWriteFile`.
 
-**Failure Handling:** Always succeeds.
+**Failure Handling:** Unmapped or non-writable `VirtualFileName`, or out-of-bounds line numbers produce a `ToolFailure`.
 
-**HLS Justification:** "Query whether any file write occurred during the session."
+**HLS Justification:** "Executing a *file editor* tool with an unmapped or non-writable *virtual file name* produces a *tool failure*."
 
-### `get_changed_files`
+### `materialize_templates`
 
 ```python
-def get_changed_files(self) -> list[VirtualName]
+def materialize_templates(self) -> None: ...
 ```
 
-**Purpose:** Return the list of changed files in write order (deduped).
+**Purpose:** (FileEditor) Materializes initial template content into missing read-write files at session start.
 
 **Preconditions:** None.
 
 **Postconditions:**
-- Returns virtual names of changed files.
+- Writes configured template content to missing target files without overwriting existing files.
+
+**Failure Handling:** Missing files are populated; existing files are preserved.
+
+**HLS Justification:** "A *file editor* materializes *templates* into missing *read-write files* without overwriting existing files."
+
+### `create_file_editor`
+
+```python
+def create_file_editor(self, config: FileEditorConfig) -> FileEditor: ...
+```
+
+**Purpose:** (FileEditorFactory) Creates a file editor instance configured with writable files and templates.
+
+**Preconditions:** None.
+
+**Postconditions:**
+- Returns a `FileEditor` configured with `config`.
 
 **Failure Handling:** Always succeeds.
 
-**HLS Justification:** "Query changed files, current content, and baseline run-start snapshots."
+**HLS Justification:** "Creating a *file editor* through a *file editor factory* yields a *file editor* configured with *read-write files*, path mappings, and *templates*."
 
 ## Invariants
 
-- Writes set the write_occurred flag and produce write confirmation plus injected read.
-- Updating lines requires an active line-numbered view.
-- Templates initialize missing files without setting write_occurred.
-
-## Non-Concerns
-
-- Diff generation: handled by run_control using baseline snapshots from file_editor.
+- Existing files are never overwritten during template materialization.
+- Replaced text matches exact character sequences within target files.

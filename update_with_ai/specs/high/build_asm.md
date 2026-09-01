@@ -1,20 +1,15 @@
 # build_asm
 
-fulfills: build_runner
-imports: build_runner_impl (the interface-only runner), build_graph_storage_impl (file-backed graph and message store), agent_node_clean_logic_asm (agent clean logic assembly), dag_cleaner_impl (DAG cleaner implementation)
+imports: build_runner, build_graph_storage, agent_node_cleaner, dag_cleaner, runner_logger, manifest_node_loader
+types from build_runner: build runner
+types from build_graph_storage: build graph storage
+types from agent_node_cleaner: agent node cleaner
+types from dag_cleaner: dag cleaner
+types from runner_logger: runner logger
+types from manifest_node_loader: manifest loader
+implements: build runner
 
-## Deltas
+## Behavior
 
-- Provides a configured build runner: assembles the concrete implementations and sub-assemblies of the cleanroom components into the interface-only runner implementation.
-- The graph factory supplies the file-backed graph and message store.
-- The clean-logic factory supplies the agent clean logic through the agent_node_clean_logic_asm sub-assembly.
-- The DAG factory supplies the topological cleaner through dag_cleaner_impl.
-- The assembled runner's operations create the components per call through the supplied factories.
-- [boundary] The concrete implementations and sub-assemblies are selected here; the runner's operations never select components.
-- [external] The concrete component implementations and sub-assemblies.
-
-## Non-concerns
-
-- Consumption of the assembled runner (entry points, generated wrappers): unspecified here.
-- Selection policy: the concrete implementations wired here are a default assembly; other selections may differ.
-- Testability: this assembly is never tested; it performs no functionality beyond configuration and assembly of other modules.
+- A *build runner* is assembled from concrete implementations of *build graph storage*, *manifest loader*, *agent node cleaner*, *dag cleaner*, and *runner logger*.
+- The assembled *build runner* coordinates topological cleaning passes by delegating target loading to *manifest loader*, graph storage to *build graph storage*, node cleaning to *agent node cleaner* wired to the *build graph storage*, topological ordering to *dag cleaner*, and routing execution transcripts to *runner logger* in the workspace directory.

@@ -1,78 +1,49 @@
-"""
-lib/conversation_history.py
+"""Conversation history interface and message models."""
 
-Conversation History Interface Protocol.
-"""
+from typing import Protocol, TypeAlias, Sequence, Mapping, Any, Optional, Union
+from dataclasses import dataclass
+from .tool_provider import ToolResult, Tool
 
-from __future__ import annotations
+MessageRole: TypeAlias = str
+MessageContent: TypeAlias = str
+MetadataField: TypeAlias = str
+MetadataContent: TypeAlias = Any
+MetadataMapping: TypeAlias = Mapping[MetadataField, MetadataContent]
 
-from typing import Any, Callable, List, Literal, Optional, Protocol, TypeAlias
-from .tool_provider import ToolResult, PresentedToolResult, ToolCall
 
-HistoryEntry: TypeAlias = dict[str, Any]
+@dataclass(frozen=True)
+class HistoryMessage:
+    role: MessageRole
+    content: MessageContent
+    metadata: Optional[MetadataMapping] = None
 
-LogEvent: TypeAlias = Literal[
-    "message_added",
-    "message_stubbed",
-    "tool_called",
-    "tool_result",
-    "api_response",
-    "response_truncated",
-    "run_terminated",
-    "reminder_injected",
-    "error",
-]
 
-LoggerCallback: TypeAlias = Callable[[LogEvent, dict[str, Any]], None]
+@dataclass(frozen=True)
+class HistoryStub(HistoryMessage):
+    role: MessageRole = "tool"
+    content: MessageContent = "..."
 
-RenderedMessage: TypeAlias = dict[str, Any]
 
-StubMapping: TypeAlias = dict[tuple[str, str], int]
+@dataclass(frozen=True)
+class ModelRequest:
+    messages: Sequence[HistoryMessage]
+    tools: Optional[Sequence[Tool]] = None
 
 
 class ConversationHistory(Protocol):
-    """
-    Protocol for managing the conversation message history and rendering
-    formatted messages for language model requests.
-    """
-
-    def reset(self) -> None:
-        """Reset history, stub mappings, and counters to an empty state."""
+    def initialize(self, initial_messages: Sequence[HistoryMessage]) -> None:
         ...
 
-    def initialize(
-        self,
-        prompt: str,
-        session_start_results: Optional[List[PresentedToolResult]] = None,
-        logger: Optional[LoggerCallback] = None,
-    ) -> None:
-        """Initialize conversation with prompt and session-start results."""
+    def append(self, item: Union[HistoryMessage, ToolResult]) -> None:
         ...
 
-    def append_message(
-        self,
-        message: HistoryEntry,
-        logger: Optional[LoggerCallback] = None,
-    ) -> None:
-        """Append a message entry to the conversation and notify the logger."""
+    def get_model_request(self) -> ModelRequest:
         ...
 
-    def add_tool_result(
-        self,
-        tool_call: Optional[ToolCall],
-        result: ToolResult | PresentedToolResult,
-        logger: Optional[LoggerCallback] = None,
-    ) -> None:
-        """Append a tool result and apply in-place stubbing if superseding."""
+    def get_messages(self) -> Sequence[HistoryMessage]:
         ...
 
-    def get_history(self) -> List[HistoryEntry]:
-        """Return the full conversation history list in chronological order."""
-        ...
 
-    def get_rendered_messages(
-        self,
-        system_prompt: Optional[str] = None,
-    ) -> List[RenderedMessage]:
-        """Format and return rendered messages ready for model requests."""
+class ConversationHistoryFactory(Protocol):
+    def create_conversation_history(self) -> ConversationHistory:
         ...

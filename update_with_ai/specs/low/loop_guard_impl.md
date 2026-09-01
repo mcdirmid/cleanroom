@@ -1,38 +1,29 @@
 <!-- Dependencies (md files to read alongside this one):
+  - tool_provider.md
   - loop_guard.md
-  - agent_loop_config.md
 -->
 
 # Implementation LLS: loop_guard_impl
 
 ## Data Types
 ```python
-from loop_guard import LoopGuard
-from agent_loop_config import AgentLoopConfig
+from typing import Optional
+from loop_guard import LoopGuard, LoopGuardConfig
 
 class LoopGuardImpl(LoopGuard):
-    def __init__(self, config: AgentLoopConfig | None = None) -> None: ...
+    def __init__(self, config: Optional[LoopGuardConfig] = None) -> None: ...
 ```
-
-The implementation tracks loop signatures, file ranges, and repetition counts.
 
 ## Behavioral Description
 
-`LoopGuardImpl` fulfills the `LoopGuard` Protocol by monitoring consecutive tool executions and response patterns.
-
-- **Loop Repetition:** Tracks `(tool_name, sorted_json_arguments)`. When the tool is `advance`, resets the signature and count. Otherwise, increments consecutive repeats. At 4 repeats, if no reminder was injected yet, returns a reminder. At 8 repeats, returns degenerate loop failure with pinned error text `Degenerate loop: same tool call repeated 8 consecutive times`.
-- **Range Repetition:** For `update_lines`, tracks `(file_path, start_line, end_line)`. At 4 repeats, if no reminder was injected yet, returns range-specific reminder text. At 8 repeats, returns degenerate loop failure with pinned error text `Degenerate loop: update_lines targeted the same file and line range 8 consecutive times`.
-- **Degenerate Responses:** `check_degenerate_response` checks if `isinstance(content, str) and len(content) > 0 and len(set(content)) == 1`.
-- **Termination Reminder:** `get_termination_reminder` invokes `config.termination_reminder_generator()` if available; otherwise returns pinned default text `You must signal termination by calling advance(), fail(), or blame() to end the run.`.
+- `LoopGuardImpl` tracks consecutive executions of identical tools with identical arguments using default thresholds (reminder threshold = 3, fatal threshold = 6) when not overridden by `config`.
+- Produces a `LoopReminder` when consecutive identical tool executions reach the reminder threshold.
+- Produces a `LoopFailure` communicating session failure when consecutive identical tool executions reach the fatal threshold.
+- Tracks consecutive edits to the same file and line range, producing a `LoopReminder` at the reminder threshold and a `LoopFailure` at the fatal threshold.
+- Resets internal repetition counters when a tool execution demonstrates forward progress.
 
 ## Invariants
 
-- At most one reminder injected per run
-- The advance tool resets tracking
-- Eight consecutive repetitions fail the run
-- No state persists across runs
-
-## Non-Concerns
-
-- **Default termination reminder:** Pinned to `You must signal termination by calling advance(), fail(), or blame() to end the run.`
-- **Degenerate error texts:** Pinned to `Degenerate loop: same tool call repeated 8 consecutive times` and `Degenerate loop: update_lines targeted the same file and line range 8 consecutive times`
+- Counter increments require identical tool arguments or exact matching file paths and line bounds.
+- Forward progress resets all repetition counters to zero.
+- Reaching fatal threshold produces a terminal failure signal.

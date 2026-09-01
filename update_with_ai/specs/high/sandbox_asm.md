@@ -1,17 +1,15 @@
 # sandbox_asm
 
-fulfills: sandbox
-imports: sandbox_impl (sandbox), file_reader_impl (read machinery), file_editor_impl (write machinery), guide_delivery_impl (step-mode delivery), run_control_impl (verification and termination), change_summary_validator_impl (change validation)
+imports: sandbox, file_reader, file_editor, guide_delivery, run_control, change_summary_validator
+types from sandbox: sandbox factory, sandbox, sandbox configuration
+types from file_reader: file reader factory
+types from file_editor: file editor factory
+types from guide_delivery: guide delivery factory
+types from run_control: run control factory
+types from change_summary_validator: change validator
+implements: sandbox factory
 
-## Deltas
+## Behavior
 
-- Assembles the concrete tool implementations into the sandbox implementation.
-- Supplies the read machinery, write machinery, step-mode delivery, and verification and termination rules through factories to the sandbox.
-- [boundary] The concrete tool implementations are selected here.
-- [external] The concrete component implementations.
-
-## Non-concerns
-
-- Consumption: how the assembled sandbox is used is unspecified here.
-- Selection policy: the concrete implementations wired here are a default assembly; other selections may differ.
-- Testability: this assembly is never tested; it performs no functionality beyond configuration and assembly of other modules.
+- A *sandbox factory* is assembled from concrete implementations of *file reader factory*, *file editor factory*, *run control factory*, *change validator*, and optional *guide delivery factory*.
+- The assembled *run control factory* is wired with the *change validator* to validate change summaries.

@@ -1,23 +1,29 @@
-# lib/change_summary_validator.py
-"""
-Interface LLS: change_summary_validator
-"""
-from typing import Any, Dict, List, Optional, Protocol, TypeAlias
-from .tool_provider import ToolFailure
+"""Change summary validator interface and diff summaries."""
 
-ClaimedChanges: TypeAlias = Optional[List[Dict[str, str]]]
-ValidationOutcome: TypeAlias = Optional[ToolFailure[str]]
+from typing import Protocol, TypeAlias, Sequence, Optional
+from dataclasses import dataclass
+from .virtual_file_name import VirtualFileName
+
+ChangeSummary: TypeAlias = str
+DiffSummary: TypeAlias = str
+FileContent: TypeAlias = str
+ValidationFeedback: TypeAlias = str
 
 
-class ChangeSummaryValidator(Protocol):
-    def compute_diff_summary(self) -> str:
+@dataclass(frozen=True)
+class NetChange:
+    file_name: VirtualFileName
+    initial_content: FileContent
+    current_content: FileContent
+
+
+class ChangeValidator(Protocol):
+    def validate_change_summary(
+        self, summary: ChangeSummary, net_changes: Sequence[NetChange]
+    ) -> Optional[ValidationFeedback]:
         ...
 
-    def get_effective_changes(self) -> List[str]:
-        ...
-
-    def validate_change_summaries(self, changes: ClaimedChanges) -> ValidationOutcome:
-        ...
-
-    def reset_validator_state(self) -> None:
+    def compute_diff_summary(
+        self, net_changes: Sequence[NetChange]
+    ) -> DiffSummary:
         ...

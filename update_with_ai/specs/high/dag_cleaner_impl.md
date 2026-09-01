@@ -1,24 +1,15 @@
 # dag_cleaner_impl
 
-fulfills: dag_cleaner
-imports: dag_storage (graph + messages), dag_clean_logic (cleaning)
-terms (from dag_storage): subgraph, dependency, reverse dependency, pending message, message
-terms (from dag_clean_logic): dirty, cleaning, change message, feedback message
+imports: dag_storage, dag_node_cleaner, dag_cleaner
+types from dag_storage: dag storage, node, pending message
+types from dag_node_cleaner: node cleaner, change message, feedback message
+types from dag_cleaner: dag cleaner
+implements: dag cleaner
 
-## Deltas
+## Behavior
 
-- All reads and writes, including graph access, go through dag_storage without caching.
-- Empty strings are valid messages.
-- Messages are discrete items; multiple identical messages are allowed (no deduplication is performed).
-- [ordering] A cleaned node's change messages are routed before the node's data is deleted: routing reads the node's known reverse dependencies, which must still be present.
-- A change result is applied by deleting the node's data after routing; a no-change result by clearing the node's pending messages; a feedback result by leaving the node's data untouched.
-- [ordering] Change messages are broadcast to the node's known reverse dependencies present in the graph; a known reverse dependency not in the graph (unresolvable) is skipped.
-- [boundary] Subgraph cleaning as a whole is not atomic: successfully cleaned nodes retain their changes even if a later node fails.
-- [state] No internal state; all state is delegated to dag_storage.
-- [failure] Concurrent cleaning operations, or a message arriving during cleaning, result in undefined behavior.
-- [failure] Self-loops are treated as cycles: a graph containing a self-loop signals failure, leaving state unchanged.
-
-## Non-concerns
-
-- Ordering among nodes at the same topological level: any deterministic order is acceptable as long as dependencies are processed before dependents.
-- Message ordering: the order of messages in a node's pending list is not semantically meaningful; FIFO, LIFO, or any other order is acceptable.
+- A *dag cleaner* cleans dirty *nodes* in topological order, cleaning each *node* only when all of its dependencies are clean.
+- A cleaned *node* with *change messages* broadcasts those messages to its recorded reverse dependencies in *dag storage*, then clears its data.
+- A cleaned *node* with *feedback messages* routes them to the target dependencies and retains its data in *dag storage*.
+- Cleaning is bounded by an execution limit to prevent infinite loops, concluding when all *nodes* in the acyclic subgraph are clean.
+- When cleaning exceeds the execution limit, the *dag cleaner* halts with an unexpected failure.

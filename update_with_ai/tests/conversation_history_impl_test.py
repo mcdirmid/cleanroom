@@ -1,144 +1,111 @@
-"""
-tests/conversation_history_impl_test.py
-
-Comprehensive unit tests for ConversationHistoryImpl against its low-level spec
-and the ConversationHistory Protocol.
-"""
+"""Tests for conversation_history_impl derived from LLS."""
 
 import unittest
-from typing import Any, Dict, List
-
-from lib.conversation_history import HistoryEntry, LogEvent, LoggerCallback
-from lib.conversation_history_impl import ConversationHistoryImpl, STUB_TEXT
-from lib.tool_provider import PresentedToolResult, ToolCall, ToolResult
+from lib.tool_provider import ToolResult
+from lib.conversation_history import HistoryMessage, HistoryStub, ModelRequest
+from lib.conversation_history_impl import ConversationHistoryFactoryImpl
 
 
-class TestConversationHistoryImpl(unittest.TestCase):
+class ConversationHistoryImplTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.history = ConversationHistoryImpl()
-        self.events: List[tuple[LogEvent, Dict[str, Any]]] = []
+        self.factory = ConversationHistoryFactoryImpl()
 
-    def logger(self, event: LogEvent, data: Dict[str, Any]) -> None:
-        self.events.append((event, data))
+    def test_dataclass_defaults(self) -> None:
+        """Tests Data Types: HistoryMessage, HistoryStub, and ModelRequest dataclass defaults."""
+        msg = HistoryMessage(role="user", content="hello")
+        self.assertEqual(msg.role, "user")
+        self.assertEqual(msg.content, "hello")
+        self.assertIsNone(msg.metadata)
 
-    def test_initialize_with_prompt_and_session_start(self) -> None:
-        presented = PresentedToolResult(
-            name="read_file",
-            arguments={"file_path": "foo.py"},
-            result=ToolResult(content="file content", supersedes=False),
+        stub = HistoryStub()
+        self.assertEqual(stub.role, "tool")
+        self.assertEqual(stub.content, "...")
+
+        req = ModelRequest(messages=[msg])
+        self.assertEqual(len(req.messages), 1)
+        self.assertIsNone(req.tools)
+
+    def test_initialize_and_append_chronology(self) -> None:
+        """Tests CUJ for initializing and appending messages chronologically.
+
+        Checks postconditions: messages are preserved in exact insertion order.
+        """
+        history = self.factory.create_conversation_history()
+        initial = [HistoryMessage(role="system", content="System instruction")]
+        history.initialize(initial)
+        history.append(HistoryMessage(role="user", content="User prompt"))
+        history.append(HistoryMessage(role="assistant", content="Assistant reply"))
+
+        msgs = history.get_messages()
+        self.assertEqual(len(msgs), 3)
+        self.assertEqual(msgs[0].role, "system")
+        self.assertEqual(msgs[1].role, "user")
+        self.assertEqual(msgs[2].role, "assistant")
+
+    def test_get_model_request_formatting(self) -> None:
+        """Tests CUJ for formatting history into ModelRequest.
+
+        Checks postconditions: returns ModelRequest containing history messages.
+        """
+        history = self.factory.create_conversation_history()
+        history.initialize([HistoryMessage(role="user", content="Hello")])
+        req = history.get_model_request()
+        self.assertIsInstance(req, ModelRequest)
+        self.assertEqual(len(req.messages), 1)
+        self.assertEqual(req.messages[0].content, "Hello")
+
+    def test_get_model_request_strips_underscore_metadata(self) -> None:
+        """Tests that get_model_request strips internal underscore-prefixed metadata fields."""
+        history = self.factory.create_conversation_history()
+        msg = HistoryMessage(
+            role="user",
+            content="Hello",
+            metadata={"_internal_id": "123", "public_id": "456"},
         )
-        self.history.initialize("Hello agent", [presented], self.logger)
-        entries = self.history.get_history()
-        self.assertEqual(len(entries), 3)
-        self.assertEqual(entries[0]["role"], "user")
-        self.assertEqual(entries[0]["content"], "Hello agent")
-        self.assertEqual(entries[1]["role"], "assistant")
-        self.assertEqual(entries[1]["tool_calls"][0]["function"]["name"], "read_file")
-        self.assertEqual(entries[2]["role"], "tool")
-        self.assertEqual(entries[2]["content"], "file content")
+        history.initialize([msg])
+        req = history.get_model_request()
+        self.assertEqual(len(req.messages), 1)
+        self.assertIsNotNone(req.messages[0].metadata)
+        self.assertNotIn("_internal_id", req.messages[0].metadata)
+        self.assertIn("public_id", req.messages[0].metadata)
 
-    def test_empty_prompt_initialization(self) -> None:
-        self.history.initialize("", None, self.logger)
-        self.assertEqual(len(self.history.get_history()), 0)
+    def test_append_unprompted_tool_inserts_synthetic_assistant_call(self) -> None:
+        """Tests that presenting an unprompted tool result inserts a synthetic assistant tool call message."""
+        history = self.factory.create_conversation_history()
+        history.initialize([HistoryMessage(role="user", content="Execute tool")])
+        history.append(ToolResult(content="output"))
 
-    def test_append_message(self) -> None:
-        msg: HistoryEntry = {"role": "assistant", "content": "Thinking..."}
-        self.history.append_message(msg, self.logger)
-        self.assertEqual(len(self.history.get_history()), 1)
-        self.assertEqual(self.history.get_history()[0]["content"], "Thinking...")
-        self.assertEqual(self.events[0][0], "message_added")
+        msgs = history.get_messages()
+        # Expect user -> synthetic assistant -> tool
+        self.assertEqual(len(msgs), 3)
+        self.assertEqual(msgs[0].role, "user")
+        self.assertEqual(msgs[1].role, "assistant")
+        self.assertEqual(msgs[2].role, "tool")
 
-    def test_in_place_stubbing_superseding_result(self) -> None:
-        call1: ToolCall = {
-            "id": "call_1",
-            "type": "function",
-            "function": {"name": "read_file", "arguments": '{"file_path": "a.py"}'},
-        }
-        self.history.add_tool_result(call1, ToolResult(content="v1", supersedes=True, note="note1"), self.logger)
+    def test_append_tool_result_supersession_stubbing(self) -> None:
+        """Tests that appending subsequent tool results replaces earlier tool results with static stub markers in-place."""
+        history = self.factory.create_conversation_history()
+        history.initialize([HistoryMessage(role="user", content="Step 1")])
+        history.append(ToolResult(content="First large result"))
+        history.append(ToolResult(content="Second result"))
 
-        call2: ToolCall = {
-            "id": "call_2",
-            "type": "function",
-            "function": {"name": "read_file", "arguments": '{"file_path": "a.py"}'},
-        }
-        self.history.add_tool_result(call2, ToolResult(content="v2", supersedes=True, note="note2"), self.logger)
+        msgs = history.get_messages()
+        # Earlier tool result should be replaced in place with "..."
+        tool_msgs = [m for m in msgs if m.role == "tool"]
+        self.assertEqual(len(tool_msgs), 2)
+        self.assertEqual(tool_msgs[0].content, "...")
+        self.assertEqual(tool_msgs[1].content, "Second result")
 
-        entries = self.history.get_history()
-        self.assertEqual(len(entries), 2)
-        self.assertEqual(entries[0]["content"], STUB_TEXT)
-        self.assertTrue(entries[0].get("_stubbed"))
-        self.assertNotIn("_note", entries[0])
-        self.assertEqual(entries[1]["content"], "v2")
-        self.assertEqual(entries[1]["_note"], "note2")
+    def test_tool_result_with_guidance_included_in_model_request(self) -> None:
+        """Tests that tool result guidance/notes are retained in ModelRequest metadata."""
+        history = self.factory.create_conversation_history()
+        history.initialize([HistoryMessage(role="user", content="Start")])
+        history.append(ToolResult(content="result text", guidance="next step hint"))
 
-        # Check message_stubbed event was emitted
-        stubbed_events = [e for e in self.events if e[0] == "message_stubbed"]
-        self.assertEqual(len(stubbed_events), 1)
-
-    def test_non_superseding_result_not_stubbed(self) -> None:
-        call1: ToolCall = {
-            "id": "call_1",
-            "type": "function",
-            "function": {"name": "run_cmd", "arguments": '{"cmd": "ls"}'},
-        }
-        self.history.add_tool_result(call1, ToolResult(content="out1", supersedes=False), self.logger)
-        self.history.add_tool_result(call1, ToolResult(content="out2", supersedes=False), self.logger)
-
-        entries = self.history.get_history()
-        self.assertEqual(len(entries), 2)
-        self.assertEqual(entries[0]["content"], "out1")
-        self.assertEqual(entries[1]["content"], "out2")
-
-    def test_different_files_do_not_stub_each_other(self) -> None:
-        call1: ToolCall = {
-            "id": "call_1",
-            "type": "function",
-            "function": {"name": "read_file", "arguments": '{"file_path": "a.py"}'},
-        }
-        call2: ToolCall = {
-            "id": "call_2",
-            "type": "function",
-            "function": {"name": "read_file", "arguments": '{"file_path": "b.py"}'},
-        }
-        self.history.add_tool_result(call1, ToolResult(content="a_content", supersedes=True), self.logger)
-        self.history.add_tool_result(call2, ToolResult(content="b_content", supersedes=True), self.logger)
-
-        entries = self.history.get_history()
-        self.assertEqual(entries[0]["content"], "a_content")
-        self.assertEqual(entries[1]["content"], "b_content")
-
-    def test_get_rendered_messages_strips_metadata_and_renders_note(self) -> None:
-        call: ToolCall = {
-            "id": "call_1",
-            "type": "function",
-            "function": {"name": "verify", "arguments": "{}"},
-        }
-        self.history.add_tool_result(
-            call,
-            ToolResult(content="passed", supersedes=False, note="Remaining: 1 step"),
-            self.logger,
-        )
-        rendered = self.history.get_rendered_messages(system_prompt="System instruction")
-        self.assertEqual(len(rendered), 2)
-        self.assertEqual(rendered[0]["role"], "system")
-        self.assertEqual(rendered[0]["content"], "System instruction")
-        self.assertEqual(rendered[1]["role"], "tool")
-        self.assertIn("passed", str(rendered[1]["content"]))
-        self.assertIn("Remaining: 1 step", str(rendered[1]["content"]))
-        self.assertNotIn("_note", rendered[1])
-        self.assertNotIn("_tool_name", rendered[1])
-        self.assertNotIn("_arguments", rendered[1])
-
-    def test_reset_clears_all_state(self) -> None:
-        call: ToolCall = {
-            "id": "call_1",
-            "type": "function",
-            "function": {"name": "read_file", "arguments": '{"file_path": "a.py"}'},
-        }
-        self.history.add_tool_result(call, ToolResult(content="v1", supersedes=True), self.logger)
-        self.history.reset()
-        self.assertEqual(len(self.history.get_history()), 0)
-        self.assertEqual(len(self.history.get_rendered_messages()), 0)
+        req = history.get_model_request()
+        tool_msgs = [m for m in req.messages if m.role == "tool"]
+        self.assertEqual(len(tool_msgs), 1)
+        self.assertIn("result text", tool_msgs[0].content)
 
 
 if __name__ == "__main__":

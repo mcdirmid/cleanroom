@@ -8,32 +8,26 @@ update_guide_with_ai(
 )
 
 update_guide_with_ai(
-    name = "low_level_spec",
-    src = "low_level_spec.md",
-    display_name = "low-level specification guide",
-    deps = [],
-)
-
-update_guide_with_ai(
     name = "high_to_low",
     src = "high_to_low.md",
     display_name = "high-level to low-level spec conversion guide",
-    deps = [":high_level_spec", ":low_level_spec"],
+    deps = [":high_level_spec"],
 )
 
 update_guide_with_ai(
     name = "low_to_lib",
     src = "low_to_lib.md",
     display_name = "low-level spec to lib module conversion guide",
-    deps = [":low_level_spec", ":high_to_low"],
+    deps = [":high_to_low"],
 )
 
 update_guide_with_ai(
     name = "low_to_test",
     src = "low_to_test.md",
     display_name = "low-level spec to test module conversion guide",
-    deps = [":low_level_spec"],
+    deps = [":high_to_low"],
 )
+
 
 update_guide_with_ai(
     name = "qa",

@@ -1,18 +1,18 @@
 # file_editor_impl
 
-fulfills: file_editor
-imports: file_reader (virtual name, line-numbered view), tool_provider (tool results, supersession flag, tool failures, tool call)
-terms (from file_editor): file write, injected read, template
-terms (from file_reader): virtual name, line-numbered view
-terms (from tool_provider): supersession flag, tool failure, tool call, tool result
+imports: tool_provider, file_reader, virtual_file_name, file_editor
+types from tool_provider: tool metadata, tool result, tool failure
+types from file_reader: read-write file
+types from virtual_file_name: virtual file name
+types from file_editor: file editor factory, file editor, text replacement tool, line update tool, template
+implements: file editor factory
 
-## Deltas
+## Behavior
 
-- Replaces at most 200 characters per string in `replace`; fails if strings exceed this limit.
-- Supports 1-indexed line ranges in `update_lines`: `start_line > end_line` performs insertion, empty `new_str` deletes.
-- Tracks `_file_views` per file (False for plain, True for line-numbered view); write resets view to plain until injected read sets it to line-numbered.
-- Snapshots original file content before the first write of each file for diff verification.
-
-## Non-concerns
-
-- Line ending normalization: standard LF line endings are used.
+- Creating a *file editor* through a *file editor factory* yields a *file editor* configured with writable permissions, host paths, and startup templates.
+- The *tool metadata* for the *text replacement tool* specifies the name `replace` and accepts target text and replacement text parameters.
+- Executing the *text replacement tool* with target text exceeding the maximum replacement size limit produces a *tool failure*.
+- The *tool metadata* for the *line update tool* specifies the name `update_lines` and accepts 1-indexed start line, end line, and replacement text parameters.
+- Executing the *line update tool* with a start line greater than the end line performs an insertion at the start line.
+- Executing the *line update tool* with empty replacement text deletes the specified line range.
+- Baseline file content is captured by a *file editor* before the first modification to a *read-write file*.

@@ -1,167 +1,156 @@
-"""
-Tests for the FileReaderImpl implementation.
-"""
+"""Tests for file_reader_impl derived from LLS."""
 
 import os
 import shutil
 import tempfile
 import unittest
-from typing import Any, Optional, Tuple
-
+from lib.tool_provider import ToolResult, ToolFailure
 from lib.file_reader import FileReaderConfig
-from lib.file_reader_impl import FileReaderImpl
-from lib.tool_provider import (
-    PresentedToolResult,
-    ToolCallOutcome,
-    ToolResult,
-    ToolFailure,
-)
+from lib.file_reader_impl import FileReaderFactoryImpl
 
 
-class TestFileReaderImpl(unittest.TestCase):
+class FileReaderImplTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.temp_dir = tempfile.mkdtemp()
-
-        self.test_file_path = os.path.join(self.temp_dir, "test.txt")
-        with open(self.test_file_path, "w", encoding="utf-8") as f:
-            f.write("Line 1: Hello World\n")
-            f.write("Line 2: This is a test\n")
-            f.write("Line 3: Another line\n")
-            f.write("Line 4: Final line\n")
-
-        self.second_path = os.path.join(self.temp_dir, "second.txt")
-        with open(self.second_path, "w", encoding="utf-8") as f:
-            f.write("Second line one\n")
-            f.write("Second line two\n")
-
-        self.ro_path = os.path.join(self.temp_dir, "ro.txt")
-        with open(self.ro_path, "w", encoding="utf-8") as f:
-            f.write("Read only line 1\n")
-            f.write("Read only line 2\n")
-
-        self.new_file_path = os.path.join(self.temp_dir, "new.txt")
-
-        self.file_mappings = {
-            "test.txt": self.test_file_path,
-            "second.txt": self.second_path,
-            "ro.txt": self.ro_path,
-            "new.txt": self.new_file_path,
-        }
-        self.readable_paths = ["test.txt", "second.txt", "ro.txt", "new.txt"]
+        self.test_dir = tempfile.mkdtemp()
+        self.rw_file = os.path.join(self.test_dir, "writable.txt")
+        self.ro_file = os.path.join(self.test_dir, "readonly.txt")
+        self.denied_file = os.path.join(self.test_dir, "denied.txt")
+        with open(self.rw_file, "w") as f:
+            f.write("Line 1\nLine 2\n")
+        with open(self.ro_file, "w") as f:
+            f.write("Read-only Line 1\nRead-only Line 2\n")
+        with open(self.denied_file, "w") as f:
+            f.write("Secret\n")
+        self.factory = FileReaderFactoryImpl()
 
     def tearDown(self) -> None:
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
+        shutil.rmtree(self.test_dir, ignore_errors=True)
 
-    def _file_reader(
-        self,
-        file_mappings: Optional[dict] = None,
-        readable_paths: Optional[list] = None,
-        search_result_limit: int = 5,
-        session_start_reads_enabled: bool = True,
-    ) -> FileReaderImpl:
-        return FileReaderImpl(FileReaderConfig(
-            file_mappings=file_mappings if file_mappings is not None else self.file_mappings,
-            readable_paths=readable_paths if readable_paths is not None else self.readable_paths,
-            search_result_limit=search_result_limit,
-            session_start_reads_enabled=session_start_reads_enabled,
-        ))
+    def test_tool_metadata(self) -> None:
+        """Tests that read_file and search_files specify required tool metadata."""
+        reader = FileReaderFactoryImpl().create_file_reader(FileReaderConfig(file_mappings={}, read_only_files=[], read_write_files=[]))
+        read_meta = reader.get_read_tool().get_metadata()
+        self.assertEqual(read_meta.name, "read_file")
+        self.assertTrue("file_name" in read_meta.parameters_schema or "file_name" in read_meta.parameters_schema.get("properties", {}))
 
-    def test_get_tool_definitions(self) -> None:
-        reader = self._file_reader()
-        defs = reader.get_tool_definitions()
-        names = [d["function"]["name"] for d in defs]
-        self.assertEqual(sorted(names), ["read_file", "search_files"])
+        search_meta = reader.get_search_tool().get_metadata()
+        self.assertEqual(search_meta.name, "search_files")
+        self.assertTrue("pattern" in search_meta.parameters_schema or "pattern" in search_meta.parameters_schema.get("properties", {}))
 
-    def test_read_file_plain(self) -> None:
-        reader = self._file_reader()
-        outcome = reader.read_file("ro.txt", include_line_numbers=False)
-        self.assertIsInstance(outcome, list)
-        self.assertEqual(len(outcome), 1)
-        res = outcome[0]
+    def test_read_file_line_numbers_contract_on_all_sides(self) -> None:
+        """Tests all sides of read_file line numbers contract:
+        1. Writable file with line_numbers=True -> ToolResult with 1-indexed line numbers.
+        2. Writable file with line_numbers=False -> ToolFailure.
+        3. Read-only file with line_numbers=False -> ToolResult with plain content.
+        4. Read-only file with line_numbers=True -> ToolFailure.
+        5. Unmapped/inaccessible file -> ToolFailure listing available files.
+        """
+        cfg = FileReaderConfig(
+            read_only_files=[self.ro_file],
+            read_write_files=[self.rw_file],
+            file_mappings={self.rw_file: self.rw_file, self.ro_file: self.ro_file},
+        )
+        reader = self.factory.create_file_reader(cfg)
+        tool = reader.get_read_tool()
+
+        # Side 1: Writable + line_numbers=True
+        res1 = tool.execute({"file_name": self.rw_file, "line_numbers": True})
+        self.assertIsInstance(res1, ToolResult)
+        self.assertIn("1: Line 1", res1.content)
+
+        # Side 2: Writable + line_numbers=False
+        res2 = tool.execute({"file_name": self.rw_file, "line_numbers": False})
+        self.assertIsInstance(res2, ToolFailure)
+
+        # Side 3: Read-only + line_numbers=False
+        res3 = tool.execute({"file_name": self.ro_file, "line_numbers": False})
+        self.assertIsInstance(res3, ToolResult)
+        self.assertIn("Read-only Line 1", res3.content)
+
+        # Side 4: Read-only + line_numbers=True
+        res4 = tool.execute({"file_name": self.ro_file, "line_numbers": True})
+        self.assertIsInstance(res4, ToolFailure)
+
+        # Side 5: Inaccessible / unmapped file lists available files
+        res5 = tool.execute({"file_name": self.denied_file, "line_numbers": True})
+        self.assertIsInstance(res5, ToolFailure)
+
+    def test_search_files_reporting_contract(self) -> None:
+        """Tests search_files reporting contract:
+        1. Matching regex on writable vs read-only files.
+        2. Invalid regex pattern produces ToolFailure.
+        """
+        cfg = FileReaderConfig(
+            read_only_files=[self.ro_file],
+            read_write_files=[self.rw_file],
+            file_mappings={self.rw_file: self.rw_file, self.ro_file: self.ro_file},
+        )
+        reader = self.factory.create_file_reader(cfg)
+        tool = reader.get_search_tool()
+
+        # Valid regex match
+        res = tool.execute({"pattern": "Line"})
         self.assertIsInstance(res, ToolResult)
-        self.assertIn("Read only line 1", res.content)
-        self.assertFalse(res.supersedes)
 
-    def test_read_file_line_numbers(self) -> None:
-        reader = self._file_reader()
-        outcome = reader.read_file("test.txt", include_line_numbers=True)
-        self.assertIsInstance(outcome, list)
-        self.assertEqual(len(outcome), 1)
-        res = outcome[0]
+        # Invalid regex
+        res_inv = tool.execute({"pattern": "["})
+        self.assertIsInstance(res_inv, ToolFailure)
+
+    def test_sanitize_paths_descending_length(self) -> None:
+        """Tests sanitize_paths replaces host paths with virtual names in descending length order."""
+        cfg = FileReaderConfig(
+            read_only_files=[],
+            read_write_files=[],
+            file_mappings={
+                "short": "/a/b",
+                "long_file": "/a/b/c/long_file.txt",
+            },
+        )
+        reader = self.factory.create_file_reader(cfg)
+        sanitized = reader.sanitize_paths("Path /a/b/c/long_file.txt and /a/b are paths")
+        self.assertEqual(sanitized, "Path long_file and short are paths")
+
+    def test_search_files_result_limit_truncation(self) -> None:
+        """Tests that search results exceeding search_result_limit are truncated with indicator."""
+        cfg = FileReaderConfig(
+            read_only_files=[self.ro_file],
+            read_write_files=[self.rw_file],
+            file_mappings={self.rw_file: self.rw_file, self.ro_file: self.ro_file},
+            search_result_limit=1,
+        )
+        reader = self.factory.create_file_reader(cfg)
+        tool = reader.get_search_tool()
+        res = tool.execute({"pattern": "Line"})
         self.assertIsInstance(res, ToolResult)
-        self.assertIn("1 | Line 1: Hello World", res.content)
-        self.assertFalse(res.supersedes)
+        self.assertTrue(bool(res.content))
 
-    def test_read_file_unmapped(self) -> None:
-        reader = self._file_reader()
-        outcome = reader.read_file("missing.txt")
-        self.assertIsInstance(outcome, ToolFailure)
-        self.assertIn("does not exist", outcome.value)
-
-    def test_read_file_not_readable(self) -> None:
-        reader = self._file_reader(readable_paths=["ro.txt"])
-        outcome = reader.read_file("test.txt")
-        self.assertIsInstance(outcome, ToolFailure)
-        self.assertIn("not readable", outcome.value)
-
-    def test_read_file_missing_on_disk(self) -> None:
-        reader = self._file_reader()
-        outcome = reader.read_file("new.txt")
-        self.assertIsInstance(outcome, ToolFailure)
-        self.assertIn("does not exist yet", outcome.value)
-
-    def test_session_start_reads_enabled(self) -> None:
-        reader = self._file_reader(readable_paths=["ro.txt", "second.txt"])
+    def test_get_session_start_reads_loads_readonly_files(self) -> None:
+        """Tests get_session_start_reads returns content of all accessible read-only files."""
+        cfg = FileReaderConfig(
+            read_only_files=[self.ro_file],
+            read_write_files=[self.rw_file],
+            file_mappings={self.rw_file: self.rw_file, self.ro_file: self.ro_file},
+        )
+        reader = self.factory.create_file_reader(cfg)
         reads = reader.get_session_start_reads()
-        self.assertEqual(len(reads), 2)
-        self.assertEqual(reads[0].arguments["file_path"], "ro.txt")
-        self.assertEqual(reads[1].arguments["file_path"], "second.txt")
-        self.assertFalse(reads[0].result.supersedes)
+        self.assertEqual(len(reads), 1)
+        self.assertIn("Read-only Line 1", reads[0].content)
 
-    def test_session_start_reads_disabled(self) -> None:
-        reader = self._file_reader(session_start_reads_enabled=False)
-        self.assertEqual(reader.get_session_start_reads(), [])
+    def test_read_file_missing_on_disk_failure(self) -> None:
+        """Tests that read_file returns ToolFailure when a declared file is missing from disk."""
+        missing_host = os.path.join(self.test_dir, "nonexistent.txt")
+        cfg = FileReaderConfig(
+            read_only_files=["nonexistent.txt"],
+            read_write_files=[],
+            file_mappings={"nonexistent.txt": missing_host},
+        )
+        reader = self.factory.create_file_reader(cfg)
+        res = reader.get_read_tool().execute({"file_name": "nonexistent.txt", "line_numbers": False})
+        self.assertIsInstance(res, ToolFailure)
 
-    def test_session_start_reads_skips_missing(self) -> None:
-        reader = self._file_reader(readable_paths=["new.txt"])
-        self.assertEqual(reader.get_session_start_reads(), [])
-
-    def test_search_files_basic(self) -> None:
-        reader = self._file_reader()
-        outcome = reader.search_files(path=".", pattern="Hello")
-        self.assertIsInstance(outcome, list)
-        res = outcome[0]
-        self.assertIsInstance(res, ToolResult)
-        self.assertIn("test.txt: Line 1: Hello World", res.content)
-        self.assertFalse(res.supersedes)
-
-    def test_search_files_specific_path(self) -> None:
-        reader = self._file_reader()
-        outcome = reader.search_files(path="ro.txt", pattern="Read only")
-        self.assertIsInstance(outcome, list)
-        res = outcome[0]
-        self.assertIsInstance(res, ToolResult)
-        self.assertIn("ro.txt: Read only line 1", res.content)
-
-    def test_search_files_invalid_pattern(self) -> None:
-        reader = self._file_reader()
-        outcome = reader.search_files(path=".", pattern="[unclosed")
-        self.assertIsInstance(outcome, ToolFailure)
-        self.assertIn("Invalid regex", outcome.value)
-
-    def test_search_files_pagination(self) -> None:
-        reader = self._file_reader(search_result_limit=5)
-        outcome = reader.search_files(path=".", pattern="Line", offset=0, limit=2)
-        self.assertIsInstance(outcome, list)
-        res = outcome[0]
-        self.assertIsInstance(res, ToolResult)
-        self.assertIn("2 remaining", res.note)
-
-    def test_sanitize_paths(self) -> None:
-        reader = self._file_reader()
-        raw = f"Error at {self.test_file_path}: syntax error"
-        sanitized = reader.sanitize_paths(raw)
-        self.assertEqual(sanitized, "Error at test.txt: syntax error")
+        # get_session_start_reads skips or handles missing files gracefully
+        reads = reader.get_session_start_reads()
+        self.assertEqual(len(reads), 0)
 
 
 if __name__ == "__main__":

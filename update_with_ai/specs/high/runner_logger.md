@@ -1,44 +1,18 @@
 # runner_logger
 
-imports: agent_loop (run, cumulative usage)
-terms (from agent_loop): run, cumulative usage
-terms (owned): transcript logging, compact log, verbose transcript, runner usage
-
 ## Purpose
 
-Provides transcript logging for build runner passes: formats compact stdout logs, records full verbose transcripts to unbuffered log files, resolves log file paths, and tracks runner usage across nodes.
+Captures observable execution events during runner passes, providing concise terminal output and unbuffered audit transcripts.
 
-## Terms
+Running multi-turn agent passes without observable logging hides failures and complicates debugging. Runner logger consumes structured execution events across the system, formatting compact single-line summaries for live operator visibility while recording detailed unbuffered transcripts to disk for auditing and replay.
 
-- Transcript logging: the recording and formatting of agent loop execution events during a build pass.
-- Runner usage: the accumulated token counts, request counts, and execution duration across all agent sessions in a runner pass.
-- Compact log: single-line formatted event summaries suitable for standard output.
-- Verbose transcript: detailed event summaries written to an unbuffered log file.
+## Types
 
-## Contract
+- A *log event* is a structured record of an observable execution event, produced by any component and consumed by a *runner logger*
+- A *runner logger* is a service that formats and records *log events*
 
-**Inputs**
+## Behavior
 
-- Per event: an event name and its associated payload dictionary.
-- For session setup: an optional log file path override.
-
-**Operations**
-
-- Resolve the destination log file path from environment variables or default conventions.
-- Create an agent logger callback and log-file closer for a runner pass.
-- Format a compact log line for standard output.
-- Format a verbose transcript line for file logging.
-
-**Guarantees**
-
-- Log writes to the transcript file are unbuffered and flushed immediately.
-- Runner usage aggregates input tokens, cached input tokens, output tokens, total tokens, request count, and duration across all terminated sessions in the run.
-- Unknown log events produce generic fallback formatting without raising exceptions.
-
-**Assumptions**
-
-- Filesystem directories for log file creation are writable.
-
-## Non-concerns
-
-- Terminal color codes: plain text formatting is used.
+- A *log event* provides an event name and a single-line summary in support of logging by a *runner logger*.
+- A *log event* provides a verbose transcript representation in support of logging by a *runner logger*.
+- A *runner logger* consumes *log events*, writing summaries to standard output and full records to a transcript log.

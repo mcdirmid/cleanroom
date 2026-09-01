@@ -1,41 +1,23 @@
 #!/usr/bin/env python3
 """
-hls_lint.py — lint high-level specification files per update_python_with_ai/guides/high_level_spec.md.
+hls_lint.py — lightweight structural and boundary linter for High-Level Specifications.
 
 Usage:
-    python3 update_python_with_ai/bin/hls_lint.py [files...]     # default: all *.md under specs/high/
+    python3 update_python_with_ai/bin/hls_lint.py [files...]
+    python3 update_python_with_ai/bin/hls_lint.py [--deps dep1 dep2 ...] -- [target files...]
 
-Checks (E = error, exits nonzero; W = warning, does not affect exit code):
-  E  filename/header mismatch
-  E  unknown front-matter key
-  E  `terms (owned)` in an implementation spec (terms are owned by interfaces)
-  E  `terms (owned)` without a `## Terms` section, or vice versa
-  E  `terms (from X)` where X has no spec, or the term is not owned by X
-  E  `terms (refined)` in an interface spec (only implementations refine)
-  E  `terms (refined)` term not owned by the fulfilled interface or a listed owner
-  E  refined term without a `[refines]` Deltas line with its concrete definition
-  E  multi-word term used in the body without being owned, referenced, or refined
-  E  table in a file without a sanctioned table (agent_loop events, agent_node_clean_logic_impl outcome mapping)
-  E  non-rectangular table (row column count differs from the header)
-  E  "client" appears in an implementation spec
-  E  "returns" appears anywhere (prohibited; use provides/signals/delegates)
-  E  unknown section (section inventory is closed: Purpose/Terms/Contract/Non-concerns for interfaces; Deltas/Non-concerns for implementations)
-  E  `###` sub-heading (use a Contract block or a Deltas tag)
-  E  old-format markers (Observable dataflow, Owned definitions, impl sub-sections, "**The client ...", Deltas beyond the)
-  E  backticked import that is not an existing spec
-  E  interface spec (filename without "impl" and not ending in "_asm") containing `fulfills:`; implementation or assembly spec missing `fulfills:`
-  E  implementation or assembly spec containing `## Contract` (an assembly has no contract)
-  E  `fulfills:` or `imports:` referencing the file itself (self-dependency)
-  E  section order deviates from the canonical order for the spec kind
-  E  Deltas line with an unknown tag (allowed: ordering, boundary, state, external, failure, refines)
-  E  Deltas line restating the fulfilled contract ("per the <interface> contract")
-  E  Contract missing a required block (**Operations**, **Guarantees**, **Assumptions**)
-  W  `## Unported` section present (unported knowledge remains)
-  W  no `## Non-concerns` section
+Checks:
+  1. Header matches filename (# <name>).
+  2. Front-matter ordering: `imports:` comes first (if any), followed by `types from <dep>:`, followed by `implements:` (if implementation/assembly).
+  3. No `imports:` of `*_impl` or `*_asm` components in non-`*_asm` components.
+  4. Every `types from <dep>:` corresponds to an imported module in `imports:`.
+  5. Implementation specs (`*_impl.md`) must declare `implements: <type>` in front-matter.
+  6. Closed section inventory: `## Purpose`, `## Types`, `## Behavior`.
 """
 
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -43,496 +25,140 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 SPECS_DIR = ROOT / "update_with_ai" / "specs" / "high"
 
-# Files whose tables are sanctioned rectangular matrices (guide: Reading Model).
-SANCTIONED_TABLES = {"agent_loop.md", "agent_node_clean_logic_impl.md"}
 
-# Single-word terms distinctive enough to enforce like multi-word terms.
-STRONG_TERMS = {"blame", "dirty", "cleaning", "stub"}
-
-# "run" (agent_loop) is checked only in nominal usage: verbs like "run a cleaning
-# pass" are ordinary English and must not be flagged.
-RUN_PATTERN = re.compile(r"\b(?:a|an|the|agent|this|that|each|every|one|a single)\s+run\b", re.I)
-
-# Deltas line tags (guide: Deltas Tags). Untagged lines are behavior deltas.
-DELTAS_TAGS = {"ordering", "boundary", "state", "external", "failure", "refines"}
-
-FRONT_MATTER_KEY = re.compile(
-    r"^(fulfills|imports|terms \(owned\)|terms \(refined\)|terms \(from [\w]+\)):"
-)
-TERMS_FROM = re.compile(r"^terms \(from ([\w]+)\): (.*)$")
-CANONICAL_INTERFACE_SECTIONS = ["Purpose", "Terms", "Contract", "Non-concerns"]
-CANONICAL_IMPL_SECTIONS = ["Deltas", "Non-concerns"]
-OLD_FORMAT_MARKERS = [
-    "<!-- Dependencies",
-    "## Interface:",
-    "## Implementation:",
-    "**This implementation exports:**",
-    "**This implementation imports:**",
-    "does not restate it here",
-    "## Observable dataflow",
-    "## Owned definitions",
-    "### Behavior",
-    "### Ordering",
-    "### State Management",
-    "### External Dependencies",
-    "### Error Handling",
-    "### Operation Boundaries",
-    "### Refined terms",
-    "**The client",
-    "**For each",
-    "Deltas beyond the",
-]
-
-errors: list[str] = []
-warnings: list[str] = []
-
-
-def err(f: Path, msg: str) -> None:
-    errors.append(f"{f.name}: {msg}")
-
-
-def warn(f: Path, msg: str) -> None:
-    warnings.append(f"{f.name}: {msg}")
-
-
-def stem_of(path: Path) -> str:
-    return path.stem
-
-
-def spec_map(files: list[Path] | None = None) -> dict[str, Path]:
-    paths = files if files is not None else sorted(SPECS_DIR.glob("*.md"))
-    return {stem_of(p): p for p in paths}
-
-
-# ---------------------------------------------------------------- parsing
-
-def split_front_matter(text: str) -> tuple[str, str]:
-    """Return (front matter, body); front matter is lines before the first '## '."""
-    lines = text.splitlines()
-    fm: list[str] = []
-    i = 1  # skip '# name'
-    while i < len(lines) and not lines[i].startswith("## "):
-        if lines[i].strip():
-            fm.append(lines[i])
-        i += 1
-    return "\n".join(fm), "\n".join(lines[i:])
-
-
-def sections(body: str) -> list[tuple[str, str]]:
-    """Return [(heading, section_text)] for each '## ' section."""
-    out = []
-    cur = None
-    for line in body.splitlines():
-        m = re.match(r"^## (.*)$", line)
-        if m:
-            cur = m.group(1)
-            out.append((cur, ""))
-        elif cur is not None:
-            out[-1] = (cur, out[-1][1] + line + "\n")
-    return out
-
-
-def get_section(body: str, heading: str) -> str | None:
-    for h, text in sections(body):
-        if h == heading:
-            return text
-    return None
-
-
-def read_all_owned(files: list[Path] | None = None) -> dict[str, str]:
-    """term -> owning spec name, across the given (or all) specs."""
-    owned_by: dict[str, str] = {}
-    for name, p in spec_map(files).items():
-        m = re.search(r"^terms \(owned\): (.+)$", p.read_text(encoding="utf-8"), re.M)
-        if m:
-            for term in m.group(1).split(","):
-                term = term.strip()
-                if term:
-                    owned_by.setdefault(term, name)
-    return owned_by
-
-
-def parse_refined(value: str) -> set[str]:
-    """Parse 'a, b' (names only; details live in [refines] Deltas lines)."""
-    return {t.strip() for t in value.split(",") if t.strip()}
-
-
-def term_in_text(term: str, text: str) -> bool:
-    """True if the term appears as a standalone word (not inside a hyphenated compound)."""
-    return re.search(r"(?<![\w-])" + re.escape(term) + r"(?![\w-])", text, re.I) is not None
-
-
-# ---------------------------------------------------------------- checks
-
-def check_front_matter(f: Path, text: str) -> tuple[set[str], dict[str, set[str]], set[str]]:
-    """Returns (owned, terms_from, refined); validates front-matter keys."""
-    fm, _ = split_front_matter(text)
-    owned: set[str] = set()
-    terms_from: dict[str, set[str]] = {}
-    refined: set[str] = set()
-    for line in fm.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        if not FRONT_MATTER_KEY.match(line):
-            err(f, f"unknown front-matter line: {line!r}")
-            continue
-        key, _, value = line.partition(":")
-        if key == "terms (owned)":
-            owned = {t.strip() for t in value.split(",") if t.strip()}
-        elif key == "terms (refined)":
-            refined = parse_refined(value)
-        elif key.startswith("terms (from "):
-            m = TERMS_FROM.match(line)
-            terms_from[m.group(1)] = {t.strip() for t in m.group(2).split(",") if t.strip()}
-        # fulfills / imports validated elsewhere
-    return owned, terms_from, refined
-
-
-def check_terms(f: Path, text: str, owned: set[str], terms_from: dict[str, set[str]], refined: set[str], is_impl: bool, files: list[Path] | None = None) -> None:
-    names = set(spec_map(files))
-    owned_by = read_all_owned(files)
-
-    if is_impl and owned:
-        err(f, f"implementation spec declares `terms (owned)`; terms are owned by interfaces: {sorted(owned)}")
-
-    has_defs = "## Terms" in text
-    if owned and not has_defs:
-        err(f, "`terms (owned)` present but no `## Terms` section")
-    if has_defs and not owned:
-        err(f, "`## Terms` present but no `terms (owned)` front-matter line")
-    if owned and has_defs:
-        defs_text = get_section(split_front_matter(text)[1], "Terms") or ""
-        for term in owned:
-            if not re.search(rf"^-\s*\**{re.escape(term)}\**\s*:", defs_text, re.M | re.I):
-                err(f, f"owned term '{term}' has no definition line in `## Terms`")
-
-    for owner, terms in terms_from.items():
-        if owner not in names:
-            err(f, f"`terms (from {owner})` but no spec high/{owner}.md")
-            continue
-        owner_owned = {t for t, o in owned_by.items() if o == owner}
-        for term in terms:
-            if term not in owner_owned:
-                err(f, f"`terms (from {owner})` lists '{term}', which high/{owner}.md does not own")
-
-    allowed_owners = set(terms_from.keys())
-    fm, body = split_front_matter(text)
-    m = re.search(r"^fulfills: (.+)$", fm, re.M)
-    if m:
-        allowed_owners.add(m.group(1).strip().strip("`"))
-    for term in refined:
-        if term not in owned_by:
-            err(f, f"refined term '{term}' is not owned by any interface")
-            continue
-        if owned_by[term] not in allowed_owners and owned_by[term] != stem_of(f):
-            err(f, f"refined term '{term}' is owned by {owned_by[term]}, not by the fulfilled interface or a listed owner")
-    if refined and not is_impl:
-        err(f, "interface spec declares `terms (refined)`; only implementations refine terms")
-    if refined and is_impl:
-        deltas = get_section(body, "Deltas") or ""
-        for term in refined:
-            if not re.search(rf"\[refines\]\s*{re.escape(term)}\s*->", deltas):
-                err(f, f"refined term '{term}' has no `[refines]` Deltas line with its concrete definition")
-
-    allowed = owned | {t for ts in terms_from.values() for t in ts} | refined
-    body_without_defs = "\n".join(txt for h, txt in sections(body) if h != "Terms")
-    for term, owner in owned_by.items():
-        if owner == stem_of(f) or term in allowed:
-            continue
-        if " " in term:
-            matched = term_in_text(term, body_without_defs)
-        elif term in STRONG_TERMS:
-            matched = term_in_text(term, body_without_defs)
-        elif term == "run":
-            matched = RUN_PATTERN.search(body_without_defs) is not None
-        else:
-            continue
-        if matched:
-            err(f, f"uses '{term}' (owned by high/{owner}.md) without listing it in `terms (from {owner})`")
-
-
-def _kind(f: Path) -> str:
-    """Spec kind by filename: 'assembly' for a `*_asm` stem, 'implementation'
-    for a `*_impl*` stem, 'interface' otherwise.
-
-    An assembly spec (high/build_asm.md) is the only kind that may import
-    implementation specs: it performs configuration and assembly of other
-    modules only, declares no `fulfills:` and no `## Contract`, and is never
-    tested.
-    """
-    stem = f.stem
-    if stem.endswith("_asm"):
-        return "assembly"
-    if "impl" in stem:
-        return "implementation"
-    return "interface"
-
-
-def _is_impl(f: Path) -> bool:
-    """Implementation-like specs (implementation or assembly) share the
-    implementation rules: Deltas, no Contract, no owned terms, no 'client'."""
-    return _kind(f) in ("implementation", "assembly")
-
-
-def check_structure(f: Path, text: str, files: list[Path] | None = None) -> tuple[bool, str]:
-    """Returns (is_impl, body); checks structural rules.
-
-    Interface-vs-implementation is decided by filename ("impl" in the stem),
-    not by content: a spec that fulfills an interface must say so in its name.
-    """
-    fm, body = split_front_matter(text)
-    m = re.search(r"^fulfills: (.+)$", fm, re.M)
-    kind = _kind(f)
-    is_impl = kind in ("implementation", "assembly")
-    names = set(spec_map(files))
-    if kind == "implementation":
-        if m is None:
-            err(f, "implementation spec missing `fulfills:`; an implementation fulfills exactly one interface")
-        else:
-            target = m.group(1).strip().strip("`")
-            if target not in names:
-                err(f, f"fulfills: unknown spec '{target}'")
-            elif target == stem_of(f):
-                err(f, f"fulfills: spec cannot fulfill itself ('{target}')")
-        if "## Contract" in body:
-            err(f, "implementation spec contains `## Contract`; the contract is inherited from the fulfilled interface")
-        if "## Deltas" not in body:
-            err(f, "implementation spec missing `## Deltas`")
-    elif kind == "assembly":
-        if m is None:
-            err(f, "assembly spec missing `fulfills:`; an assembly fulfills exactly one interface")
-        else:
-            target = m.group(1).strip().strip("`")
-            if target not in names:
-                err(f, f"fulfills: unknown spec '{target}'")
-            elif target == stem_of(f):
-                err(f, f"fulfills: spec cannot fulfill itself ('{target}')")
-        if "## Contract" in body:
-            err(f, "assembly spec contains `## Contract`; an assembly has no contract — it performs configuration and assembly only")
-        if "## Deltas" not in body:
-            err(f, "assembly spec missing `## Deltas`")
-    else:
-        if m is not None:
-            err(f, "interface spec contains `fulfills:`; only implementation specs (named *_impl*) fulfill an interface")
-        if "## Contract" not in body:
-            err(f, "interface spec missing `## Contract`")
-        if "## Deltas" in body:
-            err(f, "interface spec contains a Deltas section")
-
-    canon = CANONICAL_IMPL_SECTIONS if is_impl else CANONICAL_INTERFACE_SECTIONS
-    heads = [h for h, _ in sections(body)]
-    for h in heads:
-        if h not in canon:
-            err(f, f"unknown section '## {h}'; the section inventory is closed: {', '.join(canon)}")
-    present = [c for c in canon if any(h.startswith(c) for h in heads)]
-    actual = [next(c for c in canon if h.startswith(c)) for h in heads if any(h.startswith(c) for c in canon)]
-    if actual != present:
-        err(f, f"section order {actual} deviates from canonical {present}")
-
-    for line in body.splitlines():
-        if re.match(r"^#{3,4} ", line):
-            err(f, f"sub-heading {line.strip()!r} is not allowed; use a Contract block or a Deltas tag")
-
-    if "## Unported" in [h for h, _ in sections(body)]:
-        warn(f, "`## Unported` section present (unported knowledge remains)")
-    if "Non-concerns" not in [h for h, _ in sections(body)]:
-        warn(f, "no `## Non-concerns` section")
-
-    if is_impl and re.search(r"\bclient\b", body, re.I):
-        err(f, "implementation spec mentions 'client'")
-    return is_impl, body
-
-
-def check_deltas(f: Path, body: str) -> None:
-    """Validate implementation Deltas: tags and delta-only lines.
-
-    Guide: Deltas is a flat list; a line's dominant concern is named by an
-    optional tag (ordering/boundary/state/external/failure/refines); a line
-    that restates the fulfilled contract ("per the <interface> contract")
-    is a restatement and is prohibited.
-    """
-    deltas = get_section(body, "Deltas")
-    if deltas is None:
-        return  # a missing Deltas is reported by check_structure
-    for line in deltas.splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        m = re.match(r"^-\s*\[([^\]]*)\](?::)?", stripped)
-        if m:
-            tag = m.group(1)
-            if tag not in DELTAS_TAGS:
-                err(f, f"unknown Deltas tag [{tag}]; allowed: {sorted(DELTAS_TAGS)} — {stripped[:70]}")
-            if re.match(r"^-\s*\[[^\]]+\]:", stripped):
-                err(f, f"Deltas tag [{tag}] must not have a colon suffix: {stripped[:70]}")
-        if not stripped.startswith("|") and re.search(r"per the .*contract", stripped, re.I):
-            err(f, f"Deltas line restates the fulfilled contract; deltas only: {stripped[:80]}")
-
-
-def check_language(f: Path, text: str) -> None:
-    if re.search(r"\breturns\b", text, re.I):
-        err(f, "'returns' is prohibited (use provides/signals/delegates)")
-    for marker in OLD_FORMAT_MARKERS:
-        if marker in text:
-            err(f, f"old-format marker present: {marker!r}")
-    for tok in ("True", "False", "None"):
-        if re.search(r"`" + tok + r"`", text):
-            err(f, f"pseudo-code literal `` {tok} `` belongs in the LLS")
-
-
-def check_imports(f: Path, fm: str, files: list[Path] | None = None) -> None:
-    m = re.search(r"^imports: (.*)$", fm, re.M)
-    if not m:
-        return
-    names = set(spec_map(files))
-    for item in m.group(1).split(","):
-        bt = re.search(r"`([\w]+)`", item.strip())
-        if bt and bt.group(1) not in names:
-            err(f, f"imports backticked name '{bt.group(1)}' is not an existing spec")
-        name = item.strip().split(" ", 1)[0].strip("`")
-        if name == stem_of(f):
-            err(f, f"imports: spec cannot import itself ('{name}')")
-
-
-def check_tables(f: Path, text: str) -> None:
-    table_lines = [l for l in text.splitlines() if l.startswith("|")]
-    if not table_lines:
-        return
-    if f.name not in SANCTIONED_TABLES:
-        err(f, f"table present in {len(table_lines)} lines; tables are restricted to rectangular matrices in {sorted(SANCTIONED_TABLES)}")
-        return
-    header_cells = len([c for c in table_lines[0].strip("|").split("|")])
-    for line in table_lines[1:]:
-        if "---" in line:
-            continue
-        cells = len([c for c in line.strip("|").split("|")])
-        if cells != header_cells:
-            err(f, f"non-rectangular table row: {line[:60]!r} ({cells} cells, header has {header_cells})")
-
-
-def check_header(f: Path, text: str) -> None:
-    first = text.splitlines()[0] if text.splitlines() else ""
-    expected = "# " + stem_of(f)
-    if first != expected:
-        err(f, f"header {first!r} does not match filename stem {expected!r}")
-
-
-# ---------------------------------------------------------------- main
-
-def _spec_refs(fm: str) -> set[str]:
-    """Specs a file's front matter references: terms (from X) owners,
-    fulfills targets, and backticked imports."""
-    refs: set[str] = set()
-    for line in fm.splitlines():
-        m = re.match(r"terms \(from ([^)]+)\):", line.strip())
-        if m:
-            refs.add(m.group(1).strip())
-    m = re.search(r"fulfills:\s*([^\n]+)", fm)
-    if m:
-        for name in m.group(1).split(","):
-            name = name.strip()
-            if name:
-                refs.add(name)
-    m = re.search(r"imports:\s*(.*)", fm)
-    if m:
-        for name in re.findall(r"`([^`]+)`", m.group(1)):
-            refs.add(name)
-    return refs
-
-
-def _stem_from_spec_path(path: str) -> str:
-    """Derive a spec stem from a spec file path (specs/high/dag_storage.md -> dag_storage)."""
-    return Path(path).stem
-
-
-def check_contract_blocks(f: Path, text: str, is_impl: bool) -> None:
-    """Interface specs' ## Contract must contain its core blocks.
-
-    Guide: the Contract is a set of labeled blocks; Operations, Guarantees,
-    and Assumptions are standard (Inputs and named blocks are optional). A
-    missing block (e.g. a trimmed guarantees block) is a structure error.
-    """
-    if is_impl:
-        return
-    contract = get_section(text, "Contract")
-    if contract is None:
-        return  # a missing Contract is reported by check_structure
-    for block in ("**Operations**", "**Guarantees**", "**Assumptions**"):
-        if block not in contract:
-            err(f, f"## Contract is missing its '{block}' block")
-    for m in re.finditer(r"\*\*([A-Za-z]+)\*\*:", contract):
-        block_name = m.group(1)
-        err(f, f"Contract block '**{block_name}**:' must not have a colon suffix; use '**{block_name}**'")
-
-
-def check_sync(f: Path, fm: str, deps: list[str]) -> None:
-    """Verify the spec's text references are covered by its spec_deps.
-
-    Every spec referenced in the file's front matter (terms-from owners,
-    fulfills targets, imports) must be among the spec_deps closure passed via
-    --deps (or be the file itself); otherwise the agent context could not read
-    the referenced spec.
-    """
-    available = {stem_of(f)} | {_stem_from_spec_path(d) for d in deps}
-    for name in sorted(_spec_refs(fm)):
-        if name not in available:
-            err(f, f"references spec '{name}' in its text but '{name}' is not among the node's spec_deps; add it to spec_deps (or to a spec dep's closure)")
-
-
-def main(argv: list[str]) -> int:
-    # --deps <spec file paths...>: the spec_deps closure (optional). When
-    # provided, each linted file's text references must be covered by it.
-    deps: list[str] = []
-    rest: list[str] = []
-    i = 1
-    while i < len(argv):
-        arg = argv[i]
-        if arg == "--deps":
-            i += 1
-            while i < len(argv) and argv[i] != "--":
-                deps.append(argv[i])
-                i += 1
-        elif arg == "--":
-            # Separator: everything after "--" is a target file.
-            rest.extend(argv[i + 1 :])
+def lint_hls_file(file_path: Path) -> list[str]:
+    errors: list[str] = []
+    fname = file_path.name
+    stem = file_path.stem
+    is_impl = stem.endswith("_impl")
+    is_asm = stem.endswith("_asm")
+    
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    except OSError as e:
+        return [f"{fname}:1: error: cannot read file: {e}"]
+        
+    if not lines:
+        return [f"{fname}:1: error: empty specification file"]
+        
+    # 1. Header Check
+    first_non_empty = 0
+    while first_non_empty < len(lines) and not lines[first_non_empty].strip():
+        first_non_empty += 1
+        
+    if first_non_empty >= len(lines) or not lines[first_non_empty].startswith(f"# {stem}"):
+        actual = lines[first_non_empty].strip() if first_non_empty < len(lines) else "EOF"
+        errors.append(f"{fname}:{first_non_empty+1}: error: header must be '# {stem}' (found: '{actual}')")
+
+    # Front-matter Parsing
+    header_lines = []
+    idx = first_non_empty + 1
+    while idx < len(lines):
+        line_s = lines[idx].strip()
+        if line_s.startswith("## "):
             break
+        if line_s:
+            header_lines.append((idx + 1, line_s))
+        idx += 1
+
+    imports_list: list[str] = []
+    types_from_map: dict[str, list[str]] = {}
+    implements_type: str | None = None
+
+    last_kind = 0  # 1: imports, 2: types from, 3: implements
+    for l_num, line_s in header_lines:
+        if line_s.startswith("imports:"):
+            if last_kind > 1:
+                errors.append(f"{fname}:{l_num}: error: 'imports:' must come before 'types from' and 'implements:'")
+            last_kind = 1
+            raw_deps = line_s[len("imports:"):].strip()
+            imports_list = [d.strip() for d in raw_deps.split(",") if d.strip()]
+            
+            # Check 3: No _impl or _asm imports in non-_asm
+            if not is_asm:
+                for dep in imports_list:
+                    if dep.endswith("_impl"):
+                        errors.append(f"{fname}:{l_num}: error: non-assembly specification must not import implementation '{dep}'")
+                    elif dep.endswith("_asm"):
+                        errors.append(f"{fname}:{l_num}: error: non-assembly specification must not import assembly '{dep}'")
+                        
+        elif line_s.startswith("types from "):
+            if last_kind > 2:
+                errors.append(f"{fname}:{l_num}: error: 'types from' must come before 'implements:'")
+            last_kind = 2
+            m = re.match(r"^types from\s+([^:]+):\s*(.*)$", line_s)
+            if not m:
+                errors.append(f"{fname}:{l_num}: error: malformed 'types from <module>: <types>' line")
+            else:
+                dep_name = m.group(1).strip()
+                types = [t.strip() for t in m.group(2).split(",") if t.strip()]
+                types_from_map[dep_name] = types
+                # Check 4: types from dep must be imported
+                if dep_name not in imports_list:
+                    errors.append(f"{fname}:{l_num}: error: 'types from {dep_name}' but '{dep_name}' is not in 'imports:'")
+                    
+        elif line_s.startswith("implements:"):
+            last_kind = 3
+            implements_type = line_s[len("implements:"):].strip()
         else:
-            rest.append(argv[i])
-        i += 1
+            errors.append(f"{fname}:{l_num}: error: unknown front-matter line '{line_s}'")
 
-    files = [Path(p) for p in rest] or sorted(SPECS_DIR.glob("*.md"))
-    # Reference corpus: the canonical specs. A single-file lint run (e.g. a
-    # node's verify gate) resolves `terms (from X)` / `fulfills:` / import
-    # references against the corpus, so the lone target file is validated
-    # without spurious "no spec X" errors; corpus files themselves are not
-    # linted or reported.
-    reference_files = sorted(SPECS_DIR.glob("*.md"))
-    all_files = sorted(set(files) | set(reference_files))
-    for f in files:
-        text = f.read_text(encoding="utf-8")
-        check_header(f, text)
-        fm, _ = split_front_matter(text)
-        owned, terms_from, refined = check_front_matter(f, text)
-        is_impl, body = check_structure(f, text, all_files)
-        check_terms(f, text, owned, terms_from, refined, is_impl, all_files)
-        check_language(f, text)
-        check_deltas(f, body)
-        check_imports(f, fm, all_files)
-        check_tables(f, text)
-        check_contract_blocks(f, text, is_impl)
-        if deps:
-            check_sync(f, fm, deps)
-        if not body.strip():
-            err(f, "empty body")
+    # Check 5: Implementation and assembly specs must have implements:
+    if (is_impl or is_asm) and not implements_type:
+        spec_kind = "assembly" if is_asm else "implementation"
+        errors.append(f"{fname}:1: error: {spec_kind} specification must declare 'implements: <type>' in front-matter")
 
-    for w in warnings:
-        print(f"W {w}")
-    for e in errors:
-        print(f"E {e}")
-    print(f"\n{len(files)} files, {len(errors)} errors, {len(warnings)} warnings")
-    return 1 if errors else 0
+    # Check 6: Section Headers
+    valid_sections = {"Purpose", "Types", "Behavior"}
+    for l_idx, line in enumerate(lines[idx:], idx + 1):
+        if line.startswith("## "):
+            sec_name = line[3:].strip()
+            if sec_name not in valid_sections:
+                errors.append(f"{fname}:{l_idx}: error: unknown section '## {sec_name}'")
+
+    return errors
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    deps: list[Path] = []
+    targets: list[Path] = []
+
+    if "--" in args:
+        dash_idx = args.index("--")
+        pre_args = args[:dash_idx]
+        post_args = args[dash_idx + 1:]
+        if "--deps" in pre_args:
+            deps_idx = pre_args.index("--deps")
+            deps = [Path(p) for p in pre_args[deps_idx + 1:]]
+        targets = [Path(p) for p in post_args]
+    elif "--deps" in args:
+        deps_idx = args.index("--deps")
+        deps = [Path(p) for p in args[deps_idx + 1:]]
+    else:
+        targets = [Path(p) for p in args]
+
+    if not targets:
+        if not SPECS_DIR.exists():
+            print(f"Error: specs directory {SPECS_DIR} does not exist", file=sys.stderr)
+            return 1
+        targets = sorted(SPECS_DIR.glob("*.md"))
+
+    all_errors: list[str] = []
+    for f in targets:
+        errs = lint_hls_file(f)
+        all_errors.extend(errs)
+
+    if all_errors:
+        for err in all_errors:
+            print(err, file=sys.stderr)
+        print(f"\n[FAIL] Found {len(all_errors)} HLS structural errors.", file=sys.stderr)
+        return 1
+
+    print(f"[OK] {len(targets)} HLS specifications passed structural & boundary lint.")
+    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv))
+    sys.exit(main())

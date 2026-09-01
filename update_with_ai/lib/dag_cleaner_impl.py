@@ -1,265 +1,93 @@
-"""
-Implementation LLS: dag_cleaner_impl
-Provides concrete implementation of DAG cleaning orchestration.
-"""
+"""DAG cleaner implementation executing topological subgraph cleaning."""
 
-import os
-import signal
-import threading
-from typing import List, Set, cast
 from collections import deque
-
-from .dag_storage import NodeId, NodeMessage, PendingMessages, DagStorage
-from .dag_clean_logic import (
-    CleanResult,
-    DagCleanLogic,
-    ChangeResult,
-    FeedbackResult,
-    NoChangeResult,
-    FailureResult,
-)
-from .dag_cleaner import DagCleaner, CleaningResult
-
-# SIGTERM handler: bazel's process-wrapper sends SIGTERM when --test_timeout
-# expires (then SIGKILL after a grace period). We must terminate immediately.
-#
-# os._exit() is required here instead of sys.exit(): sys.exit() raises
-# SystemExit, which unittest's bare `except:` in _Outcome.testPartExecutor
-# swallows as a plain test error. The test suite then keeps running (any
-# remaining infinite loops keep spinning) and only dies when the timeout
-# mechanism escalates to SIGKILL -- or never, if it only sends SIGTERM, which
-# leaves a lingering process (and a zombie when the parent dies without
-# reaping it). os._exit() cannot be intercepted, so the process dies the
-# moment SIGTERM arrives and the parent can reap it.
-def _sigterm_handler(signum, frame):
-    os._exit(1)
-
-# Register only from the main thread; signal.signal() raises ValueError if
-# called from a worker thread (e.g. when this module is imported lazily).
-if threading.current_thread() is threading.main_thread():
-    signal.signal(signal.SIGTERM, _sigterm_handler)
+from typing import Set, Dict, List
+from .dag_storage import DagStorage, NodeId
+from .dag_node_cleaner import NodeCleaner
+from .dag_cleaner import DagCleaner
 
 
 class DagCleanerImpl(DagCleaner):
-    """
-    Implementation of DAG cleaning orchestration.
-    
-    Responsibilities:
-    - Traverses graph from target_node following dependencies to identify subgraph.
-    - Computes topological sort once (dependencies before dependents).
-    - Iteratively: finds earliest dirty node in sort order, ensures no dependencies are dirty, 
-      cleans it.
-    - For each dirty node: reads pending messages -> invokes clean_logic.clean -> on success, 
-      deletes old messages and routes new ones (change to reverse deps, feedback to specified deps) 
-      -> on failure, halts immediately.
-    - All reads/writes go through dag_storage; no caching.
-    
-    HLS Justification: "Provides the dag_cleaner_impl implementation that fulfills the dag_cleaner interface. 
-    Uses the configured dag_storage for message persistence and dag_clean_logic for processing 
-    node messages."
-    """
-    
-    def __init__(self, storage: DagStorage, clean_logic: DagCleanLogic):
-        """
-        Initialize DAG implementation with the configured dag_storage (message
-        persistence and graph access) and dag_clean_logic (message processing
-        and dirtiness determination), per the dag_cleaner_impl LLS.
-        
-        Invariants:
-        - No caching; all state reads/writes go through dag_storage.
-        - On failure, processing halts immediately; no recovery or retry.
-        """
-        self.storage = storage
-        self.clean_logic = clean_logic
-    
-    def _get_subgraph_nodes(self, target_node: NodeId) -> Set[NodeId]:
-        """
-        Traverse from target_node following dependencies through dag_storage
-        to identify the subgraph (the target node and its transitive dependencies).
-        """
-        subgraph = set()
-        stack = [target_node]
-        while stack:
-            node = stack.pop()
-            if node not in subgraph:
-                subgraph.add(node)
-                # Add dependencies (going backwards from target)
-                for dep in self.storage.get_node_dependencies(node):
-                    if dep not in subgraph:
-                        stack.append(dep)
-        return subgraph
-    
-    def _topological_sort(self, nodes: Set[NodeId]) -> List[NodeId]:
-        """
-        Compute topological sort (dependencies before dependents).
+    def __init__(self, max_iterations: int = 100) -> None:
+        self.max_iterations = max_iterations
 
-        Raises ValueError if the graph contains a cycle (cycle members would
-        otherwise be silently dropped from the order, causing dirty nodes to be
-        skipped forever).
-        """
-        # Build adjacency for the subgraph from dag_storage
-        adjacency = {node: [] for node in nodes}
-        in_degree = {node: 0 for node in nodes}
-        
-        for node in nodes:
-            for dep in self.storage.get_node_dependencies(node):
-                if dep in nodes:
-                    adjacency[dep].append(node)
-                    in_degree[node] += 1
-        
-        # Kahn's algorithm. The initial queue sorts the in-degree-0 nodes so
-        # the ordering is deterministic (nodes is a set; iteration order would
-        # otherwise vary across runs).
-        result = []
-        queue = deque(sorted(node for node in nodes if in_degree[node] == 0))
-        
+    def _collect_subgraph(self, root: NodeId, storage: DagStorage) -> Set[NodeId]:
+        visited: Set[NodeId] = set()
+        queue: deque[NodeId] = deque([root])
         while queue:
-            node = queue.popleft()
-            result.append(node)
-            for neighbor in adjacency[node]:
+            curr = queue.popleft()
+            if curr not in visited:
+                visited.add(curr)
+                for dep in storage.get_dependencies(curr):
+                    queue.append(dep)
+        return visited
+
+    def _topological_sort(self, nodes: Set[NodeId], storage: DagStorage) -> List[NodeId]:
+        in_degree: Dict[NodeId, int] = {n: 0 for n in nodes}
+        adj: Dict[NodeId, List[NodeId]] = {n: [] for n in nodes}
+
+        for n in nodes:
+            for dep in storage.get_dependencies(n):
+                if dep in nodes:
+                    adj[dep].append(n)
+                    in_degree[n] += 1
+
+        queue: deque[NodeId] = deque([n for n, deg in in_degree.items() if deg == 0])
+        order: List[NodeId] = []
+
+        while queue:
+            curr = queue.popleft()
+            order.append(curr)
+            for neighbor in adj[curr]:
                 in_degree[neighbor] -= 1
                 if in_degree[neighbor] == 0:
                     queue.append(neighbor)
-        
-        if len(result) != len(nodes):
-            raise ValueError(
-                "Graph contains a cycle; topological sort incomplete "
-                f"({len(result)}/{len(nodes)} nodes ordered)"
-            )
-        
-        return result
-    
-    def _get_dependencies(self, node_id: NodeId) -> List[NodeId]:
-        """Get dependencies of a node through dag_storage."""
-        return self.storage.get_node_dependencies(node_id)
-    
-    def _is_dirty(self, node_id: NodeId) -> bool:
-        """Check if a node is dirty using clean_logic."""
-        messages = self.storage.get_pending_messages(node_id)
-        return self.clean_logic.is_dirty(node_id, messages)
-    
-    def _has_dirty_dependencies(self, node_id: NodeId) -> bool:
-        """Check if any dependency of node is dirty."""
-        for dep in self._get_dependencies(node_id):
-            if self._is_dirty(dep):
-                return True
-        return False
-    
-    def _route_messages(self, node_id: NodeId, result: CleanResult) -> None:
-        """
-        Route messages based on clean result.
-        - ChangeResult: broadcast to all reverse dependencies
-        - FeedbackResult: deliver to specified dependencies
-        - NoChangeResult: no messages to route
-        - FailureResult: no messages to route
-        """
-        if isinstance(result, ChangeResult):
-            # Broadcast to all known reverse dependencies (as provided by
-            # dag_storage). A known reverse dependency that is not in the
-            # current graph (its node data cannot be resolved) is skipped.
-            broadcast = cast(List[NodeMessage], result.messages)
-            for target in self.storage.get_known_reverse_dependencies(node_id):
-                try:
-                    self.storage.add_messages(target, broadcast)
-                except ValueError:
-                    continue
 
-        elif isinstance(result, FeedbackResult):
-            # Deliver to specified dependencies
-            for target, message in result.messages:
-                self.storage.add_messages(target, [message])
+        if len(order) != len(nodes):
+            raise RuntimeError(f"Cycle detected in subgraph containing {nodes}")
 
-        # NoChangeResult and FailureResult have no messages to route
+        return order
 
-    def clean_subgraph(self, target_node: NodeId) -> CleaningResult:
-        """
-        Clean all dirty nodes in the subgraph rooted at target_node until none remain.
-        
-        On failure: failed node's messages remain unchanged; previously cleaned nodes 
-        retain changes; processing halts.
-        
-        Termination: cleaning is bounded by a cap on total cleans
-        (len(nodes) * (len(nodes) + 1)). Without a bound, a clean result that
-        re-routes messages back into the subgraph (e.g. feedback to an upstream
-        node or to the node itself) or an is_dirty() that never clears would make
-        the loop run forever. Exceeding the cap returns a failure result instead
-        of looping indefinitely.
-        """
-        # Get subgraph nodes
-        subgraph_nodes = self._get_subgraph_nodes(target_node)
+    def clean_subgraph(
+        self,
+        root: NodeId,
+        storage: DagStorage,
+        cleaner: NodeCleaner,
+    ) -> None:
+        nodes = self._collect_subgraph(root, storage)
+        order = self._topological_sort(nodes, storage)
 
-        # Compute topological sort once; a cycle returns a failure result with
-        # state unchanged (no messages deleted or routed).
-        try:
-            sorted_nodes = self._topological_sort(subgraph_nodes)
-        except ValueError:
-            return (False, FailureResult())
+        iterations = 0
+        while True:
+            iterations += 1
+            if iterations > self.max_iterations:
+                raise RuntimeError(f"Cleaning pass exceeded execution limit of {self.max_iterations} iterations")
 
-        # Termination cap: each clean can re-dirty nodes via change/feedback
-        # messages, so allow a bounded number of cleans and fail loudly rather
-        # than loop forever on a message cycle.
-        max_cleans = len(sorted_nodes) * (len(sorted_nodes) + 1)
-        total_cleans = 0
+            cleaned_any = False
+            for node in order:
+                if storage.is_dirty(node):
+                    pending = storage.get_pending_messages(node)
+                    # Clear pending messages before routing new messages from outcome
+                    storage.clear_pending_messages(node)
+                    outcome = cleaner.clean_node(node, pending)
+                    if outcome is not None:
+                        for item in outcome:
+                            content_str = getattr(item, "content", str(item))
+                            # Feedback messages (e.g. Blamed ...) route upstream to dependencies
+                            if content_str.startswith("Blamed "):
+                                deps = storage.get_dependencies(node)
+                                for dep in deps:
+                                    storage.queue_pending_messages(dep, [item])
+                                    storage.mark_dirty(dep)
+                            else:
+                                rdeps = storage.get_reverse_dependencies(node)
+                                for rdep in rdeps:
+                                    storage.queue_pending_messages(rdep, [item])
+                                    storage.mark_dirty(rdep)
+                        cleaned_any = True
+                    else:
+                        storage.mark_dirty(node)
+                        return
 
-        # Iterative cleaning.
-        #
-        # The loop must be bounded by max_cleans, not just by progress: a clean
-        # result that re-routes messages back into the subgraph (feedback to an
-        # upstream node or to the node itself) or an is_dirty() that never
-        # clears keeps making "progress" forever. The cap is part of the loop
-        # condition so we can exit and report the failure instead of spinning.
-        progress_made = True
-        last_result: CleanResult = NoChangeResult()
-        while progress_made and total_cleans < max_cleans:
-            progress_made = False
-
-            for node in sorted_nodes:
-                # Check if node is dirty
-                if not self._is_dirty(node):
-                    continue
-
-                # Ensure no dependencies are dirty
-                if self._has_dirty_dependencies(node):
-                    continue
-
-                # Clean the node
-                progress_made = True
-                messages = self.storage.get_pending_messages(node)
-                result = self.clean_logic.clean(node, messages)
-                total_cleans += 1
-
-                if isinstance(result, FailureResult):
-                    # Failure: halt immediately, failed node's messages remain unchanged
-                    return (False, FailureResult())
-
-                # Feedback targets must stay within the subgraph; routing
-                # elsewhere would leave messages that this clean never processes.
-                if isinstance(result, FeedbackResult):
-                    for target, _ in result.messages:
-                        if target not in subgraph_nodes:
-                            return (False, FailureResult())
-
-                # Success: route new messages, then apply the result's metadata
-                # effect (specs/low/dag_cleaner_impl.md / specs/high/dag_cleaner.md):
-                #   change    -> delete the node's data (messages + reverse deps)
-                #   no-change -> clear the node's pending messages (reverse deps
-                #                retained)
-                #   feedback  -> no stored data removed (the node keeps its
-                #                messages and reverse deps; it is cleaned again
-                #                after the blamed dependency changes)
-                self._route_messages(node, result)
-                if isinstance(result, ChangeResult):
-                    self.storage.delete_node_data(node)
-                elif isinstance(result, NoChangeResult):
-                    self.storage.clear_pending_messages(node)
-                last_result = result
-
-        # Cap reached: a message cycle or a non-clearing dirty state prevented
-        # termination. If the cap was reached exactly as the final dirty node
-        # was cleaned (no dirty nodes remain), the run completed within the
-        # bound and succeeds.
-        if total_cleans >= max_cleans:
-            if any(self._is_dirty(n) for n in sorted_nodes):
-                return (False, FailureResult())
-
-        return (True, last_result)
+            if not cleaned_any or not any(storage.is_dirty(n) for n in nodes):
+                break

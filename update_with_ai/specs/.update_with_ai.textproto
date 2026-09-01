@@ -1,0 +1,3 @@
+node_entry {
+  node_id: "//update_with_ai/specs:dag_storage_lib"
+}

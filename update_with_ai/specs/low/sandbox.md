@@ -1,7 +1,6 @@
 <!-- Dependencies (md files to read alongside this one):
   - tool_provider.md
-  - dag_storage.md
-  - dag_clean_logic.md
+  - virtual_file_name.md
   - file_reader.md
   - file_editor.md
   - guide_delivery.md
@@ -12,268 +11,139 @@
 
 ## Data Types
 ```python
-from dataclasses import dataclass, field
-from typing import Protocol, TypeAlias
-from tool_provider import PresentedToolResult, ToolCallOutcome, ToolDefinition
-from file_reader import (
-    FileMapping,
-    ReadablePaths,
-    SearchResultLimit,
-    VirtualName,
-)
-from file_editor import (
-    TemplateMapping,
-    WritablePaths,
-    WriteOccurred,
-)
-from run_control import Blame, BlameTargets, VerificationCallback
+from typing import Protocol, TypeAlias, Sequence, Mapping, Optional
+from dataclasses import dataclass
+from tool_provider import ToolProvider, ToolResult
+from virtual_file_name import VirtualFileMapping
+from file_reader import ReadOnlyFile, ReadWriteFile, SessionStartRead
+from file_editor import FileTemplate
+from guide_delivery import TaskGuide
+from run_control import RunControlConfig
 
-@dataclass
+StartupInteraction: TypeAlias = Sequence[ToolResult]
+
+@dataclass(frozen=True)
 class SandboxConfig:
-    file_mappings: FileMapping
-    readable_paths: ReadablePaths
-    writable_paths: WritablePaths
-    blame_targets: BlameTargets
-    search_result_limit: SearchResultLimit
-    session_start_reads_enabled: bool = True
-    guide: VirtualName | None = None
-    step_sections_enabled: bool = True
-    feedback_pending: bool = False
-    templates: TemplateMapping = field(default_factory=dict)
-    verification_callback: VerificationCallback = None
+    file_mappings: VirtualFileMapping
+    read_only_files: Sequence[ReadOnlyFile]
+    read_write_files: Sequence[ReadWriteFile]
+    templates: Mapping[ReadWriteFile, FileTemplate]
+    guide: Optional[TaskGuide] = None
+    step_mode_guide_name: Optional[str] = None
+    run_control: Optional[RunControlConfig] = None
+    search_result_limit: Optional[int] = None
 
-class Sandbox(Protocol):
-    def get_tool_definitions(self) -> list[ToolDefinition]: ...
-    def get_session_start_reads(self) -> list[PresentedToolResult]: ...
-    def read_file(self, file_path: VirtualName, include_line_numbers: bool = False) -> ToolCallOutcome: ...
-    def replace(self, file_path: VirtualName, old_str: str, new_str: str, expect_multiple: bool = False) -> ToolCallOutcome: ...
-    def update_lines(self, file_path: VirtualName, start_line: int, end_line: int, new_str: str) -> ToolCallOutcome: ...
-    def search_files(self, path: VirtualName = ".", pattern: str = "", offset: int | None = None, limit: int | None = None) -> ToolCallOutcome: ...
-    def advance(self, changes: list[dict[str, str]] = []) -> ToolCallOutcome: ...
-    def fail(self) -> ToolCallOutcome: ...
-    def blame(self, blames: list[Blame]) -> ToolCallOutcome: ...
-    def get_write_occurred(self) -> WriteOccurred: ...
+class SandboxFactory(Protocol):
+    def create_sandbox(self, config: SandboxConfig) -> "Sandbox": ...
+
+class Sandbox(ToolProvider, Protocol):
+    def get_session_start_reads(self) -> Sequence[SessionStartRead]: ...
+    def get_startup_interaction(self) -> StartupInteraction: ...
+    def materialize_startup_templates(self) -> None: ...
+    def has_file_modifications(self) -> bool: ...
 ```
 
-`SandboxConfig` is the aggregate client-supplied configuration for the sandbox: file mappings (each file's virtual name to its full path), the readable and writable virtual names, the blame targets (a mapping from each blameable artifact's virtual name to the node that owns it), the search result limit, whether session-start reads are enabled (default: enabled), the guide (default: none — the declared guide's virtual name, a file in `file_mappings`), whether step mode is enabled (default: enabled), whether feedback is pending (default: false), the templates (default: empty), and an optional verification callback.
+- `StartupInteraction` → corresponds to *startup interaction*: a collection of initial tool results (carrying *session-start reads* and an optional initial *step delivery*) provided at session start.
+- `SandboxConfig` → corresponds to *sandbox configuration*: a set of parameters configuring file mappings, permissions, templates, search bounds, *guides*, verification checks, and blame targets for a *sandbox*.
+- `SandboxFactory` → corresponds to *sandbox factory*: a provider that constructs *sandboxes* configured from *sandbox configurations*.
+- `Sandbox` → corresponds to *sandbox*: a *tool provider* composing tools from a *file reader*, a *file editor*, a *run controller*, and an optional *guide delivery*.
 
-The sandbox is a facade: it composes the file machinery (`file_reader` and `file_editor`), the step-mode guide delivery (`guide_delivery`), and the verification and termination rules (`run_control`) into a single tool surface. Each operation below delegates to the owning component's operation; the composition itself is described in the implementation spec.
 ## Term definitions
 
-- **virtual name** → the `VirtualName` alias from file_reader
-- **file write** → term definition from file_editor
-- **line-numbered view** → term definition from file_reader
-- **injected read** → term definition from file_editor
-- **session-start read** → term definition from file_reader
-- **template** → term definition from file_editor
-- **guide** → term definition from guide_delivery
-- **guide summary** → term definition from guide_delivery
-- **step section** → term definition from guide_delivery
-- **step mode** → term definition from guide_delivery
-- **blame** → term definition from run_control
-- **blame target** → the `BlameTarget` alias from run_control
-- **soft length bound** → term definition from run_control
-- **hard length bound** → term definition from run_control
-- **tool definition** → the `ToolDefinition` alias from tool_provider
-- **tool result** → the `ToolResult` type from tool_provider
-- **supersession flag** → term definition from tool_provider
-- **stub** → term definition from tool_provider
-- **termination result** → the `TerminateSuccessResult` type from tool_provider
-- **tool failure** → the `ToolFailure` type from tool_provider
-- **dependency** → the `NodeDependencies` alias from dag_storage
-- **change message** → term definition from dag_clean_logic
-- **feedback message** → term definition from dag_clean_logic
+- **sandbox configuration** → the `SandboxConfig` alias
+- **startup interaction** → the `StartupInteraction` alias
+- **sandbox** → term definition: a *tool provider* composing tools from a *file reader*, a *file editor*, a *run controller*, and an optional *guide delivery*
+- **sandbox factory** → term definition: a provider that constructs *sandboxes* configured from *sandbox configurations*
 
 ## Component-Provided Operations
-
-### `get_tool_definitions`
-
-```python
-def get_tool_definitions(self) -> list[ToolDefinition]
-```
-
-**Purpose:** Return the composed tool registry: the file tools, the advance tool, and the termination tools, presented together as the sandbox's tool surface.
-
-**Preconditions:** The sandbox has been configured with the aggregate `SandboxConfig`.
-
-**Postconditions:** Delegates to the components' tool definitions and composes them into one list (per the composition described in the implementation spec): the file tools from `file_reader.get_tool_definitions` and `file_editor.get_tool_definitions`, the advance tool from `guide_delivery.get_tool_definitions` (its parameters per the step state), and the termination tools from `run_control.get_tool_definitions` — the failure tool always, the blame tool only when blame targets are configured. Each definition follows the JSON schema format expected by the model (as defined in `tool_provider`).
-
-**Failure Handling:** No failure conditions.
-
-**HLS Justification:** "Request tool definitions (per tool_provider)."
-
 
 ### `get_session_start_reads`
 
 ```python
-def get_session_start_reads(self) -> list[PresentedToolResult]
+def get_session_start_reads(self) -> Sequence[SessionStartRead]: ...
 ```
 
-**Purpose:** Return the session-start reads for rendering at the beginning of a session before the model's first turn: the plain reads of the read-only files and, in step mode, the guide's presentation.
+**Purpose:** (Sandbox) Retrieves pre-injected session-start reads for declared read-only files.
 
 **Preconditions:** None.
 
-**Postconditions:** Delegates to `file_reader.get_session_start_reads` (the plain reads of the read-only files) and `guide_delivery.get_session_start_reads` (the guide's presentation at session start — in step mode, the pre-injected advance call); the results are presented together before the model's first turn; requesting them changes no sandbox state.
-
-**Failure Handling:** Always succeeds; filesystem errors reading a readable file are unhandled.
-
-**HLS Justification:** "Request the session-start reads."
-
-
-### `read_file`
-
-```python
-def read_file(self, file_path: VirtualName, include_line_numbers: bool = False) -> ToolCallOutcome
-```
-
-**Purpose:** Read a file's entire content using the virtual name provided by the agent.
-
-**Preconditions:** Per `file_reader.read_file` (the file machinery's rules apply).
-
-**Postconditions:** Delegates to `file_reader.read_file`; the component rules apply (per the file_reader and file_editor LLS).
-
-**Failure Handling:** Per `file_reader.read_file`'s failure signals, returned as-is.
-
-**HLS Justification:** "Execute a tool call."
-
-
-### `replace`
-
-```python
-def replace(self, file_path: VirtualName, old_str: str, new_str: str,
-            expect_multiple: bool = False) -> ToolCallOutcome
-```
-
-**Purpose:** Replace text in a file by content-based search and replace.
-
-**Preconditions:** Per `file_editor.replace` (the file machinery's rules apply).
-
-**Postconditions:** Delegates to `file_editor.replace`; the component rules apply (per the file_reader and file_editor LLS).
-
-**Failure Handling:** Per `file_editor.replace`'s failure signals, returned as-is.
-
-**HLS Justification:** "Execute a tool call."
-
-
-### `update_lines`
-
-```python
-def update_lines(self, file_path: VirtualName, start_line: int, end_line: int,
-                 new_str: str) -> ToolCallOutcome
-```
-
-**Purpose:** Replace, delete, or insert lines in a file by 1-indexed line range.
-
-**Preconditions:** Per `file_editor.update_lines` (the file machinery's rules apply).
-
-**Postconditions:** Delegates to `file_editor.update_lines`; the component rules apply (per the file_reader and file_editor LLS).
-
-**Failure Handling:** Per `file_editor.update_lines`'s failure signals, returned as-is.
-
-**HLS Justification:** "Execute a tool call."
-
-
-### `search_files`
-
-```python
-def search_files(self, path: VirtualName = ".", pattern: str = "",
-                 offset: int | None = None,
-                 limit: int | None = None) -> ToolCallOutcome
-```
-
-**Purpose:** Search for a pattern in files using the virtual path provided by the agent.
-
-**Preconditions:** Per `file_reader.search_files` (the file machinery's rules apply).
-
-**Postconditions:** Delegates to `file_reader.search_files`; the component rules apply (per the file_reader and file_editor LLS).
-
-**Failure Handling:** Per `file_reader.search_files`'s failure signals, returned as-is.
-
-**HLS Justification:** "Execute a tool call."
-
-
-### `advance`
-
-```python
-def advance(self, changes: list[dict[str, str]] = []) -> ToolCallOutcome
-```
-
-**Purpose:** Signal the session's completion: verification, step-mode delivery, and termination sequence within the advance. The agent calls this when it has nothing more to do or considers its task complete.
-
-**Preconditions:** Per `run_control.advance`'s preconditions (the change-message requirement applies only to the terminating advance) and the step mode rules from guide_delivery.
-
-**Postconditions:** Delegates to `run_control.advance`, which sequences verification, the step-mode output (per guide_delivery's output rule), and the termination machinery; the advance sequencing is described in the implementation spec.
-
-**Failure Handling:** Per `run_control.advance`'s failure signals, returned as-is (including the change-message and feedback-pending `ToolFailure` signals; a failing verification never signals a tool failure).
-
-**HLS Justification:** "Execute a tool call."
-
-
-### `fail`
-
-```python
-def fail(self) -> ToolCallOutcome
-```
-
-**Purpose:** End the session in failure. The agent calls this when it considers the task cannot be completed.
-
-**Preconditions:** No termination signal has been produced yet in the current session.
-
-**Postconditions:** Delegates to `run_control.fail`.
-
-**Failure Handling:** Per `run_control.fail`.
-
-**HLS Justification:** "Execute a tool call."
-
-
-### `blame`
-
-```python
-def blame(self, blames: list[Blame]) -> ToolCallOutcome
-```
-
-**Purpose:** Signal termination with blame: attribute the task's incompleteness to dependencies and provide feedback on how to correct their outputs.
-
-**Preconditions:** Per `run_control.blame` (blame targets are configured; each pair's target must be a key of the `blame_targets` mapping).
-
-**Postconditions:** Delegates to `run_control.blame`.
-
-**Failure Handling:** Per `run_control.blame`'s failure signals, returned as-is.
-
-**HLS Justification:** "Execute a tool call."
-
-
-### `get_write_occurred`
-
-```python
-def get_write_occurred(self) -> WriteOccurred
-```
-
-**Purpose:** Return whether the agent has modified the filesystem during the current session.
-
-**Preconditions:** None.
-
-**Postconditions:** Delegates to `file_editor.get_write_occurred`: returns `True` if any file write has succeeded during the current session; `False` otherwise.
+**Postconditions:**
+- Returns plain-content reads for all declared `ReadOnlyFile` targets.
 
 **Failure Handling:** Always succeeds.
 
-**HLS Justification:** "Query whether the session modified the filesystem."
+**HLS Justification:** "A *sandbox* provides *session-start reads* for declared *read-only files* at run start."
+
+### `get_startup_interaction`
+
+```python
+def get_startup_interaction(self) -> StartupInteraction: ...
+```
+
+**Purpose:** (Sandbox) Retrieves initial tool results combining session-start reads and an optional initial step delivery.
+
+**Preconditions:** None.
+
+**Postconditions:**
+- Returns session-start reads for declared read-only files followed by an initial step delivery when progressive guide delivery is active.
+
+**Failure Handling:** Always succeeds.
+
+**HLS Justification:** "A *sandbox* produces a *startup interaction* carrying *session-start reads* for all declared *read-only files*, along with an initial *step delivery* when progressive guide delivery is configured."
+
+### `materialize_startup_templates`
+
+```python
+def materialize_startup_templates(self) -> None: ...
+```
+
+**Purpose:** (Sandbox) Populates missing read-write files with starter templates at startup.
+
+**Preconditions:** None.
+
+**Postconditions:**
+- Writes starter templates to missing files without overwriting existing files.
+
+**Failure Handling:** Unhandled filesystem exceptions.
+
+**HLS Justification:** "A *sandbox* materializes *templates* for missing *read-write files* at startup without overwriting existing files."
+
+### `has_file_modifications`
+
+```python
+def has_file_modifications(self) -> bool: ...
+```
+
+**Purpose:** (Sandbox) Queries whether any workspace file modifications occurred during the session.
+
+**Preconditions:** None.
+
+**Postconditions:**
+- Returns `True` if files were modified relative to startup baseline; `False` otherwise.
+
+**Failure Handling:** Always succeeds.
+
+**HLS Justification:** "A *sandbox* allows querying whether any workspace file modifications occurred during the run."
+
+### `create_sandbox`
+
+```python
+def create_sandbox(self, config: SandboxConfig) -> Sandbox: ...
+```
+
+**Purpose:** (SandboxFactory) Creates an isolated sandbox instance configured from a sandbox configuration.
+
+**Preconditions:** None.
+
+**Postconditions:**
+- Returns a `Sandbox` configured from `config` using sub-component factories.
+
+**Failure Handling:** Always succeeds.
+
+**HLS Justification:** "Creating a *sandbox* through a *sandbox factory* yields a *sandbox* configured from a *sandbox configuration*."
 
 ## Invariants
 
-- The session begins when the sandbox is configured and ends when the agent signals termination
-- No state persists across runs
-- The tool surface composes the components' operations: file_reader and file_editor provide the file tools, run_control provides the termination tools, and guide_delivery provides the step-mode delivery; the composed tools are presented together
-- The blame tool is offered only when blame targets are configured
-- In a single advance, verification precedes step delivery and termination
-- A failing verification produces feedback and no step delivery, and never terminates the run
-- A passing verification with step sections remaining delivers the next step section
-- A passing verification with no step sections remaining proceeds to the termination machinery
-- The change summary applies only when advance terminates: in step mode, an advance with step sections remaining carries no change summary
-- The feedback obligation is not disclosed to the agent before advance is attempted without a change; it surfaces only through advance's rejection
-- Errors leave the filesystem unchanged (per file_reader, file_editor, and run_control)
-
-## Non-Concerns
-
-- **Error message wording:** error messages identify the violated policy or the failing operation; their exact wording is unspecified.
-- **Component internals:** how the components implement their contracts is governed by the components' own specs; the facade adds only composition.
+- Composed tools are exposed exclusively through virtual file name abstractions.
+- Advance operations coordinate progressive guide delivery before final termination verification.
+- Materializing templates never overwrites existing read-write files.

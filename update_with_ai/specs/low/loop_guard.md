@@ -6,114 +6,102 @@
 
 ## Data Types
 ```python
-from typing import Any, Protocol, TypeAlias
-from tool_provider import ToolCall
+from typing import Protocol, TypeAlias, Optional, Union
+from dataclasses import dataclass
+from tool_provider import ToolArguments, ToolResult, ToolFailure, ToolName
 
-LoopDecision: TypeAlias = tuple[bool, str | None, str | None]
+ReminderThreshold: TypeAlias = int
+FatalThreshold: TypeAlias = int
+FilePath: TypeAlias = str
+LineRange: TypeAlias = tuple[int, int]
+
+@dataclass(frozen=True)
+class LoopGuardConfig:
+    reminder_threshold: ReminderThreshold
+    fatal_threshold: FatalThreshold
+
+LoopReminder: TypeAlias = ToolResult
+LoopFailure: TypeAlias = ToolFailure
 
 class LoopGuard(Protocol):
-    def reset(self) -> None: ...
-    def record_tool_call(self, tool_call: ToolCall) -> LoopDecision: ...
-    def check_degenerate_response(self, content: str | None) -> bool: ...
-    def get_termination_reminder(self) -> str: ...
+    def record_tool_call(self, tool_name: ToolName, arguments: ToolArguments) -> Optional[Union[LoopReminder, LoopFailure]]: ...
+    def record_file_edit(self, file_path: FilePath, line_range: LineRange) -> Optional[Union[LoopReminder, LoopFailure]]: ...
+    def reset_progress(self) -> None: ...
 ```
 
-The loop decision tuple `(is_stop, reminder_message, error_message)` conveys the evaluation of a tool call: whether the loop must abort, an optional reminder to inject, or a fatal loop error description.
+- `ReminderThreshold` → corresponds to warning threshold for repetition.
+- `FatalThreshold` → corresponds to fatal threshold for repetition.
+- `FilePath` → corresponds to workspace file path.
+- `LineRange` → corresponds to line range tuple.
+- `LoopGuardConfig` → corresponds to loop guard configuration.
+- `LoopReminder` → corresponds to *loop reminder*: feedback warning an agent of detected repetition.
+- `LoopFailure` → corresponds to *loop failure*: an outcome signaling that an agent run has failed due to unresolvable repetition.
+- `LoopGuard` → corresponds to *loop guard*: a monitor that tracks repetitive execution patterns during an agent run.
 
 ## Term definitions
 
-- **loop repetition** → term definition: consecutive execution of identical tool calls with identical arguments
-- **range repetition** → term definition: consecutive file-editing tool calls targeting the same file path and line numbers
-- **loop reminder** → term definition: a warning message injected into the conversation advising the agent to make progress or terminate
-- **degenerate loop** → term definition: a failure condition triggered when repetition reaches eight consecutive iterations
-- **degenerate response** → term definition: a truncated response whose content is a single character repeated
-- **tool call** → the `ToolCall` alias from tool_provider
-- **session** → term definition from tool_provider
+- **loop guard** → term definition: a monitor that tracks repetitive execution patterns during an agent run
+- **loop reminder** → the `LoopReminder` alias
+- **loop failure** → the `LoopFailure` alias
 
 ## Component-Provided Operations
-
-### `reset`
-
-```python
-def reset(self) -> None
-```
-
-**Purpose:** Resets repetition tracking counters and reminder injection flags.
-
-**Preconditions:** None
-
-**Postconditions:**
-- Repetition tracking counters reset to zero
-- Reminder injected flag set to false
-
-**Failure Handling:** None
-
-**HLS Justification:** "No tracking state persists across runs."
 
 ### `record_tool_call`
 
 ```python
-def record_tool_call(self, tool_call: ToolCall) -> LoopDecision
+def record_tool_call(self, tool_name: ToolName, arguments: ToolArguments) -> Optional[Union[LoopReminder, LoopFailure]]: ...
 ```
 
-**Purpose:** Evaluates a tool call for loop repetition and range repetition.
+**Purpose:** (LoopGuard) Records a tool execution and checks for identical consecutive calls.
 
-**Preconditions:**
-- `tool_call` contains tool name and arguments
+**Preconditions:** None.
 
 **Postconditions:**
-- If the tool is `advance`, resets repetition tracking and returns `(False, None, None)`
-- If identical tool calls repeat 4 consecutive times and reminder not yet injected, returns `(False, reminder, None)`
-- If identical tool calls repeat 8 consecutive times, returns `(True, None, error)`
-- If `update_lines` edits the same file and line range 4 consecutive times and reminder not yet injected, returns `(False, reminder, None)`
-- If `update_lines` edits the same file and line range 8 consecutive times, returns `(True, None, error)`
-- Otherwise returns `(False, None, None)`
+- Returns a `LoopReminder` if consecutive identical calls reach `reminder_threshold`.
+- Returns a `LoopFailure` if consecutive identical calls reach `fatal_threshold`.
+- Returns `None` if repetition is within acceptable bounds.
 
-**Failure Handling:** None
+**Failure Handling:** Exceeding fatal threshold produces a terminal `LoopFailure`.
 
-**HLS Justification:** "Evaluate a tool call for loop repetition and range repetition."
+**HLS Justification:** "Consecutive repetitions reaching a warning threshold produce a *loop reminder*."
 
-### `check_degenerate_response`
+### `record_file_edit`
 
 ```python
-def check_degenerate_response(self, content: str | None) -> bool
+def record_file_edit(self, file_path: FilePath, line_range: LineRange) -> Optional[Union[LoopReminder, LoopFailure]]: ...
 ```
 
-**Purpose:** Checks whether a truncated model response consists of a single character repeated.
+**Purpose:** (LoopGuard) Records a file edit and checks for oscillating consecutive edits.
 
-**Preconditions:** None
+**Preconditions:** None.
 
 **Postconditions:**
-- Returns true if `content` is a non-empty string and all characters in `content` are identical; otherwise returns false
+- Returns a `LoopReminder` if consecutive identical edits reach `reminder_threshold`.
+- Returns a `LoopFailure` if consecutive identical edits reach `fatal_threshold`.
+- Returns `None` if repetition is within acceptable bounds.
 
-**Failure Handling:** None
+**Failure Handling:** Exceeding fatal threshold produces a terminal `LoopFailure`.
 
-**HLS Justification:** "Evaluate whether a truncated model response is degenerate."
+**HLS Justification:** "A *loop guard* evaluates consecutive executions of identical *tools* and edits."
 
-### `get_termination_reminder`
+### `reset_progress`
 
 ```python
-def get_termination_reminder(self) -> str
+def reset_progress(self) -> None: ...
 ```
 
-**Purpose:** Provides the termination reminder text when a model stops without requesting tool execution.
+**Purpose:** (LoopGuard) Resets repetition counters upon observable forward progress.
 
-**Preconditions:** None
+**Preconditions:** None.
 
 **Postconditions:**
-- Returns the configured generator's reminder message if configured, otherwise returns the default termination reminder text
+- Clears repetition counters back to zero.
 
-**Failure Handling:** None
+**Failure Handling:** Always succeeds.
 
-**HLS Justification:** "Provide a termination reminder when the model stops with content without requesting tool execution."
+**HLS Justification:** "Executing a tool that demonstrates progress clears repetition tracking in a *loop guard*."
 
 ## Invariants
 
-- At most one reminder injected per run across all detectors
-- The advance tool is exempt from repetition tracking and resets tracking state
-- Eight consecutive repetitions trigger degenerate loop failure
-- No state persists across runs
-
-## Non-Concerns
-
-- **Reminder wording:** The exact phrasing of reminder messages is unspecified.
+- Repetition counters increment only for strictly identical consecutive operations.
+- Forward progress resets all repetition counters.

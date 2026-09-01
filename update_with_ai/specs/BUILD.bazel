@@ -1,20 +1,4 @@
 # update_with_ai/specs/BUILD.bazel
-#
-# High-level specification files (specs/high), linted by //update_python_with_ai/bin:hls_lint_test.
-# Low-level specification files (specs/low), linted by //update_python_with_ai/bin:lls_lint_test.
-#
-# High-level specification nodes for update_with_ai. Each update_python_with_ai
-# call creates the node's *_high (and *_low) update_with_ai targets plus a
-# *_high_lint test target; a dependent node passes the labels of its spec deps
-# (not raw file labels), so its manifest deps and lint coverage include the
-# full transitive closure.
-#
-# module_deps mirrors each spec's dependencies: the high-level front matter
-# (the fulfills target, the `imports:` specs, and every `terms (from X)`
-# owner) plus the low-level spec's dependency-comment entries (which the
-# *_low_lint test verifies are covered). Label strings (rather than bound
-# handles) are used so dependency order is resolved by Bazel; the spec graph
-# must be acyclic, since node deps are hard build edges.
 
 load("//update_python_with_ai:update_python_with_ai.bzl", "update_python_with_ai")
 load("//update_with_ai/lib:update_with_ai.bzl", "update_with_ai")
@@ -31,17 +15,140 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
-# External dependency docs (not low-level specs): nameable as dependency-
-# comment entries (e.g. `- openai_api.md`) and in runfiles for the lints.
-filegroup(
-    name = "external_specs",
-    srcs = glob(["external/*.md"]),
-    visibility = ["//visibility:public"],
+test_suite(
+    name = "high",
+    tags = ["high_lint"],
 )
 
-# ---------------------------------------------------------------------------
-# Dependency-free specs
-# ---------------------------------------------------------------------------
+test_suite(
+    name = "low",
+    tags = ["low_lint"],
+)
+
+update_python_with_ai(
+    name = "agent_node_cleaner",
+    module_deps = ["agent_runner", "build_graph_storage", "conversation_history", "dag_node_cleaner", "dag_storage", "runner_logger", "sandbox"],
+)
+
+update_python_with_ai(
+    name = "agent_node_cleaner_asm",
+    module_deps = ["agent_node_cleaner", "agent_node_cleaner_impl", "agent_runner_asm", "build_agent_config", "build_agent_config_impl", "build_graph_storage", "conversation_history_impl", "runner_logger", "sandbox_asm"],
+)
+
+update_python_with_ai(
+    name = "agent_node_cleaner_impl",
+    module_deps = ["agent_node_cleaner", "agent_runner", "build_graph_storage", "conversation_history", "dag_node_cleaner", "dag_storage", "runner_logger", "sandbox"],
+)
+
+update_python_with_ai(
+    name = "agent_runner",
+    module_deps = ["conversation_history", "loop_guard", "runner_logger", "tool_provider"],
+)
+
+update_python_with_ai(
+    name = "agent_runner_asm",
+    module_deps = ["agent_runner", "agent_runner_impl", "loop_guard_impl", "openai_ext", "runner_logger_impl"],
+)
+
+update_python_with_ai(
+    name = "agent_runner_impl",
+    module_deps = ["agent_runner", "conversation_history", "loop_guard", "openai_ext", "runner_logger", "tool_provider"],
+)
+
+update_python_with_ai(
+    name = "bazel_node_id_utils",
+    module_deps = ["dag_storage", "node_id_utils"],
+)
+
+update_python_with_ai(
+    name = "bazel_node_id_utils_impl",
+    module_deps = ["bazel_node_id_utils", "bazel_target_labels_ext", "dag_storage", "node_id_utils"],
+)
+
+update_python_with_ai(
+    name = "bazel_target_labels_ext",
+    module_deps = [],
+)
+
+update_python_with_ai(
+    name = "build_agent_config",
+    module_deps = ["agent_runner"],
+)
+
+update_python_with_ai(
+    name = "build_agent_config_impl",
+    module_deps = ["agent_runner", "build_agent_config"],
+)
+
+update_python_with_ai(
+    name = "build_asm",
+    module_deps = ["agent_node_cleaner_asm", "bazel_node_id_utils_impl", "build_agent_config", "build_graph_storage_impl", "build_message_store_impl", "build_runner", "build_runner_impl", "dag_cleaner_impl", "manifest_node_loader_impl", "runner_logger_impl"],
+)
+
+update_python_with_ai(
+    name = "build_graph_storage",
+    module_deps = ["build_agent_config", "dag_storage", "sandbox", "virtual_file_name"],
+)
+
+update_python_with_ai(
+    name = "build_graph_storage_impl",
+    module_deps = ["build_graph_storage", "build_message_store", "dag_storage", "sandbox", "virtual_file_name"],
+)
+
+update_python_with_ai(
+    name = "build_message_store",
+    module_deps = ["dag_storage", "node_id_utils"],
+)
+
+update_python_with_ai(
+    name = "build_message_store_impl",
+    module_deps = ["build_message_store", "dag_storage", "node_id_utils", "update_with_ai_proto_ext"],
+)
+
+update_python_with_ai(
+    name = "build_runner",
+    module_deps = ["dag_cleaner", "dag_node_cleaner", "dag_storage", "manifest_node_loader", "runner_logger"],
+)
+
+update_python_with_ai(
+    name = "build_runner_impl",
+    module_deps = ["build_runner", "dag_cleaner", "dag_node_cleaner", "dag_storage", "manifest_node_loader", "runner_logger"],
+)
+
+update_python_with_ai(
+    name = "change_summary_validator",
+    module_deps = ["virtual_file_name"],
+)
+
+update_python_with_ai(
+    name = "change_summary_validator_impl",
+    module_deps = ["change_summary_validator", "virtual_file_name"],
+)
+
+update_python_with_ai(
+    name = "conversation_history",
+    module_deps = ["tool_provider"],
+)
+
+update_python_with_ai(
+    name = "conversation_history_impl",
+    module_deps = ["conversation_history", "tool_provider"],
+)
+
+update_python_with_ai(
+    name = "dag_cleaner",
+    module_deps = ["dag_node_cleaner", "dag_storage"],
+)
+
+update_python_with_ai(
+    name = "dag_cleaner_impl",
+    module_deps = ["dag_cleaner", "dag_node_cleaner", "dag_storage"],
+)
+
+update_python_with_ai(
+    name = "dag_node_cleaner",
+    module_deps = ["dag_storage"],
+)
 
 update_python_with_ai(
     name = "dag_storage",
@@ -49,64 +156,23 @@ update_python_with_ai(
 )
 
 update_python_with_ai(
-    name = "tool_provider",
-    module_deps = [],
-)
-
-# ---------------------------------------------------------------------------
-# dag family
-# ---------------------------------------------------------------------------
-
-update_python_with_ai(
-    name = "dag_clean_logic",
-    module_deps = ["dag_storage", "tool_provider"],
-)
-
-update_python_with_ai(
-    name = "dag_cleaner",
-    module_deps = ["dag_storage", "dag_clean_logic"],
-)
-
-update_python_with_ai(
-    name = "dag_cleaner_impl",
-    module_deps = ["dag_cleaner", "dag_storage", "dag_clean_logic"],
-)
-
-# ---------------------------------------------------------------------------
-# file_view / guide_delivery / run_control: the file, delivery, and control
-# machinery. All build on tool_provider; run_control also builds on the dag
-# specs and agent_loop, and the implementations fulfill their interfaces.
-# ---------------------------------------------------------------------------
-
-update_python_with_ai(
-    name = "file_reader",
-    module_deps = ["tool_provider"],
-)
-
-update_python_with_ai(
-    name = "file_reader_impl",
-    module_deps = ["file_reader", "tool_provider"],
-)
-
-update_python_with_ai(
     name = "file_editor",
-    module_deps = ["file_reader", "tool_provider"],
+    module_deps = ["file_reader", "tool_provider", "virtual_file_name"],
 )
 
 update_python_with_ai(
     name = "file_editor_impl",
-    module_deps = ["file_editor", "file_reader", "tool_provider"],
-)
-
-
-update_python_with_ai(
-    name = "change_summary_validator",
-    module_deps = ["tool_provider"],
+    module_deps = ["file_editor", "file_reader", "tool_provider", "virtual_file_name"],
 )
 
 update_python_with_ai(
-    name = "change_summary_validator_impl",
-    module_deps = ["change_summary_validator", "file_editor", "tool_provider"],
+    name = "file_reader",
+    module_deps = ["tool_provider", "virtual_file_name"],
+)
+
+update_python_with_ai(
+    name = "file_reader_impl",
+    module_deps = ["file_reader", "tool_provider", "virtual_file_name"],
 )
 
 update_python_with_ai(
@@ -120,183 +186,91 @@ update_python_with_ai(
 )
 
 update_python_with_ai(
-    name = "run_control",
-    module_deps = ["tool_provider", "dag_clean_logic", "dag_storage", "file_reader", "guide_delivery"],
-)
-
-update_python_with_ai(
-    name = "run_control_impl",
-    module_deps = ["run_control", "tool_provider", "dag_clean_logic", "dag_storage", "file_reader", "file_editor", "guide_delivery"],
-)
-
-# ---------------------------------------------------------------------------
-# conversation_history / loop_guard / agent_loop
-# ---------------------------------------------------------------------------
-
-update_python_with_ai(
-    name = "conversation_history",
-    module_deps = ["tool_provider"],
-)
-
-update_python_with_ai(
-    name = "conversation_history_impl",
-    module_deps = ["conversation_history", "tool_provider"],
-    external_deps = [":openai_api"],
-)
-
-update_python_with_ai(
     name = "loop_guard",
     module_deps = ["tool_provider"],
 )
 
 update_python_with_ai(
     name = "loop_guard_impl",
-    module_deps = ["loop_guard", "tool_provider", "agent_loop_config"],
+    module_deps = ["loop_guard", "tool_provider"],
 )
 
 update_python_with_ai(
-    name = "agent_loop",
-    module_deps = ["tool_provider", "conversation_history", "loop_guard"],
-)
-
-update_python_with_ai(
-    name = "agent_loop_config",
-    module_deps = ["agent_loop"],
-)
-
-update_python_with_ai(
-    name = "agent_loop_impl",
-    module_deps = ["agent_loop", "agent_loop_config", "tool_provider", "conversation_history", "loop_guard"],
-    external_deps = [":openai_api"],
-)
-
-update_python_with_ai(
-    name = "agent_loop_asm",
-    module_deps = ["agent_loop_impl", "conversation_history_impl", "loop_guard_impl", "agent_loop_config"],
-)
-
-# External dependency doc node: brings a non-spec file (the OpenAI API usage
-# doc) into the system as a readable dependency. It has no guide, so the
-# *_clean wrapper cannot run until a guide is added later; the node itself
-# (prompt/manifest) is valid.
-update_with_ai(
-    name = "openai_api",
-    prompt = "Maintain specs/external/openai_api.md (the OpenAI API usage doc for agent prompt calls); _clean is unavailable until a guide is added.",
-    src = "external/openai_api.md",
-)
-
-update_python_with_ai(
-    name = "sandbox",
-    module_deps = ["tool_provider", "dag_storage", "dag_clean_logic", "file_reader", "file_editor", "guide_delivery", "run_control"],
-)
-
-update_python_with_ai(
-    name = "sandbox_impl",
-    module_deps = ["sandbox", "file_reader", "file_editor", "guide_delivery", "run_control"],
-)
-
-# ---------------------------------------------------------------------------
-# bazel_* family and remaining implementations
-# ---------------------------------------------------------------------------
-
-update_python_with_ai(
-    name = "build_node_loader",
-    module_deps = ["tool_provider", "file_editor", "guide_delivery"],
-)
-
-update_python_with_ai(
-    name = "build_agent_config",
-    module_deps = ["agent_loop_config"],
-)
-
-update_python_with_ai(
-    name = "build_message_store",
-    module_deps = ["dag_storage", "build_graph_storage"],
-)
-
-update_python_with_ai(
-    name = "build_message_store_impl",
-    module_deps = ["build_message_store", "dag_storage", "build_graph_storage"],
+    name = "json_manifest_ext",
+    module_deps = [],
 )
 
 update_python_with_ai(
     name = "manifest_node_loader",
-    module_deps = ["dag_storage", "build_graph_storage", "sandbox", "run_control", "file_reader", "file_editor", "guide_delivery"],
+    module_deps = ["build_agent_config", "build_graph_storage", "dag_storage", "node_id_utils", "sandbox", "virtual_file_name"],
 )
 
 update_python_with_ai(
     name = "manifest_node_loader_impl",
-    module_deps = ["manifest_node_loader", "dag_storage", "build_graph_storage", "sandbox", "run_control", "file_reader", "file_editor", "guide_delivery"],
+    module_deps = ["build_agent_config", "build_graph_storage", "dag_storage", "json_manifest_ext", "manifest_node_loader", "node_id_utils", "sandbox", "virtual_file_name"],
 )
 
 update_python_with_ai(
-    name = "build_graph_storage",
-    module_deps = ["dag_storage", "sandbox", "run_control", "file_reader", "file_editor", "guide_delivery"],
+    name = "node_id_utils",
+    module_deps = ["dag_storage"],
 )
 
 update_python_with_ai(
-    name = "build_node_loader_impl",
-    module_deps = ["build_node_loader", "tool_provider", "agent_loop"],
+    name = "openai_ext",
+    module_deps = ["conversation_history", "tool_provider"],
 )
 
 update_python_with_ai(
-    name = "build_agent_config_impl",
-    module_deps = ["build_agent_config", "agent_loop_config"],
+    name = "run_control",
+    module_deps = ["change_summary_validator", "dag_node_cleaner", "dag_storage", "tool_provider", "virtual_file_name"],
 )
 
 update_python_with_ai(
-    name = "build_graph_storage_impl",
-    module_deps = ["build_graph_storage", "dag_storage", "build_message_store", "manifest_node_loader", "sandbox", "run_control", "file_reader", "file_editor", "guide_delivery", "build_node_loader"],
-)
-
-
-update_python_with_ai(
-    name = "agent_node_tool_executor",
-    module_deps = ["tool_provider"],
-)
-
-update_python_with_ai(
-    name = "agent_node_tool_executor_impl",
-    module_deps = ["agent_node_tool_executor", "sandbox", "tool_provider"],
-)
-
-update_python_with_ai(
-    name = "agent_node_clean_logic_impl",
-    module_deps = ["dag_clean_logic", "build_graph_storage", "dag_storage", "agent_loop", "agent_loop_config", "sandbox", "run_control", "file_reader", "file_editor", "guide_delivery", "tool_provider", "conversation_history"],
+    name = "run_control_impl",
+    module_deps = ["change_summary_validator", "dag_node_cleaner", "dag_storage", "run_control", "tool_provider", "virtual_file_name"],
 )
 
 update_python_with_ai(
     name = "runner_logger",
-    module_deps = ["agent_loop", "conversation_history"],
+    module_deps = [],
 )
 
 update_python_with_ai(
     name = "runner_logger_impl",
-    module_deps = ["runner_logger", "agent_loop", "conversation_history"],
+    module_deps = ["runner_logger"],
 )
 
 update_python_with_ai(
-    name = "build_runner",
-    module_deps = ["dag_cleaner", "dag_storage", "dag_clean_logic", "build_agent_config", "sandbox", "guide_delivery", "run_control", "build_node_loader", "runner_logger"],
-)
-
-update_python_with_ai(
-    name = "build_runner_impl",
-    module_deps = ["build_runner", "dag_storage", "dag_cleaner", "dag_clean_logic", "build_graph_storage", "agent_loop", "build_agent_config", "conversation_history", "runner_logger"],
+    name = "sandbox",
+    module_deps = ["file_editor", "file_reader", "guide_delivery", "run_control", "tool_provider", "virtual_file_name"],
 )
 
 update_python_with_ai(
     name = "sandbox_asm",
-    module_deps = ["sandbox_impl", "file_reader_impl", "file_editor_impl", "guide_delivery_impl", "run_control_impl", "sandbox", "run_control"],
+    module_deps = ["change_summary_validator_impl", "file_editor_impl", "file_reader_impl", "guide_delivery_impl", "run_control_impl", "sandbox", "sandbox_impl"],
 )
 
 update_python_with_ai(
-    name = "agent_node_clean_logic_asm",
-    module_deps = ["agent_node_clean_logic_impl", "agent_loop_asm", "build_agent_config_impl", "sandbox_asm", "dag_clean_logic", "build_graph_storage", "build_agent_config", "agent_loop", "conversation_history"],
+    name = "sandbox_impl",
+    module_deps = ["file_editor", "file_reader", "guide_delivery", "run_control", "sandbox", "tool_provider", "virtual_file_name"],
 )
 
 update_python_with_ai(
-    name = "build_asm",
-    module_deps = ["build_runner_impl", "build_graph_storage_impl", "agent_node_clean_logic_asm", "dag_cleaner_impl", "build_runner"],
+    name = "tool_provider",
+    module_deps = [],
 )
 
+update_python_with_ai(
+    name = "virtual_file_name",
+    module_deps = [],
+)
+
+update_python_with_ai(
+    name = "virtual_file_name_impl",
+    module_deps = ["virtual_file_name"],
+)
+
+update_python_with_ai(
+    name = "update_with_ai_proto_ext",
+    module_deps = ["dag_storage"],
+)

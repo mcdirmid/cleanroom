@@ -1,50 +1,33 @@
 # sandbox
 
-imports: tool_provider (tool definitions, results, signals, stubbing), dag_storage (dependency), dag_clean_logic (change message, feedback message), file_reader (read machinery), file_editor (write machinery), guide_delivery (step mode), run_control (verification and termination)
-terms (from tool_provider): tool definition, tool result, tool failure, supersession flag, stub, termination result, signal, tool call
-terms (from dag_storage): dependency
-terms (from dag_clean_logic): change message, feedback message
-terms (from file_reader): virtual name, session-start read
-terms (from file_editor): template
-terms (from guide_delivery): guide, step mode, step section
-terms (from run_control): blame, blame target, soft length bound, hard length bound
-terms (owned):
+imports: tool_provider, virtual_file_name, file_reader, file_editor, guide_delivery, run_control
+types from tool_provider: tool, tool provider, tool result, tool failure, termination outcome
+types from virtual_file_name: virtual file name
+types from file_reader: file reader, file reader factory, read-only file, read-write file, session-start read
+types from file_editor: file editor, file editor factory, template
+types from guide_delivery: guide delivery, guide delivery factory, guide, step section, step delivery
+types from run_control: run controller, run control factory, advance tool
 
 ## Purpose
 
-Provides a controlled environment for agents to read, write, search, and modify files within a virtual workspace, composing file machinery, step-mode guide delivery, and verification and termination into a single tool surface. Enforces per-run policies and signals termination when the agent completes its task.
+Provides a hermetic virtual workspace that isolates agents from host paths while coordinating progressive execution.
 
-## Contract
+Direct filesystem access leaks host paths and invites out-of-scope edits, so the sandbox confines agents to virtual workspace files. Startup preparation populates missing files from templates and injects read-only context, while runtime coordination intercepts the advance tool to deliver guide steps before allowing final termination.
 
-**Inputs**
+## Types
 
-- Configured: the aggregate sandbox configuration — file mappings (each file's virtual name to its full path), the readable and writable virtual names, the templates (a mapping from writable virtual names to their template content; may be empty), the search result limit (the maximum matches a single search may render), whether session-start reads are enabled, the blame targets (a mapping from each blameable artifact's virtual name to the node that owns it; may be empty), the guide (at most one, may be absent), whether step mode is enabled, whether the session's pending messages include a feedback message, and an optional verification callback.
-- Per call: a tool call (tool name and arguments, per tool_provider).
+- A *sandbox* is a *tool provider* composing tools from a *file reader*, a *file editor*, a *run controller*, and an optional *guide delivery*
+- A *sandbox configuration* is a set of parameters configuring file mappings, permissions, templates, search bounds, *guides*, verification checks, and blame targets for a *sandbox*
+- A *sandbox factory* is a provider that constructs *sandboxes* configured from *sandbox configurations*
+- A *startup interaction* is a collection of initial *tool results* (carrying *session-start reads* and an optional initial *step delivery*) provided at session start
 
-**Operations**
+## Behavior
 
-- Request tool definitions (per tool_provider).
-- Execute a tool call.
-- Query whether the session modified the filesystem.
-- Request the session-start reads.
-
-**Guarantees**
-
-- The tool surface composes the components' operations: file_view provides the file tools, run_control provides the termination tools, and guide_delivery provides the step-mode delivery; the composed tools are presented together.
-- The blame tool is offered only when blame targets are configured and non-empty.
-- In a single advance, verification precedes step delivery and termination.
-- A failing verification produces feedback and no step delivery, and never terminates the session.
-- A passing verification with step sections remaining delivers the next step section.
-- A passing verification with no step sections remaining proceeds to the termination machinery.
-- The change summary applies only when advance terminates: in step mode, an advance with step sections remaining carries no change summary.
-- The feedback obligation is not disclosed to the agent before advance is attempted without a change; it surfaces only through advance's rejection.
-
-**Assumptions**
-
-- The agent loop handles free-text responses, routes termination signals, and stubs the earlier result when a result's flag is set, identifying it by the file's virtual name or the verification command.
-- The verification callback, if provided, has no side effects on the sandbox's filesystem; it may only modify the node's lib/test BUILD file (maintained by the build linter), which is not among the sandbox's files.
-- A session declares at most one guide.
-
-## Non-concerns
-
-- Component internals: how the components implement their contracts is governed by the components' own specs; the facade adds only composition.
+- A *sandbox configuration* defines mappings from *virtual file names* to host paths, file permissions, optional search limits, optional *guides*, verification checks, and blame targets.
+- Creating a *sandbox* through a *sandbox factory* yields a *sandbox* configured from a *sandbox configuration*.
+- A *sandbox* provides tools composed from its *file reader*, *file editor*, *run controller*, and optional *guide delivery*.
+- A *sandbox* produces a *startup interaction* carrying *session-start reads* for all declared *read-only files*, along with an initial *step delivery* when progressive guide delivery is configured.
+- A *sandbox* materializes *templates* for missing *read-write files* at startup without overwriting existing files.
+- Executing an *advance tool* within a *sandbox* with progressive guide delivery delivers the next *step section* via *step delivery* upon passing verification while sections remain.
+- Executing an *advance tool* within a *sandbox* with no *step sections* remaining concludes with a *termination outcome* upon passing verification and change summary checks.
+- A *sandbox* allows querying whether any workspace file modifications occurred during the run.

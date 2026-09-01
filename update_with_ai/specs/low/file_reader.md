@@ -1,146 +1,153 @@
 <!-- Dependencies (md files to read alongside this one):
   - tool_provider.md
+  - virtual_file_name.md
 -->
 
 # Interface LLS: file_reader
 
 ## Data Types
 ```python
-from typing import Any, Protocol, TypeAlias
+from typing import Protocol, TypeAlias, Sequence, Optional
 from dataclasses import dataclass
-from tool_provider import ToolDefinition, PresentedToolResult, ToolCallOutcome
+from tool_provider import Tool, ToolProvider, ToolResult, ToolFailure
+from virtual_file_name import VirtualFileName, VirtualFileMapping, UnsanitizedContent, SanitizedContent
 
-VirtualName: TypeAlias = str
-FilePath: TypeAlias = str
-FileMapping: TypeAlias = dict[VirtualName, FilePath]
-ReadablePaths: TypeAlias = list[VirtualName]
-SearchResultLimit: TypeAlias = int
+HostPath: TypeAlias = str
+ReadOnlyFile: TypeAlias = VirtualFileName
+ReadWriteFile: TypeAlias = VirtualFileName
 
-@dataclass
+@dataclass(frozen=True)
 class FileReaderConfig:
-    file_mappings: FileMapping
-    readable_paths: ReadablePaths
-    search_result_limit: SearchResultLimit = 5
-    session_start_reads_enabled: bool = True
+    read_only_files: Sequence[ReadOnlyFile]
+    read_write_files: Sequence[ReadWriteFile]
+    file_mappings: VirtualFileMapping
+    step_mode_guide: Optional[VirtualFileName] = None
+    search_result_limit: Optional[int] = None
 
-class FileReader(Protocol):
-    def get_tool_definitions(self) -> list[ToolDefinition]: ...
-    def get_session_start_reads(self) -> list[PresentedToolResult]: ...
-    def read_file(self, file_path: VirtualName, include_line_numbers: bool = False) -> ToolCallOutcome: ...
-    def search_files(self, path: VirtualName = ".", pattern: str = "", offset: int | None = None, limit: int | None = None) -> ToolCallOutcome: ...
-    def sanitize_paths(self, text: str) -> str: ...
-    def resolve_path(self, file_path: VirtualName) -> str | None: ...
-    def is_readable(self, file_path: VirtualName) -> bool: ...
+SessionStartRead: TypeAlias = ToolResult
+
+class FileReader(ToolProvider, Protocol):
+    def get_read_tool(self) -> Tool: ...
+    def get_search_tool(self) -> Tool: ...
+    def get_session_start_reads(self) -> Sequence[SessionStartRead]: ...
+    def sanitize_paths(self, content: UnsanitizedContent) -> SanitizedContent: ...
+
+class FileReaderFactory(Protocol):
+    def create_file_reader(self, config: FileReaderConfig) -> FileReader: ...
 ```
+
+- `HostPath` → corresponds to host filesystem path.
+- `ReadOnlyFile` → corresponds to *read-only file*: a file accessible for reading in plain content form.
+- `ReadWriteFile` → corresponds to *read-write file*: a file accessible for reading in line-numbered form and modification.
+- `UnsanitizedContent` → corresponds to output content prior to path sanitization.
+- `SanitizedContent` → corresponds to output content following path sanitization.
+- `FileReaderConfig` → corresponds to *file reader configuration*: declared read-only files, read-write files, and host path mappings.
+- `SessionStartRead` → corresponds to *session-start read*: a *tool result* generated from a *read-only file* before the first agent turn.
+- `FileReader` → corresponds to *file reader*: a *tool provider* providing a *file read tool* and a *file search tool*.
+- `FileReaderFactory` → corresponds to *file reader factory*: a provider that constructs *file readers* configured for specific sessions.
 
 ## Term definitions
 
-- **virtual name** → the `VirtualName` alias (definition in Data Types)
-- **line-numbered view** → term definition: a view of a file's content where each line is prefixed with its 1-indexed line number
-- **session-start read** → the `PresentedToolResult` type returned by `get_session_start_reads`
-- **tool result** → the `ToolResult` type from tool_provider
-- **tool failure** → the `ToolFailure` type from tool_provider
-- **tool call** → the `ToolCall` alias from tool_provider
-- **supersession flag** → term definition from tool_provider
+- **read-only file** → the `ReadOnlyFile` alias
+- **read-write file** → the `ReadWriteFile` alias
+- **file reader configuration** → the `FileReaderConfig` alias
+- **file read tool** → term definition: a *tool* (returned by `get_read_tool`) that reads content from a *read-only file* or *read-write file*
+- **file search tool** → term definition: a *tool* (returned by `get_search_tool`) that searches file contents matching a pattern
+- **file reader** → term definition: a *tool provider* providing a *file read tool* and a *file search tool*
+- **file reader factory** → term definition: a provider that constructs *file readers* configured for specific sessions
+- **session-start read** → the `SessionStartRead` alias
 
 ## Component-Provided Operations
 
-### `get_tool_definitions`
+### `get_read_tool`
 
 ```python
-def get_tool_definitions(self) -> list[ToolDefinition]
+def get_read_tool(self) -> Tool: ...
 ```
 
-**Purpose:** Return the read and search tool definitions for the agent session.
+**Purpose:** (FileReader) Retrieves the file reading tool instance.
 
 **Preconditions:** None.
 
 **Postconditions:**
-- Returns definitions for `read_file` and `search_files` conforming to JSON schema.
+- Returns a `Tool` executing reads on `VirtualFileName` targets: formatted with line numbers on `ReadWriteFile`, or plain content on `ReadOnlyFile`.
 
-**Failure Handling:** Always succeeds.
+**Failure Handling:**
+- Reading a step-mode guide produces a `ToolFailure` explaining that the guide is delivered progressively via advance execution.
+- Unmapped or inaccessible virtual file names produce a `ToolFailure` listing all available readable virtual file names.
 
-**HLS Justification:** "Request tool definitions (per tool_provider)."
+**HLS Justification:** "Executing a *file read tool* on a guide configured for progressive step delivery produces a *tool failure* explaining that the guide is delivered progressively via advance execution."
+
+### `get_search_tool`
+
+```python
+def get_search_tool(self) -> Tool: ...
+```
+
+**Purpose:** (FileReader) Retrieves the file pattern search tool instance.
+
+**Preconditions:** None.
+
+**Postconditions:**
+- Returns a `Tool` searching matching patterns across accessible workspace files.
+
+**Failure Handling:** Invalid regex patterns produce a `ToolFailure`.
+
+**HLS Justification:** "A *file reader* provides a *file read tool* and a *file search tool*."
 
 ### `get_session_start_reads`
 
 ```python
-def get_session_start_reads(self) -> list[PresentedToolResult]
+def get_session_start_reads(self) -> Sequence[SessionStartRead]: ...
 ```
 
-**Purpose:** Provide plain reads of readable non-writable files at run start before the agent's first turn.
+**Purpose:** (FileReader) Generates plain content tool results for declared read-only files at session startup.
 
 **Preconditions:** None.
 
 **Postconditions:**
-- When session-start reads are enabled, returns a list of `PresentedToolResult` entries sorted by virtual name.
-- When disabled, returns an empty list.
-- Requesting reads changes no state.
+- Returns a sequence of `SessionStartRead` results for all configured `ReadOnlyFile` targets.
 
-**Failure Handling:** Missing files are skipped without failure.
+**Failure Handling:** Missing read-only files are skipped without halting session initialization.
 
-**HLS Justification:** "Provide session-start reads for non-writable files."
-
-### `read_file`
-
-```python
-def read_file(self, file_path: VirtualName, include_line_numbers: bool = False) -> ToolCallOutcome
-```
-
-**Purpose:** Read a file's entire content by virtual name.
-
-**Preconditions:**
-- `file_path` is a known virtual name.
-
-**Postconditions:**
-- On success: returns a single `ToolResult` with the file content.
-- Reads of non-writable files never set supersedes.
-- Reading an existing writable file requires `include_line_numbers=True`.
-
-**Failure Handling:** Returns `ToolFailure` if unmapped, unreadable, or missing.
-
-**HLS Justification:** "Read a file's content by virtual name."
-
-### `search_files`
-
-```python
-def search_files(self, path: VirtualName = ".", pattern: str = "", offset: int | None = None, limit: int | None = None) -> ToolCallOutcome
-```
-
-**Purpose:** Search for a regex pattern across readable files.
-
-**Preconditions:** None.
-
-**Postconditions:**
-- Returns matches rendered only for non-writable files; writable file matches are reported as counts in notes.
-- Never sets supersedes.
-
-**Failure Handling:** Returns `ToolFailure` on invalid regex or exceeded result limit.
-
-**HLS Justification:** "Search for a regex pattern across readable files."
+**HLS Justification:** "A *file reader* produces *session-start reads* for declared *read-only files*."
 
 ### `sanitize_paths`
 
 ```python
-def sanitize_paths(self, text: str) -> str
+def sanitize_paths(self, content: UnsanitizedContent) -> SanitizedContent: ...
 ```
 
-**Purpose:** Replace real disk paths in strings with their virtual names.
+**Purpose:** (FileReader) Replaces absolute host paths in output content with their corresponding virtual file names.
 
 **Preconditions:** None.
 
 **Postconditions:**
-- Replaces absolute filesystem paths with virtual names using longest-match first.
+- Returns sanitized content with host paths substituted by `VirtualFileName` values in descending path length order.
 
 **Failure Handling:** Always succeeds.
 
-**HLS Justification:** "Sanitize error messages and output by replacing real on-disk paths with virtual names."
+**HLS Justification:** "Transforming text through a *file reader* replaces host paths with *virtual file names*."
+
+### `create_file_reader`
+
+```python
+def create_file_reader(self, config: FileReaderConfig) -> FileReader: ...
+```
+
+**Purpose:** (FileReaderFactory) Creates a file reader instance configured with permissions and path mappings.
+
+**Preconditions:** None.
+
+**Postconditions:**
+- Returns a `FileReader` configured with `config`.
+
+**Failure Handling:** Always succeeds.
+
+**HLS Justification:** "Creating a *file reader* through a *file reader factory* yields a *file reader* configured from a *file reader configuration*."
 
 ## Invariants
 
-- Reads of non-writable files never set supersedes.
-- No state persists across sessions.
-
-## Non-Concerns
-
-- File writing and modification: handled by file_editor.
+- Executing the read tool on a `ReadWriteFile` formats lines with 1-indexed numbers.
+- Executing the read tool on a `ReadOnlyFile` produces plain unnumbered content.
+- Path sanitization substitutes host paths deterministically using virtual file mappings.

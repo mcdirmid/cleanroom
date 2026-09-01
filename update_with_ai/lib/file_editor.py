@@ -1,50 +1,33 @@
-# lib/file_editor.py
-"""
-Interface definitions for the LLS FileEditor.
-"""
+"""File editor interface and configuration."""
 
-from typing import Dict, List, Optional, Protocol, TypeAlias
-from dataclasses import dataclass, field
-from .file_reader import VirtualName
-from .tool_provider import (
-    ToolDefinition,
-    ToolCallOutcome,
-)
+from typing import Protocol, TypeAlias, Sequence, Mapping
+from dataclasses import dataclass
+from .tool_provider import Tool, ToolProvider, ToolFailure
+from .file_reader import ReadWriteFile
+from .virtual_file_name import VirtualFileMapping
 
-WritablePaths: TypeAlias = List[VirtualName]
-TemplateMapping: TypeAlias = Dict[VirtualName, str]
-WriteOccurred: TypeAlias = bool
+FileTemplate: TypeAlias = str
+TemplateMapping: TypeAlias = Mapping[ReadWriteFile, FileTemplate]
 
 
-@dataclass
+@dataclass(frozen=True)
 class FileEditorConfig:
-    writable_paths: WritablePaths
-    templates: TemplateMapping = field(default_factory=dict)
+    read_write_files: Sequence[ReadWriteFile]
+    file_mappings: VirtualFileMapping
+    templates: TemplateMapping
 
 
-class FileEditor(Protocol):
-    def get_tool_definitions(self) -> List[ToolDefinition]:
+class FileEditor(ToolProvider, Protocol):
+    def get_replacement_tool(self) -> Tool:
         ...
 
-    def replace(self, file_path: VirtualName, old_str: str, new_str: str,
-                expect_multiple: bool = False) -> ToolCallOutcome:
+    def get_line_update_tool(self) -> Tool:
         ...
 
-    def update_lines(self, file_path: VirtualName, start_line: int, end_line: int,
-                     new_str: str) -> ToolCallOutcome:
+    def materialize_templates(self) -> None:
         ...
 
-    def get_write_occurred(self) -> WriteOccurred:
-        ...
 
-    def get_changed_files(self) -> List[VirtualName]:
-        ...
-
-    def get_run_start_snapshot(self, file_path: VirtualName) -> Optional[str]:
-        ...
-
-    def get_current_content(self, file_path: VirtualName) -> Optional[str]:
-        ...
-
-    def is_writable(self, file_path: VirtualName) -> bool:
+class FileEditorFactory(Protocol):
+    def create_file_editor(self, config: FileEditorConfig) -> FileEditor:
         ...

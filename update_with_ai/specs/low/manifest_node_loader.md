@@ -1,76 +1,64 @@
 <!-- Dependencies (md files to read alongside this one):
+  - virtual_file_name.md
+  - node_id_utils.md
   - dag_storage.md
-  - build_graph_storage.md
   - sandbox.md
-  - run_control.md
-  - file_reader.md
-  - file_editor.md
-  - guide_delivery.md
+  - build_graph_storage.md
+  - build_agent_config.md
 -->
 
 # Interface LLS: manifest_node_loader
 
 ## Data Types
 ```python
-from typing import Dict, List, Optional, Protocol, Tuple, TypeAlias
-from dataclasses import dataclass
-from build_graph_storage import NodeDefinition, PackageDirectory, GraphConfig
-from dag_storage import NodeId, NodeDependencies
+from typing import Protocol, TypeAlias, Sequence
+from build_graph_storage import BuildGraphStorage, NodeDefinition
 
-@dataclass
-class LoadedGraphManifests:
-    node_definitions: Dict[NodeId, NodeDefinition]
-    node_dependencies: Dict[NodeId, NodeDependencies]
-    package_directories: Dict[NodeId, PackageDirectory]
-    propagating_dependencies: Dict[NodeId, NodeDependencies]
-    silent_dependencies: Dict[NodeId, NodeDependencies]
+ManifestContent: TypeAlias = str
 
-class ManifestNodeLoader(Protocol):
-    def resolve_graph(self, config: GraphConfig) -> LoadedGraphManifests: ...
+class ManifestLoader(Protocol):
+    def load_manifest(self, content: ManifestContent, storage: BuildGraphStorage) -> Sequence[NodeDefinition]: ...
 ```
+
+- `ManifestContent` → corresponds to *manifest*: build-time metadata written by the build system describing a target's source files, silent source files, dependencies, silent dependencies, guides, templates, verification checks, and execution settings.
+- `ManifestLoader` → corresponds to *manifest loader*: a service that resolves workspace target manifests into graph structures and *sandbox configurations*.
 
 ## Term definitions
 
-- **manifest resolution** → term definition: the process of reading JSON manifest files from a workspace directory and resolving all dependency edges and file paths
-- **synthetic definition** → term definition: a generated node definition for a declared dependency that lacks a build manifest of its own
-- **node definition** → the `NodeDefinition` dataclass from build_graph_storage
-- **package directory** → the `PackageDirectory` alias from build_graph_storage
-- **silent dependency** → term definition from build_graph_storage
-- **star dependency** → term definition from build_graph_storage
-- **blame target** → the `BlameTarget` alias from run_control
-- **virtual name** → the `VirtualName` alias from file_reader
-- **template** → the `TemplateMapping` alias from file_editor
-- **guide** → term definition from guide_delivery
-- **step mode** → term definition from guide_delivery
-- **node** → the `NodeId` alias from dag_storage
-- **dependency** → the `NodeDependencies` alias from dag_storage
-- **propagating dependency** → term definition from dag_storage
+- **manifest** → the `ManifestContent` alias
+- **node definition** → the `NodeDefinition` alias from build_graph_storage
+- **manifest loader** → term definition: a service that resolves workspace target manifests into graph structures and *sandbox configurations*
 
 ## Component-Provided Operations
 
-### `resolve_graph`
+### `load_manifest`
 
 ```python
-def resolve_graph(self, config: GraphConfig) -> LoadedGraphManifests
+def load_manifest(self, content: ManifestContent, storage: BuildGraphStorage) -> Sequence[NodeDefinition]: ...
 ```
 
-**Purpose:** Scan and resolve manifests for a workspace graph starting from the configured root label.
+**Purpose:** (ManifestLoader) Parses a manifest and populates node definitions, dependencies, task prompts, config targets, and sandbox permissions into build graph storage.
 
 **Preconditions:**
-- `config` specifies a valid workspace root and root node label.
+- `content` is valid manifest syntax.
 
 **Postconditions:**
-- Returns `LoadedGraphManifests` containing node definitions, package directories, and dependency sets for all reachable nodes.
+- Normalizes target labels to canonical `NodeId` using node identifier utilities.
+- Resolves declared source files and templates into read-write files and startup templates in sandbox configurations.
+- Resolves declared silent source files into read-write files in sandbox configurations while excluding them from dependent read-only files.
+- Resolves declared direct dependencies into declared read-only files, and star dependencies into transitive read-only file closures in sandbox configurations.
+- Resolves declared silent dependencies as non-propagating dependencies in build graph storage while excluding their source files from read-only files.
+- Resolves declared guide targets into task guides and verification checks into sandbox configurations.
+- Resolves declared feedback dependencies into blame targets mapped to their owning dependency nodes in sandbox configurations.
+- Generates sandbox configurations with minimally disambiguated virtual file names.
+- Synthesizes node definitions for declared dependencies lacking explicit manifests.
 
-**Failure Handling:** Missing manifests for external dependencies synthesize fallback node definitions.
+**Failure Handling:** Always succeeds when preconditions are met.
 
-**HLS Justification:** "Resolve the full dependency graph and per-node definitions starting from a root target."
+**HLS Justification:** "A *manifest loader* loads *manifests* to resolve target *nodes*, *dependencies*, *node definitions*, *task prompts*, *config targets*, and *sandbox configurations* using a *node identifier utility*, populating a *build graph storage*."
 
 ## Invariants
 
-- All reachable nodes have resolved package directories and definitions.
-- Star dependencies are transitively closed over star relationships only.
-
-## Non-Concerns
-
-- Runtime message mutations: handled by build_message_store and build_graph_storage_impl.
+- Canonical node IDs generated from manifests are deterministic and collision-free.
+- Transitive closures for star dependencies include all reachable source files of dependencies.
+- Disambiguated virtual file names use the shortest unique path suffix across all accessible workspace files.

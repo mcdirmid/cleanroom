@@ -1,55 +1,25 @@
 # build_graph_storage
 
-imports: dag_storage (contract fulfilled with Bazel workspace data), sandbox (node definitions)
-terms (from dag_storage): node, message, pending message, dependency, propagating dependency, reverse dependency, subgraph
-terms (from run_control): blame target
-terms (from file_reader): virtual name
-terms (from file_editor): template
-terms (from guide_delivery): guide, step mode
-terms (owned): node definition, package directory, silent dependency, star dependency
+imports: dag_storage, sandbox, virtual_file_name, build_agent_config
+types from dag_storage: dag storage, node, dependency, propagating dependency, reverse dependency, message, pending message
+types from sandbox: sandbox configuration
+types from virtual_file_name: virtual file name
+types from build_agent_config: config target
 
 ## Purpose
 
-Provides Bazel-workspace-backed storage and graph access for the agent build: node dependencies, known reverse dependencies, pending messages, and per-node definitions. The dag_storage contract holds.
+Stores workspace target graph relationships and per-node sandbox configurations populated from target manifests.
 
-## Terms
+Task execution across structured projects requires maintaining target dependency relationships and sandbox execution contexts. Build graph storage preserves propagating and non-propagating graph relationships, task prompts, and isolated sandbox configurations populated from workspace target manifests.
 
-- Node definition: the agent prompt and sandbox configuration declared by a node's target — file mappings (each file's virtual name to its full path), readable and writable virtual names, blame targets, the search result limit, the templates, and the guide.
-- Package directory: the directory containing a node's BUILD file; also where the node's messages are stored.
-- Silent dependency: a dependency a node declares as silent; a silent dependency is a dependency (cleaned before the declaring node) whose changes do not propagate to the declaring node.
-- Star dependency: a dependency a node declares as a star dependency; a star dependency is a dependency (cleaned before the declaring node) whose declared source, and the declared source of every node reachable from it through star dependencies (never through non-star dependencies or silent dependencies), are readable by the declaring node.
+## Types
 
-## Contract
+- A *build graph storage* is a *dag storage* backed by workspace build target manifests
+- A *node definition* is metadata describing target *sandbox configurations*, *task prompts*, *config targets*, guides, verification checks, and dependency blame mappings for a *node*
+- A *task prompt* is an instruction describing the work required to clean a *node*
 
-**Inputs**
+## Behavior
 
-- The workspace root (or an equivalent graph source), configured.
-- Per query: a node ID (a valid Bazel target label).
-
-**Operations**
-
-- Perform the dag_storage operations: read pending messages, add messages, clear a node's pending messages, delete a node's data, retrieve dependencies, retrieve known reverse dependencies.
-- Query a node's definition.
-- Query a node's package directory.
-
-**Guarantees**
-
-- The dag_storage guarantees hold.
-- A node's dependencies are the targets it declares, plus the guide node, which is cleaned before the node. The guide's readable and delivery treatment follows the step-mode flag: when step mode is disabled the guide is readable; when step mode is enabled the guide is not readable and its content reaches the agent only through the advance operation (per sandbox).
-- A node's sandbox configuration maps every file the node can read or write to its virtual name (per sandbox); files sharing a final path component are mapped to distinct virtual names.
-- A node's propagating dependencies are its declared dependencies, excluding its silent dependencies; retrieving a node's dependencies records the node as a reverse dependency of each declared dependency that is not silent, and of no silent dependency.
-- Queries do not modify the workspace; each query provides a consistent view of the graph.
-- Queries signal failure without side effects when the graph source fails (the graph is unmodified).
-- Node labels are valid Bazel target labels (a precondition); unknown labels are unexpected and not covered by this contract.
-
-**Assumptions**
-
-- The workspace graph is accessible.
-- Node targets declare all dependencies they consume.
-- Node IDs are valid Bazel target labels.
-- The graph topology is acyclic.
-
-## Non-concerns
-
-- Graph-source mechanism: how the graph is read from the configured source is unspecified.
-- Build execution: the component never executes builds; it provides the graph and storage as data.
+- A *build graph storage* maintains *nodes*, *dependencies*, *reverse dependencies*, and *pending messages* from workspace targets.
+- A *build graph storage* provides *task prompts*, *node definitions*, and *sandbox configurations* for declared *nodes*.
+- Declared dependencies marked propagating mark dependent *nodes* dirty when changed.
