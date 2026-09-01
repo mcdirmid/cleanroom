@@ -3,7 +3,7 @@
 imports: dag_storage, sandbox, virtual_file_name, node_id_utils, build_graph_storage, manifest_node_loader, build_agent_config, json_manifest_ext
 types from dag_storage: node, dependency, propagating dependency
 types from sandbox: sandbox configuration
-types from virtual_file_name: virtual file name, virtual file mapper factory
+types from virtual_file_name: virtual file name, virtual file mapping, virtual file mapper factory
 types from node_id_utils: node identifier utility
 types from build_graph_storage: build graph storage, node definition, task prompt
 types from manifest_node_loader: manifest loader, manifest

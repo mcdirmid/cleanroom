@@ -1,7 +1,7 @@
 # file_reader_impl
 
 imports: tool_provider, virtual_file_name, file_reader
-types from tool_provider: tool metadata, tool result, tool failure
+types from tool_provider: agent, tool metadata, tool result, tool failure
 types from virtual_file_name: virtual file name, virtual file mapper
 types from file_reader: file reader factory, file reader, file reader configuration, read-only file, read-write file, file read tool, file search tool, session-start read
 implements: file reader factory
