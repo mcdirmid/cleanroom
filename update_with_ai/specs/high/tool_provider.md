@@ -1,30 +1,29 @@
-# tool_provider
+# tool_provider interface component
 
 ## Purpose
 
-Standardizes tool interaction for AI agents to ensure predictable execution, recovery, and termination.
+The tool_provider interface component enables agents to safely interact with environment capabilities through structured invocation boundaries and actionable outcome feedback.
 
-Agents interact with environments via tools, but unstructured error reporting and ambiguous completion cause model confusion and runaway loops. Tool provider standardizes this lifecycle: tools describe their expectations via metadata, execute agent-supplied arguments, and return either usable results or actionable failure feedback that enables in-place recovery. Explicit termination outcomes ensure clean, atomic session completion.
+Autonomous agent loops risk unpredictable deviations when environment actions are unconstrained or when failures produce uninformative errors. Unstructured text interfaces force fragile parsing, whereas rigid crash behaviors prevent autonomous recovery. The tool_provider interface component establishes an extensible contract between the agent orchestration layer and concrete domain tooling, allowing external capabilities to be exposed hermetically while giving agents the structured feedback necessary to self-correct during multi-turn interactions.
 
-> Tool metadata defines arguments requiring explicit agent intent for modal or state-altering views, avoiding defaults that cause surprising behavioral shifts.
+**Out of scope:** The tool_provider interface component does not implement concrete domain tools, parse model output streams, or govern the agent turn loop; these are handled by other components.
 
-## Types
+## Types and Behavior
 
-- An *agent* is an autonomous entity that discovers and calls *tools* to accomplish a task
-- A *tool provider* is a provider of available *tools* to an *agent*
-- A *tool* is an executable capability described by *tool metadata* that performs actions when executed with arguments supplied by an *agent*
-- A *tool metadata* is a descriptor specifying a *tool*'s name, purpose, and expected arguments to an *agent*
-- A *tool result* is the successful outcome of executing a *tool*, carrying produced content and optional guidance for an *agent*
-- A *tool failure* is an execution outcome signaling that a *tool* could not be executed or complete, carrying feedback to guide the calling *agent* toward recovery
-- A *termination outcome* is a *tool result* communicating that execution has completed
+A *parameter converter* is a polymorphic service that has an *actual type*, a primitive *wire type* (limited to *string*, *integer*, or *boolean*), and can *convert* a wire type value to produce a value of that actual type. An actual type is meta type: its values are references to data types, not the values of those data types.
 
-## Behavior
+An *identity parameter converter* is a polymorphic parameter converter that works for parameters where the actual and wire types are the same, wrapping string, integer, or boolean. There are three identity parameter converters, one for each wire type: a *string parameter converter*, an *integer parameter converter*, and a *boolean parameter converter*. Converting a wire type value with an identity parameter converter produces that value directly as its actual value.
 
-- Available *tools* can be retrieved from a *tool provider* for an *agent*.
-- *Tool metadata* can be retrieved from a *tool*, describing its name, purpose, and expected arguments to an *agent*.
-- A *tool* can be executed with arguments supplied by an *agent* matching its *tool metadata*.
-- When executing a *tool* encounters invalid arguments, a policy violation, or an unmet prerequisite, execution produces a *tool failure* without modifying state.
-- A *tool failure* provides actionable feedback so the calling *agent* can self-correct and continue.
-- Executing a *tool* produces a *tool result*, which may be a *termination outcome*.
-- A *tool result* carries the content produced by the *tool* and optional producer-generated guidance for an *agent*.
-- A *termination outcome* is terminal and atomic; once produced, execution concludes and no further *tool results* are produced.
+A *tool* is a polymorphic service implemented by a component to define an executable action. A tool has a *name* (used to identify the tool), a *description* (which informs the model why and when to use the tool), and *parameters*. A *parameter* describes an input accepted by a tool, having a *name* and a *description* (guiding how arguments are supplied), a *parameter converter*, and can be *required* to indicate that an argument must be supplied for tool execution. It is assumed that all parameters of a tool have unique names.
+
+A tool can be *executed* directly with a set of *actual parameter bindings*, which map parameters to resolved values of their actual types, producing a *response* that communicates the following:
+
+- Whether tool execution *failed*.
+
+- Whether to communicate that the agent session should *terminate*.
+
+- Textual *content* that includes underlying tool execution output. When tool execution fails, the content should include error and diagnostic messages along with guidance on how to execute the tool correctly.
+
+Direct tool execution with actual parameter bindings is primarily used by components when software needs to invoke an action directly (such as executing a read tool to inject startup context).
+
+The *tool manager* is an agent session service that maintains tools for an agent session. Tools can be *installed* so they are available during the session, and it is assumed that all installed tools have unique names. At the direction of a model during an agent turn, the tool manager *executes* tools by *name* with *wire parameter bindings* (mapping parameter names to values of their wire types), that, if mappings are successfully resolved, produces the same response as executing the tool directly. The tool manager also exposes *installed tools* to inform the model of what tools can be executed.

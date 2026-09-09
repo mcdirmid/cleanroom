@@ -1,24 +1,32 @@
-"""Runner logger implementation formatting to stdout and transcript files."""
+import os
+from typing import Optional
+from . import runner_logger
+from .lifecycle import LifecycleRegistry, Singleton, get_default_registry
 
-import sys
-from typing import Optional, TypeAlias
-from .runner_logger import RunnerLogger, LogEvent
+class RunnerLogger(runner_logger.RunnerLogger, Singleton):
+    tier = "system"
 
-TranscriptPath: TypeAlias = str
+    def __init__(self) -> None:
+        self.transcript_file_path = os.environ.get("TRANSCRIPT_LOG_PATH", "agent_loop.log")
 
+    def initialize(self) -> None:
+        # Requirement: Clear existing transcript log file at initialization, resolving path from environment or defaulting to agent_loop.log
+        with open(self.transcript_file_path, "w", encoding="utf-8") as f:
+            f.write("")
 
-class RunnerLoggerImpl(RunnerLogger):
-    def __init__(self, transcript_file_path: Optional[TranscriptPath] = None) -> None:
-        self.transcript_file_path = transcript_file_path or "agent_loop.log"
-        try:
-            with open(self.transcript_file_path, "w", encoding="utf-8") as f:
-                f.write("")
-        except Exception:
-            pass
-
-    def log(self, event: LogEvent) -> None:
+    def consume(self, event: runner_logger.LogEvent) -> None:
+        # Requirement: Consuming a log event writes a single-line compact summary to standard output
         if event.summary:
             print(event.summary, flush=True)
-        if event.transcript:
+        # Requirement: Consuming a log event writes an unbuffered verbose record to the transcript log file
+        if event.transcript_representation:
             with open(self.transcript_file_path, "a", encoding="utf-8") as f:
-                f.write(event.transcript + "\n")
+                f.write(event.transcript_representation + "\n")
+
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        RunnerLogger,
+        keys=[RunnerLogger, runner_logger.RunnerLogger],
+        tier="system",
+    )

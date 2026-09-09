@@ -1,0 +1,22 @@
+# bazel_graph_storage_impl implementation component
+
+imports: bazel_node_id_utils, update_with_ai_proto_ext, file_alias
+implements: bazel_graph_storage, dag_storage
+
+## Purpose
+
+The bazel_graph_storage_impl implementation component realizes in-memory graph indexing, protobuf text format persistence, and silent dependency filtering for Bazel targets.
+
+Coordinating multi-node builds requires fast in-memory access to target metadata alongside durable on-disk persistence of inter-node communication records. The bazel_graph_storage_impl implementation component maintains target configurations and graph edges in memory, serializes message queues and reverse dependencies into per-package `.update_with_ai.textproto` files, and filters silent dependencies from dirty propagation.
+
+**Out of scope:** The bazel_graph_storage_impl implementation component does not deserialize JSON files, drive agent loops, or execute verification commands; these are handled by other components.
+
+## Types and Behavior
+
+The bazel graph storage maintains node definitions, task prompts, dependencies, and reverse dependencies mapped to nodes in dag storage.
+
+The bazel graph storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files using proto package store from update with ai proto ext.
+
+All nodes located within the same package directory resolved by the bazel node identifier utility from bazel node id utils share a common package message file named `.update_with_ai.textproto`. The bazel graph storage reads and writes message files using the directory path from file alias, creating files if missing and ignoring absent files on read.
+
+When evaluating dependency propagation in the bazel graph storage, propagating dependencies exclude silent dependencies declared on a node.

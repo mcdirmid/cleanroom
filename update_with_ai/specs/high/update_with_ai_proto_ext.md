@@ -1,21 +1,19 @@
-# update_with_ai_proto_ext
-
-imports: dag_storage
-types from dag_storage: node, message, pending message, reverse dependency
+# update_with_ai_proto_ext external component
 
 ## Purpose
 
-Specifies the external protobuf text-format schema for storing package message data in .update_with_ai.textproto files.
+The update_with_ai_proto_ext external component specifies the external protobuf text-format schema for storing package message data in `.update_with_ai.textproto` files.
 
-Package directory message persistence uses a structured text format mapping node identifiers to their pending messages and known reverse dependencies. The external format defines message record fields, kind annotations, and reverse dependency lists.
+Package directory message persistence uses a structured text format mapping node identifiers to their pending messages and known reverse dependencies. The update_with_ai_proto_ext external component encapsulates protobuf textproto record formats, kind annotations, and reverse dependency lists.
 
-## Types
+**Out of scope:** The update_with_ai_proto_ext external component does not resolve package directories, evaluate node dirty states, or execute cleaning passes; these are handled by other components.
 
-- A *proto message* is an external textproto message record with a kind discriminator and text payload
-- A *proto node entry* is an external textproto record containing pending *messages* and *reverse dependencies* for a *node*
-- A *proto package store* is a collection of *proto node entries* serialized to a package textproto file
+## Grounding Gaps Covered
 
-## Behavior
+The update_with_ai_proto_ext component provides the external domain knowledge and protobuf serialization mechanics required to store and retrieve package-level message records:
 
-- A *proto package store* serializes *nodes*, *pending messages*, and *reverse dependencies* to protobuf text format.
-- A *proto package store* deserializes protobuf text format into *nodes*, *pending messages*, and *reverse dependencies*.
+- Protobuf text format schema: Defines the message record structure used in `.update_with_ai.textproto` files, organizing package data into node entries with node identifier strings, lists of pending messages carrying kind discriminators and payload text, and lists of reverse dependency target strings.
+
+- Protobuf text serialization and deserialization: Parses human-readable protobuf textproto files into structured entries, formats structured entries back into canonical protobuf text representation, and ensures deterministic field ordering during serialization.
+
+- Textproto file persistence and error tolerance: Reads and writes `.update_with_ai.textproto` files in package directories on the filesystem, treats missing textproto files as empty stores, and handles syntax errors or corrupted textproto records with safe recovery defaults.

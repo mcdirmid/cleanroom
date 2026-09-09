@@ -1,20 +1,21 @@
-# bazel_node_id_utils
+# bazel_node_id_utils interface component
 
-imports: dag_storage, node_id_utils
-types from dag_storage: node
-types from node_id_utils: node identifier utility, node directory
+imports: dag_storage, file_alias
 
 ## Purpose
 
-Defines Bazel-specific node identifier utilities normalizing Bazel target labels and determining Bazel package directories.
+The bazel_node_id_utils interface component normalizes Bazel target labels into canonical graph nodes and determines package filesystem directories.
 
-Bazel targets use specialized label formats with repository qualifiers and package-relative targets. Bazel node identifier utilities specify the specialized normalization rules and directory mappings that bridge Bazel label syntax with opaque node identifiers.
+Multi-step workflows require deterministic node addressing and durable state storage within project package structures. The bazel_node_id_utils interface component defines operations to convert arbitrary Bazel target identifier strings into canonical node references in dag storage and resolve the workspace package directories that contain them.
 
-## Types
+**Out of scope:** The bazel_node_id_utils interface component does not inspect disk files, parse build target manifests, or execute topological cleaning; these are handled by other components.
 
-- A *bazel node identifier utility* is a *node identifier utility* specialized for Bazel target labels and package structures
+## Types and Behavior
 
-## Behavior
+A *node directory* is a directory path from file alias addressing the workspace package directory of a node from dag storage.
 
-- A *bazel node identifier utility* normalizes Bazel target labels into canonical *nodes*.
-- A *bazel node identifier utility* extracts *node directories* based on Bazel package path structure.
+The *bazel node identifier utility* is a *system* service that normalizes Bazel target labels and resolves package locations. The bazel node identifier utility:
+
+- *Normalizes* an arbitrary Bazel target identifier string into a canonical node in dag storage.
+
+- *Extracts* a node directory from a node.

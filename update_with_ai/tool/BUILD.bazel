@@ -1,0 +1,10 @@
+# update_with_ai/tool/BUILD.bazel
+
+load("@rules_python//python:defs.bzl", "py_binary")
+
+py_binary(
+    name = "evaluate_coverage",
+    srcs = ["evaluate_coverage.py"],
+    main = "evaluate_coverage.py",
+    visibility = ["//visibility:public"],
+)

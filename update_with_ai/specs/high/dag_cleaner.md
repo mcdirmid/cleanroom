@@ -1,22 +1,21 @@
-# dag_cleaner
+# dag_cleaner interface component
 
 imports: dag_storage, dag_node_cleaner
-types from dag_storage: dag storage, node, pending message
-types from dag_node_cleaner: node cleaner, change message, feedback message
 
 ## Purpose
 
-Orchestrates topological subgraph cleaning across a directed acyclic graph, ensuring dependencies are clean before dependents run.
+The dag_cleaner interface component coordinates topological graph execution to ensure dependencies are clean before dependent nodes run.
 
-Cleaning interconnected build nodes in arbitrary order causes race conditions, duplicate executions, and stale reads. DAG cleaner coordinates cleaning across acyclic subgraphs in strict topological order, broadcasting change messages downstream and routing feedback messages upstream.
+Executing interconnected tasks in an arbitrary or concurrent sequence risks race conditions, duplicate computations, and stale artifact reads. When an upstream node changes, downstream dependents must be invalidated and updated in dependency order. The dag_cleaner interface component establishes an orchestration boundary that enforces topological execution across subgraphs.
 
-## Types
+**Out of scope:** The dag_cleaner interface component does not execute single-node tasks, maintain graph topology, or deliver messages; these are handled by other components.
 
-- A *dag cleaner* is an orchestration service that cleans subgraphs in a *dag storage* using a *node cleaner*
+## Types and Behavior
 
-## Behavior
+A *dag cleaner* is a *system* service that coordinates topological graph cleaning across a dag storage using a node cleaner.
 
-- A *dag cleaner* can clean an acyclic subgraph rooted at a target *node* in a *dag storage*.
-- A *dag cleaner* cleans dirty *nodes* in topological order, ensuring dependencies are clean before dependent *nodes* execute.
-- A *dag cleaner* routes *change messages* produced by a cleaned *node* to its reverse dependencies.
-- A *dag cleaner* routes *feedback messages* produced by a cleaned *node* to its dependencies.
+A dag cleaner can *clean* a target *node* using a *node cleaner*. Cleaning a node cleans dirty nodes in dependency-first topological order, ensuring all dependencies of a node are clean before that node is cleaned. It is assumed that the node roots an acyclic subgraph in dag storage.
+
+When cleaning a dirty node using the node cleaner, cleaning delegates to the node cleaner. If the node cleaner communicates that processing cannot continue, cleaning halts.
+
+Cleaning concludes when all nodes in the subgraph rooted at the node are clean.

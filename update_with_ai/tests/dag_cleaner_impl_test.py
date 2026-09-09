@@ -1,336 +1,195 @@
-"""Tests for dag_cleaner_impl derived from LLS."""
+"""Unit tests for dag_cleaner_impl aligned with grounding specifications."""
 
 import unittest
-from typing import Sequence, Optional, Dict, List, Set
-from lib.dag_storage import DagStorage, NodeId, DagMessage, PendingMessage, NodeData
-from lib.dag_node_cleaner import NodeCleaner, NodeCleaningOutcome, ChangeMessage, FeedbackMessage
-from lib.dag_cleaner_impl import DagCleanerImpl
+from typing import Dict, List, Set
+from lib.dag_cleaner import DagCleaner
+from lib.dag_cleaner_impl import DagCleaner as DagCleanerImpl, __initialize__
+from lib.dag_node_cleaner import NodeCleaner
+from lib.dag_storage import DagStorage, Dependency, Message, Node
+from lib.lifecycle import LifecycleRegistry, enter_phase
 
 
-class MockStorage(DagStorage):
+class MockDagStorage:
+    tier = "system"
+
     def __init__(self) -> None:
-        self.deps: Dict[str, List[str]] = {}
-        self.rdeps: Dict[str, List[str]] = {}
-        self.pending: Dict[str, List[DagMessage]] = {}
-        self.dirty: Set[str] = set()
-        self.node_data: Dict[str, NodeData] = {}
+        self.dependencies: Dict[Node, Set[Dependency]] = {}
+        self.dependents: Dict[Node, Set[Node]] = {}
+        self.messages: Dict[Node, Set[Message]] = {}
+        self.dirty_nodes: Set[Node] = set()
 
-    def get_dependencies(self, node: NodeId) -> Sequence[NodeId]:
-        return self.deps.get(node, [])
+    def get_dependencies(self, node: Node) -> Set[Dependency]:
+        return set(self.dependencies.get(node, set()))
 
-    def get_reverse_dependencies(self, node: NodeId) -> Sequence[NodeId]:
-        return self.rdeps.get(node, [])
+    def get_dependents(self, node: Node) -> Set[Node]:
+        return set(self.dependents.get(node, set()))
 
-    def get_pending_messages(self, node: NodeId) -> Sequence[PendingMessage]:
-        return list(self.pending.get(node, []))
+    def get_messages(self, node: Node) -> Set[Message]:
+        return set(self.messages.get(node, set()))
 
-    def queue_pending_messages(self, node: NodeId, messages: Sequence[DagMessage]) -> None:
-        if node not in self.pending:
-            self.pending[node] = []
-        self.pending[node].extend(messages)
-        self.dirty.add(node)
+    def is_dirty(self, node: Node) -> bool:
+        return node in self.dirty_nodes
 
-    def clear_pending_messages(self, node: NodeId) -> None:
-        self.pending[node] = []
-        self.dirty.discard(node)
+    def register_dependent(self, node: Node) -> None:
+        pass
 
-    def record_node_data(self, node: NodeId, data: NodeData) -> None:
-        self.node_data[node] = data
+    def clear_dependents(self, node: Node) -> None:
+        pass
 
-    def get_node_data(self, node: NodeId) -> Optional[NodeData]:
-        return self.node_data.get(node)
+    def add_message(self, message: Message, to: Node) -> None:
+        self.messages.setdefault(to, set()).add(message)
+        self.dirty_nodes.add(to)
 
-    def mark_dirty(self, node: NodeId) -> None:
-        self.dirty.add(node)
-
-    def is_dirty(self, node: NodeId) -> bool:
-        return node in self.dirty
+    def clear_messages(self, node: Node) -> None:
+        self.messages[node] = set()
+        self.dirty_nodes.discard(node)
 
 
-class RecordingNodeCleaner(NodeCleaner):
-    def __init__(self) -> None:
-        self.cleaned_calls: List[tuple[NodeId, List[PendingMessage]]] = []
-        self.outcomes_by_node: Dict[NodeId, List[NodeCleaningOutcome]] = {}
-        self.default_outcome: NodeCleaningOutcome = []
+class RecordingNodeCleaner:
+    def __init__(self, storage: MockDagStorage, returns_continue: bool = True) -> None:
+        self.storage = storage
+        self.returns_continue = returns_continue
+        self.cleaned_calls: List[Node] = []
 
-    def set_outcomes(self, node: NodeId, outcomes: List[NodeCleaningOutcome]) -> None:
-        self.outcomes_by_node[node] = list(outcomes)
-
-    def clean_node(self, node: NodeId, pending_messages: Sequence[PendingMessage]) -> NodeCleaningOutcome:
-        self.cleaned_calls.append((node, list(pending_messages)))
-        if node in self.outcomes_by_node and self.outcomes_by_node[node]:
-            return self.outcomes_by_node[node].pop(0)
-        return self.default_outcome
+    def clean(self, node: Node) -> bool:
+        self.cleaned_calls.append(node)
+        # Default behavior: cleaning resolves dirty state
+        self.storage.dirty_nodes.discard(node)
+        return self.returns_continue
 
 
-class TestDagCleanerTopologicalExecution(unittest.TestCase):
-    """Tests CUJ for topological cleaning order and dependency-first invariants."""
+class DagCleanerImplTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.storage = MockDagStorage()
+        self.registry = LifecycleRegistry()
+        __initialize__(self.registry)
+        self.registry.register_instance(self.storage, keys=[DagStorage], tier="system")
 
     def test_single_node_clean_success(self) -> None:
-        """Tests cleaning an isolated root node with no dependencies."""
-        storage = MockStorage()
-        storage.mark_dirty("//pkg:single")
-        cleaner = RecordingNodeCleaner()
-        cleaner.default_outcome = []
+        """CUJ: Cleaning an isolated dirty root node."""
+        root = Node(address="//pkg:single")
+        self.storage.dirty_nodes.add(root)
+        cleaner = RecordingNodeCleaner(self.storage)
 
-        dag_cleaner = DagCleanerImpl()
-        dag_cleaner.clean_subgraph("//pkg:single", storage, cleaner)
+        with enter_phase("system", registry=self.registry) as scope:
+            dag_cleaner = scope.get_singleton(DagCleaner)
+            dag_cleaner.clean(root, cleaner)
 
-        self.assertEqual(len(cleaner.cleaned_calls), 1)
-        self.assertEqual(cleaner.cleaned_calls[0][0], "//pkg:single")
-        self.assertFalse(storage.is_dirty("//pkg:single"))
+            # Requirement: When cleaning a dirty node, the node cleaner is invoked to clean the node.
+            self.assertEqual(cleaner.cleaned_calls, [root])
+            # Requirement: Cleaning succeeds when all reachable nodes in the subgraph are clean.
+            self.assertFalse(self.storage.is_dirty(root))
 
     def test_linear_pipeline_topological_order(self) -> None:
-        """Tests linear chain A -> B -> C executes in dependency-first order [C, B, A]."""
-        storage = MockStorage()
-        storage.deps["//pkg:a"] = ["//pkg:b"]
-        storage.rdeps["//pkg:b"] = ["//pkg:a"]
-        storage.deps["//pkg:b"] = ["//pkg:c"]
-        storage.rdeps["//pkg:c"] = ["//pkg:b"]
+        """CUJ: Chain A depends on B, B depends on C executes in dependency-first order [C, B, A]."""
+        a = Node(address="//pkg:a")
+        b = Node(address="//pkg:b")
+        c = Node(address="//pkg:c")
 
-        storage.mark_dirty("//pkg:a")
-        storage.mark_dirty("//pkg:b")
-        storage.mark_dirty("//pkg:c")
+        self.storage.dependencies[a] = {Dependency(node=b)}
+        self.storage.dependencies[b] = {Dependency(node=c)}
+        self.storage.dirty_nodes.update([a, b, c])
 
-        cleaner = RecordingNodeCleaner()
-        dag_cleaner = DagCleanerImpl()
-        dag_cleaner.clean_subgraph("//pkg:a", storage, cleaner)
+        cleaner = RecordingNodeCleaner(self.storage)
 
-        visited_nodes = [call[0] for call in cleaner.cleaned_calls]
-        self.assertEqual(visited_nodes, ["//pkg:c", "//pkg:b", "//pkg:a"])
-        self.assertFalse(storage.is_dirty("//pkg:a"))
-        self.assertFalse(storage.is_dirty("//pkg:b"))
-        self.assertFalse(storage.is_dirty("//pkg:c"))
+        with enter_phase("system", registry=self.registry) as scope:
+            dag_cleaner = scope.get_singleton(DagCleaner)
+            dag_cleaner.clean(a, cleaner)
+
+            # Requirement: In each cleaning iteration, reachable nodes are visited in topological order.
+            # Requirement: Cleaning a node cleans dirty nodes in dependency-first topological order, ensuring all dependencies of a node are clean before that node is cleaned.
+            self.assertEqual(cleaner.cleaned_calls, [c, b, a])
+            # Requirement: Cleaning concludes when all nodes in the subgraph rooted at the node are clean.
+            self.assertFalse(self.storage.is_dirty(a))
+            self.assertFalse(self.storage.is_dirty(b))
+            self.assertFalse(self.storage.is_dirty(c))
 
     def test_diamond_graph_topological_order(self) -> None:
-        """Tests diamond DAG: root -> (left, right) -> bottom."""
-        storage = MockStorage()
-        storage.deps["//pkg:root"] = ["//pkg:left", "//pkg:right"]
-        storage.rdeps["//pkg:left"] = ["//pkg:root"]
-        storage.rdeps["//pkg:right"] = ["//pkg:root"]
+        """CUJ: Diamond DAG: root -> (left, right) -> bottom executes bottom first, root last."""
+        root = Node(address="//pkg:root")
+        left = Node(address="//pkg:left")
+        right = Node(address="//pkg:right")
+        bottom = Node(address="//pkg:bottom")
 
-        storage.deps["//pkg:left"] = ["//pkg:bottom"]
-        storage.deps["//pkg:right"] = ["//pkg:bottom"]
-        storage.rdeps["//pkg:bottom"] = ["//pkg:left", "//pkg:right"]
+        self.storage.dependencies[root] = {Dependency(node=left), Dependency(node=right)}
+        self.storage.dependencies[left] = {Dependency(node=bottom)}
+        self.storage.dependencies[right] = {Dependency(node=bottom)}
+        self.storage.dirty_nodes.update([root, left, right, bottom])
 
-        storage.mark_dirty("//pkg:root")
-        storage.mark_dirty("//pkg:left")
-        storage.mark_dirty("//pkg:right")
-        storage.mark_dirty("//pkg:bottom")
+        cleaner = RecordingNodeCleaner(self.storage)
 
-        cleaner = RecordingNodeCleaner()
-        dag_cleaner = DagCleanerImpl()
-        dag_cleaner.clean_subgraph("//pkg:root", storage, cleaner)
+        with enter_phase("system", registry=self.registry) as scope:
+            dag_cleaner = scope.get_singleton(DagCleaner)
+            dag_cleaner.clean(root, cleaner)
 
-        visited_nodes = [call[0] for call in cleaner.cleaned_calls]
-        self.assertEqual(visited_nodes[0], "//pkg:bottom")
-        self.assertEqual(visited_nodes[-1], "//pkg:root")
-        self.assertIn("//pkg:left", visited_nodes[1:3])
-        self.assertIn("//pkg:right", visited_nodes[1:3])
+            # Requirement: Cleaning a target node collects all reachable dependencies from the node.
+            # Requirement: In each cleaning iteration, reachable nodes are visited in topological order.
+            self.assertEqual(cleaner.cleaned_calls[0], bottom)
+            self.assertEqual(cleaner.cleaned_calls[-1], root)
+            self.assertIn(cleaner.cleaned_calls[1], [left, right])
+            self.assertIn(cleaner.cleaned_calls[2], [left, right])
 
     def test_only_dirty_nodes_are_cleaned(self) -> None:
-        """Tests that clean nodes in the reachable subgraph are not cleaned."""
-        storage = MockStorage()
-        storage.deps["//pkg:root"] = ["//pkg:dep1", "//pkg:dep2"]
-        storage.rdeps["//pkg:dep1"] = ["//pkg:root"]
-        storage.rdeps["//pkg:dep2"] = ["//pkg:root"]
+        """CUJ: Clean nodes in reachable subgraph are not cleaned."""
+        root = Node(address="//pkg:root")
+        dep1 = Node(address="//pkg:dep1")
+        dep2 = Node(address="//pkg:dep2")
 
+        self.storage.dependencies[root] = {Dependency(node=dep1), Dependency(node=dep2)}
         # Only dep2 and root are dirty
-        storage.mark_dirty("//pkg:dep2")
-        storage.mark_dirty("//pkg:root")
+        self.storage.dirty_nodes.update([dep2, root])
 
-        cleaner = RecordingNodeCleaner()
-        dag_cleaner = DagCleanerImpl()
-        dag_cleaner.clean_subgraph("//pkg:root", storage, cleaner)
+        cleaner = RecordingNodeCleaner(self.storage)
 
-        visited_nodes = [call[0] for call in cleaner.cleaned_calls]
-        self.assertEqual(visited_nodes, ["//pkg:dep2", "//pkg:root"])
-        self.assertNotIn("//pkg:dep1", visited_nodes)
+        with enter_phase("system", registry=self.registry) as scope:
+            dag_cleaner = scope.get_singleton(DagCleaner)
+            dag_cleaner.clean(root, cleaner)
 
-    def test_unreachable_nodes_are_not_cleaned(self) -> None:
-        """Tests that dirty nodes outside the root's dependency subgraph are ignored."""
-        storage = MockStorage()
-        storage.deps["//pkg:root"] = ["//pkg:dep"]
-        storage.rdeps["//pkg:dep"] = ["//pkg:root"]
+            # Requirement: Visiting a node checks whether the node is dirty, not whether it is cleaned.
+            # Requirement: A node is cleaned only if it is dirty and all of its dependencies are clean.
+            self.assertEqual(cleaner.cleaned_calls, [dep2, root])
+            self.assertNotIn(dep1, cleaner.cleaned_calls)
 
-        storage.mark_dirty("//pkg:root")
-        storage.mark_dirty("//pkg:dep")
-        storage.mark_dirty("//pkg:unrelated")
+    def test_halting_when_cleaner_returns_false(self) -> None:
+        """CUJ: Halts execution immediately when cleaner returns False."""
+        root = Node(address="//pkg:root")
+        dep = Node(address="//pkg:dep")
 
-        cleaner = RecordingNodeCleaner()
-        dag_cleaner = DagCleanerImpl()
-        dag_cleaner.clean_subgraph("//pkg:root", storage, cleaner)
+        self.storage.dependencies[root] = {Dependency(node=dep)}
+        self.storage.dirty_nodes.update([dep, root])
 
-        visited_nodes = [call[0] for call in cleaner.cleaned_calls]
-        self.assertEqual(visited_nodes, ["//pkg:dep", "//pkg:root"])
-        self.assertTrue(storage.is_dirty("//pkg:unrelated"))
+        # Cleaner halts on dep
+        cleaner = RecordingNodeCleaner(self.storage, returns_continue=False)
 
+        with enter_phase("system", registry=self.registry) as scope:
+            dag_cleaner = scope.get_singleton(DagCleaner)
+            dag_cleaner.clean(root, cleaner)
 
-class TestDagCleanerMessageRouting(unittest.TestCase):
-    """Tests message routing postconditions for ChangeMessage and FeedbackMessage."""
+            # Requirement: If the node cleaner communicates that processing cannot continue, cleaning halts.
+            self.assertEqual(cleaner.cleaned_calls, [dep])
+            self.assertNotIn(root, cleaner.cleaned_calls)
 
-    def test_change_message_routes_to_all_reverse_dependencies(self) -> None:
-        """Tests that ChangeMessage instances produced by a node are routed to its reverse dependencies."""
-        storage = MockStorage()
-        storage.deps["//pkg:consumer1"] = ["//pkg:producer"]
-        storage.deps["//pkg:consumer2"] = ["//pkg:producer"]
-        storage.rdeps["//pkg:producer"] = ["//pkg:consumer1", "//pkg:consumer2"]
+    def test_execution_limit(self) -> None:
+        """CUJ: Exceeding execution limit halts with an unexpected failure."""
+        with enter_phase("system", registry=self.registry) as scope:
+            dag_cleaner = scope.get_singleton(DagCleanerImpl)
+            # Requirement: The execution limit is hardcoded to 500.
+            self.assertEqual(dag_cleaner.execution_limit, 500)
 
-        storage.deps["//pkg:root"] = ["//pkg:consumer1", "//pkg:consumer2"]
-        storage.rdeps["//pkg:consumer1"] = ["//pkg:root"]
-        storage.rdeps["//pkg:consumer2"] = ["//pkg:root"]
+            root = Node(address="//pkg:infinite")
+            self.storage.dirty_nodes.add(root)
 
-        storage.mark_dirty("//pkg:producer")
-        # Consumers start clean; producer changes will mark them dirty
+            class NonResolvingCleaner(NodeCleaner):
+                def clean(self, node: Node) -> bool:
+                    return True
 
-        cleaner = RecordingNodeCleaner()
-        change_msg = ChangeMessage(content="producer_output.txt updated")
-        cleaner.set_outcomes("//pkg:producer", [[change_msg]])
-        cleaner.set_outcomes("//pkg:consumer1", [[]])
-        cleaner.set_outcomes("//pkg:consumer2", [[]])
-        cleaner.set_outcomes("//pkg:root", [[]])
-
-        dag_cleaner = DagCleanerImpl()
-        dag_cleaner.clean_subgraph("//pkg:root", storage, cleaner)
-
-        # Both consumers should have received the ChangeMessage
-        consumer1_calls = [call for call in cleaner.cleaned_calls if call[0] == "//pkg:consumer1"]
-        consumer2_calls = [call for call in cleaner.cleaned_calls if call[0] == "//pkg:consumer2"]
-        self.assertTrue(len(consumer1_calls) > 0)
-        self.assertTrue(len(consumer2_calls) > 0)
-        self.assertIn(change_msg, consumer1_calls[0][1])
-        self.assertIn(change_msg, consumer2_calls[0][1])
-
-    def test_feedback_message_routes_upstream_to_dependencies(self) -> None:
-        """Tests that FeedbackMessage instances produced by a node are routed to its dependencies."""
-        storage = MockStorage()
-        storage.deps["//pkg:consumer"] = ["//pkg:producer"]
-        storage.rdeps["//pkg:producer"] = ["//pkg:consumer"]
-
-        storage.mark_dirty("//pkg:consumer")
-
-        cleaner = RecordingNodeCleaner()
-        feedback_msg = FeedbackMessage(content="Blamed //pkg:producer: syntax error in header")
-        # Consumer on pass 1 emits feedback, marking producer dirty
-        cleaner.set_outcomes("//pkg:consumer", [[feedback_msg], []])
-        # Producer on pass 2 fixes the issue and emits change
-        cleaner.set_outcomes("//pkg:producer", [[ChangeMessage(content="fixed header")]])
-
-        dag_cleaner = DagCleanerImpl(max_iterations=10)
-        dag_cleaner.clean_subgraph("//pkg:consumer", storage, cleaner)
-
-        # Producer must have been cleaned and received the FeedbackMessage
-        producer_calls = [call for call in cleaner.cleaned_calls if call[0] == "//pkg:producer"]
-        self.assertEqual(len(producer_calls), 1)
-        self.assertIn(feedback_msg, producer_calls[0][1])
-
-    def test_clears_pending_messages_when_cleaning_node(self) -> None:
-        """Tests that pending messages are cleared when a node is cleaned."""
-        storage = MockStorage()
-        initial_msg = DagMessage(content="initial pending message")
-        storage.queue_pending_messages("//pkg:node", [initial_msg])
-        self.assertTrue(storage.is_dirty("//pkg:node"))
-
-        cleaner = RecordingNodeCleaner()
-        cleaner.set_outcomes("//pkg:node", [[]])
-
-        dag_cleaner = DagCleanerImpl()
-        dag_cleaner.clean_subgraph("//pkg:node", storage, cleaner)
-
-        self.assertEqual(len(cleaner.cleaned_calls), 1)
-        self.assertIn(initial_msg, cleaner.cleaned_calls[0][1])
-        # Pending messages in storage must now be empty
-        self.assertEqual(storage.get_pending_messages("//pkg:node"), [])
-
-
-class TestDagCleanerFailureHandling(unittest.TestCase):
-    """Tests failure handling and boundary conditions."""
-
-    def test_node_cleaning_failure_outcome_leaves_node_dirty_and_halts(self) -> None:
-        """Tests that when clean_node returns None (cleaning failure), the node is left dirty and pass halts."""
-        storage = MockStorage()
-        storage.deps["//pkg:root"] = ["//pkg:dep"]
-        storage.rdeps["//pkg:dep"] = ["//pkg:root"]
-        storage.mark_dirty("//pkg:dep")
-        storage.mark_dirty("//pkg:root")
-
-        cleaner = RecordingNodeCleaner()
-        # Dep fails cleaning (returns None)
-        cleaner.set_outcomes("//pkg:dep", [None])
-
-        dag_cleaner = DagCleanerImpl()
-        dag_cleaner.clean_subgraph("//pkg:root", storage, cleaner)
-
-        # Dep was called, but root was never cleaned because dep failed
-        visited_nodes = [call[0] for call in cleaner.cleaned_calls]
-        self.assertEqual(visited_nodes, ["//pkg:dep"])
-        self.assertTrue(storage.is_dirty("//pkg:dep"))
-
-    def test_cycle_detection_raises_runtime_error(self) -> None:
-        """Tests that a cyclic dependency graph raises RuntimeError."""
-        storage = MockStorage()
-        storage.deps["//pkg:a"] = ["//pkg:b"]
-        storage.rdeps["//pkg:b"] = ["//pkg:a"]
-        storage.deps["//pkg:b"] = ["//pkg:a"]
-        storage.rdeps["//pkg:a"] = ["//pkg:b"]
-        storage.mark_dirty("//pkg:a")
-
-        cleaner = RecordingNodeCleaner()
-        dag_cleaner = DagCleanerImpl()
-
-        with self.assertRaises(RuntimeError):
-            dag_cleaner.clean_subgraph("//pkg:a", storage, cleaner)
-
-    def test_max_iterations_exceeded_raises_runtime_error(self) -> None:
-        """Tests that oscillating ping-pong messages exceeding max_iterations raise RuntimeError."""
-        storage = MockStorage()
-        storage.deps["//pkg:b"] = ["//pkg:a"]
-        storage.rdeps["//pkg:a"] = ["//pkg:b"]
-        storage.mark_dirty("//pkg:a")
-
-        class PingPongCleaner(NodeCleaner):
-            def clean_node(self, node: NodeId, pending_messages: Sequence[PendingMessage]) -> NodeCleaningOutcome:
-                if node == "//pkg:a":
-                    return [ChangeMessage(content="change A")]
-                elif node == "//pkg:b":
-                    return [FeedbackMessage(content="Blamed //pkg:a: retry")]
-                return []
-
-        dag_cleaner = DagCleanerImpl(max_iterations=4)
-        with self.assertRaises(RuntimeError):
-            dag_cleaner.clean_subgraph("//pkg:b", storage, PingPongCleaner())
-
-    def test_max_iterations_boundary_exact_success(self) -> None:
-        """Tests boundary: convergence within exactly max_iterations succeeds."""
-        storage = MockStorage()
-        storage.deps["//pkg:b"] = ["//pkg:a"]
-        storage.rdeps["//pkg:a"] = ["//pkg:b"]
-        storage.mark_dirty("//pkg:a")
-
-        class BoundedLoopCleaner(NodeCleaner):
-            def __init__(self, limit: int) -> None:
-                self.count = 0
-                self.limit = limit
-
-            def clean_node(self, node: NodeId, pending_messages: Sequence[PendingMessage]) -> NodeCleaningOutcome:
-                self.count += 1
-                if self.count >= self.limit:
-                    return []
-                if node == "//pkg:a":
-                    return [ChangeMessage(content="change A")]
-                elif node == "//pkg:b":
-                    return [FeedbackMessage(content="Blamed //pkg:a: retry")]
-                return []
-
-        # 2 passes needed to converge
-        cleaner = BoundedLoopCleaner(limit=2)
-        dag_cleaner = DagCleanerImpl(max_iterations=3)
-        dag_cleaner.clean_subgraph("//pkg:b", storage, cleaner)
-        self.assertFalse(storage.is_dirty("//pkg:a"))
-        self.assertFalse(storage.is_dirty("//pkg:b"))
+            # Requirement: If visiting any node exceeds the execution limit, the dag cleaner halts with an unexpected failure.
+            with self.assertRaises(RuntimeError):
+                dag_cleaner.clean(root, NonResolvingCleaner())
 
 
 if __name__ == "__main__":
     unittest.main()
 
+# Untested requirements: None
 

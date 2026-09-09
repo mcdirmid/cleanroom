@@ -65,6 +65,8 @@ def lint_hls_file(file_path: Path) -> list[str]:
     imports_list: list[str] = []
     types_from_map: dict[str, list[str]] = {}
     implements_type: str | None = None
+    assembles_type: str | None = None
+    instantiates_types: list[str] = []
 
     last_kind = 0  # 1: imports, 2: types from, 3: implements
     for l_num, line_s in header_lines:
@@ -98,24 +100,45 @@ def lint_hls_file(file_path: Path) -> list[str]:
                 if dep_name not in imports_list:
                     errors.append(f"{fname}:{l_num}: error: 'types from {dep_name}' but '{dep_name}' is not in 'imports:'")
                     
+        elif line_s.startswith("assembles:"):
+            last_kind = 3
+            assembles_type = line_s[len("assembles:"):].strip()
         elif line_s.startswith("implements:"):
             last_kind = 3
             implements_type = line_s[len("implements:"):].strip()
+        elif line_s.startswith("instantiates:"):
+            last_kind = 4
+            instantiates_types = [t.strip() for t in line_s[len("instantiates:"):].split(",") if t.strip()]
         else:
             errors.append(f"{fname}:{l_num}: error: unknown front-matter line '{line_s}'")
 
-    # Check 5: Implementation and assembly specs must have implements:
-    if (is_impl or is_asm) and not implements_type:
+    # Check 5: Implementation and assembly specs must have assembles:
+    target_assemble = assembles_type or implements_type
+    if (is_impl or is_asm) and not target_assemble:
         spec_kind = "assembly" if is_asm else "implementation"
-        errors.append(f"{fname}:1: error: {spec_kind} specification must declare 'implements: <type>' in front-matter")
+        errors.append(f"{fname}:1: error: {spec_kind} specification must declare 'assembles: <type>' in front-matter")
 
-    # Check 6: Section Headers
+    if is_asm:
+        # Assembly components must import _impl or _asm components
+        non_concrete = [d for d in imports_list if not (d.endswith("_impl") or d.endswith("_asm") or d.endswith("_ext") or d.endswith("_proto") or d == stem.replace("_asm", ""))]
+        # allow the interface component for the assembled type
+        # but must have at least one _impl or _asm
+        has_concrete = any(d.endswith("_impl") or d.endswith("_asm") for d in imports_list)
+        if not has_concrete and imports_list:
+            errors.append(f"{fname}:1: error: assembly specification must import concrete '_impl' or '_asm' components")
+
+    # Check 6: Section Headers and Behavior Structure
     valid_sections = {"Purpose", "Types", "Behavior"}
+    current_section = None
+
     for l_idx, line in enumerate(lines[idx:], idx + 1):
+        line_s = line.strip()
         if line.startswith("## "):
-            sec_name = line[3:].strip()
-            if sec_name not in valid_sections:
-                errors.append(f"{fname}:{l_idx}: error: unknown section '## {sec_name}'")
+            current_section = line_s[3:].strip()
+            if current_section not in valid_sections:
+                errors.append(f"{fname}:{l_idx}: error: unknown section '## {current_section}'")
+        elif line.startswith("### "):
+            errors.append(f"{fname}:{l_idx}: error: '###' sub-headers are prohibited in HLS specifications")
 
     return errors
 

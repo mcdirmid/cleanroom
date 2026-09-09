@@ -1,29 +1,29 @@
-# agent_runner
+# agent_runner interface component
 
-imports: tool_provider, conversation_history, loop_guard, runner_logger
-types from tool_provider: tool, tool provider, tool result, tool failure, termination outcome
-types from conversation_history: conversation history, message, model request
-types from loop_guard: loop guard, loop reminder, loop failure
-types from runner_logger: runner logger, log event
+imports: tool_provider, agent_conversation_history, agent_loop_guard, runner_logger, model_config
 
 ## Purpose
 
-Orchestrates iterative model-tool interaction turns, managing conversation flow and guarding against runaway repetition.
+The agent_runner interface component orchestrates iterative model-tool interaction turns, managing conversation flow and guarding against runaway repetition.
 
-Autonomous agent tasks require multi-turn interaction loops where model decisions trigger tool executions. Agent runner coordinates this turn lifecycle: sending formatted model requests, dispatching tool calls, recording history, and evaluating repetition guards until an explicit termination outcome concludes the run.
+Autonomous agent tasks require multi-turn interaction loops where model decisions trigger tool executions. The agent_runner interface component coordinates this turn lifecycle: sending formatted model requests from conversation history, dispatching tool calls to the tool manager, evaluating loop guards, and recording audit events until an explicit termination outcome concludes the run.
 
-## Types
+**Out of scope:** The agent_runner interface component does not serialize network wire protocols, define domain tools, or persist node graphs; these are handled by other components.
 
-- An *agent runner* is an orchestration service that drives an iterative agent run
-- An *iteration limit* is a bound on the maximum number of model interaction turns permitted in a run
-- An *agent outcome* is the final result of an agent run, carrying the *termination outcome* and the *conversation history*
+## Types and Behavior
 
-## Behavior
+An *agent outcome* is the final result of an agent run that carries a *termination outcome* from tool execution in a tool provider and the final state of the conversation history from agent conversation history.
 
-- An *agent runner* drives turns by sending a *model request* to a language model and executing requested *tools*.
-- An *agent runner* appends model responses and correlates *tool results* with originating tool call identifiers in a *conversation history*.
-- An *agent runner* emits execution progress events for model turns and tool invocations.
-- An *agent runner* records *log events* for model requests, assistant responses, and tool executions to a *runner logger*.
-- An *agent runner* evaluates tool executions with a *loop guard*, injecting *loop reminders* or terminating with a *loop failure* on runaway repetition.
-- When an execution produces a *termination outcome*, the *agent runner* concludes atomically and produces an *agent outcome*.
-- An *agent runner* concludes with a failure outcome if the *iteration limit* is exceeded.
+The *agent runner* is an *agent session* service that coordinates the turn loop for an agent session. The agent runner:
+
+- Drives turns by sending a model request to a language model and executing requested tools in the tool manager.
+
+- Appends model responses and correlates tool execution responses with originating tool call identifiers in the conversation history.
+
+- Records log events for model requests, assistant responses, and tool executions to the runner logger.
+
+- Evaluates tool executions with the loop guard, injecting loop reminders from agent loop guard into the conversation or terminating with a loop failure on runaway repetition.
+
+- Concludes atomically and produces an agent outcome when tool execution produces a termination outcome.
+
+- Concludes with a failure outcome if the conversation limit from model_config is exceeded.

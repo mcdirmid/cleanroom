@@ -1,65 +1,119 @@
-"""Tool provider interface and tool execution types."""
-
-from typing import Protocol, TypeAlias, Sequence, Mapping, Any, Optional, Union
+from typing import Any, Protocol, Set, Tuple, Type, Union
 from dataclasses import dataclass
 
-AgentIdentifier: TypeAlias = str
-ToolName: TypeAlias = str
-ToolPurpose: TypeAlias = str
-ParameterSchema: TypeAlias = Mapping[str, Any]
-ToolArguments: TypeAlias = Mapping[str, Any]
-ToolResultContent: TypeAlias = str
-ProducerGuidance: TypeAlias = str
-FailureFeedback: TypeAlias = str
-FailureError: TypeAlias = str
-TerminationReason: TypeAlias = str
+@dataclass(frozen=True)
+class WireType:
+    pass
+
+@dataclass(frozen=True)
+class String(WireType):
+    pass
+
+@dataclass(frozen=True)
+class Integer(WireType):
+    pass
+
+@dataclass(frozen=True)
+class Boolean(WireType):
+    pass
+
+class ParameterConverter(Protocol):
+    @property
+    def actual_type(self) -> Type:
+        ...
+
+    @property
+    def wire_type(self) -> WireType:
+        ...
+
+    def convert(self, wire_value: Any) -> Any:
+        ...
+
+class IdentityParameterConverter(ParameterConverter, Protocol):
+    pass
+
+class StringParameterConverter(IdentityParameterConverter, Protocol):
+    @property
+    def actual_type(self) -> Type:
+        ...
+
+    @property
+    def wire_type(self) -> WireType:
+        ...
+
+    def convert(self, wire_value: Any) -> str:
+        ...
+
+class IntegerParameterConverter(IdentityParameterConverter, Protocol):
+    @property
+    def actual_type(self) -> Type:
+        ...
+
+    @property
+    def wire_type(self) -> WireType:
+        ...
+
+    def convert(self, wire_value: Any) -> int:
+        ...
+
+class BooleanParameterConverter(IdentityParameterConverter, Protocol):
+    @property
+    def actual_type(self) -> Type:
+        ...
+
+    @property
+    def wire_type(self) -> WireType:
+        ...
+
+    def convert(self, wire_value: Any) -> bool:
+        ...
 
 
 @dataclass(frozen=True)
-class ToolMetadata:
-    name: ToolName
-    purpose: ToolPurpose
-    parameters_schema: ParameterSchema
-
-
-@dataclass(frozen=True)
-class ToolResult:
-    content: ToolResultContent = ""
-    guidance: Optional[ProducerGuidance] = None
-
+class Parameter:
+    name: str
+    description: str
+    parameter_converter: ParameterConverter
+    is_required: bool = True
 
 @dataclass(frozen=True)
-class ToolFailure(ToolResult):
-    feedback: FailureFeedback = ""
-    error: FailureError = ""
-    is_failure: bool = True
-
-    def __post_init__(self) -> None:
-        if not self.content and self.feedback:
-            object.__setattr__(self, "content", self.feedback)
-
+class ActualParameterBindings:
+    bindings: Set[Tuple[Parameter, Any]]
 
 @dataclass(frozen=True)
-class TerminationOutcome(ToolResult):
-    reason: TerminationReason = ""
-    is_terminal: bool = True
+class WireParameterBindings:
+    bindings: Set[Tuple[str, Union[str, int, bool]]]
 
-    def __post_init__(self) -> None:
-        if not self.content and self.reason:
-            object.__setattr__(self, "content", self.reason)
-
-
-ToolOutcome: TypeAlias = Union[ToolResult, ToolFailure, TerminationOutcome]
-
+@dataclass(frozen=True)
+class Response:
+    is_failed: bool
+    is_terminated: bool
+    content: str
 
 class Tool(Protocol):
-    def get_metadata(self) -> ToolMetadata:
+    @property
+    def name(self) -> str:
         ...
 
-    def execute(self, arguments: ToolArguments) -> ToolOutcome:
+    @property
+    def description(self) -> str:
         ...
 
-
-class ToolProvider(Protocol):
-    def get_tools(self) -> Sequence[Tool]:
+    @property
+    def parameters(self) -> Set[Parameter]:
         ...
+
+    def execute_tool(self, actual_parameter_bindings: ActualParameterBindings) -> Response:
+        ...
+
+class ToolManager(Protocol):
+    @property
+    def installed_tools(self) -> Set[Tool]:
+        ...
+
+    def install_tool(self, tool: Tool) -> None:
+        ...
+
+    def execute_tool(self, name: str, wire_parameter_bindings: WireParameterBindings) -> Response:
+        ...
+

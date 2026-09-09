@@ -1,22 +1,21 @@
-# openai_ext
-
-imports: conversation_history, tool_provider
-types from conversation_history: model request, message
-types from tool_provider: tool metadata
+# openai_ext external component
 
 ## Purpose
 
-Specifies the external OpenAI chat completion service interface for executing model requests with function calling.
+The openai_ext external component defines the external OpenAI chat completion service boundary for executing model requests with function calling.
 
-Agent turn execution requires transmitting conversation messages and tool schemas to a remote language model API. OpenAI service extension defines the external request payload structure, tool parameter schema formats, and token usage accounting returned by OpenAI-compatible endpoints.
+Direct coupling between domain components and remote model API endpoints creates network fragility, vendor transport coupling, and inconsistent error handling. The openai_ext external component establishes an external boundary that encapsulates HTTP transport mechanics, request payload translation, and token usage accounting reported by OpenAI-compatible endpoints.
 
-## Types
+**Out of scope:** The openai_ext external component does not orchestrate agent turns, enforce loop guards, or manage persistent conversation history; these are handled by other components.
 
-- A *model name* is an identifier designating a target language model for completion requests
-- A *completion request* is an external service payload containing a *model name*, a *model request*, and *tool metadata*
-- A *completion response* is an external service outcome containing generated *messages* and token usage metrics
+## Grounding Gaps Covered
 
-## Behavior
+The openai_ext component provides the external domain knowledge and protocol mechanics required to execute chat completions against remote OpenAI-compatible endpoints:
 
-- A *completion request* transmits a *model name*, formatted *messages* with role schemas and tool call identifiers, and *tool metadata* to an OpenAI-compatible endpoint.
-- A *completion response* provides model-generated text or tool calls and reports prompt and completion token usage.
+- Chat completion wire protocol: Defines the HTTP POST request payload format for the `/v1/chat/completions` endpoint, including model identifier strings, ordered message sequences (system prompts, user inputs, assistant responses, and tool call results), tool definitions schema conforming to function-calling specifications, temperature parameters, and execution timeouts.
+
+- Endpoint transport and communication mechanics: Establishes HTTPS transport handling, request header construction with bearer token authentication, request serialization, and response reading over network connections.
+
+- HTTP error status translation: Translates standard HTTP response status codes into structured domain outcomes, mapping 401 unauthorized errors to authentication failures, 429 rate limit errors to throttling conditions, 5xx server errors to endpoint unavailability, and request timeouts to network deadline outcomes.
+
+- Completion response parsing and token usage accounting: Deserializes endpoint response JSON payloads into model-generated message records, structured assistant tool calls containing function names and argument strings, completion finish reasons, and token consumption metrics covering prompt tokens, completion tokens, and total tokens.

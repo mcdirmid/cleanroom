@@ -1,24 +1,19 @@
-# dag_storage
+# dag_storage interface component
 
 ## Purpose
 
-Maintains dependency graph structure, dirty tracking, and pending message state across task nodes.
+The dag_storage interface component coordinates incremental workflow execution and inter-task diagnostic communication across multi-step agent runs.
 
-Multi-step agent workflows require precise dirty state tracking and inter-node communication. DAG storage manages graph topology and unhandled messages, distinguishing propagating dependencies from non-propagating dependencies to prevent unnecessary downstream re-executions while ensuring affected dependents are accurately marked dirty.
+Multi-step agent workflows require coordinated incremental execution to avoid redundant re-computation and prevent stale task outputs. As tasks evolve, dependent stages must understand why upstream changes necessitate re-execution, and downstream stages must communicate diagnostic issues back to their prerequisites. The dag_storage interface component provides a dedicated graph coordination boundary that isolates lifecycle tracking and inter-node communication state from the operational mechanics of individual task execution.
 
-## Types
+**Out of scope:** The dag_storage interface component does not determine which dependencies are silent, dispatch change notifications, interpret message semantics, or execute node cleaning; these are handled by other components.
 
-- A *node* is an opaque string identifier addressing an identifiable unit of work within a *dag storage*
-- A *dag storage* is a service that maintains a directed acyclic graph of *nodes* and their *dependencies*
-- A *dependency* is a relationship from a dependent *node* to a prerequisite *node*
-- A *propagating dependency* is a *dependency* where changes to the prerequisite mark the dependent dirty
-- A *reverse dependency* is a relationship from a prerequisite *node* to a dependent *node*
-- A *message* is a communication record passed between *nodes* in a *dag storage*
-- A *pending message* is an unhandled *message* queued at a *node* in a *dag storage*
+## Types and Behavior
 
-## Behavior
+A *node* identifies a discrete unit of work in the graph. A *dag storage* is a system service that maintains node state, including its graph structure and change propagation. A node in a dag storage has:
 
-- A *dag storage* maintains *nodes*, *dependencies*, *reverse dependencies*, and *pending messages*.
-- A *dag storage* records and retrieves data associated with a *node*.
-- A *dag storage* marks a *node* dirty when its prerequisite in a *propagating dependency* changes.
-- *Pending messages* can be queued at and cleared from a *node* in a *dag storage*.
+- *Dependencies* that refer to the node's upstream nodes in the graph. A dependency can be *silent* to indicate that the dependent node does not depend on the dependency's content and so does not need to receive change messages about the dependency.
+
+- *Dependents* that refer to downstream nodes depending on it. A node can be *registered* as a dependent to all of its non-silent dependencies so that it can be notified when dependencies change. The dependents of a node can be *cleared* to avoid stale dependent relationships.
+
+- *Messages* explaining why the node requires cleaning. A message can either indicate *change*, which informs of modifications made to upstream dependencies, or *feedback*, which informs of issues detected by downstream dependents. A node is *dirty*, meaning it needs to be cleaned, if, but not only if, it has messages. Messages can be *added* to a node, to inform on why it needs to be cleaned, as well as *cleared*, to inform that it no longer needs to be cleaned.

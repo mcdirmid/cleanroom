@@ -1,19 +1,26 @@
-"""Sandbox assembler constructing hermetic sandbox instances."""
+from __future__ import annotations
+from typing import Optional
+from .lifecycle import LifecycleRegistry
+from . import sandbox_change_summary_validator_impl
+from . import sandbox_file_editor_impl
+from . import sandbox_file_reader_impl
+from . import sandbox_guide_delivery_impl
+from . import sandbox_impl
+from . import sandbox_run_control_impl
+from . import tool_provider_impl
 
-from .sandbox_impl import SandboxFactoryImpl
-from .file_reader_impl import FileReaderFactoryImpl
-from .file_editor_impl import FileEditorFactoryImpl
-from .guide_delivery_impl import GuideDeliveryFactoryImpl
-from .run_control_impl import RunControlFactoryImpl
-from .change_summary_validator_impl import ChangeValidatorImpl
+CONSTITUENTS = (
+    sandbox_impl,
+    sandbox_file_reader_impl,
+    sandbox_file_editor_impl,
+    sandbox_run_control_impl,
+    sandbox_guide_delivery_impl,
+    sandbox_change_summary_validator_impl,
+    tool_provider_impl,
+)
 
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    for mod in CONSTITUENTS:
+        mod.__initialize__(registry)
 
-class SandboxAsm(SandboxFactoryImpl):
-    def __init__(self) -> None:
-        super().__init__(
-            file_reader_factory=FileReaderFactoryImpl(),
-            file_editor_factory=FileEditorFactoryImpl(),
-            run_control_factory=RunControlFactoryImpl(change_validator=ChangeValidatorImpl()),
-            guide_delivery_factory=GuideDeliveryFactoryImpl(),
-        )
-
+_initialize_ = __initialize__

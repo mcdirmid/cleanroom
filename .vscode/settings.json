@@ -1,8 +1,7 @@
 {
-    "search.exclude": {
-        "**/bazel-*": true
-    },
-    "files.watcherExclude": {
-        "**/bazel-*": true
-    }
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/update_with_ai",
+    "${workspaceFolder}/update_with_ai/lib",
+    "${workspaceFolder}/update_with_ai/specs/grounding_pyi"
+  ]
 }

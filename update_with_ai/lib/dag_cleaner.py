@@ -1,15 +1,8 @@
-"""DAG cleaner interface for topological graph cleaning."""
-
 from typing import Protocol
-from .dag_storage import DagStorage, NodeId
-from .dag_node_cleaner import NodeCleaner
-
+from . import dag_node_cleaner
+from . import dag_storage
 
 class DagCleaner(Protocol):
-    def clean_subgraph(
-        self,
-        root: NodeId,
-        storage: DagStorage,
-        cleaner: NodeCleaner,
-    ) -> None:
+    def clean(self, node: dag_storage.Node, cleaner: dag_node_cleaner.NodeCleaner) -> None:
         ...
+

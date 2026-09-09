@@ -1,20 +1,19 @@
-# bazel_target_labels_ext
+# bazel_target_labels_ext external component
 
 ## Purpose
 
-Normalizes raw Bazel target labels into canonical syntax and resolves package filesystem directories, ensuring consistent dependency addressing across repository boundaries.
+The bazel_target_labels_ext external component normalizes raw Bazel target labels into canonical syntax and resolves package filesystem directories.
 
-Bazel targets can be addressed using apparent, repository-qualified, or shorthand label syntax, causing duplicate graph nodes and broken lookups if compared as raw strings. Bazel target labels normalization converts diverse label formats into canonical package-and-target forms (`//pkg:target`) and resolves target package directories against a workspace root, guaranteeing deterministic target resolution across the build.
+Bazel targets can be addressed using apparent, repository-qualified, or shorthand label syntax, causing duplicate graph nodes and broken lookups if compared as raw strings. The bazel_target_labels_ext external component defines the external boundary for normalizing diverse Bazel label formats into canonical package and target coordinates and resolving package directories against a workspace root from file alias.
 
-## Types
+**Out of scope:** The bazel_target_labels_ext external component does not resolve build dependencies, inspect disk contents, or track message queues; these are handled by other components.
 
-- A *raw target label* is a target identifier in any valid Bazel syntax form
-- A *canonical target label* is a normalized Bazel target label identifying a package and target
-- A *package directory* is a filesystem directory path corresponding to a target package
+## Grounding Gaps Covered
 
-## Behavior
+The bazel_target_labels_ext component provides the external domain knowledge and parsing rules required to process Bazel target labels and map packages to filesystem locations:
 
-- A *raw target label* can be normalized into a *canonical target label*.
-- Normalizing a *raw target label* strips main-repository qualifiers and expands omitted target names.
-- A *canonical target label* uniquely addresses a target within the workspace.
-- A *package directory* can be extracted from a *canonical target label* relative to a workspace root.
+- Bazel target label normalization: Parses diverse Bazel target label representations including fully qualified repository labels, main repository qualifiers, package-only shorthand where the target name matches the package name, and package-relative target names, stripping main repository prefixes and expanding implicit target identifiers into canonical `//package:target` format.
+
+- Package filesystem directory resolution: Translates canonical package identifiers into relative filesystem directory paths, resolves package directory paths against physical workspace root directories, and correctly handles workspace root package targets.
+
+- Target syntax validation: Enforces Bazel label character set rules and syntax constraints, validating package path segments and target names while rejecting malformed or ambiguous label strings.

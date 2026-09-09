@@ -1,33 +1,23 @@
-# sandbox
+# sandbox interface component
 
-imports: tool_provider, virtual_file_name, file_reader, file_editor, guide_delivery, run_control
-types from tool_provider: tool, tool provider, tool result, tool failure, termination outcome
-types from virtual_file_name: virtual file name
-types from file_reader: file reader, file reader factory, read-only file, read-write file, session-start read
-types from file_editor: file editor, file editor factory, template
-types from guide_delivery: guide delivery, guide delivery factory, guide, step section, step delivery
-types from run_control: run controller, run control factory, advance tool
+imports: tool_provider, model_config
 
 ## Purpose
 
-Provides a hermetic virtual workspace that isolates agents from host paths while coordinating progressive execution.
+The sandbox interface component coordinates the execution environment for an agent session, provisioning startup context, materializing starter templates, and tracking file modifications.
 
-Direct filesystem access leaks host paths and invites out-of-scope edits, so the sandbox confines agents to virtual workspace files. Startup preparation populates missing files from templates and injects read-only context, while runtime coordination intercepts the advance tool to deliver guide steps before allowing final termination.
+Agent sessions operate across heterogeneous tools spanning file inspection, editing, progressive guidance, and outcome control. If these capabilities are exposed as disconnected services, orchestrators must duplicate initialization logic, manage race conditions during startup template creation, and manually assemble startup context. The sandbox interface component establishes a unified session coordination boundary that packages startup tool executions, ensures template materialization precedes agent execution, and exposes session-wide file modification state.
 
-## Types
+**Out of scope:** The sandbox interface component does not schedule multi-node graph traversal, evaluate external model responses, or manage agent memory transcripts; these are handled by other components.
 
-- A *sandbox* is a *tool provider* composing tools from a *file reader*, a *file editor*, a *run controller*, and an optional *guide delivery*
-- A *sandbox configuration* is a set of parameters configuring file mappings, permissions, templates, search bounds, *guides*, verification checks, and blame targets for a *sandbox*
-- A *sandbox factory* is a provider that constructs *sandboxes* configured from *sandbox configurations*
-- A *startup interaction* is a collection of initial *tool results* (carrying *session-start reads* and an optional initial *step delivery*) provided at session start
+## Types and Behavior
 
-## Behavior
+A *startup tool execution* packages a *tool name*, *wire parameter bindings*, and a *response* for an initial tool invocation at session start. In agent conversation transcripts, tool responses cannot exist in isolation; transcript schemas require that every tool response correlates to an antecedent assistant tool request. Packaging the tool name and wire parameter bindings alongside the response allows orchestrators to forge both the synthetic tool request and response turns when seeding the session transcript.
 
-- A *sandbox configuration* defines mappings from *virtual file names* to host paths, file permissions, optional search limits, optional *guides*, verification checks, and blame targets.
-- Creating a *sandbox* through a *sandbox factory* yields a *sandbox* configured from a *sandbox configuration*.
-- A *sandbox* provides tools composed from its *file reader*, *file editor*, *run controller*, and optional *guide delivery*.
-- A *sandbox* produces a *startup interaction* carrying *session-start reads* for all declared *read-only files*, along with an initial *step delivery* when progressive guide delivery is configured.
-- A *sandbox* materializes *templates* for missing *read-write files* at startup without overwriting existing files.
-- Executing an *advance tool* within a *sandbox* with progressive guide delivery delivers the next *step section* via *step delivery* upon passing verification while sections remain.
-- Executing an *advance tool* within a *sandbox* with no *step sections* remaining concludes with a *termination outcome* upon passing verification and change summary checks.
-- A *sandbox* allows querying whether any workspace file modifications occurred during the run.
+The *sandbox* is an *agent session* service configured with whether to use step mode from model_config to communicate a guide progressively and whether to perform startup reads to inspect declared files at session start, coordinating startup context and workspace file management for an agent session. The sandbox:
+
+- Exposes *startup tool executions*, returning an ordered sequence of initial tool executions based on active configuration.
+
+- Can *materialize startup templates* into missing read-write files at session start without overwriting existing files.
+
+- Exposes whether workspace file *modifications* occurred during the session.

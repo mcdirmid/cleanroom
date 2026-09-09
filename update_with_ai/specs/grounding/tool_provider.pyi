@@ -1,0 +1,413 @@
+from typing import Any, Protocol, Set, Tuple, Type, Union
+from framework import data_type, operation, override, poly_type, singleton_type, variant
+from dataclasses import dataclass
+
+@poly_type
+class ParameterConverter(Protocol):
+    """
+PURPOSE:
+Defined as a polymorphic agent session service that has an actual type, a primitive wire type, and can convert a wire type value to produce a value of that actual type
+"""
+
+    @property
+    def actual_type(self) -> Type:
+        """
+PURPOSE:
+References the data type produced by the converter
+"""
+        ...
+
+    @property
+    def wire_type(self) -> WireType:
+        """
+PURPOSE:
+Primitive wire type accepted by the converter
+"""
+        ...
+
+    @operation
+    def convert(self, wire_value: Union[str, int, bool]) -> Any:
+        """
+PURPOSE:
+Converts a wire type value to produce a value of that actual type
+"""
+        ...
+
+@dataclass(frozen=True)
+@data_type
+class WireType:
+    """
+PURPOSE:
+Defined as a primitive wire type limited to string, integer, or boolean
+"""
+
+    def __init__(self) -> None:
+        ...
+
+@dataclass(frozen=True)
+@variant
+class String(WireType):
+    """
+PURPOSE:
+Classifies string as an allowed primitive wire type
+"""
+
+    def __init__(self) -> None:
+        ...
+
+@dataclass(frozen=True)
+@variant
+class Integer(WireType):
+    """
+PURPOSE:
+Classifies integer as an allowed primitive wire type
+"""
+
+    def __init__(self) -> None:
+        ...
+
+@dataclass(frozen=True)
+@variant
+class Boolean(WireType):
+    """
+PURPOSE:
+Classifies boolean as an allowed primitive wire type
+"""
+
+    def __init__(self) -> None:
+        ...
+
+@poly_type
+class IdentityParameterConverter(ParameterConverter, Protocol):
+    """
+PURPOSE:
+Defined as a polymorphic parameter converter that works for parameters where the actual and wire types are the same, wrapping string, integer, or boolean
+"""
+
+    @property
+    @override
+    def actual_type(self) -> Type:
+        """
+PURPOSE:
+References the data type produced by the converter
+"""
+        ...
+
+    @property
+    @override
+    def wire_type(self) -> WireType:
+        """
+PURPOSE:
+Primitive wire type accepted by the converter
+"""
+        ...
+
+    @operation
+    @override
+    def convert(self, wire_value: Union[str, int, bool]) -> Any:
+        """
+PURPOSE:
+Converts a wire type value to produce a value of that actual type
+"""
+        ...
+
+@singleton_type('agent_session')
+class StringParameterConverter(IdentityParameterConverter, Protocol):
+    """
+PURPOSE:
+Defined as an identity parameter converter that wraps string
+"""
+
+    @property
+    @override
+    def actual_type(self) -> Type:
+        """
+PURPOSE:
+Sets the converter actual type to string
+"""
+        ...
+
+    @property
+    @override
+    def wire_type(self) -> WireType:
+        """
+PURPOSE:
+Sets the converter wire type to string
+"""
+        ...
+
+    @operation
+    @override
+    def convert(self, wire_value: str) -> str:
+        """
+PURPOSE:
+Converts a wire type string to produce that string value directly
+"""
+        ...
+
+@singleton_type('agent_session')
+class IntegerParameterConverter(IdentityParameterConverter, Protocol):
+    """
+PURPOSE:
+Defined as an identity parameter converter that wraps integer
+"""
+
+    @property
+    @override
+    def actual_type(self) -> Type:
+        """
+PURPOSE:
+Sets the converter actual type to integer
+"""
+        ...
+
+    @property
+    @override
+    def wire_type(self) -> WireType:
+        """
+PURPOSE:
+Sets the converter wire type to integer
+"""
+        ...
+
+    @operation
+    @override
+    def convert(self, wire_value: int) -> int:
+        """
+PURPOSE:
+Converts a wire type integer to produce that integer value directly
+"""
+        ...
+
+@singleton_type('agent_session')
+class BooleanParameterConverter(IdentityParameterConverter, Protocol):
+    """
+PURPOSE:
+Defined as an identity parameter converter that wraps boolean
+"""
+
+    @property
+    @override
+    def actual_type(self) -> Type:
+        """
+PURPOSE:
+Sets the converter actual type to boolean
+"""
+        ...
+
+    @property
+    @override
+    def wire_type(self) -> WireType:
+        """
+PURPOSE:
+Sets the converter wire type to boolean
+"""
+        ...
+
+    @operation
+    @override
+    def convert(self, wire_value: bool) -> bool:
+        """
+PURPOSE:
+Converts a wire type boolean to produce that boolean value directly
+"""
+        ...
+
+@poly_type
+class Tool(Protocol):
+    """
+PURPOSE:
+Defined as a polymorphic agent session service that defines an executable action available to an agent
+
+FRESH_ASSUMPTIONS:
+- All parameters of a tool have unique names.
+"""
+
+    @property
+    def name(self) -> str:
+        """
+PURPOSE:
+Established that each tool has a name which the agent uses to execute the tool
+"""
+        ...
+
+    @property
+    def description(self) -> str:
+        """
+PURPOSE:
+Established that each tool has a description which informs the agent why and when to use the tool
+"""
+        ...
+
+    @property
+    def parameters(self) -> Set[Parameter]:
+        """
+PURPOSE:
+Established that each tool defines input parameters accepted for its invocation
+"""
+        ...
+
+    @operation
+    def execute_tool(self, actual_parameter_bindings: ActualParameterBindings) -> Response:
+        """
+PURPOSE:
+Executed with a set of actual parameter bindings to produce a response
+
+FRESH_REQUIREMENTS:
+- When a parameter is required, an argument must be supplied for tool execution.
+- When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
+"""
+        ...
+
+@dataclass(frozen=True)
+@data_type
+class Parameter:
+    """
+PURPOSE:
+Describes an input accepted by a tool
+"""
+
+    def __init__(self, name: str, description: str, parameter_converter: ParameterConverter, is_required: bool=...) -> None:
+        ...
+
+    @property
+    def name(self) -> str:
+        """
+PURPOSE:
+Established that each parameter has a name for the agent's benefit guiding how arguments are supplied
+"""
+        ...
+
+    @property
+    def description(self) -> str:
+        """
+PURPOSE:
+Established that each parameter has a description for the agent's benefit guiding how arguments are supplied
+"""
+        ...
+
+    @property
+    def parameter_converter(self) -> ParameterConverter:
+        """
+PURPOSE:
+Established that each parameter has a parameter converter specifying its types and performing conversion
+"""
+        ...
+
+    @property
+    def is_required(self) -> bool:
+        """
+PURPOSE:
+Indicates that an argument must be supplied for tool execution
+"""
+        ...
+
+@dataclass(frozen=True)
+@data_type
+class ActualParameterBindings:
+    """
+PURPOSE:
+Maps parameters to resolved values of their actual types
+"""
+
+    def __init__(self, bindings: Set[Tuple[Parameter, Any]]) -> None:
+        ...
+
+    @property
+    def bindings(self) -> Set[Tuple[Parameter, Any]]:
+        """
+PURPOSE:
+Set mapping parameters to resolved values of their actual types
+"""
+        ...
+
+@dataclass(frozen=True)
+@data_type
+class WireParameterBindings:
+    """
+PURPOSE:
+Maps parameter names to values of their wire types
+"""
+
+    def __init__(self, bindings: Set[Tuple[str, Union[str, int, bool]]]) -> None:
+        ...
+
+    @property
+    def bindings(self) -> Set[Tuple[str, Union[str, int, bool]]]:
+        """
+PURPOSE:
+Set mapping parameter names to values of their wire types
+"""
+        ...
+
+@dataclass(frozen=True)
+@data_type
+class Response:
+    """
+PURPOSE:
+Communicates tool execution results to the agent
+"""
+
+    def __init__(self, is_failed: bool, is_terminated: bool, content: str) -> None:
+        ...
+
+    @property
+    def is_failed(self) -> bool:
+        """
+PURPOSE:
+Communicates whether tool execution failed
+"""
+        ...
+
+    @property
+    def is_terminated(self) -> bool:
+        """
+PURPOSE:
+Communicates whether the agent session should terminate
+"""
+        ...
+
+    @property
+    def content(self) -> str:
+        """
+PURPOSE:
+Includes underlying tool execution output and error diagnostics on failure
+"""
+        ...
+
+@singleton_type('agent_session')
+class ToolManager(Protocol):
+    """
+PURPOSE:
+Defined as an agent session service that maintains tools for an agent session
+"""
+
+    @property
+    def installed_tools(self) -> Set[Tool]:
+        """
+PURPOSE:
+Exposes installed tools to the session
+"""
+        ...
+
+    @operation
+    def install_tool(self, tool: Tool) -> None:
+        """
+PURPOSE:
+Installs tools so they can be executed by the agent
+
+FRESH_ASSUMPTIONS:
+- All installed tools in a tool manager have unique names.
+"""
+        ...
+
+    @operation
+    def execute_tool(self, name: str, wire_parameter_bindings: WireParameterBindings) -> Response:
+        """
+PURPOSE:
+Executes tools by name with wire parameter bindings at the request of the agent
+
+FRESH_REQUIREMENTS:
+- Executing a tool by name with wire parameter bindings produces the same response as executing the tool directly.
+"""
+        ...

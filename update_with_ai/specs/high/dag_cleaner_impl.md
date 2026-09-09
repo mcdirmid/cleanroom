@@ -1,15 +1,26 @@
-# dag_cleaner_impl
+# dag_cleaner_impl implementation component
 
-imports: dag_storage, dag_node_cleaner, dag_cleaner
-types from dag_storage: dag storage, node, pending message
-types from dag_node_cleaner: node cleaner, change message, feedback message
-types from dag_cleaner: dag cleaner
-implements: dag cleaner
+imports: dag_storage, dag_node_cleaner
+implements: dag_cleaner
 
-## Behavior
+## Purpose
 
-- A *dag cleaner* cleans dirty *nodes* in topological order, cleaning each *node* only when all of its dependencies are clean.
-- A cleaned *node* with *change messages* broadcasts those messages to its recorded reverse dependencies in *dag storage*, then clears its data.
-- A cleaned *node* with *feedback messages* routes them to the target dependencies and retains its data in *dag storage*.
-- Cleaning is bounded by an execution limit to prevent infinite loops, concluding when all *nodes* in the acyclic subgraph are clean.
-- When cleaning exceeds the execution limit, the *dag cleaner* halts with an unexpected failure.
+The dag_cleaner_impl implementation component realizes iterative topological graph cleaning with execution limits.
+
+Unbounded feedback loops between dependent tasks can cause graph cleaners to run indefinitely, exhausting memory and stalling execution pipelines. The dag_cleaner_impl implementation component provides deterministic topological sorting, iteration-bounded re-evaluation, and robust failure handling, ensuring graph traversal terminates predictably even when tasks oscillate.
+
+**Out of scope:** The dag_cleaner_impl implementation component does not execute node tasks, persist graph changes to disk, or format diagnostic messages; these are handled by other components.
+
+## Types and Behavior
+
+A dag cleaner has an *execution limit* hardcoded to 500 that bounds the maximum times any node can be visited to check whether it is dirty.
+
+A dag cleaner cleans a target node by collecting all reachable dependencies from the node and executing them in dependency-first topological order.
+
+In each cleaning iteration, the dag cleaner visits reachable nodes in topological order. Visiting a node checks whether the node is dirty, not whether it is cleaned. A node is cleaned only if it is dirty and all of its dependencies are clean. When cleaning a dirty node:
+
+- The node cleaner is invoked to clean the node.
+
+- If the node cleaner communicates that processing cannot continue, cleaning halts.
+
+Cleaning is bounded to prevent infinite loops. If visiting any node exceeds the execution limit, the dag cleaner halts with an unexpected failure. Cleaning succeeds when all reachable nodes in the subgraph are clean.

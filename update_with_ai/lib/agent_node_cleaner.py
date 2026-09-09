@@ -1,11 +1,9 @@
-from typing import Protocol, Sequence
-from .dag_storage import NodeId, PendingMessage
-from .dag_node_cleaner import NodeCleaner, NodeCleaningOutcome
+from typing import Protocol, Set
+from . import dag_node_cleaner
+from . import dag_storage
 
-
-class AgentNodeCleaner(NodeCleaner, Protocol):
-    def clean_node(
-        self, node: NodeId, pending_messages: Sequence[PendingMessage]
-    ) -> NodeCleaningOutcome:
+class AgentNodeCleaner(dag_node_cleaner.NodeCleaner, Protocol):
+    def clean_node(self, node: dag_storage.Node) -> Set[dag_storage.Message]:
         ...
+
 

@@ -1,14 +1,12 @@
-"""DAG node cleaner interface and outcome messages."""
-
-from typing import Protocol, TypeAlias, Sequence, Union, Optional
-from .dag_storage import NodeId, DagMessage, PendingMessage
-
-ChangeMessage: TypeAlias = DagMessage
-FeedbackMessage: TypeAlias = DagMessage
-
-NodeCleaningOutcome: TypeAlias = Optional[Sequence[Union[ChangeMessage, FeedbackMessage]]]
-
+from typing import Protocol
+from . import dag_storage
 
 class NodeCleaner(Protocol):
-    def clean_node(self, node: NodeId, pending_messages: Sequence[PendingMessage]) -> NodeCleaningOutcome:
+    def clean(self, node: dag_storage.Node) -> bool:
         ...
+
+class CleanedNode(Protocol):
+    @property
+    def node(self) -> dag_storage.Node:
+        ...
+

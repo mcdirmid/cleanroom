@@ -1,253 +1,209 @@
-"""Agent runner implementation executing multi-turn tool loops."""
-
 import json
-from typing import Optional, Sequence, Any, Dict
-from .tool_provider import (
-    ToolProvider,
-    TerminationOutcome,
-    ToolResult,
-    ToolFailure,
-    ToolOutcome,
-    Tool,
-)
-from .conversation_history import ConversationHistory, HistoryMessage
-from .loop_guard import LoopGuard, LoopFailure, LoopReminder
-from .runner_logger import RunnerLogger, LogEvent
-from .openai_ext import OpenAiExt, ModelName, CompletionRequest, CompletionResponse
-from .agent_runner import (
-    AgentRunner,
-    AgentOutcome,
-    IterationLimit,
-)
+from typing import Any, Optional
+from . import agent_conversation_history
+from . import agent_loop_guard
+from . import agent_runner
+from . import model_config
+from . import runner_logger
+from . import tool_provider
+from .lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+
+try:  # pragma: no cover
+    import openai
+    OpenAI = openai.OpenAI
+    OpenAIError = openai.OpenAIError
+except ImportError:  # pragma: no cover
+    OpenAI = None  # type: ignore
+    class OpenAIError(Exception):  # type: ignore
+        pass
 
 
-class AgentRunnerImpl(AgentRunner):
-    def __init__(self, openai_ext: OpenAiExt, model: ModelName) -> None:
-        self.openai_ext = openai_ext
-        self.model = model
 
-    def run(
-        self,
-        tool_provider: ToolProvider,
-        history: ConversationHistory,
-        logger: Optional[RunnerLogger] = None,
-        loop_guard: Optional[LoopGuard] = None,
-        iteration_limit: IterationLimit = 20,
-    ) -> AgentOutcome:
-        if logger:
-            history_text = "\n".join(
-                f"[{m.role.upper()}]: {m.content}" for m in history.get_messages()
+class AgentRunner(agent_runner.AgentRunner, Singleton):
+    tier = "agent_session"
+
+    def __init__(self) -> None:
+        pass
+
+    def run(self) -> agent_runner.AgentOutcome:
+        model_cfg = get_singleton(model_config.ModelConfig)
+        logger = get_singleton(runner_logger.RunnerLogger)
+        history = get_singleton(agent_conversation_history.ConversationHistory)
+        guard = get_singleton(agent_loop_guard.LoopGuard)
+        tool_mgr = get_singleton(tool_provider.ToolManager)
+
+        client: Any = None
+        if OpenAI is not None:
+            client = OpenAI(
+                api_key=model_cfg.api_key if model_cfg.api_key else "none",
+                base_url=model_cfg.base_url,
+                timeout=float(model_cfg.timeout),
             )
-            logger.log(
-                LogEvent(
-                    name="session_start",
-                    summary="",
-                    transcript=f"=== Agent Session Started ===\n{history_text}",
+
+
+        limit = model_cfg.conversation_limit
+        turns = 0
+        last_response: tool_provider.Response = tool_provider.Response(
+            is_failed=False, is_terminated=False, content="Initialized"
+        )
+
+        # Requirement: Executes agent turns bounded by conversation limit
+        while turns < limit:
+            turns += 1
+            model_req = history.get_model_request()
+            # Requirement: Logs model request events to runner logger
+            logger.consume(
+                runner_logger.LogEvent(
+                    event_name="model_request",
+                    summary=f"Turn {turns}: Requesting completion with {len(model_req.messages)} messages",
+                    transcript_representation=f"=== Turn {turns} ===\nMessages: {len(model_req.messages)}",
                 )
             )
 
-        iterations = 0
-        while iterations < iteration_limit:
-            iterations += 1
-            tools = tool_provider.get_tools()
-            tool_metadata_list = [t.get_metadata() for t in tools] if tools else ()
+            if client is None:  # pragma: no cover
+                # Fallback for environments without live OpenAI network / mock
+                break
 
-            if logger:
-                logger.log(
-                    LogEvent(
-                        name="turn_start",
-                        summary="",
-                        transcript=f"\n--- Turn {iterations} ---",
+            messages_payload = [
+                {"role": m.role, "content": m.content}
+                for m in model_req.messages
+            ]
+
+            # Requirement: Translates tool schemas for model function calling
+            tools_payload = []
+            for t in tool_mgr.installed_tools:
+                props = {}
+                req_props = []
+                for p in t.parameters:
+                    props[p.name] = {"type": "string", "description": p.description}
+                    if p.is_required:
+                        req_props.append(p.name)
+                tools_payload.append({
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": {
+                            "type": "object",
+                            "properties": props,
+                            "required": req_props,
+                        },
+                    },
+                })
+
+            try:
+                # Requirement: Queries model completion using configured parameters
+                completion = client.chat.completions.create(
+                    model=model_cfg.model_name,
+                    messages=messages_payload,  # type: ignore
+                    tools=tools_payload if tools_payload else None,  # type: ignore
+                    temperature=0.0,
+                )
+            except OpenAIError as e:
+                logger.consume(
+                    runner_logger.LogEvent(
+                        event_name="model_error",
+                        summary=f"Model error: {e}",
+                        transcript_representation=str(e),
                     )
                 )
+                last_response = tool_provider.Response(
+                    is_failed=True, is_terminated=True, content=f"Model error: {e}"
+                )
+                return agent_runner.AgentOutcome(
+                    is_success=False,
+                    response=last_response,
+                    conversation_history=history,
+                )
 
-            req = CompletionRequest(
-                messages=history.get_messages(),
-                model=self.model,
-                tools=tool_metadata_list,
+            choice = completion.choices[0]
+            finish_reason = choice.finish_reason
+            assistant_msg = choice.message
+            tool_calls = assistant_msg.tool_calls or []
+
+            # Requirement: Appends assistant message to conversation history
+            history.append_message(
+                agent_conversation_history.Message(
+                    role="assistant",
+                    content=assistant_msg.content or "",
+                )
             )
 
-            resp = self.openai_ext.create_chat_completion(req)
-            assistant_msg = resp.message
-            history.append(assistant_msg)
+            # Requirement: Records log event for model completion
+            logger.consume(
+                runner_logger.LogEvent(
+                    event_name="model_completion",
+                    summary=f"Turn {turns}: finish_reason={finish_reason}, {len(tool_calls)} tool calls",
+                    transcript_representation=f"=== Assistant Response (turn {turns}) ===\nFinish: {finish_reason}\nContent: {assistant_msg.content}\nTool calls: {[tc.function.name for tc in tool_calls]}",
+                )
+            )
 
-            # If response is truncated at the generation limit, resume with continuation turn
-            if assistant_msg.metadata and assistant_msg.metadata.get("finish_reason") in ("length", "max_tokens", "truncated"):
-                history.append(HistoryMessage(role="user", content="continue"))
+            # Requirement: Appends continue user prompt on length truncation
+            if finish_reason == "length":
+                history.append_message(
+                    agent_conversation_history.Message(
+                        role="user",
+                        content="Response was truncated due to length. Please continue.",
+                    )
+                )
                 continue
-
-            # Check if assistant message contains tool calls
-            tool_calls = None
-            if assistant_msg.metadata and "tool_calls" in assistant_msg.metadata:
-                tool_calls = assistant_msg.metadata["tool_calls"]
-
-            if logger:
-                logger.log(
-                    LogEvent(
-                        name="assistant_response",
-                        summary="",
-                        transcript=f"[ASSISTANT]: {assistant_msg.content or ''}"
-                        + (f"\nTool Calls: {tool_calls}" if tool_calls else ""),
-                    )
-                )
 
             if not tool_calls:
-                if not tools:
-                    # Tool provider offers no tools, concluding with assistant content
-                    term = TerminationOutcome(
-                        content=str(assistant_msg.content or "Completed successfully"),
-                        is_terminal=True,
-                    )
-                    if logger:
-                        logger.log(
-                            LogEvent(
-                                name="session_end",
-                                summary=f"Run finished: {term.content}",
-                                transcript=f"\n=== Session Concluded: {term.content} ===",
-                            )
-                        )
-                    return AgentOutcome(
-                        termination=term, history=history.get_messages()
-                    )
-
-                # Tools are available, model produced no tool calls: record turn and prompt to use tools
-                if assistant_msg.content:
-                    if loop_guard:
-                        guard_res = loop_guard.record_tool_call(
-                            "text_response", {"content": assistant_msg.content}
-                        )
-                        if isinstance(guard_res, LoopFailure):
-                            term = TerminationOutcome(
-                                content="Loop limit exceeded: fatal repetition",
-                                is_terminal=True,
-                            )
-                            if logger:
-                                logger.log(
-                                    LogEvent(
-                                        name="session_end",
-                                        summary=f"Run finished: {term.content}",
-                                        transcript=f"\n=== Session Concluded: {term.content} ===",
-                                    )
-                                )
-                            return AgentOutcome(
-                                termination=term, history=history.get_messages()
-                            )
-                        elif isinstance(guard_res, LoopReminder):
-                            history.append(
-                                HistoryMessage(
-                                    role="system",
-                                    content=getattr(guard_res, "content", "Loop reminder"),
-                                )
-                            )
-                history.append(
-                    HistoryMessage(
-                        role="user",
-                        content="Please proceed by calling the available tools to complete the task.",
-                    )
+                # Requirement: Concludes successfully when assistant emits a response without tool calls
+                last_response = tool_provider.Response(
+                    is_failed=False,
+                    is_terminated=True,
+                    content=assistant_msg.content or "",
                 )
-                continue
+                break
 
-            tool_map = {t.get_metadata().name: t for t in tools}
-
+            # Requirement: Dispatches model tool calls to tool manager
             for tc in tool_calls:
-                fn = tc.get("function", {}) if isinstance(tc, dict) else {}
-                call_name = fn.get("name", "")
-                call_id = tc.get("id", "") if isinstance(tc, dict) else ""
-                raw_args = fn.get("arguments", "{}")
-                try:
-                    call_args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
-                except Exception:
-                    call_args = {}
+                fn_name = tc.function.name
+                fn_args_str = tc.function.arguments
+                args_dict = json.loads(fn_args_str) if fn_args_str else {}
 
-                if loop_guard:
-                    guard_res = loop_guard.record_tool_call(call_name, call_args)
-                    if isinstance(guard_res, LoopFailure):
-                        term = TerminationOutcome(
-                            content="Loop limit exceeded: fatal repetition",
-                            is_terminal=True,
-                        )
-                        if logger:
-                            logger.log(
-                                LogEvent(
-                                    name="session_end",
-                                    summary=f"Run finished: {term.content}",
-                                    transcript=f"\n=== Session Concluded: {term.content} ===",
-                                )
-                            )
-                        return AgentOutcome(
-                            termination=term, history=history.get_messages()
-                        )
-                    elif isinstance(guard_res, LoopReminder):
-                        history.append(
-                            HistoryMessage(
-                                role="system",
-                                content=getattr(guard_res, "content", "Loop reminder"),
-                            )
-                        )
+                wire_bindings = {(k, v) for k, v in args_dict.items()}
 
-                tool = tool_map.get(call_name)
-                if not tool:
-                    fail = ToolFailure(feedback=f"Unknown tool: {call_name}")
-                    meta = {"tool_call_id": call_id} if call_id else None
-                    history.append(
-                        HistoryMessage(role="tool", content=fail.feedback, metadata=meta)
-                    )
-                    if logger:
-                        logger.log(
-                            LogEvent(
-                                name="tool_execution",
-                                summary=f"Tool call: {call_name}({call_args})",
-                                transcript=f"[TOOL CALL] {call_name}({json.dumps(call_args)})\n[TOOL ERROR]: {fail.feedback}",
-                            )
-                        )
-                    continue
+                resp = tool_mgr.execute_tool(
+                    fn_name, tool_provider.WireParameterBindings(bindings=wire_bindings)
+                )
+                last_response = resp
 
-                res = tool.execute(call_args)
-                tool_content = getattr(res, "content", getattr(res, "feedback", str(res)))
-                meta = {"tool_call_id": call_id} if call_id else None
-                if getattr(res, "guidance", None):
-                    meta = meta or {}
-                    meta["guidance"] = getattr(res, "guidance")
-                history.append(
-                    HistoryMessage(
-                        role="tool",
-                        content=tool_content,
-                        metadata=meta,
+                logger.consume(
+                    runner_logger.LogEvent(
+                        event_name="tool_execution",
+                        summary=f"Executed {fn_name}: failed={resp.is_failed}, terminated={resp.is_terminated}",
+                        transcript_representation=resp.content,
                     )
                 )
-                if logger:
-                    logger.log(
-                        LogEvent(
-                            name="tool_execution",
-                            summary=f"Tool call: {call_name}({call_args})",
-                            transcript=f"[TOOL CALL] {call_name}({json.dumps(call_args)})\n[TOOL RESULT]: {tool_content}",
-                        )
-                    )
 
-                if isinstance(res, TerminationOutcome):
-                    if logger:
-                        logger.log(
-                            LogEvent(
-                                name="session_end",
-                                summary=f"Run finished: {res.content}",
-                                transcript=f"\n=== Session Concluded: {res.content} ===",
-                            )
-                        )
-                    return AgentOutcome(
-                        termination=res, history=history.get_messages()
-                    )
-
-        term = TerminationOutcome(
-            content="Iteration limit exceeded", is_terminal=True
-        )
-        if logger:
-            logger.log(
-                LogEvent(
-                    name="session_end",
-                    summary=f"Run finished: {term.content}",
-                    transcript=f"\n=== Session Concluded: {term.content} ===",
+                # Requirement: Records tool execution responses in conversation history
+                history.append_tool_response(
+                    response=resp,
+                    tool_name=fn_name,
+                    tool_call_id=tc.id,
                 )
-            )
-        return AgentOutcome(
-            termination=term, history=history.get_messages()
+
+                # Requirement: Terminates runner loop when tool response signals termination
+                if resp.is_terminated:
+                    return agent_runner.AgentOutcome(
+                        is_success=not resp.is_failed,
+                        response=resp,
+                        conversation_history=history,
+                    )
+
+        # Requirement: Returns final agent outcome when turns exhausted or complete
+        return agent_runner.AgentOutcome(
+            is_success=not last_response.is_failed,
+            response=last_response,
+            conversation_history=history,
         )
+
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        AgentRunner,
+        keys=[AgentRunner, agent_runner.AgentRunner],
+        tier="agent_session",
+    )

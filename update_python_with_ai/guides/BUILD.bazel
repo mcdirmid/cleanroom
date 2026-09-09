@@ -8,30 +8,30 @@ update_guide_with_ai(
 )
 
 update_guide_with_ai(
-    name = "high_to_low",
-    src = "high_to_low.md",
-    display_name = "high-level to low-level spec conversion guide",
-    deps = [":high_level_spec"],
+    name = "high_to_grounding",
+    src = "high_to_grounding.md",
+    display_name = "high-level to grounding specification guide",
+    deps = [],
 )
 
 update_guide_with_ai(
-    name = "low_to_lib",
-    src = "low_to_lib.md",
-    display_name = "low-level spec to lib module conversion guide",
-    deps = [":high_to_low"],
+    name = "grounding_to_lib",
+    src = "grounding_to_lib.md",
+    display_name = "grounding to library code guide",
+    deps = [],
 )
 
 update_guide_with_ai(
-    name = "low_to_test",
-    src = "low_to_test.md",
-    display_name = "low-level spec to test module conversion guide",
-    deps = [":high_to_low"],
+    name = "grounding_to_test",
+    src = "grounding_to_test.md",
+    display_name = "grounding to unit test guide",
+    deps = [],
 )
-
 
 update_guide_with_ai(
     name = "qa",
     src = "qa.md",
-    display_name = "QA arbiter guide",
+    display_name = "qa arbiter guide",
     deps = [],
 )
+

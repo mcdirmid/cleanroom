@@ -3,21 +3,105 @@
 load("//bin:pyright_library.bzl", "pyright_test")
 
 pyright_test(
-    name = "conversation_history_impl_test",
-    srcs = ["conversation_history_impl_test.py"],
+    name = "agent_conversation_history_impl_test",
+    srcs = ["agent_conversation_history_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:conversation_history",
-        "//update_with_ai/lib:conversation_history_impl",
+        "//update_with_ai/lib:agent_conversation_history",
+        "//update_with_ai/lib:agent_conversation_history_impl",
+        "//update_with_ai/lib:lifecycle",
         "//update_with_ai/lib:tool_provider",
     ],
 )
 
 pyright_test(
-    name = "virtual_file_name_impl_test",
-    srcs = ["virtual_file_name_impl_test.py"],
+    name = "agent_loop_guard_impl_test",
+    srcs = ["agent_loop_guard_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:virtual_file_name",
-        "//update_with_ai/lib:virtual_file_name_impl",
+        "//update_with_ai/lib:agent_loop_guard",
+        "//update_with_ai/lib:agent_loop_guard_impl",
+        "//update_with_ai/lib:lifecycle",
+        "//update_with_ai/lib:tool_provider",
+    ],
+)
+
+pyright_test(
+    name = "agent_node_cleaner_impl_test",
+    srcs = ["agent_node_cleaner_impl_test.py"],
+    pyright_deps = [
+        "//update_with_ai/lib:agent_conversation_history",
+        "//update_with_ai/lib:agent_node_cleaner",
+        "//update_with_ai/lib:agent_node_cleaner_impl",
+        "//update_with_ai/lib:agent_runner",
+        "//update_with_ai/lib:bazel_graph_storage",
+        "//update_with_ai/lib:dag_node_cleaner",
+        "//update_with_ai/lib:dag_storage",
+        "//update_with_ai/lib:lifecycle",
+        "//update_with_ai/lib:sandbox",
+        "//update_with_ai/lib:tool_provider",
+    ],
+)
+
+pyright_test(
+    name = "agent_runner_impl_test",
+    srcs = ["agent_runner_impl_test.py"],
+    pyright_deps = [
+        "//update_with_ai/lib:agent_conversation_history",
+        "//update_with_ai/lib:agent_loop_guard",
+        "//update_with_ai/lib:agent_runner",
+        "//update_with_ai/lib:agent_runner_impl",
+        "//update_with_ai/lib:lifecycle",
+        "//update_with_ai/lib:model_config",
+        "//update_with_ai/lib:runner_logger",
+        "//update_with_ai/lib:tool_provider",
+    ],
+)
+
+pyright_test(
+    name = "bazel_graph_storage_impl_test",
+    srcs = ["bazel_graph_storage_impl_test.py"],
+    pyright_deps = [
+        "//update_with_ai/lib:bazel_graph_storage",
+        "//update_with_ai/lib:bazel_graph_storage_impl",
+        "//update_with_ai/lib:bazel_node_id_utils",
+        "//update_with_ai/lib:dag_storage",
+        "//update_with_ai/lib:lifecycle",
+    ],
+)
+
+pyright_test(
+    name = "bazel_manifest_loader_impl_test",
+    srcs = ["bazel_manifest_loader_impl_test.py"],
+    pyright_deps = [
+        "//update_with_ai/lib:bazel_graph_storage",
+        "//update_with_ai/lib:bazel_manifest_loader",
+        "//update_with_ai/lib:bazel_manifest_loader_impl",
+        "//update_with_ai/lib:bazel_node_id_utils",
+        "//update_with_ai/lib:dag_storage",
+        "//update_with_ai/lib:lifecycle",
+    ],
+)
+
+pyright_test(
+    name = "bazel_model_config_impl_test",
+    srcs = ["bazel_model_config_impl_test.py"],
+    pyright_deps = [
+        "//update_with_ai/lib:bazel_model_config_impl",
+        "//update_with_ai/lib:lifecycle",
+        "//update_with_ai/lib:model_config",
+    ],
+)
+
+pyright_test(
+    name = "bazel_node_config_impl_test",
+    srcs = ["bazel_node_config_impl_test.py"],
+    pyright_deps = [
+        "//update_with_ai/lib:bazel_node_config_impl",
+        "//update_with_ai/lib:dag_storage",
+        "//update_with_ai/lib:file_alias",
+        "//update_with_ai/lib:lifecycle",
+        "//update_with_ai/lib:node_config",
+        "//update_with_ai/lib:sandbox_guide_delivery",
+        "//update_with_ai/lib:tool_provider",
     ],
 )
 
@@ -27,91 +111,24 @@ pyright_test(
     pyright_deps = [
         "//update_with_ai/lib:bazel_node_id_utils",
         "//update_with_ai/lib:bazel_node_id_utils_impl",
-        "//update_with_ai/lib:bazel_target_labels_ext",
         "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:node_id_utils",
+        "//update_with_ai/lib:lifecycle",
     ],
 )
 
 pyright_test(
-    name = "runner_logger_impl_test",
-    srcs = ["runner_logger_impl_test.py"],
+    name = "bazel_runner_impl_test",
+    srcs = ["bazel_runner_impl_test.py"],
     pyright_deps = [
+        "//update_with_ai/lib:bazel_graph_storage",
+        "//update_with_ai/lib:bazel_manifest_loader",
+        "//update_with_ai/lib:bazel_runner",
+        "//update_with_ai/lib:bazel_runner_impl",
+        "//update_with_ai/lib:dag_cleaner",
+        "//update_with_ai/lib:dag_node_cleaner",
+        "//update_with_ai/lib:dag_storage",
+        "//update_with_ai/lib:lifecycle",
         "//update_with_ai/lib:runner_logger",
-        "//update_with_ai/lib:runner_logger_impl",
-    ],
-)
-
-pyright_test(
-    name = "loop_guard_impl_test",
-    srcs = ["loop_guard_impl_test.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:loop_guard",
-        "//update_with_ai/lib:loop_guard_impl",
-        "//update_with_ai/lib:tool_provider",
-    ],
-)
-
-pyright_test(
-    name = "guide_delivery_impl_test",
-    srcs = ["guide_delivery_impl_test.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:guide_delivery",
-        "//update_with_ai/lib:guide_delivery_impl",
-        "//update_with_ai/lib:tool_provider",
-    ],
-)
-
-pyright_test(
-    name = "file_reader_impl_test",
-    srcs = ["file_reader_impl_test.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:file_reader",
-        "//update_with_ai/lib:file_reader_impl",
-        "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:virtual_file_name",
-    ],
-)
-
-pyright_test(
-    name = "file_editor_impl_test",
-    srcs = ["file_editor_impl_test.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:file_editor",
-        "//update_with_ai/lib:file_editor_impl",
-        "//update_with_ai/lib:file_reader",
-        "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:virtual_file_name",
-    ],
-)
-
-pyright_test(
-    name = "run_control_impl_test",
-    srcs = ["run_control_impl_test.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:dag_node_cleaner",
-        "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:run_control",
-        "//update_with_ai/lib:run_control_impl",
-        "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:virtual_file_name",
-    ],
-)
-
-pyright_test(
-    name = "sandbox_impl_test",
-    srcs = ["sandbox_impl_test.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:dag_node_cleaner",
-        "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:file_editor",
-        "//update_with_ai/lib:file_reader",
-        "//update_with_ai/lib:guide_delivery",
-        "//update_with_ai/lib:run_control",
-        "//update_with_ai/lib:sandbox",
-        "//update_with_ai/lib:sandbox_impl",
-        "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:virtual_file_name",
     ],
 )
 
@@ -119,163 +136,122 @@ pyright_test(
     name = "dag_cleaner_impl_test",
     srcs = ["dag_cleaner_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:build_graph_storage",
-        "//update_with_ai/lib:build_message_store",
         "//update_with_ai/lib:dag_cleaner",
         "//update_with_ai/lib:dag_cleaner_impl",
         "//update_with_ai/lib:dag_node_cleaner",
         "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:file_editor",
-        "//update_with_ai/lib:file_reader",
-        "//update_with_ai/lib:run_control",
-        "//update_with_ai/lib:sandbox",
-        "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:virtual_file_name",
+        "//update_with_ai/lib:lifecycle",
     ],
 )
 
 pyright_test(
-    name = "change_summary_validator_impl_test",
-    srcs = ["change_summary_validator_impl_test.py"],
+    name = "runner_logger_impl_test",
+    srcs = ["runner_logger_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:change_summary_validator",
-        "//update_with_ai/lib:change_summary_validator_impl",
-        "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:run_control",
-        "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:virtual_file_name",
-    ],
-)
-
-pyright_test(
-    name = "build_runner_impl_test",
-    srcs = ["build_runner_impl_test.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:agent_node_cleaner",
-        "//update_with_ai/lib:agent_runner",
-        "//update_with_ai/lib:build_graph_storage",
-        "//update_with_ai/lib:build_message_store",
-        "//update_with_ai/lib:build_runner",
-        "//update_with_ai/lib:build_runner_impl",
-        "//update_with_ai/lib:conversation_history",
-        "//update_with_ai/lib:dag_cleaner",
-        "//update_with_ai/lib:dag_node_cleaner",
-        "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:file_editor",
-        "//update_with_ai/lib:file_reader",
-        "//update_with_ai/lib:loop_guard",
-        "//update_with_ai/lib:manifest_node_loader",
-        "//update_with_ai/lib:run_control",
+        "//update_with_ai/lib:lifecycle",
         "//update_with_ai/lib:runner_logger",
-        "//update_with_ai/lib:sandbox",
-        "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:virtual_file_name",
+        "//update_with_ai/lib:runner_logger_impl",
     ],
 )
 
 pyright_test(
-    name = "manifest_node_loader_impl_test",
-    srcs = ["manifest_node_loader_impl_test.py"],
+    name = "sandbox_change_summary_validator_impl_test",
+    srcs = ["sandbox_change_summary_validator_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:bazel_node_id_utils",
-        "//update_with_ai/lib:bazel_target_labels_ext",
-        "//update_with_ai/lib:build_agent_config",
-        "//update_with_ai/lib:build_graph_storage",
-        "//update_with_ai/lib:build_message_store",
         "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:file_editor",
-        "//update_with_ai/lib:file_reader",
-        "//update_with_ai/lib:manifest_node_loader",
-        "//update_with_ai/lib:manifest_node_loader_impl",
-        "//update_with_ai/lib:node_id_utils",
-        "//update_with_ai/lib:run_control",
-        "//update_with_ai/lib:sandbox",
-        "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:virtual_file_name",
+        "//update_with_ai/lib:file_alias",
+        "//update_with_ai/lib:lifecycle",
+        "//update_with_ai/lib:sandbox_change_summary_validator",
+        "//update_with_ai/lib:sandbox_change_summary_validator_impl",
+        "//update_with_ai/lib:sandbox_run_control",
     ],
 )
 
 pyright_test(
-    name = "build_message_store_impl_test",
-    srcs = ["build_message_store_impl_test.py"],
+    name = "sandbox_file_editor_impl_test",
+    srcs = ["sandbox_file_editor_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:bazel_node_id_utils",
-        "//update_with_ai/lib:bazel_target_labels_ext",
-        "//update_with_ai/lib:build_message_store",
-        "//update_with_ai/lib:build_message_store_impl",
         "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:node_id_utils",
-        "//update_with_ai/lib:update_with_ai_proto_ext",
-    ],
-)
-
-pyright_test(
-    name = "build_agent_config_impl_test",
-    srcs = ["build_agent_config_impl_test.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:agent_runner",
-        "//update_with_ai/lib:build_agent_config",
-        "//update_with_ai/lib:build_agent_config_impl",
-        "//update_with_ai/lib:conversation_history",
-        "//update_with_ai/lib:loop_guard",
+        "//update_with_ai/lib:file_alias",
+        "//update_with_ai/lib:lifecycle",
+        "//update_with_ai/lib:node_config",
+        "//update_with_ai/lib:sandbox_file_editor",
+        "//update_with_ai/lib:sandbox_file_editor_impl",
+        "//update_with_ai/lib:sandbox_guide_delivery",
         "//update_with_ai/lib:tool_provider",
     ],
 )
 
 pyright_test(
-    name = "build_graph_storage_impl_test",
-    srcs = ["build_graph_storage_impl_test.py"],
+    name = "sandbox_file_reader_impl_test",
+    srcs = ["sandbox_file_reader_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:build_graph_storage",
-        "//update_with_ai/lib:build_graph_storage_impl",
-        "//update_with_ai/lib:build_message_store",
         "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:file_editor",
-        "//update_with_ai/lib:file_reader",
-        "//update_with_ai/lib:guide_delivery",
-        "//update_with_ai/lib:run_control",
-        "//update_with_ai/lib:sandbox",
+        "//update_with_ai/lib:file_alias",
+        "//update_with_ai/lib:lifecycle",
+        "//update_with_ai/lib:node_config",
+        "//update_with_ai/lib:sandbox_file_reader",
+        "//update_with_ai/lib:sandbox_file_reader_impl",
+        "//update_with_ai/lib:sandbox_guide_delivery",
         "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:virtual_file_name",
     ],
 )
 
 pyright_test(
-    name = "agent_node_cleaner_impl_test",
-    srcs = ["agent_node_cleaner_impl_test.py"],
+    name = "sandbox_guide_delivery_impl_test",
+    srcs = ["sandbox_guide_delivery_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:agent_node_cleaner",
-        "//update_with_ai/lib:agent_node_cleaner_impl",
-        "//update_with_ai/lib:agent_runner",
-        "//update_with_ai/lib:build_agent_config",
-        "//update_with_ai/lib:build_graph_storage",
-        "//update_with_ai/lib:conversation_history",
-        "//update_with_ai/lib:dag_node_cleaner",
+        "//update_with_ai/lib:file_alias",
+        "//update_with_ai/lib:lifecycle",
+        "//update_with_ai/lib:node_config",
+        "//update_with_ai/lib:sandbox_guide_delivery",
+        "//update_with_ai/lib:sandbox_guide_delivery_impl",
+        "//update_with_ai/lib:tool_provider",
+    ],
+)
+
+pyright_test(
+    name = "sandbox_impl_test",
+    srcs = ["sandbox_impl_test.py"],
+    pyright_deps = [
         "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:file_editor",
-        "//update_with_ai/lib:file_reader",
-        "//update_with_ai/lib:loop_guard",
-        "//update_with_ai/lib:run_control",
+        "//update_with_ai/lib:file_alias",
+        "//update_with_ai/lib:lifecycle",
+        "//update_with_ai/lib:model_config",
+        "//update_with_ai/lib:node_config",
         "//update_with_ai/lib:sandbox",
+        "//update_with_ai/lib:sandbox_file_editor",
+        "//update_with_ai/lib:sandbox_file_reader",
+        "//update_with_ai/lib:sandbox_guide_delivery",
+        "//update_with_ai/lib:sandbox_impl",
+        "//update_with_ai/lib:sandbox_run_control",
         "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:virtual_file_name",
     ],
 )
 
 pyright_test(
-    name = "agent_runner_impl_test",
-    srcs = ["agent_runner_impl_test.py"],
+    name = "sandbox_run_control_impl_test",
+    srcs = ["sandbox_run_control_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:agent_runner",
-        "//update_with_ai/lib:agent_runner_impl",
-        "//update_with_ai/lib:conversation_history",
-        "//update_with_ai/lib:file_editor",
-        "//update_with_ai/lib:file_reader",
-        "//update_with_ai/lib:loop_guard",
-        "//update_with_ai/lib:openai_ext",
-        "//update_with_ai/lib:runner_logger",
+        "//update_with_ai/lib:dag_storage",
+        "//update_with_ai/lib:file_alias",
+        "//update_with_ai/lib:lifecycle",
+        "//update_with_ai/lib:node_config",
+        "//update_with_ai/lib:sandbox_file_editor",
+        "//update_with_ai/lib:sandbox_guide_delivery",
+        "//update_with_ai/lib:sandbox_run_control",
+        "//update_with_ai/lib:sandbox_run_control_impl",
         "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:virtual_file_name",
+    ],
+)
+
+pyright_test(
+    name = "tool_provider_impl_test",
+    srcs = ["tool_provider_impl_test.py"],
+    pyright_deps = [
+        "//update_with_ai/lib:lifecycle",
+        "//update_with_ai/lib:tool_provider",
+        "//update_with_ai/lib:tool_provider_impl",
     ],
 )
 
@@ -283,4 +259,16 @@ pyright_test(
     name = "bazel_macros_test",
     srcs = ["bazel_macros_test.py"],
     pyright_deps = [],
+)
+
+pyright_test(
+    name = "lifecycle_test",
+    srcs = ["lifecycle_test.py"],
+    pyright_deps = [
+        "//update_with_ai/lib:agent_asm",
+        "//update_with_ai/lib:bazel_asm",
+        "//update_with_ai/lib:dag_asm",
+        "//update_with_ai/lib:lifecycle",
+        "//update_with_ai/lib:sandbox_asm",
+    ],
 )

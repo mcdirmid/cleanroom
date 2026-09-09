@@ -341,6 +341,41 @@ def check_lib_structure(file_path: str) -> list[str]:
     return errors
 
 
+def check_exception_eating(file_path: str) -> list[str]:
+    """Check that library modules do not suppress unexpected failures by catching
+    broad exceptions (bare except, Exception, BaseException) without re-raising."""
+    errors: list[str] = []
+    if not os.path.exists(file_path):
+        return errors
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=file_path)
+    except (OSError, SyntaxError):
+        return errors
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Try):
+            for h in node.handlers:
+                is_broad = False
+                if h.type is None:
+                    is_broad = True
+                elif isinstance(h.type, ast.Name) and h.type.id in ("Exception", "BaseException"):
+                    is_broad = True
+                elif isinstance(h.type, ast.Tuple):
+                    for elt in h.type.elts:
+                        if isinstance(elt, ast.Name) and elt.id in ("Exception", "BaseException"):
+                            is_broad = True
+                if is_broad:
+                    has_raise = any(isinstance(stmt, ast.Raise) for stmt in ast.walk(h))
+                    if not has_raise:
+                        type_str = ast.unparse(h.type) if h.type else "bare except"
+                        errors.append(
+                            f"{file_path}:{h.lineno}: error: broad exception eating detected: '{type_str}' "
+                            f"must not suppress unexpected failures; re-raise or allow exceptions to propagate"
+                        )
+    return errors
+
+
 def check_test_impl_imports(lib_pkg: str, file_path: str) -> list[str]:
     """Check that a test module (<target>_test.py) only imports from its target module (<target>)
     and does not import any other implementation module (*_impl.py) or foreign Impl class."""

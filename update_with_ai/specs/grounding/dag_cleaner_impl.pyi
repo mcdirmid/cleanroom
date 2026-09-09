@@ -1,0 +1,59 @@
+from framework import operation, override, singleton_type
+import dag_cleaner
+import dag_node_cleaner
+import dag_storage
+
+@singleton_type('system')
+class DagCleaner(dag_cleaner.DagCleaner):
+    """
+PURPOSE:
+Implements dag cleaner to execute iterative topological graph cleaning
+
+FRESH_REQUIREMENTS:
+- The execution limit is hardcoded to 500.
+
+GROUNDING_ARGUMENT:
+- As a system singleton, DagCleaner orchestrates topological traversal and node cleaning passes, interacting with imported dag_storage in the same system lifecycle tier and the polymorphic dag_node_cleaner.NodeCleaner.
+"""
+
+    @property
+    def execution_limit(self) -> int:
+        """
+PURPOSE:
+Established as the execution limit bounding the maximum times any node can be visited
+
+GROUNDING_ARGUMENT:
+- Hardcoded constant value (500) defined within the implementation to bound node visits.
+"""
+        ...
+
+    @operation
+    @override
+    def clean(self, node: dag_storage.Node, cleaner: dag_node_cleaner.NodeCleaner) -> None:
+        """
+PURPOSE:
+Implements clean to execute dirty nodes in topological order with node visit limits
+
+INHERITED_ASSUMPTIONS:
+- [DagCleaner] The target node roots an acyclic subgraph in dag storage.
+
+FRESH_REQUIREMENTS:
+- Cleaning a target node collects all reachable dependencies from the node.
+- In each cleaning iteration, reachable nodes are visited in topological order.
+- Visiting a node checks whether the node is dirty, not whether it is cleaned.
+- A node is cleaned only if it is dirty and all of its dependencies are clean.
+- When cleaning a dirty node, the node cleaner is invoked to clean the node.
+- If the node cleaner communicates that processing cannot continue, cleaning halts.
+- If visiting any node exceeds the execution limit, the dag cleaner halts with an unexpected failure.
+- Cleaning succeeds when all reachable nodes in the subgraph are clean.
+
+INHERITED_REQUIREMENTS:
+- [DagCleaner] Cleaning a node cleans dirty nodes in dependency-first topological order, ensuring all dependencies of a node are clean before that node is cleaned.
+- [DagCleaner] When cleaning a dirty node using the node cleaner, cleaning delegates to the node cleaner.
+- [DagCleaner] If the node cleaner communicates that processing cannot continue, cleaning halts.
+- [DagCleaner] Cleaning concludes when all nodes in the subgraph rooted at the node are clean.
+
+GROUNDING_ARGUMENT:
+- Receives node and cleaner as parameters, traverses reachable dependencies in topological order using imported dag_storage in the same system lifecycle tier, queries node dirty status, invokes cleaner.clean on dirty nodes, and enforces self.execution_limit bounds.
+"""
+        ...

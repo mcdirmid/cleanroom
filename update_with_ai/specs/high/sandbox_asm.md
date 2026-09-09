@@ -1,15 +1,32 @@
-# sandbox_asm
+# sandbox_asm assembly component
 
-imports: sandbox, file_reader, file_editor, guide_delivery, run_control, change_summary_validator
-types from sandbox: sandbox factory, sandbox, sandbox configuration
-types from file_reader: file reader factory
-types from file_editor: file editor factory
-types from guide_delivery: guide delivery factory
-types from run_control: run control factory
-types from change_summary_validator: change validator
-implements: sandbox factory
+imports: dag_storage, file_alias, model_config, node_config, filesystem_ext
+implements: sandbox, sandbox_file_reader, sandbox_file_editor, sandbox_run_control, sandbox_guide_delivery, sandbox_change_summary_validator, tool_provider
 
-## Behavior
+## Purpose
 
-- A *sandbox factory* is assembled from concrete implementations of *file reader factory*, *file editor factory*, *run control factory*, *change validator*, and optional *guide delivery factory*.
-- The assembled *run control factory* is wired with the *change validator* to validate change summaries.
+The sandbox_asm assembly component aggregates file inspection, guarded editing, execution control, guide delivery, change validation, and tool dispatch services into the sandbox subsystem assembly.
+
+Autonomous agents operating on source workspaces require isolated environments that combine file inspection tools, guarded in-place editors, progressive instruction delivery, and strict run completion verifiers. Without an integrated sandbox assembly, tools and validation services must be configured and wired independently across session boundaries, risking inconsistent argument conversion and permissive file write behaviors. The sandbox_asm assembly component unites concrete sandbox, tool provider, and verification modules into a cohesive subsystem, closing the sandbox and tool execution interfaces while declaring required dependencies on file aliases, configurations, and operating system storage boundaries.
+
+**Out of scope:** The sandbox_asm assembly component does not parse Bazel build manifests, manage language model network connections, or schedule topological graph passes; these are handled by other components.
+
+## Types and Behavior
+
+The *sandbox assembly* unites the concrete implementation components that realize agent session tools, workspace safety guardrails, instruction delivery, and run control verifiers. The assembly initializes its constituent implementation components and registers their singleton services with the system lifecycle prototype.
+
+The sandbox assembly aggregates the following implementation components:
+
+- The sandbox implementation from sandbox_impl, closing the sandbox interface to assemble startup tool executions, materialize templates, and expose session modification state.
+
+- The sandbox file reader implementation from sandbox_file_reader_impl, closing the sandbox file reader interface to provide guarded file reading and regular expression pattern searching.
+
+- The sandbox file editor implementation from sandbox_file_editor_impl, closing the sandbox file editor interface to provide text replacement and line update tools with template materialization.
+
+- The sandbox run control implementation from sandbox_run_control_impl, closing the sandbox run control interface to provide advance, fail, and blame execution control tools with sequential verification checks.
+
+- The sandbox guide delivery implementation from sandbox_guide_delivery_impl, closing the sandbox guide delivery interface to parse markdown instructions and deliver progressive milestone steps.
+
+- The sandbox change summary validator implementation from sandbox_change_summary_validator_impl, closing the sandbox change summary validator interface to evaluate net file modifications against reported change summaries.
+
+- The tool provider implementation from tool_provider_impl, closing the tool provider interface to manage session tool registration, parameter conversion, and tool invocation dispatch.

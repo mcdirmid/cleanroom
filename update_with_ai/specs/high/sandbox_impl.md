@@ -1,19 +1,18 @@
-# sandbox_impl
+# sandbox_impl implementation component
 
-imports: tool_provider, virtual_file_name, file_reader, file_editor, guide_delivery, run_control, sandbox
-types from tool_provider: tool metadata, tool result, tool failure, termination outcome
-types from virtual_file_name: virtual file name
-types from file_reader: file reader, file reader factory, read-only file, read-write file, session-start read
-types from file_editor: file editor, file editor factory, template
-types from guide_delivery: guide delivery, guide delivery factory, guide, step section, step delivery
-types from run_control: run controller, run control factory, advance tool
-types from sandbox: sandbox factory, sandbox, sandbox configuration, startup interaction
-implements: sandbox factory
+imports: tool_provider, sandbox_file_reader, sandbox_file_editor, sandbox_run_control, node_config, model_config
+implements: sandbox
 
-## Behavior
+## Purpose
 
-- Creating a *sandbox* through a *sandbox factory* yields a *sandbox* configured from a *sandbox configuration* using a *file reader factory*, a *file editor factory*, a *run control factory*, and an optional *guide delivery factory*.
-- A *sandbox* composes all available tools provided by its *file reader*, *file editor*, *run controller*, and *guide delivery*.
-- A *sandbox* produces a *startup interaction* combining `read_file` *tool results* from *session-start reads* and an initial `advance` *tool result* from *step delivery*.
-- Tool executions in a *sandbox* are dispatched to the corresponding underlying component.
-- In step mode, executing the *advance tool* delivers the next *step section* from *guide delivery* upon passing verification before termination.
+The sandbox_impl implementation component realizes startup tool execution assembly, template materialization, and modification tracking for agent sessions.
+
+Agent sessions require initial context assembled from multiple services before execution begins. The sandbox_impl implementation component integrates peer session services—the read manager, edit manager, and run controller—assembling baseline tool executions, delegating template materialization, and exposing session-wide file modification state.
+
+**Out of scope:** The sandbox_impl implementation component does not parse tool arguments, format diff patches, or manage run outcome termination; these are handled by other components.
+
+## Types and Behavior
+
+Retrieving startup tool executions assembles an ordered sequence of initial tool executions based on active configuration in the model config from model_config and file definitions in the node config from node_config. When using step mode in the model config to communicate a guide progressively, the sandbox includes an initial startup tool execution setting the tool name to `advance`, providing empty wire parameter bindings, and executing the advance tool from the run controller to capture the response. When performing startup reads in the model config to inspect declared files at session start, the sandbox queries the read manager for declared read-only files from node config and appends a startup tool execution for each file, setting the tool name to `read_file`, constructing wire parameter bindings mapping `file` to the file's short name and omitting line numbers, and executing the read tool to capture the response.
+
+Materializing startup templates delegates to the edit manager to populate missing read-write files with starter templates from node config without overwriting existing files. The sandbox queries the edit manager to determine whether workspace file modifications occurred during the session.

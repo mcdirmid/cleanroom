@@ -12,9 +12,9 @@
 ## Required Guides for Alignments & Tasks
 Always read and maintain in context the relevant guide from `update_python_with_ai/guides/` when modifying specs, implementations, tests, or doing alignments:
 - **High-Level Specs (HLS)**: `update_python_with_ai/guides/high_level_spec.md`
-- **HLS to LLS Alignment**: `update_python_with_ai/guides/high_to_low.md`
-- **LLS to Library Code Alignment**: `update_python_with_ai/guides/low_to_lib.md`
-- **LLS to Unit Tests Alignment**: `update_python_with_ai/guides/low_to_test.md`
+- **HLS to Grounding Alignment**: `update_python_with_ai/guides/high_to_grounding.md`
+- **Grounding to Library Code Alignment**: `update_python_with_ai/guides/grounding_to_lib.md`
+- **Grounding to Unit Tests Alignment**: `update_python_with_ai/guides/grounding_to_test.md`
 - **QA Verification**: `update_python_with_ai/guides/qa.md`
 
 ## Bazel Test Execution Flags

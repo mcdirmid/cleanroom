@@ -1,7 +1,28 @@
 {
-  "include": ["update_with_ai"],
-  "exclude": ["**/node_modules", "**/__pycache__", "**/*_pb2.py", "testing"],
-  "extraPaths": ["update_with_ai", "update_with_ai/lib"],
+  "include": [
+    "update_with_ai"
+  ],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/*_pb2.py",
+    "testing"
+  ],
+  "executionEnvironments": [
+    {
+      "root": "update_with_ai/specs/grounding",
+      "extraPaths": [
+        "update_with_ai"
+      ]
+    },
+    {
+      "root": "update_with_ai",
+      "extraPaths": [
+        "update_with_ai",
+        "update_with_ai/lib"
+      ]
+    }
+  ],
   "pythonVersion": "3.12",
   "reportMissingImports": "none",
   "reportUnknownMemberType": false,

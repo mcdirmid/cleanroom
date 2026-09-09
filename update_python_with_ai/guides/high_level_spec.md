@@ -1,77 +1,128 @@
-# Guide: High-Level Specifications (HLS)
+# Guide: High-Level Specifications
 
 ## Summary
 
-The artifact is the HLS for a component: it conforms to the HLS structure this guide states and serves as the single source of truth for design, low-level specifications, implementations, and test suites. The spec is ordinary English, ontology-driven, and declarative. Every line is a complete, self-contained fact stating exactly one concern.
+The artifact is a High-Level Specification (HLS) that defines a software component declaratively through literate prose under `high/<name>.md`. The artifact conforms to this guide and the component architecture described in the design documents. Specifications define interface (`high/<name>.md`), implementation (`high/<name>_impl.md`), external boundary (`high/<name>_ext.md`), or assembly (`high/<name>_asm.md`) components without pseudo-code, bolding, nested bullet trees, or artificial parameter flags.
 
-Five pillars:
-1. Natural language ontology: Concepts are declared as natural language types in italics with plain-English definitions; no code tokens, type annotations, or formal DSLs.
-2. Declarative behavior: Constraints, outcomes, and observable relationships; no internal mechanics, algorithms, or sequencing except observable ordering.
-3. Operations and observable transformations: State operational capabilities and outcomes directly in ordinary English (e.g. "Initial records can initialize an index store", "Appending entries adds them in chronological order"); avoid making passive types sound like autonomous living entities.
-4. Extreme separation of concerns: One component per file; value types, operations, and outcomes are cleanly separated; downstream concerns (such as caching or UI rendering) and implementation details (such as host paths) are never leaked.
-5. Compounding implementation behaviors: Implementation specs (<name>_impl.md) and assembly specs (<name>_asm.md) declare implements: <type name> after header imports and types, indicating that the implemented type can only be instantiated and used in _asm components (statically created and initialized, one per system). In an implementation spec, implements implements the type in place (Widget protocol implemented as WidgetImpl class) and adds compounding concrete requirements (such as parameter schemas, formatting details, metadata stripping, and requirements on internal protocol implementations created by factory operations).
-
-The section inventory is closed:
-- Interface specs: ## Purpose, ## Types, ## Behavior
-- Implementation specs: optional ## Purpose, ## Behavior (with ## Types restricted to constructor configuration types for dynamic initialization)
-
----
-
-## Document structure
-
-- [ ] File contains exactly one component
-- [ ] Interface specs contain no implementation content (no internal state, no private algorithms, no data structures)
-- [ ] Implementation specs and assembly specs import the interface module, list types from <module>: ..., and place implements: <type name> after type imports so the implemented type is strictly in scope; the implementing class can only be instantiated and used in _asm components
-- [ ] Static component wiring and dependency injection belong in assembly components (_asm.md); dynamic initialization parameters and operations required per run or per target are interface concerns declared in interface specs
-- [ ] When an object must be created dynamically with per-task or per-session configuration, a factory operation is declared on a factory type within the interface spec of the created type (e.g. "Creating a *<type>* through a *<type> factory* yields a *<type>* configured from a *<type> configuration*")
-- [ ] In an implementation spec implementing a factory protocol, ## Behavior specifies requirements for the factory operation as well as requirements on the created protocol type's internal implementation
-- [ ] Implementation specs (_impl.md) define no domain types; the only new types an implementation may define are constructor configuration types passed to construct that specific implementation
-- [ ] Blockquotes (> ...) under ## Purpose provide architectural notes, design rationale, or clarify out-of-scope modes without polluting behavioral rules
-
-## Purpose
-
-- [ ] ## Purpose articulates the engineering rationale and failure modes being prevented (e.g. preventing path hallucination, eliminating discovery turns, avoiding tool confusion) rather than just paraphrasing behavioral rules
-- [ ] Every type in ## Types and every major capability in ## Behavior has its motivating failure mode or purpose represented in ## Purpose; compressing for conciseness never drops coverage of an entire capability
-- [ ] When condensing or refining a rationale, compare the shorter draft directly against the uncompressed version; if condensing drops essential motivating context that causes types or behaviors to become unjustified or orphaned, the concise draft is invalid and must be expanded to retain full coverage
-- [ ] Leaf components explain the rationale for their specific domain mechanics; composite facade components explain the rationale for composition, isolation, and coordination without duplicating sub-component internals
-
-## Types
-
-- [ ] Defines every primary subject, collection, message, output artifact, and outcome that participates in operations
-- [ ] Every domain noun referenced in ## Behavior is defined in ## Types or imported from a declared dependency; no untyped floating concepts
-- [ ] Parenthetical clarifying examples are included in type definitions to clarify common roles without creating unnecessary subtype ontology (e.g. "- A *item entry* is an entry in an *inventory manifest* (such as a serialized stock item, a temporary placeholder, or a batch receipt)")
-- [ ] Types are declared in ## Types as natural language sentences: - A *<type name>* is <definition>
-- [ ] No colons (:) in type definition bullets
-- [ ] No code tokens, camelCase names, or type annotations in type definitions
-- [ ] Types categorize rather than act; active capabilities and operations belong strictly in ## Behavior
-- [ ] Value concepts (metadata, content, outcomes) are separated from operational entities (providers, handlers)
-- [ ] Type definitions describe what a type is and what it does or carries, distinguishing its role by its nature: an entity that performs actions or holds state is defined by what it does (e.g. "is a provider that..."); a value that communicates or stores information is defined by what it carries (e.g. "is a structured record carrying..."); an identifier or bound is defined by what it addresses or measures (e.g. "is a path addressing...")
-- [ ] When a type is an open value consumed across boundaries, its definition explicitly states its consumption and production roles
-- [ ] No types for host-level or internal implementation concepts that are never directly observed or manipulated by the interface
-- [ ] No unnecessary intermediate invocation records or wrapper types
-
-- [ ] Every parameter or field declared in a configuration type has a corresponding behavioral rule describing how the component directly reads or enforces it; pass-through configuration fields are prohibited
-- [ ] Composite components do not accept configuration fields on behalf of sub-systems; sub-components receive their configuration directly during assembly
-- [ ] When responsibilities shift between components, configuration parameters and requirements whose original purpose no longer exists are pruned
-
-## Behavior
-
-- [ ] Operational capabilities and transformations are expressed in direct active form (e.g. "A *tree balancer* can rebalance an acyclic subtree rooted at a target *item*")
-- [ ] Passive contortions and gerund fragments are avoided
-- [ ] Capabilities are stated directly without conversational placeholders
-- [ ] Operational restrictions, permission breaches, and invalid inputs explicitly produce recovery feedback (e.g. *tool failure*)
-- [ ] Ordering constraints and atomicity boundaries are explicitly stated
-- [ ] Preconditions are expressed as natural qualifiers on the capability sentence (e.g. "an acyclic subgraph"); violations are unexpected failures by default
-- [ ] **Cross-Specification Terminology Consistency**: When an HLS references operations, transformations, or states established by its imported dependencies (e.g. "allocating", "indexing", "partitioning", "resolving"), it uses the exact phrasing and terminology established by those dependencies rather than inventing local synonyms or paraphrases
-- [ ] **Grounding and Provenance**: Operations and transitions are grounded: dynamic inputs, directives, and factory configurations state their declared source, and stage advancements or completion outcomes state their gating conditions
-- [ ] Implementation specs declare compounding concrete metadata (tool names, argument schemas, format strings) and do not repeat invariants already established by the interface
+Component visibility and lifetimes are governed by flat lifecycle tiers (`*system*` and `*agent session*`) where services access each other directly without object type containment or factory plumbing. Specifications follow a closed two-section layout: a why-focused `## Purpose` section with an `**Out of scope:**` boundary disclaimer, and either a unified `## Types and Behavior` section expressed in literate prose with semantic italics on concept introductions (for interface, implementation, and assembly specifications), or a `## Grounding Gaps Covered` section in plain prose without semantic italics (for external boundary specifications).
 
 ## Lint checks
 
-- [ ] Header must match the file stem (`# <name>`)
-- [ ] Front-matter ordering must place `imports:` first, followed by `types from <dep>:`, followed by `implements: <type>`
-- [ ] Non-assembly specifications (`<name>.md`, `<name>_impl.md`) must not import `*_impl` or `*_asm` specifications
-- [ ] Assembly specifications (`*_asm.md`) may import interface, implementation (`*_impl`), or assembly (`*_asm`) specifications
-- [ ] Every `types from <dep>:` line must correspond to a module declared in `imports:`
-- [ ] Implementation specifications (`*_impl.md`) and assembly specifications (`*_asm.md`) must declare `implements: <type>` in front-matter
-- [ ] Section inventory is closed strictly to `## Purpose`, `## Types`, and `## Behavior`
+- [ ] Header must match `# <name> <component_type> component` where `<component_type>` is `interface`, `implementation`, `external`, or `assembly`
+- [ ] Front-matter ordering must place `imports:` first, followed by `implements:`
+- [ ] Implementation specifications (`high/<name>_impl.md`) and assembly specifications (`high/<name>_asm.md`) must declare `implements: <components>` listing the interface component names closed
+- [ ] Front-matter `implements:` clause must list interface component names rather than type names or polymorphic types
+- [ ] An interface or external boundary specification must never declare `implements:`
+- [ ] Front-matter `implements:` clause must never contain entries that are also declared under `imports:`
+- [ ] An implementation component must implement all singleton types defined in each interface component it lists under `implements:`
+- [ ] An assembly component's `implements:` clause must equal the union of all `implements:` clauses of its constituent components
+- [ ] An assembly component's `imports:` clause must contain all components imported by its constituents except those implemented by the assembly
+- [ ] A root assembly component ready for execution must implement all interface components in the binary and have no imports outside data types and external boundary components
+- [ ] Front-matter must never contain `assembles:`, `instantiates:`, or `types from <dep>:` statements
+- [ ] Every imported component in `imports:` must be referenced in `## Types and Behavior`; concepts mentioned only in `## Purpose` never count as dependencies
+- [ ] Section inventory is closed strictly to `## Purpose` and `## Types and Behavior` (or `## Grounding Gaps Covered` for external boundary specifications)
+- [ ] Sub-headers (`###`) are strictly prohibited
+
+## Document structure
+
+- [ ] The document consists exclusively of optional front-matter, `## Purpose`, and `## Types and Behavior` (or `## Grounding Gaps Covered` for external boundary specifications)
+- [ ] An interface component (`high/<name>.md`) defines public object types, data types, and capabilities as the bill of sale for consumers and mock generation
+- [ ] An implementation component (`high/<name>_impl.md`) refines capabilities into concrete tool naming, algorithms, preconditions, and error feedback for realized types
+- [ ] An external boundary component (`high/<name>_ext.md`) describes external domain knowledge and grounding gaps covered without specifying an API or types, containing strictly `## Purpose` and `## Grounding Gaps Covered` sections, using zero semantic italics, and lacking a grounding document
+- [ ] An assembly component (`high/<name>_asm.md`) aggregates constituent implementation and sub-assembly components, closing their combined interface components and propagating unresolved dependencies
+
+## Front-matter and imports
+
+- [ ] Specifications without external dependencies omit `imports:` entirely
+- [ ] `imports:` lists only component-level module names separated by commas
+- [ ] Implementation and assembly specifications declare `implements: <components>` listing closed interface component names separated by commas
+- [ ] An implementation component implements all singleton types defined by each interface component listed in `implements:`
+- [ ] Front-matter `implements:` never lists polymorphic types or type names
+- [ ] No component appears in both `imports:` and `implements:` within the same specification
+- [ ] Assembly components aggregate constituent components, inheriting their implemented interface components and leaving only unresolved dependencies in `imports:`
+- [ ] A ready-to-run root assembly component implements all interface components in the binary and declares no imports except data types and external boundary components
+
+## Purpose and boundaries
+
+- [ ] The `## Purpose` section begins with a single standalone summary sentence naming the component (`The <name> <component_type> component ...`) and articulating why the component exists rather than how it maintains state
+- [ ] A single blank line follows the summary sentence, followed by one or two paragraphs of architectural rationale motivating the component from a system perspective
+- [ ] The architectural rationale explains systemic friction, cascading risks, and workflow failure modes prevented, without overlapping or repeating behavioral details from `## Types and Behavior`
+- [ ] The section ends with an out of scope paragraph qualified by the exact prefix `**Out of scope:** `
+- [ ] The out of scope text identifies client workflow purpose, background intent, or caller motivations mentioned in `## Types and Behavior` rather than component obligations
+- [ ] Out of scope never lists low-level technical operations that the component delegates to dependencies
+- [ ] Out of scope never names specific external components, ending with `; these are handled by other components.`
+
+## Types and Behavior structure
+
+- [ ] The section heading is strictly `## Types and Behavior`
+- [ ] Content is written in literate prose paragraphs, using selective single-level bullets separated by blank lines to enumerate parallel items or constituent collections
+- [ ] Bullets are never nested; at most one level of bullet points exists
+- [ ] Complete sentences terminate with a period (`.`) and never terminate with a colon (`:`)
+- [ ] Bullets are preceded by a complete sentence ending with a period, followed by a separate sentence fragment header ending with a colon (`:`)
+- [ ] Every bullet point grammatically completes the preceding fragment lead-in into a coherent English sentence
+- [ ] No bolding (`**term**`) is used anywhere in the specification, except for the `**Out of scope:**` prefix
+- [ ] Pseudo-code jargon is avoided: the term "optional" is never used, and parameters state their purpose directly
+- [ ] The term "flag" is avoided; boolean choices express domain actions or conditions directly
+- [ ] Features, modes, and options express purpose rather than enablement (e.g. "whether the agent should use step mode to communicate a guide to the agent progressively" rather than "whether step mode is enabled")
+- [ ] Requirements state capabilities and invariants declaratively, avoiding procedural step-by-step recipes or chronological narratives
+
+## Semantic italics and typography
+
+- [ ] Italics (`*term*`) are used strictly as semantic markers upon introduction of an entity, object type, data type, property or state, sub-type variant, or callable operation
+- [ ] If a property, state, or operation is introduced for a concept, it is italicized upon introduction for that concept, even if that word was previously introduced for another concept
+- [ ] Once introduced, all subsequent references to that term anywhere within the specification remain in plain text without italics
+- [ ] Terms imported from upstream components remain in plain text without italics
+- [ ] Common scalar attributes (such as `*name*` and `*description*`) are italicized whenever they represent introduced properties of an entity
+- [ ] Operation arguments are italicized upon introduction so that operation signatures and parameter names can be cleanly extracted
+- [ ] Literal tokens, method names, and identifiers mentioned in message feedback or naming are enclosed in backticks
+- [ ] External boundary specifications (`high/<name>_ext.md`) use zero semantic italics throughout the document
+
+## Lifecycle tiers and architecture
+
+- [ ] Every singleton service declares its lifecycle tier in natural language with the tier italicized (`*system*` or `*agent session*`); polymorphic types do not specify a lifecycle tier
+- [ ] Services do not form containment or ownership hierarchies; services within the same tier access each other directly without nested type definitions
+- [ ] Aggregate services maintain collections via explicit operations, never as owned sub-types
+- [ ] Shorter-lived tiers (`*agent session*`) may access longer-lived tiers (`*system*`), but long-lived services never hold references to short-lived session services
+- [ ] Container and runner frameworks instantiate session phase services directly without factory objects
+- [ ] Lifecycle phases are established as execution blocks where session services operate, without explicit start or stop operations; cleaning happens within an agent session phase
+- [ ] Lifecycle phase transitions are specified declaratively rather than procedurally, describing initial context provision rather than invocation sequences
+
+## Knowledge custody and value derivation
+
+- [ ] Every property, operational parameter, and dependency must have an explicit derivation path from known inputs, process environment, CLI flags, build manifests, upstream node data, or collaborators in scope
+- [ ] System services live for the process duration and must never assume access to per-node or session-specific metadata unless explicitly passed as operation parameters or stored in an ambient system store
+- [ ] Specifications must never introduce floating directives or hand-wavy resolution logic without specifying what provides the source identity or how it is bound
+- [ ] Passive data types have value-based structural equality and are strictly closed within the component that introduces them; importing components cannot subtype or extend imported data types
+- [ ] Every capability or invariant required of an implementation must be deterministically satisfiable using only the component's declared in-scope collaborators, inputs, and configuration
+
+## Capabilities and behavioral constraints
+
+- [ ] Requirements state callable operations and behavioral constraints declaratively around domain entities without micromanaging collaborator routing
+- [ ] Tool execution produces a structured response indicating whether execution succeeded (if not, failed), whether the session should terminate, and output content
+- [ ] Tool failure content provides actionable diagnostic messages and guidance on how to execute the tool correctly
+- [ ] Dual or complementary constraints on an entity are combined into a cohesive sentence rather than fragmented into separate bullets
+- [ ] Conjunctions in requirements introduce distinct conditions and avoid pairing synonymous terms that create false distinctions or imply phantom states
+
+## Common pitfalls
+
+- [ ] Definition-only phantoms — introducing an entity, property, or configuration without a concrete derivation path for its runtime value
+- [ ] Floating directives — specifying that a component loads or resolves data without identifying the source or the mechanism that binds it
+- [ ] Tier custody violations — a system service holding references to session services or assuming per-node context without parameter passing
+- [ ] Syntactic verification illusions — treating passing surface formatting or table parsers as proof of architectural grounding
+- [ ] Pseudo-code jargon — using "optional", "flags", or procedural method signatures instead of declarative literate prose
+- [ ] Enablement phrasing — writing "whether X is enabled" instead of stating the purpose or domain action of the feature
+- [ ] Listing type names or polymorphic types in implements — including type names or polymorphic types rather than concrete interface component names in front-matter
+- [ ] Incomplete interface closure — declaring an interface in implements without implementing all of its singleton types
+- [ ] Overlapping imports and implements — listing an implemented interface component in imports
+- [ ] Incomplete root assembly — leaving unresolved imports other than external boundary components or data types in a ready-to-run root assembly
+- [ ] Procedural recipes — describing chronological step-by-step algorithms or start/stop imperatives instead of declarative invariants
+- [ ] Procedural lifecycle blocks — specifying step-by-step lifecycle phase setup instead of declaratively stating session creation and context provision
+- [ ] Lexical de-duplication — failing to italicize an operation or property upon introduction for a concept because the same word was introduced on another concept
+- [ ] Re-italicizing references — italicizing terms when referring back to already-introduced concepts or imported dependencies
+- [ ] Dangling lead-ins — writing bullets that clash grammatically with the introductory fragment lead-in
+- [ ] Colon after complete sentence — ending a complete sentence with a colon before a bullet list
+- [ ] Nested bullets — creating multi-level bullet trees instead of flat single-level bullet paragraphs
+- [ ] Naming collaborators in out of scope — naming specific components instead of using "other components"
+- [ ] Implementation delegation in out of scope — listing delegated technical tasks rather than distinguishing client workflow intent from component obligations
+- [ ] Bolding types — using `**term**` instead of `*term*` for introductions
+- [ ] Spatial containment — writing "in a <service>" instead of recognizing that tools and services are independent peer services in the session tier

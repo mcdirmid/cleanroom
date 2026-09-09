@@ -1,20 +1,13 @@
-"""Runner logger interface and log event definition."""
-
-from typing import Protocol, TypeAlias
+from typing import Protocol
 from dataclasses import dataclass
-
-EventName: TypeAlias = str
-EventSummary: TypeAlias = str
-TranscriptEntry: TypeAlias = str
-
 
 @dataclass(frozen=True)
 class LogEvent:
-    name: EventName
-    summary: EventSummary
-    transcript: TranscriptEntry
-
+    event_name: str
+    summary: str
+    transcript_representation: str
 
 class RunnerLogger(Protocol):
-    def log(self, event: LogEvent) -> None:
+    def consume(self, event: LogEvent) -> None:
         ...
+

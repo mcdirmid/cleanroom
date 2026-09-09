@@ -1,269 +1,228 @@
-"""Tests for sandbox_impl derived from LLS."""
+"""Unit tests for sandbox_impl aligned with grounding specifications."""
 
 import unittest
-from typing import Sequence, Optional
-from lib.tool_provider import Tool, ToolMetadata, ToolResult, ToolOutcome, ToolArguments
-from lib.file_reader import FileReader, FileReaderFactory, FileReaderConfig, SessionStartRead
-from lib.file_editor import FileEditor, FileEditorFactory, FileEditorConfig
-from lib.run_control import RunController, RunControlFactory, RunControlConfig
-from lib.guide_delivery import GuideDelivery, GuideDeliveryFactory, StepDelivery, TaskGuide, StepSection
-from lib.sandbox import SandboxConfig
-from lib.sandbox_impl import SandboxFactoryImpl
+from typing import Any, List, Optional, Set, Tuple
+
+from lib.dag_storage import Node
+from lib.file_alias import BoundFile, FileContent, ReadOnlyFile, UnboundFile, WorkspacePath
+from lib.lifecycle import LifecycleRegistry, enter_phase
+from lib.model_config import ModelConfig
+from lib.node_config import NodeConfig
+from lib.sandbox import Sandbox, StartupToolExecution
+from lib.sandbox_file_editor import EditManager
+from lib.sandbox_file_reader import ReadTool
+from lib.sandbox_guide_delivery import Guide
+from lib.sandbox_impl import Sandbox as SandboxImpl, __initialize__
+from lib.sandbox_run_control import AdvanceTool
+from lib.tool_provider import (
+    ActualParameterBindings,
+    Parameter,
+    ParameterConverter,
+    Response,
+    String,
+    Tool,
+    WireParameterBindings,
+    WireType,
+)
 
 
-class MockFileReader(FileReader):
-    def get_read_tool(self) -> Tool:
-        class _T:
-            def get_metadata(self) -> ToolMetadata:
-                return ToolMetadata("read_file", "Read file", {})
-            def execute(self, a: ToolArguments) -> ToolOutcome:
-                return ToolResult("content")
-        return _T()
+class MockModelConfig:
+    tier = "system"
 
-    def get_search_tool(self) -> Tool:
-        class _T:
-            def get_metadata(self) -> ToolMetadata:
-                return ToolMetadata("search_files", "Search files", {})
-            def execute(self, a: ToolArguments) -> ToolOutcome:
-                return ToolResult("search matches")
-        return _T()
-
-    def get_session_start_reads(self) -> Sequence[SessionStartRead]:
-        return [SessionStartRead(content="Initial read")]
-
-    def sanitize_paths(self, text: str) -> str:
-        return text
-
-    def get_tools(self) -> Sequence[Tool]:
-        return [self.get_read_tool(), self.get_search_tool()]
+    def __init__(self, is_step_mode: bool = False, is_startup_reads: bool = False) -> None:
+        self.is_step_mode = is_step_mode
+        self.is_startup_reads = is_startup_reads
+        self.model_name = "test-model"
+        self.base_url = None
+        self.api_key = None
+        self.timeout = 30
+        self.conversation_limit = 10
 
 
-class MockFileReaderFactory(FileReaderFactory):
-    def __init__(self, reader: FileReader) -> None:
-        self.reader = reader
+class MockNodeConfig:
+    tier = "agent_session"
 
-    def create_file_reader(self, config: FileReaderConfig) -> FileReader:
-        return self.reader
+    def __init__(self, read_only_files: Set[BoundFile]) -> None:
+        self.read_only_files = read_only_files
+
+    @property
+    def read_write_files(self) -> Set[BoundFile]:
+        return set()
+
+    @property
+    def guide_file(self) -> Optional[UnboundFile]:
+        return None
+
+    @property
+    def templates(self) -> Set[Tuple[BoundFile, FileContent]]:
+        return set()
+
+    @property
+    def guide(self) -> Optional[Guide]:
+        return None
+
+    @property
+    def blame_targets(self) -> Set[BoundFile]:
+        return set()
 
 
-class MockFileEditor(FileEditor):
+class MockEditManager:
+    tier = "agent_session"
+
     def __init__(self) -> None:
+        self.has_modifications = False
         self.templates_materialized = False
-        self.modified = False
-
-    def get_replacement_tool(self) -> Tool:
-        class _T:
-            def get_metadata(self) -> ToolMetadata:
-                return ToolMetadata("replace", "Replace text", {})
-            def execute(self, a: ToolArguments) -> ToolOutcome:
-                return ToolResult("replaced")
-        return _T()
-
-    def get_line_update_tool(self) -> Tool:
-        class _T:
-            def get_metadata(self) -> ToolMetadata:
-                return ToolMetadata("update_lines", "Update lines", {})
-            def execute(self, a: ToolArguments) -> ToolOutcome:
-                return ToolResult("updated")
-        return _T()
 
     def materialize_templates(self) -> None:
         self.templates_materialized = True
 
-    def has_file_modifications(self) -> bool:
-        return self.modified
 
-    def get_tools(self) -> Sequence[Tool]:
-        return [self.get_replacement_tool(), self.get_line_update_tool()]
+class MockAdvanceTool:
+    tier = "agent_session"
 
-
-class MockFileEditorFactory(FileEditorFactory):
-    def __init__(self, editor: FileEditor) -> None:
-        self.editor = editor
-
-    def create_file_editor(self, config: FileEditorConfig) -> FileEditor:
-        return self.editor
-
-
-class MockRunController(RunController):
     def __init__(self) -> None:
-        self.advance_executed = False
+        self.executed = False
 
-    def get_advance_tool(self) -> Tool:
-        class _T:
-            def __init__(self, parent: MockRunController) -> None:
-                self.parent = parent
-            def get_metadata(self) -> ToolMetadata:
-                return ToolMetadata("advance", "Advance pass", {})
-            def execute(self, a: ToolArguments) -> ToolOutcome:
-                self.parent.advance_executed = True
-                return ToolResult("advanced by controller")
-        return _T(self)
+    @property
+    def name(self) -> str:
+        return "advance"
 
-    def get_fail_tool(self) -> Tool:
-        class _T:
-            def get_metadata(self) -> ToolMetadata:
-                return ToolMetadata("fail", "Fail run", {})
-            def execute(self, a: ToolArguments) -> ToolOutcome:
-                return ToolResult("failed")
-        return _T()
+    @property
+    def description(self) -> str:
+        return "Advance tool"
 
-    def get_blame_tool(self) -> Optional[Tool]:
-        return None
+    @property
+    def parameters(self) -> Set[Parameter]:
+        return set()
 
-    def get_tools(self) -> Sequence[Tool]:
-        return [self.get_advance_tool(), self.get_fail_tool()]
+    def execute_tool(self, actual_parameter_bindings: ActualParameterBindings) -> Response:
+        self.executed = True
+        return Response(is_failed=False, is_terminated=False, content="Guide step 1")
 
 
-class MockRunControlFactory(RunControlFactory):
-    def __init__(self, controller: RunController) -> None:
-        self.controller = controller
+class DummyConverter:
+    @property
+    def actual_type(self) -> type:
+        return object
 
-    def create_run_control(
-        self,
-        config: RunControlConfig,
-        verification_fn: Optional[object] = None,
-        workspace_dirty_check_fn: Optional[object] = None,
-    ) -> RunController:
-        return self.controller
+    @property
+    def wire_type(self) -> WireType:
+        return String()
+
+    def convert(self, wire_value: Any) -> Any:
+        return wire_value
+
+
+class MockReadTool:
+    tier = "agent_session"
+
+    def __init__(self) -> None:
+        self.executed_files: List[BoundFile] = []
+        self.file_alias_parameter = Parameter(
+            name="file",
+            description="file",
+            parameter_converter=DummyConverter(),
+            is_required=True,
+        )
+
+    @property
+    def name(self) -> str:
+        return "read_file"
+
+    @property
+    def description(self) -> str:
+        return "Read tool"
+
+    @property
+    def parameters(self) -> Set[Parameter]:
+        return {self.file_alias_parameter}
+
+    def execute_tool(self, actual_parameter_bindings: ActualParameterBindings) -> Response:
+        bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
+        target = bindings_map.get("file")
+        if isinstance(target, BoundFile):
+            self.executed_files.append(target)
+        return Response(is_failed=False, is_terminated=False, content=f"Content of {target}")
 
 
 class SandboxImplTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.dummy_config = SandboxConfig(
-            file_mappings={},
-            read_only_files=[],
-            read_write_files=[],
-            templates={},
+        node = Node(address="//pkg:target")
+        self.ro_file = ReadOnlyFile(
+            short_name="spec.md",
+            workspace_path=WorkspacePath(path="pkg/spec.md"),
+            owning_node=node,
         )
 
-    def test_tool_aggregation_and_dispatch(self) -> None:
-        """Tests CUJ for aggregating tool definitions from sub-providers.
+        self.registry = LifecycleRegistry()
+        __initialize__(self.registry)
 
-        Checks postconditions: sandbox exposes read, search, edit, and control tools.
-        """
-        reader = MockFileReader()
-        editor = MockFileEditor()
-        controller = MockRunController()
-        factory = SandboxFactoryImpl(
-            file_reader_factory=MockFileReaderFactory(reader),
-            file_editor_factory=MockFileEditorFactory(editor),
-            run_control_factory=MockRunControlFactory(controller),
-        )
-        sandbox = factory.create_sandbox(self.dummy_config)
+        self.model_cfg = MockModelConfig(is_step_mode=True, is_startup_reads=True)
+        self.node_cfg = MockNodeConfig(read_only_files={self.ro_file})
+        self.edit_mgr = MockEditManager()
+        self.adv_tool = MockAdvanceTool()
+        self.read_tool = MockReadTool()
 
-        tools = sandbox.get_tools()
-        names = {t.get_metadata().name for t in tools}
-        self.assertIn("read_file", names)
-        self.assertIn("search_files", names)
-        self.assertIn("replace", names)
-        self.assertIn("update_lines", names)
-        self.assertIn("advance", names)
-        self.assertIn("fail", names)
+        self.registry.register_instance(self.model_cfg, keys=[ModelConfig], tier="system")
+        self.registry.register_instance(self.node_cfg, keys=[NodeConfig], tier="agent_session")
+        self.registry.register_instance(self.edit_mgr, keys=[EditManager], tier="agent_session")
+        self.registry.register_instance(self.adv_tool, keys=[AdvanceTool], tier="agent_session")
+        self.registry.register_instance(self.read_tool, keys=[ReadTool], tier="agent_session")
 
-    def test_session_start_reads_and_templates(self) -> None:
-        """Tests CUJ for startup reads and template materialization."""
-        reader = MockFileReader()
-        editor = MockFileEditor()
-        controller = MockRunController()
-        factory = SandboxFactoryImpl(
-            file_reader_factory=MockFileReaderFactory(reader),
-            file_editor_factory=MockFileEditorFactory(editor),
-            run_control_factory=MockRunControlFactory(controller),
-        )
-        sandbox = factory.create_sandbox(self.dummy_config)
+    def test_has_modifications_and_template_materialization_delegation(self) -> None:
+        """CUJ: Sandbox delegates modification checking and template materialization to EditManager."""
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            sb = scope.get_singleton(Sandbox)
 
-        reads = sandbox.get_session_start_reads()
-        self.assertEqual(len(reads), 1)
-        self.assertEqual(reads[0].content, "Initial read")
+            # Requirement: Querying file modifications delegates to the edit manager.
+            # Requirement: [Sandbox] The sandbox exposes whether workspace file modifications occurred during the session.
+            self.assertFalse(sb.has_modifications)
+            self.edit_mgr.has_modifications = True
+            self.assertTrue(sb.has_modifications)
 
-        sandbox.materialize_startup_templates()
-        self.assertTrue(editor.templates_materialized)
+            # Requirement: Materializing startup templates delegates to the edit manager to write template content to missing read-write files without overwriting existing files.
+            # Requirement: [Sandbox] Materializing startup templates populates missing read-write files without overwriting existing files.
+            self.assertFalse(self.edit_mgr.templates_materialized)
+            sb.materialize_startup_templates()
+            self.assertTrue(self.edit_mgr.templates_materialized)
 
-    def test_has_file_modifications_delegation(self) -> None:
-        """Tests that has_file_modifications delegates directly to the underlying FileEditor."""
-        reader = MockFileReader()
-        editor = MockFileEditor()
-        controller = MockRunController()
-        factory = SandboxFactoryImpl(
-            file_reader_factory=MockFileReaderFactory(reader),
-            file_editor_factory=MockFileEditorFactory(editor),
-            run_control_factory=MockRunControlFactory(controller),
-        )
-        sandbox = factory.create_sandbox(self.dummy_config)
+    def test_get_startup_tool_executions_step_mode_and_startup_reads(self) -> None:
+        """CUJ: Assembling startup tool executions: advance first when in step mode, followed by read_file for read-only files."""
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            sb = scope.get_singleton(Sandbox)
+            # Requirement: [Sandbox] The sandbox provides an ordered sequence of startup tool executions pairing tool requests and responses based on active configuration.
+            executions = sb.get_startup_tool_executions()
 
-        editor.modified = False
-        self.assertFalse(sandbox.has_file_modifications())
-        editor.modified = True
-        self.assertTrue(sandbox.has_file_modifications())
+            self.assertEqual(len(executions), 2)
+            # First is advance
+            # Requirement: When using step mode in the model config to communicate a guide progressively, startup tool executions include an initial advance tool execution with tool name `advance` and empty wire parameter bindings.
+            self.assertEqual(executions[0].tool_name, "advance")
+            self.assertEqual(executions[0].wire_parameter_bindings.bindings, set())
+            self.assertEqual(executions[0].response.content, "Guide step 1")
 
-    def test_startup_interaction_and_guide_advancement(self) -> None:
-        """Tests CUJs for startup interaction and step-by-step guide interception on advance."""
-        class MockStepGuideDelivery(GuideDelivery):
-            def __init__(self) -> None:
-                self.steps = ["Step 1 instructions", "Step 2 instructions"]
-            def get_summary_delivery(self) -> StepDelivery:
-                return StepDelivery(content="Guide Summary")
-            def advance_step(self, verification_passed: bool) -> Optional[StepDelivery]:
-                if self.steps:
-                    return StepDelivery(content=self.steps.pop(0))
-                return None
-            def has_steps_remaining(self) -> bool:
-                return len(self.steps) > 0
+            # Second is read_file for spec.md
+            # Requirement: When performing startup reads in the model config to inspect declared files at session start, startup tool executions include reads for all declared read-only files from the node config, positioned after any advance tool execution.
+            # Requirement: Each file read execution specifies the tool name as `read_file`.
+            self.assertEqual(executions[1].tool_name, "read_file")
+            # Requirement: Each file read execution constructs wire parameter bindings mapping `file` to the read-only file short name and omitting line numbers.
+            self.assertEqual(executions[1].wire_parameter_bindings.bindings, {("file", "spec.md")})
+            # Requirement: Each file read execution captures the execution response from the read tool.
+            self.assertIn("spec.md", executions[1].response.content)
 
-        class MockStepGuideDeliveryFactory(GuideDeliveryFactory):
-            def __init__(self, delivery: GuideDelivery) -> None:
-                self.delivery = delivery
-            def create_guide_delivery(self, guide: TaskGuide) -> GuideDelivery:
-                return self.delivery
+    def test_get_startup_tool_executions_disabled_modes(self) -> None:
+        """CUJ: Omits advance when step mode is off, and omits reads when startup reads are off."""
+        self.model_cfg.is_step_mode = False
+        self.model_cfg.is_startup_reads = False
 
-        reader = MockFileReader()
-        editor = MockFileEditor()
-        controller = MockRunController()
-        guide_delivery = MockStepGuideDelivery()
-        guide = TaskGuide(summary="Guide Summary", sections=[StepSection(0, "S1", "Step 1"), StepSection(1, "S2", "Step 2")])
-        factory = SandboxFactoryImpl(
-            file_reader_factory=MockFileReaderFactory(reader),
-            file_editor_factory=MockFileEditorFactory(editor),
-            run_control_factory=MockRunControlFactory(controller),
-            guide_delivery_factory=MockStepGuideDeliveryFactory(guide_delivery),
-        )
-        cfg = SandboxConfig(
-            file_mappings={},
-            read_only_files=[],
-            read_write_files=[],
-            templates={},
-            guide=guide,
-        )
-        sandbox = factory.create_sandbox(cfg)
-
-        # 1. Test get_startup_interaction combines session-start reads and guide summary
-        interactions = sandbox.get_startup_interaction()
-        self.assertEqual(len(interactions), 2)
-        self.assertEqual(interactions[0].content, "Initial read")
-        self.assertEqual(interactions[1].content, "Guide Summary")
-
-        # 2. Test advance tool intercepts when guide has steps remaining
-        tools = sandbox.get_tools()
-        advance_tool = next(t for t in tools if t.get_metadata().name == "advance")
-
-        # Step 1 interception
-        res1 = advance_tool.execute({})
-        self.assertIsInstance(res1, StepDelivery)
-        self.assertEqual(res1.content, "Step 1 instructions")
-        self.assertFalse(controller.advance_executed)
-
-        # Step 2 interception
-        res2 = advance_tool.execute({})
-        self.assertIsInstance(res2, StepDelivery)
-        self.assertEqual(res2.content, "Step 2 instructions")
-        self.assertFalse(controller.advance_executed)
-
-        # Terminal delegation to underlying controller
-        res_final = advance_tool.execute({})
-        self.assertEqual(res_final.content, "advanced by controller")
-        self.assertTrue(controller.advance_executed)
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            sb = scope.get_singleton(Sandbox)
+            # Requirement: When step mode is not used, startup tool executions contain no advance tool execution.
+            # Requirement: When startup reads are not performed, startup tool executions contain no file read executions.
+            executions = sb.get_startup_tool_executions()
+            self.assertEqual(len(executions), 0)
 
 
 if __name__ == "__main__":
     unittest.main()
+
+# Untested requirements: None

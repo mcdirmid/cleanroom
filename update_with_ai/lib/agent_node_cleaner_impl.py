@@ -1,102 +1,117 @@
-from typing import Sequence, Optional, List, Any
-from .dag_storage import NodeId, PendingMessage
-from .dag_node_cleaner import NodeCleaningOutcome, ChangeMessage, FeedbackMessage
-from .agent_runner import AgentRunner
-from .agent_node_cleaner import AgentNodeCleaner
-from .sandbox import Sandbox, SandboxFactory, SandboxConfig
-from .conversation_history import ConversationHistoryFactory, HistoryMessage
-from .runner_logger import RunnerLogger
-from .build_graph_storage import BuildGraphStorage
+from typing import Optional, Set
+from . import agent_conversation_history
+from . import agent_node_cleaner
+from . import agent_runner
+from . import bazel_graph_storage
+from . import dag_node_cleaner
+from . import dag_storage
+from . import sandbox
+from .lifecycle import LifecycleRegistry, Singleton, enter_phase, get_default_registry, get_singleton
 
+class CleanedNode(dag_node_cleaner.CleanedNode, Singleton):
+    tier = "agent_session"
 
-class AgentNodeCleanerImpl(AgentNodeCleaner):
-    def __init__(
-        self,
-        runner: AgentRunner,
-        sandbox_factory: SandboxFactory,
-        conversation_history_factory: ConversationHistoryFactory,
-        storage: BuildGraphStorage,
-        logger: Optional[RunnerLogger] = None,
-    ) -> None:
-        self._runner = runner
-        self._sandbox_factory = sandbox_factory
-        self._conversation_history_factory = conversation_history_factory
-        self._storage = storage
-        self._logger = logger
+    def __init__(self) -> None:
+        self._node: Optional[dag_storage.Node] = None
 
-    def clean_node(
-        self, node: NodeId, pending_messages: Sequence[PendingMessage]
-    ) -> NodeCleaningOutcome:
-        sandbox_config = self._storage.get_sandbox_config(node)
-        task_prompt = self._storage.get_task_prompt(node)
+    @property
+    def node(self) -> dag_storage.Node:
+        # Invariant: Presents the node currently being cleaned in the agent session
+        if self._node is None:
+            raise RuntimeError("CleanedNode has not been configured with a node.")
+        return self._node
 
-        sandbox = self._sandbox_factory.create_sandbox(sandbox_config)
-        sandbox.materialize_startup_templates()
+    def set_node(self, node: dag_storage.Node) -> None:
+        # Requirement: Configures the cleaned node with the target node in the session
+        self._node = node
 
-        history = self._conversation_history_factory.create_conversation_history()
-        initial_history: List[HistoryMessage] = []
-        if task_prompt:
-            initial_history.append(HistoryMessage(role="user", content=task_prompt))
+class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
+    tier = "system"
 
-        # Seed startup interaction with synthetic tool calls paired with tool results
-        startup_interaction = sandbox.get_startup_interaction()
-        ro_files = list(sandbox_config.read_only_files)
-        call_counter = 0
+    def __init__(self) -> None:
+        pass
 
-        for idx, item in enumerate(startup_interaction):
-            call_id = f"startup_call_{call_counter}"
-            call_counter += 1
-            if item.guidance or idx >= len(ro_files):
-                # Step delivery (initial advance)
-                initial_history.append(
-                    HistoryMessage(
-                        role="assistant",
-                        content="",
-                        metadata={"tool_calls": [{"id": call_id, "type": "function", "function": {"name": "advance", "arguments": "{}"}}]},
-                    )
-                )
-                initial_history.append(
-                    HistoryMessage(
-                        role="tool",
-                        content=item.content,
-                        metadata={"tool_call_id": call_id, "name": "advance", "guidance": item.guidance},
-                    )
-                )
-            else:
-                # Session start read
-                vname = ro_files[idx]
-                args = f'{{"file_name": "{vname}"}}'
-                initial_history.append(
-                    HistoryMessage(
-                        role="assistant",
-                        content="",
-                        metadata={"tool_calls": [{"id": call_id, "type": "function", "function": {"name": "read_file", "arguments": args}}]},
-                    )
-                )
-                initial_history.append(
-                    HistoryMessage(
-                        role="tool",
-                        content=item.content,
-                        metadata={"tool_call_id": call_id, "name": "read_file"},
-                    )
+    def clean_node(self, node: dag_storage.Node) -> Set[dag_storage.Message]:
+        # Requirement: Node cleaning executes within an agent session phase
+        with enter_phase("agent_session") as session:
+            # Requirement: Configures the cleaned node with the active dirty node
+            cleaned_node = session.get_singleton(CleanedNode)
+            cleaned_node.set_node(node)
+
+            storage = session.get_singleton(bazel_graph_storage.BazelGraphStorage)
+            defn = storage.get_node_definition(node)
+
+            # Requirement: Materializes sandbox startup templates for missing read-write files
+            sb = session.get_singleton(sandbox.Sandbox)
+            sb.materialize_startup_templates()
+
+            hist = session.get_singleton(agent_conversation_history.ConversationHistory)
+            # Requirement: Seeds conversation history with task prompt and node definition
+            if defn is not None and defn.task_prompt:
+                hist.append_message(
+                    agent_conversation_history.Message(role="user", content=str(defn.task_prompt))
                 )
 
-        for m in pending_messages:
-            initial_history.append(HistoryMessage(role="user", content=m.content))
-        history.initialize(initial_history)
+            # Requirement: Seeds conversation history with incoming pending messages
+            for msg in storage.get_messages(node):
+                hist.append_message(
+                    agent_conversation_history.Message(role="user", content=f"Incoming message: {type(msg).__name__}")
+                )
 
-        outcome = self._runner.run(tool_provider=sandbox, history=history, logger=self._logger)
+            # Requirement: Seeds conversation history with startup tool executions
+            for i, startup_exec in enumerate(sb.get_startup_tool_executions()):
+                hist.append_tool_response(
+                    response=startup_exec.response,
+                    tool_name=startup_exec.tool_name,
+                    tool_call_id=f"startup_{i}_{startup_exec.tool_name}",
+                )
 
-        term_content = outcome.termination.content
-        if "Failed" in term_content or "limit exceeded" in term_content:
-            return None
+            # Requirement: Executes agent runner within the session phase
+            runner = session.get_singleton(agent_runner.AgentRunner)
+            outcome = runner.run()
 
-        if term_content.startswith("Blamed "):
-            return [FeedbackMessage(content=term_content, sender=node)]
+            messages: Set[dag_storage.Message] = set()
+            # Requirement: When outcome indicates failure, no propagating messages are produced
+            if not outcome.is_success:
+                return messages
 
-        if sandbox.has_file_modifications():
-            return [ChangeMessage(content=f"Modified files for {node}", sender=node)]
+            content = outcome.response.content if outcome.response else ""
+            # Requirement: Produces feedback messages when blame is indicated
+            if content.startswith("Blamed "):
+                messages.add(dag_storage.Feedback())
+            # Requirement: Produces change messages when workspace file modifications occur
+            elif sb.has_modifications:
+                messages.add(dag_storage.Change())
 
-        return []
+            return messages
 
+    def clean(self, node: dag_storage.Node) -> bool:
+        storage = get_singleton(bazel_graph_storage.BazelGraphStorage)
+        # Requirement: Clears prior messages before cleaning dirty node
+        storage.clear_messages(node)
+        msgs = self.clean_node(node)
 
+        # Requirement: Delivers change messages to dependents and feedback to dependencies
+        for m in msgs:
+            if isinstance(m, dag_storage.Change):
+                for dependent in storage.get_dependents(node):
+                    storage.add_message(m, to=dependent)
+            elif isinstance(m, dag_storage.Feedback):
+                for dependency in storage.get_dependencies(node):
+                    storage.add_message(m, to=dependency.node)
+
+        # Requirement: Communicates whether DAG cleaning should continue
+        return True
+
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        AgentNodeCleaner,
+        keys=[AgentNodeCleaner, agent_node_cleaner.AgentNodeCleaner, dag_node_cleaner.NodeCleaner],
+        tier="system",
+    )
+    reg.register_singleton(
+        CleanedNode,
+        keys=[CleanedNode, dag_node_cleaner.CleanedNode],
+        tier="agent_session",
+    )

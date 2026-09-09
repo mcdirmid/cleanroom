@@ -1,19 +1,30 @@
-# agent_node_cleaner_impl
+# agent_node_cleaner_impl implementation component
 
-imports: dag_storage, dag_node_cleaner, agent_runner, sandbox, conversation_history, build_graph_storage, runner_logger, agent_node_cleaner
-types from dag_storage: node, pending message
-types from dag_node_cleaner: node cleaner, change message, feedback message
-types from agent_runner: agent runner, agent outcome
-types from sandbox: sandbox, sandbox factory, sandbox configuration, startup interaction
-types from conversation_history: conversation history, conversation history factory
-types from build_graph_storage: build graph storage, node definition, task prompt
-types from runner_logger: runner logger
-types from agent_node_cleaner: agent node cleaner
-implements: agent node cleaner
+imports: dag_storage, agent_runner, sandbox, agent_conversation_history, bazel_graph_storage
+implements: agent_node_cleaner, dag_node_cleaner
 
-## Behavior
+## Purpose
 
-- An *agent node cleaner* retrieves the *node definition*, *task prompt*, and *sandbox configuration* for a dirty *node* from *build graph storage*, creates a *sandbox* with a *sandbox factory*, materializes startup templates, and seeds a fresh *conversation history* from a *conversation history factory* with the *task prompt*, the *startup interaction* from the *sandbox* (pairing session-start reads with synthetic `read_file` tool calls and initial step delivery with a synthetic `advance` tool call), and incoming *pending messages* before running the agent with a *runner logger*.
-- When an *agent outcome* signals a change result, the *agent node cleaner* formats change summaries into *change messages*.
-- When an *agent outcome* signals blame, the *agent node cleaner* formats blame feedback into *feedback messages* addressed to blamed dependencies.
-- When an *agent outcome* signals run failure, the *agent node cleaner* leaves the *node* dirty.
+The agent_node_cleaner_impl implementation component realizes node clean execution, synthetic startup transcript seeding, and outcome message dispatching for agent-driven nodes.
+
+Driving node execution requires bridging abstract graph clean directives to concrete multi-turn turn loops and translating tool termination responses back into graph messages. The agent_node_cleaner_impl implementation component configures session sandboxes from stored target metadata, injects paired startup executions into conversation histories, executes the agent loop, and converts termination responses into propagating graph updates.
+
+**Out of scope:** The agent_node_cleaner_impl implementation component does not parse JSON build manifests, enforce repetition thresholds, or write transcript logs to disk; these are handled by other components.
+
+## Types and Behavior
+
+The agent node cleaner cleans a dirty node within an agent session phase, establishing the scope where session services operate and configuring the cleaned node with the target node.
+
+Within the agent session phase, cleaning executes the agent runner from agent runner, a sandbox from sandbox, and a conversation history from agent conversation history.
+
+Startup templates provided by the sandbox are materialized into missing read-write files before agent interaction.
+
+The conversation history is seeded with startup context comprising the node definition and task prompt retrieved from bazel graph storage for the dirty node, incoming pending messages from dag storage, and paired startup tool executions from the sandbox formatted with synthetic tool requests and captured responses.
+
+Execution of the agent runner resolves the dirty node based on the produced agent outcome:
+
+- An outcome signaling successful advancement with workspace file modifications produces change messages for downstream dependent nodes.
+
+- An outcome signaling blame attributed to an upstream node produces feedback messages addressed to that dependency node.
+
+- An outcome signaling run failure leaves the node dirty without producing propagating messages.

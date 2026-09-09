@@ -1,29 +1,49 @@
-"""DAG storage model defining nodes, dependencies, and messages."""
-
-from typing import Protocol, TypeAlias, Sequence, Mapping, Any, Optional
+from typing import Protocol, Set
 from dataclasses import dataclass
 
-NodeId: TypeAlias = str
-NodeData: TypeAlias = Mapping[str, Any]
-MessageContent: TypeAlias = str
-
+@dataclass(frozen=True)
+class Node:
+    address: str
 
 @dataclass(frozen=True)
-class DagMessage:
-    content: MessageContent
-    sender: Optional[NodeId] = None
+class Dependency:
+    node: Node
+    is_silent: bool = False
 
+@dataclass(frozen=True)
+class Message:
+    pass
 
-PendingMessage: TypeAlias = DagMessage
+@dataclass(frozen=True)
+class Change(Message):
+    pass
 
+@dataclass(frozen=True)
+class Feedback(Message):
+    pass
 
 class DagStorage(Protocol):
-    def get_dependencies(self, node: NodeId) -> Sequence[NodeId]: ...
-    def get_reverse_dependencies(self, node: NodeId) -> Sequence[NodeId]: ...
-    def get_pending_messages(self, node: NodeId) -> Sequence[PendingMessage]: ...
-    def queue_pending_messages(self, node: NodeId, messages: Sequence[DagMessage]) -> None: ...
-    def clear_pending_messages(self, node: NodeId) -> None: ...
-    def record_node_data(self, node: NodeId, data: NodeData) -> None: ...
-    def get_node_data(self, node: NodeId) -> Optional[NodeData]: ...
-    def mark_dirty(self, node: NodeId) -> None: ...
-    def is_dirty(self, node: NodeId) -> bool: ...
+    def get_dependencies(self, node: Node) -> Set[Dependency]:
+        ...
+
+    def get_dependents(self, node: Node) -> Set[Node]:
+        ...
+
+    def get_messages(self, node: Node) -> Set[Message]:
+        ...
+
+    def is_dirty(self, node: Node) -> bool:
+        ...
+
+    def register_dependent(self, node: Node) -> None:
+        ...
+
+    def clear_dependents(self, node: Node) -> None:
+        ...
+
+    def add_message(self, message: Message, to: Node) -> None:
+        ...
+
+    def clear_messages(self, node: Node) -> None:
+        ...
+

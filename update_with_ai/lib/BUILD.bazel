@@ -5,44 +5,20 @@ load("@pip//:requirements.bzl", "requirement")
 
 exports_files(["update_with_ai.bzl"])
 
-# ==================== LAYER 1: Leaf Types & Primitives ====================
+# ==================== Core Lifecycle ====================
 
 pyright_library(
-    name = "update_with_ai_proto_ext",
-    srcs = ["update_with_ai_proto_ext.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:dag_storage",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-
-pyright_library(
-    name = "virtual_file_name",
-    srcs = ["virtual_file_name.py"],
+    name = "lifecycle",
+    srcs = ["lifecycle.py"],
     pyright_deps = [],
     visibility = ["//visibility:public"],
 )
 
-pyright_library(
-    name = "virtual_file_name_impl",
-    srcs = ["virtual_file_name_impl.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:virtual_file_name",
-    ],
-    visibility = ["//visibility:public"],
-)
+# ==================== Interfaces / Data Types ====================
 
 pyright_library(
-    name = "json_manifest_ext",
-    srcs = ["json_manifest_ext.py"],
-    pyright_deps = [],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "bazel_target_labels_ext",
-    srcs = ["bazel_target_labels_ext.py"],
+    name = "tool_provider",
+    srcs = ["tool_provider.py"],
     pyright_deps = [],
     visibility = ["//visibility:public"],
 )
@@ -55,8 +31,8 @@ pyright_library(
 )
 
 pyright_library(
-    name = "tool_provider",
-    srcs = ["tool_provider.py"],
+    name = "model_config",
+    srcs = ["model_config.py"],
     pyright_deps = [],
     visibility = ["//visibility:public"],
 )
@@ -68,117 +44,11 @@ pyright_library(
     visibility = ["//visibility:public"],
 )
 
-# ==================== LAYER 2: Foundation Tool Providers & Graph Types ====================
-
-pyright_library(
-    name = "file_reader",
-    srcs = ["file_reader.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:virtual_file_name",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "file_editor",
-    srcs = ["file_editor.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:file_reader",
-        "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:virtual_file_name",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "conversation_history",
-    srcs = ["conversation_history.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:tool_provider",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "guide_delivery",
-    srcs = ["guide_delivery.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:tool_provider",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "loop_guard",
-    srcs = ["loop_guard.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:tool_provider",
-    ],
-    visibility = ["//visibility:public"],
-)
-
 pyright_library(
     name = "dag_node_cleaner",
     srcs = ["dag_node_cleaner.py"],
     pyright_deps = [
-        "//update_with_ai/lib:dag_storage",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "node_id_utils",
-    srcs = ["node_id_utils.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:dag_storage",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "bazel_node_id_utils",
-    srcs = ["bazel_node_id_utils.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:node_id_utils",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "bazel_node_id_utils_impl",
-    srcs = ["bazel_node_id_utils_impl.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:bazel_node_id_utils",
-        "//update_with_ai/lib:bazel_target_labels_ext",
-        "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:node_id_utils",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "build_message_store",
-    srcs = ["build_message_store.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:node_id_utils",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-# ==================== LAYER 3: Runners, Concrete Impls, External APIs ====================
-
-pyright_library(
-    name = "agent_runner",
-    srcs = ["agent_runner.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:conversation_history",
-        "//update_with_ai/lib:loop_guard",
-        "//update_with_ai/lib:openai_ext",
-        "//update_with_ai/lib:runner_logger",
-        "//update_with_ai/lib:tool_provider",
+        ":dag_storage",
     ],
     visibility = ["//visibility:public"],
 )
@@ -187,179 +57,78 @@ pyright_library(
     name = "dag_cleaner",
     srcs = ["dag_cleaner.py"],
     pyright_deps = [
-        "//update_with_ai/lib:dag_node_cleaner",
-        "//update_with_ai/lib:dag_storage",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "openai_ext",
-    srcs = ["openai_ext.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:conversation_history",
-        "//update_with_ai/lib:tool_provider",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "run_control",
-    srcs = ["run_control.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:change_summary_validator",
         ":dag_node_cleaner",
-        "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:virtual_file_name",
+        ":dag_storage",
     ],
     visibility = ["//visibility:public"],
 )
 
 pyright_library(
-    name = "runner_logger_impl",
-    srcs = ["runner_logger_impl.py"],
+    name = "file_alias",
+    srcs = ["file_alias.py"],
     pyright_deps = [
-        "//update_with_ai/lib:runner_logger",
+        ":dag_storage",
+        ":tool_provider",
     ],
     visibility = ["//visibility:public"],
 )
 
 pyright_library(
-    name = "conversation_history_impl",
-    srcs = ["conversation_history_impl.py"],
+    name = "sandbox_guide_delivery",
+    srcs = ["sandbox_guide_delivery.py"],
     pyright_deps = [
-        "//update_with_ai/lib:conversation_history",
-        "//update_with_ai/lib:tool_provider",
+        ":file_alias",
+        ":tool_provider",
     ],
     visibility = ["//visibility:public"],
 )
 
 pyright_library(
-    name = "guide_delivery_impl",
-    srcs = ["guide_delivery_impl.py"],
+    name = "node_config",
+    srcs = ["node_config.py"],
     pyright_deps = [
-        "//update_with_ai/lib:guide_delivery",
-        "//update_with_ai/lib:tool_provider",
+        ":file_alias",
+        ":sandbox_guide_delivery",
     ],
     visibility = ["//visibility:public"],
 )
 
 pyright_library(
-    name = "loop_guard_impl",
-    srcs = ["loop_guard_impl.py"],
+    name = "sandbox_run_control",
+    srcs = ["sandbox_run_control.py"],
     pyright_deps = [
-        "//update_with_ai/lib:loop_guard",
-        "//update_with_ai/lib:tool_provider",
+        ":file_alias",
+        ":tool_provider",
     ],
     visibility = ["//visibility:public"],
 )
 
 pyright_library(
-    name = "file_reader_impl",
-    srcs = ["file_reader_impl.py"],
+    name = "sandbox_file_reader",
+    srcs = ["sandbox_file_reader.py"],
     pyright_deps = [
-        "//update_with_ai/lib:file_reader",
-        "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:virtual_file_name",
+        ":file_alias",
+        ":tool_provider",
     ],
     visibility = ["//visibility:public"],
 )
 
 pyright_library(
-    name = "file_editor_impl",
-    srcs = ["file_editor_impl.py"],
+    name = "sandbox_file_editor",
+    srcs = ["sandbox_file_editor.py"],
     pyright_deps = [
-        "//update_with_ai/lib:file_editor",
-        "//update_with_ai/lib:file_reader",
-        "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:virtual_file_name",
+        ":file_alias",
+        ":tool_provider",
     ],
     visibility = ["//visibility:public"],
 )
 
 pyright_library(
-    name = "build_message_store_impl",
-    srcs = ["build_message_store_impl.py"],
+    name = "sandbox_change_summary_validator",
+    srcs = ["sandbox_change_summary_validator.py"],
     pyright_deps = [
-        "//update_with_ai/lib:build_message_store",
-        "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:node_id_utils",
-        "//update_with_ai/lib:update_with_ai_proto_ext",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-# ==================== LAYER 4: Sandboxes, Validators, Build Runners ====================
-
-pyright_library(
-    name = "agent_runner_impl",
-    srcs = ["agent_runner_impl.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:agent_runner",
-        "//update_with_ai/lib:conversation_history",
-        "//update_with_ai/lib:loop_guard",
-        "//update_with_ai/lib:openai_ext",
-        "//update_with_ai/lib:runner_logger",
-        "//update_with_ai/lib:tool_provider",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "build_agent_config",
-    srcs = ["build_agent_config.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:agent_runner",
-        "//update_with_ai/lib:conversation_history",
-        "//update_with_ai/lib:loop_guard",
-        "//update_with_ai/lib:tool_provider",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "build_runner",
-    srcs = ["build_runner.py"],
-    pyright_deps = [
-        ":dag_cleaner",
-        "//update_with_ai/lib:dag_node_cleaner",
-        "//update_with_ai/lib:dag_storage",
-        ":runner_logger",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "change_summary_validator",
-    srcs = ["change_summary_validator.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:virtual_file_name",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "dag_cleaner_impl",
-    srcs = ["dag_cleaner_impl.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:dag_cleaner",
-        "//update_with_ai/lib:dag_node_cleaner",
-        "//update_with_ai/lib:dag_storage",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "run_control_impl",
-    srcs = ["run_control_impl.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:change_summary_validator",
-        "//update_with_ai/lib:dag_node_cleaner",
-        "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:run_control",
-        "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:virtual_file_name",
+        ":file_alias",
+        ":sandbox_run_control",
     ],
     visibility = ["//visibility:public"],
 )
@@ -368,101 +137,297 @@ pyright_library(
     name = "sandbox",
     srcs = ["sandbox.py"],
     pyright_deps = [
-        "//update_with_ai/lib:file_editor",
-        "//update_with_ai/lib:file_reader",
-        ":guide_delivery",
-        "//update_with_ai/lib:run_control",
-        "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:virtual_file_name",
-        "//update_with_ai/lib:dag_storage",
+        ":tool_provider",
     ],
     visibility = ["//visibility:public"],
 )
 
-# ==================== LAYER 5: Node Cleaners, Graph Storage, Assemblies ====================
+pyright_library(
+    name = "agent_conversation_history",
+    srcs = ["agent_conversation_history.py"],
+    pyright_deps = [
+        ":tool_provider",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "agent_loop_guard",
+    srcs = ["agent_loop_guard.py"],
+    pyright_deps = [
+        ":tool_provider",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "agent_runner",
+    srcs = ["agent_runner.py"],
+    pyright_deps = [
+        ":agent_conversation_history",
+        ":tool_provider",
+    ],
+    visibility = ["//visibility:public"],
+)
 
 pyright_library(
     name = "agent_node_cleaner",
     srcs = ["agent_node_cleaner.py"],
     pyright_deps = [
+        ":dag_node_cleaner",
+        ":dag_storage",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "bazel_node_id_utils",
+    srcs = ["bazel_node_id_utils.py"],
+    pyright_deps = [
+        ":dag_storage",
+        ":file_alias",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "bazel_graph_storage",
+    srcs = ["bazel_graph_storage.py"],
+    pyright_deps = [
+        ":dag_storage",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "bazel_manifest_loader",
+    srcs = ["bazel_manifest_loader.py"],
+    pyright_deps = [
+        ":bazel_graph_storage",
+        ":dag_storage",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+
+pyright_library(
+    name = "bazel_runner",
+    srcs = ["bazel_runner.py"],
+    pyright_deps = [
+        ":dag_storage",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# ==================== Implementations ====================
+
+pyright_library(
+    name = "runner_logger_impl",
+    srcs = ["runner_logger_impl.py"],
+    pyright_deps = [
+        ":lifecycle",
+        ":runner_logger",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "dag_cleaner_impl",
+    srcs = ["dag_cleaner_impl.py"],
+    pyright_deps = [
+        ":dag_cleaner",
+        ":dag_node_cleaner",
+        ":dag_storage",
+        ":lifecycle",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "tool_provider_impl",
+    srcs = ["tool_provider_impl.py"],
+    pyright_deps = [
+        ":lifecycle",
+        ":tool_provider",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "bazel_model_config_impl",
+    srcs = ["bazel_model_config_impl.py"],
+    pyright_deps = [
+        ":lifecycle",
+        ":model_config",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "bazel_node_id_utils_impl",
+    srcs = ["bazel_node_id_utils_impl.py"],
+    pyright_deps = [
+        ":bazel_node_id_utils",
+        ":dag_storage",
+        ":lifecycle",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "bazel_graph_storage_impl",
+    srcs = ["bazel_graph_storage_impl.py"],
+    pyright_deps = [
+        ":bazel_graph_storage",
+        ":bazel_node_id_utils",
+        ":dag_storage",
+        ":lifecycle",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "bazel_manifest_loader_impl",
+    srcs = ["bazel_manifest_loader_impl.py"],
+    pyright_deps = [
+        ":bazel_graph_storage",
+        ":bazel_manifest_loader",
+        ":bazel_node_id_utils",
+        ":dag_storage",
+        ":lifecycle",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "bazel_node_config_impl",
+    srcs = ["bazel_node_config_impl.py"],
+    pyright_deps = [
+        ":file_alias",
+        ":lifecycle",
+        ":node_config",
+        ":sandbox_guide_delivery",
+        ":tool_provider",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "bazel_runner_impl",
+    srcs = ["bazel_runner_impl.py"],
+    pyright_deps = [
+        ":bazel_manifest_loader",
+        ":bazel_runner",
+        ":dag_cleaner",
+        ":dag_node_cleaner",
+        ":dag_storage",
+        ":lifecycle",
+        ":runner_logger",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "agent_conversation_history_impl",
+    srcs = ["agent_conversation_history_impl.py"],
+    pyright_deps = [
+        ":agent_conversation_history",
+        ":lifecycle",
+        ":tool_provider",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "agent_loop_guard_impl",
+    srcs = ["agent_loop_guard_impl.py"],
+    pyright_deps = [
+        ":agent_loop_guard",
+        ":lifecycle",
+        ":tool_provider",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "agent_runner_impl",
+    srcs = ["agent_runner_impl.py"],
+    deps = [
+        requirement("openai"),
+    ],
+    pyright_deps = [
+        ":agent_conversation_history",
+        ":agent_loop_guard",
         ":agent_runner",
-        "//update_with_ai/lib:dag_node_cleaner",
-        "//update_with_ai/lib:dag_storage",
-        ":sandbox",
+        ":lifecycle",
+        ":model_config",
+        ":runner_logger",
+        ":tool_provider",
     ],
     visibility = ["//visibility:public"],
 )
 
 pyright_library(
-    name = "build_agent_config_impl",
-    srcs = ["build_agent_config_impl.py"],
+    name = "sandbox_file_reader_impl",
+    srcs = ["sandbox_file_reader_impl.py"],
     pyright_deps = [
-        "//update_with_ai/lib:agent_runner",
-        "//update_with_ai/lib:build_agent_config",
-        "//update_with_ai/lib:conversation_history",
-        "//update_with_ai/lib:loop_guard",
-        "//update_with_ai/lib:tool_provider",
+        ":file_alias",
+        ":lifecycle",
+        ":node_config",
+        ":sandbox_file_reader",
+        ":tool_provider",
     ],
     visibility = ["//visibility:public"],
 )
 
 pyright_library(
-    name = "build_graph_storage",
-    srcs = ["build_graph_storage.py"],
+    name = "sandbox_file_editor_impl",
+    srcs = ["sandbox_file_editor_impl.py"],
     pyright_deps = [
-        "//update_with_ai/lib:build_agent_config",
-        "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:sandbox",
-        "//update_with_ai/lib:virtual_file_name",
-        "//update_with_ai/lib:file_editor",
-        "//update_with_ai/lib:file_reader",
-        "//update_with_ai/lib:run_control",
-        "//update_with_ai/lib:tool_provider",
+        ":file_alias",
+        ":lifecycle",
+        ":node_config",
+        ":sandbox_file_editor",
+        ":tool_provider",
     ],
     visibility = ["//visibility:public"],
 )
 
 pyright_library(
-    name = "build_runner_impl",
-    srcs = ["build_runner_impl.py"],
+    name = "sandbox_run_control_impl",
+    srcs = ["sandbox_run_control_impl.py"],
     pyright_deps = [
-        "//update_with_ai/lib:build_runner",
-        "//update_with_ai/lib:dag_cleaner",
-        "//update_with_ai/lib:dag_node_cleaner",
-        "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:manifest_node_loader",
-        "//update_with_ai/lib:runner_logger",
+        ":file_alias",
+        ":lifecycle",
+        ":node_config",
+        ":sandbox_file_editor",
+        ":sandbox_guide_delivery",
+        ":sandbox_run_control",
+        ":tool_provider",
     ],
     visibility = ["//visibility:public"],
 )
 
 pyright_library(
-    name = "change_summary_validator_impl",
-    srcs = ["change_summary_validator_impl.py"],
+    name = "sandbox_guide_delivery_impl",
+    srcs = ["sandbox_guide_delivery_impl.py"],
     pyright_deps = [
-        "//update_with_ai/lib:change_summary_validator",
-        "//update_with_ai/lib:run_control",
-        "//update_with_ai/lib:virtual_file_name",
-        "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:tool_provider",
+        ":file_alias",
+        ":lifecycle",
+        ":node_config",
+        ":sandbox_guide_delivery",
+        ":tool_provider",
     ],
     visibility = ["//visibility:public"],
 )
 
 pyright_library(
-    name = "manifest_node_loader",
-    srcs = ["manifest_node_loader.py"],
+    name = "sandbox_change_summary_validator_impl",
+    srcs = ["sandbox_change_summary_validator_impl.py"],
     pyright_deps = [
-        "//update_with_ai/lib:build_agent_config",
-        "//update_with_ai/lib:build_graph_storage",
-        "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:node_id_utils",
-        "//update_with_ai/lib:sandbox",
-        "//update_with_ai/lib:virtual_file_name",
-        "//update_with_ai/lib:file_editor",
-        "//update_with_ai/lib:file_reader",
-        "//update_with_ai/lib:run_control",
-        "//update_with_ai/lib:tool_provider",
+        ":lifecycle",
+        ":sandbox_change_summary_validator",
+        ":sandbox_run_control",
     ],
     visibility = ["//visibility:public"],
 )
@@ -471,14 +436,74 @@ pyright_library(
     name = "sandbox_impl",
     srcs = ["sandbox_impl.py"],
     pyright_deps = [
-        "//update_with_ai/lib:file_editor",
-        "//update_with_ai/lib:file_reader",
-        "//update_with_ai/lib:guide_delivery",
-        "//update_with_ai/lib:run_control",
-        "//update_with_ai/lib:sandbox",
-        "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:virtual_file_name",
-        "//update_with_ai/lib:dag_storage",
+        ":lifecycle",
+        ":model_config",
+        ":node_config",
+        ":sandbox",
+        ":sandbox_file_editor",
+        ":sandbox_file_reader",
+        ":sandbox_run_control",
+        ":tool_provider",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "agent_node_cleaner_impl",
+    srcs = ["agent_node_cleaner_impl.py"],
+    pyright_deps = [
+        ":agent_conversation_history",
+        ":agent_node_cleaner",
+        ":agent_runner",
+        ":bazel_graph_storage",
+        ":dag_node_cleaner",
+        ":dag_storage",
+        ":lifecycle",
+        ":sandbox",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# ==================== Assemblies ====================
+
+pyright_library(
+    name = "bazel_asm",
+    srcs = ["bazel_asm.py"],
+    pyright_deps = [
+        ":agent_asm",
+        ":bazel_graph_storage_impl",
+        ":bazel_manifest_loader_impl",
+        ":bazel_model_config_impl",
+        ":bazel_node_config_impl",
+        ":bazel_node_id_utils_impl",
+        ":bazel_runner_impl",
+        ":dag_asm",
+        ":lifecycle",
+        ":runner_logger_impl",
+        ":sandbox_asm",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "agent_asm",
+    srcs = ["agent_asm.py"],
+    pyright_deps = [
+        ":agent_conversation_history_impl",
+        ":agent_loop_guard_impl",
+        ":agent_node_cleaner_impl",
+        ":agent_runner_impl",
+        ":lifecycle",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "dag_asm",
+    srcs = ["dag_asm.py"],
+    pyright_deps = [
+        ":dag_cleaner_impl",
+        ":lifecycle",
     ],
     visibility = ["//visibility:public"],
 )
@@ -487,175 +512,14 @@ pyright_library(
     name = "sandbox_asm",
     srcs = ["sandbox_asm.py"],
     pyright_deps = [
-        "//update_with_ai/lib:change_summary_validator",
-        "//update_with_ai/lib:change_summary_validator_impl",
-        "//update_with_ai/lib:file_editor",
-        "//update_with_ai/lib:file_editor_impl",
-        "//update_with_ai/lib:file_reader",
-        "//update_with_ai/lib:file_reader_impl",
-        "//update_with_ai/lib:guide_delivery",
-        "//update_with_ai/lib:guide_delivery_impl",
-        "//update_with_ai/lib:run_control",
-        "//update_with_ai/lib:run_control_impl",
-        "//update_with_ai/lib:sandbox",
-        "//update_with_ai/lib:sandbox_impl",
-        "//update_with_ai/lib:dag_node_cleaner",
-        "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:virtual_file_name",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-# ==================== LAYER 6: Top-Level Cleaners & Assemblies ====================
-
-pyright_library(
-    name = "agent_node_cleaner_impl",
-    srcs = ["agent_node_cleaner_impl.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:agent_node_cleaner",
-        "//update_with_ai/lib:agent_runner",
-        "//update_with_ai/lib:dag_node_cleaner",
-        "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:sandbox",
-        "//update_with_ai/lib:conversation_history",
-        "//update_with_ai/lib:loop_guard",
-        "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:file_editor",
-        "//update_with_ai/lib:file_reader",
-        "//update_with_ai/lib:run_control",
-        "//update_with_ai/lib:virtual_file_name",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "build_graph_storage_impl",
-    srcs = ["build_graph_storage_impl.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:build_graph_storage",
-        "//update_with_ai/lib:build_message_store_impl",
-        "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:sandbox",
-        "//update_with_ai/lib:virtual_file_name",
-        "//update_with_ai/lib:build_message_store",
-        "//update_with_ai/lib:file_editor",
-        "//update_with_ai/lib:file_reader",
-        "//update_with_ai/lib:run_control",
-        "//update_with_ai/lib:tool_provider",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "manifest_node_loader_impl",
-    srcs = ["manifest_node_loader_impl.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:build_agent_config",
-        "//update_with_ai/lib:build_graph_storage",
-        "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:json_manifest_ext",
-        "//update_with_ai/lib:manifest_node_loader",
-        "//update_with_ai/lib:node_id_utils",
-        "//update_with_ai/lib:sandbox",
-        "//update_with_ai/lib:virtual_file_name",
-        "//update_with_ai/lib:file_editor",
-        "//update_with_ai/lib:file_reader",
-        "//update_with_ai/lib:run_control",
-        "//update_with_ai/lib:tool_provider",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "agent_runner_asm",
-    srcs = ["agent_runner_asm.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:agent_runner",
-        "//update_with_ai/lib:agent_runner_impl",
-        "//update_with_ai/lib:conversation_history",
-        "//update_with_ai/lib:conversation_history_impl",
-        "//update_with_ai/lib:loop_guard",
-        "//update_with_ai/lib:loop_guard_impl",
-        "//update_with_ai/lib:openai_ext",
-        "//update_with_ai/lib:runner_logger_impl",
-        "//update_with_ai/lib:tool_provider",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "agent_node_cleaner_asm",
-    srcs = ["agent_node_cleaner_asm.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:agent_node_cleaner",
-        "//update_with_ai/lib:agent_node_cleaner_impl",
-        "//update_with_ai/lib:agent_runner",
-        "//update_with_ai/lib:agent_runner_asm",
-        "//update_with_ai/lib:build_agent_config",
-        "//update_with_ai/lib:build_agent_config_impl",
-        "//update_with_ai/lib:build_graph_storage",
-        "//update_with_ai/lib:dag_node_cleaner",
-        "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:openai_ext",
-        "//update_with_ai/lib:sandbox",
-        "//update_with_ai/lib:sandbox_asm",
-        "//update_with_ai/lib:agent_runner_impl",
-        "//update_with_ai/lib:conversation_history",
-        "//update_with_ai/lib:conversation_history_impl",
-        "//update_with_ai/lib:loop_guard",
-        "//update_with_ai/lib:loop_guard_impl",
-        "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:file_editor",
-        "//update_with_ai/lib:file_reader",
-        "//update_with_ai/lib:run_control",
-        "//update_with_ai/lib:virtual_file_name",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "build_asm",
-    srcs = ["build_asm.py"],
-    pyright_deps = [
-        "//update_with_ai/lib:agent_node_cleaner",
-        "//update_with_ai/lib:agent_node_cleaner_asm",
-        "//update_with_ai/lib:build_agent_config",
-        "//update_with_ai/lib:build_graph_storage",
-        "//update_with_ai/lib:build_graph_storage_impl",
-        "//update_with_ai/lib:build_runner",
-        "//update_with_ai/lib:build_runner_impl",
-        "//update_with_ai/lib:dag_cleaner",
-        "//update_with_ai/lib:dag_cleaner_impl",
-        "//update_with_ai/lib:dag_storage",
-        "//update_with_ai/lib:runner_logger",
-        "//update_with_ai/lib:runner_logger_impl",
-        "//update_with_ai/lib:agent_node_cleaner_impl",
-        "//update_with_ai/lib:agent_runner",
-        "//update_with_ai/lib:agent_runner_asm",
-        "//update_with_ai/lib:agent_runner_impl",
-        "//update_with_ai/lib:build_agent_config_impl",
-        "//update_with_ai/lib:build_message_store",
-        "//update_with_ai/lib:conversation_history",
-        "//update_with_ai/lib:conversation_history_impl",
-        "//update_with_ai/lib:dag_node_cleaner",
-        "//update_with_ai/lib:file_editor",
-        "//update_with_ai/lib:file_reader",
-        "//update_with_ai/lib:loop_guard",
-        "//update_with_ai/lib:loop_guard_impl",
-        "//update_with_ai/lib:run_control",
-        "//update_with_ai/lib:sandbox",
-        "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:virtual_file_name",
-        "//update_with_ai/lib:bazel_node_id_utils",
-        "//update_with_ai/lib:bazel_node_id_utils_impl",
-        "//update_with_ai/lib:node_id_utils",
-        "//update_with_ai/lib:build_message_store_impl",
-        "//update_with_ai/lib:manifest_node_loader",
-        "//update_with_ai/lib:manifest_node_loader_impl",
-        "//update_with_ai/lib:update_with_ai_proto_ext",
-        "//update_with_ai/lib:bazel_target_labels_ext",
-        "//update_with_ai/lib:openai_ext",
+        ":lifecycle",
+        ":sandbox_change_summary_validator_impl",
+        ":sandbox_file_editor_impl",
+        ":sandbox_file_reader_impl",
+        ":sandbox_guide_delivery_impl",
+        ":sandbox_impl",
+        ":sandbox_run_control_impl",
+        ":tool_provider_impl",
     ],
     visibility = ["//visibility:public"],
 )
