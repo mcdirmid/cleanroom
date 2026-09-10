@@ -50,17 +50,18 @@ class ConversationHistory(agent_conversation_history.ConversationHistory, Single
         if response.suppression_key is not None:
             # Requirement: A tool response's suppression key identifies the latest preceding response with the same key in the conversation history for replacement with a stub, while responses with unmatched keys are preserved intact.
             for i in range(len(self._messages) - 1, -1, -1):
-                if self._suppression_keys[i] == response.suppression_key and not isinstance(self._messages[i], agent_conversation_history.Stub):
+                if self._suppression_keys[i] == response.suppression_key and not self._messages[i].is_stub:
                     old_msg = self._messages[i]
                     if effective_reminder is None:
                         # Requirement: A stub retains the reminder from the superseded tool response, which the newly appended response inherits when omitted.
                         effective_reminder = old_msg.reminder
-                    self._messages[i] = agent_conversation_history.Stub(
+                    self._messages[i] = agent_conversation_history.Message(
                         role=old_msg.role,
                         content="[Superseded]",
                         tool_call_id=old_msg.tool_call_id,
                         tool_name=old_msg.tool_name,
                         reminder=old_msg.reminder,
+                        is_stub=True,
                     )
                     break
 
@@ -94,6 +95,7 @@ class ConversationHistory(agent_conversation_history.ConversationHistory, Single
                     tool_name=m.tool_name,
                     reminder=m.reminder,
                     tool_arguments=m.tool_arguments,
+                    is_stub=m.is_stub,
                 )
             )
         return agent_conversation_history.ModelRequest(messages=formatted)

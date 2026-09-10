@@ -5,7 +5,6 @@ from lib.agent_conversation_history import (
     ConversationHistory,
     Message,
     ModelRequest,
-    Stub,
 )
 from lib.agent_conversation_history_impl import (
     ConversationHistory as ConversationHistoryImpl,
@@ -21,7 +20,7 @@ class AgentConversationHistoryImplTest(unittest.TestCase):
         __initialize__(self.registry)
 
     def test_dataclasses(self) -> None:
-        """CUJ: Instantiating Message, Stub, and ModelRequest records."""
+        """CUJ: Instantiating Message and ModelRequest records."""
         msg = Message(role="user", content="hello", reminder="Remember this", tool_arguments='{"a": "b"}')
         self.assertEqual(msg.role, "user")
         self.assertEqual(msg.content, "hello")
@@ -29,14 +28,16 @@ class AgentConversationHistoryImplTest(unittest.TestCase):
         self.assertIsNone(msg.tool_name)
         self.assertEqual(msg.reminder, "Remember this")
         self.assertEqual(msg.tool_arguments, '{"a": "b"}')
+        self.assertFalse(msg.is_stub)
 
-        stub = Stub(role="tool", content="[Superseded]", tool_call_id="c1", tool_name="read_file", reminder="Keep this", tool_arguments="{}")
-        self.assertEqual(stub.role, "tool")
-        self.assertEqual(stub.content, "[Superseded]")
-        self.assertEqual(stub.tool_call_id, "c1")
-        self.assertEqual(stub.tool_name, "read_file")
-        self.assertEqual(stub.reminder, "Keep this")
-        self.assertEqual(stub.tool_arguments, "{}")
+        stub_msg = Message(role="tool", content="[Superseded]", tool_call_id="c1", tool_name="read_file", reminder="Keep this", tool_arguments="{}", is_stub=True)
+        self.assertEqual(stub_msg.role, "tool")
+        self.assertEqual(stub_msg.content, "[Superseded]")
+        self.assertEqual(stub_msg.tool_call_id, "c1")
+        self.assertEqual(stub_msg.tool_name, "read_file")
+        self.assertEqual(stub_msg.reminder, "Keep this")
+        self.assertEqual(stub_msg.tool_arguments, "{}")
+        self.assertTrue(stub_msg.is_stub)
 
         req = ModelRequest(messages=[msg])
         self.assertEqual(len(req.messages), 1)
@@ -131,26 +132,26 @@ class AgentConversationHistoryImplTest(unittest.TestCase):
             tool_msgs = [m for m in history.messages if m.role == "tool"]
 
             # Verify responses without suppression keys were NOT superseded
-            self.assertNotIsInstance(tool_msgs[0], Stub)
+            self.assertFalse(tool_msgs[0].is_stub)
             self.assertEqual(tool_msgs[0].content, "spec v1")
-            self.assertNotIsInstance(tool_msgs[1], Stub)
+            self.assertFalse(tool_msgs[1].is_stub)
             self.assertEqual(tool_msgs[1].content, "spec v2")
 
             # Verify distinct suppression key was NOT superseded
-            self.assertNotIsInstance(tool_msgs[2], Stub)
+            self.assertFalse(tool_msgs[2].is_stub)
             self.assertEqual(tool_msgs[2].content, "other code")
 
             # Verify widget.py v1 WAS superseded, while widget.py v2 is intact
-            self.assertIsInstance(tool_msgs[3], Stub)
+            self.assertTrue(tool_msgs[3].is_stub)
             self.assertEqual(tool_msgs[3].content, "[Superseded]")
-            self.assertNotIsInstance(tool_msgs[4], Stub)
+            self.assertFalse(tool_msgs[4].is_stub)
             self.assertEqual(tool_msgs[4].content, "widget v2")
 
-            # Verify advance v1 WAS superseded into a Stub and retained its reminder
-            self.assertIsInstance(tool_msgs[5], Stub)
+            # Verify advance v1 WAS superseded into a stub and retained its reminder
+            self.assertTrue(tool_msgs[5].is_stub)
             self.assertEqual(tool_msgs[5].content, "[Superseded]")
             self.assertEqual(tool_msgs[5].reminder, "Only provide change summary when completing.")
-            self.assertNotIsInstance(tool_msgs[6], Stub)
+            self.assertFalse(tool_msgs[6].is_stub)
             self.assertEqual(tool_msgs[6].content, "advance step 2")
             self.assertEqual(tool_msgs[6].reminder, "Only provide change summary when completing.")
 

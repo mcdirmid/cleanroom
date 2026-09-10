@@ -1,7 +1,7 @@
 def __initialize__() -> None:
     """
 PURPOSE:
-Assembles agent execution, conversation, loop guard, and node cleaning components into the agent assembly
+Assembles agent execution, conversation, loop guard, and node cleaning components into the agent assembly.
 
 CONSTITUENTS:
 - agent_runner_impl

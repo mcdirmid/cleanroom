@@ -1,7 +1,7 @@
 def __initialize__() -> None:
     """
 PURPOSE:
-Assembles the root Bazel system assembly aggregating Bazel implementations, agent, dag, and sandbox assemblies
+Assembles the root Bazel system assembly aggregating Bazel implementations, agent, dag, and sandbox assemblies.
 
 CONSTITUENTS:
 - file_paths_impl

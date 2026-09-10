@@ -137,7 +137,11 @@ def lint_hls_file(file_path: Path) -> list[str]:
             errors.append(f"{fname}:{l_idx}: error: '###' sub-headers are prohibited in HLS specifications")
         elif current_section in ("Types and Behavior", "Types", "Behavior"):
             for dep in imports_list:
-                if re.search(r"\b" + re.escape(dep) + r"\b", line):
+                if "_" in dep:
+                    pat = r"\b" + re.escape(dep) + r"\b"
+                else:
+                    pat = r"(`" + re.escape(dep) + r"`|\b" + re.escape(dep) + r"\s+component\b)"
+                if re.search(pat, line):
                     errors.append(f"{fname}:{l_idx}: error: imported component '{dep}' must not appear in '{current_section}'")
 
     return errors

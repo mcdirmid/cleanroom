@@ -13,7 +13,7 @@ Agent sessions require initial context assembled from multiple services before e
 
 ## Types and Behavior
 
-The session environment configures startup context and tracks file modifications.
+The sandbox configures startup context and tracks file modifications.
 
 Startup tool executions are determined by session configuration:
 

@@ -13,11 +13,7 @@ class Message:
     tool_name: Optional[str] = None
     reminder: Optional[str] = None
     tool_arguments: Optional[str] = None
-
-
-@dataclass(frozen=True)
-class Stub(Message):
-    pass
+    is_stub: bool = False
 
 
 @dataclass(frozen=True)

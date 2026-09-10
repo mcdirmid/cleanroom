@@ -28,7 +28,7 @@ Component visibility and lifetimes are governed by flat lifecycle tiers (system 
 - [ ] The document consists exclusively of optional front-matter, `## Purpose`, and `## Types and Behavior` (or `## Grounding Gaps Covered` for external boundary specifications)
 - [ ] An interface component (`high/<name>.md`) defines public object types, data types, and capabilities as the bill of sale for consumers and mock generation
 - [ ] An implementation component (`high/<name>_impl.md`) refines capabilities into concrete tool naming, algorithms, preconditions, and error feedback for realized types
-- [ ] An external boundary component (`high/<name>_ext.md`) describes external domain knowledge and grounding gaps covered without specifying an API or types, containing strictly `## Purpose` and `## Grounding Gaps Covered` sections, using zero semantic italics, and lacking a grounding document
+- [ ] An external boundary component (`high/<name>_ext.md`) describes external domain knowledge and grounding gaps covered without specifying an API or types, containing strictly `## Purpose` and `## Grounding Gaps Covered` sections, using zero semantic italics, and grounding to an external boundary stub without Python code
 - [ ] An assembly component (`high/<name>_asm.md`) aggregates constituent implementation and sub-assembly components, closing their combined interface components and propagating unresolved dependencies
 
 ## Front-matter and imports

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 class ParameterConverter(Protocol):
     """
 PURPOSE:
-Defined as a polymorphic agent session service that has an actual type, a primitive wire type, and can convert a wire type value to produce a value of that actual type
+Polymorphic service that has an actual type, a primitive wire type, and can convert a wire type value to produce a value of that actual type
 """
 
     @property
@@ -215,7 +215,7 @@ Converts a wire type boolean to produce that boolean value directly
 class Tool(Protocol):
     """
 PURPOSE:
-Defined as a polymorphic agent session service that defines an executable action available to an agent
+Polymorphic service that defines an executable action available to an agent
 
 FRESH_ASSUMPTIONS:
 - All parameters of a tool have unique names.

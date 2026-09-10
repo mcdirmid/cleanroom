@@ -1,5 +1,5 @@
 from typing import List, Optional, Protocol
-from framework import data_type, operation, override, singleton_type
+from framework import data_type, operation, singleton_type
 from dataclasses import dataclass
 import tool_provider
 
@@ -11,7 +11,7 @@ PURPOSE:
 Entry in an agent conversation
 """
 
-    def __init__(self, role: str, content: str, tool_call_id: Optional[str]=..., tool_name: Optional[str]=..., reminder: Optional[str]=..., tool_arguments: Optional[str]=...) -> None:
+    def __init__(self, role: str, content: str, tool_call_id: Optional[str]=..., tool_name: Optional[str]=..., reminder: Optional[str]=..., tool_arguments: Optional[str]=..., is_stub: bool=...) -> None:
         ...
 
     @property
@@ -62,68 +62,11 @@ Serialized argument parameters for a tool invocation
 """
         ...
 
-@dataclass(frozen=True)
-@data_type
-class Stub(Message):
-    """
-PURPOSE:
-Placeholder message replacing superseded content
-"""
-
-    def __init__(self, role: str=..., content: str=..., tool_call_id: Optional[str]=..., tool_name: Optional[str]=..., reminder: Optional[str]=..., tool_arguments: Optional[str]=...) -> None:
-        ...
-
     @property
-    @override
-    def role(self) -> str:
+    def is_stub(self) -> bool:
         """
 PURPOSE:
-Role identifying the speaker, such as system, user, assistant, or tool
-"""
-        ...
-
-    @property
-    @override
-    def content(self) -> str:
-        """
-PURPOSE:
-Text content of the message
-"""
-        ...
-
-    @property
-    @override
-    def tool_call_id(self) -> Optional[str]:
-        """
-PURPOSE:
-Tool call identifier when correlating tool invocations and responses
-"""
-        ...
-
-    @property
-    @override
-    def tool_name(self) -> Optional[str]:
-        """
-PURPOSE:
-Tool name associated with a tool invocation or response
-"""
-        ...
-
-    @property
-    @override
-    def reminder(self) -> Optional[str]:
-        """
-PURPOSE:
-Advises the agent on future actions and constraints
-"""
-        ...
-
-    @property
-    @override
-    def tool_arguments(self) -> Optional[str]:
-        """
-PURPOSE:
-Serialized argument parameters for a tool invocation
+Whether the message is a stub replacing superseded content
 """
         ...
 

@@ -15,7 +15,7 @@ Introduces template as initial file content for a read-write file
 class EditingTool(tool_provider.Tool, Protocol):
     """
 PURPOSE:
-Defined as a polymorphic agent session service that modifies a read-write file
+Polymorphic tool that modifies a read-write file
 
 INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.

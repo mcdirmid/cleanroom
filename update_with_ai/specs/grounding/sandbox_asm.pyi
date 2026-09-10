@@ -1,7 +1,7 @@
 def __initialize__() -> None:
     """
 PURPOSE:
-Assembles sandbox environment, file inspection, editing, run control, guide delivery, validation, and tool provider components into the sandbox assembly
+Assembles sandbox environment, file inspection, editing, run control, guide delivery, validation, and tool provider components into the sandbox assembly.
 
 CONSTITUENTS:
 - sandbox_impl

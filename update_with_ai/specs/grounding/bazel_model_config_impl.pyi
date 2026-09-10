@@ -30,7 +30,7 @@ INHERITED_REQUIREMENTS:
 - [ModelConfig] The model config provides a model name designating the target model.
 
 GROUNDING_ARGUMENT:
-- Loaded from external data source: target configuration module specified by MODEL_CONFIG_TARGET, AGENT_CONFIG_TARGET, or --config command-line argument via model_config_ext.
+- Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
 """
         ...
 
@@ -48,7 +48,7 @@ INHERITED_REQUIREMENTS:
 - [ModelConfig] The model config provides a base url designating the remote model API endpoint address when custom endpoint routing applies.
 
 GROUNDING_ARGUMENT:
-- Loaded from external data source: target configuration module specified by MODEL_CONFIG_TARGET, AGENT_CONFIG_TARGET, or --config command-line argument via model_config_ext.
+- Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
 """
         ...
 
@@ -66,7 +66,7 @@ INHERITED_REQUIREMENTS:
 - [ModelConfig] The model config provides an api key providing authentication credentials when designated environment secrets apply.
 
 GROUNDING_ARGUMENT:
-- Loaded from external data source: environment variable designated by the target configuration module via model_config_ext.
+- Resolved from the designated environment variable specified in the target module via model_config_ext.
 """
         ...
 
@@ -84,7 +84,7 @@ INHERITED_REQUIREMENTS:
 - [ModelConfig] The model config provides a timeout specifying the maximum duration in seconds permitted for a model request.
 
 GROUNDING_ARGUMENT:
-- Loaded from external data source: target configuration module specified by MODEL_CONFIG_TARGET, AGENT_CONFIG_TARGET, or --config command-line argument via model_config_ext.
+- Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
 """
         ...
 
@@ -102,7 +102,7 @@ INHERITED_REQUIREMENTS:
 - [ModelConfig] The model config provides the conversation limit bounding interaction turns.
 
 GROUNDING_ARGUMENT:
-- Loaded from external data source: target configuration module specified by MODEL_CONFIG_TARGET, AGENT_CONFIG_TARGET, or --config command-line argument via model_config_ext.
+- Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
 """
         ...
 
@@ -120,7 +120,7 @@ INHERITED_REQUIREMENTS:
 - [ModelConfig] The model config provides a temperature specifying the sampling temperature for model requests.
 
 GROUNDING_ARGUMENT:
-- Loaded from external data source: target configuration module specified by MODEL_CONFIG_TARGET, AGENT_CONFIG_TARGET, or --config command-line argument via model_config_ext.
+- Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
 """
         ...
 
@@ -138,7 +138,7 @@ INHERITED_REQUIREMENTS:
 - [ModelConfig] The model config provides a max tokens upper bound specifying the maximum number of response tokens permitted per request when token generation is constrained.
 
 GROUNDING_ARGUMENT:
-- Loaded from external data source: target configuration module specified by MODEL_CONFIG_TARGET, AGENT_CONFIG_TARGET, or --config command-line argument via model_config_ext.
+- Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
 """
         ...
 
@@ -156,7 +156,7 @@ INHERITED_REQUIREMENTS:
 - [ModelConfig] The model config provides whether the agent should use step mode to communicate a guide progressively.
 
 GROUNDING_ARGUMENT:
-- Loaded from external data source: target configuration module specified by MODEL_CONFIG_TARGET, AGENT_CONFIG_TARGET, or --config command-line argument via model_config_ext.
+- Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
 """
         ...
 
@@ -174,7 +174,7 @@ INHERITED_REQUIREMENTS:
 - [ModelConfig] The model config provides whether the agent should perform startup reads to inspect declared files at session start.
 
 GROUNDING_ARGUMENT:
-- Loaded from external data source: target configuration module specified by MODEL_CONFIG_TARGET, AGENT_CONFIG_TARGET, or --config command-line argument via model_config_ext.
+- Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
 """
         ...
 
@@ -192,6 +192,6 @@ INHERITED_REQUIREMENTS:
 - [ModelConfig] The model config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
 
 GROUNDING_ARGUMENT:
-- Loaded from external data source: target configuration module specified by MODEL_CONFIG_TARGET, AGENT_CONFIG_TARGET, or --config command-line argument via model_config_ext.
+- Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
 """
         ...

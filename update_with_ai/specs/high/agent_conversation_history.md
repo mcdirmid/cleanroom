@@ -12,7 +12,7 @@ Repeated tool executions cause message context to explode and degrade model perf
 
 ## Types and Behavior
 
-A *message* is an entry in an agent conversation, such as system instructions, a user prompt, an assistant response, or tool results. A *stub* is a placeholder message replacing superseded content in a conversation.
+A *message* is an entry in an agent conversation, having a *role*, text *content*, a *tool call id* when correlating tool invocations and responses, a *tool name* associated with a tool invocation or response, a *reminder* advising the agent on future actions and constraints, serialized *tool arguments*, and whether the message is a *stub* replacing superseded content in a conversation.
 
 A *model request* is a formatted sequence of messages prepared for transmission to a language model.
 

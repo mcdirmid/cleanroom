@@ -228,6 +228,6 @@ PURPOSE:
 Established that the alias manager is configured with a workspace root
 
 GROUNDING_ARGUMENT:
-- Loaded from external data source: ambient workspace root directory configured at session startup.
+- Resolved from physical workspace directory configured at session startup via file_paths.WorkspaceRoot.
 """
         ...

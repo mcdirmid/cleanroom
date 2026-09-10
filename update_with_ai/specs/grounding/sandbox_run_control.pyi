@@ -10,7 +10,7 @@ import tool_provider
 class VerificationCheck(Protocol):
     """
 PURPOSE:
-Defined as a polymorphic agent session service that validates session criteria
+Polymorphic service that validates session criteria
 """
 
     @operation

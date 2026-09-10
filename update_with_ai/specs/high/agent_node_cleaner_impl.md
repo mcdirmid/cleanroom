@@ -15,11 +15,11 @@ Driving node execution requires bridging abstract graph clean directives to conc
 
 The agent node cleaner cleans a dirty node within an agent session phase, establishing the scope where session services operate and configuring the cleaned node with the target node.
 
-Within the agent session phase, cleaning executes the agent runner, the session environment, and the conversation history.
+Within the agent session phase, cleaning executes the agent runner, the sandbox, and the conversation history.
 
-Startup templates provided by the session environment are materialized into missing read-write files before agent interaction.
+Startup templates provided by the sandbox are materialized into missing read-write files before agent interaction.
 
-The conversation history is seeded with startup context comprising the node definition and task prompt retrieved from graph storage for the dirty node, incoming pending messages ordered deterministically by content, and paired startup tool executions from the session environment formatted with synthetic tool requests and captured responses. When seeding the task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when progressive guidance is active, or identifying the guide file by its file alias when progressive guidance is inactive.
+The conversation history is seeded with startup context comprising the node definition and task prompt retrieved from graph storage for the dirty node, incoming pending messages ordered deterministically by content, and paired startup tool executions from the sandbox formatted with synthetic tool requests and captured responses. When seeding the task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when progressive guidance is active, or identifying the guide file by its file alias when progressive guidance is inactive.
 
 Execution of the agent runner resolves the dirty node based on the produced agent outcome.
 

@@ -26,7 +26,7 @@ The bazel runner:
 
 - Cleans dirty nodes in topological order using the dag cleaner and the node cleaner.
 
-- Marks a target node dirty by injecting a non-triggering check change message into its pending messages.
+- Marks a target node dirty by injecting a non-triggering check *change message* into its pending messages.
 
 - Injects a caller-supplied feedback message into a target node.
 

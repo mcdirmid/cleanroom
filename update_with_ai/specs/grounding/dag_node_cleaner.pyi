@@ -6,7 +6,7 @@ import dag_storage
 class NodeCleaner(Protocol):
     """
 PURPOSE:
-Defined as a polymorphic system service that cleans an individual node in a dag storage
+Polymorphic service that cleans an individual node in a dag storage
 """
 
     @operation
