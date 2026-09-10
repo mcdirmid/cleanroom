@@ -1,4 +1,4 @@
-from typing import Sequence, Set
+from typing import Sequence, Set, Tuple
 from framework import operation, override, singleton_type
 import dag_storage
 import file_alias
@@ -12,14 +12,18 @@ import tool_provider
 class RunController(sandbox_run_control.RunController):
     """
 PURPOSE:
-Implements run controller to install advance, fail, and optional blame tools, exposing verification checks from node config
+Implements run controller to install advance, finish, fail, and optional blame tools, managing cached verification check results
 
 INHERITED_REQUIREMENTS:
-- [RunController] The run controller installs the advance tool and fail tool unconditionally, and installs the blame tool only when blame targets are configured.
 - [RunController] The run controller exposes verification checks that validate session criteria during advancement.
+- [RunController] The run controller caches verification evaluation results alongside the edit manager file update revision, reusing the cached verification outcome as long as no workspace files have been updated since that evaluation.
+- [RunController] The run controller installs an advance tool when guide step mode is active, coordinating step progression through guide delivery.
+- [RunController] The run controller installs a finish tool that concludes the session and enforces change documentation.
+- [RunController] The run controller installs a fail tool that terminates the run in failure.
+- [RunController] The run controller installs a blame tool that attributes task failure to an upstream dependency node, installed when blame targets are configured.
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, RunController installs run control tools and exposes verification check sequences delegated from imported node_config.NodeConfig, coordinating with tool_provider.ToolManager in the same session lifecycle tier.
+- As an agent_session singleton, RunController installs run control tools and exposes verification check sequences delegated from imported node_config.NodeConfig, coordinating with tool_provider.ToolManager and sandbox_file_editor.EditManager in the same session lifecycle tier.
 """
 
     @property
@@ -50,13 +54,30 @@ GROUNDING_ARGUMENT:
     def initialize(self) -> None:
         """
 PURPOSE:
-Installs advance and fail tools unconditionally, and blame tool when blame targets are configured in node config
+Installs finish and fail tools unconditionally, advance tool when guide step mode is active, and blame tool when blame targets are configured
 
 FRESH_REQUIREMENTS:
-- The run controller installs the advance tool and fail tool unconditionally, and installs the blame tool only when blame targets are configured in the node config.
+- The run controller unconditionally installs the finish tool and fail tool into the tool manager for the agent session, installs the advance tool only when guide step mode is active, and obtains configured blame targets and verification checks from the node config, installing the blame tool only when blame targets are configured.
+- Verification checks exposed by the run controller include the session verification checks from node config.
 
 GROUNDING_ARGUMENT:
-- Reads blame targets from imported node_config.NodeConfig, and installs AdvanceTool, FailTool, and BlameTool directly into imported tool_provider.ToolManager in the same session lifecycle tier.
+- Reads step mode, blame targets, and verification checks from imported node_config.NodeConfig, and installs FinishTool, FailTool, optionally AdvanceTool, and optionally BlameTool directly into imported tool_provider.ToolManager in the same session lifecycle tier.
+"""
+        ...
+
+    @operation
+    def evaluate_verification(self) -> Tuple[bool, str]:
+        """
+PURPOSE:
+Evaluates verification checks with file update revision caching
+
+FRESH_REQUIREMENTS:
+- Evaluation of verification checks is cached alongside the edit manager file update revision.
+- Verification check execution is omitted and the cached result is reused whenever workspace files have not been updated since the previous evaluation as indicated by the file update revision.
+- When the previous evaluation failed and workspace files have not been updated since, tool execution fails with the cached diagnostic output, reminding the agent that workspace files must be updated before proceeding.
+
+GROUNDING_ARGUMENT:
+- Tracks cached verification outcome and revision on self, inspecting file_update_revision from imported sandbox_file_editor.EditManager, executing self.verification_checks and caching results when revision changes.
 """
         ...
 
@@ -64,17 +85,17 @@ GROUNDING_ARGUMENT:
 class AdvanceTool(sandbox_run_control.AdvanceTool):
     """
 PURPOSE:
-Implements advance tool to coordinate progressive steps, verify state, and complete the run
+Implements advance tool to coordinate self-contained guide progression
 
 INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.
 
 FRESH_REQUIREMENTS:
-- The advance tool is named `advance`.
-- The advance tool change summary parameter uses a string parameter converter to accept text.
+- The advance tool is named `advance`, accepts no parameters, and shares a constant suppression key `advance`.
+- The advance tool presents the guide summary from node config whether execution fails or succeeds.
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, AdvanceTool coordinates guide step mode advancement, verification check evaluations, and session completion, interacting with imported sandbox_guide_delivery.GuideDelivery, sandbox_file_editor.EditManager, and RunController in the same session lifecycle tier.
+- As an agent_session singleton, AdvanceTool coordinates guide step progression, interacting with imported sandbox_guide_delivery.GuideDelivery, sandbox_file_editor.EditManager, node_config.NodeConfig, and RunController in the same session lifecycle tier.
 """
 
     @property
@@ -90,13 +111,26 @@ GROUNDING_ARGUMENT:
         ...
 
     @property
-    def change_summary(self) -> tool_provider.Parameter:
+    @override
+    def description(self) -> str:
         """
 PURPOSE:
-Parameter describing workspace file modifications that must be omitted while guide steps remain and is required only when concluding the session after modifying workspace files
+Established that each tool has a description which informs the agent why and when to use the tool
 
 GROUNDING_ARGUMENT:
-- Constant parameter descriptor configured with string parameter converter.
+- Constant tool description string.
+"""
+        ...
+
+    @property
+    @override
+    def parameters(self) -> Set[tool_provider.Parameter]:
+        """
+PURPOSE:
+Accepts no parameters
+
+GROUNDING_ARGUMENT:
+- Constant empty set.
 """
         ...
 
@@ -105,25 +139,62 @@ GROUNDING_ARGUMENT:
     def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
         """
 PURPOSE:
-Implements execute_tool to advance guide steps or evaluate verification checks and change summary
+Implements execute_tool to advance guide steps and report progress or failure diagnostics
 
 FRESH_REQUIREMENTS:
-- A call to the advance tool can be injected when an agent session starts when using step mode to deliver initial step content, executing without requiring a change summary.
-- When guide step mode is on and steps remain in guide delivery, tool execution fails if a change summary is provided, and reminds the agent that a change summary can only be provided when completing the session after seeing all guide steps.
-- When no file has changed, tool execution fails if a change summary is provided, and reminds the agent that a change summary can only be provided when workspace files were modified.
-- If workspace files were modified and either guide step mode is not on or no steps remain in guide delivery, tool execution fails if the change summary is not provided, and reminds the agent that a change summary must be provided when completing the session after modifying workspace files.
-- Verification checks execute as long as the change summary is set correctly, unless the previous advance call failed verification and no workspace files have been updated since.
-- When verification checks execute and any verification check fails, tool execution fails with diagnostic feedback sanitized through the alias manager, and the advance tool caches the failure output alongside the current file update revision from the edit manager.
-- When the advance tool is called after a previous advance call that failed verification and no workspace files have been updated since that failure as indicated by the edit manager's file update revision, tool execution fails without re-executing verification checks, serving the cached output from the previous failed verification and reminding the agent that verification failed previously and workspace files must be updated before advancing again.
-- When guide step mode is on, tool execution always presents the guide summary from node config whether execution fails or succeeds.
-- Responses from the advance tool share a constant suppression key 'advance'.
+- Passing verification advances guide delivery and delivers the next step section when guide steps remain.
+- Failing verification halts progression and reports diagnostic feedback sanitized through the alias manager when guide steps remain.
+- When no steps remain and workspace files were modified, passing verification fails tool execution with a reminder to call the finish tool with a change summary describing modifications.
+- When no steps remain and no workspace files were modified, passing verification produces a response specifying a follow-up execution of the finish tool without a change summary.
+- Failing verification reports sanitized diagnostic feedback when no steps remain.
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
 - [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, queries steps remaining and advances steps via imported sandbox_guide_delivery.GuideDelivery, queries file modification state and file update revision from imported sandbox_file_editor.EditManager, executes verification checks in RunController.verification_checks in the same session lifecycle tier unless a previous failure is cached without intervening file updates, serves cached output and fails tool execution reminding the agent when called without file updates after a verification failure, caches failure output alongside file update revision when checks fail, sanitizes diagnostic feedback through imported file_alias.AliasManager failing tool execution if any check fails, validates change summary content and applicability, attaches constant suppression key 'advance' to tool responses, and prepends the guide summary from imported node_config.NodeConfig to the response when guide step mode is on.
+- Evaluates verification via RunController.evaluate_verification in the same session lifecycle tier, queries steps remaining and advances steps via imported sandbox_guide_delivery.GuideDelivery, checks workspace modifications via imported sandbox_file_editor.EditManager, sanitizes diagnostics through imported file_alias.AliasManager, presents the guide summary from imported node_config.NodeConfig, attaches suppression key 'advance', and specifies FinishTool as follow_up_tool_call when no steps remain and no files were modified.
+"""
+        ...
+
+@singleton_type('agent_session')
+class FinishTool(sandbox_run_control.FinishTool):
+    """
+PURPOSE:
+Implements finish tool to evaluate session completion criteria and terminate the run
+
+INHERITED_ASSUMPTIONS:
+- [Tool] All parameters of a tool have unique names.
+
+FRESH_REQUIREMENTS:
+- The finish tool is named `finish`, accepting a text change summary parameter, and shares a constant suppression key `finish`.
+- The finish tool change summary parameter uses a string parameter converter to accept text.
+
+GROUNDING_ARGUMENT:
+- As an agent_session singleton, FinishTool validates session completion criteria, interacting with imported sandbox_guide_delivery.GuideDelivery, sandbox_file_editor.EditManager, node_config.NodeConfig, and RunController in the same session lifecycle tier.
+"""
+
+    @property
+    @override
+    def name(self) -> str:
+        """
+PURPOSE:
+Establishes that the finish tool is named finish
+
+GROUNDING_ARGUMENT:
+- Constant tool schema identifier ('finish').
+"""
+        ...
+
+    @property
+    @override
+    def change_summary(self) -> tool_provider.Parameter:
+        """
+PURPOSE:
+Parameter describing workspace file modifications
+
+GROUNDING_ARGUMENT:
+- Constant parameter descriptor configured with string parameter converter.
 """
         ...
 
@@ -147,7 +218,31 @@ PURPOSE:
 Established that each tool defines input parameters accepted for its invocation
 
 GROUNDING_ARGUMENT:
-- Set composed of self's constant parameter descriptor (change_summary).
+- Set composed of change_summary parameter descriptor.
+"""
+        ...
+
+    @operation
+    @override
+    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
+        """
+PURPOSE:
+Implements execute_tool to evaluate completion criteria, change documentation, and verification checks
+
+FRESH_REQUIREMENTS:
+- Tool execution fails when guide step mode is active and guide steps remain in guide delivery, reminding the agent that the advance tool must be called while guide steps remain and specifying the advance tool as a follow-up tool call.
+- Tool execution fails if workspace files were modified and the change summary is omitted, and reminds the agent that a change summary must be provided when completing the session after modifying workspace files.
+- Tool execution fails if no workspace files were modified and the change summary is provided, and reminds the agent that a change summary can only be provided when workspace files were modified.
+- Tool execution evaluates verification checks, failing with diagnostic feedback sanitized through the alias manager when any verification check fails.
+- Passing verification produces a terminating response indicating that the session completed successfully.
+
+INHERITED_REQUIREMENTS:
+- [FinishTool] Executing the finish tool while guide steps remain fails with a reminder to execute the advance tool, specifying the advance tool as a follow-up tool call.
+- [Tool] When a parameter is required, an argument must be supplied for tool execution.
+- [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
+
+GROUNDING_ARGUMENT:
+- Receives actual parameter bindings directly, extracts change_summary, queries step mode from imported node_config.NodeConfig and steps remaining from imported sandbox_guide_delivery.GuideDelivery returning a failure response specifying AdvanceTool as follow_up_tool_call if steps remain, inspects workspace modifications via imported sandbox_file_editor.EditManager, evaluates verification checks via RunController.evaluate_verification in the same session tier, sanitizes diagnostics through imported file_alias.AliasManager, attaches suppression key 'finish', and produces a terminating response on success.
 """
         ...
 
@@ -298,6 +393,7 @@ FRESH_REQUIREMENTS:
 - On successful blame tool execution, the response indicates termination attributing feedback to the blame target owning node.
 
 INHERITED_REQUIREMENTS:
+- [BlameTool] Executing the blame tool fails if the target is not one of the blame targets, and terminates the run with diagnostic feedback attributed to the owning node on success.
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
 - [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
 

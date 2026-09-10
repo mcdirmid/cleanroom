@@ -85,12 +85,18 @@ class WireParameterBindings:
     bindings: Set[Tuple[str, Union[str, int, bool]]]
 
 @dataclass(frozen=True)
+class FollowUpToolCall:
+    tool_name: str
+    wire_parameter_bindings: WireParameterBindings
+
+@dataclass(frozen=True)
 class Response:
     is_failed: bool
     is_terminated: bool
     content: str
     reminder: Optional[str] = None
     suppression_key: Optional[str] = None
+    follow_up_tool_call: Optional[FollowUpToolCall] = None
 
 class Tool(Protocol):
     @property

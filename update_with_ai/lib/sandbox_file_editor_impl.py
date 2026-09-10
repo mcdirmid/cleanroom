@@ -186,12 +186,24 @@ class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
 
         edit_mgr.record_modification(host_path)
 
+        follow_up = tool_provider.FollowUpToolCall(
+            tool_name="read_file",
+            wire_parameter_bindings=tool_provider.WireParameterBindings(
+                bindings={
+                    ("file", target_file.short_name),
+                    ("line_numbers", True),
+                }
+            ),
+        )
+        # Requirement: On successful execution, an editing tool produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
         # Requirement: Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
         return tool_provider.Response(
             is_failed=False,
             is_terminated=False,
             content="Successfully replaced text.",
+            reminder="Inspect the updated file to verify your changes.",
             suppression_key=target_file.short_name,
+            follow_up_tool_call=follow_up,
         )
 
 class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
@@ -316,12 +328,24 @@ class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
 
         edit_mgr.record_modification(host_path)
 
+        follow_up = tool_provider.FollowUpToolCall(
+            tool_name="read_file",
+            wire_parameter_bindings=tool_provider.WireParameterBindings(
+                bindings={
+                    ("file", target_file.short_name),
+                    ("line_numbers", True),
+                }
+            ),
+        )
+        # Requirement: On successful execution, an editing tool produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
         # Requirement: Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
         return tool_provider.Response(
             is_failed=False,
             is_terminated=False,
             content="Successfully updated lines.",
+            reminder="Inspect the updated file to verify your changes.",
             suppression_key=target_file.short_name,
+            follow_up_tool_call=follow_up,
         )
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:

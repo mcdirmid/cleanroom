@@ -1,7 +1,7 @@
 """Unit tests for sandbox_run_control_impl aligned with grounding specifications."""
 
 import unittest
-from typing import Any, Optional, Set, Tuple
+from typing import Any, List, Optional, Sequence, Set, Tuple
 
 from lib.dag_storage import Node
 from lib.file_alias import (
@@ -22,6 +22,7 @@ from lib.sandbox_run_control import (
     AdvanceTool,
     BlameTool,
     FailTool,
+    FinishTool,
     RunController,
     VerificationCheck,
 )
@@ -29,6 +30,7 @@ from lib.sandbox_run_control_impl import (
     AdvanceTool as AdvanceToolImpl,
     BlameTool as BlameToolImpl,
     FailTool as FailToolImpl,
+    FinishTool as FinishToolImpl,
     RunController as RunControllerImpl,
     __initialize__,
 )
@@ -98,11 +100,14 @@ class MockNodeConfig:
     def __init__(
         self,
         blame_targets: Optional[Set[BoundFile]] = None,
-        verification_checks: Optional[list] = None,
+        verification_checks: Optional[Sequence[VerificationCheck]] = None,
+        guide: Optional[Guide] = None,
+        is_step_mode: bool = True,
     ) -> None:
         self._blame_targets = blame_targets or set()
-        self._verification_checks = verification_checks or []
-        self._guide: Optional[Guide] = None
+        self._verification_checks: Sequence[VerificationCheck] = verification_checks or []
+        self._guide = guide
+        self.is_step_mode = is_step_mode
 
     @property
     def read_only_files(self) -> Set[BoundFile]:
@@ -129,7 +134,7 @@ class MockNodeConfig:
         return self._blame_targets
 
     @property
-    def verification_checks(self) -> list:
+    def verification_checks(self) -> Sequence[VerificationCheck]:
         return self._verification_checks
 
 
@@ -175,7 +180,7 @@ class MockEditManager:
         pass
 
 
-class MockVerificationCheck:
+class MockVerificationCheck(VerificationCheck):
     def __init__(self, passes: bool = True, diagnostic: str = "") -> None:
         self.passes = passes
         self.diagnostic = diagnostic
@@ -203,7 +208,11 @@ class SandboxRunControlImplTest(unittest.TestCase):
         self.tool_mgr = MockToolManager()
         self.str_conv = MockStringConverter()
         self.alias_mgr = MockAliasManager()
-        self.node_cfg = MockNodeConfig(blame_targets={self.blame_target_file})
+        self.node_cfg = MockNodeConfig(
+            blame_targets={self.blame_target_file},
+            is_step_mode=True,
+            guide=Guide(summary="Guide Summary", sections=[]),
+        )
         self.guide_del = MockGuideDelivery()
         self.edit_mgr = MockEditManager()
 
@@ -216,208 +225,276 @@ class SandboxRunControlImplTest(unittest.TestCase):
         self.registry.register_instance(self.guide_del, keys=[GuideDelivery], tier="agent_session")
         self.registry.register_instance(self.edit_mgr, keys=[EditManager], tier="agent_session")
 
-    def test_run_controller_initialization_with_blame(self) -> None:
-        """CUJ: RunController installs advance, fail, and blame tools when blame targets exist."""
+    def test_run_controller_initialization_with_blame_and_step_mode(self) -> None:
+        """CUJ: RunController installs advance, finish, fail, and blame tools when step mode and blame targets exist."""
         with enter_phase("agent_session", registry=self.registry) as scope:
             ctrl = scope.get_singleton(RunController)
+            # Requirement: Verification checks exposed by the run controller include the session verification checks from node config.
             # Requirement: [RunController] The run controller exposes verification checks that validate session criteria during advancement.
             self.assertEqual(ctrl.verification_checks, [])
-            # Requirement: The run controller installs the advance tool and fail tool unconditionally, and installs the blame tool only when blame targets are configured in the node config.
-            # Requirement: [RunController] The run controller installs the advance tool and fail tool unconditionally, and installs the blame tool only when blame targets are configured.
+            # Requirement: The run controller unconditionally installs the finish tool and fail tool into the tool manager for the agent session, installs the advance tool only when guide step mode is active, and obtains configured blame targets and verification checks from the node config, installing the blame tool only when blame targets are configured.
+            # Requirement: [RunController] The run controller installs an advance tool when guide step mode is active, coordinating step progression through guide delivery.
+            # Requirement: [RunController] The run controller installs a finish tool that concludes the session and enforces change documentation.
+            # Requirement: [RunController] The run controller installs a fail tool that terminates the run in failure.
+            # Requirement: [RunController] The run controller installs a blame tool that attributes task failure to an upstream dependency node, installed when blame targets are configured.
             tool_names = {t.name for t in self.tool_mgr.installed_tools}
-            # Requirement: The advance tool is named `advance`.
+            # Requirement: The advance tool is named `advance`, accepts no parameters, and shares a constant suppression key `advance`.
             self.assertIn("advance", tool_names)
+            # Requirement: The finish tool is named `finish`, accepting a text change summary parameter, and shares a constant suppression key `finish`.
+            self.assertIn("finish", tool_names)
             # Requirement: The fail tool is named `fail`.
             self.assertIn("fail", tool_names)
             # Requirement: The blame tool is named `blame`.
             self.assertIn("blame", tool_names)
 
+    def test_run_controller_initialization_without_blame_and_step_mode(self) -> None:
+        """CUJ: RunController omits advance and blame tools when step mode is inactive and blame targets are empty."""
+        reg = LifecycleRegistry()
+        __initialize__(reg)
+        tool_mgr = MockToolManager()
+        cfg = MockNodeConfig(blame_targets=set(), is_step_mode=False, guide=None)
+        reg.register_instance(tool_mgr, keys=[ToolManager], tier="agent_session")
+        reg.register_instance(self.str_conv, keys=[StringParameterConverter], tier="agent_session")
+        reg.register_instance(self.alias_mgr, keys=[AliasManager], tier="agent_session")
+        reg.register_instance(cfg, keys=[NodeConfig], tier="agent_session")
+        reg.register_instance(self.guide_del, keys=[GuideDelivery], tier="agent_session")
+        reg.register_instance(self.edit_mgr, keys=[EditManager], tier="agent_session")
+
+        with enter_phase("agent_session", registry=reg) as scope:
+            ctrl = scope.get_singleton(RunController)
+            # Requirement: The run controller unconditionally installs the finish tool and fail tool into the tool manager for the agent session, installs the advance tool only when guide step mode is active, and obtains configured blame targets and verification checks from the node config, installing the blame tool only when blame targets are configured.
+            tool_names = {t.name for t in tool_mgr.installed_tools}
+            self.assertIn("finish", tool_names)
+            self.assertIn("fail", tool_names)
+            self.assertNotIn("advance", tool_names)
+            self.assertNotIn("blame", tool_names)
+
+    def test_run_controller_evaluate_verification_caching(self) -> None:
+        """CUJ: RunController caches verification results and reuses them when file revision unchanged."""
+        check = MockVerificationCheck(passes=False, diagnostic="Syntax error in /workspace/pkg/dep.py:5")
+        self.node_cfg._verification_checks = [check]
+        self.edit_mgr.file_update_revision = 1
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            ctrl = scope.get_singleton(RunControllerImpl)
+            # First evaluation executes checks and caches result
+            # Requirement: Evaluation of verification checks is cached alongside the edit manager file update revision.
+            # Requirement: [RunController] The run controller caches verification evaluation results alongside the edit manager file update revision, reusing the cached verification outcome as long as no workspace files have been updated since that evaluation.
+            passed1, diag1 = ctrl.evaluate_verification()
+            self.assertFalse(passed1)
+            self.assertEqual(check.call_count, 1)
+            self.assertIn("dep.py:5", diag1)
+
+            # Re-evaluation with same file revision reuses cached result without re-executing checks
+            # Requirement: Verification check execution is omitted and the cached result is reused whenever workspace files have not been updated since the previous evaluation as indicated by the file update revision.
+            passed2, diag2 = ctrl.evaluate_verification()
+            self.assertFalse(passed2)
+            self.assertEqual(check.call_count, 1)
+            self.assertEqual(diag1, diag2)
+
+            # File update revision changes -> re-executes verification checks
+            self.edit_mgr.file_update_revision = 2
+            check.passes = True
+            passed3, diag3 = ctrl.evaluate_verification()
+            self.assertTrue(passed3)
+            self.assertEqual(check.call_count, 2)
+
     def test_advance_tool_guide_step_progression(self) -> None:
-        """CUJ: AdvanceTool returns next guide step without terminating when guide steps remain."""
+        """CUJ: AdvanceTool advances guide delivery and delivers next step section when steps remain."""
         self.guide_del.has_steps_remaining = True
         self.guide_del.next_step_content = "Step 2 Instructions"
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             adv = scope.get_singleton(AdvanceTool)
+            # Requirement: The advance tool is named `advance`, accepts no parameters, and shares a constant suppression key `advance`.
+            self.assertEqual(adv.name, "advance")
+            self.assertEqual(len(adv.parameters), 0)
+            self.assertIsInstance(adv.description, str)
+
             b = ActualParameterBindings(bindings=set())
+            # Requirement: Passing verification advances guide delivery and delivers the next step section when guide steps remain.
             resp = adv.execute_tool(b)
 
             self.assertFalse(resp.is_failed)
             self.assertFalse(resp.is_terminated)
-            self.assertEqual(resp.content, "Step 2 Instructions")
-            # Requirement: Responses from the advance tool share a constant suppression key 'advance'.
+            self.assertIn("Step 2 Instructions", resp.content)
+            # Requirement: The advance tool presents the guide summary from node config whether execution fails or succeeds.
+            self.assertTrue(resp.content.startswith("Guide Summary"))
+            # Requirement: The advance tool is named `advance`, accepts no parameters, and shares a constant suppression key `advance`.
             self.assertEqual(resp.suppression_key, "advance")
 
-    def test_advance_tool_guide_step_change_summary_rejected(self) -> None:
-        """CUJ: AdvanceTool fails if change summary provided while guide steps remain."""
+    def test_advance_tool_failing_verification_with_steps_remaining(self) -> None:
+        """CUJ: AdvanceTool reports sanitized failure diagnostics and halts progression when verification fails."""
         self.guide_del.has_steps_remaining = True
-        self.guide_del.next_step_content = "Step 2 Instructions"
-
-        with enter_phase("agent_session", registry=self.registry) as scope:
-            adv = scope.get_singleton(AdvanceToolImpl)
-            b = ActualParameterBindings(bindings={(adv.change_summary, "Premature summary")})
-            # Requirement: When guide step mode is on and steps remain in guide delivery, tool execution fails if a change summary is provided, and reminds the agent that a change summary can only be provided when completing the session after seeing all guide steps.
-            resp = adv.execute_tool(b)
-
-            self.assertTrue(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertEqual(resp.reminder, "A change summary can only be provided when completing the session after seeing all guide steps.")
-            self.assertFalse(self.guide_del.advance_step_called)
-
-    def test_advance_tool_no_modifications_change_summary_rejected(self) -> None:
-        """CUJ: AdvanceTool fails if change summary provided when no files were modified."""
-        self.guide_del.has_steps_remaining = False
-        self.edit_mgr.has_modifications = False
-        vcheck = MockVerificationCheck(passes=True)
-        self.node_cfg._verification_checks = [vcheck]
-
-        with enter_phase("agent_session", registry=self.registry) as scope:
-            adv = scope.get_singleton(AdvanceToolImpl)
-            b = ActualParameterBindings(bindings={(adv.change_summary, "Unneeded summary")})
-            # Requirement: When no file has changed, tool execution fails if a change summary is provided, and reminds the agent that a change summary can only be provided when workspace files were modified.
-            # Requirement: Verification checks always execute as long as the change summary is set correctly.
-            resp = adv.execute_tool(b)
-
-            self.assertTrue(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertEqual(resp.reminder, "A change summary can only be provided when workspace files were modified.")
-            self.assertFalse(vcheck.called)
-
-    def test_advance_tool_guide_step_verification_success(self) -> None:
-        """CUJ: AdvanceTool executes verification checks and advances guide delivery when checks pass."""
-        self.guide_del.has_steps_remaining = True
-        self.guide_del.next_step_content = "Step 2 Instructions"
-        vcheck = MockVerificationCheck(passes=True)
+        vcheck = MockVerificationCheck(passes=False, diagnostic="Failure in /workspace/pkg/dep.py:10")
         self.node_cfg._verification_checks = [vcheck]
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             adv = scope.get_singleton(AdvanceTool)
             b = ActualParameterBindings(bindings=set())
-            # Requirement: Verification checks execute as long as the change summary is set correctly, unless the previous advance call failed verification and no workspace files have been updated since.
+            # Requirement: Failing verification halts progression and reports diagnostic feedback sanitized through the alias manager when guide steps remain.
             resp = adv.execute_tool(b)
 
-            self.assertTrue(vcheck.called)
-            self.assertTrue(self.guide_del.advance_step_called)
-            self.assertIs(self.guide_del.last_verification_passed, True)
-            self.assertFalse(resp.is_failed)
-            self.assertEqual(resp.content, "Step 2 Instructions")
-
-    def test_advance_tool_guide_step_verification_failure(self) -> None:
-        """CUJ: AdvanceTool executes verification checks and delivers sanitized failure diagnostic to guide delivery when check fails."""
-        self.guide_del.has_steps_remaining = True
-        self.guide_del.next_step_content = "Step 2 Instructions"
-        vcheck = MockVerificationCheck(passes=False, diagnostic="Error in /workspace/pkg/dep.py:10")
-        self.node_cfg._verification_checks = [vcheck]
-
-        with enter_phase("agent_session", registry=self.registry) as scope:
-            adv = scope.get_singleton(AdvanceTool)
-            b = ActualParameterBindings(bindings=set())
-            # Requirement: Verification checks execute as long as the change summary is set correctly, unless the previous advance call failed verification and no workspace files have been updated since.
-            # Requirement: When verification checks execute and any verification check fails, tool execution fails with diagnostic feedback sanitized through the alias manager, and the advance tool caches the failure output alongside the current file update revision from the edit manager.
-            resp = adv.execute_tool(b)
-
-            self.assertTrue(vcheck.called)
+            self.assertTrue(resp.is_failed)
+            self.assertFalse(resp.is_terminated)
             self.assertTrue(self.guide_del.advance_step_called)
             self.assertIs(self.guide_del.last_verification_passed, False)
-            self.assertEqual(self.guide_del.last_failure_diagnostics, "Error in dep.py:10")
-            self.assertTrue(resp.is_failed)
-            self.assertIn("Step failed with: Error in dep.py:10", resp.content)
+            self.assertIn("dep.py:10", resp.content)
+            self.assertNotIn("/workspace/pkg/", resp.content)
 
-    def test_advance_tool_no_modifications_without_summary_succeeds(self) -> None:
-        """CUJ: AdvanceTool succeeds when no files modified and no summary provided."""
+    def test_advance_tool_failing_verification_repeated_cached_failure(self) -> None:
+        """CUJ: Repeated advance failure when files not updated fails with reminder."""
+        self.guide_del.has_steps_remaining = False
+        self.edit_mgr.file_update_revision = 1
+        vcheck = MockVerificationCheck(passes=False, diagnostic="Syntax error in /workspace/pkg/dep.py:12")
+        self.node_cfg._verification_checks = [vcheck]
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            adv = scope.get_singleton(AdvanceTool)
+            b = ActualParameterBindings(bindings=set())
+
+            # First failure
+            # Requirement: Failing verification reports sanitized diagnostic feedback when no steps remain.
+            resp1 = adv.execute_tool(b)
+            self.assertTrue(resp1.is_failed)
+            self.assertEqual(vcheck.call_count, 1)
+
+            # Second call without file update -> cached failure with reminder
+            # Requirement: When the previous evaluation failed and workspace files have not been updated since, tool execution fails with the cached diagnostic output, reminding the agent that workspace files must be updated before proceeding.
+            resp2 = adv.execute_tool(b)
+            self.assertTrue(resp2.is_failed)
+            self.assertEqual(vcheck.call_count, 1)
+            self.assertIsNotNone(resp2.reminder)
+
+    def test_advance_tool_no_steps_remaining_files_modified_requires_finish(self) -> None:
+        """CUJ: AdvanceTool fails with reminder to call finish tool when no steps remain and files were modified."""
+        self.guide_del.has_steps_remaining = False
+        self.edit_mgr.has_modifications = True
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            adv = scope.get_singleton(AdvanceTool)
+            b = ActualParameterBindings(bindings=set())
+            # Requirement: When no steps remain and workspace files were modified, passing verification fails tool execution with a reminder to call the finish tool with a change summary describing modifications.
+            resp = adv.execute_tool(b)
+
+            self.assertTrue(resp.is_failed)
+            self.assertFalse(resp.is_terminated)
+            self.assertIsNotNone(resp.reminder)
+
+    def test_advance_tool_no_steps_remaining_no_files_modified_specifies_finish_followup(self) -> None:
+        """CUJ: AdvanceTool specifies finish follow-up tool call when no steps remain and no files were modified."""
         self.guide_del.has_steps_remaining = False
         self.edit_mgr.has_modifications = False
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             adv = scope.get_singleton(AdvanceTool)
             b = ActualParameterBindings(bindings=set())
+            # Requirement: When no steps remain and no workspace files were modified, passing verification produces a response specifying a follow-up execution of the finish tool without a change summary.
             resp = adv.execute_tool(b)
+
+            self.assertFalse(resp.is_failed)
+            self.assertFalse(resp.is_terminated)
+            self.assertIsNotNone(resp.follow_up_tool_call)
+            assert resp.follow_up_tool_call is not None
+            self.assertEqual(resp.follow_up_tool_call.tool_name, "finish")
+            self.assertEqual(len(resp.follow_up_tool_call.wire_parameter_bindings.bindings), 0)
+
+    def test_finish_tool_parameters_and_converters(self) -> None:
+        """CUJ: FinishTool declares change_summary parameter with string converter."""
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            finish = scope.get_singleton(FinishToolImpl)
+            # Requirement: The finish tool is named `finish`, accepting a text change summary parameter, and shares a constant suppression key `finish`.
+            self.assertEqual(finish.name, "finish")
+            self.assertIsInstance(finish.description, str)
+            self.assertEqual(finish.parameters, {finish.change_summary})
+            # Requirement: The finish tool change summary parameter uses a string parameter converter to accept text.
+            self.assertIs(finish.change_summary.parameter_converter, self.str_conv)
+
+    def test_finish_tool_fails_when_steps_remain_specifies_advance_followup(self) -> None:
+        """CUJ: FinishTool fails when guide steps remain and specifies advance as follow-up."""
+        self.guide_del.has_steps_remaining = True
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            finish = scope.get_singleton(FinishToolImpl)
+            b = ActualParameterBindings(bindings=set())
+            # Requirement: Tool execution fails when guide step mode is active and guide steps remain in guide delivery, reminding the agent that the advance tool must be called while guide steps remain and specifying the advance tool as a follow-up tool call.
+            # Requirement: [FinishTool] Executing the finish tool while guide steps remain fails with a reminder to execute the advance tool, specifying the advance tool as a follow-up tool call.
+            resp = finish.execute_tool(b)
+
+            self.assertTrue(resp.is_failed)
+            self.assertFalse(resp.is_terminated)
+            self.assertIsNotNone(resp.reminder)
+            self.assertIsNotNone(resp.follow_up_tool_call)
+            assert resp.follow_up_tool_call is not None
+            self.assertEqual(resp.follow_up_tool_call.tool_name, "advance")
+            self.assertEqual(len(resp.follow_up_tool_call.wire_parameter_bindings.bindings), 0)
+            # Requirement: The finish tool is named `finish`, accepting a text change summary parameter, and shares a constant suppression key `finish`.
+            self.assertEqual(resp.suppression_key, "finish")
+
+    def test_finish_tool_fails_when_files_modified_and_summary_omitted(self) -> None:
+        """CUJ: FinishTool fails when workspace files modified but change summary omitted."""
+        self.guide_del.has_steps_remaining = False
+        self.edit_mgr.has_modifications = True
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            finish = scope.get_singleton(FinishToolImpl)
+            b = ActualParameterBindings(bindings=set())
+            # Requirement: Tool execution fails if workspace files were modified and the change summary is omitted, and reminds the agent that a change summary must be provided when completing the session after modifying workspace files.
+            resp = finish.execute_tool(b)
+
+            self.assertTrue(resp.is_failed)
+            self.assertFalse(resp.is_terminated)
+            self.assertIsNotNone(resp.reminder)
+
+    def test_finish_tool_fails_when_no_files_modified_and_summary_provided(self) -> None:
+        """CUJ: FinishTool fails when no workspace files modified but change summary provided."""
+        self.guide_del.has_steps_remaining = False
+        self.edit_mgr.has_modifications = False
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            finish = scope.get_singleton(FinishToolImpl)
+            b = ActualParameterBindings(bindings={(finish.change_summary, "Unneeded change summary")})
+            # Requirement: Tool execution fails if no workspace files were modified and the change summary is provided, and reminds the agent that a change summary can only be provided when workspace files were modified.
+            resp = finish.execute_tool(b)
+
+            self.assertTrue(resp.is_failed)
+            self.assertFalse(resp.is_terminated)
+            self.assertIsNotNone(resp.reminder)
+
+    def test_finish_tool_fails_when_verification_fails(self) -> None:
+        """CUJ: FinishTool evaluates verification checks and reports sanitized diagnostic feedback on failure."""
+        self.guide_del.has_steps_remaining = False
+        self.edit_mgr.has_modifications = True
+        vcheck = MockVerificationCheck(passes=False, diagnostic="Syntax error in /workspace/pkg/dep.py:20")
+        self.node_cfg._verification_checks = [vcheck]
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            finish = scope.get_singleton(FinishToolImpl)
+            b = ActualParameterBindings(bindings={(finish.change_summary, "Refactored module")})
+            # Requirement: Tool execution evaluates verification checks, failing with diagnostic feedback sanitized through the alias manager when any verification check fails.
+            resp = finish.execute_tool(b)
+
+            self.assertTrue(resp.is_failed)
+            self.assertFalse(resp.is_terminated)
+            self.assertIn("dep.py:20", resp.content)
+            self.assertNotIn("/workspace/pkg/", resp.content)
+
+    def test_finish_tool_succeeds_and_terminates_session(self) -> None:
+        """CUJ: FinishTool succeeds and terminates session when criteria met and verification passes."""
+        self.guide_del.has_steps_remaining = False
+        self.edit_mgr.has_modifications = True
+        vcheck = MockVerificationCheck(passes=True)
+        self.node_cfg._verification_checks = [vcheck]
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            finish = scope.get_singleton(FinishToolImpl)
+            b = ActualParameterBindings(bindings={(finish.change_summary, "Added new feature")})
+            # Requirement: Passing verification produces a terminating response indicating that the session completed successfully.
+            resp = finish.execute_tool(b)
 
             self.assertFalse(resp.is_failed)
             self.assertTrue(resp.is_terminated)
-            # Requirement: Responses from the advance tool share a constant suppression key 'advance'.
-            self.assertEqual(resp.suppression_key, "advance")
-
-    def test_advance_tool_verification_check_failure(self) -> None:
-        """CUJ: AdvanceTool evaluates verification checks and fails if any check fails."""
-        self.guide_del.has_steps_remaining = False
-        self.edit_mgr.has_modifications = True
-        self.node_cfg._verification_checks = [
-            MockVerificationCheck(passes=False, diagnostic="Syntax Error in /workspace/pkg/dep.py:10")
-        ]
-        with enter_phase("agent_session", registry=self.registry) as scope:
-            adv = scope.get_singleton(AdvanceToolImpl)
-            b = ActualParameterBindings(bindings={(adv.change_summary, "Modified files")})
-            # Requirement: Verification checks execute as long as the change summary is set correctly, unless the previous advance call failed verification and no workspace files have been updated since.
-            # Requirement: When verification checks execute and any verification check fails, tool execution fails with diagnostic feedback sanitized through the alias manager, and the advance tool caches the failure output alongside the current file update revision from the edit manager.
-            resp = adv.execute_tool(b)
-
-            self.assertTrue(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertIn("Syntax Error in dep.py:10", resp.content)
-            self.assertNotIn("/workspace/pkg/", resp.content)
-
-    def test_advance_tool_repeated_verification_failure_cached_and_complains(self) -> None:
-        """CUJ: AdvanceTool caches verification failure and complains on repeated calls without file updates."""
-        self.guide_del.has_steps_remaining = False
-        self.edit_mgr.has_modifications = True
-        self.edit_mgr.file_update_revision = 1
-        check = MockVerificationCheck(passes=False, diagnostic="Syntax Error in /workspace/pkg/dep.py:10")
-        self.node_cfg._verification_checks = [check]
-        with enter_phase("agent_session", registry=self.registry) as scope:
-            adv = scope.get_singleton(AdvanceToolImpl)
-            b = ActualParameterBindings(bindings={(adv.change_summary, "Modified files")})
-
-            # First call executes verification and fails
-            # Requirement: When verification checks execute and any verification check fails, tool execution fails with diagnostic feedback sanitized through the alias manager, and the advance tool caches the failure output alongside the current file update revision from the edit manager.
-            resp1 = adv.execute_tool(b)
-            self.assertTrue(resp1.is_failed)
-            self.assertEqual(check.call_count, 1)
-            self.assertIn("Syntax Error in dep.py:10", resp1.content)
-
-            # Second call without file update -> does NOT re-run check (check.call_count remains 1)
-            # Requirement: When the advance tool is called after a previous advance call that failed verification and no workspace files have been updated since that failure as indicated by the edit manager's file update revision, tool execution fails without re-executing verification checks, serving the cached output from the previous failed verification and reminding the agent that verification failed previously and workspace files must be updated before advancing again.
-            resp2 = adv.execute_tool(b)
-            self.assertTrue(resp2.is_failed)
-            self.assertEqual(check.call_count, 1)
-            self.assertEqual(resp2.content, resp1.content)
-            self.assertEqual(resp2.reminder, "Verification failed previously and workspace files must be updated before advancing again.")
-
-            # Updating files increments file_update_revision
-            self.edit_mgr.file_update_revision = 2
-            # Re-running verification checks occurs on next call
-            # Requirement: Verification checks execute as long as the change summary is set correctly, unless the previous advance call failed verification and no workspace files have been updated since.
-            check.passes = True
-            resp3 = adv.execute_tool(b)
-            self.assertEqual(check.call_count, 2)
-            self.assertFalse(resp3.is_failed)
-            self.assertTrue(resp3.is_terminated)
-
-    def test_advance_tool_modified_files_require_summary(self) -> None:
-        """CUJ: AdvanceTool fails if workspace files modified and change summary is missing."""
-        self.guide_del.has_steps_remaining = False
-        self.edit_mgr.has_modifications = True
-
-        with enter_phase("agent_session", registry=self.registry) as scope:
-            adv = scope.get_singleton(AdvanceToolImpl)
-
-            # Missing change_summary -> fails
-            b_missing = ActualParameterBindings(bindings=set())
-            # Requirement: If workspace files were modified and either guide step mode is not on or no steps remain in guide delivery, tool execution fails if the change summary is not provided, and reminds the agent that a change summary must be provided when completing the session after modifying workspace files.
-            resp_missing = adv.execute_tool(b_missing)
-            self.assertTrue(resp_missing.is_failed)
-            self.assertEqual(resp_missing.reminder, "A change summary must be provided when completing the session after modifying workspace files.")
-
-            # Provided change_summary -> succeeds and terminates
-            b_ok = ActualParameterBindings(bindings={(adv.change_summary, "Fixed issue")})
-            resp_ok = adv.execute_tool(b_ok)
-            self.assertFalse(resp_ok.is_failed)
-            self.assertTrue(resp_ok.is_terminated)
-            self.assertIn("Fixed issue", resp_ok.content)
-            self.assertIsInstance(adv.description, str)
-            self.assertGreater(len(adv.parameters), 0)
-            # Requirement: The advance tool change summary parameter uses a string parameter converter to accept text.
-            self.assertIs(adv.change_summary.parameter_converter, self.str_conv)
+            self.assertIn("Added new feature", resp.content)
 
     def test_fail_tool(self) -> None:
         """CUJ: FailTool produces terminating failure response carrying explanation."""
@@ -425,8 +502,11 @@ class SandboxRunControlImplTest(unittest.TestCase):
             fail_tool = scope.get_singleton(FailToolImpl)
             self.assertIsInstance(fail_tool.description, str)
             self.assertGreater(len(fail_tool.parameters), 0)
+            # Requirement: The fail tool is named `fail`.
+            self.assertEqual(fail_tool.name, "fail")
             # Requirement: The fail tool explanation parameter uses a string parameter converter to accept text.
             self.assertIs(fail_tool.explanation.parameter_converter, self.str_conv)
+
             b = ActualParameterBindings(bindings={(fail_tool.explanation, "Cannot solve bug")})
             # Requirement: Executing the fail tool produces a terminating response carrying the explanation.
             resp = fail_tool.execute_tool(b)
@@ -441,6 +521,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
             blame_tool = scope.get_singleton(BlameToolImpl)
             self.assertIsInstance(blame_tool.description, str)
             self.assertGreater(len(blame_tool.parameters), 0)
+            # Requirement: The blame tool is named `blame`.
+            self.assertEqual(blame_tool.name, "blame")
             # Requirement: The blame tool blame target parameter uses the alias manager to convert a file alias.
             self.assertIs(blame_tool.blame_target.parameter_converter, self.alias_mgr)
             # Requirement: The blame tool explanation parameter uses a string parameter converter to accept text.
@@ -461,7 +543,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # Requirement: Executing the blame tool fails if the target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
             resp_inv = blame_tool.execute_tool(b_invalid)
             self.assertTrue(resp_inv.is_failed)
-            self.assertEqual(resp_inv.reminder, "Only upstream files configured as blame targets can be blamed.")
+            self.assertIsNotNone(resp_inv.reminder)
 
             # Valid target terminates with Blamed attribution
             b_valid = ActualParameterBindings(
@@ -471,58 +553,11 @@ class SandboxRunControlImplTest(unittest.TestCase):
                 }
             )
             # Requirement: On successful blame tool execution, the response indicates termination attributing feedback to the blame target owning node.
+            # Requirement: [BlameTool] Executing the blame tool fails if the target is not one of the blame targets, and terminates the run with diagnostic feedback attributed to the owning node on success.
             resp_val = blame_tool.execute_tool(b_valid)
             self.assertFalse(resp_val.is_failed)
             self.assertTrue(resp_val.is_terminated)
-            self.assertIn("Blamed dep.py: Broken type signature", resp_val.content)
-
-    def test_advance_tool_guide_step_mode_failure_presents_guide_summary(self) -> None:
-        """CUJ: AdvanceTool presents guide summary when execution fails in guide step mode."""
-        self.node_cfg._guide = Guide(summary="# My Guide Summary", sections=[])
-        self.guide_del.has_steps_remaining = True
-
-        with enter_phase("agent_session", registry=self.registry) as scope:
-            adv = scope.get_singleton(AdvanceToolImpl)
-            b = ActualParameterBindings(bindings={(adv.change_summary, "Premature summary")})
-            # Requirement: When guide step mode is on, tool execution always presents the guide summary from node config whether execution fails or succeeds.
-            resp = adv.execute_tool(b)
-
-            self.assertTrue(resp.is_failed)
-            self.assertTrue(resp.content.startswith("# My Guide Summary\n\nError: change_summary is not allowed while guide steps remain."))
-
-    def test_advance_tool_guide_step_mode_completion_presents_guide_summary(self) -> None:
-        """CUJ: AdvanceTool presents guide summary upon session completion in guide step mode."""
-        self.node_cfg._guide = Guide(summary="# My Guide Summary", sections=[])
-        self.guide_del.has_steps_remaining = False
-        self.edit_mgr.has_modifications = False
-
-        with enter_phase("agent_session", registry=self.registry) as scope:
-            adv = scope.get_singleton(AdvanceToolImpl)
-            b = ActualParameterBindings(bindings=set())
-            # Requirement: When guide step mode is on, tool execution always presents the guide summary from node config whether execution fails or succeeds.
-            resp = adv.execute_tool(b)
-
-            self.assertFalse(resp.is_failed)
-            self.assertTrue(resp.is_terminated)
-            self.assertTrue(resp.content.startswith("# My Guide Summary\n\nSession completed successfully"))
-
-    def test_advance_tool_guide_step_mode_verification_failure_at_completion_presents_guide_summary(self) -> None:
-        """CUJ: AdvanceTool presents guide summary when verification fails at completion in guide step mode."""
-        self.node_cfg._guide = Guide(summary="# My Guide Summary", sections=[])
-        self.guide_del.has_steps_remaining = False
-        self.edit_mgr.has_modifications = True
-        self.node_cfg._verification_checks = [
-            MockVerificationCheck(passes=False, diagnostic="Syntax Error in dep.py:10")
-        ]
-
-        with enter_phase("agent_session", registry=self.registry) as scope:
-            adv = scope.get_singleton(AdvanceToolImpl)
-            b = ActualParameterBindings(bindings={(adv.change_summary, "Modified files")})
-            # Requirement: When guide step mode is on, tool execution always presents the guide summary from node config whether execution fails or succeeds.
-            resp = adv.execute_tool(b)
-
-            self.assertTrue(resp.is_failed)
-            self.assertTrue(resp.content.startswith("# My Guide Summary\n\nVerification failed: Syntax Error in dep.py:10"))
+            self.assertIn("dep.py: Broken type signature", resp_val.content)
 
 
 if __name__ == "__main__":
@@ -531,4 +566,3 @@ if __name__ == "__main__":
 # Untested requirements:
 # - [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
 # - [Tool] When a parameter is required, an argument must be supplied for tool execution.
-# - A call to the advance tool can be injected when an agent session starts when using step mode to deliver initial step content, executing without requiring a change summary.

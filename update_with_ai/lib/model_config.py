@@ -32,3 +32,7 @@ class ModelConfig(Protocol):
 
     @property
     def is_startup_reads(self) -> bool: ...
+
+    @property
+    def inject_followups(self) -> bool: ...
+

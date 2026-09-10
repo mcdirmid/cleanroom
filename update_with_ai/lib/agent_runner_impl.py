@@ -454,6 +454,66 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
                 if not resp.is_failed and fn_name in ("replace", "update_lines", "advance"):
                     guard.record_progress()
 
+                # Requirement: When configured by model config to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool through the tool manager, appending a synthetic assistant invocation and the resulting follow-up response to the conversation history immediately following the originating response.
+                # Requirement: [AgentRunner] The agent runner can dispatch follow-up tool calls specified by tool responses through the tool manager, appending an antecedent synthetic assistant tool invocation message and the follow-up tool response to the conversation history immediately following the originating response.
+                curr_resp = resp
+                curr_call_id = tc.id
+                followup_count = 0
+                while model_cfg.inject_followups and curr_resp.follow_up_tool_call is not None and not curr_resp.is_terminated:
+                    followup = curr_resp.follow_up_tool_call
+                    followup_count += 1
+                    synth_call_id = f"{curr_call_id}_followup_{followup_count}"
+                    args_dict = dict(followup.wire_parameter_bindings.bindings)
+                    history.append_message(
+                        agent_conversation_history.Message(
+                            role="assistant",
+                            content="",
+                            tool_call_id=synth_call_id,
+                            tool_name=followup.tool_name,
+                            tool_arguments=json.dumps(args_dict),
+                        )
+                    )
+                    follow_resp = tool_mgr.execute_tool(
+                        followup.tool_name, followup.wire_parameter_bindings
+                    )
+                    last_response = follow_resp
+                    raw_snippet = (follow_resp.content or "").strip()
+                    first_line = raw_snippet.splitlines()[0] if raw_snippet else ""
+                    if len(first_line) > 80:
+                        first_line = first_line[:77] + "..."
+                    if follow_resp.is_failed:
+                        status_sum = f"[Turn {turns}] Follow-up Tool {followup.tool_name}: FAILED -> {first_line}"
+                    elif follow_resp.is_terminated:
+                        status_sum = f"[Turn {turns}] Follow-up Tool {followup.tool_name}: COMPLETED -> {first_line}"
+                    else:
+                        status_sum = f"[Turn {turns}] Follow-up Tool {followup.tool_name}: OK -> {first_line}"
+                    t_rep = (
+                        f"{follow_resp.content}\n\nReminder: {follow_resp.reminder}"
+                        if follow_resp.reminder
+                        else follow_resp.content
+                    )
+                    logger.consume(
+                        runner_logger.LogEvent(
+                            event_name="tool_execution",
+                            summary=status_sum,
+                            transcript_representation=t_rep,
+                        )
+                    )
+                    history.append_tool_response(
+                        response=follow_resp,
+                        tool_name=followup.tool_name,
+                        tool_call_id=synth_call_id,
+                    )
+                    if not follow_resp.is_failed and followup.tool_name in ("replace", "update_lines", "advance"):
+                        guard.record_progress()
+                    curr_resp = follow_resp
+                    if curr_resp.is_terminated:
+                        return agent_runner.AgentOutcome(
+                            is_success=not curr_resp.is_failed,
+                            response=curr_resp,
+                            conversation_history=history,
+                        )
+
                 # Requirement: When tool execution produces a non-terminating failure response, the failure feedback is appended to the conversation history and the run continues.
                 # Requirement: When tool execution produces a terminating response, the agent runner concludes the run and returns an agent outcome.
                 if resp.is_terminated:

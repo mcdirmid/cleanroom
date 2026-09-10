@@ -98,22 +98,41 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
                 reminder="Only declared files can be inspected.",
             )
 
-        # Requirement: Executing the read tool fails if line numbers are not requested when reading a read-write file, and reminds the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files.
+        # Requirement: Executing the read tool fails if line numbers are not requested when reading a read-write file, reminding the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files, and specifying a follow-up execution of the read tool on the file with line numbers requested.
         if isinstance(target_file, file_alias.ReadWriteFile) and not line_numbers:
+            follow_up = tool_provider.FollowUpToolCall(
+                tool_name="read_file",
+                wire_parameter_bindings=tool_provider.WireParameterBindings(
+                    bindings={
+                        ("file", target_file.short_name),
+                        ("line_numbers", True),
+                    }
+                ),
+            )
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
                 content=f"Error: line_numbers must be requested when reading read-write file '{target_file.short_name}'.",
                 reminder="Line numbers must be requested when reading read-write files and omitted when reading read-only files.",
+                follow_up_tool_call=follow_up,
             )
 
-        # Requirement: Executing the read tool fails if line numbers are requested when reading a read-only file, and reminds the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files.
+        # Requirement: Executing the read tool fails if line numbers are requested when reading a read-only file, reminding the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files, and specifying a follow-up execution of the read tool on the file with line numbers omitted.
         if isinstance(target_file, file_alias.ReadOnlyFile) and line_numbers:
+            follow_up = tool_provider.FollowUpToolCall(
+                tool_name="read_file",
+                wire_parameter_bindings=tool_provider.WireParameterBindings(
+                    bindings={
+                        ("file", target_file.short_name),
+                    }
+                ),
+            )
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
                 content=f"Error: line_numbers must not be requested when reading read-only file '{target_file.short_name}'.",
                 reminder="Line numbers must be requested when reading read-write files and omitted when reading read-only files.",
+                follow_up_tool_call=follow_up,
             )
 
         # Requirement: Executing the read tool reads file content using the filesystem at the host path formed from the alias manager workspace root and bound file workspace path.

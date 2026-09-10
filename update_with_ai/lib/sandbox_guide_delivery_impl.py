@@ -88,9 +88,9 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
                 # Requirement: When advancing a step with failed verification, if no step section has been delivered yet, the guide delivery retains its index and emits a response combining the guide summary and failure diagnostics.
                 content = f"{self._guide.summary}\n\nVerification failed:\n{diag_text}".strip()
             else:
-                # Requirement: When advancing a step with failed verification, if a step section is currently active, the guide delivery retains the current step index without advancement and emits a response combining the guide summary, the current step section content, and the failure diagnostics.
+                # Requirement: When advancing a step with failed verification, if a step section is currently active, the guide delivery retains the current step index without advancement and emits a response combining the guide summary, the current step section content introduced by `Now check carefully:`, and the failure diagnostics.
                 section = self._guide.sections[self._step_index - 1]
-                content = f"{self._guide.summary}\n\n## {section.title}\n{section.content}\n\nVerification failed:\n{diag_text}".strip()
+                content = f"{self._guide.summary}\n\n## {section.title}\nNow check carefully:\n{section.content}\n\nVerification failed:\n{diag_text}".strip()
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
@@ -106,10 +106,10 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
                 content=self._guide.summary,
             )
 
-        # Requirement: When advancing a step with passed verification, if steps have already been delivered and further step sections remain, the guide delivery emits a response presenting the guide summary above the next step section content and advances its index to that section.
+        # Requirement: When advancing a step with passed verification, if steps have already been delivered and further step sections remain, the guide delivery emits a response presenting the guide summary above the next step section content introduced by `Now check carefully:` and advances its index to that section.
         section = self._guide.sections[self._step_index]
         self._step_index += 1
-        content = f"{self._guide.summary}\n\n## {section.title}\n{section.content}".strip()
+        content = f"{self._guide.summary}\n\n## {section.title}\nNow check carefully:\n{section.content}".strip()
         return tool_provider.Response(
             is_failed=False,
             is_terminated=False,

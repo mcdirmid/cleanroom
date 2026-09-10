@@ -256,9 +256,17 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: On successful text replacement tool execution, the unique occurrence of the target text is replaced with the replacement text, written using the filesystem, and file modifications are recorded.
             # Requirement: Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
             # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
+            # Requirement: On successful execution, an editing tool produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
             resp = replace_tool.execute_tool(b_ok)
             self.assertFalse(resp.is_failed)
             self.assertEqual(resp.suppression_key, self.rw_file.short_name)
+            self.assertIsNotNone(resp.follow_up_tool_call)
+            assert resp.follow_up_tool_call is not None
+            self.assertEqual(resp.follow_up_tool_call.tool_name, "read_file")
+            bindings_dict = dict(resp.follow_up_tool_call.wire_parameter_bindings.bindings)
+            self.assertEqual(bindings_dict.get("file"), self.rw_file.short_name)
+            self.assertTrue(bindings_dict.get("line_numbers"))
+            self.assertIsNotNone(resp.reminder)
             self.assertTrue(edit_mgr.has_modifications)
             with open(self.target_path, "r", encoding="utf-8") as f:
                 self.assertEqual(f.read(), "Line 1\nUpdated Line 2\nLine 3\n")
@@ -321,9 +329,17 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Executing the line update tool reads file content using the filesystem.
             # Requirement: When the start line is less than or equal to the end line, successful execution replaces lines within the range, writes using the filesystem, and records file modifications.
             # Requirement: Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
+            # Requirement: On successful execution, an editing tool produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
             resp1 = line_tool.execute_tool(b_replace)
             self.assertFalse(resp1.is_failed)
             self.assertEqual(resp1.suppression_key, self.rw_file.short_name)
+            self.assertIsNotNone(resp1.follow_up_tool_call)
+            assert resp1.follow_up_tool_call is not None
+            self.assertEqual(resp1.follow_up_tool_call.tool_name, "read_file")
+            bindings_dict = dict(resp1.follow_up_tool_call.wire_parameter_bindings.bindings)
+            self.assertEqual(bindings_dict.get("file"), self.rw_file.short_name)
+            self.assertTrue(bindings_dict.get("line_numbers"))
+            self.assertIsNotNone(resp1.reminder)
             self.assertTrue(edit_mgr.has_modifications)
             with open(self.target_path, "r", encoding="utf-8") as f:
                 self.assertEqual(f.read(), "Replaced 1 and 2\nLine 3\n")

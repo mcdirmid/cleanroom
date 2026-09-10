@@ -18,7 +18,11 @@ The *run controller* is an agent session service configured with *blame targets*
 
 - Exposes verification checks that validate session criteria during advancement.
 
-- Installs an *advance tool* that coordinates session progression and completion.
+- Caches verification evaluation results alongside the edit manager file update revision, reusing the cached verification outcome as long as no workspace files have been updated since that evaluation.
+
+- Installs an *advance tool* when guide step mode is active, coordinating step progression through guide delivery.
+
+- Installs a *finish tool* that concludes the session and enforces change documentation. Executing the finish tool while guide steps remain fails with a reminder to execute the advance tool, specifying the advance tool as a follow-up tool call.
 
 - Installs a *fail tool* that terminates the run in failure.
 

@@ -18,8 +18,14 @@ class RunController(Protocol):
 class AdvanceTool(tool_provider.Tool, Protocol):
     pass
 
+class FinishTool(tool_provider.Tool, Protocol):
+    @property
+    def change_summary(self) -> tool_provider.Parameter:
+        ...
+
 class FailTool(tool_provider.Tool, Protocol):
     pass
 
 class BlameTool(tool_provider.Tool, Protocol):
     pass
+

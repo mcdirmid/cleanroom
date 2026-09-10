@@ -19,6 +19,7 @@ Model configurations emitted by Cleanroom build rules provide JSON dictionary st
 - `max_tokens: Optional[int]` (optional): Upper bound on generated response tokens.
 - `session_start_reads: bool` (optional): Indicates whether startup tool execution inspects declared read-only files.
 - `step_sections: bool` (optional): Indicates whether guide delivery operates in progressive step mode.
+- `inject_followups: bool` (optional): Indicates whether the agent should execute follow-up tool calls specified by tool responses.
 
 **Target Configuration Discovery & Resolution**
 
@@ -48,6 +49,7 @@ When no target configuration module is located on disk, parameters fall back to 
 - Conversation limit: `int(os.environ.get("MODEL_CONVERSATION_LIMIT", "20"))`
 - Step mode: `os.environ.get("STEP_MODE", "true").lower() in ("true", "1")`
 - Startup reads: `os.environ.get("STARTUP_READS", "true").lower() in ("true", "1")`
+- Inject followups: `os.environ.get("INJECT_FOLLOWUPS", "true").lower() in ("true", "1")`
 
 ## Build Dependencies
 

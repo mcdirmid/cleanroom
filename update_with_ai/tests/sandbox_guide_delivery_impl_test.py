@@ -133,7 +133,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             self.assertTrue(delivery.has_steps_remaining)
 
             # Advance to first step section
-            # Requirement: When advancing a step with passed verification, if steps have already been delivered and further step sections remain, the guide delivery emits a response presenting the guide summary above the next step section content and advances its index to that section.
+            # Requirement: When advancing a step with passed verification, if steps have already been delivered and further step sections remain, the guide delivery emits a response presenting the guide summary above the next step section content introduced by `Now check carefully:` and advances its index to that section.
             # Requirement: [GuideDelivery] When advancing a step with passed verification on subsequent steps and steps remain, the response presents the guide summary above the next step section content.
             res1 = delivery.advance_step(verification_passed=True)
             self.assertIsNotNone(res1)
@@ -142,11 +142,11 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             self.assertFalse(res1.is_terminated)
             self.assertIn("High-level summary", res1.content)
             self.assertIn("Step 1", res1.content)
-            self.assertIn("Content 1", res1.content)
+            self.assertIn("Now check carefully:\nContent 1", res1.content)
             self.assertTrue(delivery.has_steps_remaining)
 
             # Verification failure while Step 1 is active retains step index and emits summary, current step, and diagnostics
-            # Requirement: When advancing a step with failed verification, if a step section is currently active, the guide delivery retains the current step index without advancement and emits a response combining the guide summary, the current step section content, and the failure diagnostics.
+            # Requirement: When advancing a step with failed verification, if a step section is currently active, the guide delivery retains the current step index without advancement and emits a response combining the guide summary, the current step section content introduced by `Now check carefully:`, and the failure diagnostics.
             # Requirement: [GuideDelivery] When advancing a step with failed verification, advancing retains the current step section and reports the failure diagnostics.
             res_fail1 = delivery.advance_step(verification_passed=False, failure_diagnostics="Syntax error in step 1")
             self.assertIsNotNone(res_fail1)
@@ -155,7 +155,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             self.assertFalse(res_fail1.is_terminated)
             self.assertIn("High-level summary", res_fail1.content)
             self.assertIn("Step 1", res_fail1.content)
-            self.assertIn("Content 1", res_fail1.content)
+            self.assertIn("Now check carefully:\nContent 1", res_fail1.content)
             self.assertTrue(delivery.has_steps_remaining)
 
             # Advance to second step section
@@ -166,7 +166,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             self.assertFalse(res2.is_terminated)
             self.assertIn("High-level summary", res2.content)
             self.assertIn("Step 2", res2.content)
-            self.assertIn("Content 2", res2.content)
+            self.assertIn("Now check carefully:\nContent 2", res2.content)
             self.assertFalse(delivery.has_steps_remaining)
 
             # Subsequent advance when exhausted produces None

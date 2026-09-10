@@ -14,6 +14,7 @@ from lib.model_config import ModelConfig
 from lib.runner_logger import LogEvent, RunnerLogger
 from lib.tool_provider import (
     ActualParameterBindings,
+    FollowUpToolCall,
     Parameter,
     Response,
     Tool,
@@ -33,6 +34,7 @@ class MockModelConfig:
     max_tokens: Optional[int] = None
     is_step_mode = False
     is_startup_reads = False
+    inject_followups = False
 
 
 class MockLogger:
@@ -676,6 +678,98 @@ class AgentRunnerImplTest(unittest.TestCase):
             self.assertIn("diverged at msg 0", req_events[1].summary)
             self.assertIn("Divergence detected at message index 0:", req_events[1].transcript_representation)
             self.assertIn("Content changed", req_events[1].transcript_representation)
+
+    @patch("lib.agent_runner_impl.OpenAI")
+    def test_follow_up_tool_call_dispatched_when_inject_followups_enabled(self, mock_openai_cls: MagicMock) -> None:
+        """CUJ: Dispatching follow-up tool call with synthetic assistant invocation when inject_followups is True."""
+        self.model_cfg.inject_followups = True
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        tc = DummyToolCall(id="call_initial", name="initial_tool", arguments="{}")
+        comp = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc]))])
+        mock_client.chat.completions.create.return_value = comp
+
+        follow_up = FollowUpToolCall(
+            tool_name="followup_tool",
+            wire_parameter_bindings=WireParameterBindings(bindings=set()),
+        )
+        self.tool_mgr.responses["initial_tool"] = Response(
+            is_failed=False,
+            is_terminated=False,
+            content="Initial tool executed.",
+            follow_up_tool_call=follow_up,
+        )
+        self.tool_mgr.responses["followup_tool"] = Response(
+            is_failed=False,
+            is_terminated=True,
+            content="Followup tool executed.",
+        )
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            runner = scope.get_singleton(AgentRunner)
+            outcome = runner.run()
+
+            # Requirement: When configured by model config to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool through the tool manager, appending a synthetic assistant invocation and the resulting follow-up response to the conversation history immediately following the originating response.
+            # Requirement: [AgentRunner] The agent runner can dispatch follow-up tool calls specified by tool responses through the tool manager, appending an antecedent synthetic assistant tool invocation message and the follow-up tool response to the conversation history immediately following the originating response.
+            self.assertTrue(outcome.is_success)
+            self.assertTrue(outcome.response.is_terminated)
+            self.assertEqual(outcome.response.content, "Followup tool executed.")
+            # Both tools should have been executed
+            executed_names = [e[0] for e in self.tool_mgr.executions]
+            self.assertEqual(executed_names, ["initial_tool", "followup_tool"])
+
+            # Verify conversation history sequence:
+            # 1. assistant tool call message (initial_tool)
+            # 2. tool response message (initial_tool)
+            # 3. synthetic assistant tool call message (followup_tool)
+            # 4. tool response message (followup_tool)
+            self.assertEqual(len(self.history.messages), 4)
+            self.assertEqual(self.history.messages[0].role, "assistant")
+            self.assertEqual(self.history.messages[1].role, "tool")
+            self.assertEqual(self.history.messages[1].content, "Initial tool executed.")
+            self.assertEqual(self.history.messages[2].role, "assistant")
+            self.assertEqual(self.history.messages[2].tool_name, "followup_tool")
+            self.assertEqual(self.history.messages[3].role, "tool")
+            self.assertEqual(self.history.messages[3].content, "Followup tool executed.")
+
+    @patch("lib.agent_runner_impl.OpenAI")
+    def test_follow_up_tool_call_not_dispatched_when_inject_followups_disabled(self, mock_openai_cls: MagicMock) -> None:
+        """CUJ: Follow-up tool call is ignored when inject_followups is False."""
+        self.model_cfg.inject_followups = False
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        tc1 = DummyToolCall(id="call_initial", name="initial_tool", arguments="{}")
+        comp1 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc1]))])
+        tc2 = DummyToolCall(id="call_finish", name="finish_tool", arguments="{}")
+        comp2 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc2]))])
+        mock_client.chat.completions.create.side_effect = [comp1, comp2]
+
+        follow_up = FollowUpToolCall(
+            tool_name="followup_tool",
+            wire_parameter_bindings=WireParameterBindings(bindings=set()),
+        )
+        self.tool_mgr.responses["initial_tool"] = Response(
+            is_failed=False,
+            is_terminated=False,
+            content="Initial tool executed.",
+            follow_up_tool_call=follow_up,
+        )
+        self.tool_mgr.responses["finish_tool"] = Response(
+            is_failed=False,
+            is_terminated=True,
+            content="Finished.",
+        )
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            runner = scope.get_singleton(AgentRunner)
+            outcome = runner.run()
+
+            self.assertTrue(outcome.is_success)
+            # followup_tool was NOT dispatched automatically
+            executed_names = [e[0] for e in self.tool_mgr.executions]
+            self.assertEqual(executed_names, ["initial_tool", "finish_tool"])
 
 
 if __name__ == "__main__":

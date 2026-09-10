@@ -35,4 +35,6 @@ Using model config ext, the model config loads execution parameters and authenti
 
 - Whether the agent should perform startup reads to inspect declared files at session start.
 
+- Whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
+
 When the target module is absent, execution parameters and authentication credentials fall back to ambient environment variables and standard defaults.

@@ -23,7 +23,7 @@ The sandbox assembly aggregates the following implementation components:
 
 - The sandbox file editor implementation from sandbox_file_editor_impl, closing the sandbox file editor interface to provide text replacement and line update tools with template materialization.
 
-- The sandbox run control implementation from sandbox_run_control_impl, closing the sandbox run control interface to provide advance, fail, and blame execution control tools with sequential verification checks.
+- The sandbox run control implementation from sandbox_run_control_impl, closing the sandbox run control interface to provide advance, finish, fail, and blame execution control tools with sequential verification checks.
 
 - The sandbox guide delivery implementation from sandbox_guide_delivery_impl, closing the sandbox guide delivery interface to parse markdown instructions and deliver progressive milestone steps.
 

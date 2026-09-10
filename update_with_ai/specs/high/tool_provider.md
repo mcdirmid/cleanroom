@@ -28,6 +28,8 @@ A tool can be *executed* directly with a set of *actual parameter bindings*, whi
 
 - If a previous conversation response content should be superceded by this execution, a textual *suppression key* identifying that response.
 
+- If there is a known tool that the agent should always call after this tool execution, a *follow-up tool call* specifying a tool name and wire parameter bindings of that tool.
+
 Direct tool execution with actual parameter bindings is primarily used by components when software needs to invoke an action directly (such as executing a read tool to inject startup context).
 
 The *tool manager* is an agent session service that maintains tools for an agent session. Tools can be *installed* so they are available during the session, and it is assumed that all installed tools have unique names. At the direction of a model during an agent turn, the tool manager *executes* tools by name with *wire parameter bindings* (mapping parameter names to values of their wire types), that, if mappings are successfully resolved, produces the same response as executing the tool directly. The tool manager also exposes *installed tools* to inform the model of what tools can be executed.

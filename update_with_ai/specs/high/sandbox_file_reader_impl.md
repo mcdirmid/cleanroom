@@ -17,7 +17,7 @@ The read manager unconditionally installs the read tool into the tool manager fo
 
 The read tool is named `read_file`, accepting a file alias *file* parameter and a boolean *line numbers* parameter that must be true when reading read-write files and false or omitted when reading read-only files. The read tool reads file content using filesystem ext at the host path formed from the alias manager workspace root and the bound file workspace path. Successful read tool execution requires:
 
-- Requesting line numbers when reading a read-write file, and omitting line numbers when reading a read-only file; violating either requirement causes execution to fail, and reminds the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files.
+- Requesting line numbers when reading a read-write file, and omitting line numbers when reading a read-only file; violating either requirement causes execution to fail, reminds the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files, and specifies a follow-up execution of the read tool on the file with line numbers requested for a read-write file and line numbers omitted for a read-only file.
 
 - A bound file. If an unbound file is supplied, execution fails with a response guiding agent recovery, and reminds the agent that only declared files can be inspected. This response lists available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead.
 

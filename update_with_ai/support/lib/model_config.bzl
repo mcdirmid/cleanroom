@@ -14,6 +14,7 @@ the repository:
         temperature = "0.7",       # float written as a string
         timeout_seconds = "100.0", # float written as a string (attr name avoids Bazel's reserved `timeout`)
         session_start_reads = True,  # optional; defaults to enabled
+        inject_followups = True,     # optional; defaults to enabled
         # No api_key attribute: API keys are never stored in Bazel or in
         # version control. api_key_env (optional) names the exact environment
         # variable holding this config's API key, e.g. "OPENAI_API_KEY" for a
@@ -77,13 +78,14 @@ def _model_config_impl(ctx):
         "max_tokens": max_tokens,
         "session_start_reads": ctx.attr.session_start_reads,
         "step_sections": ctx.attr.step_sections,
+        "inject_followups": ctx.attr.inject_followups,
     }
 
     # Python module: json-encoded strings are valid Python string literals.
     entries = []
     for key in ("label", "name", "model", "base_url", "api_key_env",
                 "max_iterations", "temperature", "timeout", "max_tokens",
-                "session_start_reads", "step_sections"):
+                "session_start_reads", "step_sections", "inject_followups"):
         entries.append('    "{}": {},'.format(key, _py_literal(config[key])))
 
     py_content = "\n".join(
@@ -145,6 +147,11 @@ _model_config = rule(
                 + "advance that passed verification (the guide is then not readable "
                 + "and reaches the agent only through advance outputs). Defaults to "
                 + "enabled.",
+        ),
+        "inject_followups": attr.bool(
+            default = True,
+            doc = "Whether the agent should automatically execute follow-up tool calls "
+                + "specified by tool responses. Defaults to enabled.",
         ),
         "temperature": attr.string(
             default = "0.0",

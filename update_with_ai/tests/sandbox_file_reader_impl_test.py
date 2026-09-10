@@ -219,13 +219,18 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             bindings2 = ActualParameterBindings(
                 bindings={(read_tool.file_alias_parameter, self.ro_file), (read_tool.line_numbers_parameter, True)}
             )
-            # Requirement: Executing the read tool fails if line numbers are requested when reading a read-only file, and reminds the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files.
+            # Requirement: Executing the read tool fails if line numbers are requested when reading a read-only file, reminding the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files, and specifying a follow-up execution of the read tool on the file with line numbers omitted.
             resp2 = read_tool.execute_tool(bindings2)
             self.assertTrue(resp2.is_failed)
             self.assertEqual(
                 resp2.reminder,
                 "Line numbers must be requested when reading read-write files and omitted when reading read-only files.",
             )
+            self.assertIsNotNone(resp2.follow_up_tool_call)
+            assert resp2.follow_up_tool_call is not None
+            self.assertEqual(resp2.follow_up_tool_call.tool_name, "read_file")
+            bindings2_dict = dict(resp2.follow_up_tool_call.wire_parameter_bindings.bindings)
+            self.assertEqual(bindings2_dict, {"file": self.ro_file.short_name})
 
             # 3. Read-write with line_numbers=True -> succeeds with line numbers
             bindings3 = ActualParameterBindings(
@@ -241,13 +246,18 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             bindings4 = ActualParameterBindings(
                 bindings={(read_tool.file_alias_parameter, self.rw_file), (read_tool.line_numbers_parameter, False)}
             )
-            # Requirement: Executing the read tool fails if line numbers are not requested when reading a read-write file, and reminds the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files.
+            # Requirement: Executing the read tool fails if line numbers are not requested when reading a read-write file, reminding the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files, and specifying a follow-up execution of the read tool on the file with line numbers requested.
             resp4 = read_tool.execute_tool(bindings4)
             self.assertTrue(resp4.is_failed)
             self.assertEqual(
                 resp4.reminder,
                 "Line numbers must be requested when reading read-write files and omitted when reading read-only files.",
             )
+            self.assertIsNotNone(resp4.follow_up_tool_call)
+            assert resp4.follow_up_tool_call is not None
+            self.assertEqual(resp4.follow_up_tool_call.tool_name, "read_file")
+            bindings4_dict = dict(resp4.follow_up_tool_call.wire_parameter_bindings.bindings)
+            self.assertEqual(bindings4_dict, {"file": self.rw_file.short_name, "line_numbers": True})
 
     def test_read_tool_unbound_files(self) -> None:
         """CUJ: Handling unbound file requests (guide vs unknown files)."""

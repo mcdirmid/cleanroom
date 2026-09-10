@@ -37,6 +37,7 @@ class BazelModelConfigImplTest(unittest.TestCase):
             "MODEL_CONVERSATION_LIMIT",
             "STEP_MODE",
             "STARTUP_READS",
+            "INJECT_FOLLOWUPS",
             "RUNFILES_DIR",
             "BAZEL_RUNFILES",
             "BUILD_WORKSPACE_DIRECTORY",
@@ -71,6 +72,9 @@ class BazelModelConfigImplTest(unittest.TestCase):
             # Requirement: The model config provides whether the agent should perform startup reads to inspect declared files at session start from the target module.
             # Requirement: [ModelConfig] The model config provides whether the agent should perform startup reads to inspect declared files at session start.
             self.assertTrue(cfg.is_startup_reads)
+            # Requirement: The model config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
+            # Requirement: [ModelConfig] The model config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
+            self.assertTrue(cfg.inject_followups)
             # Requirement: The model config provides the temperature specifying the sampling temperature for model requests resolved from the target module.
             # Requirement: [ModelConfig] The model config provides a temperature specifying the sampling temperature for model requests.
             self.assertEqual(cfg.temperature, 0.0)
@@ -91,6 +95,7 @@ class BazelModelConfigImplTest(unittest.TestCase):
         os.environ["MODEL_MAX_TOKENS"] = "4096"
         os.environ["STEP_MODE"] = "false"
         os.environ["STARTUP_READS"] = "0"
+        os.environ["INJECT_FOLLOWUPS"] = "false"
         sys.argv = ["script.py"]
 
         reg = LifecycleRegistry()
@@ -116,6 +121,8 @@ class BazelModelConfigImplTest(unittest.TestCase):
             self.assertFalse(cfg.is_step_mode)
             # Requirement: The model config provides whether the agent should perform startup reads to inspect declared files at session start from the target module.
             self.assertFalse(cfg.is_startup_reads)
+            # Requirement: The model config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
+            self.assertFalse(cfg.inject_followups)
 
     def test_target_module_resolution_model_config_target(self) -> None:
         """CUJ: Resolving configuration from target module file via MODEL_CONFIG_TARGET."""
@@ -133,6 +140,7 @@ class BazelModelConfigImplTest(unittest.TestCase):
                 "max_tokens": 4096,
                 "step_sections": False,
                 "session_start_reads": False,
+                "inject_followups": False,
             }
             with open(cfg_file, "w", encoding="utf-8") as f:
                 json.dump(data, f)
@@ -165,6 +173,8 @@ class BazelModelConfigImplTest(unittest.TestCase):
                 self.assertFalse(cfg.is_step_mode)
                 # Requirement: The model config provides whether the agent should perform startup reads to inspect declared files at session start from the target module.
                 self.assertFalse(cfg.is_startup_reads)
+                # Requirement: The model config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
+                self.assertFalse(cfg.inject_followups)
 
     def test_target_module_resolution_agent_config_target(self) -> None:
         """CUJ: Resolving configuration from target module file via AGENT_CONFIG_TARGET."""

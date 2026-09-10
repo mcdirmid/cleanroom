@@ -31,3 +31,5 @@ The *model config* is a system service that provides execution parameters for la
 - Whether the agent should use *step mode* to communicate a guide to the agent progressively.
 
 - Whether the agent should perform *startup reads* to inspect declared files at session start.
+
+- Whether the agent should *inject followups* to execute follow-up tool calls specified by tool responses.

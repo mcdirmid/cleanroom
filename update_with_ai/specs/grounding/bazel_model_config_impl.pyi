@@ -177,3 +177,21 @@ GROUNDING_ARGUMENT:
 - Loaded from external data source: target configuration module specified by MODEL_CONFIG_TARGET, AGENT_CONFIG_TARGET, or --config command-line argument via model_config_ext.
 """
         ...
+
+    @property
+    @override
+    def inject_followups(self) -> bool:
+        """
+PURPOSE:
+Indicates whether the agent should inject followups to execute follow-up tool calls specified by tool responses
+
+FRESH_REQUIREMENTS:
+- The model config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
+
+INHERITED_REQUIREMENTS:
+- [ModelConfig] The model config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
+
+GROUNDING_ARGUMENT:
+- Loaded from external data source: target configuration module specified by MODEL_CONFIG_TARGET, AGENT_CONFIG_TARGET, or --config command-line argument via model_config_ext.
+"""
+        ...

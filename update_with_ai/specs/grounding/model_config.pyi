@@ -114,3 +114,14 @@ FRESH_REQUIREMENTS:
 - The model config provides whether the agent should perform startup reads to inspect declared files at session start.
 """
         ...
+
+    @property
+    def inject_followups(self) -> bool:
+        """
+PURPOSE:
+Indicates whether the agent should inject followups to execute follow-up tool calls specified by tool responses
+
+FRESH_REQUIREMENTS:
+- The model config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
+"""
+        ...

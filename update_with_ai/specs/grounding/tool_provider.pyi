@@ -340,13 +340,40 @@ Set mapping parameter names to values of their wire types
 
 @dataclass(frozen=True)
 @data_type
+class FollowUpToolCall:
+    """
+PURPOSE:
+Specifies a tool name and wire parameter bindings of a tool that the agent should call after this tool execution
+"""
+
+    def __init__(self, tool_name: str, wire_parameter_bindings: WireParameterBindings) -> None:
+        ...
+
+    @property
+    def tool_name(self) -> str:
+        """
+PURPOSE:
+Identifies the tool to be called
+"""
+        ...
+
+    @property
+    def wire_parameter_bindings(self) -> WireParameterBindings:
+        """
+PURPOSE:
+Maps parameter names to values of their wire types for the follow-up tool
+"""
+        ...
+
+@dataclass(frozen=True)
+@data_type
 class Response:
     """
 PURPOSE:
 Communicates tool execution results to the agent
 """
 
-    def __init__(self, is_failed: bool, is_terminated: bool, content: str, reminder: Optional[str]=..., suppression_key: Optional[str]=...) -> None:
+    def __init__(self, is_failed: bool, is_terminated: bool, content: str, reminder: Optional[str]=..., suppression_key: Optional[str]=..., follow_up_tool_call: Optional[FollowUpToolCall]=...) -> None:
         ...
 
     @property
@@ -386,6 +413,14 @@ Advises the agent on future actions and constraints
         """
 PURPOSE:
 Identifies a previous conversation response content to be superseded by this execution
+"""
+        ...
+
+    @property
+    def follow_up_tool_call(self) -> Optional[FollowUpToolCall]:
+        """
+PURPOSE:
+Specifies a tool name and wire parameter bindings of a follow-up tool to execute
 """
         ...
 
