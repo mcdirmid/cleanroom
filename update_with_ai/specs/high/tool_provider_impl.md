@@ -14,7 +14,9 @@ Autonomous agent workflows require executing tools with wire-type arguments supp
 
 The tool manager maintains tools installed during an agent session, and exposes installed tools to inform the agent of what tools it can execute.
 
-Executing a tool by name with wire parameter bindings converts wire arguments into actual parameter bindings and delegates execution to the matching tool. Execution fails if:
+Executing a tool by name with wire parameter bindings converts wire arguments into actual parameter bindings and delegates execution to the matching tool.
+
+Execution fails if:
 
 - No installed tool matches the requested name.
 

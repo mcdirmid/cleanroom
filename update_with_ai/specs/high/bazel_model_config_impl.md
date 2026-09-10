@@ -15,7 +15,9 @@ Connecting declarative build targets to concrete language model parameters requi
 
 The model config resolves the target configuration from the `MODEL_CONFIG_TARGET` environment variable, the `AGENT_CONFIG_TARGET` environment variable, or the `--config` command-line argument, defaulting to the standard `//model_configs:default` target.
 
-Using model config ext, the model config loads execution parameters and authentication credentials for language model agent runs from the target module. The model config provides:
+The model config loads execution parameters and authentication credentials for language model agent runs from the target module.
+
+The model config provides:
 
 - The model name designating the target model.
 
@@ -29,7 +31,7 @@ Using model config ext, the model config loads execution parameters and authenti
 
 - The temperature specifying the sampling temperature for model requests.
 
-- The max tokens bound resolved from the target module, or absent if unconstrained.
+- The max tokens bound resolved from the target module when token generation is constrained.
 
 - Whether the agent should use step mode to communicate a guide to the agent progressively.
 

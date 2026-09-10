@@ -13,9 +13,9 @@ Permissive or forgiving tool implementations allow agents to drift into ambiguou
 
 ## Types and Behavior
 
-The read manager unconditionally installs the read tool into the tool manager for the agent session and never installs the search tool, obtaining declared read-only files, read-write files, and the guide file, when configured, from the node config.
+The read manager provides the read tool for the agent session and omits the search tool, obtaining declared read-only files, read-write files, and the guide file, when configured, from the session node configuration.
 
-The read tool is named `read_file`, accepting a file alias *file* parameter and a boolean *line numbers* parameter that must be true when reading read-write files and false or omitted when reading read-only files. The read tool reads file content using filesystem ext at the host path formed from the alias manager workspace root and the bound file workspace path. Successful read tool execution requires:
+The read tool is named `read_file`, accepting a file alias *file* parameter and a boolean *line numbers* parameter that must be true when reading read-write files and false or omitted when reading read-only files. The read tool reads file content from the filesystem at the host path formed from the alias manager workspace root and the bound file workspace path. Successful read tool execution requires:
 
 - Requesting line numbers when reading a read-write file, and omitting line numbers when reading a read-only file; violating either requirement causes execution to fail, reminds the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files, and specifies a follow-up execution of the read tool on the file with line numbers requested for a read-write file and line numbers omitted for a read-only file.
 
@@ -25,4 +25,4 @@ Read tool responses for read-write files carry a suppression key matching the fi
 
 The *regex pattern converter* is a parameter converter for regex patterns that converts a wire type string into a regex pattern.
 
-The search tool is named `search_files`, accepting a regex pattern *pattern* parameter using the regex pattern converter. The search tool searches for regex pattern matches across the read-only files and read-write files using filesystem ext. Search tool execution fails when given an invalid regex pattern. On successful execution, the response provides matched line contents and line numbers for read-only files, sanitized by the alias manager to mask host paths. For read-write files, the response only says that matches were found but cannot be displayed to prevent unanchored edits.
+The search tool is named `search_files`, accepting a regex pattern *pattern* parameter using the regex pattern converter. The search tool searches for regex pattern matches across the read-only files and read-write files in the filesystem. Search tool execution fails when given an invalid regex pattern. On successful execution, the response provides matched line contents and line numbers for read-only files, sanitized by the alias manager to mask host paths. For read-write files, the response only says that matches were found but cannot be displayed to prevent unanchored edits.

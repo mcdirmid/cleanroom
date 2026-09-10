@@ -32,7 +32,7 @@ FRESH_REQUIREMENTS:
 - The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies.
 
 INHERITED_REQUIREMENTS:
-- [NodeConfig] The node config provides the session's read-only files restricted to inspection.
+- [NodeConfig] The node config provides the session read-only files restricted to inspection.
 
 GROUNDING_ARGUMENT:
 - Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), extracting direct dependencies and resolving the transitive closure of star dependencies across manifests via the manifest loader, and constructing ReadOnlyFile instances.
@@ -50,7 +50,7 @@ FRESH_REQUIREMENTS:
 - The node config exposes declared source files and silent source files as read-write files.
 
 INHERITED_REQUIREMENTS:
-- [NodeConfig] The node config provides the session's read-write files permitted for inspection and modification.
+- [NodeConfig] The node config provides the session read-write files permitted for inspection and modification.
 
 GROUNDING_ARGUMENT:
 - Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), extracting declared source files and silent source files, and constructing ReadWriteFile instances.
@@ -86,7 +86,7 @@ FRESH_REQUIREMENTS:
 - The node config exposes the declared guide target as the guide file when step mode is active.
 
 INHERITED_REQUIREMENTS:
-- [NodeConfig] The node config provides the session's guide file when progressive guidance is active, or absent if no guide file is configured.
+- [NodeConfig] The node config provides the session guide file when progressive guidance is configured.
 
 GROUNDING_ARGUMENT:
 - Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), constructing an UnboundFile for the declared guide target when step mode is active.
@@ -104,7 +104,7 @@ FRESH_REQUIREMENTS:
 - The node config exposes the declared guide target as the task guide when step mode is active.
 
 INHERITED_REQUIREMENTS:
-- [NodeConfig] The node config provides the session's guide for progressive guidance, or absent if no guide is configured.
+- [NodeConfig] The node config provides the session guide for progressive guidance when progressive guidance is configured.
 
 GROUNDING_ARGUMENT:
 - Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), reading and parsing the guide markdown via sandbox_guide_delivery when step mode is active.
@@ -140,7 +140,7 @@ FRESH_REQUIREMENTS:
 - The node config exposes declared verification checks from the manifest verification command.
 
 INHERITED_REQUIREMENTS:
-- [NodeConfig] The node config provides the session's verification checks evaluated during session advancement.
+- [NodeConfig] The node config provides the session verification checks evaluated during session advancement.
 
 GROUNDING_ARGUMENT:
 - Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), constructing a CommandVerificationCheck from the declared verify command string when present.

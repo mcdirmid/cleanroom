@@ -16,7 +16,7 @@ An *identity parameter converter* is a polymorphic parameter converter that work
 
 A *tool* is a polymorphic service implemented by a component to define an executable action. A tool has a *name* (used to identify the tool), a *description* (which informs the model why and when to use the tool), and *parameters*. A *parameter* describes an input accepted by a tool, having a *name* and a *description* (guiding how arguments are supplied), a *parameter converter*, and can be *required* to indicate that an argument must be supplied for tool execution. It is assumed that all parameters of a tool have unique names.
 
-A tool can be *executed* directly with a set of *actual parameter bindings*, which map parameters to resolved values of their actual types, producing a *response* that communicates the following:
+A tool can be *executed* directly with a set of *actual parameter bindings*, which map parameters to resolved values of their actual types. Executing a tool produces a *response* communicating:
 
 - Whether tool execution *failed*.
 
@@ -24,7 +24,7 @@ A tool can be *executed* directly with a set of *actual parameter bindings*, whi
 
 - Textual *content* that includes underlying tool execution output. When tool execution fails, the content should include error and diagnostic messages along with guidance on how to execute the tool correctly.
 
-- A textual *reminder* that advises the agent on future actions and constraints, or absent when no reminder is provided.
+- A textual *reminder* advising the agent on future actions and constraints when guidance is provided.
 
 - If a previous conversation response content should be superceded by this execution, a textual *suppression key* identifying that response.
 

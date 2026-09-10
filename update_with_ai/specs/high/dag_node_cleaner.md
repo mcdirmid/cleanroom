@@ -16,4 +16,4 @@ A *node cleaner* is a polymorphic service that cleans an individual node in a da
 
 A node cleaner can *clean* a dirty node, communicating whether processing should *continue*. Processing cannot continue only if a failure occurs while cleaning the node that cannot be handled by cleaning any other node; otherwise, processing continues.
 
-The *cleaned node* is an agent session service that presents the node from dag storage currently being cleaned in the agent session.
+The *cleaned node* is an agent session service that presents the node currently being cleaned in the agent session.

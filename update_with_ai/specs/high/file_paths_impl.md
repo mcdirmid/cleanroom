@@ -13,7 +13,7 @@ Accurate path validation and resolution require consulting the physical host ope
 
 ## Types and Behavior
 
-The file paths implementation is a system service implementing the file paths interface.
+The file paths service resolves and normalizes host paths, workspace paths, and workspace roots.
 
 Host paths encapsulate non-empty path strings. Absolute paths and directory paths validate that path strings are absolute according to the host filesystem, raising a failure when relative, and normalize path representations into encapsulated records.
 

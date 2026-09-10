@@ -341,7 +341,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=self.registry) as scope:
             cleaner = scope.get_singleton(AgentNodeCleaner)
-            # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when step mode is active, or identifying the guide file by its file alias when step mode is inactive.
+            # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when progressive guidance is active, or identifying the guide file by its file alias when progressive guidance is inactive.
             _ = cleaner.clean_node(node)
 
             history_contents = [m.content for m in self.history.messages]
@@ -362,7 +362,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=self.registry) as scope:
             cleaner = scope.get_singleton(AgentNodeCleaner)
-            # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when step mode is active, or identifying the guide file by its file alias when step mode is inactive.
+            # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when progressive guidance is active, or identifying the guide file by its file alias when progressive guidance is inactive.
             _ = cleaner.clean_node(node)
 
             history_contents = [m.content for m in self.history.messages]

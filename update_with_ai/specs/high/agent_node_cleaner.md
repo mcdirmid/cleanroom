@@ -12,12 +12,12 @@ Autonomous graph execution requires cleaning dirty nodes through targeted agent 
 
 ## Types and Behavior
 
-The *agent node cleaner* is a system service that is a node cleaner from dag node cleaner.
+The *agent node cleaner* is a system service that is a node cleaner.
 
-An agent node cleaner cleans a dirty node from dag storage within an agent session phase. Cleaning resolves the dirty node by:
+An agent node cleaner cleans a dirty node within an agent session phase. Cleaning resolves the dirty node by:
 
-- Producing *change messages* from dag node cleaner when workspace file modifications occur and task verification passes.
+- Producing change messages when workspace file modifications occur and task verification passes.
 
-- Producing *feedback messages* addressed to dependency nodes when blame is signaled.
+- Producing feedback messages addressed to dependency nodes when blame is signaled.
 
 - Leaving the node clean with no produced messages when cleaning succeeds without workspace file modifications.

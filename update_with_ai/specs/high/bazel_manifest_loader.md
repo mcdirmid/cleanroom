@@ -14,11 +14,13 @@ Target execution requires resolving build metadata into executable nodes and vir
 
 A *manifest* is a build artifact written by the build system carrying node reference fields and file path fields for a workspace target, including target node label, task prompt, declared source file, silent source files, template, direct dependencies, silent dependencies, star dependencies, feedback dependencies, guide target, and verification check.
 
-The *bazel manifest loader* is a system service that resolves manifests into graph structures and node configurations. The bazel manifest loader:
+The *bazel manifest loader* is a system service that resolves manifests into graph structures and node configurations.
 
-- Retrieves the manifest for a node in dag storage.
+The bazel manifest loader:
 
-- Resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations from node config using the bazel node identifier utility from bazel node id utils, populating the bazel graph storage from bazel graph storage.
+- Retrieves the manifest for a node.
+
+- Resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using the bazel node identifier utility, populating the bazel graph storage.
 
 - Resolves declared source files and templates from manifests into read-write files and templates in a node configuration.
 
@@ -26,12 +28,12 @@ The *bazel manifest loader* is a system service that resolves manifests into gra
 
 - Resolves declared direct dependencies into read-only files, and star dependencies into transitive read-only file closures in a node configuration.
 
-- Resolves declared silent dependencies as non-propagating dependencies in dag storage while excluding their source files from read-only files.
+- Resolves declared silent dependencies as non-propagating dependencies while excluding their source files from read-only files.
 
 - Resolves declared guide targets into task guides in a node configuration.
 
 - Resolves declared feedback dependencies into blame targets mapped to their owning dependency nodes in a node configuration.
 
-- Generates node configurations with minimally disambiguated file aliases from file alias for target nodes.
+- Generates node configurations with minimally disambiguated file aliases for target nodes.
 
 - Synthesizes definitions for declared dependencies lacking explicit manifests.

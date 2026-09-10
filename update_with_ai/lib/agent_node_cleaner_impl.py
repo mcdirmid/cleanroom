@@ -52,7 +52,7 @@ class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
             # Requirement: The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content, and paired startup tool executions from the sandbox.
             if defn is not None and defn.task_prompt:
                 task_prompt = str(defn.task_prompt)
-                # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when step mode is active, or identifying the guide file by its file alias when step mode is inactive.
+                # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when progressive guidance is active, or identifying the guide file by its file alias when progressive guidance is inactive.
                 n_cfg = session.get_singleton(node_config.NodeConfig)
                 if n_cfg.guide_file is not None:
                     m_cfg = session.get_singleton(model_config.ModelConfig)

@@ -12,10 +12,12 @@ Multi-step workflows require deterministic node addressing and durable state sto
 
 ## Types and Behavior
 
-A *node directory* is a workspace path from file paths addressing the workspace package directory of a node from dag storage. A node directory is constructed exclusively through service operations rather than direct public constructors.
+A *node directory* is a workspace path addressing the workspace package directory of a node. A node directory is constructed exclusively through service operations rather than direct public constructors.
 
-The *bazel node identifier utility* is a system service that normalizes Bazel target labels and resolves package locations. The bazel node identifier utility:
+The *bazel node identifier utility* is a system service that normalizes Bazel target labels and resolves package locations.
 
-- *Normalizes* an arbitrary Bazel target identifier string into a canonical node in dag storage.
+The bazel node identifier utility:
+
+- *Normalizes* an arbitrary Bazel target identifier string into a canonical node.
 
 - *Extracts* a node directory from a node.

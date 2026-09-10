@@ -16,11 +16,13 @@ A *message* is an entry in an agent conversation, such as system instructions, a
 
 A *model request* is a formatted sequence of messages prepared for transmission to a language model.
 
-The *conversation history* is an agent session service that maintains chronological messages for an agent run. The conversation history:
+The *conversation history* is an agent session service that maintains chronological messages for an agent run.
+
+The conversation history:
 
 - Can be initialized with initial messages, including task instructions.
 
-- Can *append* messages and tool responses produced by tool execution in a tool provider.
+- Can *append* messages and tool responses produced by tool execution.
 
 - Stubs previous responses identified by a suppression key.
 

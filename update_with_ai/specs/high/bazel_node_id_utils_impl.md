@@ -13,6 +13,6 @@ Bazel targets can be addressed using apparent, repository-qualified, or shorthan
 
 ## Types and Behavior
 
-The bazel node identifier utility normalizes raw target labels from bazel target labels ext into canonical nodes in dag storage by stripping repository qualifiers and expanding omitted target names.
+The bazel node identifier utility normalizes raw target labels into canonical nodes by stripping repository qualifiers and expanding omitted target names.
 
-The bazel node identifier utility derives node directories from normalized nodes by extracting package directory paths relative to a workspace root from file paths.
+The bazel node identifier utility derives node directories from normalized nodes by extracting package directory paths relative to a workspace root.

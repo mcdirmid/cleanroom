@@ -16,20 +16,22 @@ A *cleaning pass* is an execution run that cleans dirty nodes across a target su
 
 A *build result* is the final outcome of a cleaning pass, reporting overall success or failure along with an execution summary.
 
-The *bazel runner* is a system service that executes topological build and cleaning passes across workspace nodes. The bazel runner:
+The *bazel runner* is a system service that executes topological build and cleaning passes across workspace nodes.
 
-- Resolves target manifests and loads workspace target graphs into dag storage using the bazel manifest loader from bazel manifest loader.
+The bazel runner:
 
-- Executes a cleaning pass over an acyclic subgraph rooted at a target node in dag storage.
+- Resolves target manifests and loads workspace target graphs into graph storage.
 
-- Cleans dirty nodes in topological order using the dag cleaner from dag cleaner and the node cleaner from dag node cleaner.
+- Executes a cleaning pass over an acyclic subgraph rooted at a target node.
 
-- Marks a target node dirty by injecting a non-triggering check change message from dag storage into its pending messages in dag storage.
+- Cleans dirty nodes in topological order using the dag cleaner and the node cleaner.
 
-- Injects a caller-supplied feedback message from dag storage into a target node.
+- Marks a target node dirty by injecting a non-triggering check change message into its pending messages.
 
-- Broadcasts a caller-supplied change message from dag storage from a node to all of its reverse dependencies.
+- Injects a caller-supplied feedback message into a target node.
 
-- Logs execution events to standard output and transcript files using the runner logger from runner logger.
+- Broadcasts a caller-supplied change message from a node to all of its reverse dependencies.
+
+- Logs execution events to standard output and transcript files using the runner logger.
 
 - Produces a build result upon pass completion.

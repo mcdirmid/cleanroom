@@ -14,9 +14,11 @@ Language models occasionally get trapped repeating identical tool calls or oscil
 
 A *loop reminder* is diagnostic feedback warning an agent of detected repetition. A *loop failure* is an outcome signaling that an agent session has failed due to unresolvable repetition.
 
-The *loop guard* is an agent session service that tracks repetitive execution patterns across turns. The loop guard:
+The *loop guard* is an agent session service that tracks repetitive execution patterns across turns.
 
-- Evaluates consecutive executions of identical tools and file edits in a tool provider.
+The loop guard:
+
+- Evaluates consecutive executions of identical tools and file edits.
 
 - Produces a loop reminder when consecutive repetitions reach a warning threshold.
 

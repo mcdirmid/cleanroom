@@ -17,10 +17,6 @@ A dag cleaner has an *execution limit* hardcoded to 500 that bounds the maximum 
 
 A dag cleaner cleans a target node by collecting all reachable dependencies from the node and executing them in dependency-first topological order.
 
-In each cleaning iteration, the dag cleaner visits reachable nodes in topological order. Visiting a node checks whether the node is dirty, not whether it is cleaned. A node is cleaned only if it is dirty and all of its dependencies are clean. When cleaning a dirty node:
-
-- The node cleaner is invoked to clean the node.
-
-- If the node cleaner communicates that processing cannot continue, cleaning halts.
+In each cleaning iteration, the dag cleaner visits reachable nodes in topological order. Visiting a node checks whether the node is dirty, not whether it is cleaned. A node is cleaned only if it is dirty and all of its dependencies are clean.
 
 Cleaning is bounded to prevent infinite loops. If visiting any node exceeds the execution limit, the dag cleaner halts with an unexpected failure. Cleaning succeeds when all reachable nodes in the subgraph are clean.

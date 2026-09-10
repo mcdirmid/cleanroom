@@ -12,13 +12,15 @@ Language model interactions require explicit connection coordinates, authorizati
 
 A *conversation limit* is a bound on the maximum number of model interaction turns permitted in an agent run.
 
-The *model config* is a system service that provides execution parameters for language model agent runs. The model config provides:
+The *model config* is a system service that provides execution parameters for language model agent runs.
+
+The model config provides:
 
 - A *model name* designating the target model.
 
-- A *base url* designating the remote model API endpoint address, or absent if default address resolution applies.
+- A *base url* designating the remote model API endpoint address when custom endpoint routing applies.
 
-- An *api key* providing authentication credentials, or absent if ambient environment credentials apply.
+- An *api key* providing authentication credentials when designated environment secrets apply.
 
 - A *timeout* specifying the maximum duration in seconds permitted for a model request.
 
@@ -26,7 +28,7 @@ The *model config* is a system service that provides execution parameters for la
 
 - A *temperature* specifying the sampling temperature for model requests.
 
-- A *max tokens* upper bound specifying the maximum number of response tokens permitted per request, or absent if unconstrained.
+- A *max tokens* upper bound specifying the maximum number of response tokens permitted per request when token generation is constrained.
 
 - Whether the agent should use *step mode* to communicate a guide to the agent progressively.
 

@@ -84,19 +84,19 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             cfg._blame_targets.add(ro)
 
             # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies.
-            # Requirement: [NodeConfig] The node config provides the session's read-only files restricted to inspection.
+            # Requirement: [NodeConfig] The node config provides the session read-only files restricted to inspection.
             self.assertIn(ro, cfg.read_only_files)
             # Requirement: The node config exposes declared source files and silent source files as read-write files.
-            # Requirement: [NodeConfig] The node config provides the session's read-write files permitted for inspection and modification.
+            # Requirement: [NodeConfig] The node config provides the session read-write files permitted for inspection and modification.
             self.assertIn(rw, cfg.read_write_files)
             # Requirement: The node config exposes templates mapping read-write files to initial file content.
             # Requirement: [NodeConfig] The node config provides templates mapping read-write files to initial file content.
             self.assertIn((rw, "template"), cfg.templates)
             # Requirement: The node config exposes the declared guide target as the guide file when step mode is active.
-            # Requirement: [NodeConfig] The node config provides the session's guide file when progressive guidance is active, or absent if no guide file is configured.
+            # Requirement: [NodeConfig] The node config provides the session guide file when progressive guidance is configured.
             self.assertEqual(cfg.guide_file, unbound)
             # Requirement: The node config exposes the declared guide target as the task guide when step mode is active.
-            # Requirement: [NodeConfig] The node config provides the session's guide for progressive guidance, or absent if no guide is configured.
+            # Requirement: [NodeConfig] The node config provides the session guide for progressive guidance when progressive guidance is configured.
             self.assertEqual(cfg.guide, guide)
             # Requirement: The node config exposes declared feedback dependencies as blame targets mapped to owning dependency nodes.
             # Requirement: [NodeConfig] The node config provides blame targets eligible for defect attribution.
@@ -108,7 +108,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             dummy_check = DummyCheck()
             cfg._verification_checks.append(dummy_check)
             # Requirement: The node config exposes declared verification checks from the manifest verification command.
-            # Requirement: [NodeConfig] The node config provides the session's verification checks evaluated during session advancement.
+            # Requirement: [NodeConfig] The node config provides the session verification checks evaluated during session advancement.
             self.assertIn(dummy_check, cfg.verification_checks)
 
     def test_alias_manager_converter_and_sanitization(self) -> None:
@@ -229,13 +229,13 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             alias_mgr = scope.get_singleton(AliasManager)
 
             # Requirement: The node config exposes declared source files and silent source files as read-write files.
-            # Requirement: [NodeConfig] The node config provides the session's read-write files permitted for inspection and modification.
+            # Requirement: [NodeConfig] The node config provides the session read-write files permitted for inspection and modification.
             rw_names = {f.short_name for f in cfg.read_write_files}
             self.assertIn("impl.py", rw_names)
             self.assertIn("internal.py", rw_names)
 
             # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies.
-            # Requirement: [NodeConfig] The node config provides the session's read-only files restricted to inspection.
+            # Requirement: [NodeConfig] The node config provides the session read-only files restricted to inspection.
             ro_names = {f.short_name for f in cfg.read_only_files}
             self.assertIn("dep_target.py", ro_names)
             self.assertIn("star_parent.py", ro_names)
@@ -247,7 +247,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             self.assertIn("dep_target.py", blame_names)
 
             # Requirement: The node config exposes declared verification checks from the manifest verification command.
-            # Requirement: [NodeConfig] The node config provides the session's verification checks evaluated during session advancement.
+            # Requirement: [NodeConfig] The node config provides the session verification checks evaluated during session advancement.
             self.assertEqual(len(cfg.verification_checks), 1)
             passed, diag = cfg.verification_checks[0].verify()
             self.assertTrue(passed)

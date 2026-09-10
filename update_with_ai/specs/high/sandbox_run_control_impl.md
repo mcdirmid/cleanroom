@@ -13,11 +13,11 @@ Autonomous agents reaching task completion require strict verification enforceme
 
 ## Types and Behavior
 
-The run controller unconditionally installs the finish tool and fail tool into the tool manager for the agent session, installs the advance tool only when guide step mode is active, and obtains configured blame targets and verification checks from the node config, installing the blame tool only when blame targets are configured. Verification checks exposed by the run controller include the session verification checks from node config.
+The run controller unconditionally provides the finish tool and fail tool for the agent session, provides the advance tool when guide step mode is active, and provides the blame tool when blame targets are configured. Verification checks exposed by the run controller include the session verification checks.
 
 Evaluation of verification checks is cached alongside the edit manager file update revision. Verification check execution is omitted and the cached result is reused whenever workspace files have not been updated since the previous evaluation as indicated by the file update revision. When the previous evaluation failed and workspace files have not been updated since, tool execution fails with the cached diagnostic output, reminding the agent that workspace files must be updated before proceeding.
 
-The advance tool is named `advance`, accepts no parameters, and shares a constant suppression key `advance`. The advance tool presents the guide summary from node config whether execution fails or succeeds. Executing the advance tool coordinates self-contained guide progression:
+The advance tool is named `advance`, accepts no parameters, and shares a constant suppression key `advance`. The advance tool presents the configured guide summary whether execution fails or succeeds. Executing the advance tool coordinates self-contained guide progression:
 
 - Passing verification advances guide delivery and delivers the next step section when guide steps remain.
 

@@ -12,18 +12,20 @@ Multi-step agent workflows execute under varying constraints—such as source is
 
 ## Types and Behavior
 
-The *node config* is an agent session service that exposes configuration parameters for the session execution environment. The node config provides:
+The *node config* is an agent session service that exposes configuration parameters for the session execution environment.
 
-- The session's *read-only files*, which are bound files from file alias restricted to inspection.
+The node config provides:
 
-- The session's *read-write files*, which are bound files permitted for inspection and modification.
+- The session read-only files, restricting bound files to inspection.
 
-- The session's *guide file*, which is an unbound file configured when progressive guidance is active, or absent if no guide file is configured.
+- The session read-write files, permitting bound files for inspection and modification.
 
-- The session's *templates*, mapping read-write files to initial file content from the edit manager.
+- The session guide file when progressive guidance is configured.
 
-- The session's *guide*, providing structured instructional text for progressive guidance from guide delivery when progressive guidance is active, or absent if no guide is configured.
+- The session templates, mapping read-write files to initial file content.
 
-- The session's *blame targets*, which are bound files owned by upstream dependency nodes eligible for defect attribution.
+- The session guide, providing structured instructional text when progressive guidance is configured.
 
-- The session's *verification checks*, which are verification checks evaluated during session advancement.
+- The session blame targets, which are bound files owned by upstream dependency nodes eligible for defect attribution.
+
+- The session verification checks evaluated during session advancement.

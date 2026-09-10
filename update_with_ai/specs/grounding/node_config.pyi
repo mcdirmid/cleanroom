@@ -18,7 +18,7 @@ PURPOSE:
 Bound files restricted to inspection
 
 FRESH_REQUIREMENTS:
-- The node config provides the session's read-only files restricted to inspection.
+- The node config provides the session read-only files restricted to inspection.
 """
         ...
 
@@ -29,7 +29,7 @@ PURPOSE:
 Bound files permitted for inspection and modification
 
 FRESH_REQUIREMENTS:
-- The node config provides the session's read-write files permitted for inspection and modification.
+- The node config provides the session read-write files permitted for inspection and modification.
 """
         ...
 
@@ -40,7 +40,7 @@ PURPOSE:
 Unbound file configured when progressive guidance is active
 
 FRESH_REQUIREMENTS:
-- The node config provides the session's guide file when progressive guidance is active, or absent if no guide file is configured.
+- The node config provides the session guide file when progressive guidance is configured.
 """
         ...
 
@@ -62,7 +62,7 @@ PURPOSE:
 Structured instructional text for progressive guidance
 
 FRESH_REQUIREMENTS:
-- The node config provides the session's guide for progressive guidance, or absent if no guide is configured.
+- The node config provides the session guide for progressive guidance when progressive guidance is configured.
 """
         ...
 
@@ -84,6 +84,6 @@ PURPOSE:
 Session verification checks evaluated during session advancement
 
 FRESH_REQUIREMENTS:
-- The node config provides the session's verification checks evaluated during session advancement.
+- The node config provides the session verification checks evaluated during session advancement.
 """
         ...

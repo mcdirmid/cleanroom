@@ -17,8 +17,8 @@ The bazel graph storage maintains node definitions, task prompts, dependencies, 
 
 A node in dag storage is dirty if it has messages explaining why it requires cleaning, or if its declared source file is missing from the workspace root.
 
-The bazel graph storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files using proto package store from update with ai proto ext.
+The bazel graph storage serializes pending messages and reverse dependencies for nodes into protobuf text format files using the proto package store.
 
-All nodes located within the same package directory resolved by the bazel node identifier utility from bazel node id utils share a common package message file named `.update_with_ai.textproto`. The bazel graph storage resolves the package directory against the workspace root from file paths to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
+All nodes located within the same package directory resolved by the bazel node identifier utility share a common package message file named `.update_with_ai.textproto`. The bazel graph storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
 
 When evaluating dependency propagation in the bazel graph storage, propagating dependencies exclude silent dependencies declared on a node.

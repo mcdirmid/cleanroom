@@ -15,24 +15,28 @@ Multi-turn agent execution within Bazel workspaces requires binding node-specifi
 
 The node config and alias manager realize session configuration and file alias resolution for the target node presented by the cleaned node using the bazel manifest loader.
 
-When initialized for an agent session, the node config and alias manager retrieve the active node from the cleaned node and load target manifests from the bazel manifest loader.
+When initialized for an agent session, the node config and alias manager retrieve the active node from the cleaned node and load target manifests.
 
-For the node config:
+The node config provides session parameters resolved from the target node manifest.
 
-- Exposes declared source files and templates from the manifest as the session's read-write files and templates in the node config, mapping read-write files to initial file content from the edit manager.
+The node config provides:
 
-- Exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files in the node config, excluding declared silent dependencies and their source files.
+- Declared source files and templates from the manifest as the session read-write files and templates, mapping read-write files to initial file content.
 
-- Exposes declared guide targets from the manifest as the guide file and task guide in the node config when step mode is active, or absent if no guide is configured.
+- Declared direct dependencies and transitive star dependencies resolved across dependency manifests as the session read-only files, excluding declared silent dependencies and their source files.
 
-- Exposes declared feedback dependencies from the manifest as blame targets mapped to their owning dependency nodes in dag storage.
+- Declared guide targets from the manifest as the guide file and task guide when step mode is active and guidance is configured.
 
-- Exposes declared verification checks from the manifest's verification command as the session's verification checks in the node config.
+- Declared feedback dependencies from the manifest as blame targets mapped to their owning dependency nodes.
 
-For the alias manager:
+- Declared verification checks from the manifest's verification command as the session verification checks.
+
+The alias manager maintains virtual file addressing and path masking for the active session.
+
+The alias manager:
 
 - Generates file aliases with minimal unambiguous short names for all accessible workspace files associated with the active node.
 
-- Implements parameter converter for the actual type file alias and wire type string, converting short names to matching file aliases, and producing unbound files when short names are unmapped.
+- Converts wire type strings to file aliases, matching short names to corresponding file aliases and producing unbound files when short names are unmapped.
 
 - Sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its minimal short name, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking.

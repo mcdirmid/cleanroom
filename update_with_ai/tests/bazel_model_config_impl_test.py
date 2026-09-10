@@ -55,10 +55,10 @@ class BazelModelConfigImplTest(unittest.TestCase):
             # Requirement: [ModelConfig] The model config provides a model name designating the target model.
             self.assertEqual(cfg.model_name, "gpt-4o")
             # Requirement: The model config provides the base url resolved from the target module.
-            # Requirement: [ModelConfig] The model config provides a base url designating the remote model API endpoint address, or absent if default address resolution applies.
+            # Requirement: [ModelConfig] The model config provides a base url designating the remote model API endpoint address when custom endpoint routing applies.
             self.assertIsNone(cfg.base_url)
             # Requirement: The model config reads authentication credentials from the designated environment variable specified in the target module.
-            # Requirement: [ModelConfig] The model config provides an api key providing authentication credentials, or absent if ambient environment credentials apply.
+            # Requirement: [ModelConfig] The model config provides an api key providing authentication credentials when designated environment secrets apply.
             self.assertIsNone(cfg.api_key)
             # Requirement: The model config provides the timeout resolved from the target module.
             # Requirement: [ModelConfig] The model config provides a timeout specifying the maximum duration in seconds permitted for a model request.
@@ -79,7 +79,7 @@ class BazelModelConfigImplTest(unittest.TestCase):
             # Requirement: [ModelConfig] The model config provides a temperature specifying the sampling temperature for model requests.
             self.assertEqual(cfg.temperature, 0.0)
             # Requirement: The model config provides the max tokens bound resolved from the target module.
-            # Requirement: [ModelConfig] The model config provides a max tokens upper bound specifying the maximum number of response tokens permitted per request, or absent if unconstrained.
+            # Requirement: [ModelConfig] The model config provides a max tokens upper bound specifying the maximum number of response tokens permitted per request when token generation is constrained.
             self.assertIsNone(cfg.max_tokens)
 
     def test_environment_overrides(self) -> None:

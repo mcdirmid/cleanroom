@@ -14,9 +14,11 @@ Language models often write change descriptions that do not match actual modific
 
 A *diff summary* is a formatted representation of line changes across modified files. A *net change* is an observable difference between a file's initial content and its current content.
 
-The *change summary validator* is an agent session service that is a verification check from sandbox run control. The change summary validator:
+The *change summary validator* is an agent session service that is a verification check.
 
-- Verifies that a change summary describes all net changes across read-write files from file alias.
+The change summary validator:
+
+- Verifies that a change summary describes all net changes across read-write files.
 
 - Rejects a change summary that claims changes for files with no net change.
 

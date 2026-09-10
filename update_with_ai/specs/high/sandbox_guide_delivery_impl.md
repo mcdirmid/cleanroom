@@ -13,9 +13,9 @@ Agent guidance documents contain disparate front-matter, structural summaries, a
 
 ## Types and Behavior
 
-A guide delivery parses file content into a task guide, extracting the summary from content preceding the first section heading, and creating sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Lint checks`. When initialized for an agent session, the guide delivery obtains its guide from the node config.
+When initialized for an agent session, the guide delivery obtains its guide parsed from configured guide file content.
 
-A guide delivery begins before the first step section. When advancing a step with passed verification:
+Initially, before any step has been advanced, the guide delivery is positioned prior to the first step section. When advancing a step with passed verification:
 
 - If no steps have been delivered yet, the guide delivery emits a response containing the guide summary alone without delivering a step section.
 

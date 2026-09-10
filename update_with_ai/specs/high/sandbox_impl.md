@@ -15,12 +15,12 @@ Agent sessions require initial context assembled from multiple services before e
 
 The session environment configures startup context and tracks file modifications.
 
-For startup tool executions:
+Startup tool executions are determined by session configuration:
 
-- When using step mode to communicate a guide progressively, startup tool executions include an initial advance tool execution with the name of the advance tool, empty wire parameter bindings, and the response produced by executing the advance tool.
+- An initial advance tool execution with the name of the advance tool, empty wire parameter bindings, and the response produced by executing the advance tool is included when using step mode to communicate a guide progressively.
 
-- When performing startup reads to inspect declared files at session start, startup tool executions include file read executions for all declared read-only files from node config ordered deterministically by file alias short name, positioned after any advance tool execution. Each file read execution uses the name of the read tool, specifies wire parameter bindings mapping the file alias parameter of the read tool to the read-only file alias short name while omitting line numbers, and captures the response produced by executing the read tool.
+- File read executions for all declared read-only files ordered deterministically by file alias short name are included when performing startup reads, positioned after any advance tool execution. Each file read execution uses the name of the read tool, specifies wire parameter bindings mapping the file alias parameter of the read tool to the read-only file alias short name while omitting line numbers, and captures the response produced by executing the read tool.
 
-- When step mode is not used, startup tool executions contain no advance tool execution; when startup reads are not performed, startup tool executions contain no file read executions.
+- Omitted tool executions correspond to unconfigured options: when step mode is not used, startup tool executions contain no advance tool execution; when startup reads are not performed, startup tool executions contain no file read executions.
 
-Startup templates materialize missing read-write files with starter templates from node config without overwriting existing files. Workspace file modifications report whether any read-write file was modified during the session.
+Startup templates materialize missing read-write files with starter templates without overwriting existing files. Workspace file modifications report whether any read-write file was modified during the session.

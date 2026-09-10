@@ -34,7 +34,7 @@ PURPOSE:
 Remote model API endpoint address
 
 FRESH_REQUIREMENTS:
-- The model config provides a base url designating the remote model API endpoint address, or absent if default address resolution applies.
+- The model config provides a base url designating the remote model API endpoint address when custom endpoint routing applies.
 """
         ...
 
@@ -45,7 +45,7 @@ PURPOSE:
 Authentication credentials for the model API
 
 FRESH_REQUIREMENTS:
-- The model config provides an api key providing authentication credentials, or absent if ambient environment credentials apply.
+- The model config provides an api key providing authentication credentials when designated environment secrets apply.
 """
         ...
 
@@ -89,7 +89,7 @@ PURPOSE:
 Upper bound on generated response tokens per model interaction
 
 FRESH_REQUIREMENTS:
-- The model config provides a max tokens upper bound specifying the maximum number of response tokens permitted per request, or absent if unconstrained.
+- The model config provides a max tokens upper bound specifying the maximum number of response tokens permitted per request when token generation is constrained.
 """
         ...
 

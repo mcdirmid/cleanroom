@@ -13,9 +13,9 @@ Enforcing concise and honest summaries requires comparing current file state aga
 
 ## Types and Behavior
 
-The change summary validator compares initial baseline file content with current content to identify net changes across declared read-write files from file alias.
+The change summary validator compares initial baseline file content with current content to identify net changes across declared read-write files.
 
-When validating a change summary as a verification check from sandbox run control:
+When validating a change summary as a verification check:
 
 - The validator rejects change summaries exceeding a soft length bound up to a grace limit before failing at the hard bound.
 

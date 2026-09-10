@@ -45,7 +45,7 @@ FRESH_REQUIREMENTS:
 - The model config provides the base url resolved from the target module.
 
 INHERITED_REQUIREMENTS:
-- [ModelConfig] The model config provides a base url designating the remote model API endpoint address, or absent if default address resolution applies.
+- [ModelConfig] The model config provides a base url designating the remote model API endpoint address when custom endpoint routing applies.
 
 GROUNDING_ARGUMENT:
 - Loaded from external data source: target configuration module specified by MODEL_CONFIG_TARGET, AGENT_CONFIG_TARGET, or --config command-line argument via model_config_ext.
@@ -63,7 +63,7 @@ FRESH_REQUIREMENTS:
 - The model config reads authentication credentials from the designated environment variable specified in the target module.
 
 INHERITED_REQUIREMENTS:
-- [ModelConfig] The model config provides an api key providing authentication credentials, or absent if ambient environment credentials apply.
+- [ModelConfig] The model config provides an api key providing authentication credentials when designated environment secrets apply.
 
 GROUNDING_ARGUMENT:
 - Loaded from external data source: environment variable designated by the target configuration module via model_config_ext.
@@ -135,7 +135,7 @@ FRESH_REQUIREMENTS:
 - The model config provides the max tokens bound resolved from the target module.
 
 INHERITED_REQUIREMENTS:
-- [ModelConfig] The model config provides a max tokens upper bound specifying the maximum number of response tokens permitted per request, or absent if unconstrained.
+- [ModelConfig] The model config provides a max tokens upper bound specifying the maximum number of response tokens permitted per request when token generation is constrained.
 
 GROUNDING_ARGUMENT:
 - Loaded from external data source: target configuration module specified by MODEL_CONFIG_TARGET, AGENT_CONFIG_TARGET, or --config command-line argument via model_config_ext.

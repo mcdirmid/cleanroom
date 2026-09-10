@@ -13,16 +13,12 @@ Executing multi-stage agent workflows requires coordinating target loading, dirt
 
 ## Types and Behavior
 
-The bazel runner coordinates build graph execution and change propagation across workspace targets. The bazel runner:
+The bazel runner coordinates build graph execution and change propagation across workspace targets.
 
-- Resolves target labels and loads workspace target graphs into dag storage from dag storage using the bazel manifest loader from bazel manifest loader.
+When executing a cleaning pass:
 
-- Executes cleaning passes in topological order using the dag cleaner from dag cleaner and the node cleaner from dag node cleaner.
+- Target labels are resolved against workspace directories or runfiles trees to populate graph storage before cleaning.
 
-- Marks a node dirty by injecting a change message with text set to check into its pending messages in dag storage.
+- Cleaning halts immediately and produces a failing build result if node cleaning fails or a cycle is detected during topological traversal.
 
-- Injects caller-provided feedback messages into a target node's message queue in dag storage, or broadcasts caller-provided change messages to all of a node's reverse dependencies.
-
-- Halts cleaning and produces a failing build result if node cleaning fails or a cycle is encountered.
-
-- Logs execution events, cumulative token usage, and pass duration to standard output and transcript files using the runner logger from runner logger.
+- Telemetry capturing execution events, cumulative token usage, and pass duration is streamed to standard output and transcript files.

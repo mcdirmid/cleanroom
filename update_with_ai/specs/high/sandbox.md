@@ -14,7 +14,9 @@ Agent sessions operate across heterogeneous tools spanning file inspection, edit
 
 A *startup tool execution* packages a *tool name*, *wire parameter bindings*, and a *response* for an initial tool invocation at session start. In agent conversation transcripts, tool responses cannot exist in isolation; transcript schemas require that every tool response correlates to an antecedent assistant tool request. Packaging the tool name and wire parameter bindings alongside the response allows orchestrators to forge both the synthetic tool request and response turns when seeding the session transcript.
 
-The *session environment* is an agent session service configured with whether to use step mode from model config to communicate a guide progressively and whether to perform startup reads to inspect declared files at session start, coordinating startup context and workspace file management for an agent session. The session environment:
+The *session environment* is an agent session service configured with whether to use step mode to communicate a guide progressively and whether to perform startup reads to inspect declared files at session start, coordinating startup context and workspace file management for an agent session.
+
+The session environment:
 
 - Exposes *startup tool executions* as an ordered sequence of initial tool executions based on active configuration, ordering startup reads deterministically by file alias short name.
 

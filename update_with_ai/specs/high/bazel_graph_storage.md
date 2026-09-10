@@ -14,9 +14,11 @@ Task execution across structured projects requires maintaining target dependency
 
 A *task prompt* is an instruction describing the work required to clean a node.
 
-A *node definition* is metadata describing task prompts for a node from dag storage.
+A *node definition* is metadata describing task prompts for a node.
 
-The *bazel graph storage* is a system service that is a dag storage backed by workspace build target manifests. The bazel graph storage:
+The *bazel graph storage* is a system service that is a dag storage backed by workspace build target manifests.
+
+The bazel graph storage:
 
 - Maintains nodes, dependencies, reverse dependencies, and pending messages from workspace targets.
 
@@ -24,7 +26,7 @@ The *bazel graph storage* is a system service that is a dag storage backed by wo
 
 - Marks dependent nodes dirty when propagating dependencies change.
 
-- Reads and writes pending messages and reverse dependencies for nodes from dag storage in node directories resolved by the bazel node identifier utility from bazel node id utils.
+- Reads and writes pending messages and reverse dependencies for nodes in node directories resolved by the bazel node identifier utility.
 
 - Creates missing package message files on write and treats absent files as empty.
 

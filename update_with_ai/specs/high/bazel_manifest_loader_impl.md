@@ -13,26 +13,28 @@ Target manifests emitted by Bazel record target labels, source files, and depend
 
 ## Types and Behavior
 
-The bazel manifest loader loads target manifests to construct graph structures and node configurations. The bazel manifest loader:
+The bazel manifest loader loads target manifests to construct graph structures and node configurations.
 
-- Retrieves target manifests from workspace directories or runfiles trees for nodes in dag storage.
+The bazel manifest loader:
 
-- Parses manifests from JSON files written by the build system in workspace directories or runfiles trees into json manifests from json manifest ext.
+- Retrieves target manifests from workspace directories or runfiles trees for graph nodes.
 
-- Extracts manifest node references from a json manifest and normalizes them into canonical nodes using the bazel node identifier utility from bazel node id utils.
+- Parses manifests from JSON files written by the build system in workspace directories or runfiles trees into json manifests.
+
+- Extracts manifest node references from a json manifest and normalizes them into canonical nodes using the bazel node identifier utility.
 
 - Extracts manifest file paths from a json manifest and resolves them relative to target package directories extracted by the bazel node identifier utility.
 
-- Resolves a target node's declared source file, template, and silent source files into read-write files and startup template mappings in its node configuration from node config.
+- Resolves a target node's declared source file, template, and silent source files into read-write files and startup template mappings in its node configuration.
 
 - Resolves declared direct dependencies into read-only files, and transitive star-dependency closures into read-only files in the target node configuration by retrieving declared source files from corresponding dependency node manifests.
 
-- Registers declared silent dependencies as non-propagating dependencies in dag storage and bazel graph storage from bazel graph storage, excluding their source files from dependent node configurations.
+- Registers declared silent dependencies as non-propagating dependencies in graph storage, excluding their source files from dependent node configurations.
 
 - Resolves declared guide targets into task guides from declared source files of referenced guide manifests, excluding step-mode guide source files from declared read-only files.
 
 - Maps declared source files of feedback dependencies to blame targets associated with their owning dependency nodes in the target node configuration.
 
-- Derives file aliases from file alias for all accessible workspace files.
+- Derives file aliases for all accessible workspace files.
 
 - Synthesizes node definitions in bazel graph storage for referenced dependency targets lacking manifests.
