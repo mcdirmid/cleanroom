@@ -24,6 +24,8 @@ A tool can be *executed* directly with a set of *actual parameter bindings*, whi
 
 - Textual *content* that includes underlying tool execution output. When tool execution fails, the content should include error and diagnostic messages along with guidance on how to execute the tool correctly.
 
+- A textual *reminder* that advises the agent on future actions and constraints, or absent when no reminder is provided.
+
 Direct tool execution with actual parameter bindings is primarily used by components when software needs to invoke an action directly (such as executing a read tool to inject startup context).
 
 The *tool manager* is an agent session service that maintains tools for an agent session. Tools can be *installed* so they are available during the session, and it is assumed that all installed tools have unique names. At the direction of a model during an agent turn, the tool manager *executes* tools by *name* with *wire parameter bindings* (mapping parameter names to values of their wire types), that, if mappings are successfully resolved, produces the same response as executing the tool directly. The tool manager also exposes *installed tools* to inform the model of what tools can be executed.

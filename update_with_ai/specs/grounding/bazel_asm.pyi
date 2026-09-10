@@ -4,6 +4,7 @@ PURPOSE:
 Assembles the root Bazel system assembly aggregating Bazel implementations, agent, dag, and sandbox assemblies
 
 CONSTITUENTS:
+- file_paths_impl
 - bazel_runner_impl
 - bazel_manifest_loader_impl
 - bazel_graph_storage_impl

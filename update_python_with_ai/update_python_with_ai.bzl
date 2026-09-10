@@ -18,7 +18,7 @@ are plain labels (same or other packages); the graph is resolved at run
 time from the loaded manifests.
 """
 
-load("//update_with_ai/lib:update_with_ai.bzl", "collect_node_manifests", "update_with_ai")
+load("//update_with_ai/support/lib:update_with_ai.bzl", "collect_node_manifests", "update_with_ai")
 
 def _apparent_label_str(label):
     """Return the apparent (user-facing) label for a main-repo label.
@@ -182,47 +182,16 @@ _hls_lint_test = rule(
             doc = "Dep spec files whose Data Types names the closure checks import against",
         ),
         "_linter": attr.label(
-            default = Label("//update_python_with_ai/bin:hls_lint.py"),
+            default = Label("//update_with_ai/support/lib:hls_lint.py"),
             allow_single_file = True,
         ),
         "_direct_deps": attr.bool(
             default = False,
-            doc = "True when --deps comes from dep_srcs directly (lls_lint); False when it comes from the spec_deps manifest closure walk (hls_lint)",
+            doc = "True when --deps comes from dep_srcs directly; False when it comes from the spec_deps manifest closure walk (hls_lint)",
         ),
         "_corpus": attr.label(
             default = Label("//update_with_ai/specs:high_specs"),
             doc = "Canonical spec corpus used for term-ownership reference resolution",
-        ),
-    },
-)
-
-_lls_lint_test = rule(
-    implementation = _spec_lint_test_impl,
-    test = True,
-    attrs = {
-        "srcs": attr.label_list(
-            allow_files = True,
-            doc = "Spec file(s) to lint",
-        ),
-        "spec_deps": attr.label_list(
-            doc = "Spec dependency node targets whose coverage is verified against the dependency comment's entries",
-            aspects = [collect_node_manifests],
-        ),
-        "dep_srcs": attr.label_list(
-            allow_files = True,
-            doc = "Dep spec files whose Data Types names the closure checks import against",
-        ),
-        "_linter": attr.label(
-            default = Label("//update_python_with_ai/bin:lls_lint.py"),
-            allow_single_file = True,
-        ),
-        "_direct_deps": attr.bool(
-            default = True,
-            doc = "True when --deps comes from dep_srcs directly (lls_lint); False when it comes from the spec_deps manifest closure walk (hls_lint)",
-        ),
-        "_corpus": attr.label(
-            default = Label("//update_with_ai/specs:low_specs"),
-            doc = "Canonical low-level spec corpus (runfiles only)",
         ),
     },
 )
@@ -310,12 +279,8 @@ def update_python_with_ai(name, module_deps, visibility = None):
     _update_python_with_ai(
         name = name + "_high",
         prompt = (
-            "Ensure the high-level specification for %s (in high/%s.md) conforms to " +
-            "high_level_spec.md with minimal changes: make only the targeted edits " +
-            "needed to fix deviations, and leave conformant content untouched. If the " +
-            "file is a template, fill it in. A write is followed by an automatic " +
-            "re-read with line numbers, so a line-range edit (replace_lines) may " +
-            "follow a write without a further read."
+            "Align the high-level specification for component %s (%s.md) with its " +
+            "dependencies per the guide. Call advance to proceed."
         ) % (name, name),
         src = "high/" + name + ".md",
         template = "//update_python_with_ai/templates:hls",
@@ -339,17 +304,12 @@ def update_python_with_ai(name, module_deps, visibility = None):
     _update_python_with_ai(
         name = name + "_low",
         prompt = (
-            "Ensure the low-level specification (LLS) for %s (in low/%s.md) is aligned " +
-            "with the high-level specification (HLS) for %s (in high/%s.md) according to " +
-            "high_to_low.md, with minimal changes: make only the targeted edits needed to " +
-            "fix misalignments, and leave conformant content untouched. If the file is a " +
-            "template, fill it in. A write is followed by an automatic re-read with line " +
-            "numbers, so a line-range edit (replace_lines) may follow a write without a " +
-            "further read."
-        ) % (name, name, name, name),
-        src = "low/" + name + ".md",
-        template = "//update_python_with_ai/templates:lls",
-        guide = "//update_python_with_ai/guides:high_to_low",
+            "Align the grounding specification for component %s (%s.pyi) with the " +
+            "high-level specification (%s.md) per the guide. Call advance to proceed."
+        ) % (name, name, name),
+        src = "grounding/" + name + ".pyi",
+        template = "//update_python_with_ai/templates:empty",
+        guide = "//update_python_with_ai/guides:high_to_grounding",
         module_deps = lls_spec_deps,
         deps = [":" + name + "_high"],
         verify = "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{}:{}_low_lint --test_output=errors --noshow_progress 2>&1".format(
@@ -359,22 +319,7 @@ def update_python_with_ai(name, module_deps, visibility = None):
         visibility = visibility,
     )
 
-    # The LLS is validated by a lls_lint test that mirrors the HLS's hls_lint
-    # test. The target is created only once the spec file exists on disk (low
-    # specs are generated as the graph is walked; a lint target with a missing
-    # src would fail to build). The template initializes the file at run start,
-    # so the target materializes on the next bazel invocation after the agent
-    # writes the spec, which is when the node's verify tool gates on it. The
-    # lint's --deps are the module_deps md files directly (no transitive
-    # closure: the comment lists the direct deps, and the closure lives in the
-    # node's star_deps).
-    if native.glob(["low/" + name + ".md"], allow_empty = True):
-        _lls_lint_test(
-            name = name + "_low_lint",
-            srcs = ["low/" + name + ".md"],
-            dep_srcs = native.glob(["low/" + dep.split(":")[-1] + ".md" for dep in module_deps], allow_empty = True),
-            tags = ["low_lint", "low"],
-        )
+
 
     # The lib and tests directories are one level up from this package (the
     # parent of the instantiation package): the lib-python node writes
@@ -397,56 +342,45 @@ def update_python_with_ai(name, module_deps, visibility = None):
     # third-party deps, and has no _test or _qa node.
     if name.endswith("_impl"):
         _lib_kind_clause = (
-            "This is an implementation module: it subclasses the interface's " +
-            "Protocol class per the LLS."
+            "This is an implementation module: it realizes concrete singleton " +
+            "classes and functions defined in the grounding specification."
         )
     elif name.endswith("_asm"):
         _lib_kind_clause = (
-            "This is an assembly module: it performs no functionality beyond " +
-            "configuration and assembly of other modules — it wires the " +
-            "concrete implementations into the configured interface-only " +
-            "components and provides the assembled result. It implements no " +
-            "interface and is never tested (no test module exists for it)."
+            "This is an assembly module: it wires concrete implementations into " +
+            "configured interface components and provides the assembled result."
         )
     elif name.endswith("_ext"):
         _lib_kind_clause = (
             "This is an external module: it defines shared type aliases and " +
-            "constants, anchors external third-party dependencies, and never " +
-            "defines an implementation class. It is never tested directly " +
-            "(no test module exists for it)."
+            "constants, and anchors external third-party dependencies."
         )
     else:
         _lib_kind_clause = (
-            "This is an interface module: it defines the interface's Protocol " +
-            "and types only, never an implementation class (implementations " +
-            "live in the `_impl` module, which implements an implementation " +
-            "LLS; this spec has none). If the template has an " +
-            "implementation-class half, delete it."
+            "This is an interface module: it defines the interface's protocol " +
+            "and types."
         )
+
+    _lib_deps = []
+    if name.endswith("_impl") or name.endswith("_asm"):
+        _lib_deps = ["//update_python_with_ai:lifecycle"]
+
     _update_python_with_ai(
         name = name + "_lib",
         prompt = (
-            "Ensure the lib module for %s (the file %s.py) implements " +
-            "its LLS per low_to_lib.md, with minimal changes: make only the " +
-            "targeted edits needed to fix deviations, and leave conformant content " +
-            "untouched. If the file is a template, fill it in. " +
-            "Call advance() regularly to re-run the type check: after fixing type " +
-            "errors, call advance() to confirm they are really gone, and after each " +
-            "edit or small series of edits, call advance() to confirm no new type " +
-            "errors were introduced. " +
-            _lib_kind_clause + " " +
-            "A write is " +
-            "followed by an automatic re-read with line numbers, so a line-range edit " +
-            "(replace_lines) may follow a write without a further read."
-        ) % (name, name),
+            "Align the lib module for component %s (%s.py) with its grounding " +
+            "specification (%s.pyi) per the guide. " +
+            _lib_kind_clause + " Call advance to proceed."
+        ) % (name, name, name),
         src = "../lib/" + name + ".py",
         template = "//update_python_with_ai/templates:lib",
-        guide = "//update_python_with_ai/guides:low_to_lib",
+        guide = "//update_python_with_ai/guides:grounding_to_lib",
+        deps = _lib_deps,
         module_deps = [":" + name + "_low"],
         silent_deps = [dep + "_lib" for dep in module_deps],
         verify = (
-            "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_python_with_ai/bin/lib_lint.py " +
-            "{}/lib/BUILD.bazel {}/lib/{}.py {} && " +
+            "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_with_ai/support/lib/lib_lint.py " +
+            "{}/lib/BUILD.bazel {}/lib/{}.py {} {} && " +
             "bazel test //{}/lib:{}_type_check --test_output=errors --noshow_progress 2>&1"
         ).format(
             _parent_pkg,
@@ -455,14 +389,17 @@ def update_python_with_ai(name, module_deps, visibility = None):
             "--deps " + ",".join([dep.split(":")[-1] for dep in module_deps])
             if module_deps
             else "",
+            "--pyi-deps " + ",".join(["{}/specs/grounding/{}.pyi".format(_parent_pkg, dep.split(":")[-1]) for dep in module_deps])
+            if module_deps
+            else "",
             _parent_pkg,
             name,
         ),
         visibility = visibility,
     )
 
-    # The test node (implementations only, per low_to_test.md: one test
-    # module per implementation LLS): written from the implementation LLS
+    # The test node (implementations only, per grounding_to_test.md: one test
+    # module per implementation grounding spec): written from the implementation grounding spec
     # alone. The implementation module is a silent dep — cleaned before this
     # node (so the tests type-check against it) but not readable to it (the
     # implementation Python file is never consulted). Verify gates on the
@@ -473,28 +410,16 @@ def update_python_with_ai(name, module_deps, visibility = None):
         _update_python_with_ai(
             name = name + "_test",
             prompt = (
-                "Ensure the test module for %s (the file %s_test.py) is written from " +
-                "the implementation LLS per low_to_test.md, " +
-                "with minimal changes: make only the targeted edits needed to fix " +
-                "deviations, and leave conformant content untouched. The implementation " +
-                "Python file is never consulted. If the file is a template, fill it in. " +
-                "Write incrementally: append one test class per edit, never the whole " +
-                "file in one edit (an edit that exceeds the response limit is lost). " +
-                "Call advance() regularly to re-run the type check: after fixing type " +
-                "errors, call advance() to confirm they are really gone, and after each " +
-                "edit or small series of edits, call advance() to confirm no new type " +
-                "errors were introduced. " +
-                "A write is followed by an automatic re-read with line numbers, so a " +
-                "line-range edit (replace_lines) may follow a write without a further " +
-                "read."
-            ) % (name, name),
+                "Write the test module for component %s (%s_test.py) from the " +
+                "grounding specification (%s.pyi) per the guide. Call advance to proceed."
+            ) % (name, name, name),
             src = "../tests/" + name + "_test.py",
             template = "//update_python_with_ai/templates:test",
-            guide = "//update_python_with_ai/guides:low_to_test",
+            guide = "//update_python_with_ai/guides:grounding_to_test",
             module_deps = [":" + name + "_low"],
             silent_deps = [":" + name + "_lib"] + [dep + "_lib" for dep in module_deps],
             verify = (
-                "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_python_with_ai/bin/test_lint.py " +
+                "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_with_ai/support/lib/test_lint.py " +
                 "{}/tests/BUILD.bazel {}/tests/{}_test.py --lib-pkg {}/lib {} && " +
                 "bazel test //{}/tests:{}_test_type_check --test_output=errors --noshow_progress 2>&1"
             ).format(
@@ -529,11 +454,7 @@ def update_python_with_ai(name, module_deps, visibility = None):
         _qa_log_path = "{}/logs/{}_qa.log".format(native.package_name(), name)
         _update_python_with_ai(
             name = name + "_qa",
-            prompt = (
-                "Call advance() to start. Do not try to execute the tests " +
-                "yourself: advance runs the tests and gives you feedback " +
-                "about any test failures."
-            ),
+            prompt = "Call advance to run verification and arbitrate failures per the guide.",
             src = "logs/" + name + "_qa.log",
             template = "//update_python_with_ai/templates:empty",
             guide = "//update_python_with_ai/guides:qa",

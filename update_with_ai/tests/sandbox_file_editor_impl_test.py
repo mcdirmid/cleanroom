@@ -18,7 +18,7 @@ from lib.file_alias import (
     UnboundFile,
     WorkspacePath,
 )
-from lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from lib.node_config import NodeConfig
 from lib.sandbox_file_editor import (
     EditManager,
@@ -76,11 +76,23 @@ class MockIntegerConverter:
         return int(wire_value)
 
 
+def _make_directory_path(path: str) -> DirectoryPath:
+    obj = object.__new__(DirectoryPath)
+    object.__setattr__(obj, "path", path)
+    return obj
+
+
+def _make_workspace_path(path: str) -> WorkspacePath:
+    obj = object.__new__(WorkspacePath)
+    object.__setattr__(obj, "path", path)
+    return obj
+
+
 class MockAliasManager:
     tier = "agent_session"
 
     def __init__(self, workspace_root: str) -> None:
-        self.workspace_root = DirectoryPath(path=workspace_root)
+        self.workspace_root = _make_directory_path(workspace_root)
         self.actual_type = FileAlias
         self.wire_type = String()
 
@@ -132,18 +144,18 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         node = Node(address="//pkg:edit_test")
         self.rw_file = ReadWriteFile(
             short_name="file.txt",
-            workspace_path=WorkspacePath(path="file.txt"),
+            workspace_path=_make_workspace_path("file.txt"),
             owning_node=node,
         )
         self.ro_file = ReadOnlyFile(
             short_name="readonly.txt",
-            workspace_path=WorkspacePath(path="readonly.txt"),
+            workspace_path=_make_workspace_path("readonly.txt"),
             owning_node=node,
         )
 
         self.missing_bound = ReadWriteFile(
             short_name="missing.txt",
-            workspace_path=WorkspacePath(path="missing.txt"),
+            workspace_path=_make_workspace_path("missing.txt"),
             owning_node=node,
         )
 
@@ -270,8 +282,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.replacement_text_parameter, "New"),
                 }
             )
-            # Requirement: Executing the text replacement tool fails if the target text exceeds 100,000 characters.
-            self.assertTrue(replace_tool.execute_tool(b_huge).is_failed)
+            # Requirement: Executing the text replacement tool fails if the target text exceeds 100,000 characters, and reminds the agent that target text for replacement must not exceed 100,000 characters.
+            resp_huge = replace_tool.execute_tool(b_huge)
+            self.assertTrue(resp_huge.is_failed)
+            self.assertEqual(resp_huge.reminder, "Target text for replacement must not exceed 100,000 characters.")
 
     def test_line_update_tool_bounds_and_insertion(self) -> None:
         """CUJ: LineUpdateTool updates line ranges and performs insertion when start > end."""
@@ -360,10 +374,116 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             )
             self.assertFalse(line_tool.execute_tool(b_no_nl).is_failed)
 
+    def test_diff_based_has_modifications(self) -> None:
+        """CUJ: EditManager tracks real content differences and detects reverted modifications."""
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(TextReplacementTool)
+            edit_mgr = scope.get_singleton(EditManager)
+
+            # Initially no modifications
+            self.assertFalse(edit_mgr.has_modifications)
+
+            # 1. Modify file -> has_modifications is True
+            # Requirement: The edit manager exposes whether workspace file modifications occurred during the session by comparing current workspace file content against initial content before editing.
+            b_mod = ActualParameterBindings(
+                bindings={
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_text_parameter, "Line 2"),
+                    (replace_tool.replacement_text_parameter, "Modified Line 2"),
+                }
+            )
+            resp1 = replace_tool.execute_tool(b_mod)
+            self.assertFalse(resp1.is_failed)
+            self.assertTrue(edit_mgr.has_modifications)
+
+            # 2. Revert back to original content -> has_modifications is False
+            b_revert = ActualParameterBindings(
+                bindings={
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_text_parameter, "Modified Line 2"),
+                    (replace_tool.replacement_text_parameter, "Line 2"),
+                }
+            )
+            resp2 = replace_tool.execute_tool(b_revert)
+            self.assertFalse(resp2.is_failed)
+            # Requirement: [EditManager] The edit manager exposes whether workspace file modifications occurred during the session, determined by whether workspace file contents differ from their initial state prior to editing.
+            self.assertFalse(edit_mgr.has_modifications)
+
+            # 3. No-op replacement with identical text -> has_modifications remains False
+            b_noop = ActualParameterBindings(
+                bindings={
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_text_parameter, "Line 2"),
+                    (replace_tool.replacement_text_parameter, "Line 2"),
+                }
+            )
+            resp3 = replace_tool.execute_tool(b_noop)
+            self.assertFalse(resp3.is_failed)
+            self.assertFalse(edit_mgr.has_modifications)
+
+    def test_file_update_revision(self) -> None:
+        """CUJ: EditManager file_update_revision increments when editing tools modify files."""
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            edit_mgr = scope.get_singleton(EditManager)
+            replace_tool = scope.get_singleton(TextReplacementTool)
+            line_tool = scope.get_singleton(LineUpdateTool)
+
+            # Requirement: The edit manager tracks a file update revision that increments whenever workspace files are updated.
+            # Requirement: [EditManager] The edit manager exposes a file update revision that tracks sequential updates made to workspace files.
+            self.assertEqual(edit_mgr.file_update_revision, 0)
+
+            # Perform text replacement
+            b_replace = ActualParameterBindings(
+                bindings={
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_text_parameter, "Line 2"),
+                    (replace_tool.replacement_text_parameter, "Modified Line 2"),
+                }
+            )
+            resp1 = replace_tool.execute_tool(b_replace)
+            self.assertFalse(resp1.is_failed)
+            self.assertEqual(edit_mgr.file_update_revision, 1)
+
+            # Perform line update
+            b_line = ActualParameterBindings(
+                bindings={
+                    (line_tool.file_alias_parameter, self.rw_file),
+                    (line_tool.start_line_parameter, 1),
+                    (line_tool.end_line_parameter, 1),
+                    (line_tool.replacement_text_parameter, "Updated Line 1\n"),
+                }
+            )
+            resp2 = line_tool.execute_tool(b_line)
+            self.assertFalse(resp2.is_failed)
+            self.assertEqual(edit_mgr.file_update_revision, 2)
+
+    def test_tool_parameter_converters(self) -> None:
+        """CUJ: Parameter converters associated with tool parameters."""
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(TextReplacementTool)
+            line_tool = scope.get_singleton(LineUpdateTool)
+
+            # Requirement: The text replacement tool file parameter uses the alias manager to convert a file alias.
+            self.assertIs(replace_tool.file_alias_parameter.parameter_converter, self.alias_mgr)
+            # Requirement: The text replacement tool target text parameter uses a string parameter converter to accept text.
+            self.assertIs(replace_tool.target_text_parameter.parameter_converter, self.str_conv)
+            # Requirement: The text replacement tool replacement text parameter uses a string parameter converter to accept text.
+            self.assertIs(replace_tool.replacement_text_parameter.parameter_converter, self.str_conv)
+
+            # Requirement: The line update tool file parameter uses the alias manager to convert a file alias.
+            self.assertIs(line_tool.file_alias_parameter.parameter_converter, self.alias_mgr)
+            # Requirement: The line update tool start line parameter uses an integer parameter converter to accept an integer.
+            self.assertIs(line_tool.start_line_parameter.parameter_converter, self.int_conv)
+            # Requirement: The line update tool end line parameter uses an integer parameter converter to accept an integer.
+            self.assertIs(line_tool.end_line_parameter.parameter_converter, self.int_conv)
+            # Requirement: The line update tool replacement text parameter uses a string parameter converter to accept text.
+            self.assertIs(line_tool.replacement_text_parameter.parameter_converter, self.str_conv)
+
 
 if __name__ == "__main__":
     unittest.main()
 
 # Untested requirements:
 # - [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
+# - [Tool] When a parameter is required, an argument must be supplied for tool execution.
 

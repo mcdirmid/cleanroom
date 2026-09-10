@@ -37,30 +37,7 @@ The `filesystem_ext` external component specifies host operating system storage 
 
 ## Build Dependencies
 
-The `filesystem_ext` component relies exclusively on the Python standard library (`pathlib`, `os`, `re`, `sys`).
-
-Consuming implementation components (`sandbox_file_reader_impl`, `sandbox_file_editor_impl`) require no external pip dependencies in `update_with_ai/lib/BUILD.bazel`:
-```python
-py_library(
-    name = "sandbox_file_reader_impl",
-    srcs = ["sandbox_file_reader_impl.py"],
-    deps = [
-        ":sandbox_file_reader",
-        ":file_alias",
-        ":tool_provider",
-    ],
-)
-
-py_library(
-    name = "sandbox_file_editor_impl",
-    srcs = ["sandbox_file_editor_impl.py"],
-    deps = [
-        ":sandbox_file_editor",
-        ":file_alias",
-        ":tool_provider",
-    ],
-)
-```
+(none)
 
 ## Usage Snippets
 

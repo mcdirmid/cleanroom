@@ -4,7 +4,7 @@
 
 The artifact is the test module for an implementation: `<component-name>_test.py`, written from the implementation LLS and its dependency closure alone — the implementation Python file is never consulted. Tests written from the LLS catch implementation drift: when a test fails, the implementation is wrong, unless the test misread the LLS. A file that is a template is filled in.
 
-The LLS is the only contract: tests cover its postconditions, invariants, and expected failure signals, extracting claims from Data Types, Config, Behavioral Description, Failure Handling, and Invariants. Test editing is incremental and targeted, updating or adding test methods one at a time via `update_lines` without regenerating the whole file. When calling `advance(change_summary="...")`, the summary is at most 200 characters (one short sentence).
+The LLS is the only contract: tests cover its postconditions, invariants, and expected failure signals, extracting claims from Data Types, Config, Behavioral Description, Failure Handling, and Invariants. Test editing is incremental and targeted, updating or adding test methods one at a time via `update_lines` without regenerating the whole file.
 
 ## Module layout
 

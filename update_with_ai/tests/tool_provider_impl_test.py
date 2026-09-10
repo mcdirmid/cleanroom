@@ -2,7 +2,7 @@
 
 import unittest
 from typing import Set
-from lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from lib.tool_provider import (
     ActualParameterBindings,
     Boolean,
@@ -122,8 +122,9 @@ class ToolProviderImplTest(unittest.TestCase):
             manager.install_tool(tool)
 
             resp = manager.execute_tool("tool_no_params", WireParameterBindings(bindings={("bogus", "val")}))
-            # Requirement: Executing a tool by name fails if a parameter name does not match any parameter of the tool.
+            # Requirement: Executing a tool by name fails if a parameter name does not match any parameter of the tool, and reminds the agent that only declared parameters of the tool can be provided.
             self.assertTrue(resp.is_failed)
+            self.assertEqual(resp.reminder, "Only declared parameters of the tool can be provided.")
 
     def test_tool_manager_missing_required_parameter(self) -> None:
         """CUJ: Executing a tool without supplying a required parameter fails."""
@@ -135,8 +136,9 @@ class ToolProviderImplTest(unittest.TestCase):
             manager.install_tool(tool)
 
             resp = manager.execute_tool("tool_req", WireParameterBindings(bindings=set()))
-            # Requirement: Executing a tool by name fails if an argument is not supplied for a required parameter of the tool.
+            # Requirement: Executing a tool by name fails if an argument is not supplied for a required parameter of the tool, and reminds the agent that required parameters of the tool must be supplied.
             self.assertTrue(resp.is_failed)
+            self.assertEqual(resp.reminder, "Required parameters of the tool must be supplied.")
 
 
 if __name__ == "__main__":

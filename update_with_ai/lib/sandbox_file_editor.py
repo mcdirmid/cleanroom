@@ -13,6 +13,10 @@ class EditManager(Protocol):
     def has_modifications(self) -> bool:
         ...
 
+    @property
+    def file_update_revision(self) -> int:
+        ...
+
     def materialize_templates(self) -> None:
         ...
 

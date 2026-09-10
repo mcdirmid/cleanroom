@@ -6,7 +6,7 @@ from . import sandbox_file_editor
 from . import sandbox_file_reader
 from . import sandbox_run_control
 from . import tool_provider
-from .lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
 
 class Sandbox(sandbox.Sandbox, Singleton):
     tier = "agent_session"
@@ -16,7 +16,7 @@ class Sandbox(sandbox.Sandbox, Singleton):
 
     @property
     def has_modifications(self) -> bool:
-        # Requirement: Delegate querying file modifications to edit manager
+        # Requirement: Querying file modifications delegates to the edit manager.
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
         return edit_mgr.has_modifications
 
@@ -24,31 +24,31 @@ class Sandbox(sandbox.Sandbox, Singleton):
         executions: List[sandbox.StartupToolExecution] = []
         m_cfg = get_singleton(model_config.ModelConfig)
 
-        # Requirement: When using step mode, include initial advance tool execution with tool name 'advance' and empty bindings
+        # Requirement: When using step mode to communicate a guide progressively, startup tool executions include an initial advance tool execution with the name of the advance tool, empty wire parameter bindings, and the response produced by executing the advance tool.
         if m_cfg.is_step_mode:
             adv_tool = get_singleton(sandbox_run_control.AdvanceTool)
             resp = adv_tool.execute_tool(tool_provider.ActualParameterBindings(bindings=set()))
             executions.append(
                 sandbox.StartupToolExecution(
-                    tool_name="advance",
+                    tool_name=adv_tool.name,
                     wire_parameter_bindings=tool_provider.WireParameterBindings(bindings=set()),
                     response=resp,
                 )
             )
 
-        # Requirement: When performing startup reads, include read executions for all declared read-only files from node config, positioned after any advance execution
+        # Requirement: When performing startup reads to inspect declared files at session start, startup tool executions include file read executions for all declared read-only files from node config ordered deterministically by file alias short name, positioned after any advance tool execution.
         if m_cfg.is_startup_reads:
             n_cfg = get_singleton(node_config.NodeConfig)
             read_tool = get_singleton(sandbox_file_reader.ReadTool)
-            for ro in n_cfg.read_only_files:
+            for ro in sorted(n_cfg.read_only_files, key=lambda x: x.short_name):
                 bindings = {(read_tool.file_alias_parameter, ro)}
+                # Requirement: Each file read execution uses the name of the read tool, specifies wire parameter bindings mapping the file alias parameter of the read tool to the read-only file alias short name while omitting line numbers, and captures the response produced by executing the read tool.
                 resp = read_tool.execute_tool(tool_provider.ActualParameterBindings(bindings=bindings))
-                # Requirement: Specify tool name as 'read_file' with wire bindings mapping 'file' to short name and capture read tool response
                 executions.append(
                     sandbox.StartupToolExecution(
-                        tool_name="read_file",
+                        tool_name=read_tool.name,
                         wire_parameter_bindings=tool_provider.WireParameterBindings(
-                            bindings={("file", ro.short_name)}
+                            bindings={(read_tool.file_alias_parameter.name, ro.short_name)}
                         ),
                         response=resp,
                     )
@@ -57,7 +57,7 @@ class Sandbox(sandbox.Sandbox, Singleton):
         return executions
 
     def materialize_startup_templates(self) -> None:
-        # Requirement: Delegate template materialization to edit manager to write template content without overwriting existing files
+        # Requirement: Materializing startup templates delegates to the edit manager to write template content to missing read-write files without overwriting existing files.
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
         edit_mgr.materialize_templates()
 

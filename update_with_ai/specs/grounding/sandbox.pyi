@@ -64,7 +64,7 @@ PURPOSE:
 Retrieves startup tool executions based on active configuration
 
 FRESH_REQUIREMENTS:
-- The sandbox provides an ordered sequence of startup tool executions pairing tool requests and responses based on active configuration.
+- The sandbox exposes startup tool executions as an ordered sequence of initial tool executions based on active configuration, ordering startup reads deterministically by file alias short name.
 """
         ...
 

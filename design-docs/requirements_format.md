@@ -91,7 +91,7 @@ Each requirement and assumption in a grounding document must explicitly list the
 A critical task when extracting requirements from HLS prose is separating true behavioral contracts from structural definitions, static knowledge, and domain purpose:
 
 1. **Constituent Properties vs. Requirements**:
-   - Statements in prose that simply introduce or enumerate the fields of a record (e.g., *"A log event provides an event name, a single-line summary, and a verbose transcript representation"*, or *"An agent configuration defines model identifiers, timeouts, and iteration limits"*) define static structure.
+   - Statements in prose that simply introduce or enumerate the fields of a record (e.g., *"A log event provides an event name, a single-line summary, and a verbose transcript representation"*, or *"A model configuration defines model identifiers, timeouts, and iteration limits"*) define static structure.
    - These belong exclusively in the 4-column grounding table as `property` rows. They are **never** behavioral requirements and must not be duplicated under `## Requirements`.
 2. **Static Knowledge and Algebraic Relationships vs. Requirements**:
    - Statements describing static type knowledge, type algebra, or mathematical relations between types (e.g., *"Concatenating a workspace root and a workspace path produces an absolute path"*) describe semantic definitions, not observable behavioral contracts on an active component.
@@ -113,7 +113,54 @@ A critical task when extracting requirements from HLS prose is separating true b
 
 ## 4. Document Placement Standard
 
-In grounding specifications (`<name>.md`), the **Assumptions** (if any) and **Requirements** sections are placed directly after the main 4-column ontological table:
+Requirements and assumptions are placed directly in the specification documents. Cleanroom uses the canonical Python interface stub (`.pyi`) format, where requirements are co-located inside class and method docstrings.
+
+### 4.1 Canonical Format: Python Interface Stubs (`.pyi`)
+
+In `.pyi` grounding specifications (see [New Grounding Format](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/new_grounding_format.md)), requirements and assumptions are embedded directly into class and method docstrings under structured headers:
+- `PURPOSE:` Architectural rationale and intent.
+- `FRESH_ASSUMPTIONS:` Caller preconditions authored locally on this member.
+- `INHERITED_ASSUMPTIONS:` Preconditions inherited from ancestors, managed by `grounding_tool.py --sync`.
+- `FRESH_REQUIREMENTS:` Behavioral contracts and guarantees authored locally on this member.
+- `INHERITED_REQUIREMENTS:` Behavioral contracts inherited from ancestors, managed by `grounding_tool.py --sync`.
+- `GROUNDING_ARGUMENT:` Semantic derivation path establishing runtime values.
+
+```python
+@operation
+def execute_tool(self, actual_parameter_bindings: ActualParameterBindings) -> Response:
+    """
+PURPOSE:
+Executes the tool with validated parameter bindings.
+
+FRESH_REQUIREMENTS:
+- When a parameter is required, an argument must be supplied for tool execution.
+- When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
+
+INHERITED_REQUIREMENTS:
+- [Tool] Executing a tool produces an observable Response record.
+"""
+    ...
+```
+
+For top-level requirements not attributed to an active object type, they are placed in the module's `__orphan__()` function:
+
+```python
+def __orphan__() -> None:
+    """
+PURPOSE:
+Captures system-wide or non-attributed architectural requirements.
+
+FRESH_REQUIREMENTS:
+- A file alias short name is a minimal unambiguous relative path identifying the file within an agent session.
+"""
+    ...
+```
+
+### 4.2 Historical Format: 4-Column Markdown Tables (`.md`)
+
+*(Note: Superseded by the `.pyi` format; preserved for historical context on earlier specifications).*
+
+In legacy markdown grounding specifications (`<name>.md`), the **Assumptions** (if any) and **Requirements** sections were placed directly after the 4-column ontological table:
 
 ```markdown
 # <component_name> grounding
@@ -137,34 +184,6 @@ implements: ...
 - orphaned: <Requirement sentence 3>.
 ```
 
-If a component defines no assumptions, the `## Assumptions` section is omitted.
-
-### Complete Example (`tool_provider.md` Interface Grounding)
-
-```markdown
-## Assumptions
-
-- ToolManager.install_tool: All installed tools in a tool manager have unique names.
-- Tool: All parameters of a tool have unique names.
-
-## Requirements
-
-- Tool.execute_tool: When a parameter is required, an argument must be supplied for tool execution.
-- Tool.execute_tool: When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
-- ToolManager.execute_tool: Executing a tool by name with wire parameter bindings produces the same response as executing the tool directly.
-```
-
-### Complete Example (`tool_provider_impl.md` Implementation Grounding)
-
-```markdown
-## Requirements
-
-- ToolManager.execute_tool: Executing a tool by name fails if no installed tool matches the requested name.
-- ToolManager.execute_tool: Executing a tool by name fails if a parameter name does not match any parameter of the tool.
-- ToolManager.execute_tool: Executing a tool by name fails if an argument is not supplied for a required parameter of the tool.
-- ToolManager.execute_tool: When parameter mappings are successfully resolved, executing a tool by name delegates to the matching tool with the resolved actual parameter bindings and returns the tool's response.
-```
-
 ---
 
 ## 5. Testing Natural Language Tool Guidance & Error Messages via Supervising LLMs (TODO)
@@ -185,4 +204,31 @@ In deterministic unit tests:
   1. Does the message accurately diagnose the specific failure condition that occurred?
   2. Does the message provide clear, actionable instructions enabling an agent to fix its parameters and invoke the tool correctly?
 - This will enable rigorous automated verification of natural language agent guidance without relying on brittle, unpinned string-matching assertions in unit tests.
+
+---
+
+## 6. Grounding Problems and Fabricated Requirements
+
+### 6.1 Grounding Problems
+A **grounding problem** occurs when a semantic gap exists between the High-Level Specification (HLS) and the executable Low-Level Specification (LLS / library implementation):
+1. **Incomplete Derivation Paths**: An HLS requires a capability or property, but the grounding specification cannot derive it from declared collaborators or inputs (`GROUNDING_ARGUMENT:` failure).
+2. **Omitted Operational Branches**: An HLS specifies nominal happy-path behaviors or partial failure cases, but omits non-standard branches, unprompted responses, or empty input sets. The grounding and implementation are left with undefined behavior for real runtime scenarios.
+3. **Unchecked Architectural Notes**: An HLS communicates architectural intent, operational boundaries, or failure-mode warnings in its `## Purpose` or meta-notes, but alignment drops them instead of formulating binding `FRESH_REQUIREMENTS:`.
+
+**Resolution Protocol**:
+Grounding problems MUST be resolved upstream at the specification level (HLS and grounding `.pyi`), never downstream in code. When a grounding gap is identified, the HLS must be refined with explicit behavioral guarantees, outcome branches, and intent notes, which are then formally grounded into `FRESH_REQUIREMENTS:` with complete derivation arguments.
+
+### 6.2 Fabricated Requirements (Anti-Pattern)
+A **fabricated requirement** occurs when library implementation code (`_impl.py`) or unit tests (`_impl_test.py`) introduce behaviors, artificial return signals, short-circuit terminations, or `# Requirement:` comments that do not exist in the grounding specification (`FRESH_REQUIREMENTS:` or `INHERITED_REQUIREMENTS:`).
+
+**The Cascading Failure of Fabricated Requirements**:
+1. **Masking Specification Gaps**: Instead of escalating an unhandled case back to the HLS, the implementer invents ad-hoc code (e.g. terminating an iterative session when no tools are called) and decorates it with a fake `# Requirement:` comment.
+2. **Bias Rule Inversion in Tests**: A test author looks at the fabricated code, transcribes its behavior, and writes a unit test that explicitly asserts the fabricated behavior.
+3. **Verification Bypass**: Because the test suite actively asserts and passes the fabricated behavior, automated verification and type-checking succeed, creating a dangerous illusion of system correctness while catastrophic runtime failures (such as bypassing verification checks or aborting prematurely) occur in production.
+
+**Strict Architectural Rules**:
+- **Verbatim Citation**: Every `# Requirement:` comment in library code and test suites must quote verbatim an exact requirement string from `FRESH_REQUIREMENTS:` or `INHERITED_REQUIREMENTS:` in the grounding specification.
+- **Zero Unmandated Behavior**: No library code may implement synthetic outcomes, artificial completion paths, or side-effects not mandated by the grounding contract.
+- **Independent QA Auditing**: Passing test suites must be audited (by QA and alignment tooling) to ensure that assertions genuinely verify the specific postconditions of the requirements they cite, rather than asserting fabricated shortcuts or passing via tautology.
+
 

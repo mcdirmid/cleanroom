@@ -48,8 +48,8 @@ Executes an installed tool with converted actual parameter bindings, failing if 
 
 FRESH_REQUIREMENTS:
 - Executing a tool by name fails if no installed tool matches the requested name.
-- Executing a tool by name fails if a parameter name does not match any parameter of the tool.
-- Executing a tool by name fails if an argument is not supplied for a required parameter of the tool.
+- Executing a tool by name fails if a parameter name does not match any parameter of the tool, and reminds the agent that only declared parameters of the tool can be provided.
+- Executing a tool by name fails if an argument is not supplied for a required parameter of the tool, and reminds the agent that required parameters of the tool must be supplied.
 - When parameter mappings are successfully resolved, executing a tool by name delegates to the matching tool with the resolved actual parameter bindings and returns the tool's response.
 
 INHERITED_REQUIREMENTS:

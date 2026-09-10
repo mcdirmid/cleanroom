@@ -1,5 +1,6 @@
 # bazel_model_config_impl implementation component
 
+imports: model_config_ext
 implements: model_config
 
 ## Purpose
@@ -12,8 +13,26 @@ Connecting declarative build targets to concrete language model parameters requi
 
 ## Types and Behavior
 
-The model config resolves the target configuration from the `MODEL_CONFIG_TARGET` environment variable or the `--config` command-line argument, defaulting to the standard `//agent_configs:default` target.
+The model config resolves the target configuration from the `MODEL_CONFIG_TARGET` environment variable, the `AGENT_CONFIG_TARGET` environment variable, or the `--config` command-line argument, defaulting to the standard `//model_configs:default` target.
 
-The model config loads execution parameters and authentication credentials for language model agent runs from the target module located in the workspace runfiles tree or build output directory.
+Using model config ext, the model config loads execution parameters and authentication credentials for language model agent runs from the target module. The model config provides:
 
-When loading the model config, authentication credentials are read from designated environment variables specified in the target configuration, providing the model name, base url, api key, timeout, conversation limit, whether the agent should use step mode to communicate a guide to the agent progressively, and whether the agent should perform startup reads to inspect declared files at session start.
+- The model name designating the target model.
+
+- The base url designating the remote model API endpoint address.
+
+- The api key providing authentication credentials from the designated environment variable, or ambient environment credentials.
+
+- The timeout specifying the maximum request duration in seconds.
+
+- The conversation limit bounding interaction turns.
+
+- The temperature specifying the sampling temperature for model requests.
+
+- The max tokens bound resolved from the target module, or absent if unconstrained.
+
+- Whether the agent should use step mode to communicate a guide to the agent progressively.
+
+- Whether the agent should perform startup reads to inspect declared files at session start.
+
+When the target module is absent, execution parameters and authentication credentials fall back to ambient environment variables and standard defaults.

@@ -3,7 +3,7 @@
 import unittest
 from lib.dag_storage import Node
 from lib.file_alias import ReadWriteFile, WorkspacePath
-from lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from lib.sandbox_change_summary_validator import (
     ChangeSummaryValidator,
     DiffSummary,
@@ -16,6 +16,12 @@ from lib.sandbox_change_summary_validator_impl import (
 from lib.sandbox_run_control import VerificationCheck
 
 
+def _make_workspace_path(path: str) -> WorkspacePath:
+    obj = object.__new__(WorkspacePath)
+    object.__setattr__(obj, "path", path)
+    return obj
+
+
 class SandboxChangeSummaryValidatorImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
@@ -26,7 +32,7 @@ class SandboxChangeSummaryValidatorImplTest(unittest.TestCase):
         node = Node(address="//pkg:target")
         rw_file = ReadWriteFile(
             short_name="module.py",
-            workspace_path=WorkspacePath(path="pkg/module.py"),
+            workspace_path=_make_workspace_path("pkg/module.py"),
             owning_node=node,
         )
         change = NetChange(

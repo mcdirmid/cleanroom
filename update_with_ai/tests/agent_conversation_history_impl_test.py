@@ -11,8 +11,8 @@ from lib.agent_conversation_history_impl import (
     ConversationHistory as ConversationHistoryImpl,
     __initialize__,
 )
-from lib.lifecycle import LifecycleRegistry, enter_phase
-from lib.tool_provider import Response
+from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from lib.tool_provider import Response, WireParameterBindings
 
 
 class AgentConversationHistoryImplTest(unittest.TestCase):
@@ -22,17 +22,21 @@ class AgentConversationHistoryImplTest(unittest.TestCase):
 
     def test_dataclasses(self) -> None:
         """CUJ: Instantiating Message, Stub, and ModelRequest records."""
-        msg = Message(role="user", content="hello")
+        msg = Message(role="user", content="hello", reminder="Remember this", tool_arguments='{"a": "b"}')
         self.assertEqual(msg.role, "user")
         self.assertEqual(msg.content, "hello")
         self.assertIsNone(msg.tool_call_id)
         self.assertIsNone(msg.tool_name)
+        self.assertEqual(msg.reminder, "Remember this")
+        self.assertEqual(msg.tool_arguments, '{"a": "b"}')
 
-        stub = Stub(role="tool", content="[Superseded]", tool_call_id="c1", tool_name="read_file")
+        stub = Stub(role="tool", content="[Superseded]", tool_call_id="c1", tool_name="read_file", reminder="Keep this", tool_arguments="{}")
         self.assertEqual(stub.role, "tool")
         self.assertEqual(stub.content, "[Superseded]")
         self.assertEqual(stub.tool_call_id, "c1")
         self.assertEqual(stub.tool_name, "read_file")
+        self.assertEqual(stub.reminder, "Keep this")
+        self.assertEqual(stub.tool_arguments, "{}")
 
         req = ModelRequest(messages=[msg])
         self.assertEqual(len(req.messages), 1)
@@ -54,46 +58,105 @@ class AgentConversationHistoryImplTest(unittest.TestCase):
             self.assertEqual(msgs[2].role, "assistant")
 
     def test_append_unprompted_tool_response_inserts_synthetic_assistant_call(self) -> None:
-        """CUJ: Appending unprompted tool response adds synthetic assistant invocation."""
+        """CUJ: Appending unprompted tool response adds synthetic assistant invocation correlating with tool_call_id and sorted arguments."""
         with enter_phase("agent_session", registry=self.registry) as scope:
             history = scope.get_singleton(ConversationHistory)
             history.append_message(Message(role="user", content="Execute tool"))
 
-            resp = Response(is_failed=False, is_terminated=False, content="tool output")
-            # Requirement: An unprompted tool response presented at session start is preceded in the conversation history by a synthetic assistant tool invocation message addressing the corresponding tool name.
-            # Requirement: Tool execution response notes and content from the tool provider are included in visible tool message content.
-            history.append_tool_response(resp, tool_name="read_file", tool_call_id="call_1")
+            resp1 = Response(is_failed=False, is_terminated=False, content="_resource: first.py\n_kind: read_only\ntool output 1")
+            # Requirement: Each unprompted tool response presented at session start is preceded in the conversation history by a synthetic assistant tool invocation message formatted according to OpenAI tool calling conventions, correlating with the response tool call identifier and ordering serialized argument parameters deterministically by parameter name, presenting the tool execution as if initiated by the model.
+            bindings1 = WireParameterBindings(bindings={("z_param", "last"), ("a_param", "first")})
+            history.append_tool_response(resp1, tool_name="read_file", tool_call_id="call_1", wire_parameter_bindings=bindings1)
+
+            # A second unprompted tool response with the SAME tool name must also get its own synthetic assistant message paired by tool_call_id
+            resp2 = Response(is_failed=False, is_terminated=False, content="_resource: second.py\n_kind: read_only\ntool output 2")
+            bindings2 = WireParameterBindings(bindings={("file", "second.py")})
+            history.append_tool_response(resp2, tool_name="read_file", tool_call_id="call_2", wire_parameter_bindings=bindings2)
 
             msgs = history.messages
-            # Expect: user -> synthetic assistant -> tool
-            self.assertEqual(len(msgs), 3)
+            # Expect: user -> synthetic assistant 1 -> tool 1 -> synthetic assistant 2 -> tool 2
+            self.assertEqual(len(msgs), 5)
             self.assertEqual(msgs[0].role, "user")
+
             self.assertEqual(msgs[1].role, "assistant")
             self.assertEqual(msgs[1].tool_call_id, "call_1")
             self.assertEqual(msgs[1].tool_name, "read_file")
+            self.assertEqual(msgs[1].tool_arguments, '{"a_param": "first", "z_param": "last"}')
+
             self.assertEqual(msgs[2].role, "tool")
-            self.assertEqual(msgs[2].content, "tool output")
+            self.assertEqual(msgs[2].tool_call_id, "call_1")
+            self.assertEqual(msgs[2].content, "_resource: first.py\n_kind: read_only\ntool output 1")
+
+            self.assertEqual(msgs[3].role, "assistant")
+            self.assertEqual(msgs[3].tool_call_id, "call_2")
+            self.assertEqual(msgs[3].tool_name, "read_file")
+            self.assertEqual(msgs[3].tool_arguments, '{"file": "second.py"}')
+
+            self.assertEqual(msgs[4].role, "tool")
+            self.assertEqual(msgs[4].tool_call_id, "call_2")
+            self.assertEqual(msgs[4].content, "_resource: second.py\n_kind: read_only\ntool output 2")
 
     def test_append_tool_response_supersession_stubbing(self) -> None:
-        """CUJ: Superseded tool results for the same resource are replaced in place with stubs."""
+        """CUJ: Superseded tool results for the same resource are replaced in place with stubs, while distinct resources and read-only files are preserved."""
         with enter_phase("agent_session", registry=self.registry) as scope:
             history = scope.get_singleton(ConversationHistory)
-            resp1 = Response(is_failed=False, is_terminated=False, content="first output")
-            resp2 = Response(is_failed=False, is_terminated=False, content="second output")
 
-            history.append_tool_response(resp1, tool_name="read_file", tool_call_id="call_1")
-            # Requirement: [ConversationHistory] When an appended tool result supersedes an earlier result for the same resource, the earlier result is replaced in place with a stub.
-            history.append_tool_response(resp2, tool_name="read_file", tool_call_id="call_2")
+            # 1. Read-only file is never superseded
+            ro_resp1 = Response(is_failed=False, is_terminated=False, content="_resource: spec.pyi\n_kind: read_only\nspec v1")
+            history.append_tool_response(ro_resp1, tool_name="read_file", tool_call_id="call_ro1")
 
-            msgs = history.messages
-            tool_msgs = [m for m in msgs if m.role == "tool"]
-            self.assertEqual(len(tool_msgs), 2)
-            self.assertIsInstance(tool_msgs[0], Stub)
-            self.assertEqual(tool_msgs[0].content, "[Superseded]")
-            self.assertEqual(tool_msgs[1].content, "second output")
+            ro_resp2 = Response(is_failed=False, is_terminated=False, content="_resource: spec.pyi\n_kind: read_only\nspec v2")
+            history.append_tool_response(ro_resp2, tool_name="read_file", tool_call_id="call_ro2")
 
-    def test_get_model_request_strips_internal_metadata(self) -> None:
-        """CUJ: Formatting messages into ModelRequest strips lines starting with underscore."""
+            # 2. Distinct read-write file does not supersede another resource
+            rw_other = Response(is_failed=False, is_terminated=False, content="_resource: other.py\n_kind: read_write\nother code")
+            history.append_tool_response(rw_other, tool_name="read_file", tool_call_id="call_other")
+
+            # 3. Read-write file supersedes earlier read of the SAME read-write file
+            rw_widget1 = Response(is_failed=False, is_terminated=False, content="_resource: widget.py\n_kind: read_write\nwidget v1")
+            history.append_tool_response(rw_widget1, tool_name="read_file", tool_call_id="call_w1")
+
+            # Requirement: When an appended tool result supersedes an earlier result for the same resource, earlier tool results matching the resource identifier—such as the target read-write file alias identified by internal metadata markers or single-instance tool executions—are replaced in place with a stub, while tool results for distinct resources and read-only files are preserved.
+            # Requirement: [ConversationHistory] When an appended tool result supersedes an earlier result for the same mutable resource, the earlier result is replaced in place with a stub, while tool results for read-only resources are never superseded.
+            rw_widget2 = Response(is_failed=False, is_terminated=False, content="_resource: widget.py\n_kind: read_write\nwidget v2")
+            history.append_tool_response(rw_widget2, tool_name="read_file", tool_call_id="call_w2")
+
+            # 4. Tools without resource metadata (like advance) supersede earlier runs of the same tool name, retaining reminder
+            adv1 = Response(is_failed=True, is_terminated=False, content="advance step 1 failed", reminder="Only provide change summary when completing.")
+            adv2 = Response(is_failed=False, is_terminated=False, content="advance step 2")
+            history.append_tool_response(adv1, tool_name="advance", tool_call_id="call_adv1")
+            # Requirement: A stub retains any reminder provided in the superseded tool response to remind the agent in subsequent turns, and when the newly appended tool result does not supply a reminder, it inherits the reminder from the superseded response.
+            # Requirement: [ConversationHistory] A stub retains any reminder provided in the superseded tool response to remind the agent in subsequent turns, and when the newly appended tool response does not supply a reminder, it inherits the reminder from the superseded response.
+            history.append_tool_response(adv2, tool_name="advance", tool_call_id="call_adv2")
+
+            tool_msgs = [m for m in history.messages if m.role == "tool"]
+
+            # Verify read-only files were NOT superseded
+            self.assertNotIsInstance(tool_msgs[0], Stub)
+            self.assertEqual(tool_msgs[0].content, "_resource: spec.pyi\n_kind: read_only\nspec v1")
+            self.assertNotIsInstance(tool_msgs[1], Stub)
+            self.assertEqual(tool_msgs[1].content, "_resource: spec.pyi\n_kind: read_only\nspec v2")
+
+            # Verify distinct read-write file was NOT superseded
+            self.assertNotIsInstance(tool_msgs[2], Stub)
+            self.assertEqual(tool_msgs[2].content, "_resource: other.py\n_kind: read_write\nother code")
+
+            # Verify widget.py v1 WAS superseded, while widget.py v2 is intact
+            self.assertIsInstance(tool_msgs[3], Stub)
+            self.assertEqual(tool_msgs[3].content, "[Superseded]")
+            self.assertNotIsInstance(tool_msgs[4], Stub)
+            self.assertEqual(tool_msgs[4].content, "_resource: widget.py\n_kind: read_write\nwidget v2")
+
+            # Verify advance v1 WAS superseded into a Stub and retained its reminder
+            self.assertIsInstance(tool_msgs[5], Stub)
+            self.assertEqual(tool_msgs[5].content, "[Superseded]")
+            self.assertEqual(tool_msgs[5].reminder, "Only provide change summary when completing.")
+            self.assertNotIsInstance(tool_msgs[6], Stub)
+            self.assertEqual(tool_msgs[6].content, "advance step 2")
+            self.assertEqual(tool_msgs[6].reminder, "Only provide change summary when completing.")
+
+    def test_get_model_request_strips_internal_metadata_and_formats_reminders(self) -> None:
+        """CUJ: Formatting messages into ModelRequest strips lines starting with underscore and formats reminders."""
         with enter_phase("agent_session", registry=self.registry) as scope:
             history = scope.get_singleton(ConversationHistory)
             history.append_message(
@@ -102,14 +165,27 @@ class AgentConversationHistoryImplTest(unittest.TestCase):
                     content="Hello world\n_internal_metadata_id: 12345\nSecond line",
                 )
             )
+            resp = Response(
+                is_failed=False,
+                is_terminated=False,
+                content="line 1\n_meta: hide\nline 2",
+                reminder="Remember to write tests.",
+            )
+            history.append_tool_response(resp, tool_name="advance", tool_call_id="c1")
             # Requirement: [ConversationHistory] The conversation history produces a model request prepared for transmission to a language model.
-            # Requirement: Messages in a model request are formatted according to model provider roles for system, user, assistant, and tool messages.
+            # Requirement: The conversation history formats messages in a model request according to OpenAI chat completion conventions for system, user, assistant, and tool messages.
             # Requirement: Messages in a model request omit internal metadata fields starting with an underscore.
+            # Requirement: Tool execution response notes, content, and reminders from the tool provider are included in visible tool message content, formatting active reminders on messages and superseded stubs to remind the agent in the assembled model request.
             req = history.get_model_request()
-            self.assertEqual(len(req.messages), 1)
+            self.assertEqual(len(req.messages), 3)  # user, synthetic assistant, tool
             self.assertNotIn("_internal_metadata_id", req.messages[0].content)
             self.assertIn("Hello world", req.messages[0].content)
             self.assertIn("Second line", req.messages[0].content)
+
+            tool_msg = req.messages[2]
+            self.assertEqual(tool_msg.role, "tool")
+            self.assertNotIn("_meta: hide", tool_msg.content)
+            self.assertIn("line 1\nline 2\n\nReminder: Remember to write tests.", tool_msg.content)
 
 
 if __name__ == "__main__":

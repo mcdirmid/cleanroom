@@ -72,6 +72,28 @@ FRESH_REQUIREMENTS:
         ...
 
     @property
+    def temperature(self) -> float:
+        """
+PURPOSE:
+Sampling temperature for model requests
+
+FRESH_REQUIREMENTS:
+- The model config provides a temperature specifying the sampling temperature for model requests.
+"""
+        ...
+
+    @property
+    def max_tokens(self) -> Optional[int]:
+        """
+PURPOSE:
+Upper bound on generated response tokens per model interaction
+
+FRESH_REQUIREMENTS:
+- The model config provides a max tokens upper bound specifying the maximum number of response tokens permitted per request, or absent if unconstrained.
+"""
+        ...
+
+    @property
     def is_step_mode(self) -> bool:
         """
 PURPOSE:

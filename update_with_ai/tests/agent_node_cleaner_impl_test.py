@@ -14,7 +14,10 @@ from lib.agent_runner import AgentOutcome, AgentRunner
 from lib.bazel_graph_storage import BazelGraphStorage, NodeDefinition, TaskPrompt
 from lib.dag_node_cleaner import CleanedNode
 from lib.dag_storage import Change, Dependency, Feedback, Message as DagMessage, Node
-from lib.lifecycle import LifecycleRegistry, enter_phase
+from lib.file_alias import BoundFile, FileContent, UnboundFile
+from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from lib.model_config import ModelConfig
+from lib.node_config import NodeConfig
 from lib.sandbox import Sandbox, StartupToolExecution
 from lib.tool_provider import Response, WireParameterBindings
 
@@ -47,7 +50,7 @@ class MockStorage:
         return self.dependencies.get(node.address, set())
 
     def is_dirty(self, node: Node) -> bool:
-        return True
+        return bool(self.messages.get(node.address))
 
     def register_dependent(self, node: Node) -> None:
         pass
@@ -76,7 +79,7 @@ class MockHistory:
 
     def __init__(self) -> None:
         self._messages: List[Message] = []
-        self.tool_responses: List[tuple[Response, str, str]] = []
+        self.tool_responses: List[tuple[Response, str, str, Optional[WireParameterBindings]]] = []
 
     @property
     def messages(self) -> List[Message]:
@@ -85,8 +88,14 @@ class MockHistory:
     def append_message(self, message: Message) -> None:
         self._messages.append(message)
 
-    def append_tool_response(self, response: Response, tool_name: str, tool_call_id: str) -> None:
-        self.tool_responses.append((response, tool_name, tool_call_id))
+    def append_tool_response(
+        self,
+        response: Response,
+        tool_name: str,
+        tool_call_id: str,
+        wire_parameter_bindings: Optional[WireParameterBindings] = None,
+    ) -> None:
+        self.tool_responses.append((response, tool_name, tool_call_id, wire_parameter_bindings))
         self._messages.append(
             Message(role="tool", content=response.content, tool_call_id=tool_call_id, tool_name=tool_name)
         )
@@ -109,6 +118,34 @@ class MockRunner:
         return self.outcome
 
 
+class MockModelConfig:
+    tier = "system"
+
+    def __init__(self, is_step_mode: bool = False) -> None:
+        self.is_step_mode = is_step_mode
+        self.model_name = "test-model"
+        self.base_url = None
+        self.api_key = None
+        self.timeout = 60
+        self.conversation_limit = 100
+        self.temperature = 0.0
+        self.max_tokens = None
+        self.is_startup_reads = True
+
+
+class MockNodeConfig:
+    tier = "agent_session"
+
+    def __init__(self, guide_file: Optional[UnboundFile] = None) -> None:
+        self.read_only_files: Set[BoundFile] = set()
+        self.read_write_files: Set[BoundFile] = set()
+        self.guide_file = guide_file
+        self.templates: Set[tuple[BoundFile, FileContent]] = set()
+        self.guide = None
+        self.blame_targets: Set[BoundFile] = set()
+        self.verification_checks = []
+
+
 class AgentNodeCleanerImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
@@ -117,11 +154,15 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.sandbox = MockSandbox()
         self.history = MockHistory()
         self.runner = MockRunner()
+        self.node_cfg = MockNodeConfig()
+        self.model_cfg = MockModelConfig()
 
         self.registry.register_instance(self.storage, keys=[BazelGraphStorage], tier="system")
         self.registry.register_instance(self.sandbox, keys=[Sandbox], tier="agent_session")
         self.registry.register_instance(self.history, keys=[ConversationHistory], tier="agent_session")
         self.registry.register_instance(self.runner, keys=[AgentRunner], tier="agent_session")
+        self.registry.register_instance(self.node_cfg, keys=[NodeConfig], tier="agent_session")
+        self.registry.register_instance(self.model_cfg, keys=[ModelConfig], tier="system")
 
     def test_cleaned_node_lifecycle(self) -> None:
         """CUJ: CleanedNode holds and exposes the target node in the session tier."""
@@ -144,10 +185,10 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             node=node,
             task_prompt=TaskPrompt("Clean this node"),
         )
-        self.storage.messages[node.address] = {Feedback()}
+        self.storage.messages[node.address] = {Feedback(), Change()}
         startup_exec = StartupToolExecution(
             tool_name="read_file",
-            wire_parameter_bindings=WireParameterBindings(bindings=set()),
+            wire_parameter_bindings=WireParameterBindings(bindings={("file", "dag_storage.pyi")}),
             response=Response(is_failed=False, is_terminated=False, content="spec content"),
         )
         self.sandbox.startup_executions.append(startup_exec)
@@ -162,11 +203,15 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             # Requirement: Startup templates from the sandbox are materialized for missing read-write files.
             self.assertTrue(self.sandbox.templates_materialized)
             # Verify history seeded
-            # Requirement: The conversation history is seeded with the task prompt, node definition, incoming pending messages, and paired startup tool executions from the sandbox.
+            # Requirement: The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content, and paired startup tool executions from the sandbox.
             history_contents = [m.content for m in self.history.messages]
             self.assertTrue(any("Clean this node" in c for c in history_contents))
-            self.assertTrue(any("Feedback" in c for c in history_contents))
+            # Verify messages are ordered deterministically by content: "Change" before "Feedback"
+            change_idx = next(i for i, c in enumerate(history_contents) if "Incoming message: Change" in c)
+            feedback_idx = next(i for i, c in enumerate(history_contents) if "Incoming message: Feedback" in c)
+            self.assertLess(change_idx, feedback_idx)
             self.assertTrue(any("spec content" in c for c in history_contents))
+            self.assertEqual(self.history.tool_responses[0][3], startup_exec.wire_parameter_bindings)
 
     def test_clean_node_with_file_modifications_produces_change_message(self) -> None:
         """CUJ: Producing Change message when run succeeds with file modifications."""
@@ -237,6 +282,13 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             msgs = cleaner.clean_node(node)
             self.assertEqual(len(msgs), 0)
 
+            # Requirement: [NodeCleaner] Cleaning a dirty node communicates whether processing should continue.
+            # Requirement: [NodeCleaner] Processing cannot continue only if a failure occurs while cleaning the node that cannot be handled by cleaning any other node.
+            cont = cleaner.clean(node)
+            self.assertFalse(cont)
+            self.assertTrue(self.storage.is_dirty(node))
+            self.assertGreater(len(self.storage.get_messages(node)), 0)
+
     def test_clean_delivers_messages_to_dependents_and_dependencies(self) -> None:
         """CUJ: Clean operation delivers Change messages to dependents and clears prior messages."""
         node = Node(address="//pkg:clean_op")
@@ -277,9 +329,67 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             self.assertEqual(len(self.storage.messages[dependency.address]), 1)
             self.assertIsInstance(list(self.storage.messages[dependency.address])[0], Feedback)
 
+    def test_clean_node_seeds_history_with_step_mode_guide(self) -> None:
+        """CUJ: Seeding conversation history augments task prompt with advance instruction in step mode."""
+        node = Node(address="//pkg:step_guide_test")
+        self.storage.definitions[node.address] = NodeDefinition(
+            node=node,
+            task_prompt=TaskPrompt("Ensure the lib conforms to the guide"),
+        )
+        self.node_cfg.guide_file = UnboundFile(short_name="guide.md")
+        self.model_cfg.is_step_mode = True
+
+        with enter_phase("system", registry=self.registry) as scope:
+            cleaner = scope.get_singleton(AgentNodeCleaner)
+            # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when step mode is active, or identifying the guide file by its file alias when step mode is inactive.
+            _ = cleaner.clean_node(node)
+
+            history_contents = [m.content for m in self.history.messages]
+            prompt_content = next(c for c in history_contents if "Ensure the lib conforms" in c)
+            self.assertIn("advance", prompt_content)
+            self.assertIn("change_summary", prompt_content)
+            self.assertNotIn("guide.md", prompt_content)
+
+    def test_clean_node_seeds_history_with_non_step_mode_guide(self) -> None:
+        """CUJ: Seeding conversation history augments task prompt with guide file alias when not in step mode."""
+        node = Node(address="//pkg:nostep_guide_test")
+        self.storage.definitions[node.address] = NodeDefinition(
+            node=node,
+            task_prompt=TaskPrompt("Ensure the lib conforms to the guide"),
+        )
+        self.node_cfg.guide_file = UnboundFile(short_name="my_guide.md")
+        self.model_cfg.is_step_mode = False
+
+        with enter_phase("system", registry=self.registry) as scope:
+            cleaner = scope.get_singleton(AgentNodeCleaner)
+            # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when step mode is active, or identifying the guide file by its file alias when step mode is inactive.
+            _ = cleaner.clean_node(node)
+
+            history_contents = [m.content for m in self.history.messages]
+            prompt_content = next(c for c in history_contents if "Ensure the lib conforms" in c)
+            self.assertIn("my_guide.md", prompt_content)
+            self.assertNotIn("advance", prompt_content)
+
+    def test_clean_node_seeds_history_without_guide_leaves_prompt_unaugmented(self) -> None:
+        """CUJ: Seeding conversation history leaves task prompt unaugmented when no guide is configured."""
+        node = Node(address="//pkg:noguide_test")
+        self.storage.definitions[node.address] = NodeDefinition(
+            node=node,
+            task_prompt=TaskPrompt("Ensure the lib conforms without guide"),
+        )
+        self.node_cfg.guide_file = None
+
+        with enter_phase("system", registry=self.registry) as scope:
+            cleaner = scope.get_singleton(AgentNodeCleaner)
+            _ = cleaner.clean_node(node)
+
+            history_contents = [m.content for m in self.history.messages]
+            prompt_content = next(c for c in history_contents if "Ensure the lib conforms without guide" in c)
+            self.assertEqual(prompt_content, "Ensure the lib conforms without guide")
+
 
 if __name__ == "__main__":
     unittest.main()
 
-# Untested requirements:
-# - [NodeCleaner] Processing cannot continue only if a failure occurs while cleaning the node that cannot be handled by cleaning any other node.
+# Untested requirements: None
+

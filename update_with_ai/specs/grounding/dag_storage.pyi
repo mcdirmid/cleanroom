@@ -134,16 +134,14 @@ Indicates that a dependency can be silent when the dependent node does not depen
 """
         ...
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 @data_type
 class Message:
     """
 PURPOSE:
 Introduces messages explaining why a node requires cleaning
 """
-
-    def __init__(self) -> None:
-        ...
+    ...
 
 @dataclass(frozen=True)
 @variant

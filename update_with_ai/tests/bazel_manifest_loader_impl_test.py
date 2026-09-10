@@ -15,7 +15,13 @@ from lib.bazel_manifest_loader_impl import (
 )
 from lib.bazel_node_id_utils import BazelNodeIdentifierUtility, NodeDirectory
 from lib.dag_storage import Dependency, Message, Node
-from lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleRegistry, enter_phase
+
+
+def _make_node_dir(path: str) -> NodeDirectory:
+    obj = object.__new__(NodeDirectory)
+    object.__setattr__(obj, "path", path)
+    return obj
 
 
 class MockNodeIdUtils:
@@ -35,7 +41,7 @@ class MockNodeIdUtils:
 
     def extract_directory(self, node: Node) -> NodeDirectory:
         pkg = node.address.split(":")[0].lstrip("/")
-        return NodeDirectory(path=os.path.join(self.base_dir, pkg))
+        return _make_node_dir(os.path.join(self.base_dir, pkg))
 
 
 class MockGraphStorage:
@@ -153,6 +159,48 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             # Requirement: A manifest loader registers silent dependencies as non-propagating dependencies excluding their source files.
             self.assertFalse(dep_b.is_silent)
             self.assertTrue(silent_c.is_silent)
+
+    def test_load_manifest_from_update_with_ai_schema(self) -> None:
+        """CUJ: Loading top-level manifest object directly formatted by update_with_ai.bzl."""
+        manifest_data = {
+            "label": "//pkg:sample_node",
+            "name": "sample_node",
+            "prompt": "Implement the requested feature",
+            "tools": [":tool_a"],
+            "deps": ["//pkg:dep_x"],
+            "silent_deps": ["//pkg:silent_y"],
+            "feedback_deps": [],
+            "star_deps": [],
+            "src": "src.txt",
+            "template": None,
+            "guide": None,
+            "silent_srcs": [],
+            "verify": None,
+            "dependency_paths": [],
+        }
+        manifest_content = Manifest(json.dumps(manifest_data))
+
+        with enter_phase("system", registry=self.registry) as scope:
+            loader = scope.get_singleton(BazelManifestLoader)
+            results = loader.load_manifest(manifest_content, self.storage)
+
+            # Requirement: A manifest loader parses JSON manifests using the filesystem into json manifest records.
+            self.assertEqual(len(results), 1)
+            defn = results[0]
+            # Requirement: A manifest loader normalizes node references into canonical nodes using node identifier utilities.
+            self.assertEqual(defn.node, Node(address="//pkg:sample_node"))
+            self.assertEqual(defn.task_prompt, "Implement the requested feature")
+
+            # Requirement: [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using a node identifier utility, populating the bazel graph storage.
+            self.assertEqual(self.storage.get_node_definition(defn.node), defn)
+
+            # Dependencies recorded in storage
+            deps = self.storage.get_dependencies(defn.node)
+            self.assertEqual(len(deps), 2)
+            dep_x = next(d for d in deps if d.node.address == "//pkg:dep_x")
+            silent_y = next(d for d in deps if d.node.address == "//pkg:silent_y")
+            self.assertFalse(dep_x.is_silent)
+            self.assertTrue(silent_y.is_silent)
 
 
 if __name__ == "__main__":

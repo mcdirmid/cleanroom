@@ -19,7 +19,7 @@ from lib.file_alias import (
     UnboundFile,
     WorkspacePath,
 )
-from lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from lib.node_config import NodeConfig
 from lib.sandbox_file_reader import ReadManager, ReadTool, SearchTool
 from lib.sandbox_file_reader_impl import (
@@ -66,11 +66,23 @@ class MockBooleanConverter:
         return bool(wire_value)
 
 
+def _make_directory_path(path: str) -> DirectoryPath:
+    obj = object.__new__(DirectoryPath)
+    object.__setattr__(obj, "path", path)
+    return obj
+
+
+def _make_workspace_path(path: str) -> WorkspacePath:
+    obj = object.__new__(WorkspacePath)
+    object.__setattr__(obj, "path", path)
+    return obj
+
+
 class MockAliasManager:
     tier = "agent_session"
 
     def __init__(self, workspace_root: str) -> None:
-        self.workspace_root = DirectoryPath(path=workspace_root)
+        self.workspace_root = _make_directory_path(workspace_root)
         self.actual_type = FileAlias
         self.wire_type = String()
 
@@ -120,12 +132,12 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         node = Node(address="//pkg:test")
         self.ro_file = ReadOnlyFile(
             short_name="readonly.txt",
-            workspace_path=WorkspacePath(path="readonly.txt"),
+            workspace_path=_make_workspace_path("readonly.txt"),
             owning_node=node,
         )
         self.rw_file = ReadWriteFile(
             short_name="writable.txt",
-            workspace_path=WorkspacePath(path="writable.txt"),
+            workspace_path=_make_workspace_path("writable.txt"),
             owning_node=node,
         )
         self.guide_unbound = UnboundFile(short_name="guide.md")
@@ -164,13 +176,13 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         with enter_phase("agent_session", registry=self.registry) as scope:
             read_mgr = scope.get_singleton(ReadManager)
             # Both read_file and search_files installed in tool manager
-            # Requirement: The read manager unconditionally installs the read tool and search tool into the tool manager.
+            # Requirement: The read manager unconditionally installs the read tool into the tool manager and never installs the search tool.
             # Requirement: [ReadManager] The read manager installs the read tool and search tool.
             tool_names = {t.name for t in self.tool_mgr.installed_tools}
             # Requirement: The read tool is named `read_file`.
             self.assertIn("read_file", tool_names)
             # Requirement: The search tool is named `search_files`.
-            self.assertIn("search_files", tool_names)
+            self.assertNotIn("search_files", tool_names)
 
             # Requirement: The read manager exposes declared read-only files, read-write files, and optional guide file obtained from the node config.
             # Requirement: [ReadManager] The read manager exposes the session's set of read-only files to support session startup context injection.
@@ -186,6 +198,10 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             read_tool = scope.get_singleton(ReadTool)
             self.assertIsInstance(read_tool.description, str)
             self.assertGreater(len(read_tool.parameters), 0)
+            # Requirement: The read tool file parameter uses the alias manager to convert a file alias.
+            self.assertIs(read_tool.file_alias_parameter.parameter_converter, self.alias_mgr)
+            # Requirement: The read tool line numbers parameter uses the boolean parameter converter.
+            self.assertIs(read_tool.line_numbers_parameter.parameter_converter, self.bool_conv)
 
             # 1. Read-only with line_numbers=False -> succeeds
             bindings1 = ActualParameterBindings(
@@ -193,8 +209,10 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             )
             # Requirement: Executing the read tool reads file content using the filesystem at the host path formed from the alias manager workspace root and bound file workspace path.
             # Requirement: On successful read tool execution for a read-only file, the returned file content is sanitized by the alias manager to mask host paths.
+            # Requirement: On successful read tool execution, the response includes internal resource metadata identifying the read file alias.
             resp1 = read_tool.execute_tool(bindings1)
             self.assertFalse(resp1.is_failed)
+            self.assertIn(f"_resource: {self.ro_file.short_name}\n_kind: read_only\n", resp1.content)
             self.assertIn("Line 1 readonly", resp1.content)
             self.assertIn("[WORKSPACE]/readonly.txt", resp1.content)
 
@@ -202,25 +220,35 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             bindings2 = ActualParameterBindings(
                 bindings={(read_tool.file_alias_parameter, self.ro_file), (read_tool.line_numbers_parameter, True)}
             )
-            # Requirement: Executing the read tool fails if line numbers are requested when reading a read-only file.
+            # Requirement: Executing the read tool fails if line numbers are requested when reading a read-only file, and reminds the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files.
             resp2 = read_tool.execute_tool(bindings2)
             self.assertTrue(resp2.is_failed)
+            self.assertEqual(
+                resp2.reminder,
+                "Line numbers must be requested when reading read-write files and omitted when reading read-only files.",
+            )
 
             # 3. Read-write with line_numbers=True -> succeeds with line numbers
             bindings3 = ActualParameterBindings(
                 bindings={(read_tool.file_alias_parameter, self.rw_file), (read_tool.line_numbers_parameter, True)}
             )
+            # Requirement: On successful read tool execution, the response includes internal resource metadata identifying the read file alias.
             resp3 = read_tool.execute_tool(bindings3)
             self.assertFalse(resp3.is_failed)
+            self.assertIn(f"_resource: {self.rw_file.short_name}\n_kind: read_write\n", resp3.content)
             self.assertIn("1: Line 1 writable", resp3.content)
 
             # 4. Read-write with line_numbers=False -> fails
             bindings4 = ActualParameterBindings(
                 bindings={(read_tool.file_alias_parameter, self.rw_file), (read_tool.line_numbers_parameter, False)}
             )
-            # Requirement: Executing the read tool fails if line numbers are not requested when reading a read-write file.
+            # Requirement: Executing the read tool fails if line numbers are not requested when reading a read-write file, and reminds the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files.
             resp4 = read_tool.execute_tool(bindings4)
             self.assertTrue(resp4.is_failed)
+            self.assertEqual(
+                resp4.reminder,
+                "Line numbers must be requested when reading read-write files and omitted when reading read-only files.",
+            )
 
     def test_read_tool_unbound_files(self) -> None:
         """CUJ: Handling unbound file requests (guide vs unknown files)."""
@@ -241,6 +269,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             )
             resp_unknown = read_tool.execute_tool(bindings_unknown)
             self.assertTrue(resp_unknown.is_failed)
+            self.assertEqual(resp_unknown.reminder, "Only declared files can be inspected.")
 
     def test_search_tool_reporting_and_invalid_pattern(self) -> None:
         """CUJ: Searching regex across files and handling invalid regex."""
@@ -249,6 +278,8 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertIsInstance(search_tool.description, str)
             self.assertGreater(len(search_tool.parameters), 0)
             conv = search_tool.regex_pattern_parameter.parameter_converter
+            # Requirement: [SearchTool] The search tool accepts a regex pattern parameter.
+            # Requirement: The search tool regex pattern parameter uses the regex pattern converter.
             self.assertIsNotNone(conv.actual_type)
             self.assertIsNotNone(conv.wire_type)
 
@@ -281,6 +312,7 @@ if __name__ == "__main__":
 
 # Untested requirements:
 # - [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
-# - Executing the read tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases.
+# - [Tool] When a parameter is required, an argument must be supplied for tool execution.
+# - Executing the read tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.
 # - When an unbound file equals the guide file configured for step-mode, the read tool failure response indicates that `advance` must be called to read the guide instead.
 # - [ReadTool] Executing the read tool on the guide file provides progressive delivery feedback to the agent.

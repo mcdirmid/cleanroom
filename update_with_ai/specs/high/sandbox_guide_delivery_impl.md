@@ -13,12 +13,18 @@ Agent guidance documents contain disparate front-matter, structural summaries, a
 
 ## Types and Behavior
 
-A guide delivery parses file content into a task guide, extracting the summary from content preceding the first section heading, and creating sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Lint checks`. When initialized for an agent session, the guide delivery obtains its guide from the node config in node_config.
+A guide delivery parses file content into a task guide, extracting the summary from content preceding the first section heading, and creating sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Lint checks`. When initialized for an agent session, the guide delivery obtains its guide from the node config.
 
 A guide delivery begins before the first step section. When advancing a step with passed verification:
 
-- If no steps have been delivered yet, the guide delivery emits a response combining the guide summary and the first step section content, and advances to the first step section.
+- If no steps have been delivered yet, the guide delivery emits a response containing the guide summary alone without delivering a step section.
 
-- If a step section is currently active and further step sections remain, the guide delivery emits a response containing the next step section content and advances its index to that section.
+- If steps have already been delivered and further step sections remain, the guide delivery emits a response presenting the guide summary above the next step section content and advances its index to that section.
 
-When verification fails, the guide delivery retains the current step index without advancement and produces no response. When no guide is configured or no step sections remain, the guide delivery indicates that no steps remain and advancing produces no response.
+Failing verification halts progression and provides diagnostic feedback. When advancing a step with failed verification:
+
+- If no step section has been delivered yet, the guide delivery retains its index and emits a response combining the guide summary and failure diagnostics.
+
+- If a step section is currently active, the guide delivery retains the current step index without advancement and emits a response combining the guide summary, the current step section content, and the failure diagnostics.
+
+When no guide is configured or no step sections remain, the guide delivery indicates that no steps remain and advancing produces no response.

@@ -8,7 +8,7 @@ The reader is an LLM consuming the guide through tool reads; it has only the cur
 
 The Summary drives the initial write or edit in one or at most two concise paragraphs: it states the high-level subject and core constraints completely so the initial revision is accurate in substance, without detailing fine-grained checks that checklist sections verify. Because linters run immediately upon advancing, structural problems are exposed early, keeping the Summary light and focused on core constraints rather than deep rule duplication.
 
-A guide never triggers. The prompt asks for alignment or conformance with the guide and the other input files, and it drives the loop; the guide stakes constraints and requirements only. Directive verbs aimed at the reader ("ensure", "produce", "apply", "verify the checklist", "call advance") are prohibited; declarative constraints ("the module must", "X matches Y") are the rule.
+A guide never triggers. The prompt asks for alignment or conformance with the guide and the other input files, and it drives the loop; the guide stakes constraints and requirements only. Directive verbs aimed at the reader ("ensure", "produce", "apply", "verify the checklist", "call advance") are prohibited; declarative constraints ("the module must", "X matches Y") are the rule. Guides and prompts never advise about tool arguments: they can refer to advance, but they cannot refer to tool arguments or the content of advance. Prompts state what the artifact is, never what it is not. Prompts never provide negative instructions, never speculate about other modules or unreadable files, and never instruct on editing mechanics or tool usage. Prompts state the target artifact and call advance to proceed.
 
 Every guide follows this structure:
 
@@ -37,8 +37,9 @@ Every guide follows this structure:
 - [ ] No directive framing — never "ensure", "produce", "transform" (the file pre-exists; the prompt triggers, the guide constrains)
 - [ ] Build-critical requirements come first (BUILD entries, required structure) — nothing builds without them
 - [ ] The guide's requirements are satisfiable from the guide alone: no reliance on the artifact's starting state — the file's existing content (a template, a prior version) is at most an efficiency boost, never the source of required structure
-- [ ] No instruction to run or interpret verification; verification is transparent and the reader's only verification action is calling `advance`
-- [ ] No instruction to do what the reader cannot do — the reader's capabilities are fixed (file reads, edits, and advance; no execution, no shell, no test runs); a capability the reader lacks is never stated as a requirement and never as a prohibition — the reader already knows it lacks it
+- [ ] No instruction to run or interpret verification; verification is transparent and the reader's only verification action is calling `advance`; guides and prompts never advise about tool arguments: they can refer to advance, but they cannot refer to tool arguments or the content of advance
+- [ ] Prompts state what the artifact is, never what it is not: no negative instructions, no speculation about other modules, and no editing or tool advice
+- [ ] No instruction to do what the reader cannot do — the reader's capabilities are fixed (file reads, edits, and advance; the search tool is never installed; no execution, no shell, no test runs); a capability the reader lacks is never stated as a requirement and never as a prohibition — the reader already knows it lacks it
 - [ ] No reference to files the reader cannot read (other guides, HLS files, implementations); a label in the source material that names an unreadable file gets one sentence saying it carries no requirements
 - [ ] External domain knowledge and foreign formats (third-party APIs, foreign serialization formats, runtime identifiers) are excluded from guides; external boundaries are specified in dedicated external boundary specifications (`low/<name>_ext.md`)
 - [ ] Templates mentioned at most once ("a file that is a template is filled in")

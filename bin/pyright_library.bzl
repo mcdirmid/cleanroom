@@ -17,37 +17,96 @@ def _pyright_test_impl(ctx):
                 if f.path.endswith(".py"):
                     py_files.append(f)
     
-    # Create a file list for pyright
-    file_list = ctx.actions.declare_file(ctx.label.name + "_files.txt")
-    
-    # Write unique paths to file list
-    unique_paths = sorted(set([f.path for f in py_files]))
-    file_list_content = "\n".join(unique_paths)
-    ctx.actions.write(file_list, file_list_content)
-    
     # Create a wrapper script
     wrapper = ctx.actions.declare_file(ctx.label.name + "_wrapper.sh")
     
-    # Set up PYTHONPATH with all dependency paths
-    dep_paths = []
+    # Set up PYTHONPATH with all dependency paths (always include workspace root '.')
+    dep_paths = ["."]
+    
+    # Process target imports relative to package
+    for imp in getattr(ctx.attr, "imports", []):
+        if imp == ".":
+            dep_paths.append(ctx.label.package if ctx.label.package else ".")
+        else:
+            pkg_parts = ctx.label.package.split("/") if ctx.label.package else []
+            imp_parts = imp.split("/")
+            for part in imp_parts:
+                if part == "..":
+                    if pkg_parts:
+                        pkg_parts.pop()
+                elif part != ".":
+                    pkg_parts.append(part)
+            resolved = "/".join(pkg_parts) if pkg_parts else "."
+            dep_paths.append(resolved)
+
     for dep in ctx.attr.deps + ctx.attr.pyright_deps:
+        dep_label = str(dep.label)
+        if dep_label.endswith(":framework") or dep_label == "//update_with_ai/support/lib:framework":
+            fail("Target {} is not allowed to depend on framework ({})".format(ctx.label, dep_label))
+
         if hasattr(dep, "files"):
             for f in dep.files.to_list():
                 if f.path.endswith(".py"):
-                    dep_paths.append(f.dirname)
-                    parent = "/".join(f.dirname.split("/")[:-1])
-                    if parent:
-                        dep_paths.append(parent)
+                    if "site-packages" in f.short_path:
+                        idx = f.short_path.find("site-packages")
+                        dep_paths.append(f.short_path[:idx + len("site-packages")])
+                    else:
+                        parts = f.short_path.split("/")
+                        if parts:
+                            dep_paths.append(parts[0])
+                        if "support/lib" in f.short_path:
+                            dep_paths.append("update_with_ai")
+                        else:
+                            dep_paths.append(f.short_path.rsplit("/", 1)[0] if "/" in f.short_path else ".")
+                            if len(parts) > 2:
+                                dep_paths.append("/".join(parts[:-2]))
     
     for f in ctx.files.srcs:
-        parent = "/".join(f.dirname.split("/")[:-1])
-        if parent:
-            dep_paths.append(parent)
+        parts = f.short_path.split("/")
+        if parts:
+            dep_paths.append(parts[0])
+        dep_paths.append(f.short_path.rsplit("/", 1)[0] if "/" in f.short_path else ".")
+        if len(parts) > 2:
+            dep_paths.append("/".join(parts[:-2]))
     
     unique_dep_paths = sorted(set(dep_paths))
+
+    # Generate target-specific hermetic pyright configuration
+    config_file = ctx.actions.declare_file(ctx.label.name + "_pyrightconfig.json")
+    
+    pkg_parts = ctx.label.package.split("/") if ctx.label.package else []
+    root_rel = "/".join([".." for _ in pkg_parts]) if pkg_parts else "."
+    
+    include_paths = []
+    for f in ctx.files.srcs:
+        if root_rel == ".":
+            include_paths.append(f.short_path)
+        else:
+            include_paths.append(root_rel + "/" + f.short_path)
+    unique_include_paths = _deduplicate_list(sorted(include_paths))
+    
+    extra_paths = []
+    for p in unique_dep_paths:
+        if root_rel == ".":
+            extra_paths.append(p)
+        else:
+            extra_paths.append(root_rel if p == "." else root_rel + "/" + p)
+    unique_extra_paths = _deduplicate_list(sorted(extra_paths))
+    
+    config_dict = {
+        "include": unique_include_paths,
+        "exclude": [],
+        "extraPaths": unique_extra_paths,
+        "pythonVersion": "3.12",
+        "reportMissingImports": "none",
+        "reportUnknownMemberType": False,
+        "reportUnknownVariableType": False,
+        "reportUnknownArgumentType": False,
+    }
+    ctx.actions.write(config_file, json.encode(config_dict))
     
     wrapper_content = """#!/bin/bash
-set -e
+set -e -o pipefail
 
 # Set PYTHONPATH to include all dependencies
 if [ -n "$PYTHONPATH" ]; then
@@ -56,19 +115,23 @@ else
     export PYTHONPATH="{dep_paths}"
 fi
 
-# Read files from the file list and run pyright on them
-# Use xargs to handle large numbers of files
-cat {file_list} | xargs python3 -m pyright
+python3 -m pyright --project {config_path}
 """.format(
         dep_paths=":".join(unique_dep_paths),
-        file_list=file_list.path
+        config_path=config_file.short_path,
     )
     ctx.actions.write(wrapper, wrapper_content, is_executable=True)
+    
+    runfiles = ctx.runfiles(files = [wrapper, config_file] + py_files)
+    for dep in ctx.attr.deps + ctx.attr.pyright_deps:
+        if DefaultInfo in dep:
+            runfiles = runfiles.merge(dep[DefaultInfo].default_runfiles)
     
     return [
         DefaultInfo(
             executable = wrapper,
-            files = depset([wrapper, file_list] + py_files),
+            files = depset([wrapper, config_file] + py_files),
+            runfiles = runfiles,
         ),
     ]
 
@@ -158,6 +221,7 @@ def pyright_library(name, srcs, deps = [], pyright_deps = [], imports = [".."], 
         srcs = srcs,
         deps = deps,
         pyright_deps = pyright_deps,
+        imports = imports,
         tags = ["type_check"],
     )
     
@@ -203,6 +267,7 @@ def pyright_test(name, srcs, deps = [], pyright_deps = [], imports = [".."], **k
         srcs = srcs,
         deps = deps,
         pyright_deps = pyright_deps,
+        imports = imports,
         tags = ["type_check"],
     )
     
@@ -249,6 +314,7 @@ def pyright_binary(name, srcs, main, deps = [], pyright_deps = [], imports = [".
         srcs = srcs,
         deps = deps,
         pyright_deps = pyright_deps,
+        imports = imports,
         tags = ["type_check"],
     )
     
@@ -277,11 +343,12 @@ def pyright_binary(name, srcs, main, deps = [], pyright_deps = [], imports = [".
 
 # Define the rule
 _pyright_test = rule(
-    implementation = _pyright_test_impl,
-    attrs = {
-        "srcs": attr.label_list(allow_files = [".py"]),
-        "deps": attr.label_list(providers = [DefaultInfo]),
-        "pyright_deps": attr.label_list(providers = [DefaultInfo]),
-    },
-    test = True,
+     implementation = _pyright_test_impl,
+     attrs = {
+         "srcs": attr.label_list(allow_files = [".py"]),
+         "deps": attr.label_list(providers = [DefaultInfo]),
+         "pyright_deps": attr.label_list(providers = [DefaultInfo]),
+         "imports": attr.string_list(default = []),
+     },
+     test = True,
 )

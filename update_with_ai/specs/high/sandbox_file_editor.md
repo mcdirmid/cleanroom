@@ -22,4 +22,4 @@ The *edit manager* is an agent session service that installs editing tools for m
 
 - A *line update tool* that is an editing tool updating or inserting lines within a line range in a read-write file, accepting a *file alias parameter*, a *start line parameter*, an *end line parameter*, and a *replacement text parameter*.
 
-The edit manager can *materialize* templates into missing read-write files at session start without overwriting existing files. The edit manager exposes whether workspace file *modifications* occurred during the session.
+The edit manager can *materialize* templates into missing read-write files at session start without overwriting existing files. The edit manager exposes whether workspace file *modifications* occurred during the session, determined by whether workspace file contents differ from their initial state prior to editing, and exposes a *file update revision* that tracks sequential updates made to workspace files.

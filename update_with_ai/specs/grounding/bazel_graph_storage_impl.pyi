@@ -3,7 +3,7 @@ from framework import operation, override, singleton_type
 import bazel_graph_storage
 import bazel_node_id_utils
 import dag_storage
-import file_alias
+import file_paths
 import update_with_ai_proto_ext
 
 @singleton_type('system')
@@ -27,7 +27,7 @@ INHERITED_REQUIREMENTS:
 - [BazelGraphStorage] Modifying messages or reverse dependencies in the bazel graph storage preserves existing records on failure.
 
 GROUNDING_ARGUMENT:
-- As a system singleton, BazelGraphStorage maintains node definitions and task prompts mapped to nodes in dag storage, coordinates with imported bazel_node_id_utils in the same system lifecycle tier, and persists pending messages and reverse dependencies to package textproto files via update_with_ai_proto_ext.
+- As a system singleton, BazelGraphStorage maintains node definitions and task prompts mapped to nodes in dag storage, coordinates with imported bazel_node_id_utils and file_paths in the same system lifecycle tier, and persists pending messages and reverse dependencies to package textproto files via update_with_ai_proto_ext.
 """
 
     @operation

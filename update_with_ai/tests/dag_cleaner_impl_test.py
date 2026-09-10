@@ -6,7 +6,7 @@ from lib.dag_cleaner import DagCleaner
 from lib.dag_cleaner_impl import DagCleaner as DagCleanerImpl, __initialize__
 from lib.dag_node_cleaner import NodeCleaner
 from lib.dag_storage import DagStorage, Dependency, Message, Node
-from lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleRegistry, enter_phase
 
 
 class MockDagStorage:
@@ -97,9 +97,12 @@ class DagCleanerImplTest(unittest.TestCase):
             dag_cleaner.clean(a, cleaner)
 
             # Requirement: In each cleaning iteration, reachable nodes are visited in topological order.
-            # Requirement: Cleaning a node cleans dirty nodes in dependency-first topological order, ensuring all dependencies of a node are clean before that node is cleaned.
+            # Requirement: [DagCleaner] Cleaning a node cleans dirty nodes in dependency-first topological order, ensuring all dependencies of a node are clean before that node is cleaned.
+            # Requirement: When cleaning a dirty node, the node cleaner is invoked to clean the node.
+            # Requirement: [DagCleaner] When cleaning a dirty node using the node cleaner, cleaning delegates to the node cleaner.
             self.assertEqual(cleaner.cleaned_calls, [c, b, a])
-            # Requirement: Cleaning concludes when all nodes in the subgraph rooted at the node are clean.
+            # Requirement: Cleaning succeeds when all reachable nodes in the subgraph are clean.
+            # Requirement: [DagCleaner] Cleaning concludes when all nodes in the subgraph rooted at the node are clean.
             self.assertFalse(self.storage.is_dirty(a))
             self.assertFalse(self.storage.is_dirty(b))
             self.assertFalse(self.storage.is_dirty(c))
@@ -166,6 +169,7 @@ class DagCleanerImplTest(unittest.TestCase):
             dag_cleaner.clean(root, cleaner)
 
             # Requirement: If the node cleaner communicates that processing cannot continue, cleaning halts.
+            # Requirement: [DagCleaner] If the node cleaner communicates that processing cannot continue, cleaning halts.
             self.assertEqual(cleaner.cleaned_calls, [dep])
             self.assertNotIn(root, cleaner.cleaned_calls)
 

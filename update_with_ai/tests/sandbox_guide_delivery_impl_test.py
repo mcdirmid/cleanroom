@@ -3,7 +3,7 @@
 import unittest
 from typing import Optional, Set, Tuple
 from lib.file_alias import BoundFile, FileContent, UnboundFile
-from lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from lib.node_config import NodeConfig
 from lib.sandbox_guide_delivery import Guide, GuideDelivery, StepSection
 from lib.sandbox_guide_delivery_impl import (
@@ -92,6 +92,9 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
         with enter_phase("agent_session", registry=self.registry) as scope:
             delivery = scope.get_singleton(GuideDelivery)
             self.assertFalse(delivery.has_steps_remaining)
+            # Requirement: When no guide is configured or no step sections remain, the guide delivery indicates that no steps remain and advancing produces no response.
+            res_none = delivery.advance_step(verification_passed=True)
+            self.assertIsNone(res_none)
 
         guide = Guide(
             summary="High-level summary",
@@ -108,34 +111,65 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             # Requirement: [GuideDelivery] Steps remaining indicates whether further step sections remain to be completed.
             self.assertTrue(delivery.has_steps_remaining)
 
-            # Verification failure produces no response and does not advance step
-            # Requirement: When advancing a step with failed verification, the current step index is retained and no response is produced.
-            # Requirement: [GuideDelivery] When verification fails, advancing a step retains the current step section and produces no response.
-            res_fail = delivery.advance_step(verification_passed=False)
-            self.assertIsNone(res_fail)
+            # Verification failure before any steps delivered emits summary and failure diagnostics
+            # Requirement: When advancing a step with failed verification, if no step section has been delivered yet, the guide delivery retains its index and emits a response combining the guide summary and failure diagnostics.
+            res_fail0 = delivery.advance_step(verification_passed=False, failure_diagnostics="Pre-flight check failed")
+            self.assertIsNotNone(res_fail0)
+            assert res_fail0 is not None
+            self.assertTrue(res_fail0.is_failed)
+            self.assertFalse(res_fail0.is_terminated)
+            self.assertIn("High-level summary", res_fail0.content)
             self.assertTrue(delivery.has_steps_remaining)
 
-            # First advance produces summary + first step
-            # Requirement: When advancing a step with passed verification before any step is delivered, the response combines the guide summary and first step section content, advancing to the first section.
-            # Requirement: [GuideDelivery] When verification passes on initial delivery, advancing a step produces a response containing the guide summary and first step section content.
+            # Initial passing advance produces summary alone without step section
+            # Requirement: When advancing a step with passed verification, if no steps have been delivered yet, the guide delivery emits a response containing the guide summary alone without delivering a step section.
+            # Requirement: [GuideDelivery] When advancing a step with passed verification on initial delivery, the response contains the guide summary alone.
+            res0 = delivery.advance_step(verification_passed=True)
+            self.assertIsNotNone(res0)
+            assert res0 is not None
+            self.assertFalse(res0.is_failed)
+            self.assertFalse(res0.is_terminated)
+            self.assertEqual(res0.content, "High-level summary")
+            self.assertTrue(delivery.has_steps_remaining)
+
+            # Advance to first step section
+            # Requirement: When advancing a step with passed verification, if steps have already been delivered and further step sections remain, the guide delivery emits a response presenting the guide summary above the next step section content and advances its index to that section.
+            # Requirement: [GuideDelivery] When advancing a step with passed verification on subsequent steps and steps remain, the response presents the guide summary above the next step section content.
             res1 = delivery.advance_step(verification_passed=True)
             self.assertIsNotNone(res1)
             assert res1 is not None
+            self.assertFalse(res1.is_failed)
+            self.assertFalse(res1.is_terminated)
             self.assertIn("High-level summary", res1.content)
+            self.assertIn("Step 1", res1.content)
             self.assertIn("Content 1", res1.content)
             self.assertTrue(delivery.has_steps_remaining)
 
-            # Second advance produces second step
-            # Requirement: When advancing a step with passed verification and subsequent steps remain, the response contains the next step section content and the step index advances to that section.
-            # Requirement: [GuideDelivery] When verification passes on subsequent steps and steps remain, advancing a step produces a response containing the next step section content.
+            # Verification failure while Step 1 is active retains step index and emits summary, current step, and diagnostics
+            # Requirement: When advancing a step with failed verification, if a step section is currently active, the guide delivery retains the current step index without advancement and emits a response combining the guide summary, the current step section content, and the failure diagnostics.
+            # Requirement: [GuideDelivery] When advancing a step with failed verification, advancing retains the current step section and reports the failure diagnostics.
+            res_fail1 = delivery.advance_step(verification_passed=False, failure_diagnostics="Syntax error in step 1")
+            self.assertIsNotNone(res_fail1)
+            assert res_fail1 is not None
+            self.assertTrue(res_fail1.is_failed)
+            self.assertFalse(res_fail1.is_terminated)
+            self.assertIn("High-level summary", res_fail1.content)
+            self.assertIn("Step 1", res_fail1.content)
+            self.assertIn("Content 1", res_fail1.content)
+            self.assertTrue(delivery.has_steps_remaining)
+
+            # Advance to second step section
             res2 = delivery.advance_step(verification_passed=True)
             self.assertIsNotNone(res2)
             assert res2 is not None
+            self.assertFalse(res2.is_failed)
+            self.assertFalse(res2.is_terminated)
+            self.assertIn("High-level summary", res2.content)
+            self.assertIn("Step 2", res2.content)
             self.assertIn("Content 2", res2.content)
             self.assertFalse(delivery.has_steps_remaining)
 
             # Subsequent advance when exhausted produces None
-            # Requirement: When no guide is configured or no step sections remain, advancing a step produces no response.
             res3 = delivery.advance_step(verification_passed=True)
             self.assertIsNone(res3)
 

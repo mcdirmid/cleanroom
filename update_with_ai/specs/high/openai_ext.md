@@ -12,7 +12,7 @@ Direct coupling between domain components and remote model API endpoints creates
 
 The openai_ext component provides the external domain knowledge and protocol mechanics required to execute chat completions against remote OpenAI-compatible endpoints:
 
-- Chat completion wire protocol: Defines the HTTP POST request payload format for the `/v1/chat/completions` endpoint, including model identifier strings, ordered message sequences (system prompts, user inputs, assistant responses, and tool call results), tool definitions schema conforming to function-calling specifications, temperature parameters, and execution timeouts.
+- Chat completion wire protocol: Defines the HTTP POST request payload format for the `/v1/chat/completions` endpoint, including model identifier strings, ordered message sequences adhering to OpenAI chat completion and tool calling conventions (system prompts, user inputs, assistant responses with function tool calls, and tool call results correlated by call identifier), tool definitions schema conforming to function-calling specifications, temperature parameters, and execution timeouts.
 
 - Endpoint transport and communication mechanics: Establishes HTTPS transport handling, request header construction with bearer token authentication, request serialization, and response reading over network connections.
 

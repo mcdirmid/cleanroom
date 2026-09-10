@@ -3,30 +3,34 @@ from . import file_alias
 from . import node_config
 from . import sandbox_guide_delivery
 from . import tool_provider
-from .lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
 
 class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
     tier = "agent_session"
 
     def __init__(self) -> None:
         self._guide: Optional[sandbox_guide_delivery.Guide] = None
+        self._initial_delivered: bool = False
         self._step_index: int = 0
 
     def initialize(self) -> None:
-        # Requirement: Obtain configured guide from node config
+        # Requirement: Initializing the guide delivery obtains its guide from the node config.
         cfg = get_singleton(node_config.NodeConfig)
         self._guide = cfg.guide
+        self._initial_delivered = False
         self._step_index = 0
 
     @property
     def has_steps_remaining(self) -> bool:
-        # Requirement: Indicate whether further step sections remain to be completed
+        # Requirement: [GuideDelivery] Steps remaining indicates whether further step sections remain to be completed.
         if self._guide is None:
             return False
+        if not self._initial_delivered:
+            return True
         return self._step_index < len(self._guide.sections)
 
     def parse_guide(self, content: file_alias.FileContent) -> sandbox_guide_delivery.Guide:
-        # Requirement: Extract summary from content preceding first section heading and exclude sections whose title begins with Lint checks
+        # Requirement: Guide parsing extracts the summary from content preceding the first section heading and excludes sections whose title begins with `Lint checks`.
         raw = str(content)
         lines = raw.splitlines()
         summary_lines: List[str] = []
@@ -71,23 +75,41 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
             sections=sections,
         )
 
-    def advance_step(self, verification_passed: bool) -> Optional[tool_provider.Response]:
-        # Requirement: When advancing a step with failed verification or no guide configured, retain current step index and produce no response
-        if not verification_passed or self._guide is None:
+    def advance_step(
+        self, verification_passed: bool, failure_diagnostics: Optional[str] = None
+    ) -> Optional[tool_provider.Response]:
+        # Requirement: When no guide is configured or no step sections remain, the guide delivery indicates that no steps remain and advancing produces no response.
+        if self._guide is None or not self.has_steps_remaining:
             return None
 
-        if not self.has_steps_remaining:
-            return None
+        if not verification_passed:
+            diag_text = failure_diagnostics or ""
+            if self._step_index == 0:
+                # Requirement: When advancing a step with failed verification, if no step section has been delivered yet, the guide delivery retains its index and emits a response combining the guide summary and failure diagnostics.
+                content = f"{self._guide.summary}\n\nVerification failed:\n{diag_text}".strip()
+            else:
+                # Requirement: When advancing a step with failed verification, if a step section is currently active, the guide delivery retains the current step index without advancement and emits a response combining the guide summary, the current step section content, and the failure diagnostics.
+                section = self._guide.sections[self._step_index - 1]
+                content = f"{self._guide.summary}\n\n## {section.title}\n{section.content}\n\nVerification failed:\n{diag_text}".strip()
+            return tool_provider.Response(
+                is_failed=True,
+                is_terminated=False,
+                content=content,
+            )
 
+        if not self._initial_delivered:
+            # Requirement: When advancing a step with passed verification, if no steps have been delivered yet, the guide delivery emits a response containing the guide summary alone without delivering a step section.
+            self._initial_delivered = True
+            return tool_provider.Response(
+                is_failed=False,
+                is_terminated=False,
+                content=self._guide.summary,
+            )
+
+        # Requirement: When advancing a step with passed verification, if steps have already been delivered and further step sections remain, the guide delivery emits a response presenting the guide summary above the next step section content and advances its index to that section.
         section = self._guide.sections[self._step_index]
-        # Requirement: When advancing a step with passed verification before any step is delivered, combine guide summary and first section content
-        if self._step_index == 0:
-            content = f"{self._guide.summary}\n\n## {section.title}\n{section.content}".strip()
-        # Requirement: When advancing a step with passed verification and subsequent steps remain, return next section content and advance step index
-        else:
-            content = f"## {section.title}\n{section.content}".strip()
-
         self._step_index += 1
+        content = f"{self._guide.summary}\n\n## {section.title}\n{section.content}".strip()
         return tool_provider.Response(
             is_failed=False,
             is_terminated=False,

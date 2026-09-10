@@ -1,0 +1,68 @@
+# update_with_ai/support/tests/BUILD.bazel
+
+load("//bin:pyright_library.bzl", "pyright_test")
+load("@rules_python//python:defs.bzl", "py_test")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+pyright_test(
+    name = "lifecycle_test",
+    srcs = ["lifecycle_test.py"],
+    imports = ["../.."],
+    pyright_deps = [
+        "//update_with_ai/lib:agent_asm",
+        "//update_with_ai/lib:bazel_asm",
+        "//update_with_ai/lib:dag_asm",
+        "//update_with_ai/lib:sandbox_asm",
+        "//update_with_ai/support/lib:lifecycle",
+    ],
+)
+
+py_test(
+    name = "test_spec_toolchain",
+    srcs = ["test_spec_toolchain.py"],
+    main = "test_spec_toolchain.py",
+    imports = ["../..", "../lib"],
+    deps = [
+        "//update_with_ai/support/lib:framework",
+        "//update_with_ai/support/lib:grounding_tool_lib",
+    ],
+)
+
+pyright_test(
+    name = "bazel_macros_test",
+    srcs = ["bazel_macros_test.py"],
+    imports = ["../.."],
+    pyright_deps = [
+        "//update_with_ai/lib:bazel_asm",
+        "//update_with_ai/support/lib:lifecycle",
+    ],
+)
+
+sh_test(
+    name = "lib_lint_test",
+    srcs = ["lib_lint_test.sh"],
+    data = [
+        "//update_with_ai/support/lib:build_lint_common.py",
+        "//update_with_ai/support/lib:lib_lint.py",
+    ],
+    tags = ["lint"],
+)
+
+sh_test(
+    name = "test_lint_test",
+    srcs = ["test_lint_test.sh"],
+    data = [
+        "//update_with_ai/support/lib:build_lint_common.py",
+        "//update_with_ai/support/lib:test_lint.py",
+    ],
+    tags = ["lint"],
+)
+
+sh_test(
+    name = "clean_binary_integration_test",
+    srcs = ["clean_binary_integration_test.sh"],
+    data = [
+        "//update_with_ai/tests/example:sample_node_1_clean",
+    ],
+    tags = ["integration"],
+)

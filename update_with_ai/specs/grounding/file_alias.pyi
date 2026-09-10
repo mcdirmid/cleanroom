@@ -2,106 +2,8 @@ from typing import Protocol, Type
 from framework import data_type, operation, override, singleton_type, variant
 from dataclasses import dataclass
 import dag_storage
+import file_paths
 import tool_provider
-
-@dataclass(frozen=True)
-@data_type
-class HostPath:
-    """
-PURPOSE:
-Introduces a host path to represent a path on the local filesystem
-"""
-
-    def __init__(self, path: str) -> None:
-        ...
-
-    @property
-    def path(self) -> str:
-        """
-PURPOSE:
-Path string on the filesystem
-"""
-        ...
-
-@dataclass(frozen=True)
-@variant
-class AbsolutePath(HostPath):
-    """
-PURPOSE:
-Classifies absolute path as a host path on the local filesystem
-"""
-
-    def __init__(self, path: str) -> None:
-        ...
-
-    @property
-    @override
-    def path(self) -> str:
-        """
-PURPOSE:
-Path string on the filesystem
-"""
-        ...
-
-@dataclass(frozen=True)
-@variant
-class WorkspacePath(HostPath):
-    """
-PURPOSE:
-Classifies workspace path as a host path that is relative to the root of the workspace
-"""
-
-    def __init__(self, path: str) -> None:
-        ...
-
-    @property
-    @override
-    def path(self) -> str:
-        """
-PURPOSE:
-Path string on the filesystem
-"""
-        ...
-
-@dataclass(frozen=True)
-@data_type
-class DirectoryPath(AbsolutePath):
-    """
-PURPOSE:
-Established as a host path designating a directory, acting as an absolute path on the local filesystem
-"""
-
-    def __init__(self, path: str) -> None:
-        ...
-
-    @property
-    @override
-    def path(self) -> str:
-        """
-PURPOSE:
-Path string on the filesystem
-"""
-        ...
-
-@dataclass(frozen=True)
-@data_type
-class WorkspaceRoot(DirectoryPath):
-    """
-PURPOSE:
-Introduces workspace root as a directory path such that concatenating it with a workspace path produces an absolute path
-"""
-
-    def __init__(self, path: str) -> None:
-        ...
-
-    @property
-    @override
-    def path(self) -> str:
-        """
-PURPOSE:
-Path string on the filesystem
-"""
-        ...
 
 @data_type
 class FileContent(str):
@@ -130,7 +32,7 @@ INHERITANCE:
 """
 
     @property
-    def workspace_root(self) -> DirectoryPath:
+    def workspace_root(self) -> file_paths.WorkspaceRoot:
         """
 PURPOSE:
 Established that the alias manager is configured with a workspace root
@@ -157,7 +59,7 @@ Sets the converter wire type for the alias manager to string
 
     @operation
     @override
-    def convert(self, wire_value: str) -> FileAlias:
+    def convert(self, wire_value: str) -> 'FileAlias':
         """
 PURPOSE:
 Converts a wire type string to a file alias, producing an unbound file if the short name is not found
@@ -171,14 +73,14 @@ FRESH_REQUIREMENTS:
     def sanitize_text(self, text: str) -> str:
         """
 PURPOSE:
-Provides that the alias manager sanitizes text by masking occurrences of host paths with short names
+Provides that the alias manager sanitizes text by masking occurrences of relative workspace paths and preceding path prefixes with short names
 
 FRESH_REQUIREMENTS:
-- Sanitizing text masks occurrences of host paths with the corresponding file alias short names.
+- Sanitizing text masks occurrences of relative workspace paths and preceding path prefixes with the corresponding file alias short names.
 """
         ...
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 @data_type
 class FileAlias:
     """
@@ -192,9 +94,6 @@ FRESH_REQUIREMENTS:
 - A file alias displays itself by its short name when converted to a string.
 """
 
-    def __init__(self, short_name: str) -> None:
-        ...
-
     @property
     def short_name(self) -> str:
         """
@@ -203,7 +102,7 @@ Established that each file alias has a short name that is a minimal unambiguous 
 """
         ...
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 @variant
 class BoundFile(FileAlias):
     """
@@ -217,11 +116,8 @@ INHERITED_REQUIREMENTS:
 - [FileAlias] A file alias displays itself by its short name when converted to a string.
 """
 
-    def __init__(self, short_name: str, workspace_path: WorkspacePath, owning_node: dag_storage.Node) -> None:
-        ...
-
     @property
-    def workspace_path(self) -> WorkspacePath:
+    def workspace_path(self) -> file_paths.WorkspacePath:
         """
 PURPOSE:
 Established that each bound file has a workspace path
@@ -259,12 +155,12 @@ INHERITED_REQUIREMENTS:
 - [FileAlias] A file alias displays itself by its short name when converted to a string.
 """
 
-    def __init__(self, short_name: str, workspace_path: WorkspacePath, owning_node: dag_storage.Node) -> None:
+    def __init__(self, short_name: str, workspace_path: file_paths.WorkspacePath, owning_node: dag_storage.Node) -> None:
         ...
 
     @property
     @override
-    def workspace_path(self) -> WorkspacePath:
+    def workspace_path(self) -> file_paths.WorkspacePath:
         """
 PURPOSE:
 Established that each bound file has a workspace path
@@ -303,12 +199,12 @@ INHERITED_REQUIREMENTS:
 - [FileAlias] A file alias displays itself by its short name when converted to a string.
 """
 
-    def __init__(self, short_name: str, workspace_path: WorkspacePath, owning_node: dag_storage.Node) -> None:
+    def __init__(self, short_name: str, workspace_path: file_paths.WorkspacePath, owning_node: dag_storage.Node) -> None:
         ...
 
     @property
     @override
-    def workspace_path(self) -> WorkspacePath:
+    def workspace_path(self) -> file_paths.WorkspacePath:
         """
 PURPOSE:
 Established that each bound file has a workspace path

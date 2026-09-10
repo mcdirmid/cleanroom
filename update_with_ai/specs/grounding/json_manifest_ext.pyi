@@ -3,23 +3,25 @@
 
 ## External Mechanics & API Documentation
 
-The `json_manifest_ext` external component specifies build target manifest JSON schema deserialization and extraction using the Python standard library. External boundary specifications define no standalone library files; dependent implementation components (specifically `bazel_manifest_loader_impl`) import and invoke Python's standard `json` library directly.
+The `json_manifest_ext` external component specifies build target manifest JSON schema deserialization and extraction using the Python standard library. External boundary specifications define no standalone library files; dependent implementation components (specifically `bazel_manifest_loader_impl`) import and invoke Python's standard `json` library directly. The manifest schema is defined and emitted by the Starlark build rule `update_with_ai` in `update_with_ai/support/lib/update_with_ai.bzl`.
 
 **Target Manifest JSON Document Schema**
 
 Build manifests emitted by Cleanroom build rules provide JSON dictionary structures:
-- `target: str` (required): Canonical Bazel target label string (`"//pkg:target_name"`).
-- `dependencies: List[str]` (optional): Prerequisite upstream target labels.
-- `silent_dependencies: List[str]` (optional): Dependencies whose modifications do not invalidate this target.
-- `star_dependencies: List[str]` (optional): Star dependencies expanded during graph construction.
-- `feedback_dependencies: List[str]` (optional): Downstream targets allowed to send diagnostic feedback.
+- `label: str` (required): Canonical or apparent Bazel target label string (`"//pkg:target_name"`).
+- `name: str` (required): Target name string (`"target_name"`).
+- `prompt: str` (optional): Natural-language prompt instructions for the agent run.
+- `tools: List[str]` (optional): Tool target label strings.
+- `deps: List[str]` (optional): Prerequisite upstream target labels (including resolved star deps, feedback deps, and guide).
+- `silent_deps: List[str]` (optional): Dependencies whose modifications do not invalidate this target and whose outputs are not readable.
+- `feedback_deps: List[str]` (optional): Downstream targets allowed to send diagnostic feedback.
+- `star_deps: List[str]` (optional): Dependencies whose transitive closure over star deps is readable.
+- `src: str` (optional): The node's declared primary writable source file path (readable by deps).
+- `template: Optional[str]` (optional): Repo-relative template file path initializing `src` if absent.
 - `guide: Optional[str]` (optional): Optional target label providing task guidance.
-- `config: Optional[str]` (optional): Optional target label providing node configuration.
-- `primary_sources: List[str]` (optional): Read-write package source file paths.
-- `templates: Mapping[str, str]` (optional): Mapping from destination source path to initial template content file path.
-- `silent_sources: List[str]` (optional): Read-only package source file paths.
-- `task_prompt: str` (optional): Natural-language prompt instructions for the agent run.
-- `verification_commands: List[str]` (optional): Shell verification command strings.
+- `silent_srcs: List[str]` (optional): Paths the agent can write that are not readable by deps.
+- `verify: Optional[str]` (optional): Shell command string executed on verification.
+- `dependency_paths: List[Mapping[str, str]]` (optional): List of mappings from dependency target label to file path.
 
 **JSON Text Deserialization & Structural Validation**
 
@@ -27,27 +29,14 @@ Build manifests emitted by Cleanroom build rules provide JSON dictionary structu
 - **Deserialization API**: `json.loads(text: str) -> Any`.
 - **Validation**:
   - Verifies that root JSON value is a `dict`.
-  - Confirms `"target"` key is present and non-empty.
-  - Supplies default empty collections (`[]`, `{}`) for optional list and mapping fields.
+  - Confirms `"label"` key is present and non-empty.
+  - Supplies default empty collections (`[]`) and `None` for optional fields.
 - **Error Exceptions**:
   - `json.JSONDecodeError`: Raised on malformed JSON text, syntax errors, or unclosed delimiters.
 
 ## Build Dependencies
 
-The `json_manifest_ext` component relies exclusively on the Python standard library (`json`).
-
-The consuming implementation component `bazel_manifest_loader_impl` requires no external pip dependencies in `update_with_ai/lib/BUILD.bazel`:
-```python
-py_library(
-    name = "bazel_manifest_loader_impl",
-    srcs = ["bazel_manifest_loader_impl.py"],
-    deps = [
-        ":bazel_manifest_loader",
-        ":bazel_graph_storage",
-        ":file_alias",
-    ],
-)
-```
+(none)
 
 ## Usage Snippets
 
@@ -68,22 +57,24 @@ def parse_target_manifest_file(manifest_path: str) -> Tuple[bool, Mapping[str, A
         raw_data = json.loads(p.read_text(encoding="utf-8"))
         if not isinstance(raw_data, dict):
             return False, {"error": f"Manifest JSON must be an object: {manifest_path}"}
-        if "target" not in raw_data or not isinstance(raw_data["target"], str):
-            return False, {"error": f"Manifest missing valid 'target' field: {manifest_path}"}
+        if "label" not in raw_data or not isinstance(raw_data["label"], str) or not raw_data["label"].strip():
+            return False, {"error": f"Manifest missing valid 'label' field: {manifest_path}"}
             
         manifest = {
-            "target": raw_data["target"],
-            "dependencies": raw_data.get("dependencies", []),
-            "silent_dependencies": raw_data.get("silent_dependencies", []),
-            "star_dependencies": raw_data.get("star_dependencies", []),
-            "feedback_dependencies": raw_data.get("feedback_dependencies", []),
+            "label": raw_data["label"].strip(),
+            "name": raw_data.get("name", ""),
+            "prompt": raw_data.get("prompt", ""),
+            "tools": raw_data.get("tools", []),
+            "deps": raw_data.get("deps", []),
+            "silent_deps": raw_data.get("silent_deps", []),
+            "feedback_deps": raw_data.get("feedback_deps", []),
+            "star_deps": raw_data.get("star_deps", []),
+            "src": raw_data.get("src", ""),
+            "template": raw_data.get("template"),
             "guide": raw_data.get("guide"),
-            "config": raw_data.get("config"),
-            "primary_sources": raw_data.get("primary_sources", []),
-            "templates": raw_data.get("templates", {}),
-            "silent_sources": raw_data.get("silent_sources", []),
-            "task_prompt": raw_data.get("task_prompt", ""),
-            "verification_commands": raw_data.get("verification_commands", []),
+            "silent_srcs": raw_data.get("silent_srcs", []),
+            "verify": raw_data.get("verify"),
+            "dependency_paths": raw_data.get("dependency_paths", []),
         }
         return True, manifest
     except (json.JSONDecodeError, OSError) as exc:

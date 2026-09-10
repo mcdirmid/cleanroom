@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Optional
-from .lifecycle import LifecycleRegistry
+from support.lib.lifecycle import LifecycleRegistry
 from . import dag_cleaner_impl
 
 CONSTITUENTS = (

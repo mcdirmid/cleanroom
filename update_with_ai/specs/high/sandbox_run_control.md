@@ -1,6 +1,6 @@
 # sandbox_run_control interface component
 
-imports: tool_provider, file_alias, dag_storage, sandbox_file_editor, sandbox_guide_delivery
+imports: tool_provider, file_alias, dag_storage
 
 ## Purpose
 
@@ -14,10 +14,12 @@ Autonomous agents require unambiguous control tools to signal when a task is fin
 
 A *verification check* is a polymorphic service that validates session criteria, communicating whether verification passed and diagnostic feedback on failure.
 
-The *run controller* is an agent session service configured with *blame targets*, which are bound files owned by upstream dependency nodes in dag storage. The run controller maintains verification checks and installs tools for terminating agent sessions and attributing outcomes. Verification checks can be *installed* on the run controller so they are evaluated during session advancement. The run controller installs:
+The *run controller* is an agent session service configured with *blame targets*, which are bound files owned by upstream dependency nodes in dag storage, and *verification checks*. The run controller installs tools for terminating agent sessions and attributing outcomes. The run controller:
 
-- An *advance tool* that coordinates session progression and completion. When progressive guide delivery is configured and steps remain in guide delivery, executing the advance tool advances the guide step delivery and returns the next step content without terminating the run. A call to the advance tool can be injected when an agent session starts when using step mode to deliver initial step content. When all guide steps are completed or progressive guide delivery is not configured, executing the advance tool evaluates installed verification checks and completes the session, terminating the run, but fails if workspace file modifications occurred (as tracked by the edit manager) and no change summary was provided.
+- Exposes *verification checks* that validate session criteria during advancement.
 
-- A *fail tool* that terminates the run in failure.
+- Installs an *advance tool* that coordinates session progression and completion.
 
-- A *blame tool* that attributes task failure to an upstream dependency node. The run controller installs the blame tool when blame targets are configured. Executing the blame tool fails if the target is not one of the blame targets, and terminates the run with diagnostic feedback attributed to the owning node on success.
+- Installs a *fail tool* that terminates the run in failure.
+
+- Installs a *blame tool* that attributes task failure to an upstream dependency node. The run controller installs the blame tool when blame targets are configured. Executing the blame tool fails if the target is not one of the blame targets, and terminates the run with diagnostic feedback attributed to the owning node on success.

@@ -6,6 +6,8 @@ import agent_runner
 import bazel_graph_storage
 import dag_node_cleaner
 import dag_storage
+import model_config
+import node_config
 import sandbox
 
 @singleton_type('system')
@@ -29,7 +31,8 @@ FRESH_REQUIREMENTS:
 - Node cleaning executes within an agent session phase, configuring the cleaned node with the dirty node.
 - Node cleaning executes an agent runner with the sandbox and conversation history.
 - Startup templates from the sandbox are materialized for missing read-write files.
-- The conversation history is seeded with the task prompt, node definition, incoming pending messages, and paired startup tool executions from the sandbox.
+- The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content, and paired startup tool executions from the sandbox.
+- When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when step mode is active, or identifying the guide file by its file alias when step mode is inactive.
 - When the agent outcome indicates change with workspace file modifications, change messages are produced for downstream dependent nodes.
 - When the agent outcome indicates blame, feedback messages are produced for the blamed dependency node.
 - When the agent outcome indicates failure, the node remains dirty and no propagating messages are produced.
@@ -41,7 +44,7 @@ INHERITED_REQUIREMENTS:
 - [AgentNodeCleaner] When cleaning succeeds without workspace file modifications, no messages are produced.
 
 GROUNDING_ARGUMENT:
-- Receives node as an input argument and retrieves task prompt and node definition from imported bazel_graph_storage in the same system lifecycle tier. Within the orchestrated agent session phase, it configures CleanedNode, materializes startup templates from sandbox, seeds conversation history, executes agent_runner, and maps the resulting agent outcome to change or feedback messages for dag_storage, relying on the requirements of collaborator types to satisfy message generation and dirty state management.
+- Receives node as an input argument and retrieves task prompt and node definition from imported bazel_graph_storage in the same system lifecycle tier. Within the orchestrated agent session phase, it configures CleanedNode, materializes startup templates from sandbox, seeds conversation history with incoming pending messages ordered deterministically by content and augmenting the task prompt with guide instructions based on imported node_config and model_config, executes agent_runner, and maps the resulting agent outcome to change or feedback messages for dag_storage, relying on the requirements of collaborator types to satisfy message generation and dirty state management.
 """
         ...
 

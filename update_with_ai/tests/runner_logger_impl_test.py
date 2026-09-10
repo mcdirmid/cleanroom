@@ -6,7 +6,7 @@ import os
 import shutil
 import tempfile
 import unittest
-from lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from lib.runner_logger import LogEvent, RunnerLogger
 from lib.runner_logger_impl import RunnerLogger as RunnerLoggerImpl, __initialize__
 
@@ -34,7 +34,6 @@ class RunnerLoggerTest(unittest.TestCase):
 
         Asserts LogEvent properties and values.
         """
-        # Requirement: LogEvent preserves event_name, summary, and transcript_representation
         event = LogEvent(
             event_name="test_event",
             summary="short summary",

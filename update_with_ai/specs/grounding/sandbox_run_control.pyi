@@ -1,4 +1,4 @@
-from typing import Protocol, Set, Tuple
+from typing import Protocol, Sequence, Set, Tuple
 from framework import operation, override, poly_type, singleton_type
 import dag_storage
 import file_alias
@@ -25,17 +25,18 @@ Validates session criteria, returning whether verification passed and diagnostic
 class RunController(Protocol):
     """
 PURPOSE:
-Defined as an agent session service that installs run control tools and maintains verification checks
+Defined as an agent session service that installs run control tools and exposes verification checks
 
 FRESH_REQUIREMENTS:
 - The run controller installs the advance tool and fail tool unconditionally, and installs the blame tool only when blame targets are configured.
+- The run controller exposes verification checks that validate session criteria during advancement.
 """
 
     @property
-    def verification_checks(self) -> Set[VerificationCheck]:
+    def verification_checks(self) -> Sequence[VerificationCheck]:
         """
 PURPOSE:
-Verification checks installed on the run controller
+Verification checks configured for the session
 """
         ...
 
@@ -47,22 +48,11 @@ Upstream bound files that can be attributed when prerequisite defects occur
 """
         ...
 
-    @operation
-    def install_verification_check(self, check: VerificationCheck) -> None:
-        """
-PURPOSE:
-Installs a verification check to be evaluated during session advancement
-
-FRESH_REQUIREMENTS:
-- Installing a verification check adds it to the verification checks evaluated during session advancement.
-"""
-        ...
-
 @singleton_type('agent_session')
 class AdvanceTool(tool_provider.Tool, Protocol):
     """
 PURPOSE:
-Defined as a tool that coordinates progressive guidance and completes the run
+Defined as a tool that coordinates guide step mode and completes the run
 
 INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.

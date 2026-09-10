@@ -1,9 +1,10 @@
 from __future__ import annotations
 from typing import Optional
-from .lifecycle import LifecycleRegistry
+from support.lib.lifecycle import LifecycleRegistry
 from . import agent_asm
 from . import dag_asm
 from . import sandbox_asm
+from . import file_paths_impl
 from . import bazel_graph_storage_impl
 from . import bazel_manifest_loader_impl
 from . import bazel_model_config_impl
@@ -13,6 +14,7 @@ from . import bazel_runner_impl
 from . import runner_logger_impl
 
 CONSTITUENTS = (
+    file_paths_impl,
     bazel_runner_impl,
     bazel_manifest_loader_impl,
     bazel_graph_storage_impl,

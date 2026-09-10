@@ -1,2 +1,8 @@
 /bazel-*
 /agent_loop.log
+/testing/specs
+/testing/lib
+/testing/tests
+__pycache__/
+*.py[cod]
+*$py.class

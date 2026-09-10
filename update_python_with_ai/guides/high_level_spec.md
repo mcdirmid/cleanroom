@@ -19,7 +19,7 @@ Component visibility and lifetimes are governed by flat lifecycle tiers (`*syste
 - [ ] An assembly component's `imports:` clause must contain all components imported by its constituents except those implemented by the assembly
 - [ ] A root assembly component ready for execution must implement all interface components in the binary and have no imports outside data types and external boundary components
 - [ ] Front-matter must never contain `assembles:`, `instantiates:`, or `types from <dep>:` statements
-- [ ] Every imported component in `imports:` must be referenced in `## Types and Behavior`; concepts mentioned only in `## Purpose` never count as dependencies
+- [ ] Imported component names in `imports:` must never appear in `## Types and Behavior`
 - [ ] Section inventory is closed strictly to `## Purpose` and `## Types and Behavior` (or `## Grounding Gaps Covered` for external boundary specifications)
 - [ ] Sub-headers (`###`) are strictly prohibited
 
@@ -93,6 +93,7 @@ Component visibility and lifetimes are governed by flat lifecycle tiers (`*syste
 - [ ] System services live for the process duration and must never assume access to per-node or session-specific metadata unless explicitly passed as operation parameters or stored in an ambient system store
 - [ ] Specifications must never introduce floating directives or hand-wavy resolution logic without specifying what provides the source identity or how it is bound
 - [ ] Passive data types have value-based structural equality and are strictly closed within the component that introduces them; importing components cannot subtype or extend imported data types
+- [ ] Data types can be specified as constructed exclusively through an authorized service operation rather than directly by callers, precluding arbitrary direct construction from primitive values
 - [ ] Every capability or invariant required of an implementation must be deterministically satisfiable using only the component's declared in-scope collaborators, inputs, and configuration
 
 ## Capabilities and behavioral constraints
@@ -100,12 +101,15 @@ Component visibility and lifetimes are governed by flat lifecycle tiers (`*syste
 - [ ] Requirements state callable operations and behavioral constraints declaratively around domain entities without micromanaging collaborator routing
 - [ ] Tool execution produces a structured response indicating whether execution succeeded (if not, failed), whether the session should terminate, and output content
 - [ ] Tool failure content provides actionable diagnostic messages and guidance on how to execute the tool correctly
+- [ ] Behavioral requirements state explicit handling for all operational outcome branches, input variants, and termination conditions without leaving unhandled edge cases to implementation guesswork
+- [ ] Architectural intent, purpose, and operational notes declared in dependent specifications are inspected during alignment, ensuring all stated operational boundaries and constraints are preserved in requirements
 - [ ] Dual or complementary constraints on an entity are combined into a cohesive sentence rather than fragmented into separate bullets
 - [ ] Conjunctions in requirements introduce distinct conditions and avoid pairing synonymous terms that create false distinctions or imply phantom states
 
 ## Common pitfalls
 
 - [ ] Definition-only phantoms — introducing an entity, property, or configuration without a concrete derivation path for its runtime value
+- [ ] Omitted edge-case branches — leaving non-standard responses, empty inputs, or boundary cases unhandled in the specification, forcing downstream implementations to guess behavior
 - [ ] Floating directives — specifying that a component loads or resolves data without identifying the source or the mechanism that binds it
 - [ ] Tier custody violations — a system service holding references to session services or assuming per-node context without parameter passing
 - [ ] Syntactic verification illusions — treating passing surface formatting or table parsers as proof of architectural grounding

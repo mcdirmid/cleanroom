@@ -16,6 +16,6 @@ A *guide* provides structured instructional text containing a *summary* and sequ
 
 A *guide delivery* is an *agent session* service configured with a guide that delivers step-by-step instructions to an agent. A guide delivery:
 
-- Can *advance step* when verification passes, delivering the next instructional content (including guide summary on initial delivery and subsequent step sections) as a response, or retaining the current step section when verification fails.
+- Can *advance step* with a boolean *verification passed* indicator and text *failure diagnostics*, delivering the guide summary alone on initial delivery, presenting the guide summary above each step section on subsequent steps when verification passes, or retaining the current step section and reporting the failure diagnostics when verification fails.
 
 - Exposes whether progressive *steps remain* to be completed.

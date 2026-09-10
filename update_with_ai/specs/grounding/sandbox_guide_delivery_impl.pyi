@@ -64,23 +64,24 @@ GROUNDING_ARGUMENT:
 
     @operation
     @override
-    def advance_step(self, verification_passed: bool) -> Optional[tool_provider.Response]:
+    def advance_step(self, verification_passed: bool, failure_diagnostics: Optional[str]=None) -> Optional[tool_provider.Response]:
         """
 PURPOSE:
-Implements advance_step to deliver initial summary and first step, or next step content on passed verification
+Implements advance_step to deliver initial summary alone, subsequent step content with summary, or failure diagnostics with current step
 
 FRESH_REQUIREMENTS:
-- When advancing a step with passed verification before any step is delivered, the response combines the guide summary and first step section content, advancing to the first section.
-- When advancing a step with passed verification and subsequent steps remain, the response contains the next step section content and the step index advances to that section.
-- When advancing a step with failed verification, the current step index is retained and no response is produced.
-- When no guide is configured or no step sections remain, advancing a step produces no response.
+- When advancing a step with passed verification, if no steps have been delivered yet, the guide delivery emits a response containing the guide summary alone without delivering a step section.
+- When advancing a step with passed verification, if steps have already been delivered and further step sections remain, the guide delivery emits a response presenting the guide summary above the next step section content and advances its index to that section.
+- When advancing a step with failed verification, if no step section has been delivered yet, the guide delivery retains its index and emits a response combining the guide summary and failure diagnostics.
+- When advancing a step with failed verification, if a step section is currently active, the guide delivery retains the current step index without advancement and emits a response combining the guide summary, the current step section content, and the failure diagnostics.
+- When no guide is configured or no step sections remain, the guide delivery indicates that no steps remain and advancing produces no response.
 
 INHERITED_REQUIREMENTS:
-- [GuideDelivery] When verification passes on initial delivery, advancing a step produces a response containing the guide summary and first step section content.
-- [GuideDelivery] When verification passes on subsequent steps and steps remain, advancing a step produces a response containing the next step section content.
-- [GuideDelivery] When verification fails, advancing a step retains the current step section and produces no response.
+- [GuideDelivery] When advancing a step with passed verification on initial delivery, the response contains the guide summary alone.
+- [GuideDelivery] When advancing a step with passed verification on subsequent steps and steps remain, the response presents the guide summary above the next step section content.
+- [GuideDelivery] When advancing a step with failed verification, advancing retains the current step section and reports the failure diagnostics.
 
 GROUNDING_ARGUMENT:
-- Receives verification_passed directly as a parameter, evaluates the current step index against remaining sections on self, advances the step state when verification passes, and formats the response content using tool_provider.Response.
+- Receives verification_passed and failure_diagnostics directly as parameters, evaluates the active delivery state against remaining sections on self, advances or retains the step state based on verification, and formats the response content using tool_provider.Response.
 """
         ...

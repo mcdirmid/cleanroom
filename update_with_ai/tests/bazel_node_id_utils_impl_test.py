@@ -7,7 +7,7 @@ from lib.bazel_node_id_utils_impl import (
     __initialize__,
 )
 from lib.dag_storage import Node
-from lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleRegistry, enter_phase
 
 
 class TestBazelNodeIdUtilsImpl(unittest.TestCase):
@@ -59,17 +59,22 @@ class TestBazelNodeIdUtilsImpl(unittest.TestCase):
         - Extracts package directory relative to workspace.
         - Root target //:root_target resolves to empty path.
         """
+        def _make_node_dir(path: str) -> NodeDirectory:
+            obj = object.__new__(NodeDirectory)
+            object.__setattr__(obj, "path", path)
+            return obj
+
         with enter_phase("system", registry=self.registry) as scope:
             utils = scope.get_singleton(BazelNodeIdentifierUtility)
             # Requirement: The bazel node identifier utility derives node directories from normalized nodes relative to a workspace root.
             # Requirement: [BazelNodeIdentifierUtility] The bazel node identifier utility extracts a node directory from a node.
             self.assertEqual(
                 utils.extract_directory(Node(address="//pkg/sub:target")),
-                NodeDirectory(path="pkg/sub"),
+                _make_node_dir("pkg/sub"),
             )
             self.assertEqual(
                 utils.extract_directory(Node(address="//:root_target")),
-                NodeDirectory(path=""),
+                _make_node_dir(""),
             )
 
 

@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Sync update_with_ai directories (lib, specs, tests) into testing/.
+"""Sync update_with_ai directories and specs BUILD.bazel into testing/.
 
 Copies:
-    update_with_ai/lib   -> testing/lib
-    update_with_ai/specs -> testing/specs
-    update_with_ai/tests -> testing/tests
+    update_with_ai/specs/high        -> testing/specs/high
+    update_with_ai/specs/grounding   -> testing/specs/grounding
+    update_with_ai/specs/BUILD.bazel -> testing/specs/BUILD.bazel
+    update_with_ai/lib               -> testing/lib
+    update_with_ai/tests             -> testing/tests
 
 Performs string replacements:
-    - In BUILD.bazel and .bzl files: '//update_with_ai' -> '//testing'
-    - In .py files: 'update_with_ai.' -> 'testing.'
+    - In BUILD.bazel and .bzl files: '//update_with_ai/{lib,specs,tests}' -> '//testing/{lib,specs,tests}'
+    - In .py/.pyi files: 'update_with_ai.{lib,tests}' -> 'testing.{lib,tests}'
 """
 
 import os
@@ -26,25 +28,46 @@ def main() -> int:
         print(f"Error: Source directory {src_root} not found.", file=sys.stderr)
         return 1
 
-    directories = ["lib", "specs", "tests"]
+    sync_targets = [
+        ("specs/high", "specs/high"),
+        ("specs/grounding", "specs/grounding"),
+        ("specs/BUILD.bazel", "specs/BUILD.bazel"),
+        ("lib", "lib"),
+        ("tests", "tests"),
+    ]
 
-    for d in directories:
-        src_dir = src_root / d
-        dest_dir = dest_root / d
+    for src_rel, dest_rel in sync_targets:
+        src_path = src_root / src_rel
+        if not src_path.exists() and src_rel == "tests" and (src_root / "test").exists():
+            src_path = src_root / "test"
 
-        if not src_dir.exists():
-            print(f"Warning: {src_dir} does not exist, skipping.", file=sys.stderr)
+        dest_path = dest_root / dest_rel
+
+        if not src_path.exists():
+            print(f"Warning: {src_path} does not exist, skipping.", file=sys.stderr)
             continue
 
-        if dest_dir.exists():
-            shutil.rmtree(dest_dir)
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        if src_path.is_file():
+            if dest_path.is_dir():
+                shutil.rmtree(dest_path)
+            shutil.copy2(src_path, dest_path)
+        else:
+            if dest_path.is_dir():
+                shutil.rmtree(dest_path)
+            elif dest_path.is_file():
+                dest_path.unlink()
+            shutil.copytree(
+                src_path,
+                dest_path,
+                ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo", ".DS_Store"),
+            )
+        print(f"Copied {src_path.relative_to(workspace_root)} -> {dest_path.relative_to(workspace_root)}")
 
-        shutil.copytree(
-            src_dir,
-            dest_dir,
-            ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo", ".DS_Store"),
-        )
-        print(f"Copied {src_dir.relative_to(workspace_root)} -> {dest_dir.relative_to(workspace_root)}")
+    # Clean up any stale directories under dest_root/specs (e.g. obsolete 'low')
+    stale_low = dest_root / "specs" / "low"
+    if stale_low.exists():
+        shutil.rmtree(stale_low)
 
     # Perform text replacements across copied files
     for root, _dirs, files in os.walk(dest_root):
@@ -64,17 +87,27 @@ def main() -> int:
             modified = False
 
             if filename == "BUILD.bazel" or filename.endswith(".bzl") or filename.endswith(".bazel"):
-                if "//update_with_ai" in content:
-                    content = content.replace("//update_with_ai", "//testing")
-                    modified = True
+                for synced in ("lib", "specs", "tests"):
+                    src_label = f"//update_with_ai/{synced}"
+                    dest_label = f"//testing/{synced}"
+                    if src_label in content:
+                        content = content.replace(src_label, dest_label)
+                        modified = True
 
-            if filename.endswith(".py"):
-                if "update_with_ai." in content:
-                    content = content.replace("update_with_ai.", "testing.")
-                    modified = True
-                if "//update_with_ai" in content:
-                    content = content.replace("//update_with_ai", "//testing")
-                    modified = True
+            if filename.endswith(".py") or filename.endswith(".pyi"):
+                for synced in ("lib", "tests"):
+                    src_mod = f"update_with_ai.{synced}"
+                    dest_mod = f"testing.{synced}"
+                    if src_mod in content:
+                        content = content.replace(src_mod, dest_mod)
+                        modified = True
+
+                for synced in ("lib", "specs", "tests"):
+                    src_label = f"//update_with_ai/{synced}"
+                    dest_label = f"//testing/{synced}"
+                    if src_label in content:
+                        content = content.replace(src_label, dest_label)
+                        modified = True
 
             if modified:
                 filepath.write_text(content, encoding="utf-8")

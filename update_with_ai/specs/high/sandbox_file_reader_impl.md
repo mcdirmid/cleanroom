@@ -13,15 +13,15 @@ Permissive or forgiving tool implementations allow agents to drift into ambiguou
 
 ## Types and Behavior
 
-The read manager unconditionally installs the read tool and search tool into the tool manager for the agent session, obtaining declared read-only files, read-write files, and optional guide file from the node config in node_config.
+The read manager unconditionally installs the read tool into the tool manager for the agent session and never installs the search tool, obtaining declared read-only files, read-write files, and optional guide file from the node config.
 
-The read tool is named `read_file`, accepting a file alias *file* parameter and a boolean *line numbers* parameter. The read tool reads file content using filesystem ext at the host path formed from the alias manager workspace root and the bound file workspace path. Successful read tool execution requires:
+The read tool is named `read_file`, accepting a file alias *file* parameter and a boolean *line numbers* parameter that must be true when reading read-write files and false or omitted when reading read-only files. The read tool reads file content using filesystem ext at the host path formed from the alias manager workspace root and the bound file workspace path. Successful read tool execution requires:
 
-- Requesting line numbers when reading a read-write file, and omitting line numbers when reading a read-only file; violating either requirement causes execution to fail.
+- Requesting line numbers when reading a read-write file, and omitting line numbers when reading a read-only file; violating either requirement causes execution to fail, and reminds the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files.
 
-- A bound file. If an unbound file is supplied, execution fails with a response guiding agent recovery. This response lists available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead.
+- A bound file. If an unbound file is supplied, execution fails with a response guiding agent recovery, and reminds the agent that only declared files can be inspected. This response lists available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead.
 
-On successful read tool execution, the response provides file content that the alias manager sanitizes to mask host paths if a read-only file is being read.
+On successful read tool execution, the response includes internal resource metadata identifying the read file alias, and provides file content that the alias manager sanitizes to mask host paths if a read-only file is being read.
 
 The *regex pattern converter* is a parameter converter for regex patterns that converts a wire type string into a regex pattern.
 

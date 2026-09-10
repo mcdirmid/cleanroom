@@ -22,6 +22,6 @@ The *conversation history* is an *agent session* service that maintains chronolo
 
 - Can *append* messages and tool responses produced by tool execution in a tool provider.
 
-- Replaces earlier tool results in place with a stub when a newly appended tool result supersedes an earlier result for the same resource.
+- Replaces earlier tool results in place with a stub when a newly appended tool result supersedes an earlier result for the same mutable resource, while tool results for read-only resources are never superseded. A stub retains any reminder provided in the superseded tool response to remind the agent in subsequent turns, and when the newly appended tool response does not supply a reminder, it inherits the reminder from the superseded response.
 
 - Provides a model request for transmission to a language model.

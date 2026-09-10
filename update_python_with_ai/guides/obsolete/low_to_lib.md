@@ -4,7 +4,7 @@
 
 The module `<component-name>.py` implements `low/<component-name>.md` (an implementation LLS is implemented by `<component-name>_impl.py`). The lib node has write access only to its library implementation file (`<name>.py`); test files (`<name>_test.py`) are strictly read-only. The LLS and its dependency closure are the module's only contract; its `HLS Justification` labels quote the HLS and carry no implementation obligations. A file that is a template is filled in. The files and specifications provided in context at session start are the complete and only source of truth required to implement the module.
 
-The module's types mirror the LLS Data Types block; every operation implements its contract and invariants hold. Implementation editing is incremental and targeted, using `update_lines` for multi-line blocks, functions, or classes (`replace` is restricted to short single-line changes < 200 characters), never rewriting the entire file in one edit. When calling `advance(change_summary="...")`, the summary is at most 200 characters (one short sentence).
+The module's types mirror the LLS Data Types block; every operation implements its contract and invariants hold. Implementation editing is incremental and targeted, using `update_lines` for multi-line blocks, functions, or classes (`replace` is restricted to short single-line changes < 200 characters), never rewriting the entire file in one edit.
 
 ## Module layout
 

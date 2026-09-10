@@ -25,7 +25,7 @@ Types and behaviors are presented together in a unified **`## Types and Behavior
 
 ### 2.2 Italics as Semantic Markers
 In the high-level specification, we do not call out or label whether an entity is an object type, data type, property/state, constituent collection, or operation. Instead, whatever could be one of those is placed in italics (`*term*`):
-- Potential object types / services (e.g., `*dag storage*`, `*filesystem*`, `*tool provider*`, `*file reader*`).
+- Potential object types / services (e.g., `*dag storage*`, `*file paths*`, `*tool provider*`, `*file reader*`).
 - Potential data types / records (e.g., `*node*`, `*host path*`, `*file content*`, `*matches*`).
 - Potential properties or states (e.g., `*dependencies*`, `*dependents*`, `*messages*`, `*dirty*`, `*silent*`).
 - Potential sub-types / variants (e.g., `*change*`, `*feedback*`, `*read-only file*`, `*read-write file*`).
@@ -61,7 +61,7 @@ Component visibility and lifetime are governed by **Lifecycle Tiers** expressed 
 
 ### 3.1 Lifecycle Tiers
 Every service and object type declares its lifecycle tier in natural language, with the tier italicized:
-- **`*system*` Services**: Live for the entire process or run (stateless services, external boundaries, or process-wide stores, e.g., `filesystem`, `dag_storage`).
+- **`*system*` Services**: Live for the entire process or run (stateless services, external boundaries, or process-wide stores, e.g., `file_paths`, `dag_storage`).
   - *Example*: `A dag storage is a *system* service that maintains graph structure, change propagation, and node state.`
 - **`*agent session*` Services**: Live for the duration of cleaning a single node or manifest target (e.g., `tool`, `parameter converter`, `tool provider`, `file reader`, `alias mapper`).
   - *Example*: `A tool is an *agent session* service that defines an executable action available to an agent...`
@@ -78,13 +78,14 @@ Object types do not form containment or ownership hierarchies:
 2. **Downward Visibility**: Short-lived tier objects (e.g., `*agent session*`) can access and call operations on long-lived tier objects (e.g., `*system*`).
 3. **Upward Isolation**: A long-lived tier object (e.g., `*system*`) cannot hold references to short-lived tier objects (e.g., `*agent session*`), preventing memory leaks and stale cross-session references.
 4. **No Factory Plumbing**: Factories are eliminated from the domain ontology. Container and runner frameworks instantiate session phase objects directly.
-5. **No `_asm` Components**: System assembly is handled by the framework using lifecycle tiers and phase declarations.
+5. **Subsystem Assembly via `_asm` Components**: System and subsystem composition is handled by dedicated assembly components (`<name>_asm.md`) that aggregate constituent implementation modules and register their singletons into the `LifecycleRegistry`.
 
 ### 3.4 Data Types, Variants, and Hierarchy
 - **Data Types vs. Object Services**: While active services are flat and governed by lifecycle tiers, passive data types (such as `file alias`, `node`, `line range`) represent structured immutable values with structural equality.
 - **Component Locality & Data Type Closure**: Data types are strictly closed within the component that introduces them. Importing components **cannot** extend, subtype, or add variants to an imported data type (e.g., `file_reader` cannot define a `guide file` subtype or variant of `file_alias`). If an importing component uses an imported data type in a specific role, that role is represented as a property referencing the data type or an existing variant thereof (e.g., a read manager is configured with a guide file, which is an unbound file).
 - **Variants Introducing Properties**: Variants of a data type can introduce constituent properties (e.g., `bound file` introduces a `workspace path` and an `owning node` for an actual workspace file, whereas `unbound file` is not mapped to an actual file). Sub-variants (`read-only file`, `read-write file`) inherit the properties of their parent variant.
 - **Structural Value Equality**: Data types and their variants have value-based structural equality rather than reference identity. Any two instances constructed with identical field values compare as equal, allowing lookups across session services to match reliably.
+- **Data Types Without Public Constructors**: Value records constructed exclusively through service operations (such as path representations or file aliases) rather than direct caller instantiation state this explicitly in prose. In grounding stubs, they are marked with `@dataclass(frozen=True, init=False)` without an `__init__` constructor method, ensuring callers cannot bypass system validation or construction invariants. Leaf data types with direct public construction declare `@dataclass(frozen=True, init=True)` (or default `@dataclass(frozen=True)`) and define a matching `__init__`.
 
 ### 3.5 Lifecycle Phase Execution & Non-Procedural Specifications
 - **Phase Scoping**: A lifecycle phase (such as an `*agent session*`) is governed by execution logic that runs the phase from beginning to end (e.g., an execution block or context manager). Lifecycle phases do not have imperative `start` or `stop` operations; they are established as execution blocks within which session services exist and operate.
@@ -108,9 +109,9 @@ Object types do not form containment or ownership hierarchies:
 ### 4.1 Document Title & Component Naming
 - **Document Title**: The main title of the specification must name the component along with its component type:
   ```markdown
-  # <name> <interface | implementation | external> component
+  # <name> <interface | implementation | external | assembly> component
   ```
-  *(e.g., `# dag_storage interface component`, `# filesystem external component`, `# file_reader implementation component`)*.
+  *(e.g., `# dag_storage interface component`, `# filesystem_ext external component`, `# file_reader implementation component`, `# dag_asm assembly component`)*.
 - **Component Reference in Prose**: Always refer to the component by its full component name in prose (e.g., `the dag_storage interface component`).
 
 ### 4.2 Interface Components (`<name>.md`)
@@ -136,6 +137,12 @@ Object types do not form containment or ownership hierarchies:
 ### 4.4 External Boundary Components (`<name>_ext.md`)
 - Remain the strict boundary for external libraries, serialization formats (JSON, Proto), and OS APIs (e.g., `filesystem_ext`).
 - Do not perform grounding satisfaction checks; they encapsulate foreign environments.
+
+### 4.5 Assembly Components (`<name>_asm.md`)
+- Aggregate and close a cohesive set of implementation components into a subsystem assembly.
+- Declares `imports:` (which may import `*_impl` modules and other `*_asm` modules) and `implements:` (listing the closed interfaces provided to external consumers).
+- Initializes constituent implementation components and registers their singletons into the `LifecycleRegistry`.
+- Strictly isolated: Non-assembly components are prohibited from importing `*_impl` or `*_asm` specifications.
 
 ---
 
@@ -257,7 +264,32 @@ The <name>_impl implementation component <why-focused core reason for being>.
 <Declarative implementation behaviors, concrete tool naming, input validation preconditions, error guidance, and sanitized output formatting.>
 ```
 
-### 8.3 Canonical Examples
+### 8.3 Assembly Component Layout (`<name>_asm.md`)
+
+```markdown
+# <name>_asm assembly component
+
+imports: <constituent implementation and interface dependencies>
+implements: <closed interfaces provided to external callers>
+
+## Purpose
+
+The <name>_asm assembly component <why-focused core reason for being>.
+
+<1-2 paragraphs of architectural rationale motivating the subsystem composition.>
+
+**Out of scope:** The <name>_asm assembly component does not <high-level workflow operations>; these are handled by other components.
+
+## Types and Behavior
+
+The *<name> assembly* unites the concrete implementation components that realize <subsystem capability>. The assembly initializes its constituent implementation components and registers their singleton services with the system lifecycle prototype.
+
+The <name> assembly aggregates the following implementation components:
+
+- The <subsystem implementation> from <name>_impl, closing the <interface> interface to <capability>.
+```
+
+### 8.4 Canonical Examples
 
 #### Interface Example: `dag_storage.md`
 

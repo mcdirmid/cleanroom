@@ -1,7 +1,7 @@
 # bazel_asm assembly component
 
-imports: bazel_target_labels_ext, filesystem_ext, json_manifest_ext, openai_ext, update_with_ai_proto_ext
-implements: agent_conversation_history, agent_loop_guard, agent_node_cleaner, agent_runner, bazel_graph_storage, bazel_manifest_loader, bazel_node_id_utils, bazel_runner, dag_cleaner, dag_node_cleaner, dag_storage, file_alias, model_config, node_config, runner_logger, sandbox, sandbox_change_summary_validator, sandbox_file_editor, sandbox_file_reader, sandbox_guide_delivery, sandbox_run_control, tool_provider
+imports: bazel_target_labels_ext, filesystem_ext, json_manifest_ext, model_config_ext, openai_ext, update_with_ai_proto_ext
+implements: agent_conversation_history, agent_loop_guard, agent_node_cleaner, agent_runner, bazel_graph_storage, bazel_manifest_loader, bazel_node_id_utils, bazel_runner, dag_cleaner, dag_node_cleaner, dag_storage, file_alias, file_paths, model_config, node_config, runner_logger, sandbox, sandbox_change_summary_validator, sandbox_file_editor, sandbox_file_reader, sandbox_guide_delivery, sandbox_run_control, tool_provider
 
 ## Purpose
 
@@ -16,6 +16,8 @@ Building an autonomous multi-agent development environment requires integrating 
 The *bazel assembly* unites the sub-assemblies and Bazel workspace implementations into a complete system that is ready to execute. The bazel assembly initializes its constituent assemblies and implementations recursively, registering all singleton services with the system lifecycle prototype to achieve complete interface closure.
 
 The bazel assembly aggregates the following constituents:
+
+- The file paths implementation from file_paths_impl, closing the file paths interface to create, validate, and resolve path representations against the physical workspace root.
 
 - The bazel runner implementation from bazel_runner_impl, closing the bazel runner interface to coordinate build graph execution and change propagation across workspace targets.
 

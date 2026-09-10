@@ -18,9 +18,9 @@ Executing a tool by name with wire parameter bindings converts wire arguments in
 
 - No installed tool matches the requested name.
 
-- A name is supplied in parameter bindings that does not match known parameters of the tool.
+- A name is supplied in parameter bindings that does not match known parameters of the tool, and reminds the agent that only declared parameters of the tool can be provided.
 
-- Any required parameter of the tool is omitted.
+- Any required parameter of the tool is omitted, and reminds the agent that required parameters of the tool must be supplied.
 
 On successful argument resolution, the tool manager executes the tool with the resolved actual parameter bindings and returns the response produced by the tool.
 

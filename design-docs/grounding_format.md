@@ -1,4 +1,7 @@
-# Grounding Specification Format & Ontological Extraction Guide
+# Grounding Specification Format & Ontological Extraction Guide (Legacy Archive)
+
+> [!WARNING]
+> **Archival Notice**: This document describes the legacy 4-column Markdown table grounding format (`type | name | signature | comment`). Cleanroom has transitioned to native Python interface stubs (`.pyi`). For the active canonical grounding standard, see [New Grounding Format (`.pyi`)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/new_grounding_format.md) and [Toolchain & Verification Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/toolchain_and_verification.md).
 
 ## 1. Overview & Purpose
 
@@ -97,7 +100,7 @@ To maintain mathematical clarity and eliminate ambiguous formatting across table
   - Implementation specifications (`<name>_impl.md`) govern strictly the private code generated for that specific component; their requirements are never inherited or relied upon by external implementers.
 
 ### 2.9 Cross-Component Type Qualification
-- When referencing a type defined in an imported component (that is not being refined in the current component), the type must be explicitly qualified with its originating component name: `<component>.<type>` (e.g. `filesystem_ext.DirectoryPath`, `dag_storage.Node`, `tool_provider.Tool`).
+- When referencing a type defined in an imported component (that is not being refined in the current component), the type must be explicitly qualified with its originating component name: `<component>.<type>` (e.g. `file_paths.DirectoryPath`, `dag_storage.Node`, `tool_provider.Tool`).
 - Primitive and built-in types (`string`, `integer`, `boolean`, `Type`, `ExpectedFailure`) and locally defined types are written unqualified.
 
 ### 2.10 Lifecycle Phases & Built-in Object Initialization (`initialize`)

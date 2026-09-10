@@ -10,7 +10,7 @@ class Dependency:
     node: Node
     is_silent: bool = False
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class Message:
     pass
 

@@ -20,10 +20,12 @@ The *agent runner* is an *agent session* service that coordinates the turn loop 
 
 - Appends model responses and correlates tool execution responses with originating tool call identifiers in the conversation history.
 
-- Records log events for model requests, assistant responses, and tool executions to the runner logger.
+- Records log events for model requests, assistant responses, and tool executions to the runner logger, providing event summaries that convey turn progress, tool calls with arguments or non-tool response text, and tool execution outcomes.
 
 - Evaluates tool executions with the loop guard, injecting loop reminders from agent loop guard into the conversation or terminating with a loop failure on runaway repetition.
 
+- Injects a tool reminder into the conversation history when a model response contains no tool executions, prompting that session progress and conclusion require executing tools, and continues the turn loop.
+
 - Concludes atomically and produces an agent outcome when tool execution produces a termination outcome.
 
-- Concludes with a failure outcome if the conversation limit from model_config is exceeded.
+- Concludes with a failure outcome if the conversation limit is exceeded.

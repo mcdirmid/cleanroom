@@ -1,5 +1,5 @@
 from typing import List, Optional, Protocol
-from framework import data_type, operation, override, singleton_type, variant
+from framework import data_type, operation, override, singleton_type
 from dataclasses import dataclass
 import tool_provider
 
@@ -11,7 +11,7 @@ PURPOSE:
 Entry in an agent conversation
 """
 
-    def __init__(self, role: str, content: str, tool_call_id: Optional[str]=..., tool_name: Optional[str]=...) -> None:
+    def __init__(self, role: str, content: str, tool_call_id: Optional[str]=..., tool_name: Optional[str]=..., reminder: Optional[str]=..., tool_arguments: Optional[str]=...) -> None:
         ...
 
     @property
@@ -46,15 +46,31 @@ Tool name associated with a tool invocation or response
 """
         ...
 
+    @property
+    def reminder(self) -> Optional[str]:
+        """
+PURPOSE:
+Advises the agent on future actions and constraints
+"""
+        ...
+
+    @property
+    def tool_arguments(self) -> Optional[str]:
+        """
+PURPOSE:
+Serialized argument parameters for a tool invocation
+"""
+        ...
+
 @dataclass(frozen=True)
-@variant
+@data_type
 class Stub(Message):
     """
 PURPOSE:
 Placeholder message replacing superseded content
 """
 
-    def __init__(self, role: str=..., content: str=..., tool_call_id: Optional[str]=..., tool_name: Optional[str]=...) -> None:
+    def __init__(self, role: str=..., content: str=..., tool_call_id: Optional[str]=..., tool_name: Optional[str]=..., reminder: Optional[str]=..., tool_arguments: Optional[str]=...) -> None:
         ...
 
     @property
@@ -90,6 +106,24 @@ Tool call identifier when correlating tool invocations and responses
         """
 PURPOSE:
 Tool name associated with a tool invocation or response
+"""
+        ...
+
+    @property
+    @override
+    def reminder(self) -> Optional[str]:
+        """
+PURPOSE:
+Advises the agent on future actions and constraints
+"""
+        ...
+
+    @property
+    @override
+    def tool_arguments(self) -> Optional[str]:
+        """
+PURPOSE:
+Serialized argument parameters for a tool invocation
 """
         ...
 
@@ -140,13 +174,14 @@ Appends a message to the conversation history
         ...
 
     @operation
-    def append_tool_response(self, response: tool_provider.Response, tool_name: str, tool_call_id: str) -> None:
+    def append_tool_response(self, response: tool_provider.Response, tool_name: str, tool_call_id: str, wire_parameter_bindings: Optional[tool_provider.WireParameterBindings]=...) -> None:
         """
 PURPOSE:
 Appends a tool execution response, stubbing superseded results
 
 FRESH_REQUIREMENTS:
-- When an appended tool result supersedes an earlier result for the same resource, the earlier result is replaced in place with a stub.
+- When an appended tool result supersedes an earlier result for the same mutable resource, the earlier result is replaced in place with a stub, while tool results for read-only resources are never superseded.
+- A stub retains any reminder provided in the superseded tool response to remind the agent in subsequent turns, and when the newly appended tool response does not supply a reminder, it inherits the reminder from the superseded response.
 """
         ...
 

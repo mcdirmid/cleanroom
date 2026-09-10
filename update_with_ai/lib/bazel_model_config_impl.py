@@ -1,54 +1,149 @@
+import json
 import os
-from typing import Optional
+import sys
+from typing import Any, Mapping, Optional
 from . import model_config
-from .lifecycle import LifecycleRegistry, Singleton, get_default_registry
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
+
+
+def _resolve_target_label() -> str:
+    # Requirement: The model config resolves the target configuration from the MODEL_CONFIG_TARGET environment variable, the AGENT_CONFIG_TARGET environment variable, or the --config command-line argument, defaulting to the standard //model_configs:default target.
+    label = os.environ.get("MODEL_CONFIG_TARGET") or os.environ.get("AGENT_CONFIG_TARGET")
+    if label:
+        return label.strip()
+
+    args = sys.argv[1:] if len(sys.argv) > 1 else []
+    for i, arg in enumerate(args):
+        if arg == "--config" and i + 1 < len(args):
+            return args[i + 1].strip()
+        if arg.startswith("--config="):
+            return arg.split("=", 1)[1].strip()
+
+    return "//model_configs:default"
+
+
+def _find_target_config_file(target_label: str) -> Optional[str]:
+    # Requirement: The model config loads execution parameters from a target module located in the workspace runfiles tree or build output directory.
+    clean = target_label.strip()
+    if clean.startswith("@@//"):
+        clean = clean[2:]
+    elif clean.startswith("@//"):
+        clean = clean[1:]
+    elif clean.startswith("@@") or (clean.startswith("@") and not clean.startswith("//")):
+        clean = "//" + clean.lstrip("@").lstrip("/")
+
+    if clean.startswith(":"):
+        pkg = "model_configs"
+        name = clean[1:]
+    elif ":" in clean:
+        pkg, name = clean.split(":", 1)
+        pkg = pkg.lstrip("/")
+    else:
+        parts = clean.lstrip("/").split("/")
+        name = parts[-1]
+        pkg = "/".join(parts[:-1]) if len(parts) > 1 else "model_configs"
+
+    filename = f"{name}_config.json"
+    search_dirs = []
+
+    for env_var in ("RUNFILES_DIR", "BAZEL_RUNFILES"):
+        rf = os.environ.get(env_var)
+        if rf:
+            search_dirs.append(os.path.join(rf, "_main", pkg))
+            search_dirs.append(os.path.join(rf, pkg))
+            search_dirs.append(rf)
+
+    ws = os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd()
+    search_dirs.append(os.path.join(ws, "bazel-bin", pkg))
+    search_dirs.append(os.path.join(ws, pkg))
+    search_dirs.append(ws)
+
+    if sys.argv and sys.argv[0]:
+        exec_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+        search_dirs.append(os.path.join(exec_dir, pkg))
+        search_dirs.append(exec_dir)
+
+    for d in search_dirs:
+        cand = os.path.join(d, filename)
+        if os.path.isfile(cand):
+            return cand
+
+    return None
+
 
 class ModelConfig(model_config.ModelConfig, Singleton):
     tier = "system"
 
     def __init__(self) -> None:
-        self._model_name = os.environ.get("OPENAI_MODEL", "gpt-4o")
-        self._base_url = os.environ.get("OPENAI_BASE_URL", None)
-        self._api_key = os.environ.get("OPENAI_API_KEY", None)
-        self._timeout = int(os.environ.get("MODEL_TIMEOUT", "60"))
-        self._conversation_limit = int(os.environ.get("MODEL_CONVERSATION_LIMIT", "20"))
-        self._is_step_mode = os.environ.get("STEP_MODE", "true").lower() in ("true", "1")
-        self._is_startup_reads = os.environ.get("STARTUP_READS", "true").lower() in ("true", "1")
+        target_label = _resolve_target_label()
+        config_file = _find_target_config_file(target_label)
+
+        data: Mapping[str, Any] = {}
+        if config_file is not None:
+            with open(config_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+        self._model_name = str(data["model"]) if "model" in data else os.environ.get("OPENAI_MODEL", "gpt-4o")
+        self._base_url = data.get("base_url") if "base_url" in data else os.environ.get("OPENAI_BASE_URL", None)
+
+        api_key_env = data.get("api_key_env")
+        if api_key_env:
+            self._api_key = os.environ.get(api_key_env, None)
+        else:
+            self._api_key = os.environ.get("AGENT_API_KEY") or os.environ.get("OPENAI_API_KEY", None)
+
+        self._timeout = int(float(data["timeout"])) if "timeout" in data else int(os.environ.get("MODEL_TIMEOUT", "60"))
+        self._conversation_limit = int(data["max_iterations"]) if "max_iterations" in data else int(os.environ.get("MODEL_CONVERSATION_LIMIT", "20"))
+        self._temperature = float(data["temperature"]) if "temperature" in data else float(os.environ.get("MODEL_TEMPERATURE", "0.0"))
+        self._max_tokens = int(data["max_tokens"]) if data.get("max_tokens") is not None else (int(os.environ["MODEL_MAX_TOKENS"]) if os.environ.get("MODEL_MAX_TOKENS") else None)
+        self._is_step_mode = bool(data["step_sections"]) if "step_sections" in data else os.environ.get("STEP_MODE", "true").lower() in ("true", "1")
+        self._is_startup_reads = bool(data["session_start_reads"]) if "session_start_reads" in data else os.environ.get("STARTUP_READS", "true").lower() in ("true", "1")
 
     @property
     def model_name(self) -> str:
-        # Requirement: Returns configured model identifier string
+        # Requirement: The model config provides the model name resolved from the target module.
         return self._model_name
 
     @property
     def base_url(self) -> Optional[str]:
-        # Requirement: Returns optional custom base URL for model endpoint
+        # Requirement: The model config provides the base url resolved from the target module.
         return self._base_url
 
     @property
     def api_key(self) -> Optional[str]:
-        # Requirement: Returns optional API key credentials for model endpoint
+        # Requirement: The model config reads authentication credentials from the designated environment variable specified in the target module.
         return self._api_key
 
     @property
     def timeout(self) -> int:
-        # Requirement: Returns network request timeout duration in seconds
+        # Requirement: The model config provides the timeout resolved from the target module.
         return self._timeout
 
     @property
     def conversation_limit(self) -> model_config.ConversationLimit:
-        # Requirement: Returns upper limit for conversational agent turns
+        # Requirement: The model config provides the conversation limit resolved from the target module.
         return self._conversation_limit
 
     @property
+    def temperature(self) -> float:
+        # Requirement: The model config provides the temperature specifying the sampling temperature for model requests resolved from the target module.
+        return self._temperature
+
+    @property
+    def max_tokens(self) -> Optional[int]:
+        # Requirement: The model config provides the max tokens bound resolved from the target module.
+        return self._max_tokens
+
+    @property
     def is_step_mode(self) -> bool:
-        # Requirement: Indicates whether guide delivery operates in progressive step mode
+        # Requirement: The model config provides whether the agent should use step mode to communicate a guide progressively from the target module.
         return self._is_step_mode
 
     @property
     def is_startup_reads(self) -> bool:
-        # Requirement: Indicates whether startup tool execution performs initial file reads
+        # Requirement: The model config provides whether the agent should perform startup reads to inspect declared files at session start from the target module.
         return self._is_startup_reads
+
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry

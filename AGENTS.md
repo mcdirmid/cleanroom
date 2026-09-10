@@ -19,3 +19,7 @@ Always read and maintain in context the relevant guide from `update_python_with_
 
 ## Bazel Test Execution Flags
 - **Required Flags**: When running tests via `bazel test`, ALWAYS include `--test_output=errors --test_timeout=100` and `--noshow_progress --noshow_loading_progress`.
+
+## DO NOT EDIT pyrightconfig.json to fix type problems!
+
+If a test doesn't matter, don't run the test! Do not edit pyrightconfig.json to make the test not matter anymore. If you have a type error that you can't fix, don't edit pyrightconfig.json to make the type error go away. Etc...

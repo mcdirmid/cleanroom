@@ -2,7 +2,7 @@ from framework import operation, override, singleton_type
 import bazel_node_id_utils
 import bazel_target_labels_ext
 import dag_storage
-import file_alias
+import file_paths
 
 @singleton_type('system')
 class BazelNodeIdentifierUtility(bazel_node_id_utils.BazelNodeIdentifierUtility):

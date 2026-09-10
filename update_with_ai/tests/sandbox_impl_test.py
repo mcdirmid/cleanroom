@@ -5,7 +5,7 @@ from typing import Any, List, Optional, Set, Tuple
 
 from lib.dag_storage import Node
 from lib.file_alias import BoundFile, FileContent, ReadOnlyFile, UnboundFile, WorkspacePath
-from lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from lib.model_config import ModelConfig
 from lib.node_config import NodeConfig
 from lib.sandbox import Sandbox, StartupToolExecution
@@ -37,6 +37,8 @@ class MockModelConfig:
         self.api_key = None
         self.timeout = 30
         self.conversation_limit = 10
+        self.temperature = 0.0
+        self.max_tokens = None
 
 
 class MockNodeConfig:
@@ -145,12 +147,18 @@ class MockReadTool:
         return Response(is_failed=False, is_terminated=False, content=f"Content of {target}")
 
 
+def _make_workspace_path(path: str) -> WorkspacePath:
+    obj = object.__new__(WorkspacePath)
+    object.__setattr__(obj, "path", path)
+    return obj
+
+
 class SandboxImplTest(unittest.TestCase):
     def setUp(self) -> None:
         node = Node(address="//pkg:target")
         self.ro_file = ReadOnlyFile(
             short_name="spec.md",
-            workspace_path=WorkspacePath(path="pkg/spec.md"),
+            workspace_path=_make_workspace_path("pkg/spec.md"),
             owning_node=node,
         )
 
@@ -188,26 +196,35 @@ class SandboxImplTest(unittest.TestCase):
 
     def test_get_startup_tool_executions_step_mode_and_startup_reads(self) -> None:
         """CUJ: Assembling startup tool executions: advance first when in step mode, followed by read_file for read-only files."""
+        node = Node(address="//pkg:target")
+        ro_file_z = ReadOnlyFile(short_name="z_spec.md", workspace_path=_make_workspace_path("pkg/z_spec.md"), owning_node=node)
+        ro_file_a = ReadOnlyFile(short_name="a_spec.md", workspace_path=_make_workspace_path("pkg/a_spec.md"), owning_node=node)
+        ro_files: Set[BoundFile] = {ro_file_z, ro_file_a}
+        self.node_cfg.read_only_files = ro_files
+
         with enter_phase("agent_session", registry=self.registry) as scope:
             sb = scope.get_singleton(Sandbox)
-            # Requirement: [Sandbox] The sandbox provides an ordered sequence of startup tool executions pairing tool requests and responses based on active configuration.
+            # Requirement: [Sandbox] The sandbox exposes startup tool executions as an ordered sequence of initial tool executions based on active configuration, ordering startup reads deterministically by file alias short name.
             executions = sb.get_startup_tool_executions()
 
-            self.assertEqual(len(executions), 2)
+            self.assertEqual(len(executions), 3)
             # First is advance
-            # Requirement: When using step mode in the model config to communicate a guide progressively, startup tool executions include an initial advance tool execution with tool name `advance` and empty wire parameter bindings.
+            # Requirement: When using step mode to communicate a guide progressively, startup tool executions include an initial advance tool execution with the name of the advance tool, empty wire parameter bindings, and the response produced by executing the advance tool.
             self.assertEqual(executions[0].tool_name, "advance")
             self.assertEqual(executions[0].wire_parameter_bindings.bindings, set())
             self.assertEqual(executions[0].response.content, "Guide step 1")
 
-            # Second is read_file for spec.md
-            # Requirement: When performing startup reads in the model config to inspect declared files at session start, startup tool executions include reads for all declared read-only files from the node config, positioned after any advance tool execution.
-            # Requirement: Each file read execution specifies the tool name as `read_file`.
+            # Second is read_file for a_spec.md (ordered deterministically before z_spec.md)
+            # Requirement: When performing startup reads to inspect declared files at session start, startup tool executions include file read executions for all declared read-only files from node config ordered deterministically by file alias short name, positioned after any advance tool execution.
+            # Requirement: Each file read execution uses the name of the read tool, specifies wire parameter bindings mapping the file alias parameter of the read tool to the read-only file alias short name while omitting line numbers, and captures the response produced by executing the read tool.
             self.assertEqual(executions[1].tool_name, "read_file")
-            # Requirement: Each file read execution constructs wire parameter bindings mapping `file` to the read-only file short name and omitting line numbers.
-            self.assertEqual(executions[1].wire_parameter_bindings.bindings, {("file", "spec.md")})
-            # Requirement: Each file read execution captures the execution response from the read tool.
-            self.assertIn("spec.md", executions[1].response.content)
+            self.assertEqual(executions[1].wire_parameter_bindings.bindings, {("file", "a_spec.md")})
+            self.assertIn("a_spec.md", executions[1].response.content)
+
+            # Third is read_file for z_spec.md
+            self.assertEqual(executions[2].tool_name, "read_file")
+            self.assertEqual(executions[2].wire_parameter_bindings.bindings, {("file", "z_spec.md")})
+            self.assertIn("z_spec.md", executions[2].response.content)
 
     def test_get_startup_tool_executions_disabled_modes(self) -> None:
         """CUJ: Omits advance when step mode is off, and omits reads when startup reads are off."""

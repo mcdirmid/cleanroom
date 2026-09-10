@@ -21,20 +21,7 @@ Bazel targets can be supplied in multiple syntax variants:
 
 ## Build Dependencies
 
-The `bazel_target_labels_ext` component relies exclusively on the Python standard library (`re`, `os.path`).
-
-The consuming implementation component `bazel_node_id_utils_impl` requires no external pip dependencies in `update_with_ai/lib/BUILD.bazel`:
-```python
-py_library(
-    name = "bazel_node_id_utils_impl",
-    srcs = ["bazel_node_id_utils_impl.py"],
-    deps = [
-        ":bazel_node_id_utils",
-        ":dag_storage",
-        ":file_alias",
-    ],
-)
-```
+(none)
 
 ## Usage Snippets
 

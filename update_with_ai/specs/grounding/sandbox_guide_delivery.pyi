@@ -96,14 +96,14 @@ FRESH_REQUIREMENTS:
         ...
 
     @operation
-    def advance_step(self, verification_passed: bool) -> Optional[tool_provider.Response]:
+    def advance_step(self, verification_passed: bool, failure_diagnostics: Optional[str]=None) -> Optional[tool_provider.Response]:
         """
 PURPOSE:
-Advances to the next step section if verification passed, or retains the current step
+Advances to the next step section if verification passed, or retains the current step and reports failure diagnostics
 
 FRESH_REQUIREMENTS:
-- When verification passes on initial delivery, advancing a step produces a response containing the guide summary and first step section content.
-- When verification passes on subsequent steps and steps remain, advancing a step produces a response containing the next step section content.
-- When verification fails, advancing a step retains the current step section and produces no response.
+- When advancing a step with passed verification on initial delivery, the response contains the guide summary alone.
+- When advancing a step with passed verification on subsequent steps and steps remain, the response presents the guide summary above the next step section content.
+- When advancing a step with failed verification, advancing retains the current step section and reports the failure diagnostics.
 """
         ...

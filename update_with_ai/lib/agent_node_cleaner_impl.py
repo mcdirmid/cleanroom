@@ -5,8 +5,10 @@ from . import agent_runner
 from . import bazel_graph_storage
 from . import dag_node_cleaner
 from . import dag_storage
+from . import model_config
+from . import node_config
 from . import sandbox
-from .lifecycle import LifecycleRegistry, Singleton, enter_phase, get_default_registry, get_singleton
+from support.lib.lifecycle import LifecycleRegistry, LifecycleScope, Singleton, enter_phase, get_default_registry, get_singleton
 
 class CleanedNode(dag_node_cleaner.CleanedNode, Singleton):
     tier = "agent_session"
@@ -16,70 +18,82 @@ class CleanedNode(dag_node_cleaner.CleanedNode, Singleton):
 
     @property
     def node(self) -> dag_storage.Node:
-        # Invariant: Presents the node currently being cleaned in the agent session
+        # Requirement: [CleanedNode] The cleaned node presents the node currently being cleaned in the agent session.
         if self._node is None:
             raise RuntimeError("CleanedNode has not been configured with a node.")
         return self._node
 
     def set_node(self, node: dag_storage.Node) -> None:
-        # Requirement: Configures the cleaned node with the target node in the session
+        # Requirement: The cleaned node is configured with the node currently being cleaned within the agent session phase.
         self._node = node
 
 class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
     tier = "system"
 
     def __init__(self) -> None:
-        pass
+        self._last_outcome: Optional[agent_runner.AgentOutcome] = None
 
     def clean_node(self, node: dag_storage.Node) -> Set[dag_storage.Message]:
-        # Requirement: Node cleaning executes within an agent session phase
-        with enter_phase("agent_session") as session:
-            # Requirement: Configures the cleaned node with the active dirty node
+        def setup_session(session: LifecycleScope) -> None:
+            # Requirement: Node cleaning executes within an agent session phase, configuring the cleaned node with the dirty node.
             cleaned_node = session.get_singleton(CleanedNode)
             cleaned_node.set_node(node)
 
+        # Requirement: Node cleaning executes within an agent session phase, configuring the cleaned node with the dirty node.
+        with enter_phase("agent_session", setup=setup_session) as session:
             storage = session.get_singleton(bazel_graph_storage.BazelGraphStorage)
             defn = storage.get_node_definition(node)
 
-            # Requirement: Materializes sandbox startup templates for missing read-write files
+            # Requirement: Startup templates from the sandbox are materialized for missing read-write files.
             sb = session.get_singleton(sandbox.Sandbox)
             sb.materialize_startup_templates()
 
             hist = session.get_singleton(agent_conversation_history.ConversationHistory)
-            # Requirement: Seeds conversation history with task prompt and node definition
+            # Requirement: The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content, and paired startup tool executions from the sandbox.
             if defn is not None and defn.task_prompt:
+                task_prompt = str(defn.task_prompt)
+                # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when step mode is active, or identifying the guide file by its file alias when step mode is inactive.
+                n_cfg = session.get_singleton(node_config.NodeConfig)
+                if n_cfg.guide_file is not None:
+                    m_cfg = session.get_singleton(model_config.ModelConfig)
+                    if m_cfg.is_step_mode:
+                        task_prompt += "\n\nCall advance() without arguments to view each guide step. Do not supply change_summary until all guide steps are complete."
+                    else:
+                        task_prompt += f"\n\nThe guide is in file {n_cfg.guide_file.short_name}."
                 hist.append_message(
-                    agent_conversation_history.Message(role="user", content=str(defn.task_prompt))
+                    agent_conversation_history.Message(role="user", content=task_prompt)
                 )
 
-            # Requirement: Seeds conversation history with incoming pending messages
-            for msg in storage.get_messages(node):
+            # Requirement: The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content, and paired startup tool executions from the sandbox.
+            for msg in sorted(storage.get_messages(node), key=lambda m: f"Incoming message: {type(m).__name__}"):
                 hist.append_message(
                     agent_conversation_history.Message(role="user", content=f"Incoming message: {type(msg).__name__}")
                 )
 
-            # Requirement: Seeds conversation history with startup tool executions
+            # Requirement: The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content, and paired startup tool executions from the sandbox.
             for i, startup_exec in enumerate(sb.get_startup_tool_executions()):
                 hist.append_tool_response(
                     response=startup_exec.response,
                     tool_name=startup_exec.tool_name,
                     tool_call_id=f"startup_{i}_{startup_exec.tool_name}",
+                    wire_parameter_bindings=startup_exec.wire_parameter_bindings,
                 )
 
-            # Requirement: Executes agent runner within the session phase
+            # Requirement: Node cleaning executes an agent runner with the sandbox and conversation history.
             runner = session.get_singleton(agent_runner.AgentRunner)
             outcome = runner.run()
+            self._last_outcome = outcome
 
             messages: Set[dag_storage.Message] = set()
-            # Requirement: When outcome indicates failure, no propagating messages are produced
+            # Requirement: When the agent outcome indicates failure, the node remains dirty and no propagating messages are produced.
             if not outcome.is_success:
                 return messages
 
             content = outcome.response.content if outcome.response else ""
-            # Requirement: Produces feedback messages when blame is indicated
+            # Requirement: When the agent outcome indicates blame, feedback messages are produced for the blamed dependency node.
             if content.startswith("Blamed "):
                 messages.add(dag_storage.Feedback())
-            # Requirement: Produces change messages when workspace file modifications occur
+            # Requirement: When the agent outcome indicates change with workspace file modifications, change messages are produced for downstream dependent nodes.
             elif sb.has_modifications:
                 messages.add(dag_storage.Change())
 
@@ -87,11 +101,18 @@ class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
 
     def clean(self, node: dag_storage.Node) -> bool:
         storage = get_singleton(bazel_graph_storage.BazelGraphStorage)
-        # Requirement: Clears prior messages before cleaning dirty node
-        storage.clear_messages(node)
         msgs = self.clean_node(node)
+        if self._last_outcome is not None and not self._last_outcome.is_success:
+            # Requirement: When the agent outcome indicates failure, the node remains dirty and no propagating messages are produced.
+            # Requirement: [NodeCleaner] Processing cannot continue only if a failure occurs while cleaning the node that cannot be handled by cleaning any other node.
+            if not storage.is_dirty(node):
+                storage.add_message(dag_storage.Feedback(), to=node)
+            return False
 
-        # Requirement: Delivers change messages to dependents and feedback to dependencies
+        # Requirement: [NodeCleaner] When cleaning a dirty node, a node cleaner interacts with dag storage to deliver messages and manages whether the node remains dirty.
+        storage.clear_messages(node)
+
+        # Requirement: [NodeCleaner] Delivering messages delivers change messages to dependents when modifications are made, or feedback messages to dependencies when defects require revision.
         for m in msgs:
             if isinstance(m, dag_storage.Change):
                 for dependent in storage.get_dependents(node):
@@ -100,7 +121,7 @@ class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
                 for dependency in storage.get_dependencies(node):
                     storage.add_message(m, to=dependency.node)
 
-        # Requirement: Communicates whether DAG cleaning should continue
+        # Requirement: [NodeCleaner] Cleaning a dirty node communicates whether processing should continue.
         return True
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:

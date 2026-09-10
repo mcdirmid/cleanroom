@@ -60,7 +60,7 @@ def operation(func: Callable[..., Any]) -> Callable[..., Any]:
     return func
 
 def override(func: Callable[..., Any]) -> Callable[..., Any]:
-    """Marks an operation or property as overriding or inheriting a contract from a supertype."""
+    """Marks an operation or property as overriding an inherited contract."""
     return func
 ```
 
@@ -117,10 +117,21 @@ class AgentRunner(agent_runner.AgentRunner):
     ...
 ```
 
-### 2.6 Data Types & Structural Equality Invariant (No Empty Data Types)
+### 2.6 Data Types, Structural Equality, and Construction Invariants
 In Cleanroom, data types are passive value objects evaluated by structural equality. Consequently, **empty or token data types are strictly prohibited**:
-- Every `@data_type` and `@variant` MUST declare at least one property that participates in its structural identity.
-- Any entity previously declared without properties (such as `Node`) is defective. In Cleanroom, `Node` must explicitly declare an `address: str` property to establish its identity.
+- Every `@data_type` and `@variant` MUST declare at least one property that participates in its structural identity (or subclass a data type that does).
+- Any entity previously declared without properties (such as `Node`) is defective. In Cleanroom, `Node` explicitly declares an `address: str` property to establish its identity.
+
+#### `@dataclass(frozen=True)` & Constructor Policies
+Data types and closed variants are represented in `.pyi` grounding stubs using the standard `@dataclass` decorator in conjunction with `@data_type` or `@variant`:
+1. **Direct Public Construction (`init=True`)**:
+   - Leaf data types that external callers can instantiate directly are decorated with `@dataclass(frozen=True)` (or `@dataclass(frozen=True, init=True)`).
+   - They define a matching `def __init__(self, ...): ...` method signature establishing the positional parameters accepted during instantiation.
+2. **Service-Constructed Data Types (`init=False`)**:
+   - When a data type represents an entity whose instantiation must be guarded, validated, or mapped exclusively through designated service operations (such as `file_paths.HostPath`, `file_paths.WorkspacePath`, or `file_alias.FileAlias`), it is decorated with `@dataclass(frozen=True, init=False)`.
+   - It **omits** `def __init__` in the `.pyi` specification. This guarantees callers cannot bypass system validation rules by calling a default constructor.
+3. **Sum-Type Roots and Base Variants**:
+   - Base data types with variants and sum-type roots never declare `def __init__`. Instances can only be created from leaf data types without variants or leaf variant branches.
 
 ### 2.7 Canonical Type Mapping
 Informal type strings from legacy 4-column tables map deterministically to standard Python `typing` constructs:
@@ -232,7 +243,7 @@ INHERITED_REQUIREMENTS:
    - `GROUNDING_ARGUMENT:` (only in `*_impl.pyi` specifications on members of `@singleton_type` classes):
      - Formatted directly as the rationale (omitting ritual "Well-grounded." boilerplate). The argument explains *why* the member is grounded. Any ungrounded condition or gap is explicitly flagged.
      - For operations: details how the operation accesses necessary collaborator services, internal state, and arguments to meet its requirements.
-     - For properties: details where property values originate (e.g. delegated from another collaborator, populated via mutable operations, configured via operations, or loaded from external data sources or environment).
+     - For properties: details where property values originate (e.g. delegated from another collaborator, populated via mutable operations, configured via operations). Vague phrases such as "loaded from external data source" or "derived from environment" are strictly prohibited; external state derivation must specify the 3-part derivation path: (1) context provider collaborator, (2) loader service operation, and (3) return type transformation. All referenced collaborators must be imported.
    - `FRESH_ASSUMPTIONS:` list operation preconditions (what callers must guarantee before invoking the operation). Violating an assumption results in undefined behavior.
    - `INHERITED_ASSUMPTIONS:` preconditions propagated from ancestor declarations of this member.
    - `FRESH_REQUIREMENTS:` list guaranteed postconditions, state transitions, validation boundaries, return values, and explicit failure-handling contracts.
@@ -273,36 +284,75 @@ def __orphan__() -> None:
 6. **Docstring Headers**: Must contain `PURPOSE:` and `FRESH_REQUIREMENTS:`. Cannot contain `GROUNDING_ARGUMENT:`, `INHERITANCE:`, `INHERITED_ASSUMPTIONS:`, or `INHERITED_REQUIREMENTS:`.
 7. **Tooling Conservation**: `grounding_tool.py --sync` and `--check` preserve `__orphan__()` verbatim without drift or modification.
 
+#### Assembly Specifications & Subsystem Initialization Stubs (`__initialize__()`)
+Assembly components (`<name>_asm.md`) define subsystem composition and lifecycle singleton registration. Their grounding stubs (`grounding/<name>_asm.pyi`) define strictly an unnested top-level `__initialize__()` function:
+
+```python
+def __initialize__() -> None:
+    """
+    PURPOSE:
+    Assembles dag graph cleaning components into the dag assembly.
+
+    CONSTITUENTS:
+    - dag_cleaner_impl
+    """
+    ...
+```
+
+**Grammar & Invariants for `__initialize__()`**:
+1. **Unnested Only**: Must be a top-level function at module scope in assembly grounding files (`<name>_asm.pyi`).
+2. **Singular**: At most one `__initialize__()` function may exist per assembly specification module.
+3. **No Arguments or Decorators**: Must take no parameters (`()`) and have no decorators.
+4. **Return Annotation**: Return type annotation must be `None` (or omitted).
+5. **Pure Body**: Body must consist strictly of an optional docstring followed by an ellipsis (`...`).
+6. **Docstring Headers**: Must contain strictly `PURPOSE:` and `CONSTITUENTS:` listing the constituent implementation and sub-assembly modules.
+
 ---
 
 ## 4. Reference Implementation: `file_alias.pyi`
 
-Below is the definitive reference specification demonstrating all structural conventions, decorators, type signatures, and co-located requirements in a `.pyi` stub file:
+Below is the definitive reference specification demonstrating all structural conventions, decorators, type signatures, dataclass construction policies, and co-located requirements in a `.pyi` stub file:
 
 ```python
 # file_alias.pyi
-from typing import Optional, Set
-from framework import data_type, variant, singleton_type, override, operation
-from dag_storage import Node
-from filesystem import DirectoryPath, WorkspacePath
-from tool_provider import ParameterConverter, WireType, Type
+from typing import Protocol, Type
+from framework import data_type, operation, override, singleton_type, variant
+from dataclasses import dataclass
+import dag_storage
+import file_paths
+import tool_provider
 
-@singleton_type("agent_session")
-class AliasManager(ParameterConverter):
+@data_type
+class FileContent(str):
     """
     PURPOSE:
-    Defined as an agent session service configured with a workspace root 
-    that sanitizes output text.
+    Introduces file content to represent data read from or stored in a file
+    """
+    ...
+
+@data_type
+class RegexPattern(str):
+    """
+    PURPOSE:
+    Introduces regex pattern as the pattern used to search in files
+    """
+    ...
+
+@singleton_type('agent_session')
+class AliasManager(tool_provider.ParameterConverter, Protocol):
+    """
+    PURPOSE:
+    Defined as an agent session service configured with a workspace root that sanitizes output text
 
     INHERITANCE:
-    - ParameterConverter: Established that the alias manager is a parameter converter for file aliases, allowing file aliases to be used as tool parameters.
+    - tool_provider.ParameterConverter: Established that the alias manager is a parameter converter for file aliases, allowing file aliases to be used as tool parameters
     """
 
     @property
-    def workspace_root(self) -> DirectoryPath:
+    def workspace_root(self) -> file_paths.WorkspaceRoot:
         """
         PURPOSE:
-        Established that the alias manager is configured with a workspace root.
+        Established that the alias manager is configured with a workspace root
         """
         ...
 
@@ -311,59 +361,52 @@ class AliasManager(ParameterConverter):
     def actual_type(self) -> Type:
         """
         PURPOSE:
-        Sets the converter actual type for the alias manager to file alias.
+        Sets the converter actual type for the alias manager to file alias
         """
         ...
 
     @property
     @override
-    def wire_type(self) -> WireType:
+    def wire_type(self) -> tool_provider.WireType:
         """
         PURPOSE:
-        Sets the converter wire type for the alias manager to string.
+        Sets the converter wire type for the alias manager to string
         """
         ...
 
     @operation
     @override
-    def convert(self, wire_value: str) -> "FileAlias":
+    def convert(self, wire_value: str) -> 'FileAlias':
         """
         PURPOSE:
-        Converts a wire type string to a file alias, producing an unbound 
-        file if the short name is not found.
-        
+        Converts a wire type string to a file alias, producing an unbound file if the short name is not found
+
         FRESH_REQUIREMENTS:
         - Converting a wire type string produces the matching file alias if its short name is found, and produces an unbound file if the short name is not found.
-
-        INHERITED_REQUIREMENTS:
-        - [ParameterConverter] Converting a wire value must produce an instance compatible with actual_type.
-        - [ParameterConverter] Converting an invalid wire value raises a ParameterConversionError.
         """
         ...
-        
+
     @operation
     def sanitize_text(self, text: str) -> str:
         """
         PURPOSE:
-        Provides that the alias manager sanitizes text by masking occurrences 
-        of host paths with short names.
-        
+        Provides that the alias manager sanitizes text by masking occurrences of host paths with short names
+
         FRESH_REQUIREMENTS:
         - Sanitizing text masks occurrences of host paths with the corresponding file alias short names.
         """
         ...
 
-
+@dataclass(frozen=True, init=False)
 @data_type
 class FileAlias:
     """
     PURPOSE:
-    Defined to represent a session file, hiding physical filesystem details 
-    and paths from the agent.
-    
+    Defined to represent a session file, hiding physical filesystem details and paths from the agent
+
     FRESH_ASSUMPTIONS:
     - The short name of a file alias is assumed to be a minimal unambiguous relative path identifying the file within an agent session.
-    
+
     FRESH_REQUIREMENTS:
     - A file alias displays itself by its short name when converted to a string.
     """
@@ -372,60 +415,162 @@ class FileAlias:
     def short_name(self) -> str:
         """
         PURPOSE:
-        Established that each file alias has a short name.
+        Established that each file alias has a short name that is a minimal unambiguous relative path identifying the file within an agent session
         """
         ...
 
-
+@dataclass(frozen=True, init=False)
 @variant
 class BoundFile(FileAlias):
     """
     PURPOSE:
-    Classifies bound file as a file alias mapped to an actual workspace file.
+    Classifies bound file as a file alias mapped to an actual workspace file
+
+    INHERITED_ASSUMPTIONS:
+    - [FileAlias] The short name of a file alias is assumed to be a minimal unambiguous relative path identifying the file within an agent session.
+
+    INHERITED_REQUIREMENTS:
+    - [FileAlias] A file alias displays itself by its short name when converted to a string.
     """
 
     @property
-    def workspace_path(self) -> WorkspacePath:
+    def workspace_path(self) -> file_paths.WorkspacePath:
         """
         PURPOSE:
-        Established that each bound file has a workspace path.
+        Established that each bound file has a workspace path
         """
         ...
 
     @property
-    def owning_node(self) -> Node:
+    def owning_node(self) -> dag_storage.Node:
         """
         PURPOSE:
-        Established that each bound file has an owning node.
+        Established that each bound file has an owning node
         """
         ...
 
+    @property
+    @override
+    def short_name(self) -> str:
+        """
+        PURPOSE:
+        Established that each file alias has a short name that is a minimal unambiguous relative path identifying the file within an agent session
+        """
+        ...
 
+@dataclass(frozen=True)
 @variant
 class ReadOnlyFile(BoundFile):
     """
     PURPOSE:
-    Classifies read-only file as a bound file restricted to inspection.
+    Classifies read-only file as a bound file restricted to inspection
+
+    INHERITED_ASSUMPTIONS:
+    - [FileAlias] The short name of a file alias is assumed to be a minimal unambiguous relative path identifying the file within an agent session.
+
+    INHERITED_REQUIREMENTS:
+    - [FileAlias] A file alias displays itself by its short name when converted to a string.
     """
-    ...
 
+    def __init__(self, short_name: str, workspace_path: file_paths.WorkspacePath, owning_node: dag_storage.Node) -> None:
+        ...
 
+    @property
+    @override
+    def workspace_path(self) -> file_paths.WorkspacePath:
+        """
+        PURPOSE:
+        Established that each bound file has a workspace path
+        """
+        ...
+
+    @property
+    @override
+    def owning_node(self) -> dag_storage.Node:
+        """
+        PURPOSE:
+        Established that each bound file has an owning node
+        """
+        ...
+
+    @property
+    @override
+    def short_name(self) -> str:
+        """
+        PURPOSE:
+        Established that each file alias has a short name that is a minimal unambiguous relative path identifying the file within an agent session
+        """
+        ...
+
+@dataclass(frozen=True)
 @variant
 class ReadWriteFile(BoundFile):
     """
     PURPOSE:
-    Classifies read-write file as a bound file permitted for inspection and modification.
+    Classifies read-write file as a bound file permitted for inspection and modification
+
+    INHERITED_ASSUMPTIONS:
+    - [FileAlias] The short name of a file alias is assumed to be a minimal unambiguous relative path identifying the file within an agent session.
+
+    INHERITED_REQUIREMENTS:
+    - [FileAlias] A file alias displays itself by its short name when converted to a string.
     """
-    ...
 
+    def __init__(self, short_name: str, workspace_path: file_paths.WorkspacePath, owning_node: dag_storage.Node) -> None:
+        ...
 
+    @property
+    @override
+    def workspace_path(self) -> file_paths.WorkspacePath:
+        """
+        PURPOSE:
+        Established that each bound file has a workspace path
+        """
+        ...
+
+    @property
+    @override
+    def owning_node(self) -> dag_storage.Node:
+        """
+        PURPOSE:
+        Established that each bound file has an owning node
+        """
+        ...
+
+    @property
+    @override
+    def short_name(self) -> str:
+        """
+        PURPOSE:
+        Established that each file alias has a short name that is a minimal unambiguous relative path identifying the file within an agent session
+        """
+        ...
+
+@dataclass(frozen=True)
 @variant
 class UnboundFile(FileAlias):
     """
     PURPOSE:
-    Classifies unbound file as a file alias that is not mapped to an actual file.
+    Classifies unbound file as a file alias that is not mapped to an actual file
+
+    INHERITED_ASSUMPTIONS:
+    - [FileAlias] The short name of a file alias is assumed to be a minimal unambiguous relative path identifying the file within an agent session.
+
+    INHERITED_REQUIREMENTS:
+    - [FileAlias] A file alias displays itself by its short name when converted to a string.
     """
-    ...
+
+    def __init__(self, short_name: str) -> None:
+        ...
+
+    @property
+    @override
+    def short_name(self) -> str:
+        """
+        PURPOSE:
+        Established that each file alias has a short name that is a minimal unambiguous relative path identifying the file within an agent session
+        """
+        ...
 ```
 
 ---
@@ -462,14 +607,18 @@ The Cleanroom grounding toolchain consists of three deterministic pipeline passe
 
 ### 5. Unified Specification Toolchain (`grounding_tool.py`)
 
-All specification validation and code generation steps are consolidated into a single unified CLI tool: [`grounding_tool.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/tools/grounding_tool.py).
+All specification validation and code generation steps are consolidated into a single unified CLI tool: [`grounding_tool.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/support/lib/grounding_tool.py) (Bazel binary: `//update_with_ai/support/lib:grounding_tool`, test suite: `//update_with_ai/support/tests:test_spec_toolchain`). For comprehensive toolchain architecture, see [Toolchain & Verification Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/toolchain_and_verification.md).
 
 ```bash
 # Verify syntax, imports, and zero inheritance drift:
-python3 update_with_ai/tools/grounding_tool.py --check update_with_ai/specs/grounding/*.pyi
+bazel run //update_with_ai/support/lib:grounding_tool -- --check
+# Or directly via python3:
+python3 update_with_ai/support/lib/grounding_tool.py --check
 
 # Synchronize inherited requirements and @override stubs in-place:
-python3 update_with_ai/tools/grounding_tool.py --sync update_with_ai/specs/grounding/*.pyi
+bazel run //update_with_ai/support/lib:grounding_tool -- --sync
+# Or directly via python3:
+python3 update_with_ai/support/lib/grounding_tool.py --sync
 ```
 
 ### 5.1 Pass 1: Custom "By-Hand" AST Linter & Type-Checker
@@ -636,7 +785,7 @@ A dedicated pair of Bazel rules integrates `.pyi` groundings:
 All checks execute locally in Bazel sandboxes in milliseconds with **zero external API calls and zero LLM token costs**.
 
 ### 7.2 Migration Path for Existing Specifications
-1. **Phase 1: Framework & Toolchain**: Implement `framework.py` and the unified CLI tool ([`grounding_tool.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/tools/grounding_tool.py)) with full unit test suites.
+1. **Phase 1: Framework & Toolchain**: Implement `framework.py` and the unified CLI tool ([`grounding_tool.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/support/lib/grounding_tool.py)) with full unit test suites.
 2. **Phase 2: Lossless Markdown-to-PYI Converter**: Construct a translator script converting legacy Markdown tables and requirement lists into `.pyi` grounding stubs placed in `update_with_ai/specs/grounding/`.
 3. **Phase 3: Validation & Promotion**: Verify all files in `grounding/` pass linting and inheritance expansion as the canonical specification repository.
 
@@ -667,3 +816,69 @@ In unit tests, string contents cannot be pinned or asserted deterministically, m
 - Enable automated tests to generate a series of targeted evaluation questions to submit to a supervising LLM.
 - The supervising LLM evaluates whether the tool's generated failure feedback accurately diagnoses the issue and provides sufficient, actionable guidance for an agent to recover.
 - This provides robust verification for natural language agent communication contracts without hardcoding unpinned string assertions into unit tests.
+
+---
+
+## 9. Grounding Translation & Alignment Challenges: Prompt Engineering vs. Deterministic Enforcement
+
+### 9.1 Executive Problem Statement: Why Prompt Engineering Alone Fails
+
+In literate Cleanroom engineering, High-Level Specifications (HLS) are translated into Python interface stubs (`.pyi` grounding contracts), which are subsequently implemented as runtime Python libraries (`.py`) and verified by unit test suites (`_test.py`).
+
+Empirical evaluation of autonomous agent runs reveals that **prompt engineering alone cannot reliably enforce structural and semantic grounding boundaries**. LLMs suffer from fundamental cognitive limitations when operating across specification boundaries:
+
+1. **The In-Context Syntax Bleed Effect**: When an LLM translates a `.pyi` grounding stub into a `.py` implementation, the stub tokens in its context window exert strong in-context attentional pull. Despite explicit prompt instructions (e.g. *"do not copy framework decorators"*), transformers frequently replicate spec-only syntax (`@singleton_type`, `@operation`, `@data_type`, specification docstring blocks) directly into executable runtime code. Negative prompt constraints (*"do not do X"*) are notoriously fragile in complex contexts.
+2. **Structural Type Translation Divergence**: In `.pyi` grounding stubs, passive data records are specified as `@data_type` classes with `@property` stubs returning field types. In runtime Python, these must be implemented as `@dataclass` classes with type-annotated class attributes (e.g. `path: str`), *not* method stubs. Without external enforcement, agents repeatedly emit empty `def __init__(self): ...` or `@property` stubs inside dataclasses.
+3. **Mock Drift vs. Spec Drift (Phantom Protocol Extensions)**: When unit tests mock a grounding protocol, test authors or generative agents frequently define convenience methods on the mock class (e.g. adding `extract_target_name(self, node)` to `MockBazelNodeIdentifierUtility`) that do not exist on the protocol. The implementation code under test then calls the hallucinated mock method, all unit tests pass, yet the implementation violates the canonical grounding contract and fails static type checking or runtime integration.
+4. **Visibility Leakage & Global Environment Contamination**: When type checkers or runtimes rely on ambient `PYTHONPATH` or permissive global IDE configuration files (`pyrightconfig.json`), specification-only infrastructure (`update_with_ai/support/lib/framework.py`) becomes resolvable by library code, silently masking illegal architectural coupling.
+
+To address these vulnerabilities, Cleanroom relies on a two-tier defense: **declarative upfront prompt guidance** to bias generative synthesis, backed by **uncompromising, deterministic AST linters and closed-world build rules** that reject drift with millisecond compiler diagnostics.
+
+---
+
+### 9.2 Comprehensive Ledger: Solved vs. Unsolved Challenges
+
+The following ledger documents the grounding, translation, and verification challenges encountered in Cleanroom, their resolution status, and the technical mechanism employed:
+
+| Challenge / Defect Class | Layer | Status | Resolution Mechanism / Root Cause |
+| :--- | :--- | :--- | :--- |
+| **Framework Decorator & Import Leakage** | Grounding $\to$ Lib | **SOLVED** | **AST Linter & Build Enforcement**: `lib_lint.py` inspects the AST of all `_impl.py` and library files, failing immediately if any `ast.Import` or `ast.ImportFrom` targets `framework`. In addition, `bin/pyright_library.bzl` fails analysis if `:framework` is in `deps`/`pyright_deps`. |
+| **Dataclass Method Stub Generation** | Grounding $\to$ Lib | **SOLVED** | **AST Linter Enforcement**: `lib_lint.py` (`check_dataclass_stubs`) inspects all `@dataclass` definitions, rejecting any that define empty `__init__` or `@property` stubs. `grounding_to_lib.md` was updated upfront to mandate standard class attribute declarations. |
+| **Specification Docstring Contamination** | Grounding $\to$ Lib | **SOLVED** | **Guide Alignment**: `grounding_to_lib.md` was updated to explicitly prohibit copying `PURPOSE:`, `GROUNDING_ARGUMENT:`, and `FRESH_REQUIREMENTS:` headers into runtime code docstrings. |
+| **Fake `_type_check` Passes in Bazel Harness** | Toolchain / Bazel | **SOLVED** | **Harness Execution Fix**: `bin/pyright_library.bzl` previously failed silently on `cat ... \| xargs` due to missing `runfiles` and missing `set -o pipefail`. Fixed by declaring all dependencies in `runfiles`, adding `set -e -o pipefail`, and passing target source files only. |
+| **Third-Party Namespace Pollution in Runfiles** | Toolchain / Pyright | **SOLVED** | **Runfiles Path Normalization**: Resolved pip wheel path injection where deep paths into `site-packages` (e.g. `openai/types`) shadowed standard library packages (such as `types`). Trimmed paths to the `site-packages` root. |
+| **Zero-Token MRO Requirements Synchronization** | Grounding Stubs | **SOLVED** | **Deterministic AST Traversal**: `grounding_tool.py --sync` programmatically computes MRO, synthesizes `@override` stubs, and copies down inherited contracts with exact provenance labels in milliseconds, eliminating prompt hallucination in specification maintenance. |
+| **Mock-to-Protocol Parity Drift** | Grounding $\to$ Tests | **UNSOLVED** *(Hard)* | **Protocol Conformance Verification Gap**: When tests define test doubles (e.g. `MockNodeIdentifierUtility`), agents add helper methods (like `extract_target_name`) absent from the spec protocol. While strict Pyright on the consumer caught the missing attribute, mocks themselves are not currently validated against their protocol signatures via `@typing.override` or runtime protocol assertions. |
+| **Ergonomic Query Omission in Protocols** | Grounding Spec | **UNSOLVED** *(Hard)* | **Interface Completeness Gap**: When a protocol omits an ergonomic query needed by consumers (e.g. extracting the target name from a node when only package directory extraction is specified), agents either hallucinate the method or resort to ad-hoc string parsing (`dep_label.split(":")[-1]`). Prompt engineering cannot solve missing API ergonomics. |
+| **Closed-World Per-Target Type Isolation** | Toolchain / Pyright | **UNSOLVED** *(Hard)* | **Global Config vs. Target Hermeticity**: Pyright defaults to reading a workspace-level `pyrightconfig.json`, which either leaks search paths or requires continuous manual synchronization of `executionEnvironments`. To be strictly closed, `pyright_library` must generate hermetic, per-target JSON configs passed via `--project`, independent of ambient workspace configs or `PYTHONPATH`. |
+| **Semantic Efficacy of Agent Failure Diagnostics** | Grounding $\to$ QA | **UNSOLVED** *(Hard)* | **Supervising LLM Protocol (TODO)**: Tool failure contracts requiring actionable guidance for agent recovery cannot be verified via deterministic unit test string assertions. Requires automated questionnaire generation and independent supervisory model scoring. |
+
+---
+
+### 9.3 Deep Dive: Hard Grounding Problems Resistant to Prompt Engineering
+
+#### 1. Mock-to-Protocol Parity & Structural Drift
+Prompting an agent to *"ensure mocks implement only what the protocol defines"* is inherently unreliable. Generative models construct mocks by backward-chaining from the needs of the test assertion. If a test assertion needs to know the target name of a node, the agent instinctively attaches `extract_target_name` to the mock utility object in scope. Because Python classes allow arbitrary method definitions, standard unit testing frameworks do not complain.
+
+**Required Architectural Solution**:
+- Mocks should be required to use static type annotations or runtime protocol checks:
+  ```python
+  # Must be type-checked as the protocol type, not the mock type
+  node_util: BazelNodeIdentifierUtility = MockNodeIdentifierUtility()
+  ```
+- Pyright running with `reportAttributeAccessIssue` and `reportUnknownMemberType` then guarantees that tests cannot access ad-hoc mock methods on protocol-typed variables.
+
+#### 2. Protocol Ergonomics & Semantic Workarounds
+When an ontological grounding interface specifies low-level operations (e.g. `normalize` and `extract_directory`) but omits obvious derived queries (e.g. `extract_target_name`), agents face an architectural dilemma:
+- If they respect the protocol, they write fragile string manipulations (`dep_label.split(":")[-1]`) scattered across consuming implementations.
+- If they seek clean abstractions, they hallucinate methods on the service interface.
+
+Prompt engineering cannot fix an incomplete grounding contract. The HLS-to-grounding alignment process must systematically audit consumer requirements against protocol capabilities, ensuring derived accessors are formally grounded as `@operation` methods on the protocol or standard utility functions.
+
+#### 3. Closed-World Build Hermeticity vs. Typing Hacks
+A recurring failure mode in type-checked multi-package repositories is **search path leakage**:
+- When `pyrightconfig.json` adds `extraPaths` globally to satisfy one consumer, all consumers gain visibility into those packages, bypassing Bazel's explicit `deps` declarations.
+- When `PYTHONPATH` is manipulated globally, module resolution order becomes non-deterministic and can shadow standard libraries.
+
+Cleanroom's architecture requires **strict build-rule hermeticity**: each `pyright_test` must generate a dedicated, target-specific Pyright project file derived strictly from the target's explicit `deps` and `imports`, guaranteeing that undeclared dependencies fail resolution identically in Bazel, in the IDE, and in CI.
+

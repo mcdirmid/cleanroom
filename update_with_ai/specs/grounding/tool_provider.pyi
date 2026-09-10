@@ -1,4 +1,4 @@
-from typing import Any, Protocol, Set, Tuple, Type, Union
+from typing import Any, Optional, Protocol, Set, Tuple, Type, Union
 from framework import data_type, operation, override, poly_type, singleton_type, variant
 from dataclasses import dataclass
 
@@ -33,16 +33,14 @@ Converts a wire type value to produce a value of that actual type
 """
         ...
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 @data_type
 class WireType:
     """
 PURPOSE:
 Defined as a primitive wire type limited to string, integer, or boolean
 """
-
-    def __init__(self) -> None:
-        ...
+    ...
 
 @dataclass(frozen=True)
 @variant
@@ -348,7 +346,7 @@ PURPOSE:
 Communicates tool execution results to the agent
 """
 
-    def __init__(self, is_failed: bool, is_terminated: bool, content: str) -> None:
+    def __init__(self, is_failed: bool, is_terminated: bool, content: str, reminder: Optional[str]=...) -> None:
         ...
 
     @property
@@ -372,6 +370,14 @@ Communicates whether the agent session should terminate
         """
 PURPOSE:
 Includes underlying tool execution output and error diagnostics on failure
+"""
+        ...
+
+    @property
+    def reminder(self) -> Optional[str]:
+        """
+PURPOSE:
+Advises the agent on future actions and constraints
 """
         ...
 

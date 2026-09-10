@@ -61,26 +61,7 @@ The `openai_ext` external component specifies the third-party Python SDK mechani
 
 ## Build Dependencies
 
-External boundary components have no standalone `py_library` target in `update_with_ai/lib`. Instead, dependent implementation components consume the third-party Python package directly.
-
-The consuming component `agent_runner_impl` must configure its Bazel target in `update_with_ai/lib/BUILD.bazel` (or corresponding package BUILD) with:
-- Pip dependency label: `requirement("openai")` via `@rules_python`.
-- Target dependency definition:
-  ```python
-  py_library(
-      name = "agent_runner_impl",
-      srcs = ["agent_runner_impl.py"],
-      deps = [
-          ":agent_runner",
-          ":agent_conversation_history",
-          ":agent_loop_guard",
-          ":model_config",
-          ":runner_logger",
-          ":tool_provider",
-          requirement("openai"),
-      ],
-  )
-  ```
+- `requirement("openai")`
 
 ## Usage Snippets
 

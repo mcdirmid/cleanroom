@@ -2,25 +2,22 @@ from framework import data_type, operation, override, singleton_type
 from typing import Protocol
 from dataclasses import dataclass
 import dag_storage
-import file_alias
+import file_paths
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 @data_type
-class NodeDirectory(file_alias.DirectoryPath):
+class NodeDirectory(file_paths.WorkspacePath):
     """
 PURPOSE:
 Filesystem path addressing the workspace package directory of a node
 """
-
-    def __init__(self, path: str) -> None:
-        ...
 
     @property
     @override
     def path(self) -> str:
         """
 PURPOSE:
-Path string on the filesystem
+The string representing the filesystem path.
 """
         ...
 

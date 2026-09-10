@@ -10,7 +10,7 @@ from lib.agent_loop_guard_impl import (
     LoopGuard as LoopGuardImpl,
     __initialize__,
 )
-from lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from lib.tool_provider import ActualParameterBindings, Parameter, String, WireType
 
 

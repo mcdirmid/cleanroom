@@ -1,7 +1,7 @@
-from typing import Any, Protocol, Set, Tuple, Type, Union
+from typing import Any, Optional, Protocol, Set, Tuple, Type, Union
 from dataclasses import dataclass
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class WireType:
     pass
 
@@ -89,6 +89,7 @@ class Response:
     is_failed: bool
     is_terminated: bool
     content: str
+    reminder: Optional[str] = None
 
 class Tool(Protocol):
     @property

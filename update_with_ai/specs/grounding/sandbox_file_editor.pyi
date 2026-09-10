@@ -80,6 +80,20 @@ FRESH_REQUIREMENTS:
         """
 PURPOSE:
 Exposes whether workspace file modifications occurred during the session
+
+FRESH_REQUIREMENTS:
+- The edit manager exposes whether workspace file modifications occurred during the session, determined by whether workspace file contents differ from their initial state prior to editing.
+"""
+        ...
+
+    @property
+    def file_update_revision(self) -> int:
+        """
+PURPOSE:
+Exposes a file update revision that tracks sequential updates made to workspace files
+
+FRESH_REQUIREMENTS:
+- The edit manager exposes a file update revision that tracks sequential updates made to workspace files.
 """
         ...
 

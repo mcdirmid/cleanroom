@@ -11,6 +11,8 @@ class Message:
     content: str
     tool_call_id: Optional[str] = None
     tool_name: Optional[str] = None
+    reminder: Optional[str] = None
+    tool_arguments: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -30,7 +32,11 @@ class ConversationHistory(Protocol):
     def append_message(self, message: Message) -> None: ...
 
     def append_tool_response(
-        self, response: tool_provider.Response, tool_name: str, tool_call_id: str
+        self,
+        response: tool_provider.Response,
+        tool_name: str,
+        tool_call_id: str,
+        wire_parameter_bindings: Optional[tool_provider.WireParameterBindings] = None,
     ) -> None: ...
 
     def get_model_request(self) -> ModelRequest: ...

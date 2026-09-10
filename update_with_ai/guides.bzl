@@ -5,7 +5,7 @@ update_with_ai macro (update_with_ai.bzl); the node's agent updates the guide
 file per the display name given.
 """
 
-load("//update_with_ai/lib:update_with_ai.bzl", "update_with_ai")
+load("//update_with_ai/support/lib:update_with_ai.bzl", "update_with_ai")
 
 def update_guide_with_ai(name, src, deps, display_name):
     """Create a guide node whose agent updates the guide file.

@@ -1,6 +1,6 @@
 # bazel_node_id_utils interface component
 
-imports: dag_storage, file_alias
+imports: dag_storage, file_paths
 
 ## Purpose
 
@@ -12,7 +12,7 @@ Multi-step workflows require deterministic node addressing and durable state sto
 
 ## Types and Behavior
 
-A *node directory* is a directory path from file alias addressing the workspace package directory of a node from dag storage.
+A *node directory* is a workspace path from file paths addressing the workspace package directory of a node from dag storage. A node directory is constructed exclusively through service operations rather than direct public constructors.
 
 The *bazel node identifier utility* is a *system* service that normalizes Bazel target labels and resolves package locations. The bazel node identifier utility:
 

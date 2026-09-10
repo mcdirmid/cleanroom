@@ -2,13 +2,13 @@
 
 ## Summary
 
-The artifact is the test module for an implementation: `<name>_impl_test.py`, written from `grounding/<name>_impl.pyi` and its dependency closure alone — the library implementation Python file is never consulted. Tests written from the grounding specification catch implementation drift: when a test fails, the implementation is wrong, unless the test misread the grounding contract. A file that is a template is filled in. The files and specifications provided in context at session start are the complete and only source of truth required to write the test module.
+The artifact is the test module for an implementation: `<name>_impl_test.py`, written from `<name>_impl.pyi` and its dependency closure alone — the library implementation Python file is never consulted and must never be present in context during test authoring. Tests written from the grounding specification catch implementation drift: when a test fails, the implementation is wrong, unless the test misread the grounding contract. A file that is a template is filled in. The files and specifications provided in context at session start are the complete and only source of truth required to write the test module.
 
-The grounding specification is the only contract: tests cover its postconditions (`FRESH_REQUIREMENTS:`, `INHERITED_REQUIREMENTS:`), invariants, and expected failure signals, while dependency mocks enforce caller preconditions (`FRESH_ASSUMPTIONS:`). Tests must always satisfy all declared assumptions (`FRESH_ASSUMPTIONS:`, `INHERITED_ASSUMPTIONS:`) and never test that an assumption violation produces anything other than unexpected behavior — undefined behavior is undefined behavior, and tests never assert defined behavior for violated assumptions. When tool execution fails, tests assert the failure signal (`is_failed=True`, `is_terminated=...`) but never assert string contents or wording of error and diagnostic messages; requirements specifying that tool failure responses include error messages, diagnostics, or recovery guidance are cataloged in the untested requirements block at the bottom of the test file. Every test method contains a docstring or comment block identifying the tested Customer User Journey (CUJ) or edge case, and comments identifying which specific requirements (`# Requirement: <text>`) and invariants are tested. A comment block at the bottom of each test file lists any untested requirements from the grounding specification, with the aim of making that list as short as possible by covering every testable requirement. Singletons under test are instantiated and tested via their lifecycle scope; collaborator singletons are registered as mocks or stubs in a fresh lifecycle registry, while polymorphic types are mocked or instantiated directly. Test editing is incremental and targeted, updating or adding test methods one at a time via `update_lines` without regenerating the whole file. When calling `advance(change_summary="...")`, the summary is at most 200 characters (one short sentence).
+The grounding specification is the only contract: tests cover its postconditions (`FRESH_REQUIREMENTS:`, `INHERITED_REQUIREMENTS:`), invariants, and expected failure signals, while dependency mocks enforce caller preconditions (`FRESH_ASSUMPTIONS:`). Tests must always satisfy all declared assumptions (`FRESH_ASSUMPTIONS:`, `INHERITED_ASSUMPTIONS:`) and never test that an assumption violation produces anything other than unexpected behavior — undefined behavior is undefined behavior, and tests never assert defined behavior for violated assumptions. When tool execution fails, tests assert the failure signal (`is_failed=True`, `is_terminated=...`) but never assert string contents or wording of error and diagnostic messages; requirements specifying that tool failure responses include error messages, diagnostics, or recovery guidance are cataloged in the untested requirements block at the bottom of the test file. Every test method contains a docstring or comment block identifying the tested Customer User Journey (CUJ) or edge case, and comments identifying which specific requirements (`# Requirement: <text>`) and invariants are tested. Every requirement cited by a test must be actively exercised and verified with non-tautological assertions. A comment block at the bottom of each test file lists any untested requirements from the grounding specification, with the aim of making that list as short as possible by covering every testable requirement. Singletons under test are instantiated and tested via their lifecycle scope; collaborator singletons are registered as mocks or stubs in a fresh lifecycle registry, while polymorphic types are mocked or instantiated directly. Test editing is incremental and targeted, updating or adding test methods one at a time via `update_lines` without regenerating the whole file. The search tool is never installed.
 
 ## Module layout
 
-- [ ] One test module per implementation specification: `grounding/widget_impl.pyi` → `widget_impl_test.py`
+- [ ] One test module per implementation specification: `widget_impl.pyi` → `widget_impl_test.py`
 - [ ] A test module (`<name>_impl_test.py`) imports only its target implementation module (`<name>_impl`) and interface protocols; it must never import from foreign `*_impl` modules or import foreign `*Impl` classes
 - [ ] Imports of library modules use `from lib.<module> import ...` (never prefixing the workspace directory name)
 - [ ] The module uses `unittest`, ending with `if __name__ == "__main__": unittest.main()`
@@ -28,7 +28,11 @@ The grounding specification is the only contract: tests cover its postconditions
 - [ ] Invariants tested across operation sequences (a fresh instance behaves freshly; state unchanged after a failing operation; idempotency)
 - [ ] Every test method documents its purpose in a docstring or leading comment identifying the tested Customer User Journey (CUJ) or edge case, checked postconditions or invariants, and confirming no caller preconditions are violated
 - [ ] Comments inside each test method identify which requirements or invariants from `FRESH_REQUIREMENTS:` and `INHERITED_REQUIREMENTS:` the test asserts, citing the requirement text using `# Requirement: <text>`, without explaining test execution mechanics
+- [ ] Every requirement cited via `# Requirement: <text>` is actively exercised and verified by assertions directly evaluating that requirement's specific postconditions, state transitions, or failure signals; citing a requirement on a test that does not execute or assert that requirement's mandated behavior is prohibited
+- [ ] Tests assert outcomes and terminations strictly through the mechanisms defined in the grounding specification; asserting artificial success or termination conditions not present in the contract is prohibited
 - [ ] All edge cases are covered; for every covered edge case, tests exist exercising all sides of the boundary (e.g. exactly at threshold, one below, and one above; empty vs populated; matching vs non-matching)
+- [ ] Negative testing of relational and conditional requirements: for every requirement governing actions under a specific matching condition or entity identity (such as operations affecting the same resource or matching entity), tests assert both the positive case (matching entities are affected) and the negative case (distinct or non-matching entities are not affected and remain intact)
+- [ ] Non-interference verification: operations that modify, supersede, or delete state for a targeted entity or resource are verified to leave state for distinct or non-targeted entities intact
 - [ ] All stated behavioral requirements and failure signals are covered; unmandated implementation choices are never asserted
 - [ ] Every requirement in `FRESH_REQUIREMENTS:` and `INHERITED_REQUIREMENTS:` is either asserted in a test method with a `# Requirement:` comment or listed in the untested requirements comment block at the bottom of the test file
 
@@ -41,7 +45,7 @@ The grounding specification is the only contract: tests cover its postconditions
 - [ ] Each mock records calls, returns scripted results, and enforces the interface's preconditions (raises when the component under test violates a `FRESH_ASSUMPTIONS:` precondition)
 - [ ] Preconditions are verified in caller tests via mock enforcement, never in callee tests (callees assume satisfied preconditions; violations are unexpected failures)
 - [ ] Interaction is asserted through recorded calls: which dependency operations were called, in what order, with what arguments
-- [ ] External boundaries documented in `grounding/<name>_ext.pyi` are mocked with fixtures aligned to the interface types; boundary preconditions are enforced the same way
+- [ ] External boundaries documented in `<name>_ext.pyi` are mocked with fixtures aligned to the interface types; boundary preconditions are enforced the same way
 - [ ] File fixtures exist on disk or are mocked: when a component takes a file path to read at initialization or during execution, tests supply a real fixture file (e.g. created via `tempfile.NamedTemporaryFile` with test content) or mock the file-reading boundary, never passing a non-existent dummy path string
 - [ ] Mock targets patch where looked up: when patching standard library functions or submodules used by a module, patch the attribute on the module under test (`patch('lib.<module>.<symbol>')`, e.g. `patch('lib.widget_impl.os.path.isfile', ...)`), never the global stdlib module (`os.path.isfile`); global builtins target `builtins.<name>` (e.g. `builtins.open`)
 - [ ] Synthetic fixtures conform strictly to spec delimiters: helper functions generating test files (markdown, CSV, JSON, proto) produce the exact delimiters and structures defined in grounding specifications or external docstrings, never bare unstructured strings
@@ -50,8 +54,11 @@ The grounding specification is the only contract: tests cover its postconditions
 ## The bias rule
 
 - [ ] Tests verify that the implementation satisfies the grounding contract; they are never written to accommodate the implementation
+- [ ] Tests are authored in complete isolation from the library implementation module; authoring tests with library implementation code in context is prohibited
 - [ ] A failing test is re-read against the grounding contract first; when the contract supports the assertion, the implementation is fixed, not the test
 - [ ] Assertions are never weakened to match observed behavior; tests are never written by transcribing implementation behavior
+- [ ] Passing tests that succeed through tautological assertions or by accommodating unmandated implementation shortcuts are contract violations and must be rewritten to assert the grounding specification
+- [ ] Testing only the positive branch of a relational requirement while omitting negative non-interference tests is prohibited as an accommodating shortcut
 - [ ] The only legitimate test-side fixes are contract misreadings: wrong signal, wrong precondition, or testing something the contract does not require
 
 ## What not to test
@@ -85,6 +92,7 @@ The grounding specification is the only contract: tests cover its postconditions
 ## Common pitfalls
 
 - [ ] Tests that read the library implementation and transcribe its behavior instead of reading the grounding contract
+- [ ] Authoring tests with library implementation code in context
 - [ ] Weakening assertions to match observed implementation behavior
 - [ ] Mocking the system under test
 - [ ] Global stdlib patches (`@patch('os.path.isfile')` instead of `@patch('lib.<module>.os.path.isfile')`)
@@ -92,8 +100,12 @@ The grounding specification is the only contract: tests cover its postconditions
 - [ ] Precondition tests in callee test suites (preconditions are tested in caller tests via mock enforcement, never in the callee itself)
 - [ ] Testing behavior when an assumption is violated instead of treating assumption violation as undefined behavior
 - [ ] Asserting defined error handling, graceful returns, or specific exceptions for inputs that violate contract assumptions
+- [ ] Omitting negative tests for relational or conditional requirements (testing that matching entities are affected, but failing to test that distinct entities are untouched)
+- [ ] Testing positive effects without asserting non-interference on distinct entities or resources
 - [ ] Asserting string contents or wording of tool failure responses instead of treating diagnostic guidance requirements as untested requirements
 - [ ] Tests for unmandated implementation choices
+- [ ] Asserting artificial success, completion, or termination outcomes not specified in the grounding contract
+- [ ] Citing `# Requirement:` comments on test methods that do not execute or assert the cited requirement
 - [ ] Imports of foreign implementation modules or foreign `*Impl` classes (mock dependency protocols instead)
 - [ ] Omitting docstrings or leading comments describing the CUJ or edge case being covered
 - [ ] Omitting `# Requirement: <text>` comments on test assertion blocks
@@ -101,3 +113,4 @@ The grounding specification is the only contract: tests cover its postconditions
 - [ ] Leaving requirements in the untested requirements block that can be verified with unit tests
 - [ ] Explaining test mechanics in comments rather than identifying what requirement or invariant is tested
 - [ ] Importing foreign implementation modules to wire collaborator singletons instead of registering protocol mocks in the lifecycle registry
+- [ ] Exposing file paths — using filesystem paths (e.g. `grounding/<name>_impl.pyi`) instead of virtual file names (`<name>_impl.pyi`)

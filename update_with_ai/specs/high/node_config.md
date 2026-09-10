@@ -1,6 +1,6 @@
 # node_config interface component
 
-imports: file_alias, sandbox_guide_delivery, sandbox_file_editor
+imports: file_alias, sandbox_guide_delivery, sandbox_file_editor, sandbox_run_control
 
 ## Purpose
 
@@ -20,8 +20,10 @@ The *node config* is an *agent session* service that exposes configuration param
 
 - The session's *guide file*, which is an unbound file configured when progressive guidance is active, or absent if no guide file is configured.
 
-- The session's *templates*, mapping read-write files to initial file content from the sandbox file editor.
+- The session's *templates*, mapping read-write files to initial file content from the edit manager.
 
-- The session's *guide*, providing structured instructional text for progressive guidance from the sandbox guide delivery when progressive guidance is active, or absent if no guide is configured.
+- The session's *guide*, providing structured instructional text for progressive guidance from guide delivery when progressive guidance is active, or absent if no guide is configured.
 
 - The session's *blame targets*, which are bound files owned by upstream dependency nodes eligible for defect attribution.
+
+- The session's *verification checks*, which are verification checks evaluated during session advancement.

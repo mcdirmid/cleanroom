@@ -1,18 +1,18 @@
-# Repo-wide default agent/model configuration (an `agent_config` target) for
+# Repo-wide default model configuration (a `model_config` target) for
 # the generated *_clean binaries. The value is embedded into the binaries at
-# build time; --config <label> (after `--`) or the AGENT_CONFIG_TARGET
-# environment variable still override it per run.
+# build time; --config <label> (after `--`) or the MODEL_CONFIG_TARGET /
+# AGENT_CONFIG_TARGET environment variable still override it per run.
 #
-#   bazel run //pkg:my_node_clean -- --config //agent_configs:staging
-#   AGENT_CONFIG_TARGET=//agent_configs:staging bazel run //pkg:my_node_clean
+#   bazel run //pkg:my_node_clean -- --config //model_configs:staging
+#   MODEL_CONFIG_TARGET=//model_configs:staging bazel run //pkg:my_node_clean
 #
 # Personal default: configs tend to be personal, and the config *definitions*
-# live in agent_configs/BUILD.bazel. Override the default selection in your
+# live in model_configs/BUILD.bazel. Override the default selection in your
 # user-level bazelrc (~/.bazelrc), which is read AFTER this file:
 #
-#   echo 'build --define=AGENT_CONFIG=//agent_configs:sean' >> ~/.bazelrc
+#   echo 'build --define=MODEL_CONFIG=//model_configs:sean' >> ~/.bazelrc
 #
-# (Add the :sean target to //agent_configs:all_configs so it is bundled into
+# (Add the :sean target to //model_configs:all_configs so it is bundled into
 # every *_clean binary's runfiles; otherwise build it once and it is resolved
 # from bazel-bin. Command-line --define beats ~/.bazelrc beats this file.)
-build --define=AGENT_CONFIG=//agent_configs:qwen-moe-q6
+build --define=MODEL_CONFIG=//model_configs:qwen-moe-q6

@@ -44,19 +44,17 @@ PURPOSE:
 Implements get_startup_tool_executions assembling an ordered sequence of executions based on configuration
 
 FRESH_REQUIREMENTS:
-- When using step mode in the model config to communicate a guide progressively, startup tool executions include an initial advance tool execution with tool name `advance` and empty wire parameter bindings.
-- When performing startup reads in the model config to inspect declared files at session start, startup tool executions include reads for all declared read-only files from the node config, positioned after any advance tool execution.
+- When using step mode to communicate a guide progressively, startup tool executions include an initial advance tool execution with the name of the advance tool, empty wire parameter bindings, and the response produced by executing the advance tool.
+- When performing startup reads to inspect declared files at session start, startup tool executions include file read executions for all declared read-only files from node config ordered deterministically by file alias short name, positioned after any advance tool execution.
+- Each file read execution uses the name of the read tool, specifies wire parameter bindings mapping the file alias parameter of the read tool to the read-only file alias short name while omitting line numbers, and captures the response produced by executing the read tool.
 - When step mode is not used, startup tool executions contain no advance tool execution.
 - When startup reads are not performed, startup tool executions contain no file read executions.
-- Each file read execution specifies the tool name as `read_file`.
-- Each file read execution constructs wire parameter bindings mapping `file` to the read-only file short name and omitting line numbers.
-- Each file read execution captures the execution response from the read tool.
 
 INHERITED_REQUIREMENTS:
-- [Sandbox] The sandbox provides an ordered sequence of startup tool executions pairing tool requests and responses based on active configuration.
+- [Sandbox] The sandbox exposes startup tool executions as an ordered sequence of initial tool executions based on active configuration, ordering startup reads deterministically by file alias short name.
 
 GROUNDING_ARGUMENT:
-- Reads step mode and startup read flags from imported model_config.ModelConfig (system tier), retrieves declared read-only files from imported node_config.NodeConfig (session tier), executes imported sandbox_run_control.AdvanceTool and sandbox_file_reader.ReadTool (session tier), and pairs tool requests with responses into StartupToolExecution records.
+- Reads step mode and startup reads from imported model_config.ModelConfig (system tier), retrieves declared read-only files from imported node_config.NodeConfig (session tier) ordered deterministically by file alias short name, executes imported sandbox_run_control.AdvanceTool and sandbox_file_reader.ReadTool (session tier), and pairs tool requests with responses into StartupToolExecution records.
 """
         ...
 

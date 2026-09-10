@@ -1,6 +1,6 @@
 # bazel_node_id_utils_impl implementation component
 
-imports: dag_storage, file_alias, bazel_target_labels_ext
+imports: dag_storage, file_paths, bazel_target_labels_ext
 implements: bazel_node_id_utils
 
 ## Purpose
@@ -15,4 +15,4 @@ Bazel targets can be addressed using apparent, repository-qualified, or shorthan
 
 The bazel node identifier utility normalizes raw target labels from bazel target labels ext into canonical nodes in dag storage by stripping repository qualifiers and expanding omitted target names.
 
-The bazel node identifier utility derives node directories from normalized nodes by extracting package directory paths relative to a workspace root from file alias.
+The bazel node identifier utility derives node directories from normalized nodes by extracting package directory paths relative to a workspace root from file paths.

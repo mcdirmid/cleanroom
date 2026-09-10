@@ -1,0 +1,113 @@
+# Personal model configurations (see update_with_ai/support/lib/model_config.bzl).
+#
+# Bazel is a monorepo, so configs must be declared inside the workspace; and
+# they tend to be personal (which model, which endpoint). For now we check a
+# shared default in here and keep the personal part personal: the *selection*
+# of which config to use by default lives in the user's ~/.bazelrc (or in
+# MODEL_CONFIG_TARGET / --config at run time), never in the config
+# definitions themselves. API keys are never here either — they come from
+# AGENT_API_KEY (or a config-pinned variable) at run time.
+#
+# Add a personal config and include it in all_configs so every *_clean binary
+# bundles it (then it works with --config / MODEL_CONFIG_TARGET / your
+# ~/.bazelrc default without a separate `bazel build`):
+#
+#   model_config(
+#       name = "sean",
+#       model = "my-model",
+#       base_url = "http://localhost:8000/v1",
+#   )
+#   filegroup(name = "all_configs", srcs = [":default", ":sean"], ...)
+#
+# Multiple providers: a config may pin the exact environment variable holding
+# its API key with api_key_env (e.g. "OPENAI_API_KEY"); that variable alone
+# is used, so a different provider's key is never sent. Without it, the plain
+# AGENT_API_KEY variable applies.
+#
+#   model_config(
+#       name = "openai",
+#       model = "gpt-5",
+#       base_url = "https://api.openai.com/v1",
+#       api_key_env = "OPENAI_API_KEY",
+#   )
+#
+# Default selection (lowest priority, overridable per run):
+#   build --define=MODEL_CONFIG=//model_configs:default   (repo .bazelrc)
+# Personal default in ~/.bazelrc (read after the workspace .bazelrc):
+#   echo 'build --define=MODEL_CONFIG=//model_configs:sean' >> ~/.bazelrc
+
+load("//update_with_ai/support/lib:model_config.bzl", "model_config")
+
+# Public: referenced from update_with_ai/support/lib/update_with_ai.bzl (the *_clean rule's
+# `_model_configs` attr) and selectable from any package.
+package(default_visibility = ["//visibility:public"])
+
+# The shared default: mirrors the original hardcoded development setup, minus
+# the API key.
+model_config(
+    name = "qwen-moe-q4",
+    model = "stamsam-Qwen3.6-35B-A3B-Q4",
+    base_url = "http://localhost:8000/v1",
+    max_iterations = 100,
+    temperature = "0.7",
+    timeout_seconds = "100.0",
+    api_key_env = "OPENAI_API_KEY",
+    # so spiraling is detected quickly.
+    max_tokens = 2048,
+)
+
+model_config(
+    name = "coder-next-reap",
+    model = "Coder-Next-REAP-48B-A3B-Q4",
+    base_url = "http://localhost:8000/v1",
+    max_iterations = 100,
+    temperature = "0.7",
+    timeout_seconds = "100.0",
+    api_key_env = "OPENAI_API_KEY",
+    # so spiraling is detected quickly.
+    max_tokens = 2048,
+)
+
+model_config(
+    name = "coder-next",
+    model = "Qwen3-Coder-Next-4bit",
+    base_url = "http://localhost:8000/v1",
+    max_iterations = 100,
+    temperature = "0.7",
+    timeout_seconds = "100.0",
+    api_key_env = "OPENAI_API_KEY",
+    # so spiraling is detected quickly.
+    max_tokens = 2048,
+)
+
+model_config(
+    name = "qwen-dense-q4",
+    model = "Qwen3.8-27B-MLX-oQ4e-mtp",
+    base_url = "http://localhost:8000/v1",
+    max_iterations = 100,
+    temperature = "0.7",
+    timeout_seconds = "100.0",
+    api_key_env = "OPENAI_API_KEY",
+    # so spiraling is detected quickly.
+    max_tokens = 2048,
+)
+
+model_config(
+    name = "qwen-moe-q6",
+    model = "Qwen3.6-35B-A3B-oQ6-mtp",
+    base_url = "http://localhost:8000/v1",
+    max_iterations = 100,
+    temperature = "0.7",
+    timeout_seconds = "100.0",
+    api_key_env = "OPENAI_API_KEY",
+    # so spiraling is detected quickly.
+    max_tokens = 4096,
+)
+
+# All configs bundled into every *_clean binary's runfiles so any of them can
+# be selected at run time. Add personal configs to this list.
+filegroup(
+    name = "all_configs",
+    srcs = [":qwen-moe-q6", ":qwen-moe-q4", ":coder-next-reap", ":coder-next", ":qwen-dense-q4"],
+    visibility = ["//visibility:public"],
+)

@@ -1,17 +1,11 @@
 # update_with_ai/specs/BUILD.bazel
 
 load("//update_python_with_ai:update_python_with_ai.bzl", "update_python_with_ai")
-load("//update_with_ai/lib:update_with_ai.bzl", "update_with_ai")
+load("//update_with_ai/support/lib:update_with_ai.bzl", "update_with_ai")
 
 filegroup(
     name = "high_specs",
     srcs = glob(["high/*.md"]),
-    visibility = ["//visibility:public"],
-)
-
-filegroup(
-    name = "low_specs",
-    srcs = glob(["low/*.md"]),
     visibility = ["//visibility:public"],
 )
 
@@ -20,49 +14,104 @@ test_suite(
     tags = ["high_lint"],
 )
 
-test_suite(
-    name = "low",
-    tags = ["low_lint"],
+update_python_with_ai(
+    name = "agent_asm",
+    module_deps = ['bazel_graph_storage', 'dag_storage', 'model_config', 'openai_ext', 'runner_logger', 'sandbox', 'tool_provider'],
+)
+
+update_python_with_ai(
+    name = "agent_conversation_history",
+    module_deps = ['tool_provider'],
+)
+
+update_python_with_ai(
+    name = "agent_conversation_history_impl",
+    module_deps = ['agent_conversation_history', 'openai_ext', 'tool_provider'],
+)
+
+update_python_with_ai(
+    name = "agent_loop_guard",
+    module_deps = ['tool_provider'],
+)
+
+update_python_with_ai(
+    name = "agent_loop_guard_impl",
+    module_deps = ['agent_loop_guard', 'tool_provider'],
 )
 
 update_python_with_ai(
     name = "agent_node_cleaner",
-    module_deps = ["agent_runner", "build_graph_storage", "conversation_history", "dag_node_cleaner", "dag_storage", "runner_logger", "sandbox"],
-)
-
-update_python_with_ai(
-    name = "agent_node_cleaner_asm",
-    module_deps = ["agent_node_cleaner", "agent_node_cleaner_impl", "agent_runner_asm", "build_agent_config", "build_agent_config_impl", "build_graph_storage", "conversation_history_impl", "runner_logger", "sandbox_asm"],
+    module_deps = ['dag_node_cleaner', 'dag_storage'],
 )
 
 update_python_with_ai(
     name = "agent_node_cleaner_impl",
-    module_deps = ["agent_node_cleaner", "agent_runner", "build_graph_storage", "conversation_history", "dag_node_cleaner", "dag_storage", "runner_logger", "sandbox"],
+    module_deps = ['agent_conversation_history', 'agent_node_cleaner', 'agent_runner', 'bazel_graph_storage', 'dag_storage', 'model_config', 'node_config', 'sandbox'],
 )
 
 update_python_with_ai(
     name = "agent_runner",
-    module_deps = ["conversation_history", "loop_guard", "runner_logger", "tool_provider"],
-)
-
-update_python_with_ai(
-    name = "agent_runner_asm",
-    module_deps = ["agent_runner", "agent_runner_impl", "loop_guard_impl", "openai_ext", "runner_logger_impl"],
+    module_deps = ['agent_conversation_history', 'agent_loop_guard', 'model_config', 'runner_logger', 'tool_provider'],
 )
 
 update_python_with_ai(
     name = "agent_runner_impl",
-    module_deps = ["agent_runner", "conversation_history", "loop_guard", "openai_ext", "runner_logger", "tool_provider"],
+    module_deps = ['agent_conversation_history', 'agent_loop_guard', 'agent_runner', 'model_config', 'openai_ext', 'runner_logger', 'tool_provider'],
+)
+
+update_python_with_ai(
+    name = "bazel_asm",
+    module_deps = ['bazel_target_labels_ext', 'file_paths_impl', 'filesystem_ext', 'json_manifest_ext', 'model_config_ext', 'openai_ext', 'update_with_ai_proto_ext'],
+)
+
+update_python_with_ai(
+    name = "bazel_graph_storage",
+    module_deps = ['bazel_node_id_utils', 'dag_storage'],
+)
+
+update_python_with_ai(
+    name = "bazel_graph_storage_impl",
+    module_deps = ['bazel_graph_storage', 'bazel_node_id_utils', 'file_paths', 'update_with_ai_proto_ext'],
+)
+
+update_python_with_ai(
+    name = "bazel_manifest_loader",
+    module_deps = ['bazel_graph_storage', 'bazel_node_id_utils', 'dag_storage', 'file_alias', 'node_config'],
+)
+
+update_python_with_ai(
+    name = "bazel_manifest_loader_impl",
+    module_deps = ['bazel_graph_storage', 'bazel_manifest_loader', 'bazel_node_id_utils', 'dag_storage', 'file_alias', 'json_manifest_ext', 'node_config'],
+)
+
+update_python_with_ai(
+    name = "bazel_model_config_impl",
+    module_deps = ['model_config', 'model_config_ext'],
+)
+
+update_python_with_ai(
+    name = "bazel_node_config_impl",
+    module_deps = ['bazel_manifest_loader', 'dag_node_cleaner', 'dag_storage', 'file_alias', 'file_paths', 'node_config', 'sandbox_file_editor', 'sandbox_guide_delivery', 'sandbox_run_control', 'tool_provider'],
 )
 
 update_python_with_ai(
     name = "bazel_node_id_utils",
-    module_deps = ["dag_storage", "node_id_utils"],
+    module_deps = ['dag_storage', 'file_paths'],
 )
 
 update_python_with_ai(
     name = "bazel_node_id_utils_impl",
-    module_deps = ["bazel_node_id_utils", "bazel_target_labels_ext", "dag_storage", "node_id_utils"],
+    module_deps = ['bazel_node_id_utils', 'bazel_target_labels_ext', 'dag_storage', 'file_paths'],
+)
+
+update_python_with_ai(
+    name = "bazel_runner",
+    module_deps = ['bazel_manifest_loader', 'dag_cleaner', 'dag_node_cleaner', 'dag_storage', 'runner_logger'],
+)
+
+update_python_with_ai(
+    name = "bazel_runner_impl",
+    module_deps = ['bazel_manifest_loader', 'bazel_runner', 'dag_cleaner', 'dag_node_cleaner', 'dag_storage', 'runner_logger'],
 )
 
 update_python_with_ai(
@@ -71,83 +120,23 @@ update_python_with_ai(
 )
 
 update_python_with_ai(
-    name = "build_agent_config",
-    module_deps = ["agent_runner"],
-)
-
-update_python_with_ai(
-    name = "build_agent_config_impl",
-    module_deps = ["agent_runner", "build_agent_config"],
-)
-
-update_python_with_ai(
-    name = "build_asm",
-    module_deps = ["agent_node_cleaner_asm", "bazel_node_id_utils_impl", "build_agent_config", "build_graph_storage_impl", "build_message_store_impl", "build_runner", "build_runner_impl", "dag_cleaner_impl", "manifest_node_loader_impl", "runner_logger_impl"],
-)
-
-update_python_with_ai(
-    name = "build_graph_storage",
-    module_deps = ["build_agent_config", "dag_storage", "sandbox", "virtual_file_name"],
-)
-
-update_python_with_ai(
-    name = "build_graph_storage_impl",
-    module_deps = ["build_graph_storage", "build_message_store", "dag_storage", "sandbox", "virtual_file_name"],
-)
-
-update_python_with_ai(
-    name = "build_message_store",
-    module_deps = ["dag_storage", "node_id_utils"],
-)
-
-update_python_with_ai(
-    name = "build_message_store_impl",
-    module_deps = ["build_message_store", "dag_storage", "node_id_utils", "update_with_ai_proto_ext"],
-)
-
-update_python_with_ai(
-    name = "build_runner",
-    module_deps = ["dag_cleaner", "dag_node_cleaner", "dag_storage", "manifest_node_loader", "runner_logger"],
-)
-
-update_python_with_ai(
-    name = "build_runner_impl",
-    module_deps = ["build_runner", "dag_cleaner", "dag_node_cleaner", "dag_storage", "manifest_node_loader", "runner_logger"],
-)
-
-update_python_with_ai(
-    name = "change_summary_validator",
-    module_deps = ["virtual_file_name"],
-)
-
-update_python_with_ai(
-    name = "change_summary_validator_impl",
-    module_deps = ["change_summary_validator", "virtual_file_name"],
-)
-
-update_python_with_ai(
-    name = "conversation_history",
-    module_deps = ["tool_provider"],
-)
-
-update_python_with_ai(
-    name = "conversation_history_impl",
-    module_deps = ["conversation_history", "tool_provider"],
+    name = "dag_asm",
+    module_deps = ['dag_cleaner', 'dag_node_cleaner', 'dag_storage'],
 )
 
 update_python_with_ai(
     name = "dag_cleaner",
-    module_deps = ["dag_node_cleaner", "dag_storage"],
+    module_deps = ['dag_node_cleaner', 'dag_storage'],
 )
 
 update_python_with_ai(
     name = "dag_cleaner_impl",
-    module_deps = ["dag_cleaner", "dag_node_cleaner", "dag_storage"],
+    module_deps = ['dag_cleaner', 'dag_node_cleaner', 'dag_storage'],
 )
 
 update_python_with_ai(
     name = "dag_node_cleaner",
-    module_deps = ["dag_storage"],
+    module_deps = ['dag_storage'],
 )
 
 update_python_with_ai(
@@ -156,43 +145,23 @@ update_python_with_ai(
 )
 
 update_python_with_ai(
-    name = "file_editor",
-    module_deps = ["file_reader", "tool_provider", "virtual_file_name"],
+    name = "file_alias",
+    module_deps = ['dag_storage', 'file_paths', 'tool_provider'],
 )
 
 update_python_with_ai(
-    name = "file_editor_impl",
-    module_deps = ["file_editor", "file_reader", "tool_provider", "virtual_file_name"],
+    name = "file_paths",
+    module_deps = [],
 )
 
 update_python_with_ai(
-    name = "file_reader",
-    module_deps = ["tool_provider", "virtual_file_name"],
+    name = "file_paths_impl",
+    module_deps = ['file_paths', 'filesystem_ext'],
 )
 
 update_python_with_ai(
-    name = "file_reader_impl",
-    module_deps = ["file_reader", "tool_provider", "virtual_file_name"],
-)
-
-update_python_with_ai(
-    name = "guide_delivery",
-    module_deps = ["tool_provider"],
-)
-
-update_python_with_ai(
-    name = "guide_delivery_impl",
-    module_deps = ["guide_delivery", "tool_provider"],
-)
-
-update_python_with_ai(
-    name = "loop_guard",
-    module_deps = ["tool_provider"],
-)
-
-update_python_with_ai(
-    name = "loop_guard_impl",
-    module_deps = ["loop_guard", "tool_provider"],
+    name = "filesystem_ext",
+    module_deps = [],
 )
 
 update_python_with_ai(
@@ -201,33 +170,23 @@ update_python_with_ai(
 )
 
 update_python_with_ai(
-    name = "manifest_node_loader",
-    module_deps = ["build_agent_config", "build_graph_storage", "dag_storage", "node_id_utils", "sandbox", "virtual_file_name"],
+    name = "model_config",
+    module_deps = [],
 )
 
 update_python_with_ai(
-    name = "manifest_node_loader_impl",
-    module_deps = ["build_agent_config", "build_graph_storage", "dag_storage", "json_manifest_ext", "manifest_node_loader", "node_id_utils", "sandbox", "virtual_file_name"],
+    name = "model_config_ext",
+    module_deps = [],
 )
 
 update_python_with_ai(
-    name = "node_id_utils",
-    module_deps = ["dag_storage"],
+    name = "node_config",
+    module_deps = ['file_alias', 'sandbox_file_editor', 'sandbox_guide_delivery', 'sandbox_run_control'],
 )
 
 update_python_with_ai(
     name = "openai_ext",
-    module_deps = ["conversation_history", "tool_provider"],
-)
-
-update_python_with_ai(
-    name = "run_control",
-    module_deps = ["change_summary_validator", "dag_node_cleaner", "dag_storage", "tool_provider", "virtual_file_name"],
-)
-
-update_python_with_ai(
-    name = "run_control_impl",
-    module_deps = ["change_summary_validator", "dag_node_cleaner", "dag_storage", "run_control", "tool_provider", "virtual_file_name"],
+    module_deps = [],
 )
 
 update_python_with_ai(
@@ -237,22 +196,72 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "runner_logger_impl",
-    module_deps = ["runner_logger"],
+    module_deps = ['runner_logger'],
 )
 
 update_python_with_ai(
     name = "sandbox",
-    module_deps = ["file_editor", "file_reader", "guide_delivery", "run_control", "tool_provider", "virtual_file_name"],
+    module_deps = ['model_config', 'tool_provider'],
 )
 
 update_python_with_ai(
     name = "sandbox_asm",
-    module_deps = ["change_summary_validator_impl", "file_editor_impl", "file_reader_impl", "guide_delivery_impl", "run_control_impl", "sandbox", "sandbox_impl"],
+    module_deps = ['dag_storage', 'file_alias', 'filesystem_ext', 'model_config', 'node_config'],
+)
+
+update_python_with_ai(
+    name = "sandbox_change_summary_validator",
+    module_deps = ['file_alias', 'sandbox_run_control'],
+)
+
+update_python_with_ai(
+    name = "sandbox_change_summary_validator_impl",
+    module_deps = ['file_alias', 'sandbox_change_summary_validator', 'sandbox_run_control'],
+)
+
+update_python_with_ai(
+    name = "sandbox_file_editor",
+    module_deps = ['file_alias', 'tool_provider'],
+)
+
+update_python_with_ai(
+    name = "sandbox_file_editor_impl",
+    module_deps = ['file_alias', 'filesystem_ext', 'node_config', 'sandbox_file_editor', 'tool_provider'],
+)
+
+update_python_with_ai(
+    name = "sandbox_file_reader",
+    module_deps = ['file_alias', 'tool_provider'],
+)
+
+update_python_with_ai(
+    name = "sandbox_file_reader_impl",
+    module_deps = ['file_alias', 'filesystem_ext', 'node_config', 'sandbox_file_reader', 'tool_provider'],
+)
+
+update_python_with_ai(
+    name = "sandbox_guide_delivery",
+    module_deps = ['file_alias', 'tool_provider'],
+)
+
+update_python_with_ai(
+    name = "sandbox_guide_delivery_impl",
+    module_deps = ['file_alias', 'node_config', 'sandbox_guide_delivery', 'tool_provider'],
 )
 
 update_python_with_ai(
     name = "sandbox_impl",
-    module_deps = ["file_editor", "file_reader", "guide_delivery", "run_control", "sandbox", "tool_provider", "virtual_file_name"],
+    module_deps = ['model_config', 'node_config', 'sandbox', 'sandbox_file_editor', 'sandbox_file_reader', 'sandbox_run_control', 'tool_provider'],
+)
+
+update_python_with_ai(
+    name = "sandbox_run_control",
+    module_deps = ['dag_storage', 'file_alias', 'sandbox_file_editor', 'sandbox_guide_delivery', 'tool_provider'],
+)
+
+update_python_with_ai(
+    name = "sandbox_run_control_impl",
+    module_deps = ['dag_storage', 'file_alias', 'node_config', 'sandbox_file_editor', 'sandbox_guide_delivery', 'sandbox_run_control', 'tool_provider'],
 )
 
 update_python_with_ai(
@@ -261,16 +270,12 @@ update_python_with_ai(
 )
 
 update_python_with_ai(
-    name = "virtual_file_name",
-    module_deps = [],
-)
-
-update_python_with_ai(
-    name = "virtual_file_name_impl",
-    module_deps = ["virtual_file_name"],
+    name = "tool_provider_impl",
+    module_deps = ['tool_provider'],
 )
 
 update_python_with_ai(
     name = "update_with_ai_proto_ext",
-    module_deps = ["dag_storage"],
+    module_deps = [],
 )
+

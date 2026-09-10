@@ -65,13 +65,13 @@ GROUNDING_ARGUMENT:
     def initialize(self) -> None:
         """
 PURPOSE:
-Provides that initialization unconditionally installs the read tool and search tool into the tool manager
+Provides that initialization unconditionally installs the read tool into the tool manager and never installs the search tool
 
 FRESH_REQUIREMENTS:
-- The read manager unconditionally installs the read tool and search tool into the tool manager.
+- The read manager unconditionally installs the read tool into the tool manager and never installs the search tool.
 
 GROUNDING_ARGUMENT:
-- Installs ReadTool and SearchTool directly into imported tool_provider.ToolManager in the same session lifecycle tier.
+- Installs ReadTool directly into imported tool_provider.ToolManager in the same session lifecycle tier, and never installs SearchTool.
 """
         ...
 
@@ -122,7 +122,7 @@ GROUNDING_ARGUMENT:
     def line_numbers_parameter(self) -> tool_provider.Parameter:
         """
 PURPOSE:
-Parameter specifying whether line numbers are formatted
+Parameter that must be true when reading read-write files, and false or omitted when reading read-only files
 
 GROUNDING_ARGUMENT:
 - Constant parameter descriptor configured with boolean parameter converter.
@@ -138,11 +138,12 @@ Implements execute_tool on the read tool to read file content with line number f
 
 FRESH_REQUIREMENTS:
 - Executing the read tool reads file content using the filesystem at the host path formed from the alias manager workspace root and bound file workspace path.
-- Executing the read tool fails if line numbers are not requested when reading a read-write file.
-- Executing the read tool fails if line numbers are requested when reading a read-only file.
-- Executing the read tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases.
+- Executing the read tool fails if line numbers are not requested when reading a read-write file, and reminds the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files.
+- Executing the read tool fails if line numbers are requested when reading a read-only file, and reminds the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files.
+- Executing the read tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.
 - When an unbound file equals the guide file configured for step-mode, the read tool failure response indicates that `advance` must be called to read the guide instead.
 - On successful read tool execution for a read-only file, the returned file content is sanitized by the alias manager to mask host paths.
+- On successful read tool execution, the response includes internal resource metadata identifying the read file alias.
 
 INHERITED_REQUIREMENTS:
 - [ReadTool] Executing the read tool on the guide file provides progressive delivery feedback to the agent.
@@ -150,7 +151,7 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, resolves host paths using imported file_alias.AliasManager workspace root in the same session lifecycle tier, reads file content via the filesystem, checks line number formatting rules for read-only and read-write files, and masks host paths in output.
+- Receives actual parameter bindings, resolves host paths using imported file_alias.AliasManager workspace root in the same session lifecycle tier, reads file content via the filesystem, checks line number formatting rules for read-only and read-write files, includes internal resource metadata identifying the read file alias in the response, and masks host paths in output.
 """
         ...
 

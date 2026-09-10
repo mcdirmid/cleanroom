@@ -24,6 +24,10 @@ The *model config* is a *system* service that provides execution parameters for 
 
 - The *conversation limit* bounding interaction turns.
 
+- A *temperature* specifying the sampling temperature for model requests.
+
+- A *max tokens* upper bound specifying the maximum number of response tokens permitted per request, or absent if unconstrained.
+
 - Whether the agent should use *step mode* to communicate a guide to the agent progressively.
 
 - Whether the agent should perform *startup reads* to inspect declared files at session start.

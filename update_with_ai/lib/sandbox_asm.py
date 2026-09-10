@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Optional
-from .lifecycle import LifecycleRegistry
+from support.lib.lifecycle import LifecycleRegistry
 from . import sandbox_change_summary_validator_impl
 from . import sandbox_file_editor_impl
 from . import sandbox_file_reader_impl

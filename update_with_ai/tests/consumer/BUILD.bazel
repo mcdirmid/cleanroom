@@ -10,7 +10,7 @@
 #
 # Build with:
 #   bazel build //update_with_ai/tests/consumer:all
-load("//update_with_ai/lib:update_with_ai.bzl", "update_with_ai")
+load("//update_with_ai/support/lib:update_with_ai.bzl", "update_with_ai")
 
 update_with_ai(
     src = "animals.txt",

@@ -1,11 +1,14 @@
-from typing import Optional, Set, Tuple, Type
+from typing import List, Optional, Sequence, Set, Tuple, Type
 from framework import operation, override, singleton_type
 import bazel_manifest_loader
+import dag_node_cleaner
 import dag_storage
 import file_alias
+import file_paths
 import node_config
 import sandbox_file_editor
 import sandbox_guide_delivery
+import sandbox_run_control
 import tool_provider
 
 @singleton_type('agent_session')
@@ -15,7 +18,7 @@ PURPOSE:
 Implements node config from node manifest metadata
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, NodeConfig exposes session file sets, templates, and guidance configurations derived from target manifests.
+- As an agent_session singleton, NodeConfig accesses the target node from dag_node_cleaner.CleanedNode.node and loads its manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(node) during session initialization, deriving session file sets, templates, and guidance configurations.
 """
 
     @property
@@ -26,13 +29,13 @@ PURPOSE:
 Declared direct dependencies and transitive star dependencies
 
 FRESH_REQUIREMENTS:
-- The node config exposes declared direct dependencies and transitive star dependencies as read-only files, excluding silent dependencies.
+- The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session's read-only files restricted to inspection.
 
 GROUNDING_ARGUMENT:
-- Loaded from external data source: node manifest target file declarations for dependencies.
+- Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), extracting direct dependencies and resolving the transitive closure of star dependencies across manifests via the manifest loader, and constructing ReadOnlyFile instances.
 """
         ...
 
@@ -50,7 +53,7 @@ INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session's read-write files permitted for inspection and modification.
 
 GROUNDING_ARGUMENT:
-- Loaded from external data source: node manifest target file declarations for sources.
+- Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), extracting declared source files and silent source files, and constructing ReadWriteFile instances.
 """
         ...
 
@@ -68,7 +71,7 @@ INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides templates mapping read-write files to initial file content.
 
 GROUNDING_ARGUMENT:
-- Loaded from external data source: node manifest template configurations.
+- Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), pairing read-write files with template contents.
 """
         ...
 
@@ -86,7 +89,7 @@ INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session's guide file when progressive guidance is active, or absent if no guide file is configured.
 
 GROUNDING_ARGUMENT:
-- Loaded from external data source: node manifest guide target declaration when step mode is active.
+- Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), constructing an UnboundFile for the declared guide target when step mode is active.
 """
         ...
 
@@ -104,7 +107,7 @@ INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session's guide for progressive guidance, or absent if no guide is configured.
 
 GROUNDING_ARGUMENT:
-- Loaded from external data source: node manifest guide target declaration when step mode is active.
+- Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), reading and parsing the guide markdown via sandbox_guide_delivery when step mode is active.
 """
         ...
 
@@ -122,7 +125,25 @@ INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides blame targets eligible for defect attribution.
 
 GROUNDING_ARGUMENT:
-- Loaded from external data source: node manifest feedback dependency declarations.
+- Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), mapping declared feedback dependencies to ReadOnlyFile blame targets.
+"""
+        ...
+
+    @property
+    @override
+    def verification_checks(self) -> List[sandbox_run_control.VerificationCheck]:
+        """
+PURPOSE:
+Session verification checks derived from the manifest verification command
+
+FRESH_REQUIREMENTS:
+- The node config exposes declared verification checks from the manifest verification command.
+
+INHERITED_REQUIREMENTS:
+- [NodeConfig] The node config provides the session's verification checks evaluated during session advancement.
+
+GROUNDING_ARGUMENT:
+- Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), constructing a CommandVerificationCheck from the declared verify command string when present.
 """
         ...
 
@@ -136,7 +157,7 @@ INHERITANCE:
 - tool_provider.ParameterConverter: Implements parameter converter for file alias actual type
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, AliasManager maintains bidirectional short name and host path mappings for workspace files within the active session scope.
+- As an agent_session singleton, AliasManager resolves accessible workspace files for get_singleton(dag_node_cleaner.CleanedNode).node into minimal unambiguous short names and maintains host path mappings.
 """
 
     @property
@@ -186,22 +207,22 @@ GROUNDING_ARGUMENT:
     def sanitize_text(self, text: str) -> str:
         """
 PURPOSE:
-Masks occurrences of host paths with minimal short names
+Masks occurrences of relative workspace paths and preceding path prefixes with minimal short names
 
 FRESH_REQUIREMENTS:
-- The alias manager sanitizes output text by masking occurrences of host paths with minimal short names.
+- The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its minimal short name, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking.
 
 INHERITED_REQUIREMENTS:
-- [AliasManager] Sanitizing text masks occurrences of host paths with the corresponding file alias short names.
+- [AliasManager] Sanitizing text masks occurrences of relative workspace paths and preceding path prefixes with the corresponding file alias short names.
 
 GROUNDING_ARGUMENT:
-- Receives text directly as a parameter and replaces host workspace paths with corresponding minimal short names stored on self.
+- Receives text directly as a parameter and replaces relative workspace paths and preceding path prefixes with corresponding minimal short names stored on self.
 """
         ...
 
     @property
     @override
-    def workspace_root(self) -> file_alias.DirectoryPath:
+    def workspace_root(self) -> file_paths.WorkspaceRoot:
         """
 PURPOSE:
 Established that the alias manager is configured with a workspace root

@@ -27,8 +27,14 @@ GROUNDING_ARGUMENT:
 PURPOSE:
 Tracks whether workspace files were modified during the session
 
+FRESH_REQUIREMENTS:
+- The edit manager exposes whether workspace file modifications occurred during the session by comparing current workspace file content against initial content before editing.
+
+INHERITED_REQUIREMENTS:
+- [EditManager] The edit manager exposes whether workspace file modifications occurred during the session, determined by whether workspace file contents differ from their initial state prior to editing.
+
 GROUNDING_ARGUMENT:
-- Internal session state populated via mutable operations when editing tools modify workspace files.
+- Internal session state comparing current file content against initial content recorded before editing tools modify workspace files.
 """
         ...
 
@@ -61,6 +67,24 @@ INHERITED_REQUIREMENTS:
 
 GROUNDING_ARGUMENT:
 - Obtains template mappings from imported node_config.NodeConfig, resolves host paths using imported file_alias.AliasManager workspace root in the same session lifecycle tier, and writes missing files via the filesystem.
+"""
+        ...
+
+    @property
+    @override
+    def file_update_revision(self) -> int:
+        """
+PURPOSE:
+Exposes a file update revision that tracks sequential updates made to workspace files
+
+FRESH_REQUIREMENTS:
+- The edit manager tracks a file update revision that increments whenever workspace files are updated.
+
+INHERITED_REQUIREMENTS:
+- [EditManager] The edit manager exposes a file update revision that tracks sequential updates made to workspace files.
+
+GROUNDING_ARGUMENT:
+- Internal session counter on self incremented whenever editing tools successfully update workspace files.
 """
         ...
 
@@ -140,7 +164,7 @@ Implements execute_tool to replace unique matching text with size validation
 
 FRESH_REQUIREMENTS:
 - Executing the text replacement tool reads file content using the filesystem.
-- Executing the text replacement tool fails if the target text exceeds 100,000 characters.
+- Executing the text replacement tool fails if the target text exceeds 100,000 characters, and reminds the agent that target text for replacement must not exceed 100,000 characters.
 - Executing the text replacement tool fails if the target text is not found in the file content.
 - Executing the text replacement tool fails if the target text matches multiple locations in the file.
 - On successful text replacement tool execution, the unique occurrence of the target text is replaced with the replacement text, written using the filesystem, and file modifications are recorded.

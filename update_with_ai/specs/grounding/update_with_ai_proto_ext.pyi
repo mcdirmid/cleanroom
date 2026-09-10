@@ -28,23 +28,7 @@ Package `.update_with_ai.textproto` files store structured node records:
 
 ## Build Dependencies
 
-Consuming implementation components require the Python protobuf library in `BUILD.bazel`.
-
-The consuming component `bazel_graph_storage_impl` must configure its Bazel target in `update_with_ai/lib/BUILD.bazel` with:
-- Protobuf dependency label: `@com_google_protobuf//:protobuf_python` (or proto rules).
-- Target dependency definition:
-  ```python
-  py_library(
-      name = "bazel_graph_storage_impl",
-      srcs = ["bazel_graph_storage_impl.py"],
-      deps = [
-          ":bazel_graph_storage",
-          ":dag_storage",
-          ":file_alias",
-          "@com_google_protobuf//:protobuf_python",
-      ],
-  )
-  ```
+(none)
 
 ## Usage Snippets
 

@@ -10,7 +10,7 @@ from lib import dag_cleaner
 from lib import dag_node_cleaner
 from lib import dag_storage
 from lib import runner_logger
-from lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton
+from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton
 
 
 class MockRunnerLogger(runner_logger.RunnerLogger):

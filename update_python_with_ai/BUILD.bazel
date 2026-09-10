@@ -1,4 +1,17 @@
 # update_python_with_ai/BUILD.bazel
 
 # Making the bzl file explicitly visible to the repository
-exports_files(["update_python_with_ai.bzl"])
+exports_files([
+    "lifecycle.pyi",
+    "update_python_with_ai.bzl",
+])
+
+load("//update_with_ai/support/lib:update_with_ai.bzl", "update_with_ai")
+
+update_with_ai(
+    name = "lifecycle",
+    src = "lifecycle.pyi",
+    prompt = "Maintain the Cleanroom lifecycle specification and usage guide.",
+    visibility = ["//visibility:public"],
+)
+

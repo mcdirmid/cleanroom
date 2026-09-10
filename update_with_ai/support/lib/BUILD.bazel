@@ -1,0 +1,80 @@
+# update_with_ai/support/lib/BUILD.bazel
+
+load("//bin:pyright_library.bzl", "pyright_library")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+
+exports_files([
+    "agent_config.bzl",
+    "update_with_ai.bzl",
+    "hls_lint.py",
+    "build_lint_common.py",
+    "lib_lint.py",
+    "test_lint.py",
+], visibility = ["//visibility:public"])
+
+pyright_library(
+    name = "build_lint_common",
+    srcs = ["build_lint_common.py"],
+    pyright_deps = [],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "hls_lint",
+    srcs = ["hls_lint.py"],
+    pyright_deps = [],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "lib_lint",
+    srcs = ["lib_lint.py"],
+    pyright_deps = [":build_lint_common"],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "test_lint",
+    srcs = ["test_lint.py"],
+    pyright_deps = [":build_lint_common"],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "framework",
+    srcs = ["framework.py"],
+    pyright_deps = [],
+    imports = ["../.."],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "lifecycle",
+    srcs = ["lifecycle.py"],
+    pyright_deps = [],
+    imports = ["../.."],
+    visibility = ["//visibility:public"],
+)
+
+py_library(
+    name = "grounding_tool_lib",
+    srcs = ["grounding_tool.py"],
+    deps = [":framework"],
+    imports = ["../.."],
+    visibility = ["//visibility:public"],
+)
+
+py_binary(
+    name = "grounding_tool",
+    srcs = ["grounding_tool.py"],
+    main = "grounding_tool.py",
+    deps = [":grounding_tool_lib"],
+    visibility = ["//visibility:public"],
+)
+
+py_binary(
+    name = "evaluate_coverage",
+    srcs = ["evaluate_coverage.py"],
+    main = "evaluate_coverage.py",
+    visibility = ["//visibility:public"],
+)

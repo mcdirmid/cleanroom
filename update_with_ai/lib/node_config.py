@@ -1,7 +1,7 @@
 """Node configuration interface and types."""
 
-from typing import Optional, Protocol, Set, Tuple
-from . import file_alias, sandbox_guide_delivery
+from typing import Optional, Protocol, Sequence, Set, Tuple
+from . import file_alias, sandbox_guide_delivery, sandbox_run_control
 
 
 class NodeConfig(Protocol):
@@ -22,3 +22,6 @@ class NodeConfig(Protocol):
 
     @property
     def blame_targets(self) -> Set[file_alias.BoundFile]: ...
+
+    @property
+    def verification_checks(self) -> Sequence[sandbox_run_control.VerificationCheck]: ...

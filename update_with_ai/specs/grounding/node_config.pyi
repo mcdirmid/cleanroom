@@ -1,7 +1,8 @@
-from typing import Optional, Protocol, Set, Tuple
+from typing import Optional, Protocol, Sequence, Set, Tuple
 from framework import singleton_type
 import file_alias
 import sandbox_guide_delivery
+import sandbox_run_control
 
 @singleton_type('agent_session')
 class NodeConfig(Protocol):
@@ -73,5 +74,16 @@ Bound files owned by upstream dependency nodes eligible for defect attribution
 
 FRESH_REQUIREMENTS:
 - The node config provides blame targets eligible for defect attribution.
+"""
+        ...
+
+    @property
+    def verification_checks(self) -> Sequence[sandbox_run_control.VerificationCheck]:
+        """
+PURPOSE:
+Session verification checks evaluated during session advancement
+
+FRESH_REQUIREMENTS:
+- The node config provides the session's verification checks evaluated during session advancement.
 """
         ...

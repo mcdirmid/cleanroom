@@ -1,0 +1,70 @@
+# Cleanroom Architecture & Design Documentation
+
+Welcome to the Cleanroom design documentation index. Cleanroom is a literate, specification-driven software engineering paradigm designed for AI pair-programming and deterministic verification.
+
+---
+
+## Document Index & Reading Guide
+
+The design documentation is organized across four foundational areas:
+
+### 1. Specification Architecture & Literate Formats
+- **[Specification Format & Architecture Design](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/specification_format.md)** (`specification_format.md`):
+  - Definitive reference for literate High-Level Specifications (HLS).
+  - Explains the prose philosophy, single-level standalone bullet paragraphs, italic semantic markers (`*term*`), and lifecycle tiers (`*system*` and `*agent session*`).
+  - Outlines strict tier custody, knowledge derivation, and elimination of object type hierarchies.
+- **[Requirements Specification Format](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/requirements_format.md)** (`requirements_format.md`):
+  - Formulates natural language behavioral contracts and assumption preconditions.
+  - Distinguishes caller-satisfied assumptions (preconditions) from callee guarantees (requirements).
+  - Outlines the grounded failure principle, boundary defense, and rules for avoiding ungrounded error branches.
+
+### 2. Grounding & Ontological Modeling
+- **[Grounding Specification Format: Python Interface Stubs (`.pyi`)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/new_grounding_format.md)** (`new_grounding_format.md`):
+  - Definitive reference for Cleanroom's canonical `.pyi` grounding format.
+  - Explains the structural infrastructure split (`framework.py` vs. pure `.pyi` stubs), pure ellipsis bodies (`...`), and decorators (`@singleton_type`, `@poly_type`, `@data_type`, `@variant`, `@property`, `@operation`, `@override`).
+  - Details the custom "by-hand" AST linter, closed-world linker, and zero-token MRO requirements inheritance engine.
+  - **Grounding Translation & Alignment Challenges (Section 9)**: In-depth ledger of solved vs. open grounding problems, analyzing why prompt engineering alone fails at boundary enforcement, mock-to-protocol parity, and structural type translation.
+- **[Legacy Grounding Format (Historical Archive)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/grounding_format.md)** (`grounding_format.md`):
+  - *Archived / Superseded*: Historical documentation of the earlier 4-column Markdown table format (`type | name | signature | comment`). Preserved for context on the evolution of Cleanroom grounding.
+
+### 3. Toolchain & Verification Architecture
+- **[Toolchain & Verification Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/toolchain_and_verification.md)** (`toolchain_and_verification.md`):
+  - Comprehensive guide to all deterministic tools implemented in Cleanroom.
+  - **Specification Toolchain (`grounding_tool.py`)**: AST linter, linker, and zero-token in-place inheritance synchronizer.
+  - **Coverage Evaluation Tool (`evaluate_coverage.py`)**: 1:1 single-target test isolation, AST statement normalization, exclusion of non-executable lines, pragma handling, and Cleanroom assumption enforcement.
+  - **Specification & Code Linters (`update_with_ai/support/lib/`)**: `hls_lint.py`, `lib_lint.py`, `test_lint.py` (supported by `build_lint_common.py`).
+  - **Closed-World Type Verification & Problem Ledger (Section 6)**: Hermetic Bazel type checking via `bin/pyright_library.bzl` and tracking of solved vs. open challenges.
+  - **Supervising LLM Verification Protocol (TODO)**: Automated questionnaire generation for evaluating natural language tool failure diagnostics and agent recovery guidance.
+
+---
+
+## Cleanroom Specification Lifecycle
+
+```
+[High-Level Specification (HLS)]
+  format: literate Markdown (.md)
+  linter: hls_lint.py
+  doc: design-docs/specification_format.md
+         |
+         v
+[Grounding Interface Stubs]
+  format: Python stubs (.pyi)
+  tool: grounding_tool.py (--lint, --link, --sync, --check)
+  doc: design-docs/new_grounding_format.md
+         |
+         +---------------------------------------+
+         |                                       |
+         v                                       v
+[Library Implementation]                [Unit Test Suites]
+  format: Python (_impl.py)               format: Python (_impl_test.py)
+  linter: lib_lint.py                     linter: test_lint.py
+  type check: pyright                     guide: update_python_with_ai/guides/grounding_to_test.md
+         |                                       |
+         +-------------------+-------------------+
+                             |
+                             v
+              [Coverage Evaluation Tool]
+                tool: evaluate_coverage.py (bazel run)
+                benchmark: 100.0% statement coverage across 20 modules (1,687 statements)
+                doc: design-docs/toolchain_and_verification.md
+```

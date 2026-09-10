@@ -3,7 +3,8 @@ from typing import Any, Dict, List, Mapping, Optional, Set
 from . import bazel_graph_storage
 from . import bazel_node_id_utils
 from . import dag_storage
-from .lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from . import file_paths
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
 
 class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage, Singleton):
     tier = "system"
@@ -13,18 +14,22 @@ class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage, Singleton):
         self._dependencies: Dict[dag_storage.Node, Set[dag_storage.Dependency]] = {}
 
     def _get_store_path(self, node: dag_storage.Node) -> Path:
-        # Requirement: Maps target node to package directory textproto store path
+        # Requirement: All nodes located within the same package directory resolved by the bazel node identifier utility from bazel node id utils share a common package message file named `.update_with_ai.textproto`.
+        # Requirement: [BazelGraphStorage] The bazel graph storage reads and writes pending messages and reverse dependencies for nodes from dag storage in node directories resolved by the bazel node identifier utility from bazel node id utils.
         node_util = get_singleton(bazel_node_id_utils.BazelNodeIdentifierUtility)
         pkg_dir = node_util.extract_directory(node)
-        return Path(pkg_dir.path) / ".update_with_ai.textproto"
+        paths_service = get_singleton(file_paths.FilePaths)
+        root = paths_service.get_workspace_root()
+        resolved_dir = paths_service.resolve_directory(root, pkg_dir)
+        return Path(resolved_dir.path) / ".update_with_ai.textproto"
 
     def _load_package_data(self, path: Path) -> Dict[str, Dict[str, Any]]:
-        # Requirement: Missing textproto file is treated as empty store
+        # Requirement: [BazelGraphStorage] The bazel graph storage creates missing package message files on write and treats absent files as empty.
         if not path.is_file():
             return {}
         content = path.read_text(encoding="utf-8")
 
-        # Requirement: Deserializes textproto records into node dictionary
+        # Requirement: The bazel graph storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files using proto package store from update with ai proto ext.
         nodes: Dict[str, Dict[str, Any]] = {}
         current_node_id: Optional[str] = None
         current_messages: List[Dict[str, str]] = []
@@ -53,7 +58,7 @@ class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage, Singleton):
         return nodes
 
     def _save_package_data(self, path: Path, node_records: Mapping[str, Mapping[str, Any]]) -> bool:
-        # Requirement: Serializes node records to deterministic textproto format
+        # Requirement: The bazel graph storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files using proto package store from update with ai proto ext.
         lines: List[str] = []
         for node_id in sorted(node_records.keys()):
             record = node_records[node_id]
@@ -77,18 +82,20 @@ class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage, Singleton):
             path.write_text(content, encoding="utf-8")
             return True
         except OSError:
+            # Requirement: [BazelGraphStorage] Modifying messages or reverse dependencies in the bazel graph storage preserves existing records on failure.
             return False
 
     def get_node_definition(self, node: dag_storage.Node) -> Optional[bazel_graph_storage.NodeDefinition]:
-        # Requirement: Returns node definition metadata for specified node
+        # Requirement: [BazelGraphStorage] The bazel graph storage provides task prompts and node definitions for declared nodes.
+        # Requirement: The bazel graph storage maintains node definitions and task prompts mapped to nodes in dag storage.
         return self._definitions.get(node)
 
     def get_dependencies(self, node: dag_storage.Node) -> Set[dag_storage.Dependency]:
-        # Requirement: Returns direct dependency edges recorded for specified node
+        # Requirement: [BazelGraphStorage] The bazel graph storage maintains nodes, dependencies, reverse dependencies, and pending messages from workspace targets.
         return set(self._dependencies.get(node, set()))
 
     def get_dependents(self, node: dag_storage.Node) -> Set[dag_storage.Node]:
-        # Requirement: Resolves reverse dependency nodes from package textproto store
+        # Requirement: [BazelGraphStorage] The bazel graph storage reads and writes pending messages and reverse dependencies for nodes from dag storage in node directories resolved by the bazel node identifier utility from bazel node id utils.
         path = self._get_store_path(node)
         data = self._load_package_data(path)
         record = data.get(node.address, {})
@@ -99,7 +106,7 @@ class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage, Singleton):
         return deps
 
     def get_messages(self, node: dag_storage.Node) -> Set[dag_storage.Message]:
-        # Requirement: Reads pending messages recorded for specified node from package textproto store
+        # Requirement: [BazelGraphStorage] The bazel graph storage reads and writes pending messages and reverse dependencies for nodes from dag storage in node directories resolved by the bazel node identifier utility from bazel node id utils.
         path = self._get_store_path(node)
         data = self._load_package_data(path)
         record = data.get(node.address, {})
@@ -112,11 +119,14 @@ class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage, Singleton):
         return messages
 
     def is_dirty(self, node: dag_storage.Node) -> bool:
-        # Requirement: Target node is dirty if it has any unprocessed incoming messages
+        # Requirement: A node is dirty if it has messages explaining why it requires cleaning.
+        # Requirement: [DagStorage] A node is dirty if, but not only if, it has messages.
         return len(self.get_messages(node)) > 0
 
     def register_dependent(self, node: dag_storage.Node) -> None:
-        # Requirement: Registers node as reverse dependency on its non-silent dependencies in package textproto store
+        # Requirement: Registering a node as a dependent adds the node to the dependents of all of its non-silent dependencies.
+        # Requirement: [DagStorage] Registering a node as a dependent adds the node to the dependents of all of its non-silent dependencies.
+        # Requirement: Propagating dependencies exclude silent dependencies declared on a node.
         for dep in self.get_dependencies(node):
             if not dep.is_silent:
                 path = self._get_store_path(dep.node)
@@ -128,7 +138,8 @@ class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage, Singleton):
                 self._save_package_data(path, data)
 
     def clear_dependents(self, node: dag_storage.Node) -> None:
-        # Requirement: Clears all recorded reverse dependencies for node in package textproto store
+        # Requirement: Clearing the dependents of a node empties all recorded dependents for that node.
+        # Requirement: [DagStorage] Clearing the dependents of a node empties all recorded dependents for that node.
         path = self._get_store_path(node)
         data = self._load_package_data(path)
         if node.address in data:
@@ -136,7 +147,8 @@ class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage, Singleton):
             self._save_package_data(path, data)
 
     def add_message(self, message: dag_storage.Message, to: dag_storage.Node) -> None:
-        # Requirement: Appends a message to target node's pending message store in package textproto file
+        # Requirement: Adding a message to a node records the message explaining why the node requires cleaning.
+        # Requirement: [DagStorage] Adding a message to a node records the message for that node.
         path = self._get_store_path(to)
         data = self._load_package_data(path)
         record = data.setdefault(to.address, {"messages": [], "reverse_dependencies": []})
@@ -146,7 +158,8 @@ class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage, Singleton):
         self._save_package_data(path, data)
 
     def clear_messages(self, node: dag_storage.Node) -> None:
-        # Requirement: Clears all pending messages for target node in package textproto file
+        # Requirement: Clearing messages for a node removes all recorded messages explaining why it requires cleaning.
+        # Requirement: [DagStorage] Clearing messages for a node removes all recorded messages for that node.
         path = self._get_store_path(node)
         data = self._load_package_data(path)
         if node.address in data:
