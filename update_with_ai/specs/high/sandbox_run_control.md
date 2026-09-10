@@ -14,9 +14,9 @@ Autonomous agents require unambiguous control tools to signal when a task is fin
 
 A *verification check* is a polymorphic service that validates session criteria, communicating whether verification passed and diagnostic feedback on failure.
 
-The *run controller* is an agent session service configured with *blame targets*, which are bound files owned by upstream dependency nodes in dag storage, and *verification checks*. The run controller installs tools for terminating agent sessions and attributing outcomes. The run controller:
+The *run controller* is an agent session service configured with *blame targets*, which are bound files owned by upstream dependency nodes in dag storage, and verification checks. The run controller installs tools for terminating agent sessions and attributing outcomes. The run controller:
 
-- Exposes *verification checks* that validate session criteria during advancement.
+- Exposes verification checks that validate session criteria during advancement.
 
 - Installs an *advance tool* that coordinates session progression and completion.
 

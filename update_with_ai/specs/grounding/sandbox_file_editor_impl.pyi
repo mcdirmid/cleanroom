@@ -168,6 +168,7 @@ FRESH_REQUIREMENTS:
 - Executing the text replacement tool fails if the target text is not found in the file content.
 - Executing the text replacement tool fails if the target text matches multiple locations in the file.
 - On successful text replacement tool execution, the unique occurrence of the target text is replaced with the replacement text, written using the filesystem, and file modifications are recorded.
+- Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
 
 INHERITED_REQUIREMENTS:
 - [EditingTool] Executing an editing tool with a file alias that is not a read-write file fails.
@@ -175,7 +176,7 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, resolves the target read-write file via imported file_alias.AliasManager, inspects and updates file content using the filesystem, and notifies EditManager in the same session lifecycle tier that workspace files were modified.
+- Receives actual parameter bindings, resolves the target read-write file via imported file_alias.AliasManager, inspects and updates file content using the filesystem, attaches the read-write file's short name as a suppression key on successful responses, and notifies EditManager in the same session lifecycle tier that workspace files were modified.
 """
         ...
 
@@ -296,6 +297,7 @@ FRESH_REQUIREMENTS:
 - When the start line is less than or equal to the end line, executing the line update tool fails if the end line exceeds the total line count.
 - When the start line is less than or equal to the end line, successful execution replaces lines within the range, writes using the filesystem, and records file modifications.
 - When the start line exceeds the end line, successful execution inserts the replacement lines before the start line, writes using the filesystem, and records file modifications.
+- Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
 
 INHERITED_REQUIREMENTS:
 - [EditingTool] Executing an editing tool with a file alias that is not a read-write file fails.
@@ -303,7 +305,7 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, resolves the target read-write file via imported file_alias.AliasManager, reads and updates file content using the filesystem, and notifies EditManager in the same session lifecycle tier that workspace files were modified.
+- Receives actual parameter bindings, resolves the target read-write file via imported file_alias.AliasManager, reads and updates file content using the filesystem, attaches the read-write file's short name as a suppression key on successful responses, and notifies EditManager in the same session lifecycle tier that workspace files were modified.
 """
         ...
 

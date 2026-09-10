@@ -346,7 +346,7 @@ PURPOSE:
 Communicates tool execution results to the agent
 """
 
-    def __init__(self, is_failed: bool, is_terminated: bool, content: str, reminder: Optional[str]=...) -> None:
+    def __init__(self, is_failed: bool, is_terminated: bool, content: str, reminder: Optional[str]=..., suppression_key: Optional[str]=...) -> None:
         ...
 
     @property
@@ -378,6 +378,14 @@ Includes underlying tool execution output and error diagnostics on failure
         """
 PURPOSE:
 Advises the agent on future actions and constraints
+"""
+        ...
+
+    @property
+    def suppression_key(self) -> Optional[str]:
+        """
+PURPOSE:
+Identifies a previous conversation response content to be superseded by this execution
 """
         ...
 

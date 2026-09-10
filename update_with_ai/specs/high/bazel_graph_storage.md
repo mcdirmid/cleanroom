@@ -16,7 +16,7 @@ A *task prompt* is an instruction describing the work required to clean a node.
 
 A *node definition* is metadata describing task prompts for a node from dag storage.
 
-The *bazel graph storage* is a *system* service that is a dag storage backed by workspace build target manifests. The bazel graph storage:
+The *bazel graph storage* is a system service that is a dag storage backed by workspace build target manifests. The bazel graph storage:
 
 - Maintains nodes, dependencies, reverse dependencies, and pending messages from workspace targets.
 

@@ -245,6 +245,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertFalse(resp.is_failed)
             self.assertFalse(resp.is_terminated)
             self.assertEqual(resp.content, "Step 2 Instructions")
+            # Requirement: Responses from the advance tool share a constant suppression key 'advance'.
+            self.assertEqual(resp.suppression_key, "advance")
 
     def test_advance_tool_guide_step_change_summary_rejected(self) -> None:
         """CUJ: AdvanceTool fails if change summary provided while guide steps remain."""
@@ -333,6 +335,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             self.assertFalse(resp.is_failed)
             self.assertTrue(resp.is_terminated)
+            # Requirement: Responses from the advance tool share a constant suppression key 'advance'.
+            self.assertEqual(resp.suppression_key, "advance")
 
     def test_advance_tool_verification_check_failure(self) -> None:
         """CUJ: AdvanceTool evaluates verification checks and fails if any check fails."""

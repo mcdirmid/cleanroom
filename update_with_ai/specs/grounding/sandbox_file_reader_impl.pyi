@@ -142,8 +142,7 @@ FRESH_REQUIREMENTS:
 - Executing the read tool fails if line numbers are requested when reading a read-only file, and reminds the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files.
 - Executing the read tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.
 - When an unbound file equals the guide file configured for step-mode, the read tool failure response indicates that `advance` must be called to read the guide instead.
-- On successful read tool execution for a read-only file, the returned file content is sanitized by the alias manager to mask host paths.
-- On successful read tool execution, the response includes internal resource metadata identifying the read file alias.
+- Read tool responses for read-write files carry a suppression key matching the file's short name, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
 
 INHERITED_REQUIREMENTS:
 - [ReadTool] Executing the read tool on the guide file provides progressive delivery feedback to the agent.
@@ -151,7 +150,7 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, resolves host paths using imported file_alias.AliasManager workspace root in the same session lifecycle tier, reads file content via the filesystem, checks line number formatting rules for read-only and read-write files, includes internal resource metadata identifying the read file alias in the response, and masks host paths in output.
+- Receives actual parameter bindings, resolves host paths using imported file_alias.AliasManager workspace root in the same session lifecycle tier, reads file content via the filesystem, checks line number formatting rules for read-only and read-write files, attaches the file's short name as a suppression key on responses for read-write files while omitting it for read-only files, and masks host paths in read-only output.
 """
         ...
 

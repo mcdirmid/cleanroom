@@ -5,9 +5,9 @@ implements: agent_conversation_history
 
 ## Purpose
 
-The agent_conversation_history_impl implementation component realizes provider role formatting, metadata stripping, and synthetic tool invocation injection for model conversation requests.
+The agent_conversation_history_impl implementation component realizes provider role formatting, response stubbing, and synthetic tool invocation injection for model conversation requests.
 
-Language model APIs impose strict role alternation invariants and reject internal orchestration fields. The agent_conversation_history_impl implementation component formats messages according to provider role schemas, strips internal metadata fields, preserves visible diagnostic notes, and pairs unprompted tool responses with antecedent synthetic assistant invocations to preserve API protocol compliance.
+Language model APIs impose strict role alternation invariants and reject uncoordinated orchestration fields. The agent_conversation_history_impl implementation component formats messages according to provider role schemas, stubs superseded tool responses, preserves visible diagnostic notes, and pairs unprompted tool responses with antecedent synthetic assistant invocations to preserve API protocol compliance.
 
 **Out of scope:** The agent_conversation_history_impl implementation component does not transmit network payloads to remote endpoints, enforce repetition guards, or record unbuffered log files; these are handled by other components.
 
@@ -15,11 +15,9 @@ Language model APIs impose strict role alternation invariants and reject interna
 
 The conversation history formats messages in a model request according to OpenAI chat completion conventions for system, user, assistant, and tool messages.
 
-When an appended tool result supersedes an earlier result for the same resource, earlier tool results matching the resource identifier—such as the target read-write file alias identified by internal metadata markers or single-instance tool executions—are replaced in place with a stub, while tool results for distinct resources and read-only files are preserved. A stub retains any reminder provided in the superseded tool response to remind the agent in subsequent turns, and when the newly appended tool result does not supply a reminder, it inherits the reminder from the superseded response.
+A tool response's suppression key identifies the latest preceding response with the same key in the conversation history for replacement with a stub, while responses with unmatched keys are preserved intact. A stub retains the reminder from the superseded tool response, which the newly appended response inherits when omitted.
 
 When assembling a model request from messages in the agent conversation history:
-
-- Messages omit internal metadata fields starting with an underscore.
 
 - Tool execution response notes, content, and reminders from the tool provider are included in visible tool message content, formatting active reminders on messages and superseded stubs to remind the agent in the assembled model request.
 

@@ -180,16 +180,16 @@ GROUNDING_ARGUMENT:
     def is_dirty(self, node: dag_storage.Node) -> bool:
         """
 PURPOSE:
-Determines whether a node has pending messages requiring cleaning
+Determines whether a node has pending messages or missing declared source file requiring cleaning
 
 FRESH_REQUIREMENTS:
-- A node is dirty if it has messages explaining why it requires cleaning.
+- A node in dag storage is dirty if it has messages explaining why it requires cleaning, or if its declared source file is missing from the workspace root.
 
 INHERITED_REQUIREMENTS:
 - [DagStorage] A node is dirty if, but not only if, it has messages.
 
 GROUNDING_ARGUMENT:
-- Receives the node parameter directly and evaluates whether the pending messages set retrieved from package textproto storage is non-empty.
+- Receives the node parameter directly, evaluating whether the pending messages set retrieved from package textproto storage is non-empty, or whether its declared source file is missing from the workspace root.
 """
         ...
 

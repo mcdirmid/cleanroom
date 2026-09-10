@@ -1,30 +1,24 @@
 # file_paths_impl implementation component
 
-imports: file_paths, filesystem_ext
+imports: filesystem_ext
 implements: file_paths
 
 ## Purpose
 
 The file_paths_impl implementation component provides the concrete implementation of the file paths service using the filesystem boundary and operating system environment.
 
-Accurate path validation and resolution require consulting the physical host operating system layout, environment variables indicating workspace boundaries, and platform-specific path mechanics. The file_paths_impl component implements the file paths service by delegating to host filesystem functions to validate path formats and resolve workspace roots.
+Accurate path validation and resolution require consulting the physical host operating system layout, environment variables indicating workspace boundaries, and platform-specific path mechanics. The file_paths_impl implementation component realizes the file paths service by delegating to host filesystem functions to validate path formats and resolve workspace roots.
 
-**Out of scope:** The file_paths_impl component does not create file aliases or interact with language models; these are handled by other components.
+**Out of scope:** The file_paths_impl implementation component does not create file aliases or interact with language models; these are handled by other components.
 
 ## Types and Behavior
 
-The *file paths* implementation is a system service implementing the file paths interface. The file paths implementation:
+The file paths implementation is a system service implementing the file paths interface.
 
-- Implements *create host path* by instantiating a host path record holding the path string.
+Host paths encapsulate non-empty path strings. Absolute paths and directory paths validate that path strings are absolute according to the host filesystem, raising a failure when relative, and normalize path representations into encapsulated records.
 
-- Implements *create absolute path* by verifying that the path string is absolute using the host filesystem, raising a failure if it is not, and instantiating an absolute path record holding the path string.
+Workspace paths validate that path strings are relative, raising a failure when absolute, and normalize relative path representations into encapsulated records.
 
-- Implements *create workspace path* by verifying that the path string is not absolute using the host filesystem, raising a failure if it is absolute, and instantiating a workspace path record holding the path string.
+Workspace root discovery inspects the process environment for the workspace directory variable, falling back to the current working directory when unset or not absolute, and returns a workspace root encapsulating the normalized absolute directory path.
 
-- Implements *create directory path* by verifying that the path string is absolute using the host filesystem, raising a failure if it is not, and instantiating a directory path record holding the path string.
-
-- Implements *get workspace root* by checking the environment for the workspace directory variable, falling back to the current working directory, and instantiating a workspace root record holding the resolved directory path.
-
-- Implements *resolve directory* by joining the workspace root path and relative workspace path, and instantiating a directory path record holding the joined path.
-
-- Implements *resolve path* by joining the workspace root path and relative workspace path, and instantiating an absolute path record holding the joined path.
+Resolving paths and directories against a workspace root joins the relative workspace path to the workspace root directory path, producing normalized absolute path or directory path records.

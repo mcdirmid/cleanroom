@@ -208,11 +208,10 @@ class SandboxFileReaderImplTest(unittest.TestCase):
                 bindings={(read_tool.file_alias_parameter, self.ro_file), (read_tool.line_numbers_parameter, False)}
             )
             # Requirement: Executing the read tool reads file content using the filesystem at the host path formed from the alias manager workspace root and bound file workspace path.
-            # Requirement: On successful read tool execution for a read-only file, the returned file content is sanitized by the alias manager to mask host paths.
-            # Requirement: On successful read tool execution, the response includes internal resource metadata identifying the read file alias.
+            # Requirement: Read tool responses for read-write files carry a suppression key matching the file's short name, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
             resp1 = read_tool.execute_tool(bindings1)
             self.assertFalse(resp1.is_failed)
-            self.assertIn(f"_resource: {self.ro_file.short_name}\n_kind: read_only\n", resp1.content)
+            self.assertIsNone(resp1.suppression_key)
             self.assertIn("Line 1 readonly", resp1.content)
             self.assertIn("[WORKSPACE]/readonly.txt", resp1.content)
 
@@ -232,10 +231,10 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             bindings3 = ActualParameterBindings(
                 bindings={(read_tool.file_alias_parameter, self.rw_file), (read_tool.line_numbers_parameter, True)}
             )
-            # Requirement: On successful read tool execution, the response includes internal resource metadata identifying the read file alias.
+            # Requirement: Read tool responses for read-write files carry a suppression key matching the file's short name, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
             resp3 = read_tool.execute_tool(bindings3)
             self.assertFalse(resp3.is_failed)
-            self.assertIn(f"_resource: {self.rw_file.short_name}\n_kind: read_write\n", resp3.content)
+            self.assertEqual(resp3.suppression_key, self.rw_file.short_name)
             self.assertIn("1: Line 1 writable", resp3.content)
 
             # 4. Read-write with line_numbers=False -> fails

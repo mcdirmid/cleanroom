@@ -9,6 +9,7 @@ class ConversationHistory(agent_conversation_history.ConversationHistory, Single
 
     def __init__(self) -> None:
         self._messages: List[agent_conversation_history.Message] = []
+        self._suppression_keys: List[Optional[str]] = []
 
     @property
     def messages(self) -> List[agent_conversation_history.Message]:
@@ -18,6 +19,7 @@ class ConversationHistory(agent_conversation_history.ConversationHistory, Single
     def append_message(self, message: agent_conversation_history.Message) -> None:
         # Requirement: [ConversationHistory] Appending messages and tool responses adds them in chronological order.
         self._messages.append(message)
+        self._suppression_keys.append(None)
 
     def append_tool_response(
         self,
@@ -42,49 +44,25 @@ class ConversationHistory(agent_conversation_history.ConversationHistory, Single
                     tool_arguments=json.dumps(args_dict, sort_keys=True),
                 )
             )
-
-        # Requirement: When an appended tool result supersedes an earlier result for the same resource, earlier tool results matching the resource identifier—such as the target read-write file alias identified by internal metadata markers or single-instance tool executions—are replaced in place with a stub, while tool results for distinct resources and read-only files are preserved.
-        new_resource = None
-        new_kind = None
-        for line in response.content.splitlines():
-            if line.startswith("_resource:"):
-                new_resource = line.split(":", 1)[1].strip()
-            elif line.startswith("_kind:"):
-                new_kind = line.split(":", 1)[1].strip()
-            elif not line.startswith("_"):
-                break
+            self._suppression_keys.append(None)
 
         effective_reminder = response.reminder
-        if new_kind != "read_only":
-            for i, m in enumerate(self._messages):
-                if m.role == "tool" and not isinstance(m, agent_conversation_history.Stub):
-                    m_resource = None
-                    m_kind = None
-                    for line in m.content.splitlines():
-                        if line.startswith("_resource:"):
-                            m_resource = line.split(":", 1)[1].strip()
-                        elif line.startswith("_kind:"):
-                            m_kind = line.split(":", 1)[1].strip()
-                        elif not line.startswith("_"):
-                            break
-
-                    should_supersede = False
-                    if new_resource is not None and new_kind == "read_write":
-                        should_supersede = (m_resource == new_resource and m_kind == "read_write")
-                    elif new_resource is None and m_resource is None:
-                        should_supersede = (m.tool_name == tool_name)
-
-                    if should_supersede:
-                        if effective_reminder is None:
-                            effective_reminder = m.reminder
-                        # Requirement: A stub retains any reminder provided in the superseded tool response to remind the agent in subsequent turns, and when the newly appended tool result does not supply a reminder, it inherits the reminder from the superseded response.
-                        self._messages[i] = agent_conversation_history.Stub(
-                            role="tool",
-                            content="[Superseded]",
-                            tool_call_id=m.tool_call_id,
-                            tool_name=m.tool_name,
-                            reminder=m.reminder,
-                        )
+        if response.suppression_key is not None:
+            # Requirement: A tool response's suppression key identifies the latest preceding response with the same key in the conversation history for replacement with a stub, while responses with unmatched keys are preserved intact.
+            for i in range(len(self._messages) - 1, -1, -1):
+                if self._suppression_keys[i] == response.suppression_key and not isinstance(self._messages[i], agent_conversation_history.Stub):
+                    old_msg = self._messages[i]
+                    if effective_reminder is None:
+                        # Requirement: A stub retains the reminder from the superseded tool response, which the newly appended response inherits when omitted.
+                        effective_reminder = old_msg.reminder
+                    self._messages[i] = agent_conversation_history.Stub(
+                        role=old_msg.role,
+                        content="[Superseded]",
+                        tool_call_id=old_msg.tool_call_id,
+                        tool_name=old_msg.tool_name,
+                        reminder=old_msg.reminder,
+                    )
+                    break
 
         self._messages.append(
             agent_conversation_history.Message(
@@ -95,14 +73,13 @@ class ConversationHistory(agent_conversation_history.ConversationHistory, Single
                 reminder=effective_reminder,
             )
         )
+        self._suppression_keys.append(response.suppression_key)
 
     def get_model_request(self) -> agent_conversation_history.ModelRequest:
         # Requirement: The conversation history formats messages in a model request according to OpenAI chat completion conventions for system, user, assistant, and tool messages.
         formatted: List[agent_conversation_history.Message] = []
         for m in self._messages:
-            # Requirement: Messages in a model request omit internal metadata fields starting with an underscore.
-            lines = [line for line in m.content.splitlines() if not line.strip().startswith("_")]
-            clean_content = "\n".join(lines) if m.content else ""
+            clean_content = m.content if m.content else ""
             # Requirement: Tool execution response notes, content, and reminders from the tool provider are included in visible tool message content, formatting active reminders on messages and superseded stubs to remind the agent in the assembled model request.
             if m.reminder:
                 if clean_content:

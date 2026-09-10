@@ -12,7 +12,7 @@ Autonomous agents require structured access to workspace files, but naive whole-
 
 ## Types and Behavior
 
-The *read manager* is an agent session service that installs the following tools for inspecting workspace files:
+The *read manager* is an agent session service that manages inspection of workspace files. The read manager installs the following tools:
 
 - A *read tool* that reads file content, taking a *file alias parameter* and a parameter specifying if the agent wants content formatted with *line numbers* or not. Executing the read tool distinguishes reading attempts on the guide file to provide *progressive delivery* feedback.
 

@@ -14,7 +14,7 @@ Autonomous agents given monolithic instructions frequently attempt all objective
 
 A *guide* provides structured instructional text containing a *summary* and sequential *step sections*. A *step section* is a milestone section within a guide having an *index*, a *title*, and *content*. A guide delivery can *parse* file content into a guide, extracting the summary from content preceding the first section heading, and creating sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Lint checks`.
 
-A *guide delivery* is an *agent session* service configured with a guide that delivers step-by-step instructions to an agent. A guide delivery:
+A *guide delivery* is an agent session service configured with a guide that delivers step-by-step instructions to an agent. A guide delivery:
 
 - Can *advance step* with a boolean *verification passed* indicator and text *failure diagnostics*, delivering the guide summary alone on initial delivery, presenting the guide summary above each step section on subsequent steps when verification passes, or retaining the current step section and reporting the failure diagnostics when verification fails.
 

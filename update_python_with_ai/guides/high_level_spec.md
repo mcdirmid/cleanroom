@@ -4,7 +4,7 @@
 
 The artifact is a High-Level Specification (HLS) that defines a software component declaratively through literate prose under `high/<name>.md`. The artifact conforms to this guide and the component architecture described in the design documents. Specifications define interface (`high/<name>.md`), implementation (`high/<name>_impl.md`), external boundary (`high/<name>_ext.md`), or assembly (`high/<name>_asm.md`) components without pseudo-code, bolding, nested bullet trees, or artificial parameter flags.
 
-Component visibility and lifetimes are governed by flat lifecycle tiers (`*system*` and `*agent session*`) where services access each other directly without object type containment or factory plumbing. Specifications follow a closed two-section layout: a why-focused `## Purpose` section with an `**Out of scope:**` boundary disclaimer, and either a unified `## Types and Behavior` section expressed in literate prose with semantic italics on concept introductions (for interface, implementation, and assembly specifications), or a `## Grounding Gaps Covered` section in plain prose without semantic italics (for external boundary specifications).
+Component visibility and lifetimes are governed by flat lifecycle tiers (system and agent session) where services access each other directly without object type containment or factory plumbing. Specifications follow a closed two-section layout: a why-focused `## Purpose` section with an `**Out of scope:**` boundary disclaimer, and either a unified `## Types and Behavior` section expressed in literate prose with semantic italics on concept introductions (for interface, implementation, and assembly specifications), or a `## Grounding Gaps Covered` section in plain prose without semantic italics (for external boundary specifications).
 
 ## Lint checks
 
@@ -72,6 +72,7 @@ Component visibility and lifetimes are governed by flat lifecycle tiers (`*syste
 - [ ] If a property, state, or operation is introduced for a concept, it is italicized upon introduction for that concept, even if that word was previously introduced for another concept
 - [ ] Once introduced, all subsequent references to that term anywhere within the specification remain in plain text without italics
 - [ ] Terms imported from upstream components remain in plain text without italics
+- [ ] Built-in architecture constructs, lifecycle tiers, execution phases, and runtime framework concepts are not introduced by the specification and remain in plain text without italics
 - [ ] Common scalar attributes (such as `*name*` and `*description*`) are italicized whenever they represent introduced properties of an entity
 - [ ] Operation arguments are italicized upon introduction so that operation signatures and parameter names can be cleanly extracted
 - [ ] Literal tokens, method names, and identifiers mentioned in message feedback or naming are enclosed in backticks
@@ -79,10 +80,10 @@ Component visibility and lifetimes are governed by flat lifecycle tiers (`*syste
 
 ## Lifecycle tiers and architecture
 
-- [ ] Every singleton service declares its lifecycle tier in natural language with the tier italicized (`*system*` or `*agent session*`); polymorphic types do not specify a lifecycle tier
+- [ ] Every singleton service declares its lifecycle tier in natural language in plain text without italics, as lifecycle tiers are built-in architectural constructs rather than terms introduced by the specification; polymorphic types do not specify a lifecycle tier
 - [ ] Services do not form containment or ownership hierarchies; services within the same tier access each other directly without nested type definitions
 - [ ] Aggregate services maintain collections via explicit operations, never as owned sub-types
-- [ ] Shorter-lived tiers (`*agent session*`) may access longer-lived tiers (`*system*`), but long-lived services never hold references to short-lived session services
+- [ ] Shorter-lived tiers may access longer-lived tiers, but long-lived services never hold references to short-lived session services
 - [ ] Container and runner frameworks instantiate session phase services directly without factory objects
 - [ ] Lifecycle phases are established as execution blocks where session services operate, without explicit start or stop operations; cleaning happens within an agent session phase
 - [ ] Lifecycle phase transitions are specified declaratively rather than procedurally, describing initial context provision rather than invocation sequences
@@ -123,6 +124,7 @@ Component visibility and lifetimes are governed by flat lifecycle tiers (`*syste
 - [ ] Procedural lifecycle blocks — specifying step-by-step lifecycle phase setup instead of declaratively stating session creation and context provision
 - [ ] Lexical de-duplication — failing to italicize an operation or property upon introduction for a concept because the same word was introduced on another concept
 - [ ] Re-italicizing references — italicizing terms when referring back to already-introduced concepts or imported dependencies
+- [ ] Italicizing built-in constructs — italicizing lifecycle tiers, execution phases, or framework concepts that are built-in rather than introduced by the component
 - [ ] Dangling lead-ins — writing bullets that clash grammatically with the introductory fragment lead-in
 - [ ] Colon after complete sentence — ending a complete sentence with a colon before a bullet list
 - [ ] Nested bullets — creating multi-level bullet trees instead of flat single-level bullet paragraphs

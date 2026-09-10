@@ -16,7 +16,7 @@ A *template* is file content representing initial boilerplate for a read-write f
 
 An *editing tool* is a tool that modifies a read-write file. Executing an editing tool with a file alias that is not a read-write file fails.
 
-The *edit manager* is an agent session service that installs editing tools for modifying workspace files and tracks session edits:
+The *edit manager* is an agent session service that modifies workspace files and tracks session edits. The edit manager installs:
 
 - A *text replacement tool* that is an editing tool replacing unique matching text in a read-write file, accepting a *file alias parameter*, a *target text parameter*, and a *replacement text parameter*.
 

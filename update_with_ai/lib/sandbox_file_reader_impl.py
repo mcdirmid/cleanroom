@@ -129,15 +129,19 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
         else:
             content = "".join(lines)
 
-        # Requirement: On successful read tool execution for a read-only file, the returned file content is sanitized by the alias manager to mask host paths.
-        sanitized = alias_mgr.sanitize_text(content)
-        # Requirement: On successful read tool execution, the response includes internal resource metadata identifying the read file alias.
-        kind = "read_write" if isinstance(target_file, file_alias.ReadWriteFile) else "read_only"
-        response_content = f"_resource: {target_file.short_name}\n_kind: {kind}\n{sanitized}"
+        # Requirement: Read tool responses for read-write files carry a suppression key matching the file's short name, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
+        if isinstance(target_file, file_alias.ReadWriteFile):
+            suppression_key = target_file.short_name
+            final_content = content
+        else:
+            suppression_key = None
+            final_content = alias_mgr.sanitize_text(content)
+
         return tool_provider.Response(
             is_failed=False,
             is_terminated=False,
-            content=response_content,
+            content=final_content,
+            suppression_key=suppression_key,
         )
 
 class RegexPatternConverter(tool_provider.ParameterConverter, Singleton):

@@ -14,7 +14,7 @@ Autonomous agent tasks require multi-turn interaction loops where model decision
 
 An *agent outcome* is the final result of an agent run that carries a *termination outcome* from tool execution in a tool provider and the final state of the conversation history from agent conversation history.
 
-The *agent runner* is an *agent session* service that coordinates the turn loop for an agent session. The agent runner:
+The *agent runner* is an agent session service that coordinates the turn loop for an agent session. The agent runner:
 
 - Drives turns by sending a model request to a language model and executing requested tools in the tool manager.
 

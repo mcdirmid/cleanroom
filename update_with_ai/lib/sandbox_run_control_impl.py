@@ -63,14 +63,16 @@ class AdvanceTool(sandbox_run_control.AdvanceTool, Singleton):
     def _format_response(self, resp: tool_provider.Response) -> tool_provider.Response:
         node_cfg = get_singleton(node_config.NodeConfig)
         # Requirement: When guide step mode is on, tool execution always presents the guide summary from node config whether execution fails or succeeds.
-        if node_cfg.guide is not None and not resp.content.startswith(node_cfg.guide.summary):
-            return tool_provider.Response(
-                is_failed=resp.is_failed,
-                is_terminated=resp.is_terminated,
-                content=f"{node_cfg.guide.summary}\n\n{resp.content}".strip(),
-                reminder=resp.reminder,
-            )
-        return resp
+        # Requirement: Responses from the advance tool share a constant suppression key 'advance'.
+        prefix = f"{node_cfg.guide.summary}\n\n" if node_cfg.guide is not None and not resp.content.startswith(node_cfg.guide.summary) else ""
+        content = f"{prefix}{resp.content}".strip()
+        return tool_provider.Response(
+            is_failed=resp.is_failed,
+            is_terminated=resp.is_terminated,
+            content=content,
+            reminder=resp.reminder,
+            suppression_key="advance",
+        )
 
     def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}

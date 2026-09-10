@@ -22,7 +22,7 @@ The agent runner logs log events for turn requests, completions, and tool result
 Before each tool execution in the tool manager, the agent runner evaluates the tool invocation with the loop guard. If the loop guard produces a loop failure, the agent runner concludes the run with a failure outcome. If the loop guard produces a loop reminder, the agent runner appends the reminder to the conversation history and proceeds with execution. Productive tool executions that modify workspace files or advance the guide step clear repetition tracking in the loop guard.
 
 When tool execution in the tool manager produces a response indicating failure without terminating the run, the agent runner appends the failure feedback to the conversation history and continues the turn loop. When tool execution produces a response indicating that the session should terminate, the agent runner concludes the run and returns an agent outcome.
- 
+
 When a model response produces no tool executions, the agent runner appends a prompt to the conversation history reminding that progress and conclusion require invoking tools, and continues the turn loop.
- 
+
 When interaction turns reach the conversation limit from model config, the agent runner concludes the run with a failure outcome.

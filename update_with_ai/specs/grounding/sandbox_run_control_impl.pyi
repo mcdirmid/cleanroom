@@ -116,13 +116,14 @@ FRESH_REQUIREMENTS:
 - When verification checks execute and any verification check fails, tool execution fails with diagnostic feedback sanitized through the alias manager, and the advance tool caches the failure output alongside the current file update revision from the edit manager.
 - When the advance tool is called after a previous advance call that failed verification and no workspace files have been updated since that failure as indicated by the edit manager's file update revision, tool execution fails without re-executing verification checks, serving the cached output from the previous failed verification and reminding the agent that verification failed previously and workspace files must be updated before advancing again.
 - When guide step mode is on, tool execution always presents the guide summary from node config whether execution fails or succeeds.
+- Responses from the advance tool share a constant suppression key 'advance'.
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
 - [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, queries steps remaining and advances steps via imported sandbox_guide_delivery.GuideDelivery, queries file modification state and file update revision from imported sandbox_file_editor.EditManager, executes verification checks in RunController.verification_checks in the same session lifecycle tier unless a previous failure is cached without intervening file updates, serves cached output and fails tool execution reminding the agent when called without file updates after a verification failure, caches failure output alongside file update revision when checks fail, sanitizes diagnostic feedback through imported file_alias.AliasManager failing tool execution if any check fails, validates change summary content and applicability, and prepends the guide summary from imported node_config.NodeConfig to the response when guide step mode is on.
+- Receives actual parameter bindings, queries steps remaining and advances steps via imported sandbox_guide_delivery.GuideDelivery, queries file modification state and file update revision from imported sandbox_file_editor.EditManager, executes verification checks in RunController.verification_checks in the same session lifecycle tier unless a previous failure is cached without intervening file updates, serves cached output and fails tool execution reminding the agent when called without file updates after a verification failure, caches failure output alongside file update revision when checks fail, sanitizes diagnostic feedback through imported file_alias.AliasManager failing tool execution if any check fails, validates change summary content and applicability, attaches constant suppression key 'advance' to tool responses, and prepends the guide summary from imported node_config.NodeConfig to the response when guide step mode is on.
 """
         ...
 

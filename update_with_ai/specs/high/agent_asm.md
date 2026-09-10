@@ -1,6 +1,6 @@
 # agent_asm assembly component
 
-imports: bazel_graph_storage, dag_storage, model_config, runner_logger, sandbox, tool_provider, openai_ext
+imports: bazel_graph_storage, dag_storage, model_config, node_config, runner_logger, sandbox, tool_provider, openai_ext
 implements: agent_runner, agent_conversation_history, agent_loop_guard, agent_node_cleaner, dag_node_cleaner
 
 ## Purpose

@@ -90,6 +90,7 @@ class Response:
     is_terminated: bool
     content: str
     reminder: Optional[str] = None
+    suppression_key: Optional[str] = None
 
 class Tool(Protocol):
     @property

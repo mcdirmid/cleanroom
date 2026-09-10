@@ -12,7 +12,7 @@ Multi-step agent workflows execute under varying constraints—such as source is
 
 ## Types and Behavior
 
-The *node config* is an *agent session* service that exposes configuration parameters for the session execution environment. The node config provides:
+The *node config* is an agent session service that exposes configuration parameters for the session execution environment. The node config provides:
 
 - The session's *read-only files*, which are bound files from file alias restricted to inspection.
 

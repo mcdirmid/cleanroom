@@ -150,7 +150,7 @@ class BazelGraphStorageImplTest(unittest.TestCase):
             storage.add_message(Change(), to=node)
             storage.add_message(Feedback(), to=node)
 
-            # Requirement: A node is dirty if it has messages explaining why it requires cleaning.
+            # Requirement: A node in dag storage is dirty if it has messages explaining why it requires cleaning, or if its declared source file is missing from the workspace root.
             # Requirement: [DagStorage] A node is dirty if, but not only if, it has messages.
             self.assertTrue(storage.is_dirty(node))
             msgs = storage.get_messages(node)
@@ -170,6 +170,27 @@ class BazelGraphStorageImplTest(unittest.TestCase):
             storage.clear_messages(node)
             self.assertFalse(storage.is_dirty(node))
             self.assertEqual(storage.get_messages(node), set())
+
+    def test_missing_source_file_dirty_state(self) -> None:
+        """CUJ: A node is dirty when its declared source file is missing from the workspace root."""
+        node = Node(address="//pkg/src:target")
+        with enter_phase("system", registry=self.registry) as scope:
+            storage = scope.get_singleton(BazelGraphStorage)
+            assert isinstance(storage, BazelGraphStorageImpl)
+
+            # Node with declared source file that does not exist yet
+            rel_path = "pkg/src/target.py"
+            storage._source_files[node] = rel_path
+            # Requirement: A node in dag storage is dirty if it has messages explaining why it requires cleaning, or if its declared source file is missing from the workspace root.
+            # Requirement: [DagStorage] A node is dirty if, but not only if, it has messages.
+            self.assertTrue(storage.is_dirty(node))
+
+            # Creating the declared source file on disk clears the dirty state when no messages exist
+            abs_src = os.path.join(self.test_dir, rel_path)
+            os.makedirs(os.path.dirname(abs_src), exist_ok=True)
+            with open(abs_src, "w", encoding="utf-8") as f:
+                f.write("# source file\n")
+            self.assertFalse(storage.is_dirty(node))
 
     def test_reverse_dependencies_registration_and_clearing(self) -> None:
         """CUJ: Registering dependent writes reverse dependency to non-silent dependencies."""

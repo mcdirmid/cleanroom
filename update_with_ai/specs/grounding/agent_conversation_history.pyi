@@ -180,8 +180,7 @@ PURPOSE:
 Appends a tool execution response, stubbing superseded results
 
 FRESH_REQUIREMENTS:
-- When an appended tool result supersedes an earlier result for the same mutable resource, the earlier result is replaced in place with a stub, while tool results for read-only resources are never superseded.
-- A stub retains any reminder provided in the superseded tool response to remind the agent in subsequent turns, and when the newly appended tool response does not supply a reminder, it inherits the reminder from the superseded response.
+- Stubs previous responses identified by a suppression key.
 """
         ...
 

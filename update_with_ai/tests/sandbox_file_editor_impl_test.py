@@ -254,9 +254,11 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             )
             # Requirement: Executing the text replacement tool reads file content using the filesystem.
             # Requirement: On successful text replacement tool execution, the unique occurrence of the target text is replaced with the replacement text, written using the filesystem, and file modifications are recorded.
+            # Requirement: Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
             # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
             resp = replace_tool.execute_tool(b_ok)
             self.assertFalse(resp.is_failed)
+            self.assertEqual(resp.suppression_key, self.rw_file.short_name)
             self.assertTrue(edit_mgr.has_modifications)
             with open(self.target_path, "r", encoding="utf-8") as f:
                 self.assertEqual(f.read(), "Line 1\nUpdated Line 2\nLine 3\n")
@@ -318,8 +320,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             )
             # Requirement: Executing the line update tool reads file content using the filesystem.
             # Requirement: When the start line is less than or equal to the end line, successful execution replaces lines within the range, writes using the filesystem, and records file modifications.
+            # Requirement: Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
             resp1 = line_tool.execute_tool(b_replace)
             self.assertFalse(resp1.is_failed)
+            self.assertEqual(resp1.suppression_key, self.rw_file.short_name)
             self.assertTrue(edit_mgr.has_modifications)
             with open(self.target_path, "r", encoding="utf-8") as f:
                 self.assertEqual(f.read(), "Replaced 1 and 2\nLine 3\n")
@@ -334,8 +338,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 }
             )
             # Requirement: When the start line exceeds the end line, successful execution inserts the replacement lines before the start line, writes using the filesystem, and records file modifications.
+            # Requirement: Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
             resp2 = line_tool.execute_tool(b_insert)
             self.assertFalse(resp2.is_failed)
+            self.assertEqual(resp2.suppression_key, self.rw_file.short_name)
             with open(self.target_path, "r", encoding="utf-8") as f:
                 self.assertEqual(f.read(), "Replaced 1 and 2\nInserted Line\nLine 3\n")
 

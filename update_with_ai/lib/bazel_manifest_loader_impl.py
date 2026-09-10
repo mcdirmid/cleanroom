@@ -77,6 +77,12 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
             if hasattr(storage_any, "_definitions"):
                 storage_any._definitions[node] = defn
 
+            src = t.get("src")
+            if src and hasattr(storage_any, "_source_files"):
+                pkg_path = node_util.extract_directory(node).path
+                norm_rel = os.path.normpath(os.path.join(pkg_path, src))
+                storage_any._source_files[node] = norm_rel
+
             # Requirement: A manifest loader registers silent dependencies as non-propagating dependencies excluding their source files.
             # Requirement: [BazelManifestLoader] A manifest loader resolves declared silent dependencies as non-propagating dependencies while excluding their source files from read-only files.
             deps: Set[dag_storage.Dependency] = set()

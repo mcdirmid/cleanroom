@@ -13,7 +13,7 @@ Permissive or forgiving tool implementations allow agents to drift into ambiguou
 
 ## Types and Behavior
 
-The read manager unconditionally installs the read tool into the tool manager for the agent session and never installs the search tool, obtaining declared read-only files, read-write files, and optional guide file from the node config.
+The read manager unconditionally installs the read tool into the tool manager for the agent session and never installs the search tool, obtaining declared read-only files, read-write files, and the guide file, when configured, from the node config.
 
 The read tool is named `read_file`, accepting a file alias *file* parameter and a boolean *line numbers* parameter that must be true when reading read-write files and false or omitted when reading read-only files. The read tool reads file content using filesystem ext at the host path formed from the alias manager workspace root and the bound file workspace path. Successful read tool execution requires:
 
@@ -21,7 +21,7 @@ The read tool is named `read_file`, accepting a file alias *file* parameter and 
 
 - A bound file. If an unbound file is supplied, execution fails with a response guiding agent recovery, and reminds the agent that only declared files can be inspected. This response lists available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead.
 
-On successful read tool execution, the response includes internal resource metadata identifying the read file alias, and provides file content that the alias manager sanitizes to mask host paths if a read-only file is being read.
+Read tool responses for read-write files carry a suppression key matching the file's short name, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
 
 The *regex pattern converter* is a parameter converter for regex patterns that converts a wire type string into a regex pattern.
 

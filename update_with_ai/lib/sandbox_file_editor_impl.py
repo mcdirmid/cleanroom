@@ -186,10 +186,12 @@ class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
 
         edit_mgr.record_modification(host_path)
 
+        # Requirement: Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
         return tool_provider.Response(
             is_failed=False,
             is_terminated=False,
             content="Successfully replaced text.",
+            suppression_key=target_file.short_name,
         )
 
 class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
@@ -314,10 +316,12 @@ class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
 
         edit_mgr.record_modification(host_path)
 
+        # Requirement: Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
         return tool_provider.Response(
             is_failed=False,
             is_terminated=False,
             content="Successfully updated lines.",
+            suppression_key=target_file.short_name,
         )
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
