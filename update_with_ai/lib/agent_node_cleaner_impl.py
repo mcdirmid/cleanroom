@@ -64,13 +64,19 @@ class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
                     agent_conversation_history.Message(role="user", content=task_prompt)
                 )
 
-            # Requirement: The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content, and paired startup tool executions from the sandbox.
-            for msg in sorted(storage.get_messages(node), key=lambda m: f"Incoming message: {type(m).__name__}"):
+            # Requirement: The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox.
+            messages_sorted = sorted(
+                storage.get_messages(node),
+                key=lambda m: (m.content, type(m).__name__),
+            )
+            for msg in messages_sorted:
+                prefix = f"Incoming {type(msg).__name__.lower()}"
+                body = f"{prefix}: {msg.content}" if msg.content else prefix
                 hist.append_message(
-                    agent_conversation_history.Message(role="user", content=f"Incoming message: {type(msg).__name__}")
+                    agent_conversation_history.Message(role="user", content=body)
                 )
 
-            # Requirement: The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content, and paired startup tool executions from the sandbox.
+            # Requirement: The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox.
             for i, startup_exec in enumerate(sb.get_startup_tool_executions()):
                 hist.append_tool_response(
                     response=startup_exec.response,
@@ -90,9 +96,32 @@ class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
                 return messages
 
             content = outcome.response.content if outcome.response else ""
-            # Requirement: When the agent outcome indicates blame, feedback messages are produced for the blamed dependency node.
+            # Requirement: When the agent outcome indicates blame, feedback messages containing the blame explanation are produced addressed to the blamed dependency node.
             if content.startswith("Blamed "):
-                messages.add(dag_storage.Feedback())
+                blame_target_str = ""
+                blame_exp = ""
+                after_blamed = content[len("Blamed "):]
+                if ": " in after_blamed:
+                    blame_target_str, blame_exp = after_blamed.split(": ", 1)
+                    blame_target_str = blame_target_str.strip()
+                    blame_exp = blame_exp.strip()
+                else:
+                    blame_target_str = after_blamed.strip()
+
+                n_cfg = session.get_singleton(node_config.NodeConfig)
+                blamed_node: Optional[dag_storage.Node] = None
+                for bt in n_cfg.blame_targets:
+                    if bt.short_name == blame_target_str or str(bt) == blame_target_str:
+                        blamed_node = bt.owning_node
+                        break
+                    if hasattr(bt, "owning_node") and bt.owning_node is not None and bt.owning_node.address == blame_target_str:
+                        blamed_node = bt.owning_node
+                        break
+
+                if blamed_node is None:
+                    blamed_node = dag_storage.Node(address=blame_target_str)
+
+                messages.add(dag_storage.Feedback(content=blame_exp or content, target=blamed_node))
             # Requirement: When the agent outcome indicates change with workspace file modifications, change messages are produced for downstream dependent nodes.
             elif sb.has_modifications:
                 messages.add(dag_storage.Change())
@@ -109,17 +138,26 @@ class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
                 storage.add_message(dag_storage.Feedback(), to=node)
             return False
 
+        # Requirement: After a dirty node is cleaned, the agent node cleaner registers the node as a dependent to its non-silent dependencies.
+        # Requirement: [NodeCleaner] After a dirty node is cleaned, the node is registered as a dependent to its non-silent dependencies.
+        storage.register_dependent(node)
+
         # Requirement: [NodeCleaner] When cleaning a dirty node, a node cleaner interacts with dag storage to deliver messages and manages whether the node remains dirty.
         storage.clear_messages(node)
 
+        # Requirement: When delivering messages after cleaning, feedback messages are delivered to their addressed dependency node.
+        # Requirement: Change messages are delivered to downstream dependents.
         # Requirement: [NodeCleaner] Delivering messages delivers change messages to dependents when modifications are made, or feedback messages to dependencies when defects require revision.
         for m in msgs:
             if isinstance(m, dag_storage.Change):
                 for dependent in storage.get_dependents(node):
                     storage.add_message(m, to=dependent)
             elif isinstance(m, dag_storage.Feedback):
-                for dependency in storage.get_dependencies(node):
-                    storage.add_message(m, to=dependency.node)
+                if m.target is not None:
+                    storage.add_message(m, to=m.target)
+                else:
+                    for dependency in storage.get_dependencies(node):
+                        storage.add_message(m, to=dependency.node)
 
         # Requirement: [NodeCleaner] Cleaning a dirty node communicates whether processing should continue.
         return True

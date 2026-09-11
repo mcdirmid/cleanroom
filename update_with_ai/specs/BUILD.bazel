@@ -14,6 +14,11 @@ test_suite(
     tags = ["high_lint"],
 )
 
+test_suite(
+    name = "low",
+    tags = ["low_lint"],
+)
+
 update_python_with_ai(
     name = "agent_asm",
     module_deps = ['bazel_graph_storage', 'dag_storage', 'model_config', 'openai_ext', 'runner_logger', 'sandbox', 'tool_provider'],

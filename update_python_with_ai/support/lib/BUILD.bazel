@@ -1,0 +1,24 @@
+# update_python_with_ai/support/lib/BUILD.bazel
+
+load("//bin:pyright_library.bzl", "pyright_library")
+
+exports_files([
+    "framework.py",
+    "lifecycle.py",
+], visibility = ["//visibility:public"])
+
+pyright_library(
+    name = "framework",
+    srcs = ["framework.py"],
+    pyright_deps = [],
+    imports = ["../..", "."],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "lifecycle",
+    srcs = ["lifecycle.py"],
+    pyright_deps = [],
+    imports = ["../.."],
+    visibility = ["//visibility:public"],
+)

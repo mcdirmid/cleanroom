@@ -30,6 +30,7 @@ class MockStorage:
         self.messages: dict[str, Set[DagMessage]] = {}
         self.dependents: dict[str, Set[Node]] = {}
         self.dependencies: dict[str, Set[Dependency]] = {}
+        self.registered_dependents: List[Node] = []
 
     def get_node_definition(self, node: Node) -> Optional[NodeDefinition]:
         return self.definitions.get(node.address)
@@ -53,7 +54,10 @@ class MockStorage:
         return bool(self.messages.get(node.address))
 
     def register_dependent(self, node: Node) -> None:
-        pass
+        self.registered_dependents.append(node)
+        for dep in self.get_dependencies(node):
+            if not dep.is_silent:
+                self.dependents.setdefault(dep.node.address, set()).add(node)
 
     def clear_dependents(self, node: Node) -> None:
         pass
@@ -185,7 +189,10 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             node=node,
             task_prompt=TaskPrompt("Clean this node"),
         )
-        self.storage.messages[node.address] = {Feedback(), Change()}
+        self.storage.messages[node.address] = {
+            Feedback(content="Z defect explanation"),
+            Change(content="A spec updated"),
+        }
         startup_exec = StartupToolExecution(
             tool_name="read_file",
             wire_parameter_bindings=WireParameterBindings(bindings={("file", "dag_storage.pyi")}),
@@ -203,12 +210,12 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             # Requirement: Startup templates from the sandbox are materialized for missing read-write files.
             self.assertTrue(self.sandbox.templates_materialized)
             # Verify history seeded
-            # Requirement: The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content, and paired startup tool executions from the sandbox.
+            # Requirement: The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox.
             history_contents = [m.content for m in self.history.messages]
             self.assertTrue(any("Clean this node" in c for c in history_contents))
-            # Verify messages are ordered deterministically by content: "Change" before "Feedback"
-            change_idx = next(i for i, c in enumerate(history_contents) if "Incoming message: Change" in c)
-            feedback_idx = next(i for i, c in enumerate(history_contents) if "Incoming message: Feedback" in c)
+            # Verify messages are ordered deterministically by content and formatted with their content
+            change_idx = next(i for i, c in enumerate(history_contents) if "Incoming change: A spec updated" in c)
+            feedback_idx = next(i for i, c in enumerate(history_contents) if "Incoming feedback: Z defect explanation" in c)
             self.assertLess(change_idx, feedback_idx)
             self.assertTrue(any("spec content" in c for c in history_contents))
             self.assertEqual(self.history.tool_responses[0][3], startup_exec.wire_parameter_bindings)
@@ -237,18 +244,22 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         node = Node(address="//pkg:blame_test")
         self.runner.outcome = AgentOutcome(
             is_success=True,
-            response=Response(is_failed=False, is_terminated=True, content="Blamed //pkg:upstream"),
+            response=Response(is_failed=False, is_terminated=True, content="Blamed //pkg:upstream: Syntax error in file"),
             conversation_history=self.history,
         )
 
         with enter_phase("system", registry=self.registry) as scope:
             cleaner = scope.get_singleton(AgentNodeCleaner)
-            # Requirement: When the agent outcome indicates blame, feedback messages are produced for the blamed dependency node.
-            # Requirement: [AgentNodeCleaner] When blame is signaled, the agent node cleaner produces feedback messages addressed to dependency nodes.
+            # Requirement: When the agent outcome indicates blame, feedback messages containing the blame explanation are produced addressed to the blamed dependency node.
+            # Requirement: [AgentNodeCleaner] When blame is signaled, the agent node cleaner produces feedback messages containing the blame explanation and addressed to the blamed dependency node.
             msgs = cleaner.clean_node(node)
 
             self.assertEqual(len(msgs), 1)
-            self.assertIsInstance(list(msgs)[0], Feedback)
+            fb = list(msgs)[0]
+            self.assertIsInstance(fb, Feedback)
+            assert isinstance(fb, Feedback)
+            self.assertEqual(fb.content, "Syntax error in file")
+            self.assertEqual(fb.target, Node(address="//pkg:upstream"))
 
     def test_clean_node_without_modifications_produces_no_messages(self) -> None:
         """CUJ: Producing no messages when cleaning succeeds without workspace file modifications."""
@@ -288,6 +299,28 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             self.assertFalse(cont)
             self.assertTrue(self.storage.is_dirty(node))
             self.assertGreater(len(self.storage.get_messages(node)), 0)
+            self.assertNotIn(node, self.storage.registered_dependents)
+
+    def test_clean_registers_dependent_to_non_silent_dependencies(self) -> None:
+        """CUJ: Clean operation registers node as dependent to immediate non-silent dependencies."""
+        node = Node(address="//pkg:clean_target")
+        dep_non_silent = Node(address="//pkg:upstream_code")
+        dep_silent = Node(address="//pkg:upstream_silent")
+        self.storage.dependencies[node.address] = {
+            Dependency(node=dep_non_silent, is_silent=False),
+            Dependency(node=dep_silent, is_silent=True),
+        }
+
+        with enter_phase("system", registry=self.registry) as scope:
+            cleaner = scope.get_singleton(AgentNodeCleaner)
+            # Requirement: After a dirty node is cleaned, the agent node cleaner registers the node as a dependent to its non-silent dependencies.
+            # Requirement: [NodeCleaner] After a dirty node is cleaned, the node is registered as a dependent to its non-silent dependencies.
+            cont = cleaner.clean(node)
+
+            self.assertTrue(cont)
+            self.assertIn(node, self.storage.registered_dependents)
+            self.assertIn(node, self.storage.get_dependents(dep_non_silent))
+            self.assertNotIn(node, self.storage.get_dependents(dep_silent))
 
     def test_clean_delivers_messages_to_dependents_and_dependencies(self) -> None:
         """CUJ: Clean operation delivers Change messages to dependents and clears prior messages."""
@@ -307,27 +340,35 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             # Requirement: [NodeCleaner] When cleaning a dirty node, a node cleaner interacts with dag storage to deliver messages and manages whether the node remains dirty.
             self.assertEqual(len(self.storage.messages[node.address]), 0)
             # Dependent received Change message
+            # Requirement: Change messages are delivered to downstream dependents.
             # Requirement: [NodeCleaner] Delivering messages delivers change messages to dependents when modifications are made, or feedback messages to dependencies when defects require revision.
             self.assertEqual(len(self.storage.messages[dependent.address]), 1)
             self.assertIsInstance(list(self.storage.messages[dependent.address])[0], Change)
 
     def test_clean_delivers_feedback_to_dependencies(self) -> None:
-        """CUJ: Clean operation delivers Feedback messages to dependencies."""
+        """CUJ: Clean operation delivers Feedback messages specifically to addressed dependency."""
         node = Node(address="//pkg:clean_op_feedback")
-        dependency = Node(address="//pkg:dependency")
-        self.storage.dependencies[node.address] = {Dependency(node=dependency)}
+        dependency1 = Node(address="//pkg:dependency1")
+        dependency2 = Node(address="//pkg:dependency2")
+        self.storage.dependencies[node.address] = {Dependency(node=dependency1), Dependency(node=dependency2)}
         self.runner.outcome = AgentOutcome(
             is_success=True,
-            response=Response(is_failed=False, is_terminated=True, content="Blamed //pkg:dependency"),
+            response=Response(is_failed=False, is_terminated=True, content="Blamed //pkg:dependency1: Defect in dep 1"),
             conversation_history=self.history,
         )
 
         with enter_phase("system", registry=self.registry) as scope:
             cleaner = scope.get_singleton(AgentNodeCleaner)
+            # Requirement: When delivering messages after cleaning, feedback messages are delivered to their addressed dependency node.
+            # Requirement: [NodeCleaner] Delivering messages delivers change messages to dependents when modifications are made, or feedback messages to dependencies when defects require revision.
             cont = cleaner.clean(node)
             self.assertTrue(cont)
-            self.assertEqual(len(self.storage.messages[dependency.address]), 1)
-            self.assertIsInstance(list(self.storage.messages[dependency.address])[0], Feedback)
+            self.assertEqual(len(self.storage.messages.get(dependency1.address, set())), 1)
+            fb = list(self.storage.messages[dependency1.address])[0]
+            self.assertIsInstance(fb, Feedback)
+            assert isinstance(fb, Feedback)
+            self.assertEqual(fb.content, "Defect in dep 1")
+            self.assertEqual(len(self.storage.messages.get(dependency2.address, set())), 0)
 
     def test_clean_node_seeds_history_with_step_mode_guide(self) -> None:
         """CUJ: Seeding conversation history augments task prompt with advance instruction in step mode."""

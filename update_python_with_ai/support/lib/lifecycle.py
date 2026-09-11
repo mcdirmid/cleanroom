@@ -210,36 +210,42 @@ _global_registry = LifecycleRegistry()
 _ambient_system_scope: Optional[LifecycleScope] = None
 _active_scope: ContextVar[Optional[LifecycleScope]] = ContextVar("_active_scope", default=None)
 
-# Guarantee module identity across import alias variations (support.lib.lifecycle vs update_with_ai.support.lib.lifecycle)
+# Guarantee module identity across import alias variations
+# (support.lib.lifecycle, update_python_with_ai.support.lib.lifecycle, update_with_ai.support.lib.lifecycle)
 import types as _types
-if __name__ == "support.lib.lifecycle":
-    if "update_with_ai.support.lib.lifecycle" not in sys.modules:
-        sys.modules["update_with_ai.support.lib.lifecycle"] = sys.modules[__name__]
-    if "update_with_ai" not in sys.modules:
-        try:
-            import update_with_ai as _u  # pyright: ignore[reportMissingImports]
-        except Exception:
-            _u = sys.modules.setdefault("update_with_ai", _types.ModuleType("update_with_ai"))
-    else:
-        _u = sys.modules["update_with_ai"]
-    if not hasattr(_u, "support"):
-        _s = sys.modules.setdefault("update_with_ai.support", _types.ModuleType("update_with_ai.support"))
-        setattr(_u, "support", _s)
-    else:
-        _s = getattr(_u, "support")
-    if not hasattr(_s, "lib"):
-        _l = sys.modules.setdefault("update_with_ai.support.lib", _types.ModuleType("update_with_ai.support.lib"))
-        setattr(_s, "lib", _l)
-    else:
-        _l = getattr(_s, "lib")
-    setattr(_l, "lifecycle", sys.modules[__name__])
-elif __name__ == "update_with_ai.support.lib.lifecycle":
-    if "support.lib.lifecycle" not in sys.modules:
-        sys.modules["support.lib.lifecycle"] = sys.modules[__name__]
-    _s = sys.modules.setdefault("support", _types.ModuleType("support"))
-    _l = sys.modules.setdefault("support.lib", _types.ModuleType("support.lib"))
-    setattr(_s, "lib", _l)
-    setattr(_l, "lifecycle", sys.modules[__name__])
+
+_MODULE_ALIASES = (
+    "support.lib.lifecycle",
+    "update_python_with_ai.support.lib.lifecycle",
+    "update_with_ai.support.lib.lifecycle",
+)
+
+_this_module = sys.modules.get(__name__)
+if _this_module is not None:
+    def _ensure_module_tree(path_parts: Sequence[str], mod: _types.ModuleType) -> None:
+        current: Optional[_types.ModuleType] = None
+        accum = ""
+        for part in path_parts[:-1]:
+            accum = f"{accum}.{part}" if accum else part
+            if accum in sys.modules:
+                node = sys.modules[accum]
+            else:
+                try:
+                    node = __import__(accum, fromlist=["__name__"])
+                except Exception:
+                    node = _types.ModuleType(accum)
+                    node.__path__ = []
+                sys.modules[accum] = node
+            if current is not None and not hasattr(current, part):
+                setattr(current, part, node)
+            current = node
+        if current is not None:
+            setattr(current, path_parts[-1], mod)
+
+    for _alias in _MODULE_ALIASES:
+        if _alias not in sys.modules:
+            sys.modules[_alias] = _this_module
+        _ensure_module_tree(_alias.split("."), _this_module)
 
 
 def get_default_registry() -> LifecycleRegistry:

@@ -497,9 +497,12 @@ class TestLifecycle(unittest.TestCase):
         """
         import support.lib.lifecycle as mod1
         import update_with_ai.support.lib.lifecycle as mod2
+        import update_python_with_ai.support.lib.lifecycle as mod3
 
         self.assertIs(mod1, mod2)
+        self.assertIs(mod1, mod3)
         self.assertIs(mod1.get_default_registry(), mod2.get_default_registry())
+        self.assertIs(mod1.get_default_registry(), mod3.get_default_registry())
 
         # Testing requirement: Registering a singleton via mod1 is resolvable via mod2
         class CrossModuleService(Singleton):

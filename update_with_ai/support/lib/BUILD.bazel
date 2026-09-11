@@ -10,6 +10,7 @@ exports_files([
     "build_lint_common.py",
     "lib_lint.py",
     "test_lint.py",
+    "grounding_tool.py",
 ], visibility = ["//visibility:public"])
 
 pyright_library(
@@ -40,19 +41,27 @@ pyright_library(
     visibility = ["//visibility:public"],
 )
 
-pyright_library(
+alias(
     name = "framework",
-    srcs = ["framework.py"],
-    pyright_deps = [],
-    imports = ["../.."],
+    actual = "//update_python_with_ai/support/lib:framework",
     visibility = ["//visibility:public"],
 )
 
-pyright_library(
+alias(
+    name = "framework_type_check",
+    actual = "//update_python_with_ai/support/lib:framework_type_check",
+    visibility = ["//visibility:public"],
+)
+
+alias(
     name = "lifecycle",
-    srcs = ["lifecycle.py"],
-    pyright_deps = [],
-    imports = ["../.."],
+    actual = "//update_python_with_ai/support/lib:lifecycle",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "lifecycle_type_check",
+    actual = "//update_python_with_ai/support/lib:lifecycle_type_check",
     visibility = ["//visibility:public"],
 )
 

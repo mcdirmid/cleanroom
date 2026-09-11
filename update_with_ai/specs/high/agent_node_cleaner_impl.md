@@ -19,7 +19,7 @@ Within the agent session phase, cleaning executes the agent runner, the sandbox,
 
 Startup templates provided by the sandbox are materialized into missing read-write files before agent interaction.
 
-The conversation history is seeded with startup context comprising the node definition and task prompt retrieved from graph storage for the dirty node, incoming pending messages ordered deterministically by content, and paired startup tool executions from the sandbox formatted with synthetic tool requests and captured responses. When seeding the task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when progressive guidance is active, or identifying the guide file by its file alias when progressive guidance is inactive.
+The conversation history is seeded with startup context comprising the node definition and task prompt retrieved from graph storage for the dirty node, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox formatted with synthetic tool requests and captured responses. When seeding the task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when progressive guidance is active, or identifying the guide file by its file alias when progressive guidance is inactive.
 
 Execution of the agent runner resolves the dirty node based on the produced agent outcome.
 
@@ -27,6 +27,8 @@ Resolving the dirty node produces:
 
 - Change messages for downstream dependent nodes when the outcome signals successful advancement with workspace file modifications.
 
-- Feedback messages addressed to an upstream node when the outcome signals blame attributed to that dependency node.
+- Feedback messages containing the blame explanation and addressed to the blamed dependency node owning the blamed file when the outcome signals blame attributed to that dependency node.
 
 - No propagating messages when the outcome signals run failure, leaving the node dirty and communicating that processing cannot continue.
+
+After a dirty node is cleaned, the agent node cleaner registers the node as a dependent to its non-silent dependencies, delivers change messages to downstream dependents, and delivers feedback messages to their addressed dependency node.

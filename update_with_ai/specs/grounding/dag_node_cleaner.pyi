@@ -6,17 +6,17 @@ import dag_storage
 class NodeCleaner(Protocol):
     """
 PURPOSE:
-Polymorphic service that cleans an individual node in a dag storage
+Polymorphic service that cleans an individual node
 """
 
     @operation
     def clean(self, node: dag_storage.Node) -> bool:
         """
 PURPOSE:
-Cleans a dirty node, interacting with dag storage to deliver messages and manage dirty state, communicating whether processing should continue
+Cleans a dirty node, communicating whether processing should continue
 
 FRESH_REQUIREMENTS:
-- When cleaning a dirty node, a node cleaner interacts with dag storage to deliver messages and manages whether the node remains dirty.
+- After a dirty node is cleaned, the node is registered as a dependent to its non-silent dependencies.
 - Delivering messages delivers change messages to dependents when modifications are made, or feedback messages to dependencies when defects require revision.
 - Cleaning a dirty node communicates whether processing should continue.
 - Processing cannot continue only if a failure occurs while cleaning the node that cannot be handled by cleaning any other node.

@@ -31,16 +31,16 @@ FRESH_REQUIREMENTS:
 - Node cleaning executes within an agent session phase, configuring the cleaned node with the dirty node.
 - Node cleaning executes an agent runner with the sandbox and conversation history.
 - Startup templates from the sandbox are materialized for missing read-write files.
-- The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content, and paired startup tool executions from the sandbox.
+- The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox.
 - When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when progressive guidance is active, or identifying the guide file by its file alias when progressive guidance is inactive.
 - When the agent outcome indicates change with workspace file modifications, change messages are produced for downstream dependent nodes.
-- When the agent outcome indicates blame, feedback messages are produced for the blamed dependency node.
+- When the agent outcome indicates blame, feedback messages containing the blame explanation are produced addressed to the blamed dependency node.
 - When the agent outcome indicates failure, the node remains dirty and no propagating messages are produced.
 
 INHERITED_REQUIREMENTS:
 - [AgentNodeCleaner] An agent node cleaner cleans a dirty node within an agent session phase.
 - [AgentNodeCleaner] When workspace file modifications occur and task verification passes, the agent node cleaner produces change messages.
-- [AgentNodeCleaner] When blame is signaled, the agent node cleaner produces feedback messages addressed to dependency nodes.
+- [AgentNodeCleaner] When blame is signaled, the agent node cleaner produces feedback messages containing the blame explanation and addressed to the blamed dependency node.
 - [AgentNodeCleaner] When cleaning succeeds without workspace file modifications, no messages are produced.
 
 GROUNDING_ARGUMENT:
@@ -53,13 +53,21 @@ GROUNDING_ARGUMENT:
     def clean(self, node: dag_storage.Node) -> bool:
         """
 PURPOSE:
-Cleans a dirty node, interacting with dag storage to deliver messages and manage dirty state, communicating whether processing should continue
+Cleans a dirty node, communicating whether processing should continue
+
+FRESH_REQUIREMENTS:
+- After a dirty node is cleaned, the agent node cleaner registers the node as a dependent to its non-silent dependencies.
+- When delivering messages after cleaning, feedback messages are delivered to their addressed dependency node.
+- Change messages are delivered to downstream dependents.
 
 INHERITED_REQUIREMENTS:
-- [NodeCleaner] When cleaning a dirty node, a node cleaner interacts with dag storage to deliver messages and manages whether the node remains dirty.
+- [NodeCleaner] After a dirty node is cleaned, the node is registered as a dependent to its non-silent dependencies.
 - [NodeCleaner] Delivering messages delivers change messages to dependents when modifications are made, or feedback messages to dependencies when defects require revision.
 - [NodeCleaner] Cleaning a dirty node communicates whether processing should continue.
 - [NodeCleaner] Processing cannot continue only if a failure occurs while cleaning the node that cannot be handled by cleaning any other node.
+
+GROUNDING_ARGUMENT:
+- Receives node as an input argument and interacts with imported dag_storage in the same system tier to register the node as a dependent to its non-silent dependencies, deliver change messages to dependents, and deliver feedback messages to their addressed dependency node, managing dirty state.
 """
         ...
 

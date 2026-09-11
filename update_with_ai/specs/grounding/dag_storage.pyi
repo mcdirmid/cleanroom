@@ -1,5 +1,5 @@
-from typing import Protocol, Set
-from framework import data_type, operation, singleton_type, variant
+from typing import Optional, Protocol, Set
+from framework import data_type, operation, override, singleton_type, variant
 from dataclasses import dataclass
 
 @singleton_type('system')
@@ -141,7 +141,14 @@ class Message:
 PURPOSE:
 Introduces messages explaining why a node requires cleaning
 """
-    ...
+
+    @property
+    def content(self) -> str:
+        """
+PURPOSE:
+Text content explaining why the node requires cleaning
+"""
+        ...
 
 @dataclass(frozen=True)
 @variant
@@ -151,7 +158,16 @@ PURPOSE:
 Introduces change messages informing of modifications made to upstream dependencies
 """
 
-    def __init__(self) -> None:
+    def __init__(self, content: str=...) -> None:
+        ...
+
+    @property
+    @override
+    def content(self) -> str:
+        """
+PURPOSE:
+Text content explaining why the node requires cleaning
+"""
         ...
 
 @dataclass(frozen=True)
@@ -162,5 +178,22 @@ PURPOSE:
 Introduces feedback messages informing of issues detected by downstream dependents
 """
 
-    def __init__(self) -> None:
+    def __init__(self, content: str=..., target: Optional[Node]=...) -> None:
+        ...
+
+    @property
+    def target(self) -> Optional[Node]:
+        """
+PURPOSE:
+Target dependency node addressed by the feedback message
+"""
+        ...
+
+    @property
+    @override
+    def content(self) -> str:
+        """
+PURPOSE:
+Text content explaining why the node requires cleaning
+"""
         ...

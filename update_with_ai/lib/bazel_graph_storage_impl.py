@@ -113,10 +113,11 @@ class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage, Singleton):
         record = data.get(node.address, {})
         messages: Set[dag_storage.Message] = set()
         for msg in record.get("messages", []):
+            content = msg.get("content", "")
             if msg.get("kind") == "feedback":
-                messages.add(dag_storage.Feedback())
+                messages.add(dag_storage.Feedback(content=content))
             else:
-                messages.add(dag_storage.Change())
+                messages.add(dag_storage.Change(content=content))
         return messages
 
     def is_dirty(self, node: dag_storage.Node) -> bool:
@@ -164,7 +165,8 @@ class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage, Singleton):
         record = data.setdefault(to.address, {"messages": [], "reverse_dependencies": []})
         msg_list: List[Dict[str, str]] = record.setdefault("messages", [])
         kind = "feedback" if isinstance(message, dag_storage.Feedback) else "change"
-        msg_list.append({"kind": kind, "content": ""})
+        content = message.content if hasattr(message, "content") else ""
+        msg_list.append({"kind": kind, "content": content})
         self._save_package_data(path, data)
 
     def clear_messages(self, node: dag_storage.Node) -> None:

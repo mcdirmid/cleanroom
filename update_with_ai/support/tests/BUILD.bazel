@@ -4,17 +4,14 @@ load("//bin:pyright_library.bzl", "pyright_test")
 load("@rules_python//python:defs.bzl", "py_test")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
-pyright_test(
+test_suite(
     name = "lifecycle_test",
-    srcs = ["lifecycle_test.py"],
-    imports = ["../.."],
-    pyright_deps = [
-        "//update_with_ai/lib:agent_asm",
-        "//update_with_ai/lib:bazel_asm",
-        "//update_with_ai/lib:dag_asm",
-        "//update_with_ai/lib:sandbox_asm",
-        "//update_with_ai/support/lib:lifecycle",
-    ],
+    tests = ["//update_python_with_ai/support/tests:lifecycle_test"],
+)
+
+test_suite(
+    name = "lifecycle_test_type_check",
+    tests = ["//update_python_with_ai/support/tests:lifecycle_test_type_check"],
 )
 
 py_test(
@@ -34,7 +31,7 @@ pyright_test(
     imports = ["../.."],
     pyright_deps = [
         "//update_with_ai/lib:bazel_asm",
-        "//update_with_ai/support/lib:lifecycle",
+        "//update_python_with_ai/support/lib:lifecycle",
     ],
 )
 

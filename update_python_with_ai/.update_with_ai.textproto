@@ -1,4 +1,4 @@
 node {
-  node_id: "//update_python_with_ai/guides:qa"
+  node_id: "//update_python_with_ai:lifecycle"
   reverse_dependencies: "//testing/specs:dag_cleaner_impl_qa"
 }

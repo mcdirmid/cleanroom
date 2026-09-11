@@ -135,12 +135,13 @@ class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
         target_text = str(bindings_map.get("target_text", ""))
         replacement_text = str(bindings_map.get("replacement_text", ""))
 
-        # Requirement: [EditingTool] Executing an editing tool with a file alias that is not a read-write file fails.
+        # Requirement: [EditingTool] Executing an editing tool with a file alias that is not a read-write file fails, providing a response reminding the agent that only declared read-write files can be modified.
         if not isinstance(target_file, file_alias.ReadWriteFile):
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
                 content=f"Error: {target_file} is not a read-write file.",
+                reminder="Only declared read-write files can be modified.",
             )
 
         # Requirement: Executing the text replacement tool fails if the target text exceeds 100,000 characters, and reminds the agent that target text for replacement must not exceed 100,000 characters.
@@ -276,12 +277,13 @@ class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
         end_line = int(bindings_map.get("end_line", 1))
         replacement_text = str(bindings_map.get("replacement_text", ""))
 
-        # Requirement: [EditingTool] Executing an editing tool with a file alias that is not a read-write file fails.
+        # Requirement: [EditingTool] Executing an editing tool with a file alias that is not a read-write file fails, providing a response reminding the agent that only declared read-write files can be modified.
         if not isinstance(target_file, file_alias.ReadWriteFile):
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
                 content=f"Error: {target_file} is not a read-write file.",
+                reminder="Only declared read-write files can be modified.",
             )
 
         alias_mgr = get_singleton(file_alias.AliasManager)

@@ -196,6 +196,48 @@ _hls_lint_test = rule(
     },
 )
 
+def _lls_lint_test_impl(ctx):
+    src_file = ctx.file.src
+    dep_files = ctx.files.dep_srcs
+    tool = ctx.file._tool
+    script = ctx.actions.declare_file(ctx.label.name + ".sh")
+
+    all_files = [src_file] + dep_files
+    files_str = " ".join(['"$ws/{}"'.format(f.short_path) for f in all_files])
+
+    script_content = (
+        "#!/bin/bash\n" +
+        "set -euo pipefail\n" +
+        'ws="$TEST_SRCDIR/${{TEST_WORKSPACE:-cleanroom}}"\n' +
+        'python3 "$ws/{tool}" --check {files}\n'
+    ).format(
+        tool = tool.short_path,
+        files = files_str,
+    )
+    ctx.actions.write(output = script, content = script_content)
+    runfiles = ctx.runfiles(files = [tool] + all_files)
+    return [DefaultInfo(executable = script, runfiles = runfiles)]
+
+_lls_lint_test = rule(
+    implementation = _lls_lint_test_impl,
+    test = True,
+    attrs = {
+        "src": attr.label(
+            allow_single_file = True,
+            mandatory = True,
+            doc = "Grounding .pyi file to check",
+        ),
+        "dep_srcs": attr.label_list(
+            allow_files = True,
+            doc = "Dep grounding .pyi files for symbol linking",
+        ),
+        "_tool": attr.label(
+            default = Label("//update_with_ai/support/lib:grounding_tool.py"),
+            allow_single_file = True,
+        ),
+    },
+)
+
 # ============================================================================
 # Macro: update_python_with_ai (specification nodes)
 # ============================================================================
@@ -299,6 +341,13 @@ def update_python_with_ai(name, module_deps, visibility = None):
         spec_deps = hls_spec_deps,
         dep_srcs = native.glob(["high/" + dep.split(":")[-1] + ".md" for dep in module_deps], allow_empty = True),
         tags = ["high_lint", "high"],
+    )
+    _lls_lint_test(
+        name = name + "_low_lint",
+        src = "grounding/" + name + ".pyi",
+        dep_srcs = native.glob(["grounding/*.pyi"], exclude = ["grounding/" + name + ".pyi"], allow_empty = True),
+        tags = ["low_lint", "low"],
+        visibility = visibility,
     )
     lls_spec_deps = [dep + "_low" for dep in module_deps]
     _update_python_with_ai(
@@ -416,6 +465,7 @@ def update_python_with_ai(name, module_deps, visibility = None):
             src = "../tests/" + name + "_test.py",
             template = "//update_python_with_ai/templates:test",
             guide = "//update_python_with_ai/guides:grounding_to_test",
+            deps = _lib_deps,
             module_deps = [":" + name + "_low"],
             silent_deps = [":" + name + "_lib"] + [dep + "_lib" for dep in module_deps],
             verify = (
@@ -458,6 +508,7 @@ def update_python_with_ai(name, module_deps, visibility = None):
             src = "logs/" + name + "_qa.log",
             template = "//update_python_with_ai/templates:empty",
             guide = "//update_python_with_ai/guides:qa",
+            deps = _lib_deps,
             star_deps = [":" + name + "_low"],
             feedback_deps = [":" + name + "_lib", ":" + name + "_test"],
             verify = (

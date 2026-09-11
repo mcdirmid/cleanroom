@@ -1,4 +1,4 @@
-from typing import Protocol, Set
+from typing import Optional, Protocol, Set
 from dataclasses import dataclass
 
 @dataclass(frozen=True)
@@ -12,15 +12,16 @@ class Dependency:
 
 @dataclass(frozen=True, init=False)
 class Message:
-    pass
+    content: str = ""
 
 @dataclass(frozen=True)
 class Change(Message):
-    pass
+    content: str = ""
 
 @dataclass(frozen=True)
 class Feedback(Message):
-    pass
+    content: str = ""
+    target: Optional[Node] = None
 
 class DagStorage(Protocol):
     def get_dependencies(self, node: Node) -> Set[Dependency]:

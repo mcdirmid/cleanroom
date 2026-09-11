@@ -41,7 +41,7 @@ def _pyright_test_impl(ctx):
 
     for dep in ctx.attr.deps + ctx.attr.pyright_deps:
         dep_label = str(dep.label)
-        if dep_label.endswith(":framework") or dep_label == "//update_with_ai/support/lib:framework":
+        if dep_label.endswith(":framework") or dep_label == "//update_with_ai/support/lib:framework" or dep_label == "//update_python_with_ai/support/lib:framework":
             fail("Target {} is not allowed to depend on framework ({})".format(ctx.label, dep_label))
 
         if hasattr(dep, "files"):
@@ -56,6 +56,7 @@ def _pyright_test_impl(ctx):
                             dep_paths.append(parts[0])
                         if "support/lib" in f.short_path:
                             dep_paths.append("update_with_ai")
+                            dep_paths.append("update_python_with_ai")
                         else:
                             dep_paths.append(f.short_path.rsplit("/", 1)[0] if "/" in f.short_path else ".")
                             if len(parts) > 2:
@@ -223,6 +224,7 @@ def pyright_library(name, srcs, deps = [], pyright_deps = [], imports = [".."], 
         pyright_deps = pyright_deps,
         imports = imports,
         tags = ["type_check"],
+        visibility = kwargs.get("visibility"),
     )
     
     # Create the test suite
@@ -269,6 +271,7 @@ def pyright_test(name, srcs, deps = [], pyright_deps = [], imports = [".."], **k
         pyright_deps = pyright_deps,
         imports = imports,
         tags = ["type_check"],
+        visibility = kwargs.get("visibility"),
     )
     
     # Create the test suite
@@ -316,6 +319,7 @@ def pyright_binary(name, srcs, main, deps = [], pyright_deps = [], imports = [".
         pyright_deps = pyright_deps,
         imports = imports,
         tags = ["type_check"],
+        visibility = kwargs.get("visibility"),
     )
     
     # Create the test suite

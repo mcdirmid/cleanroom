@@ -840,6 +840,9 @@ def check_test_dry_run(lib_pkg: str, module_path: str) -> list[str]:
         "-c",
         (
             f"import sys, os, unittest; "
+            f"sys.path.insert(0, os.path.abspath('.')); "
+            f"sys.path.insert(0, os.path.abspath('update_python_with_ai')); "
+            f"sys.path.insert(0, os.path.abspath('update_with_ai')); "
             f"sys.path.insert(0, os.path.abspath('{lib_parent}')); "
             f"sys.path.insert(0, os.path.abspath('{test_dir}')); "
             f"import importlib; "

@@ -12,8 +12,10 @@ Multi-step build and agent workflows execute heterogeneous tasks—such as code 
 
 ## Types and Behavior
 
-A *node cleaner* is a polymorphic service that cleans an individual node in a dag storage. When cleaning a dirty node, a node cleaner interacts with dag storage to deliver messages—delivering change messages to dependents when modifications are made, or feedback messages to dependencies when defects require revision—and manages whether the node remains dirty.
+A *node cleaner* is a polymorphic service that cleans an individual node.
 
 A node cleaner can *clean* a dirty node, communicating whether processing should *continue*. Processing cannot continue only if a failure occurs while cleaning the node that cannot be handled by cleaning any other node; otherwise, processing continues.
+
+After a dirty node is cleaned, the node is registered as a dependent to its non-silent dependencies, delivering change messages to dependents when modifications are made, or feedback messages to dependencies when defects require revision, and managing whether the node remains dirty.
 
 The *cleaned node* is an agent session service that presents the node currently being cleaned in the agent session.

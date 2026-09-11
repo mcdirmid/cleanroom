@@ -114,7 +114,10 @@ class TestBazelMacrosIntegration(unittest.TestCase):
 
     def test_binary_preamble_and_lifecycle_resolution(self):
         """Test that generated binary preamble resolves all singletons without LifecycleResolutionError."""
-        from support.lib.lifecycle import get_singleton
+        try:
+            from support.lib.lifecycle import get_singleton
+        except ImportError:
+            from update_python_with_ai.support.lib.lifecycle import get_singleton
         from lib import bazel_asm
         from lib.bazel_node_id_utils import BazelNodeIdentifierUtility
         from lib.bazel_manifest_loader import BazelManifestLoader

@@ -230,8 +230,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.replacement_text_parameter, "New Line 2"),
                 }
             )
-            # Requirement: [EditingTool] Executing an editing tool with a file alias that is not a read-write file fails.
-            self.assertTrue(replace_tool.execute_tool(b_ro).is_failed)
+            # Requirement: [EditingTool] Executing an editing tool with a file alias that is not a read-write file fails, providing a response reminding the agent that only declared read-write files can be modified.
+            resp_ro = replace_tool.execute_tool(b_ro)
+            self.assertTrue(resp_ro.is_failed)
+            self.assertEqual(resp_ro.reminder, "Only declared read-write files can be modified.")
 
             # 2. Text not found fails
             b_not_found = ActualParameterBindings(
@@ -314,8 +316,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (line_tool.replacement_text_parameter, "New\n"),
                 }
             )
-            # Requirement: [EditingTool] Executing an editing tool with a file alias that is not a read-write file fails.
-            self.assertTrue(line_tool.execute_tool(b_ro).is_failed)
+            # Requirement: [EditingTool] Executing an editing tool with a file alias that is not a read-write file fails, providing a response reminding the agent that only declared read-write files can be modified.
+            resp_line_ro = line_tool.execute_tool(b_ro)
+            self.assertTrue(resp_line_ro.is_failed)
+            self.assertEqual(resp_line_ro.reminder, "Only declared read-write files can be modified.")
 
             # 1. Replace lines 1 and 2
             b_replace = ActualParameterBindings(
