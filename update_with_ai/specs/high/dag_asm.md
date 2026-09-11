@@ -1,5 +1,6 @@
 # dag_asm assembly component
 
+assembles: dag_cleaner_impl
 imports: dag_node_cleaner, dag_storage
 implements: dag_cleaner
 

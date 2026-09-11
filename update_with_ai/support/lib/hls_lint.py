@@ -69,9 +69,14 @@ def lint_hls_file(file_path: Path) -> list[str]:
     assembles_type: str | None = None
     instantiates_types: list[str] = []
 
-    last_kind = 0  # 1: imports, 2: types from, 3: implements
+    last_kind = 0  # 1: imports / assembles, 2: types from, 3: implements
     for l_num, line_s in header_lines:
-        if line_s.startswith("imports:"):
+        if line_s.startswith("assembles:"):
+            if last_kind > 1:
+                errors.append(f"{fname}:{l_num}: error: 'assembles:' must come before 'types from' and 'implements:'")
+            last_kind = 1
+            assembles_type = line_s[len("assembles:"):].strip()
+        elif line_s.startswith("imports:"):
             if last_kind > 1:
                 errors.append(f"{fname}:{l_num}: error: 'imports:' must come before 'types from' and 'implements:'")
             last_kind = 1
@@ -101,9 +106,6 @@ def lint_hls_file(file_path: Path) -> list[str]:
                 if dep_name not in imports_list:
                     errors.append(f"{fname}:{l_num}: error: 'types from {dep_name}' but '{dep_name}' is not in 'imports:'")
                     
-        elif line_s.startswith("assembles:"):
-            last_kind = 3
-            assembles_type = line_s[len("assembles:"):].strip()
         elif line_s.startswith("implements:"):
             last_kind = 3
             implements_type = line_s[len("implements:"):].strip()
@@ -113,11 +115,13 @@ def lint_hls_file(file_path: Path) -> list[str]:
         else:
             errors.append(f"{fname}:{l_num}: error: unknown front-matter line '{line_s}'")
 
-    # Check 5: Implementation and assembly specs must have assembles:
-    target_assemble = assembles_type or implements_type
-    if (is_impl or is_asm) and not target_assemble:
-        spec_kind = "assembly" if is_asm else "implementation"
-        errors.append(f"{fname}:1: error: {spec_kind} specification must declare 'assembles: <type>' in front-matter")
+    # Check 5: Implementation specs must have implements, assembly specs must have assembles and implements:
+    if is_impl and not implements_type:
+        errors.append(f"{fname}:1: error: implementation specification must declare 'implements: <type>' in front-matter")
+    if is_asm and not assembles_type:
+        errors.append(f"{fname}:1: error: assembly specification must declare 'assembles: <components>' in front-matter")
+    if is_asm and not implements_type:
+        errors.append(f"{fname}:1: error: assembly specification must declare 'implements: <components>' in front-matter")
 
 
     # Check 6: Section Headers and Behavior Structure

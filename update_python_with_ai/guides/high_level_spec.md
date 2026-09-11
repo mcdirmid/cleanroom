@@ -9,16 +9,17 @@ Component visibility and lifetimes are governed by flat lifecycle tiers (system 
 ## Lint checks
 
 - [ ] Header must match `# <name> <component_type> component` where `<component_type>` is `interface`, `implementation`, `external`, or `assembly`
-- [ ] Front-matter ordering must place `imports:` first, followed by `implements:`
+- [ ] Front-matter ordering must place `assembles:` (for assembly specifications) and `imports:` first, followed by `implements:`
 - [ ] Implementation specifications (`high/<name>_impl.md`) and assembly specifications (`high/<name>_asm.md`) must declare `implements: <components>` listing the interface component names closed
+- [ ] Assembly specifications (`high/<name>_asm.md`) must declare `assembles: <components>` listing the constituent implementation and sub-assembly component names closed
 - [ ] Front-matter `implements:` clause must list interface component names rather than type names or polymorphic types
 - [ ] An interface or external boundary specification must never declare `implements:`
-- [ ] Front-matter `implements:` clause must never contain entries that are also declared under `imports:`
+- [ ] Front-matter `implements:` clause must never contain entries that are also declared under `imports:` or `assembles:`
 - [ ] An implementation component must implement all singleton types defined in each interface component it lists under `implements:`
 - [ ] An assembly component's `implements:` clause must equal the union of all `implements:` clauses of its constituent components
 - [ ] An assembly component's `imports:` clause must contain all components imported by its constituents except those implemented by the assembly
 - [ ] A root assembly component ready for execution must implement all interface components in the binary and have no imports outside data types and external boundary components
-- [ ] Front-matter must never contain `assembles:`, `instantiates:`, or `types from <dep>:` statements
+- [ ] Front-matter must never contain `instantiates:` or `types from <dep>:` statements
 - [ ] Imported component names in `imports:` must never appear in `## Types and Behavior`
 - [ ] Section inventory is closed strictly to `## Purpose` and `## Types and Behavior` (or `## Grounding Gaps Covered` for external boundary specifications)
 - [ ] Sub-headers (`###`) are strictly prohibited
@@ -35,6 +36,7 @@ Component visibility and lifetimes are governed by flat lifecycle tiers (system 
 
 - [ ] Specifications without external dependencies omit `imports:` entirely
 - [ ] `imports:` lists only component-level module names separated by commas
+- [ ] Assembly specifications declare `assembles: <components>` listing constituent implementation and sub-assembly components separated by commas
 - [ ] Implementation and assembly specifications declare `implements: <components>` listing closed interface component names separated by commas
 - [ ] An implementation component implements all singleton types defined by each interface component listed in `implements:`
 - [ ] Front-matter `implements:` never lists polymorphic types or type names

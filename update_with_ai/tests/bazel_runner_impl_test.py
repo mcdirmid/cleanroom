@@ -28,6 +28,7 @@ class MockManifestLoader(bazel_manifest_loader.BazelManifestLoader):
 
     def __init__(self) -> None:
         self.manifests: dict[str, bazel_manifest_loader.Manifest] = {}
+        self.loaded: list[bazel_manifest_loader.Manifest] = []
 
     def get_manifest(self, node: dag_storage.Node) -> Optional[bazel_manifest_loader.Manifest]:
         return self.manifests.get(node.address)
@@ -37,6 +38,7 @@ class MockManifestLoader(bazel_manifest_loader.BazelManifestLoader):
         content: bazel_manifest_loader.Manifest,
         storage: bazel_graph_storage.BazelGraphStorage,
     ) -> Sequence[bazel_graph_storage.NodeDefinition]:
+        self.loaded.append(content)
         return []
 
 
@@ -47,9 +49,10 @@ class MockDagStorage(dag_storage.DagStorage):
         self.dirty_nodes: Set[dag_storage.Node] = set()
         self.messages: dict[dag_storage.Node, list[dag_storage.Message]] = {}
         self.dependents_map: dict[dag_storage.Node, Set[dag_storage.Node]] = {}
+        self.dependencies_map: dict[dag_storage.Node, Set[dag_storage.Dependency]] = {}
 
     def get_dependencies(self, node: dag_storage.Node) -> Set[dag_storage.Dependency]:
-        return set()
+        return self.dependencies_map.get(node, set())
 
     def get_dependents(self, node: dag_storage.Node) -> Set[dag_storage.Node]:
         return self.dependents_map.get(node, set())
@@ -181,6 +184,34 @@ class BazelRunnerImplTest(unittest.TestCase):
             end_events = [e for e in self.logger.events if e.event_name == "build_pass_end"]
             self.assertEqual(len(start_events), 1)
             self.assertEqual(len(end_events), 1)
+
+    def test_run_cleaning_pass_loads_dependency_graph(self) -> None:
+        """Tests that run_cleaning_pass transitively loads manifests for all dependencies in the graph."""
+        root = dag_storage.Node(address="//pkg:root")
+        dep1 = dag_storage.Node(address="//pkg:dep1")
+        dep2 = dag_storage.Node(address="//pkg:dep2")
+
+        root_m = bazel_manifest_loader.Manifest('{"name": "root"}')
+        dep1_m = bazel_manifest_loader.Manifest('{"name": "dep1"}')
+        dep2_m = bazel_manifest_loader.Manifest('{"name": "dep2"}')
+
+        self.manifest_loader.manifests["//pkg:root"] = root_m
+        self.manifest_loader.manifests["//pkg:dep1"] = dep1_m
+        self.manifest_loader.manifests["//pkg:dep2"] = dep2_m
+
+        self.storage.dependencies_map[root] = {dag_storage.Dependency(node=dep1)}
+        self.storage.dependencies_map[dep1] = {dag_storage.Dependency(node=dep2)}
+
+        with enter_phase("system", registry=self.registry):
+            runner = get_singleton(bazel_runner.BazelRunner)
+            # Requirement: The bazel runner resolves target labels and loads workspace target graphs into dag storage using a manifest loader.
+            # Requirement: [BazelRunner] A bazel runner resolves target manifests and loads workspace target graphs into dag storage using a manifest loader.
+            result = runner.run_cleaning_pass(root)
+
+            self.assertTrue(result.success)
+            self.assertIn(root_m, self.manifest_loader.loaded)
+            self.assertIn(dep1_m, self.manifest_loader.loaded)
+            self.assertIn(dep2_m, self.manifest_loader.loaded)
 
     def test_run_cleaning_pass_runtime_error(self) -> None:
         """Tests cleaning pass failure handling when cleaner raises RuntimeError."""

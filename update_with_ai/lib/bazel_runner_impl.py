@@ -1,4 +1,4 @@
-from typing import Any, Optional, cast
+from typing import Any, Optional, Set, cast
 from . import bazel_manifest_loader
 from . import bazel_runner
 from . import dag_cleaner
@@ -31,9 +31,19 @@ class BazelRunner(bazel_runner.BazelRunner, Singleton):
 
         # Requirement: The bazel runner resolves target labels and loads workspace target graphs into dag storage using a manifest loader.
         # Requirement: [BazelRunner] A bazel runner resolves target manifests and loads workspace target graphs into dag storage using a manifest loader.
-        manifest = manifest_loader.get_manifest(root)
-        if manifest is not None:
-            manifest_loader.load_manifest(manifest, cast(Any, storage))
+        visited: Set[dag_storage.Node] = set()
+        queue: list[dag_storage.Node] = [root]
+        while queue:
+            curr = queue.pop(0)
+            if curr in visited:
+                continue
+            visited.add(curr)
+            manifest = manifest_loader.get_manifest(curr)
+            if manifest is not None:
+                manifest_loader.load_manifest(manifest, cast(Any, storage))
+            for dep in storage.get_dependencies(curr):
+                if dep.node not in visited:
+                    queue.append(dep.node)
 
         # Requirement: The bazel runner executes cleaning passes in topological order using the dag cleaner and the node cleaner.
         # Requirement: [BazelRunner] A bazel runner cleans dirty nodes in topological order using the dag cleaner and the node cleaner.

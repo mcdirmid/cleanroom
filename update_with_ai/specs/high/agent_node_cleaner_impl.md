@@ -31,4 +31,6 @@ Resolving the dirty node produces:
 
 - No propagating messages when the outcome signals run failure, leaving the node dirty and communicating that processing cannot continue.
 
+When a dirty node defines no task prompt, cleaning resolves the node without executing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
+
 After a dirty node is cleaned, the agent node cleaner registers the node as a dependent to its non-silent dependencies, delivers change messages to downstream dependents, and delivers feedback messages to their addressed dependency node.

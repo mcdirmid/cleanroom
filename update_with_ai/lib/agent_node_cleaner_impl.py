@@ -34,6 +34,17 @@ class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
         self._last_outcome: Optional[agent_runner.AgentOutcome] = None
 
     def clean_node(self, node: dag_storage.Node) -> Set[dag_storage.Message]:
+        storage = get_singleton(bazel_graph_storage.BazelGraphStorage)
+        defn = storage.get_node_definition(node)
+
+        # Requirement: When a dirty node defines no task prompt, cleaning resolves the node without executing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
+        if defn is None or not defn.task_prompt:
+            self._last_outcome = None
+            has_changes = any(isinstance(m, dag_storage.Change) for m in storage.get_messages(node))
+            if has_changes:
+                return {dag_storage.Change()}
+            return set()
+
         def setup_session(session: LifecycleScope) -> None:
             # Requirement: Node cleaning executes within an agent session phase, configuring the cleaned node with the dirty node.
             cleaned_node = session.get_singleton(CleanedNode)
@@ -41,7 +52,6 @@ class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
 
         # Requirement: Node cleaning executes within an agent session phase, configuring the cleaned node with the dirty node.
         with enter_phase("agent_session", setup=setup_session) as session:
-            storage = session.get_singleton(bazel_graph_storage.BazelGraphStorage)
             defn = storage.get_node_definition(node)
 
             # Requirement: Startup templates from the sandbox are materialized for missing read-write files.

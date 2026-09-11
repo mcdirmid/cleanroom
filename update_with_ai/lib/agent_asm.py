@@ -7,10 +7,10 @@ from . import agent_node_cleaner_impl
 from . import agent_runner_impl
 
 CONSTITUENTS = (
-    agent_runner_impl,
     agent_conversation_history_impl,
     agent_loop_guard_impl,
     agent_node_cleaner_impl,
+    agent_runner_impl,
 )
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:

@@ -1,4 +1,20 @@
 node {
+  node_id: "//update_python_with_ai/guides:grounding_to_lib"
+  reverse_dependencies: "//testing/specs:filesystem_ext_lib"
+  reverse_dependencies: "//testing/specs:sandbox_guide_delivery_impl_lib"
+}
+node {
+  node_id: "//update_python_with_ai/guides:grounding_to_test"
+  reverse_dependencies: "//testing/specs:sandbox_change_summary_validator_impl_test"
+}
+node {
   node_id: "//update_python_with_ai/guides:qa"
   reverse_dependencies: "//testing/specs:dag_cleaner_impl_qa"
+  reverse_dependencies: "//testing/specs:sandbox_change_summary_validator_impl_qa"
+  reverse_dependencies: "//testing/specs:sandbox_file_editor_impl_qa"
+  reverse_dependencies: "//testing/specs:sandbox_file_reader_impl_qa"
+  reverse_dependencies: "//testing/specs:sandbox_guide_delivery_impl_qa"
+  reverse_dependencies: "//testing/specs:sandbox_impl_qa"
+  reverse_dependencies: "//testing/specs:sandbox_run_control_impl_qa"
+  reverse_dependencies: "//testing/specs:tool_provider_impl_qa"
 }

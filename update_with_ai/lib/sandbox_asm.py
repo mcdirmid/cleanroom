@@ -10,12 +10,12 @@ from . import sandbox_run_control_impl
 from . import tool_provider_impl
 
 CONSTITUENTS = (
-    sandbox_impl,
-    sandbox_file_reader_impl,
-    sandbox_file_editor_impl,
-    sandbox_run_control_impl,
-    sandbox_guide_delivery_impl,
     sandbox_change_summary_validator_impl,
+    sandbox_file_editor_impl,
+    sandbox_file_reader_impl,
+    sandbox_guide_delivery_impl,
+    sandbox_impl,
+    sandbox_run_control_impl,
     tool_provider_impl,
 )
 

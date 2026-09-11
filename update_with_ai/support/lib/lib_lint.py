@@ -46,6 +46,29 @@ from build_lint_common import (
 RULE = "pyright_library"
 
 
+def generate_asm_content(raw_deps: list[str]) -> str:
+    lines = [
+        "from __future__ import annotations",
+        "from typing import Optional",
+        "from support.lib.lifecycle import LifecycleRegistry",
+    ]
+    for dep in sorted(raw_deps):
+        lines.append(f"from . import {dep}")
+    lines.append("")
+    lines.append("CONSTITUENTS = (")
+    for dep in sorted(raw_deps):
+        lines.append(f"    {dep},")
+    lines.append(")")
+    lines.append("")
+    lines.append("def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:")
+    lines.append("    for mod in CONSTITUENTS:")
+    lines.append("        mod.__initialize__(registry)")
+    lines.append("")
+    lines.append("_initialize_ = __initialize__")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Maintain a pyright_library BUILD entry.")
     ap.add_argument("build_path", help="path to the package's BUILD.bazel file")
@@ -62,17 +85,25 @@ def main() -> int:
     )
     args = ap.parse_args()
 
-    syntax_errors = check_syntax(args.module_path)
-    if syntax_errors:
-        for err in syntax_errors:
-            sys.stderr.write(err + "\n")
-        return 1
-
     package = package_of(args.build_path)
     stem = module_stem(args.module_path)
     srcs = module_file(args.module_path)
     raw_deps = [d for d in args.deps.split(",") if d]
     pyi_paths = [p for p in args.pyi_deps.split(",") if p]
+
+    if stem.endswith("_asm"):
+        asm_content = generate_asm_content(raw_deps)
+        dir_name = os.path.dirname(args.module_path)
+        if dir_name:
+            os.makedirs(dir_name, exist_ok=True)
+        if not os.path.exists(args.module_path) or read_text(args.module_path) != asm_content:
+            write_text(args.module_path, asm_content)
+
+    syntax_errors = check_syntax(args.module_path)
+    if syntax_errors:
+        for err in syntax_errors:
+            sys.stderr.write(err + "\n")
+        return 1
 
     # Separate library dependencies from external specification dependencies
     lib_deps: list[str] = []

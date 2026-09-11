@@ -36,6 +36,7 @@ FRESH_REQUIREMENTS:
 - When the agent outcome indicates change with workspace file modifications, change messages are produced for downstream dependent nodes.
 - When the agent outcome indicates blame, feedback messages containing the blame explanation are produced addressed to the blamed dependency node.
 - When the agent outcome indicates failure, the node remains dirty and no propagating messages are produced.
+- When a dirty node defines no task prompt, cleaning resolves the node without executing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
 
 INHERITED_REQUIREMENTS:
 - [AgentNodeCleaner] An agent node cleaner cleans a dirty node within an agent session phase.
@@ -44,7 +45,7 @@ INHERITED_REQUIREMENTS:
 - [AgentNodeCleaner] When cleaning succeeds without workspace file modifications, no messages are produced.
 
 GROUNDING_ARGUMENT:
-- Receives node as an input argument and retrieves task prompt and node definition from imported bazel_graph_storage in the same system lifecycle tier. Within the orchestrated agent session phase, it configures CleanedNode, materializes startup templates from sandbox, seeds conversation history with incoming pending messages ordered deterministically by content and augmenting the task prompt with guide instructions based on imported node_config and model_config, executes agent_runner, and maps the resulting agent outcome to change or feedback messages for dag_storage, relying on the requirements of collaborator types to satisfy message generation and dirty state management.
+- Receives node as an input argument and retrieves task prompt and node definition from imported bazel_graph_storage in the same system lifecycle tier. When a dirty node defines no task prompt, it resolves without executing an agent session phase, producing change messages if incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise. Within the orchestrated agent session phase, it configures CleanedNode, materializes startup templates from sandbox, seeds conversation history with incoming pending messages ordered deterministically by content and augmenting the task prompt with guide instructions based on imported node_config and model_config, executes agent_runner, and maps the resulting agent outcome to change or feedback messages for dag_storage, relying on the requirements of collaborator types to satisfy message generation and dirty state management.
 """
         ...
 

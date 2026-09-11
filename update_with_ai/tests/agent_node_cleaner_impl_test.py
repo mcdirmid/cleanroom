@@ -117,8 +117,10 @@ class MockRunner:
             response=Response(is_failed=False, is_terminated=True, content="Done"),
             conversation_history=MockHistory(),
         )
+        self.run_count = 0
 
     def run(self) -> AgentOutcome:
+        self.run_count += 1
         return self.outcome
 
 
@@ -223,6 +225,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
     def test_clean_node_with_file_modifications_produces_change_message(self) -> None:
         """CUJ: Producing Change message when run succeeds with file modifications."""
         node = Node(address="//pkg:mod_test")
+        self.storage.definitions[node.address] = NodeDefinition(node=node, task_prompt=TaskPrompt("Task prompt"))
         self.sandbox.has_modifications = True
         self.runner.outcome = AgentOutcome(
             is_success=True,
@@ -242,6 +245,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
     def test_clean_node_with_blame_produces_feedback_message(self) -> None:
         """CUJ: Producing Feedback message when blame outcome occurs."""
         node = Node(address="//pkg:blame_test")
+        self.storage.definitions[node.address] = NodeDefinition(node=node, task_prompt=TaskPrompt("Task prompt"))
         self.runner.outcome = AgentOutcome(
             is_success=True,
             response=Response(is_failed=False, is_terminated=True, content="Blamed //pkg:upstream: Syntax error in file"),
@@ -264,6 +268,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
     def test_clean_node_without_modifications_produces_no_messages(self) -> None:
         """CUJ: Producing no messages when cleaning succeeds without workspace file modifications."""
         node = Node(address="//pkg:no_mod")
+        self.storage.definitions[node.address] = NodeDefinition(node=node, task_prompt=TaskPrompt("Task prompt"))
         self.sandbox.has_modifications = False
         self.runner.outcome = AgentOutcome(
             is_success=True,
@@ -281,6 +286,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
     def test_clean_node_failure_leaves_node_dirty_and_no_messages(self) -> None:
         """CUJ: Node remains dirty and no messages produced on agent outcome failure."""
         node = Node(address="//pkg:fail_test")
+        self.storage.definitions[node.address] = NodeDefinition(node=node, task_prompt=TaskPrompt("Task prompt"))
         self.runner.outcome = AgentOutcome(
             is_success=False,
             response=Response(is_failed=True, is_terminated=True, content="Failed"),
@@ -300,6 +306,53 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             self.assertTrue(self.storage.is_dirty(node))
             self.assertGreater(len(self.storage.get_messages(node)), 0)
             self.assertNotIn(node, self.storage.registered_dependents)
+
+    def test_clean_node_without_task_prompt_resolves_without_runner(self) -> None:
+        """CUJ: Cleaning a dirty node defining no task prompt resolves without agent runner and produces change messages when incoming messages indicate change."""
+        node = Node(address="//pkg:promptless_change")
+        self.storage.definitions[node.address] = NodeDefinition(node=node, task_prompt=TaskPrompt(""))
+        self.storage.messages[node.address] = {Change(content="Upstream library updated")}
+
+        with enter_phase("system", registry=self.registry) as scope:
+            cleaner = scope.get_singleton(AgentNodeCleaner)
+            # Requirement: When a dirty node defines no task prompt, cleaning resolves the node without executing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
+            msgs = cleaner.clean_node(node)
+
+            self.assertEqual(len(msgs), 1)
+            self.assertIsInstance(list(msgs)[0], Change)
+            self.assertEqual(self.runner.run_count, 0)
+
+    def test_clean_node_without_task_prompt_and_no_change_messages_produces_no_messages(self) -> None:
+        """CUJ: Cleaning a dirty node defining no task prompt produces no propagating messages when incoming pending messages contain no changes."""
+        node = Node(address="//pkg:promptless_no_change")
+        # Node has no entry in storage definitions (defines no task prompt)
+        self.storage.messages[node.address] = {Feedback(content="Defect notice")}
+
+        with enter_phase("system", registry=self.registry) as scope:
+            cleaner = scope.get_singleton(AgentNodeCleaner)
+            # Requirement: When a dirty node defines no task prompt, cleaning resolves the node without executing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
+            msgs = cleaner.clean_node(node)
+
+            self.assertEqual(len(msgs), 0)
+            self.assertEqual(self.runner.run_count, 0)
+
+    def test_clean_without_task_prompt_delivers_change_to_dependents(self) -> None:
+        """CUJ: Clean operation on dirty node with no task prompt delivers Change messages to dependents, clears messages, and registers dependents."""
+        node = Node(address="//pkg:promptless_qa")
+        dependent = Node(address="//pkg:parent_qa")
+        self.storage.dependents[node.address] = {dependent}
+        self.storage.messages[node.address] = {Change(content="lib updated")}
+
+        with enter_phase("system", registry=self.registry) as scope:
+            cleaner = scope.get_singleton(AgentNodeCleaner)
+            # Requirement: [NodeCleaner] Cleaning a dirty node communicates whether processing should continue.
+            cont = cleaner.clean(node)
+
+            self.assertTrue(cont)
+            self.assertEqual(len(self.storage.messages[node.address]), 0)
+            self.assertEqual(len(self.storage.messages[dependent.address]), 1)
+            self.assertIsInstance(list(self.storage.messages[dependent.address])[0], Change)
+            self.assertEqual(self.runner.run_count, 0)
 
     def test_clean_registers_dependent_to_non_silent_dependencies(self) -> None:
         """CUJ: Clean operation registers node as dependent to immediate non-silent dependencies."""
@@ -325,6 +378,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
     def test_clean_delivers_messages_to_dependents_and_dependencies(self) -> None:
         """CUJ: Clean operation delivers Change messages to dependents and clears prior messages."""
         node = Node(address="//pkg:clean_op")
+        self.storage.definitions[node.address] = NodeDefinition(node=node, task_prompt=TaskPrompt("Task prompt"))
         dependent = Node(address="//pkg:dependent")
         self.storage.dependents[node.address] = {dependent}
         self.storage.messages[node.address] = {Feedback()}  # Prior dirty message
@@ -348,6 +402,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
     def test_clean_delivers_feedback_to_dependencies(self) -> None:
         """CUJ: Clean operation delivers Feedback messages specifically to addressed dependency."""
         node = Node(address="//pkg:clean_op_feedback")
+        self.storage.definitions[node.address] = NodeDefinition(node=node, task_prompt=TaskPrompt("Task prompt"))
         dependency1 = Node(address="//pkg:dependency1")
         dependency2 = Node(address="//pkg:dependency2")
         self.storage.dependencies[node.address] = {Dependency(node=dependency1), Dependency(node=dependency2)}
