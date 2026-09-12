@@ -817,6 +817,46 @@ In unit tests, string contents cannot be pinned or asserted deterministically, m
 - The supervising LLM evaluates whether the tool's generated failure feedback accurately diagnoses the issue and provides sufficient, actionable guidance for an agent to recover.
 - This provides robust verification for natural language agent communication contracts without hardcoding unpinned string assertions into unit tests.
 
+### 8.3 Requirement Ordering & Prioritization Formalization (TODO)
+
+When an HLS specifies that an operation evaluates failure conditions in a specific sequence (e.g. *"Tool execution fails in the following order when: ..."*), alignment translates each branch into an atomic requirement bullet under `FRESH_REQUIREMENTS:`.
+
+However, the `.pyi` grounding specification treats requirement bullets as an unordered collection of declarative postcondition invariants. There is currently no formal grammatical mechanism in the `.pyi` stub to declare evaluation precedence or priority ranking among requirements.
+
+**The Context Vulnerability**:
+The only reason library implementations and unit tests currently evaluate these conditions in the intended sequence is that the High-Level Specification was coincidentally present in the author's prompt context during development. In cleanroom execution, however, code and tests must be synthesized from the `.pyi` contract alone—meaning HLS context is **not guaranteed** (and is explicitly prohibited in isolated cleanroom sessions). When HLS context is absent, the agent cannot deduce the required check ordering from the `.pyi` file alone, leading to arbitrary check sequencing in library code and brittle test failures.
+
+**TODO**:
+- Formulate a cleanroom grounding convention to explicitly preserve evaluation order (e.g., an `ORDERED_REQUIREMENTS:` block or explicit priority annotations `[P1]`, `[P2]`).
+- Extend toolchain linters to verify that library implementation early-exit ladders reflect the declared priority ordering.
+- Mandate that test suites include overlapping condition cases to verify that higher-priority failure branches strictly preempt lower-priority branches.
+
+### 8.4 Decomposing Compound Failure & Response Requirements: Failure Monotonicity & Prioritized Decision Lists (TODO)
+
+Currently, grounding requirements frequently conflate operational failure conditions with response messaging payloads in single compound sentences (e.g., `Tool execution fails when condition A, reminding the agent that X and specifying Y as follow-up`).
+
+**Failure is Monotonic, Response Dispatch is Not**:
+Failure itself has no ordering dependency because failure is logically monotonic: $\text{Failed} \iff A \lor B \lor C$. Ordering failure predicates is a category error; the operation simply fails if any failure condition is met.
+
+The ordering requirement exists **exclusively in response dispatch** (which diagnostic text and follow-up tool call to return when multiple failure conditions coincide: $R_A$ if $A$, $R_B$ if $\neg A \wedge B$, $R_C$ if $\neg A \wedge \neg B \wedge C$).
+
+**Avoiding the "Icky Booleans" Anti-Pattern**:
+If the grounding contract models this via explicit combinatorial negations (`Response B when not A and B...`), runtime implementations face a dilemma:
+- **Redundant boolean checks** (`if not a and b:`), creating verbose, unpythonic, defensive code with combinatorial boolean explosion.
+- Or clean procedural early-returns (`if b:`), where the `not a` condition is satisfied implicitly by fallthrough rather than explicitly by expression, creating a gap between the requirement statement and the line of code.
+
+**TODO**:
+Grounding specifications should model failure as a monotonic invariant and response dispatch as a **Prioritized Decision List**:
+1. **Monotonic Failure Invariant**:
+   - `Tool execution fails if condition A, condition B, or condition C is met.`
+2. **Prioritized Decision List for Response Dispatch**:
+   - `When tool execution fails, the response is dispatched according to the first matching condition in priority order:`
+     - `1. If condition A holds, the response reminds that X and specifies Y as follow-up.`
+     - `2. If condition B holds, the response reminds that Z.`
+     - `3. If condition C holds, the response reminds that W.`
+
+This formally authorizes early-return `if` ladders in Python without redundant booleans (`not a and b`), preserves deterministic precedence for cleanroom agents working without HLS context, and allows AST linters to verify statement ordering against the declared priority list.
+
 ---
 
 ## 9. Grounding Translation & Alignment Challenges: Prompt Engineering vs. Deterministic Enforcement
@@ -852,6 +892,10 @@ The following ledger documents the grounding, translation, and verification chal
 | **Ergonomic Query Omission in Protocols** | Grounding Spec | **UNSOLVED** *(Hard)* | **Interface Completeness Gap**: When a protocol omits an ergonomic query needed by consumers (e.g. extracting the target name from a node when only package directory extraction is specified), agents either hallucinate the method or resort to ad-hoc string parsing (`dep_label.split(":")[-1]`). Prompt engineering cannot solve missing API ergonomics. |
 | **Closed-World Per-Target Type Isolation** | Toolchain / Pyright | **UNSOLVED** *(Hard)* | **Global Config vs. Target Hermeticity**: Pyright defaults to reading a workspace-level `pyrightconfig.json`, which either leaks search paths or requires continuous manual synchronization of `executionEnvironments`. To be strictly closed, `pyright_library` must generate hermetic, per-target JSON configs passed via `--project`, independent of ambient workspace configs or `PYTHONPATH`. |
 | **Semantic Efficacy of Agent Failure Diagnostics** | Grounding $\to$ QA | **UNSOLVED** *(Hard)* | **Supervising LLM Protocol (TODO)**: Tool failure contracts requiring actionable guidance for agent recovery cannot be verified via deterministic unit test string assertions. Requires automated questionnaire generation and independent supervisory model scoring. |
+| **Requirement Ordering & Prioritization Formalization** | HLS $\to$ Grounding $\to$ Lib/Test | **UNSOLVED** *(Hard)* | **Requirement Prioritization Gap (TODO)**: When an HLS specifies prioritized failure conditions ("fails in the following order when..."), each condition translates into an atomic bullet under `FRESH_REQUIREMENTS:`. However, grounding stubs lack an explicit mechanism to declare execution priority or evaluation order. When agents generate code or tests from the `.pyi` specification alone without the HLS in context, priority ordering is lost. |
+| **Decomposition of Failure vs. Response Requirements** | Grounding Spec $\to$ Lib/Test | **UNSOLVED** *(Hard)* | **Compound Requirement Conflation (TODO)**: Grounding contracts conflate failure predicates (`X fails if A`) with response guidance (`reminding that...`). Decoupling into distinct failure conditions and response payload requirements is needed for clean precedence ordering and targeted verification. |
+
+
 
 ---
 

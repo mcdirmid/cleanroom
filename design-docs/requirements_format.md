@@ -231,4 +231,153 @@ A **fabricated requirement** occurs when library implementation code (`_impl.py`
 - **Zero Unmandated Behavior**: No library code may implement synthetic outcomes, artificial completion paths, or side-effects not mandated by the grounding contract.
 - **Independent QA Auditing**: Passing test suites must be audited (by QA and alignment tooling) to ensure that assertions genuinely verify the specific postconditions of the requirements they cite, rather than asserting fabricated shortcuts or passing via tautology.
 
+---
+
+## 7. Requirement Ordering & Prioritization Formalization (TODO)
+
+### 7.1 The Precedence Gap in Declarative Grounding Contracts
+High-Level Specifications frequently define prioritized or sequential behavior, particularly for operations that evaluate multiple failure conditions (e.g. *"Tool execution fails in the following order when: ..."*).
+
+When translating these specifications to grounding stubs (`.pyi`), each bulleted condition becomes an atomic, independent guarantee under `FRESH_REQUIREMENTS:`:
+- The bullet order in `FRESH_REQUIREMENTS:` reflects the author's intent, but the grounding format treats `FRESH_REQUIREMENTS:` as an unordered collection of declarative postcondition invariants.
+- Grounding stubs contain no formal syntax, tags, or machine-readable markers to express evaluation precedence, short-circuit ordering, or mutual exclusivity among requirements.
+
+### 7.2 The Architectural Vulnerability: Unwarranted In-Context Assumptions
+Under strict Cleanroom principles, implementation modules (`*_impl.py`) and unit tests (`*_impl_test.py`) are synthesized from the **grounding specification (`.pyi`) and its dependency closure alone**; the High-Level Specification (`.md`) is deliberately omitted from context to prevent hallucination, bias, and circular reasoning.
+
+**The Failure Mode**:
+When an implementation or test author works strictly from the `.pyi` contract:
+1. **Lost Precedence**: The author cannot know which failure check takes priority when multiple error conditions coincide (e.g., whether remaining guide steps take precedence over failing verification checks, or vice versa).
+2. **Brittle Accidental Alignment**: The only reason ordered checks currently succeed during development is the incidental presence of the HLS document in context during authoring sessions. Because HLS context is NOT guaranteed (and is explicitly forbidden in cleanroom subagent sessions), independent agents synthesize divergent failure ladders and conflicting test assertions.
+
+### 7.3 Proposed Architectural Solutions (TODO)
+
+**TODO**:
+1. **Explicit Grounding Syntax for Ordered Contracts**: Introduce formal syntax in `.pyi` stubs to preserve evaluation precedence without reverting to procedural pseudo-code. Potential approaches include:
+   - Dedicated docstring section: `ORDERED_REQUIREMENTS:` or `PRIORITIZED_REQUIREMENTS:` indicating that the listed requirements must be evaluated in strict top-to-bottom sequence.
+   - Priority tagging: Explicit numeric prefixes or priority attributes (e.g. `[P1]`, `[P2]`) within requirement statements.
+2. **Deterministic AST Linter for Failure Ladders**: Extend `lib_lint.py` to trace early-return `if` statement sequences against the ordered requirements in the corresponding `.pyi` stub, failing compilation if the implementation evaluates lower-priority conditions ahead of higher-priority ones.
+3. **Multi-Condition Conflict Test Synthesis**: Require unit test suites to construct overlapping fixture states where multiple failure conditions are active simultaneously, asserting that the higher-priority failure response and suppression key dominate.
+
+---
+
+## 8. Decomposing Compound Failure & Response Requirements (TODO)
+
+### 8.1 The Compound Requirement Problem
+A recurring pattern in existing grounding specifications is bundling the condition that triggers failure with the diagnostic feedback and recovery guidance delivered in the response:
+
+```
+# Current Pattern (Compound / Conflated):
+- Tool execution fails when condition A is met, reminding the agent that X must be addressed and specifying tool Y as a follow-up tool call.
+- Tool execution fails when condition B is met, reminding the agent that Z is invalid.
+- Tool execution fails when condition C is met, reminding the agent that W is missing.
+```
+
+This compound structure causes multiple architectural defects across specification, implementation, and testing:
+
+1. **Entangling Control Flow with Natural Language Messaging**:
+   The boolean operational outcome (`response.is_failed = True` vs. `False`) is inextricably joined with natural language messaging and follow-up tool configurations.
+2. **Obscured Evaluation Precedence**:
+   When an operation must evaluate multiple failure branches in a specific order, attempting to declare priority over massive compound sentences is verbose and error-prone. The actual decision ladder (`X fails if A`, `X fails if B`, `X fails if C`) is buried under paragraphs of message formatting.
+3. **Verification Asymmetry & Brittle Tests**:
+   Verifying that an operation fails under condition A is a deterministic boolean test. Verifying that the response content delivers appropriate natural language guidance is often a fuzzy, semantic concern (see Section 5 on Supervising LLMs). Conflating them in a single requirement forces unit tests to either:
+   - Perform brittle, unpinned string assertions against English reminders to claim coverage of the requirement.
+   - Or cite the entire compound requirement while only asserting `self.assertTrue(resp.is_failed)`, leaving the messaging contract unverified.
+
+### 8.2 The Atomic Decomposition Model
+
+**TODO**:
+Grounding specifications should systematically decompose compound failure contracts into orthogonal, atomic requirements:
+
+```
+# 1. Failure Invariants / Predicates (Deterministic Control Flow & Ordering)
+- Tool execution fails if condition A is met.
+- Tool execution fails if condition B is met.
+- Tool execution fails if condition C is met.
+
+# 2. Diagnostic & Recovery Postconditions (Response Content & Guidance)
+- Tool execution response content reminds that X must be addressed and specifies tool Y as a follow-up tool call when failing due to condition A.
+- Tool execution response content reminds that Z is invalid when failing due to condition B.
+- Tool execution response content reminds that W is missing when failing due to condition C.
+```
+
+### 8.3 Architectural Benefits
+
+1. **Clear Precedence Specification**:
+   Ordering requirements can focus strictly on the failure predicates:
+   `Tool execution fails in the following order: condition A, condition B, condition C.`
+2. **Precise Requirement Citation in Library Code**:
+   In `_impl.py`, early-exit ladders cite the predicate requirement at the `if` check, and cite the response guidance requirement at the `Response(...)` instantiation:
+   ```python
+   # Requirement: Tool execution fails if condition A is met.
+   if condition_a:
+       # Requirement: Tool execution response content reminds that X must be addressed...
+       return tool_provider.Response(
+           is_failed=True,
+           content="...",
+           reminder="...",
+           follow_up_tool_call=...,
+       )
+   ```
+3. **Targeted Unit Testing & Verification Tiers**:
+   - Deterministic unit tests assert `is_failed == True` against the failure predicates.
+   - Response message semantics and recovery guidance can be tested against the dedicated messaging requirements independently, or routed to the Supervising LLM verification tier without entangling core control flow.
+
+### 8.4 Failure Monotonicity vs. Response Dispatch: Avoiding the "Icky Booleans" Anti-Pattern
+
+A critical insight arises when formalizing ordered failures: **failure itself has no ordering problem because failure is monotonic.**
+- In boolean logic: $\text{Failed} \iff A \lor B \lor C$.
+- If condition $A$, $B$, or $C$ holds, the operation fails regardless of check order ($A \lor B = B \lor A$).
+- Attempting to order failure predicates themselves is a category error; the system simply fails if any failure predicate is satisfied.
+
+**Where Ordering Actually Resides: Response Dispatch**:
+The ordering dependency exists **exclusively in the response payload** (which diagnostic content, reminder, and follow-up tool call is emitted when multiple failure conditions coincide):
+- If $A$ holds $\to$ emit $R_A$.
+- If $\neg A \wedge B$ holds $\to$ emit $R_B$.
+- If $\neg A \wedge \neg B \wedge C$ holds $\to$ emit $R_C$.
+
+**The "Icky Booleans" Coding Problem**:
+If grounding specifications formalize these mutually exclusive response conditions with explicit boolean logic (`X's failure response when not A and B reminds...`), how does runtime code implement and cite them?
+
+1. **The Icky Booleans Anti-Pattern**:
+   Writing explicit negated boolean checks in code:
+   ```python
+   if a:
+       return ResponseA(...)
+   if not a and b:  # Redundant, defensive, and unpythonic
+       return ResponseB(...)
+   if not a and not b and c:  # Combinatorial explosion of negated booleans!
+       return ResponseC(...)
+   ```
+   This is verbose, unpythonic, and error-prone.
+2. **The Procedural Fallthrough vs. Citation Gap**:
+   In clean, idiomatic Python, developers use prioritized early returns:
+   ```python
+   if a:
+       return ResponseA(...)
+   if b:  # "not a" is guaranteed implicitly by the early return above
+       return ResponseB(...)
+   if c:  # "not a and not b" is guaranteed implicitly
+       return ResponseC(...)
+   ```
+   However, if the requirement comment above `if b:` literally requires `# Requirement: Response B is produced when not A and B`, an AST linter or cleanroom agent might complain that `not a` is absent from the `if` expression, or an agent might accidentally reorder the statements because the dependency on `not a` was procedural rather than lexical.
+
+**The Cleanroom Solution: Prioritized Decision Lists in Grounding**:
+The grounding contract must formalize **Prioritized Decision Lists** directly:
+1. **Declare failure monotonically**:
+   `- Tool execution fails if condition A, condition B, or condition C is met.`
+2. **Declare response dispatch as an ordered decision list**:
+   `- When tool execution fails, the response is dispatched according to the first matching condition in priority order:`
+     - `1. If condition A holds, the response reminds that X and specifies Y as follow-up.`
+     - `2. If condition B holds, the response reminds that Z.`
+     - `3. If condition C holds, the response reminds that W.`
+
+**Why This Solves the Dilemma**:
+- **Zero Icky Booleans**: The "first matching in priority order" clause formally authorizes the early-return `if` ladder. Branch 2 (`if b:`) does not need to check `not a`, because the grounding contract itself defines branch 2 as evaluated only when preceding branches did not match.
+- **Hermetic Precedence**: Cleanroom agents synthesizing code from the `.pyi` file alone see the explicit evaluation order without needing the HLS in context.
+- **Deterministic Linters**: Linters like `lib_lint.py` can verify that the order of `if` return statements matches the order of the decision list, catching reordering bugs without demanding redundant boolean checks.
+
+
+
+
 

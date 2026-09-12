@@ -17,6 +17,8 @@ The design documentation is organized across four foundational areas:
   - Formulates natural language behavioral contracts and assumption preconditions.
   - Distinguishes caller-satisfied assumptions (preconditions) from callee guarantees (requirements).
   - Outlines the grounded failure principle, boundary defense, and rules for avoiding ungrounded error branches.
+  - **Requirement Ordering & Prioritization Formalization (Section 7, TODO)**: Resolving the precedence gap in declarative `.pyi` contracts when HLS documents are absent from implementation and test authoring context.
+  - **Decomposing Compound Failure & Response Requirements (Section 8, TODO)**: Decoupling deterministic failure predicates (`X fails if A`) from diagnostic guidance payloads (`reminding that...`).
 - **[Markdown Template Format & System Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/template_format.md)** (`template_format.md`):
   - Definitive reference for Cleanroom's formatter-resilient Markdown templating system.
   - Explains the spec-as-sample philosophy, CommonMark HTML comment block and line-suffix directives (`<!-- if: ... -->`, `<!-- for: ... in ... -->`), parameter interpolation (`<name>`), and preservation of unrendered template structures.
@@ -27,6 +29,7 @@ The design documentation is organized across four foundational areas:
   - Definitive reference for Cleanroom's canonical `.pyi` grounding format.
   - Explains the structural infrastructure split (`framework.py` vs. pure `.pyi` stubs), pure ellipsis bodies (`...`), and decorators (`@singleton_type`, `@poly_type`, `@data_type`, `@variant`, `@property`, `@operation`, `@override`).
   - Details the custom "by-hand" AST linter, closed-world linker, and zero-token MRO requirements inheritance engine.
+  - **Architectural Extensions (Section 8, TODO)**: Unused import ledgers, supervising LLM diagnostics evaluation, requirement prioritization, and atomic failure/response requirement decomposition.
   - **Grounding Translation & Alignment Challenges (Section 9)**: In-depth ledger of solved vs. open grounding problems, analyzing why prompt engineering alone fails at boundary enforcement, mock-to-protocol parity, and structural type translation.
 - **[Legacy Grounding Format (Historical Archive)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/grounding_format.md)** (`grounding_format.md`):
   - *Archived / Superseded*: Historical documentation of the earlier 4-column Markdown table format (`type | name | signature | comment`). Preserved for context on the evolution of Cleanroom grounding.

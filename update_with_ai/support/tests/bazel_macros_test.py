@@ -163,6 +163,43 @@ class TestBazelMacrosIntegration(unittest.TestCase):
         self.assertTrue(interface_params["is_interface"])
         self.assertFalse(interface_params["needs_implements"])
 
+    def test_update_python_with_ai_ext_lib_suppression_and_deps(self):
+        """Test that _ext components do not produce _lib targets and deps exclude _ext_lib."""
+        def compute_targets_and_deps(name, module_deps):
+            is_ext = name.endswith("_ext")
+            is_impl = name.endswith("_impl")
+            
+            targets = [name + "_high", name + "_low"]
+            silent_deps = {}
+            if not is_ext:
+                targets.append(name + "_lib")
+                silent_deps[name + "_lib"] = [dep + "_lib" for dep in module_deps if not dep.endswith("_ext")]
+            if is_impl:
+                targets.append(name + "_test")
+                silent_deps[name + "_test"] = [":" + name + "_lib"] + [dep + "_lib" for dep in module_deps if not dep.endswith("_ext")]
+            return targets, silent_deps
+
+        # External component: no _lib target generated
+        ext_targets, ext_deps = compute_targets_and_deps("model_config_ext", [])
+        self.assertNotIn("model_config_ext_lib", ext_targets)
+        self.assertIn("model_config_ext_high", ext_targets)
+        self.assertIn("model_config_ext_low", ext_targets)
+
+        # Impl component depending on _ext: _lib and _test silent_deps filter out _ext
+        impl_targets, impl_deps = compute_targets_and_deps(
+            "bazel_model_config_impl",
+            ["model_config", "model_config_ext"],
+        )
+        self.assertIn("bazel_model_config_impl_lib", impl_targets)
+        self.assertIn("bazel_model_config_impl_test", impl_targets)
+        self.assertEqual(impl_deps["bazel_model_config_impl_lib"], ["model_config_lib"])
+        self.assertNotIn("model_config_ext_lib", impl_deps["bazel_model_config_impl_lib"])
+        self.assertEqual(
+            impl_deps["bazel_model_config_impl_test"],
+            [":bazel_model_config_impl_lib", "model_config_lib"],
+        )
+        self.assertNotIn("model_config_ext_lib", impl_deps["bazel_model_config_impl_test"])
+
     def test_binary_preamble_and_lifecycle_resolution(self):
         """Test that generated binary preamble resolves all singletons without LifecycleResolutionError."""
         try:

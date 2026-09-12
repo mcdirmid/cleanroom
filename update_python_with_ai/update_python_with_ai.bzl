@@ -469,69 +469,65 @@ def update_python_with_ai(name, module_deps, template_parameters = None, visibil
     # types only; an implementation spec's module subclasses the interface's
     # Protocol per the LLS; an assembly spec's module (name ending in _asm)
     # performs configuration and assembly of other modules only, is never
-    # tested, and has no _test or _qa node; an external spec's module (name
-    # ending in _ext) defines shared type aliases and constants, anchors
-    # third-party deps, and has no _test or _qa node.
-    if name.endswith("_impl"):
-        _lib_kind_clause = (
-            "This is an implementation module: it realizes concrete singleton " +
-            "classes and functions defined in the grounding specification."
-        )
-    elif name.endswith("_asm"):
-        _lib_kind_clause = (
-            "This is an assembly module: it wires concrete implementations into " +
-            "configured interface components and provides the assembled result."
-        )
-    elif name.endswith("_ext"):
-        _lib_kind_clause = (
-            "This is an external module: it defines shared type aliases and " +
-            "constants, and anchors external third-party dependencies."
-        )
-    else:
-        _lib_kind_clause = (
-            "This is an interface module: it defines the interface's protocol " +
-            "and types."
-        )
-
+    # tested, and has no _test or _qa node; external boundary specs (name
+    # ending in _ext) have no library implementation file and no _lib, _test,
+    # or _qa node.
     _lib_deps = []
     if name.endswith("_impl") or name.endswith("_asm"):
         _lib_deps = ["//update_python_with_ai:lifecycle"]
 
-    _update_python_with_ai(
-        name = name + "_lib",
-        prompt = (
-            "Align the lib module for component %s (%s.py) with its grounding " +
-            "specification (%s.pyi) per the guide. " +
-            _lib_kind_clause
-        ).strip() % (name, name, name),
-        src = "../lib/" + name + ".py",
-        template = "//update_python_with_ai/templates:lib",
-        template_parameters = lib_params,
-        guide = "//update_python_with_ai/guides:grounding_to_lib",
-        deps = _lib_deps,
-        module_deps = [":" + name + "_low"],
-        silent_deps = [dep + "_lib" for dep in module_deps],
-        verify = (
-            "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_with_ai/support/lib/lib_lint.py " +
-            "{}/lib/BUILD.bazel {}/lib/{}.py --pyi {}/specs/grounding/{}.pyi {} {} && " +
-            "bazel test //{}/lib:{}_type_check --test_output=errors --noshow_progress 2>&1"
-        ).format(
-            _parent_pkg,
-            _parent_pkg,
-            name,
-            _parent_pkg,
-            name,
-            "--deps " + ",".join([dep.split(":")[-1] for dep in module_deps])
-            if module_deps
-            else "",
-            "--pyi-deps " + ",".join(["{}/specs/grounding/{}.pyi".format(_parent_pkg, dep.split(":")[-1]) for dep in module_deps])
-            if module_deps
-            else "",
-            _parent_pkg,
-            name,
-        ),
-        visibility = visibility,
-    )
+    if not is_ext:
+        if name.endswith("_impl"):
+            _lib_kind_clause = (
+                "This is an implementation module: it realizes concrete singleton " +
+                "classes and functions defined in the grounding specification."
+            )
+        elif name.endswith("_asm"):
+            _lib_kind_clause = (
+                "This is an assembly module: it wires concrete implementations into " +
+                "configured interface components and provides the assembled result."
+            )
+        else:
+            _lib_kind_clause = (
+                "This is an interface module: it defines the interface's protocol " +
+                "and types."
+            )
+
+        _update_python_with_ai(
+            name = name + "_lib",
+            prompt = (
+                "Align the lib module for component %s (%s.py) with its grounding " +
+                "specification (%s.pyi) per the guide. " +
+                _lib_kind_clause
+            ).strip() % (name, name, name),
+            src = "../lib/" + name + ".py",
+            template = "//update_python_with_ai/templates:lib",
+            template_parameters = lib_params,
+            guide = "//update_python_with_ai/guides:grounding_to_lib",
+            deps = _lib_deps,
+            module_deps = [":" + name + "_low"],
+            silent_deps = [dep + "_lib" for dep in module_deps if not dep.endswith("_ext")],
+            verify = (
+                "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_with_ai/support/lib/lib_lint.py " +
+                "{}/lib/BUILD.bazel {}/lib/{}.py --pyi {}/specs/grounding/{}.pyi {} {} && " +
+                "bazel test //{}/lib:{}_type_check --test_output=errors --noshow_progress 2>&1"
+            ).format(
+                _parent_pkg,
+                _parent_pkg,
+                name,
+                _parent_pkg,
+                name,
+                "--deps " + ",".join([dep.split(":")[-1] for dep in module_deps])
+                if module_deps
+                else "",
+                "--pyi-deps " + ",".join(["{}/specs/grounding/{}.pyi".format(_parent_pkg, dep.split(":")[-1]) for dep in module_deps])
+                if module_deps
+                else "",
+                _parent_pkg,
+                name,
+            ),
+            visibility = visibility,
+        )
 
     # The test node (implementations only, per grounding_to_test.md: one test
     # module per implementation grounding spec): written from the implementation grounding spec
@@ -554,7 +550,7 @@ def update_python_with_ai(name, module_deps, template_parameters = None, visibil
             guide = "//update_python_with_ai/guides:grounding_to_test",
             deps = _lib_deps,
             module_deps = [":" + name + "_low"],
-            silent_deps = [":" + name + "_lib"] + [dep + "_lib" for dep in module_deps],
+            silent_deps = [":" + name + "_lib"] + [dep + "_lib" for dep in module_deps if not dep.endswith("_ext")],
             verify = (
                 "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_with_ai/support/lib/test_lint.py " +
                 "{}/tests/BUILD.bazel {}/tests/{}_test.py --lib-pkg {}/lib {} && " +
