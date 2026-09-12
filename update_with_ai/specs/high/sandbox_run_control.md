@@ -18,16 +18,16 @@ The *run controller* is an agent session service configured with *blame targets*
 
 The run controller:
 
-- Exposes verification checks that validate session criteria during advancement.
+- Exposes verification checks that validate session criteria.
 
 - Caches verification evaluation results alongside the edit manager file update revision, reusing the cached verification outcome as long as no workspace files have been updated since that evaluation.
 
-- Installs an *advance tool* when guide step mode is active, coordinating step progression through guide delivery.
+- Installs an *advance tool* when guide step mode is active, coordinating step progression through guide delivery upon passing verification.
 
-- Installs a *finish tool* that concludes the session and enforces change documentation.
+- Installs a *finish tool* that concludes the session upon passing verification and enforces change documentation.
 
 - Installs a *fail tool* that terminates the run in failure.
 
-- Installs a *run tests tool* that directs the agent to run tests through the advance tool or finish tool.
+- Installs a *run tests tool* that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
 
 - Installs a *blame tool* when blame targets are configured, attributing task failure to an upstream dependency node.

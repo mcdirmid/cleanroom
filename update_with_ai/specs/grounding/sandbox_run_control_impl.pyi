@@ -15,12 +15,12 @@ PURPOSE:
 Implements run controller to install advance, finish, fail, and optional blame tools, managing cached verification check results
 
 INHERITED_REQUIREMENTS:
-- [RunController] The run controller exposes verification checks that validate session criteria during advancement.
+- [RunController] The run controller exposes verification checks that validate session criteria.
 - [RunController] The run controller caches verification evaluation results alongside the edit manager file update revision, reusing the cached verification outcome as long as no workspace files have been updated since that evaluation.
-- [RunController] The run controller installs an advance tool when guide step mode is active, coordinating step progression through guide delivery.
-- [RunController] The run controller installs a finish tool that concludes the session and enforces change documentation.
+- [RunController] The run controller installs an advance tool when guide step mode is active, coordinating step progression through guide delivery upon passing verification.
+- [RunController] The run controller installs a finish tool that concludes the session upon passing verification and enforces change documentation.
 - [RunController] The run controller installs a fail tool that terminates the run in failure.
-- [RunController] The run controller installs a run tests tool that directs the agent to run tests through the advance tool or finish tool.
+- [RunController] The run controller installs a run tests tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
 - [RunController] The run controller installs a blame tool when blame targets are configured, attributing task failure to an upstream dependency node.
 
 GROUNDING_ARGUMENT:
@@ -74,8 +74,8 @@ Evaluates verification checks with file update revision caching
 
 FRESH_REQUIREMENTS:
 - Evaluation of verification checks is cached alongside the edit manager file update revision.
-- Verification check execution is omitted and the cached result is reused whenever workspace files have not been updated since the previous evaluation as indicated by the file update revision.
-- When the previous evaluation failed and workspace files have not been updated since, tool execution fails with the cached diagnostic output, reminding the agent that workspace files must be updated before proceeding.
+- Verification checks are evaluated sequentially and results are cached whenever verification results are outdated, which occurs before initial evaluation and when workspace files have been updated since the previous evaluation.
+- When workspace files have not been updated since the previous evaluation, verification check execution is omitted and the cached verification outcome is reused.
 
 GROUNDING_ARGUMENT:
 - Tracks cached verification outcome and revision on self, inspecting file_update_revision from imported sandbox_file_editor.EditManager, executing self.verification_checks and caching results when revision changes.
@@ -142,11 +142,12 @@ PURPOSE:
 Implements execute_tool to advance guide steps and report progress or failure diagnostics
 
 FRESH_REQUIREMENTS:
-- Passing verification advances guide delivery and delivers the next step section when guide steps remain.
-- Failing verification halts progression and reports diagnostic feedback sanitized through the alias manager when guide steps remain.
-- When no steps remain and workspace files were modified, passing verification fails tool execution with a reminder to call the finish tool with a change summary describing modifications.
-- When no steps remain and no workspace files were modified, passing verification produces a response specifying a follow-up execution of the finish tool without a change summary.
-- Failing verification reports sanitized diagnostic feedback alongside any configured verification failure instructions when no steps remain.
+- On its first execution, the advance tool delivers the initial guide summary through guide delivery without updating verification results.
+- On subsequent executions, executing the advance tool updates verification results if outdated.
+- Tool execution fails when verification is failing, reminding the agent that the run tests tool should be called first and specifying a follow-up execution of the run tests tool.
+- Tool execution advances guide delivery and delivers the next step section when verification is passing and guide steps remain.
+- Tool execution fails with a reminder to call the finish tool with a change summary describing modifications when verification is passing, no steps remain, and workspace files were modified.
+- Tool execution produces a response specifying a follow-up execution of the finish tool without a change summary when verification is passing, no steps remain, and no workspace files were modified.
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
@@ -230,12 +231,13 @@ PURPOSE:
 Implements execute_tool to evaluate completion criteria, change documentation, and verification checks
 
 FRESH_REQUIREMENTS:
-- Tool execution fails when session feedback is present and no workspace files were modified, reminding the agent that workspace files must be modified to address feedback or that the fail tool must be used.
+- Executing the finish tool updates verification results if outdated.
 - Tool execution fails when guide step mode is active and guide steps remain in guide delivery, reminding the agent that the advance tool must be called while guide steps remain and specifying the advance tool as a follow-up tool call.
-- Tool execution fails if workspace files were modified and the change summary is omitted, and reminds the agent that a change summary must be provided when completing the session after modifying workspace files.
-- Tool execution fails if no workspace files were modified and the change summary is provided, and reminds the agent that a change summary can only be provided when workspace files were modified.
-- Tool execution evaluates verification checks, failing with diagnostic feedback sanitized through the alias manager when any verification check fails.
-- Passing verification produces a terminating response indicating that the session completed successfully.
+- Tool execution fails when verification is failing, reminding the agent that the run tests tool should be called first and specifying a follow-up execution of the run tests tool.
+- Tool execution fails when session feedback is present and no workspace files were modified, reminding the agent that workspace files must be modified to address feedback or that the fail tool must be used.
+- Tool execution fails if workspace files were modified and the change summary is omitted, reminding the agent that a change summary must be provided when completing the session after modifying workspace files.
+- Tool execution fails if no workspace files were modified and the change summary is provided, reminding the agent that a change summary can only be provided when workspace files were modified.
+- Tool execution produces a terminating response indicating that the session completed successfully when verification is passing and all completion criteria are met.
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
@@ -429,18 +431,16 @@ GROUNDING_ARGUMENT:
 class RunTestsTool(sandbox_run_control.RunTestsTool):
     """
 PURPOSE:
-Implements run tests tool to redirect test execution to advance or finish tool
+Implements run tests tool to evaluate and present verification results
 
 INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.
 
 FRESH_REQUIREMENTS:
-- The run tests tool is named `run_tests` and accepts no parameters.
-- Executing the run tests tool always fails reminding the agent that tests can only be run by calling the advance tool when guide step mode is active and guide steps remain in guide delivery, specifying the advance tool as a follow-up tool call.
-- Executing the run tests tool always fails reminding the agent that tests can only be run by calling the finish tool when guide step mode is inactive, or when guide step mode is active and no guide steps remain in guide delivery, specifying the finish tool without a change summary as a follow-up tool call.
+- The run tests tool is named `run_tests`, accepts no parameters, and shares a constant suppression key `run_tests`.
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, RunTestsTool directs test execution to advance or finish, interacting with imported sandbox_guide_delivery.GuideDelivery, node_config.NodeConfig, and AdvanceTool or FinishTool in the same session lifecycle tier.
+- As an agent_session singleton, RunTestsTool evaluates verification checks via RunController, presenting results with suppression key 'run_tests' in the same session lifecycle tier.
 """
 
     @property
@@ -463,7 +463,7 @@ PURPOSE:
 Description of the tool informing the agent why and when to use it
 
 GROUNDING_ARGUMENT:
-- Returns a constant description informing the agent that running tests evaluates through advance or finish.
+- Returns a constant description informing the agent that running tests evaluates verification checks.
 """
         ...
 
@@ -484,13 +484,18 @@ GROUNDING_ARGUMENT:
     def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
         """
 PURPOSE:
-Executes the run tests tool, always returning a failure response with a reminder and follow-up tool call
+Executes the run tests tool, updating verification results and presenting them
+
+FRESH_REQUIREMENTS:
+- Executing the run tests tool updates verification results if outdated.
+- Tool execution fails when verification fails, presenting diagnostic feedback sanitized through the alias manager alongside any configured verification failure instructions.
+- Tool execution produces a response presenting passing verification results when verification passes.
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
 - [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
 
 GROUNDING_ARGUMENT:
-- Evaluates whether guide step mode is active via imported node_config.NodeConfig and whether steps remain via imported sandbox_guide_delivery.GuideDelivery, constructing a failing tool_provider.Response with reminder and follow-up tool call.
+- Evaluates verification via RunController.evaluate_verification in the same session lifecycle tier, sanitizes diagnostics through imported file_alias.AliasManager, formats failure instructions from imported sandbox_guide_delivery.GuideDelivery, attaches suppression key 'run_tests', and constructs a tool_provider.Response presenting verification outcome.
 """
         ...

@@ -28,12 +28,12 @@ PURPOSE:
 Defined as an agent session service that installs run control tools and exposes verification checks
 
 FRESH_REQUIREMENTS:
-- The run controller exposes verification checks that validate session criteria during advancement.
+- The run controller exposes verification checks that validate session criteria.
 - The run controller caches verification evaluation results alongside the edit manager file update revision, reusing the cached verification outcome as long as no workspace files have been updated since that evaluation.
-- The run controller installs an advance tool when guide step mode is active, coordinating step progression through guide delivery.
-- The run controller installs a finish tool that concludes the session and enforces change documentation.
+- The run controller installs an advance tool when guide step mode is active, coordinating step progression through guide delivery upon passing verification.
+- The run controller installs a finish tool that concludes the session upon passing verification and enforces change documentation.
 - The run controller installs a fail tool that terminates the run in failure.
-- The run controller installs a run tests tool that directs the agent to run tests through the advance tool or finish tool.
+- The run controller installs a run tests tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
 - The run controller installs a blame tool when blame targets are configured, attributing task failure to an upstream dependency node.
 """
 
@@ -265,7 +265,7 @@ INHERITED_REQUIREMENTS:
 class RunTestsTool(tool_provider.Tool, Protocol):
     """
 PURPOSE:
-Defined as a tool that directs the agent to run tests through the advance tool or finish tool
+Defined as a tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed
 
 INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.

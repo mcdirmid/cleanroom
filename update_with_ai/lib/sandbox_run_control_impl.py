@@ -1,4 +1,4 @@
-from typing import List, Optional, Sequence, Set, Tuple
+from typing import Optional, Sequence, Set, Tuple
 from . import file_alias
 from . import node_config
 from . import sandbox_file_editor
@@ -38,17 +38,10 @@ class RunController(sandbox_run_control.RunController, Singleton):
         cfg = get_singleton(node_config.NodeConfig)
         return cfg.blame_targets
 
-    def has_cached_failure(self) -> bool:
-        edit_mgr = get_singleton(sandbox_file_editor.EditManager)
-        return (
-            self._cached_revision is not None
-            and edit_mgr.file_update_revision == self._cached_revision
-            and not self._cached_passed
-        )
-
     def evaluate_verification(self) -> Tuple[bool, str]:
         # Requirement: Evaluation of verification checks is cached alongside the edit manager file update revision.
-        # Requirement: Verification check execution is omitted and the cached result is reused whenever workspace files have not been updated since the previous evaluation as indicated by the file update revision.
+        # Requirement: Verification checks are evaluated sequentially and results are cached whenever verification results are outdated, which occurs before initial evaluation and when workspace files have been updated since the previous evaluation.
+        # Requirement: When workspace files have not been updated since the previous evaluation, verification check execution is omitted and the cached verification outcome is reused.
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
         current_rev = edit_mgr.file_update_revision
         if self._cached_revision is not None and current_rev == self._cached_revision:
@@ -73,7 +66,7 @@ class AdvanceTool(sandbox_run_control.AdvanceTool, Singleton):
     tier = "agent_session"
 
     def __init__(self) -> None:
-        pass
+        self._is_first_call = True
 
     @property
     def name(self) -> str:
@@ -94,42 +87,42 @@ class AdvanceTool(sandbox_run_control.AdvanceTool, Singleton):
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
         rc = get_singleton(RunController)
 
-        is_cached_fail = rc.has_cached_failure()
-        passed, diag = rc.evaluate_verification()
-        if not passed:
-            # Requirement: When the previous evaluation failed and workspace files have not been updated since, tool execution fails with the cached diagnostic output, reminding the agent that workspace files must be updated before proceeding.
-            reminder = (
-                "Calling advance without modifying workspace files will always fail with cached diagnostics and cannot advance the guide. Workspace files must be updated before proceeding."
-                if is_cached_fail
-                else None
+        # Requirement: On its first execution, the advance tool delivers the initial guide summary through guide delivery without updating verification results.
+        if self._is_first_call:
+            self._is_first_call = False
+            next_step = guide_del.advance_step(
+                verification_passed=True, failure_diagnostics=None
             )
-            if guide_del.has_steps_remaining:
-                # Requirement: Failing verification halts progression and reports diagnostic feedback sanitized through the alias manager when guide steps remain.
-                next_step = guide_del.advance_step(
-                    verification_passed=False, failure_diagnostics=diag
-                )
-                if next_step is not None:
-                    return tool_provider.Response(
-                        is_failed=True,
-                        is_terminated=False,
-                        content=next_step.content,
-                        reminder=reminder or next_step.reminder,
-                        suppression_key="advance",
-                    )
-            # Requirement: Failing verification reports sanitized diagnostic feedback alongside any configured verification failure instructions when no steps remain.
-            vf_block = ""
-            guide_obj = getattr(guide_del, "guide", None)
-            if guide_obj and getattr(guide_obj, "verification_failure", None):
-                vf_block = f"\n\n## Verification failure\n{guide_obj.verification_failure}"
+            content = next_step.content if next_step is not None else ""
+            reminder = next_step.reminder if next_step is not None else None
+            follow_up = next_step.follow_up_tool_call if next_step is not None else None
+            return tool_provider.Response(
+                is_failed=False,
+                is_terminated=False,
+                content=content,
+                reminder=reminder,
+                suppression_key="advance",
+                follow_up_tool_call=follow_up,
+            )
+
+        # Requirement: On subsequent executions, executing the advance tool updates verification results if outdated.
+        passed, _ = rc.evaluate_verification()
+        if not passed:
+            # Requirement: Tool execution fails when verification is failing, reminding the agent that the run tests tool should be called first and specifying a follow-up execution of the run tests tool.
+            follow_up = tool_provider.FollowUpToolCall(
+                tool_name="run_tests",
+                wire_parameter_bindings=tool_provider.WireParameterBindings(bindings=set()),
+            )
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
-                content=f"Verification failed: {diag}{vf_block}".strip(),
-                reminder=reminder,
+                content="Verification is failing. The run tests tool should be called first.",
+                reminder="The run tests tool should be called first to inspect verification results.",
                 suppression_key="advance",
+                follow_up_tool_call=follow_up,
             )
 
-        # Requirement: Passing verification advances guide delivery and delivers the next step section when guide steps remain.
+        # Requirement: Tool execution advances guide delivery and delivers the next step section when verification is passing and guide steps remain.
         if guide_del.has_steps_remaining:
             next_step = guide_del.advance_step(
                 verification_passed=True, failure_diagnostics=None
@@ -145,7 +138,7 @@ class AdvanceTool(sandbox_run_control.AdvanceTool, Singleton):
                 )
 
         if edit_mgr.has_modifications:
-            # Requirement: When no steps remain and workspace files were modified, passing verification fails tool execution with a reminder to call the finish tool with a change summary describing modifications.
+            # Requirement: Tool execution fails with a reminder to call the finish tool with a change summary describing modifications when verification is passing, no steps remain, and workspace files were modified.
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
@@ -154,7 +147,7 @@ class AdvanceTool(sandbox_run_control.AdvanceTool, Singleton):
                 suppression_key="advance",
             )
 
-        # Requirement: When no steps remain and no workspace files were modified, passing verification produces a response specifying a follow-up execution of the finish tool without a change summary.
+        # Requirement: Tool execution produces a response specifying a follow-up execution of the finish tool without a change summary when verification is passing, no steps remain, and no workspace files were modified.
         follow_up = tool_provider.FollowUpToolCall(
             tool_name="finish",
             wire_parameter_bindings=tool_provider.WireParameterBindings(bindings=set()),
@@ -205,20 +198,13 @@ class FinishTool(sandbox_run_control.FinishTool, Singleton):
         guide_del = get_singleton(sandbox_guide_delivery.GuideDelivery)
         cfg = get_singleton(node_config.NodeConfig)
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
+        rc = get_singleton(RunController)
 
-        # Requirement: Tool execution fails when session feedback is present and no workspace files were modified, reminding the agent that workspace files must be modified to address feedback or that the fail tool must be used.
-        if cfg.feedback and not edit_mgr.has_modifications:
-            return tool_provider.Response(
-                is_failed=True,
-                is_terminated=False,
-                content="Error: Session feedback is present but no workspace files were modified.",
-                reminder="Workspace files must be modified to address feedback or the fail tool must be used.",
-                suppression_key="finish",
-            )
+        # Requirement: Executing the finish tool updates verification results if outdated.
+        passed, _ = rc.evaluate_verification()
 
+        # Requirement: Tool execution fails when guide step mode is active and guide steps remain in guide delivery, reminding the agent that the advance tool must be called while guide steps remain and specifying the advance tool as a follow-up tool call.
         if cfg.is_step_mode and guide_del.has_steps_remaining:
-            # Requirement: Tool execution fails when guide step mode is active and guide steps remain in guide delivery, reminding the agent that the advance tool must be called while guide steps remain and specifying the advance tool as a follow-up tool call.
-            # Requirement: [FinishTool] Executing the finish tool while guide steps remain fails with a reminder to execute the advance tool, specifying the advance tool as a follow-up tool call.
             follow_up = tool_provider.FollowUpToolCall(
                 tool_name="advance",
                 wire_parameter_bindings=tool_provider.WireParameterBindings(bindings=set()),
@@ -232,8 +218,32 @@ class FinishTool(sandbox_run_control.FinishTool, Singleton):
                 follow_up_tool_call=follow_up,
             )
 
-        edit_mgr = get_singleton(sandbox_file_editor.EditManager)
-        # Requirement: Tool execution fails if workspace files were modified and the change summary is omitted, and reminds the agent that a change summary must be provided when completing the session after modifying workspace files.
+        # Requirement: Tool execution fails when verification is failing, reminding the agent that the run tests tool should be called first and specifying a follow-up execution of the run tests tool.
+        if not passed:
+            follow_up = tool_provider.FollowUpToolCall(
+                tool_name="run_tests",
+                wire_parameter_bindings=tool_provider.WireParameterBindings(bindings=set()),
+            )
+            return tool_provider.Response(
+                is_failed=True,
+                is_terminated=False,
+                content="Verification is failing. The run tests tool should be called first.",
+                reminder="The run tests tool should be called first to inspect verification results.",
+                suppression_key="finish",
+                follow_up_tool_call=follow_up,
+            )
+
+        # Requirement: Tool execution fails when session feedback is present and no workspace files were modified, reminding the agent that workspace files must be modified to address feedback or that the fail tool must be used.
+        if cfg.feedback and not edit_mgr.has_modifications:
+            return tool_provider.Response(
+                is_failed=True,
+                is_terminated=False,
+                content="Error: Session feedback is present but no workspace files were modified.",
+                reminder="Workspace files must be modified to address feedback or the fail tool must be used.",
+                suppression_key="finish",
+            )
+
+        # Requirement: Tool execution fails if workspace files were modified and the change summary is omitted, reminding the agent that a change summary must be provided when completing the session after modifying workspace files.
         if edit_mgr.has_modifications and not summary_str:
             return tool_provider.Response(
                 is_failed=True,
@@ -243,7 +253,7 @@ class FinishTool(sandbox_run_control.FinishTool, Singleton):
                 suppression_key="finish",
             )
 
-        # Requirement: Tool execution fails if no workspace files were modified and the change summary is provided, and reminds the agent that a change summary can only be provided when workspace files were modified.
+        # Requirement: Tool execution fails if no workspace files were modified and the change summary is provided, reminding the agent that a change summary can only be provided when workspace files were modified.
         if not edit_mgr.has_modifications and summary_str:
             return tool_provider.Response(
                 is_failed=True,
@@ -253,22 +263,7 @@ class FinishTool(sandbox_run_control.FinishTool, Singleton):
                 suppression_key="finish",
             )
 
-        rc = get_singleton(RunController)
-        is_cached_fail = rc.has_cached_failure()
-        passed, diag = rc.evaluate_verification()
-        if not passed:
-            # Requirement: When the previous evaluation failed and workspace files have not been updated since, tool execution fails with the cached diagnostic output, reminding the agent that workspace files must be updated before proceeding.
-            # Requirement: Tool execution evaluates verification checks, failing with diagnostic feedback sanitized through the alias manager when any verification check fails.
-            reminder = "Workspace files must be updated before proceeding." if is_cached_fail else None
-            return tool_provider.Response(
-                is_failed=True,
-                is_terminated=False,
-                content=f"Verification failed: {diag}".strip(),
-                reminder=reminder,
-                suppression_key="finish",
-            )
-
-        # Requirement: Passing verification produces a terminating response indicating that the session completed successfully.
+        # Requirement: Tool execution produces a terminating response indicating that the session completed successfully when verification is passing and all completion criteria are met.
         msg = f"Session completed successfully: {summary_str}".strip() if summary_str else "Session completed successfully."
         return tool_provider.Response(
             is_failed=False,
@@ -385,47 +380,45 @@ class RunTestsTool(sandbox_run_control.RunTestsTool, Singleton):
 
     @property
     def name(self) -> str:
-        # Requirement: The run tests tool is named `run_tests` and accepts no parameters.
+        # Requirement: The run tests tool is named `run_tests`, accepts no parameters, and shares a constant suppression key `run_tests`.
         return "run_tests"
 
     @property
     def description(self) -> str:
-        return "Directs the agent to run tests through the advance tool or finish tool."
+        return "Evaluates verification checks and presents results."
 
     @property
     def parameters(self) -> Set[tool_provider.Parameter]:
-        # Requirement: The run tests tool is named `run_tests` and accepts no parameters.
+        # Requirement: The run tests tool is named `run_tests`, accepts no parameters, and shares a constant suppression key `run_tests`.
         return set()
 
     def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
-        cfg = get_singleton(node_config.NodeConfig)
+        rc = get_singleton(RunController)
         guide_del = get_singleton(sandbox_guide_delivery.GuideDelivery)
 
-        # Requirement: Executing the run tests tool always fails reminding the agent that tests can only be run by calling the advance tool when guide step mode is active and guide steps remain in guide delivery, specifying the advance tool as a follow-up tool call.
-        if cfg.is_step_mode and guide_del.has_steps_remaining:
-            follow_up = tool_provider.FollowUpToolCall(
-                tool_name="advance",
-                wire_parameter_bindings=tool_provider.WireParameterBindings(bindings=set()),
-            )
+        # Requirement: Executing the run tests tool updates verification results if outdated.
+        passed, diag = rc.evaluate_verification()
+
+        if not passed:
+            # Requirement: Tool execution fails when verification fails, presenting diagnostic feedback sanitized through the alias manager alongside any configured verification failure instructions.
+            vf_block = ""
+            guide_obj = getattr(guide_del, "guide", None)
+            if guide_obj and getattr(guide_obj, "verification_failure", None):
+                vf_block = f"\n\n## Verification failure\n{guide_obj.verification_failure}"
+            content = f"Verification failed: {diag}{vf_block}".strip()
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
-                content="Tests cannot be run directly with run_tests.",
-                reminder="Tests can only be run by calling the advance tool.",
-                follow_up_tool_call=follow_up,
+                content=content,
+                suppression_key="run_tests",
             )
 
-        # Requirement: Executing the run tests tool always fails reminding the agent that tests can only be run by calling the finish tool when guide step mode is inactive, or when guide step mode is active and no guide steps remain in guide delivery, specifying the finish tool without a change summary as a follow-up tool call.
-        follow_up = tool_provider.FollowUpToolCall(
-            tool_name="finish",
-            wire_parameter_bindings=tool_provider.WireParameterBindings(bindings=set()),
-        )
+        # Requirement: Tool execution produces a response presenting passing verification results when verification passes.
         return tool_provider.Response(
-            is_failed=True,
+            is_failed=False,
             is_terminated=False,
-            content="Tests cannot be run directly with run_tests.",
-            reminder="Tests can only be run by calling the finish tool.",
-            follow_up_tool_call=follow_up,
+            content="Verification passed: All checks succeeded.",
+            suppression_key="run_tests",
         )
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
