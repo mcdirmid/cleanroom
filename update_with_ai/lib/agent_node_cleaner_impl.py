@@ -167,15 +167,12 @@ class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
             return False
 
         # Requirement: After a dirty node is cleaned, the agent node cleaner registers the node as a dependent to its non-silent dependencies.
-        # Requirement: [NodeCleaner] After a dirty node is cleaned, the node is registered as a dependent to its non-silent dependencies.
         storage.register_dependent(node)
 
-        # Requirement: [NodeCleaner] When cleaning a dirty node, a node cleaner interacts with dag storage to deliver messages and manages whether the node remains dirty.
         storage.clear_messages(node)
 
         # Requirement: When delivering messages after cleaning, feedback messages are delivered to their addressed dependency node.
         # Requirement: Change messages are delivered to downstream dependents.
-        # Requirement: [NodeCleaner] Delivering messages delivers change messages to dependents when modifications are made, or feedback messages to dependencies when defects require revision.
         for m in msgs:
             if isinstance(m, dag_storage.Change):
                 for dependent in storage.get_dependents(node):

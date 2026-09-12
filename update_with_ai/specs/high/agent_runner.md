@@ -22,9 +22,9 @@ The agent runner:
 
 - Appends model responses and correlates tool execution responses with originating tool call identifiers in the conversation history.
 
-- Can dispatch follow-up tool calls specified by tool responses, appending an antecedent synthetic assistant tool invocation message and the follow-up tool response to the conversation history immediately following the originating response.
+- Can dispatch follow-up tool calls specified by tool responses, recording the follow-up execution in the conversation history.
 
-- Records log events for model requests, assistant responses, and tool executions to the runner logger, providing event summaries that convey turn progress, tool calls with arguments or non-tool response text, and tool execution outcomes.
+- Records log events for interaction turns, tool executions, and turn outcomes to the runner logger.
 
 - Evaluates tool executions with the loop guard, injecting loop reminders into the conversation or halting with an unexpected failure on runaway repetition.
 

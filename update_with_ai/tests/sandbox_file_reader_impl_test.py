@@ -231,7 +231,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertNotIn("search_files", tool_names)
 
             # Requirement: The read manager exposes declared read-only files, read-write files, and optional guide file obtained from the node config.
-            # Requirement: [ReadManager] The read manager exposes the session's set of read-only files to support session startup context injection.
+            # Requirement: [ReadManager] The read manager exposes the session's set of read-only files.
             # Requirement: [ReadManager] The read manager exposes the session's set of read-write files.
             # Requirement: [ReadManager] When step-mode is active, the read manager is configured with a guide file that is an unbound file.
             self.assertIn(self.ro_file, read_mgr.read_only_files)
@@ -429,4 +429,3 @@ if __name__ == "__main__":
 # - [Tool] When a parameter is required, an argument must be supplied for tool execution.
 # - Executing the read tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.
 # - When an unbound file equals the guide file configured for step-mode, the read tool failure response indicates that `advance` must be called to read the guide instead.
-# - [ReadTool] Executing the read tool on the guide file provides progressive delivery feedback to the agent.

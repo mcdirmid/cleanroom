@@ -16,8 +16,6 @@ PURPOSE:
 Cleans a dirty node, communicating whether processing should continue
 
 FRESH_REQUIREMENTS:
-- After a dirty node is cleaned, the node is registered as a dependent to its non-silent dependencies.
-- Delivering messages delivers change messages to dependents when modifications are made, or feedback messages to dependencies when defects require revision.
 - Cleaning a dirty node communicates whether processing should continue.
 - Processing cannot continue only if a failure occurs while cleaning the node that cannot be handled by cleaning any other node.
 """

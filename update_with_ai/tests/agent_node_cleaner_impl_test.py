@@ -348,7 +348,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             cleaner = scope.get_singleton(AgentNodeCleaner)
             msgs = cleaner.clean_node(node)
 
-            # Requirement: [AgentNodeCleaner] When cleaning succeeds without workspace file modifications, no messages are produced.
+            # Requirement: [AgentNodeCleaner] When cleaning succeeds without workspace file modifications, the node is left clean with no produced messages.
             self.assertEqual(len(msgs), 0)
 
     def test_clean_node_failure_leaves_node_dirty_and_no_messages(self) -> None:
@@ -364,6 +364,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         with enter_phase("system", registry=self.registry) as scope:
             cleaner = scope.get_singleton(AgentNodeCleaner)
             # Requirement: When the agent outcome indicates failure, the node remains dirty and no propagating messages are produced.
+            # Requirement: [AgentNodeCleaner] When cleaning fails, the node remains dirty with no produced messages and continuation halts.
             msgs = cleaner.clean_node(node)
             self.assertEqual(len(msgs), 0)
 
@@ -448,7 +449,6 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         with enter_phase("system", registry=self.registry) as scope:
             cleaner = scope.get_singleton(AgentNodeCleaner)
             # Requirement: After a dirty node is cleaned, the agent node cleaner registers the node as a dependent to its non-silent dependencies.
-            # Requirement: [NodeCleaner] After a dirty node is cleaned, the node is registered as a dependent to its non-silent dependencies.
             cont = cleaner.clean(node)
 
             self.assertTrue(cont)
@@ -472,11 +472,9 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
 
             self.assertTrue(cont)
             # Prior messages on node cleared
-            # Requirement: [NodeCleaner] When cleaning a dirty node, a node cleaner interacts with dag storage to deliver messages and manages whether the node remains dirty.
             self.assertEqual(len(self.storage.messages[node.address]), 0)
             # Dependent received Change message
             # Requirement: Change messages are delivered to downstream dependents.
-            # Requirement: [NodeCleaner] Delivering messages delivers change messages to dependents when modifications are made, or feedback messages to dependencies when defects require revision.
             self.assertEqual(len(self.storage.messages[dependent.address]), 1)
             self.assertIsInstance(list(self.storage.messages[dependent.address])[0], Change)
 
@@ -496,7 +494,6 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         with enter_phase("system", registry=self.registry) as scope:
             cleaner = scope.get_singleton(AgentNodeCleaner)
             # Requirement: When delivering messages after cleaning, feedback messages are delivered to their addressed dependency node.
-            # Requirement: [NodeCleaner] Delivering messages delivers change messages to dependents when modifications are made, or feedback messages to dependencies when defects require revision.
             cont = cleaner.clean(node)
             self.assertTrue(cont)
             self.assertEqual(len(self.storage.messages.get(dependency1.address, set())), 1)

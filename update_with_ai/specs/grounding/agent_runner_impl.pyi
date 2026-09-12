@@ -39,8 +39,8 @@ FRESH_REQUIREMENTS:
 INHERITED_REQUIREMENTS:
 - [AgentRunner] The agent runner drives turns by sending model requests to a language model and executing requested tools.
 - [AgentRunner] The agent runner appends model responses and correlates tool responses with tool call identifiers in conversation history.
-- [AgentRunner] The agent runner can dispatch follow-up tool calls specified by tool responses through the tool manager, appending an antecedent synthetic assistant tool invocation message and the follow-up tool response to the conversation history immediately following the originating response.
-- [AgentRunner] The agent runner records log events for model requests, responses, and tool executions to the runner logger, providing summaries with turn progress, tool calls with arguments or text snippets, and execution outcomes.
+- [AgentRunner] The agent runner can dispatch follow-up tool calls specified by tool responses, recording the follow-up execution in the conversation history.
+- [AgentRunner] The agent runner records log events for interaction turns, tool executions, and turn outcomes to the runner logger.
 - [AgentRunner] The agent runner evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
 - [AgentRunner] When a model response contains no tool executions, the agent runner injects a tool reminder into the conversation history and continues the turn loop.
 - [AgentRunner] When tool execution produces a termination outcome, the agent runner concludes and returns an agent outcome, or halts with an unexpected failure if the termination indicates a failing outcome.

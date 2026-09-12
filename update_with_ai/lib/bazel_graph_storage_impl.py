@@ -16,7 +16,8 @@ class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage, Singleton):
 
     def _get_store_path(self, node: dag_storage.Node) -> Path:
         # Requirement: All nodes located within the same package directory resolved by the bazel node identifier utility from bazel node id utils share a common package message file named `.update_with_ai.textproto`.
-        # Requirement: [BazelGraphStorage] The bazel graph storage reads and writes pending messages and reverse dependencies for nodes from dag storage in node directories resolved by the bazel node identifier utility from bazel node id utils.
+        # Requirement: [BazelGraphStorage] The bazel graph storage persists pending messages and reverse dependencies across package directories resolved by the bazel node identifier utility from bazel node id utils.
+        # Requirement: The bazel graph storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
         node_util = get_singleton(bazel_node_id_utils.BazelNodeIdentifierUtility)
         pkg_dir = node_util.extract_directory(node)
         paths_service = get_singleton(file_paths.FilePaths)
@@ -25,7 +26,7 @@ class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage, Singleton):
         return Path(resolved_dir.path) / ".update_with_ai.textproto"
 
     def _load_package_data(self, path: Path) -> Dict[str, Dict[str, Any]]:
-        # Requirement: [BazelGraphStorage] The bazel graph storage creates missing package message files on write and treats absent files as empty.
+        # Requirement: The bazel graph storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
         if not path.is_file():
             return {}
         content = path.read_text(encoding="utf-8")
@@ -83,7 +84,6 @@ class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage, Singleton):
             path.write_text(content, encoding="utf-8")
             return True
         except OSError:
-            # Requirement: [BazelGraphStorage] Modifying messages or reverse dependencies in the bazel graph storage preserves existing records on failure.
             return False
 
     def get_node_definition(self, node: dag_storage.Node) -> Optional[bazel_graph_storage.NodeDefinition]:
@@ -96,7 +96,7 @@ class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage, Singleton):
         return set(self._dependencies.get(node, set()))
 
     def get_dependents(self, node: dag_storage.Node) -> Set[dag_storage.Node]:
-        # Requirement: [BazelGraphStorage] The bazel graph storage reads and writes pending messages and reverse dependencies for nodes from dag storage in node directories resolved by the bazel node identifier utility from bazel node id utils.
+        # Requirement: [BazelGraphStorage] The bazel graph storage persists pending messages and reverse dependencies across package directories resolved by the bazel node identifier utility from bazel node id utils.
         path = self._get_store_path(node)
         data = self._load_package_data(path)
         record = data.get(node.address, {})
@@ -107,7 +107,7 @@ class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage, Singleton):
         return deps
 
     def get_messages(self, node: dag_storage.Node) -> Set[dag_storage.Message]:
-        # Requirement: [BazelGraphStorage] The bazel graph storage reads and writes pending messages and reverse dependencies for nodes from dag storage in node directories resolved by the bazel node identifier utility from bazel node id utils.
+        # Requirement: [BazelGraphStorage] The bazel graph storage persists pending messages and reverse dependencies across package directories resolved by the bazel node identifier utility from bazel node id utils.
         path = self._get_store_path(node)
         data = self._load_package_data(path)
         record = data.get(node.address, {})

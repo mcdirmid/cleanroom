@@ -286,7 +286,7 @@ class BazelRunnerImplTest(unittest.TestCase):
         with enter_phase("system", registry=self.registry):
             runner = get_singleton(bazel_runner.BazelRunner)
             # Requirement: Marking a node dirty injects a change message with text set to check.
-            # Requirement: [BazelRunner] A bazel runner marks a target node dirty by injecting a non-triggering check change message into its pending messages in dag storage.
+            # Requirement: [BazelRunner] A bazel runner marks a target node dirty by injecting a change message into its pending messages in dag storage.
             runner.mark_node_dirty(target, change)
 
             self.assertTrue(self.storage.is_dirty(target))

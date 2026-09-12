@@ -18,7 +18,7 @@ FRESH_REQUIREMENTS:
 
 INHERITED_REQUIREMENTS:
 - [ReadManager] The read manager installs the read tool and search tool.
-- [ReadManager] The read manager exposes the session's set of read-only files to support session startup context injection.
+- [ReadManager] The read manager exposes the session's set of read-only files.
 - [ReadManager] The read manager exposes the session's set of read-write files.
 - [ReadManager] When step-mode is active, the read manager is configured with a guide file that is an unbound file.
 
@@ -164,8 +164,6 @@ FRESH_REQUIREMENTS:
 - When reading read-only markdown files ending with .md, content is formatted using the template formatter with session template parameters after filtering out paragraphs beginning with > META:.
 
 INHERITED_REQUIREMENTS:
-- [ReadTool] Executing the read tool on the guide file provides progressive delivery feedback to the agent.
-- [ReadTool] When reading markdown files, paragraphs beginning with > META: are filtered out.
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
 - [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
 

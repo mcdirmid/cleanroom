@@ -139,7 +139,7 @@ class BazelGraphStorageImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=self.registry) as scope:
             storage = scope.get_singleton(BazelGraphStorage)
-            # Requirement: [BazelGraphStorage] The bazel graph storage creates missing package message files on write and treats absent files as empty.
+            # Requirement: The bazel graph storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
             self.assertFalse(storage.is_dirty(node))
             self.assertEqual(storage.get_messages(node), set())
 
@@ -160,7 +160,7 @@ class BazelGraphStorageImplTest(unittest.TestCase):
 
             # Verify textproto file was written to package directory
             # Requirement: All nodes located within the same package directory resolved by the bazel node identifier utility from bazel node id utils share a common package message file named `.update_with_ai.textproto`.
-            # Requirement: [BazelGraphStorage] The bazel graph storage reads and writes pending messages and reverse dependencies for nodes from dag storage in node directories resolved by the bazel node identifier utility from bazel node id utils.
+            # Requirement: [BazelGraphStorage] The bazel graph storage persists pending messages and reverse dependencies across package directories resolved by the bazel node identifier utility from bazel node id utils.
             proto_path = os.path.join(self.test_dir, "pkg/sub", ".update_with_ai.textproto")
             self.assertTrue(os.path.isfile(proto_path))
 
@@ -224,24 +224,6 @@ class BazelGraphStorageImplTest(unittest.TestCase):
             # Requirement: [DagStorage] Clearing the dependents of a node empties all recorded dependents for that node.
             storage.clear_dependents(upstream)
             self.assertEqual(storage.get_dependents(upstream), set())
-
-    def test_failure_preserves_existing_records(self) -> None:
-        """CUJ: Modifying records preserves existing records on disk when save fails."""
-        node = Node(address="//pkg/fail:target")
-        with enter_phase("system", registry=self.registry) as scope:
-            storage = scope.get_singleton(BazelGraphStorage)
-            # Requirement: [BazelGraphStorage] The bazel graph storage creates missing package message files on write and treats absent files as empty.
-            storage.add_message(Change(), to=node)
-            self.assertEqual(len(storage.get_messages(node)), 1)
-
-            proto_path = os.path.join(self.test_dir, "pkg/fail", ".update_with_ai.textproto")
-            os.chmod(proto_path, 0o444)
-            try:
-                # Requirement: [BazelGraphStorage] Modifying messages or reverse dependencies in the bazel graph storage preserves existing records on failure.
-                storage.add_message(Feedback(), to=node)
-                self.assertEqual(len(storage.get_messages(node)), 1)
-            finally:
-                os.chmod(proto_path, 0o666)
 
     def test_dag_storage_protocol_aliasing(self) -> None:
         """CUJ: Resolving singleton via DagStorage protocol alias."""

@@ -51,7 +51,7 @@ FRESH_REQUIREMENTS:
 - When startup reads are not performed, startup tool executions contain no file read executions.
 
 INHERITED_REQUIREMENTS:
-- [Sandbox] The sandbox exposes startup tool executions as an ordered sequence of initial tool executions based on active configuration, ordering startup reads deterministically by file alias short name.
+- [Sandbox] The sandbox exposes startup tool executions as an ordered sequence of initial tool executions based on active configuration.
 
 GROUNDING_ARGUMENT:
 - Reads step mode and startup reads from imported model_config.ModelConfig (system tier), retrieves declared read-only files from imported node_config.NodeConfig (session tier) ordered deterministically by file alias short name, executes imported sandbox_run_control.AdvanceTool and sandbox_file_reader.ReadTool (session tier), and pairs tool requests with responses into StartupToolExecution records.

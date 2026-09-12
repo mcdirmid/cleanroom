@@ -138,7 +138,7 @@ class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
         target_text = str(bindings_map.get("target_text", ""))
         replacement_text = str(bindings_map.get("replacement_text", ""))
 
-        # Requirement: [EditingTool] Editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+        # Requirement: Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
         if not isinstance(target_file, file_alias.ReadWriteFile):
             return tool_provider.Response(
                 is_failed=True,
@@ -185,7 +185,7 @@ class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
         # Requirement: On successful text replacement tool execution, the unique occurrence of the target text is replaced with the replacement text, written using the filesystem, and file modifications are recorded.
         # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
         new_content = content.replace(target_text, replacement_text, 1)
-        # Requirement: [EditingTool] Editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
+        # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
         if new_content == content:
             return tool_provider.Response(
                 is_failed=True,
@@ -208,7 +208,7 @@ class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
                 }
             ),
         )
-        # Requirement: On successful execution, an editing tool produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
+        # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
         # Requirement: Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
         return tool_provider.Response(
             is_failed=False,
@@ -289,7 +289,7 @@ class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
         end_line = int(bindings_map.get("end_line", 1))
         replacement_text = str(bindings_map.get("replacement_text", ""))
 
-        # Requirement: [EditingTool] Editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+        # Requirement: Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
         if not isinstance(target_file, file_alias.ReadWriteFile):
             return tool_provider.Response(
                 is_failed=True,
@@ -333,7 +333,7 @@ class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
             # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
             new_lines = lines[: start_line - 1] + rep_lines + lines[start_line - 1 :]
 
-        # Requirement: [EditingTool] Editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
+        # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
         if new_lines == lines:
             return tool_provider.Response(
                 is_failed=True,
@@ -359,7 +359,7 @@ class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
                 }
             ),
         )
-        # Requirement: On successful execution, an editing tool produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
+        # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
         # Requirement: Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
         return tool_provider.Response(
             is_failed=False,

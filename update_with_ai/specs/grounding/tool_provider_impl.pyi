@@ -53,7 +53,7 @@ FRESH_REQUIREMENTS:
 - When parameter mappings are successfully resolved, executing a tool by name delegates to the matching tool with the resolved actual parameter bindings and returns the tool's response.
 
 INHERITED_REQUIREMENTS:
-- [ToolManager] Executing a tool by name with wire parameter bindings produces the same response as executing the tool directly.
+- [ToolManager] Executing a tool by name with wire parameter bindings produces the tool response upon resolving parameter conversions.
 
 GROUNDING_ARGUMENT:
 - Receives tool name and wire parameter bindings as arguments, looks up the tool in self.installed_tools, resolves and converts parameter values using the tool's parameter converters, and invokes the matching tool's execute_tool operation directly.

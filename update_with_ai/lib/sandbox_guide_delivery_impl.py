@@ -35,7 +35,7 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
         return self._guide
 
     def parse_guide(self, content: file_alias.FileContent) -> sandbox_guide_delivery.Guide:
-        # Requirement: Guide parsing extracts the summary from content preceding the first section heading, captures verification failure instructions when a section heading begins with `Verification failure`, and excludes sections whose title begins with `Lint checks` or `Verification failure`.
+        # Requirement: Guide parsing extracts the summary from content preceding the first section heading, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Lint checks` or `Verification failure`.
         raw = str(content)
         lines = raw.splitlines()
         summary_lines: List[str] = []

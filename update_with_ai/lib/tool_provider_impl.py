@@ -57,6 +57,7 @@ class ToolManager(tool_provider.ToolManager, Singleton):
                 actual_bindings.add((p, conv_val))
 
         # Requirement: When parameter mappings are successfully resolved, executing a tool by name delegates to the matching tool with the resolved actual parameter bindings and returns the tool's response.
+        # Requirement: [ToolManager] Executing a tool by name with wire parameter bindings produces the tool response upon resolving parameter conversions.
         return tool.execute_tool(tool_provider.ActualParameterBindings(bindings=actual_bindings))
 
 class StringParameterConverter(tool_provider.StringParameterConverter, Singleton):

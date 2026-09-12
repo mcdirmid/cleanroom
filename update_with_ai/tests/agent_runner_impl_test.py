@@ -248,7 +248,7 @@ class AgentRunnerImplTest(unittest.TestCase):
             self.assertIn("No tools were executed", self.history.messages[1].content)
             self.assertEqual(self.history.messages[2].role, "assistant")
             # Requirement: The agent runner logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
-            # Requirement: [AgentRunner] The agent runner records log events for model requests, responses, and tool executions to the runner logger, providing summaries with turn progress, tool calls with arguments or text snippets, and execution outcomes.
+            # Requirement: [AgentRunner] The agent runner records log events for interaction turns, tool executions, and turn outcomes to the runner logger.
             comp_events = [e for e in self.logger.events if e.event_name == "model_completion"]
             self.assertTrue(len(comp_events) >= 2)
             self.assertIn("[Turn 1] Assistant (text):", comp_events[0].summary)
@@ -717,7 +717,7 @@ class AgentRunnerImplTest(unittest.TestCase):
             outcome = runner.run()
 
             # Requirement: When configured by model config to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool through the tool manager, appending a synthetic assistant invocation and the resulting follow-up response to the conversation history immediately following the originating response.
-            # Requirement: [AgentRunner] The agent runner can dispatch follow-up tool calls specified by tool responses through the tool manager, appending an antecedent synthetic assistant tool invocation message and the follow-up tool response to the conversation history immediately following the originating response.
+            # Requirement: [AgentRunner] The agent runner can dispatch follow-up tool calls specified by tool responses, recording the follow-up execution in the conversation history.
             self.assertTrue(outcome.is_success)
             self.assertTrue(outcome.response.is_terminated)
             self.assertEqual(outcome.response.content, "Followup tool executed.")

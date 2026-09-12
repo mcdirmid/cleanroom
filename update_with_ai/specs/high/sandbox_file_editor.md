@@ -14,7 +14,7 @@ Autonomous agents require structured mechanisms to update code and configuration
 
 A *template* is file content representing initial boilerplate for a read-write file.
 
-An *editing tool* is a tool that modifies a read-write file. Editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified. Editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail. On successful execution, an editing tool produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
+An *editing tool* is a tool that modifies a read-write file.
 
 The *edit manager* is an agent session service that modifies workspace files and tracks session edits. The edit manager installs:
 

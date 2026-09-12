@@ -10,7 +10,7 @@ Autonomous agent loops risk unpredictable deviations when environment actions ar
 
 ## Types and Behavior
 
-A *parameter converter* is a polymorphic service that has an *actual type*, a primitive *wire type* (limited to *string*, *integer*, or *boolean*), and can *convert* a wire type value to produce a value of that actual type. An actual type is meta type: its values are references to data types, not the values of those data types.
+A *parameter converter* is a polymorphic service that has an *actual type*, a primitive *wire type* (limited to *string*, *integer*, or *boolean*), and can *convert* a wire type value to produce a value of that actual type. An actual type is a meta type: its values are references to data types, not the values of those data types.
 
 An *identity parameter converter* is a polymorphic parameter converter that works for parameters where the actual and wire types are the same, wrapping string, integer, or boolean. There are three identity parameter converters, one for each wire type: a *string parameter converter*, an *integer parameter converter*, and a *boolean parameter converter*. Converting a wire type value with an identity parameter converter produces that value directly as its actual value.
 
@@ -30,6 +30,12 @@ A tool can be *executed* directly with a set of *actual parameter bindings*, whi
 
 - If there is a known tool that the agent should always call after this tool execution, a *follow-up tool call* specifying a tool name and wire parameter bindings of that tool.
 
-Direct tool execution with actual parameter bindings is primarily used by components when software needs to invoke an action directly (such as executing a read tool to inject startup context).
+The *tool manager* is an agent session service that maintains tools for an agent session.
 
-The *tool manager* is an agent session service that maintains tools for an agent session. Tools can be *installed* so they are available during the session, and it is assumed that all installed tools have unique names. At the direction of a model during an agent turn, the tool manager *executes* tools by name with *wire parameter bindings* (mapping parameter names to values of their wire types), that, if mappings are successfully resolved, produces the same response as executing the tool directly. The tool manager also exposes *installed tools* to inform the model of what tools can be executed.
+The tool manager:
+
+- Installs tools for the agent session, assuming all installed tools have unique names.
+
+- Exposes *installed tools* available for execution.
+
+- *Executes* tools by name with *wire parameter bindings* mapping parameter names to wire type values, producing the tool response upon resolving parameter conversions.

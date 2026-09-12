@@ -18,7 +18,7 @@ The *sandbox* is an agent session service configured with whether to use step mo
 
 The sandbox:
 
-- Exposes *startup tool executions* as an ordered sequence of initial tool executions based on active configuration, ordering startup reads deterministically by file alias short name.
+- Exposes *startup tool executions* as an ordered sequence of initial tool executions based on active configuration.
 
 - Can *materialize startup templates* into missing read-write files at session start without overwriting existing files.
 

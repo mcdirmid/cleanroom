@@ -38,4 +38,4 @@ The bazel assembly aggregates the following constituents:
 
 - The dag assembly from dag_asm, closing the dag cleaner interface.
 
-- The sandbox assembly from sandbox_asm, closing the sandbox, sandbox file reader, sandbox file editor, sandbox run control, sandbox guide delivery, sandbox change summary validator, and tool provider interfaces.
+- The sandbox assembly from sandbox_asm, closing the sandbox, sandbox file reader, sandbox file editor, sandbox run control, sandbox guide delivery, sandbox change summary validator, template format, and tool provider interfaces.

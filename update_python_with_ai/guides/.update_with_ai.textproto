@@ -4,8 +4,11 @@ node {
   reverse_dependencies: "//testing/specs:agent_loop_guard_impl_coverage"
   reverse_dependencies: "//testing/specs:agent_runner_impl_coverage"
   reverse_dependencies: "//testing/specs:bazel_graph_storage_impl_coverage"
+  reverse_dependencies: "//testing/specs:bazel_manifest_loader_impl_coverage"
   reverse_dependencies: "//testing/specs:bazel_model_config_impl_coverage"
+  reverse_dependencies: "//testing/specs:bazel_node_config_impl_coverage"
   reverse_dependencies: "//testing/specs:bazel_node_id_utils_impl_coverage"
+  reverse_dependencies: "//testing/specs:bazel_runner_impl_coverage"
   reverse_dependencies: "//testing/specs:dag_cleaner_impl_coverage"
   reverse_dependencies: "//testing/specs:file_paths_impl_coverage"
   reverse_dependencies: "//testing/specs:runner_logger_impl_coverage"
@@ -26,8 +29,11 @@ node {
 }
 node {
   node_id: "//update_python_with_ai/guides:grounding_to_test"
+  reverse_dependencies: "//testing/specs:agent_conversation_history_impl_test"
+  reverse_dependencies: "//testing/specs:agent_runner_impl_test"
   reverse_dependencies: "//testing/specs:dag_cleaner_impl_test"
   reverse_dependencies: "//testing/specs:sandbox_change_summary_validator_impl_test"
+  reverse_dependencies: "//testing/specs:template_format_impl_test"
 }
 node {
   node_id: "//update_python_with_ai/guides:qa"
@@ -38,6 +44,7 @@ node {
   reverse_dependencies: "//testing/specs:bazel_graph_storage_impl_qa"
   reverse_dependencies: "//testing/specs:bazel_model_config_impl_qa"
   reverse_dependencies: "//testing/specs:bazel_node_id_utils_impl_qa"
+  reverse_dependencies: "//testing/specs:bazel_runner_impl_qa"
   reverse_dependencies: "//testing/specs:dag_cleaner_impl_qa"
   reverse_dependencies: "//testing/specs:file_paths_impl_qa"
   reverse_dependencies: "//testing/specs:runner_logger_impl_qa"

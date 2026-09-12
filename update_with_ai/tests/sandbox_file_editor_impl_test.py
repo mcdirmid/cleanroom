@@ -255,7 +255,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.replacement_text_parameter, "New Line 2"),
                 }
             )
-            # Requirement: [EditingTool] Editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+            # Requirement: Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
             resp_ro = replace_tool.execute_tool(b_ro)
             self.assertTrue(resp_ro.is_failed)
             self.assertEqual(resp_ro.reminder, "Only declared read-write files can be modified.")
@@ -283,7 +283,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: On successful text replacement tool execution, the unique occurrence of the target text is replaced with the replacement text, written using the filesystem, and file modifications are recorded.
             # Requirement: Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
             # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
-            # Requirement: On successful execution, an editing tool produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
+            # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
             resp = replace_tool.execute_tool(b_ok)
             self.assertFalse(resp.is_failed)
             self.assertEqual(resp.suppression_key, self.rw_file.short_name)
@@ -334,7 +334,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.replacement_text_parameter, "Line 2"),
                 }
             )
-            # Requirement: [EditingTool] Editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
+            # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
             resp_no_change = replace_tool.execute_tool(b_no_change)
             self.assertTrue(resp_no_change.is_failed)
             self.assertEqual(resp_no_change.reminder, "Your edit had no effect, and such edits will fail.")
@@ -358,7 +358,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (line_tool.replacement_text_parameter, "New\n"),
                 }
             )
-            # Requirement: [EditingTool] Editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+            # Requirement: Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
             resp_line_ro = line_tool.execute_tool(b_ro)
             self.assertTrue(resp_line_ro.is_failed)
             self.assertEqual(resp_line_ro.reminder, "Only declared read-write files can be modified.")
@@ -375,7 +375,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Executing the line update tool reads file content using the filesystem.
             # Requirement: When the start line is less than or equal to the end line, successful execution replaces lines within the range, writes using the filesystem, and records file modifications.
             # Requirement: Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
-            # Requirement: On successful execution, an editing tool produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
+            # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
             resp1 = line_tool.execute_tool(b_replace)
             self.assertFalse(resp1.is_failed)
             self.assertEqual(resp1.suppression_key, self.rw_file.short_name)
@@ -484,7 +484,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (line_tool.replacement_text_parameter, "No newline\n"),
                 }
             )
-            # Requirement: [EditingTool] Editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
+            # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
             resp_no_change_line = line_tool.execute_tool(b_no_change_line)
             self.assertTrue(resp_no_change_line.is_failed)
             self.assertEqual(resp_no_change_line.reminder, "Your edit had no effect, and such edits will fail.")
@@ -500,7 +500,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (line_tool.replacement_text_parameter, ""),
                 }
             )
-            # Requirement: [EditingTool] Editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
+            # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
             resp_no_change_insert = line_tool.execute_tool(b_no_change_insert)
             self.assertTrue(resp_no_change_insert.is_failed)
             self.assertEqual(resp_no_change_insert.reminder, "Your edit had no effect, and such edits will fail.")
@@ -550,7 +550,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.replacement_text_parameter, "Line 2"),
                 }
             )
-            # Requirement: [EditingTool] Editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
+            # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
             resp3 = replace_tool.execute_tool(b_noop)
             self.assertTrue(resp3.is_failed)
             self.assertEqual(resp3.reminder, "Your edit had no effect, and such edits will fail.")

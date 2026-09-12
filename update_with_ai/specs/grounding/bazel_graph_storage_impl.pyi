@@ -16,15 +16,14 @@ FRESH_REQUIREMENTS:
 - The bazel graph storage maintains node definitions and task prompts mapped to nodes in dag storage.
 - The bazel graph storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files using proto package store from update with ai proto ext.
 - All nodes located within the same package directory resolved by the bazel node identifier utility from bazel node id utils share a common package message file named `.update_with_ai.textproto`.
+- The bazel graph storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
 - Propagating dependencies exclude silent dependencies declared on a node.
 
 INHERITED_REQUIREMENTS:
 - [BazelGraphStorage] The bazel graph storage maintains nodes, dependencies, reverse dependencies, and pending messages from workspace targets.
 - [BazelGraphStorage] The bazel graph storage provides task prompts and node definitions for declared nodes.
 - [BazelGraphStorage] Declared dependencies marked propagating mark dependent nodes dirty when changed.
-- [BazelGraphStorage] The bazel graph storage reads and writes pending messages and reverse dependencies for nodes from dag storage in node directories resolved by the bazel node identifier utility from bazel node id utils.
-- [BazelGraphStorage] The bazel graph storage creates missing package message files on write and treats absent files as empty.
-- [BazelGraphStorage] Modifying messages or reverse dependencies in the bazel graph storage preserves existing records on failure.
+- [BazelGraphStorage] The bazel graph storage persists pending messages and reverse dependencies across package directories resolved by the bazel node identifier utility from bazel node id utils.
 
 GROUNDING_ARGUMENT:
 - As a system singleton, BazelGraphStorage maintains node definitions and task prompts mapped to nodes in dag storage, coordinates with imported bazel_node_id_utils and file_paths in the same system lifecycle tier, and persists pending messages and reverse dependencies to package textproto files via update_with_ai_proto_ext.

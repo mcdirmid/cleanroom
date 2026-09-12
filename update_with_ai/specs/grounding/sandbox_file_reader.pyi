@@ -11,7 +11,7 @@ Defined as an agent session service that installs tools for inspecting workspace
 
 FRESH_REQUIREMENTS:
 - The read manager installs the read tool and search tool.
-- The read manager exposes the session's set of read-only files to support session startup context injection.
+- The read manager exposes the session's set of read-only files.
 - The read manager exposes the session's set of read-write files.
 - When step-mode is active, the read manager is configured with a guide file that is an unbound file.
 """
@@ -79,11 +79,7 @@ Establishes that the read tool takes a parameter specifying if the agent wants c
     def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
         """
 PURPOSE:
-Provides that executing the read tool reads file content and distinguishes reading attempts on the guide file
-
-FRESH_REQUIREMENTS:
-- Executing the read tool on the guide file provides progressive delivery feedback to the agent.
-- When reading markdown files, paragraphs beginning with > META: are filtered out.
+Provides that executing the read tool reads file content
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.

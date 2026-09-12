@@ -44,7 +44,7 @@ Established as the instructional content of the step section
 class Guide:
     """
 PURPOSE:
-Structured instructional text containing a summary and sequential step sections
+Structured instructional text containing a summary, sequential step sections, and verification failure instructions
 """
 
     def __init__(self, summary: str, sections: List[StepSection], verification_failure: Optional[str]=None) -> None:
@@ -70,7 +70,7 @@ Established as the sequential milestone sections of the guide
     def verification_failure(self) -> Optional[str]:
         """
 PURPOSE:
-Established as optional instructions delivered when verification fails
+Established as instructions delivered when verification fails
 """
         ...
 
@@ -104,10 +104,7 @@ Exposes the configured guide for the session
     def parse_guide(self, content: file_alias.FileContent) -> Guide:
         """
 PURPOSE:
-Parses file content into a task guide, extracting summary and step sections
-
-FRESH_REQUIREMENTS:
-- Parsing file content extracts the summary from content preceding the first section heading, captures verification failure instructions when a section heading begins with `Verification failure`, and excludes sections whose title begins with `Lint checks` or `Verification failure`.
+Parses file content into a guide
 """
         ...
 
@@ -118,8 +115,6 @@ PURPOSE:
 Advances to the next step section if verification passed, or retains the current step and reports failure diagnostics
 
 FRESH_REQUIREMENTS:
-- When advancing a step with passed verification on initial delivery, the response contains the guide summary alone.
-- When advancing a step with passed verification on subsequent steps and steps remain, the response presents the guide summary above the next step section content.
-- When advancing a step with failed verification, advancing retains the current step section and reports the failure diagnostics alongside any configured verification failure instructions.
+- Advancing step delivers instructional text when verification passes, or retains the current milestone and reports failure diagnostics alongside verification failure instructions when verification fails.
 """
         ...

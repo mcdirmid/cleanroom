@@ -52,9 +52,7 @@ FRESH_REQUIREMENTS:
 - The bazel graph storage maintains nodes, dependencies, reverse dependencies, and pending messages from workspace targets.
 - The bazel graph storage provides task prompts and node definitions for declared nodes.
 - Declared dependencies marked propagating mark dependent nodes dirty when changed.
-- The bazel graph storage reads and writes pending messages and reverse dependencies for nodes from dag storage in node directories resolved by the bazel node identifier utility from bazel node id utils.
-- The bazel graph storage creates missing package message files on write and treats absent files as empty.
-- Modifying messages or reverse dependencies in the bazel graph storage preserves existing records on failure.
+- The bazel graph storage persists pending messages and reverse dependencies across package directories resolved by the bazel node identifier utility from bazel node id utils.
 """
 
     @operation

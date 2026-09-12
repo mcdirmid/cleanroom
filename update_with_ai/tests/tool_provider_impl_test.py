@@ -98,7 +98,7 @@ class ToolProviderImplTest(unittest.TestCase):
             resp = manager.execute_tool("my_tool", wire_bindings)
 
             # Requirement: When parameter mappings are successfully resolved, executing a tool by name delegates to the matching tool with the resolved actual parameter bindings and returns the tool's response.
-            # Requirement: [ToolManager] Executing a tool by name with wire parameter bindings produces the same response as executing the tool directly.
+            # Requirement: [ToolManager] Executing a tool by name with wire parameter bindings produces the tool response upon resolving parameter conversions.
             self.assertFalse(resp.is_failed)
             self.assertEqual(resp.content, "dummy executed")
             self.assertIsNotNone(tool.last_bindings)

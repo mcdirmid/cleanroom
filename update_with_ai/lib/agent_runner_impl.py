@@ -442,7 +442,7 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
                     guard.record_progress()
 
                 # Requirement: When configured by model config to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool through the tool manager, appending a synthetic assistant invocation and the resulting follow-up response to the conversation history immediately following the originating response.
-                # Requirement: [AgentRunner] The agent runner can dispatch follow-up tool calls specified by tool responses through the tool manager, appending an antecedent synthetic assistant tool invocation message and the follow-up tool response to the conversation history immediately following the originating response.
+                # Requirement: [AgentRunner] The agent runner can dispatch follow-up tool calls specified by tool responses, recording the follow-up execution in the conversation history.
                 curr_resp = resp
                 curr_call_id = tc.id
                 followup_count = 0

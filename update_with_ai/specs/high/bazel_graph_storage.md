@@ -26,8 +26,4 @@ The bazel graph storage:
 
 - Marks dependent nodes dirty when propagating dependencies change.
 
-- Reads and writes pending messages and reverse dependencies for nodes in node directories resolved by the bazel node identifier utility.
-
-- Creates missing package message files on write and treats absent files as empty.
-
-- Preserves existing records on failure when modifying messages or reverse dependencies.
+- Persists pending messages and reverse dependencies across package directories resolved by the bazel node identifier utility.

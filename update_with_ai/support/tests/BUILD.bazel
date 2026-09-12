@@ -61,5 +61,8 @@ sh_test(
     data = [
         "//update_with_ai/tests/example:sample_node_1_clean",
     ],
-    tags = ["integration"],
+    tags = [
+        "integration",
+        "manual",
+    ],
 )

@@ -43,7 +43,8 @@ INHERITED_REQUIREMENTS:
 - [AgentNodeCleaner] An agent node cleaner cleans a dirty node within an agent session phase.
 - [AgentNodeCleaner] When workspace file modifications occur and task verification passes, the agent node cleaner produces change messages.
 - [AgentNodeCleaner] When blame is signaled, the agent node cleaner produces feedback messages containing the blame explanation and addressed to the blamed dependency node.
-- [AgentNodeCleaner] When cleaning succeeds without workspace file modifications, no messages are produced.
+- [AgentNodeCleaner] When cleaning succeeds without workspace file modifications, the node is left clean with no produced messages.
+- [AgentNodeCleaner] When cleaning fails, the node remains dirty with no produced messages and continuation halts.
 
 GROUNDING_ARGUMENT:
 - Receives node as an input argument and retrieves task prompt and node definition from imported bazel_graph_storage in the same system lifecycle tier. When a dirty node defines no task prompt, it resolves without executing an agent session phase, producing change messages if incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise. Within the orchestrated agent session phase, it configures CleanedNode, materializes startup templates from sandbox, seeds conversation history with incoming pending messages ordered deterministically by content and augmenting the task prompt with guide instructions based on imported node_config and model_config, executes agent_runner, and maps the resulting agent outcome to change or feedback messages for dag_storage, relying on the requirements of collaborator types to satisfy message generation and dirty state management.
@@ -63,8 +64,6 @@ FRESH_REQUIREMENTS:
 - Change messages are delivered to downstream dependents.
 
 INHERITED_REQUIREMENTS:
-- [NodeCleaner] After a dirty node is cleaned, the node is registered as a dependent to its non-silent dependencies.
-- [NodeCleaner] Delivering messages delivers change messages to dependents when modifications are made, or feedback messages to dependencies when defects require revision.
 - [NodeCleaner] Cleaning a dirty node communicates whether processing should continue.
 - [NodeCleaner] Processing cannot continue only if a failure occurs while cleaning the node that cannot be handled by cleaning any other node.
 

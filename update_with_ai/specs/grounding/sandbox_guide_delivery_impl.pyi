@@ -52,10 +52,7 @@ PURPOSE:
 Implements parse_guide to extract summary and step sections from file content
 
 FRESH_REQUIREMENTS:
-- Guide parsing extracts the summary from content preceding the first section heading, captures verification failure instructions when a section heading begins with `Verification failure`, and excludes sections whose title begins with `Lint checks` or `Verification failure`.
-
-INHERITED_REQUIREMENTS:
-- [GuideDelivery] Parsing file content extracts the summary from content preceding the first section heading, captures verification failure instructions when a section heading begins with `Verification failure`, and excludes sections whose title begins with `Lint checks` or `Verification failure`.
+- Guide parsing extracts the summary from content preceding the first section heading, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Lint checks` or `Verification failure`.
 
 GROUNDING_ARGUMENT:
 - Receives content directly as a parameter and parses the markdown text into summary, verification failure instructions, and step sections, excluding sections titled with Lint checks or Verification failure.
@@ -77,9 +74,7 @@ FRESH_REQUIREMENTS:
 - When no guide is configured or no step sections remain, the guide delivery indicates that no steps remain and advancing produces no response.
 
 INHERITED_REQUIREMENTS:
-- [GuideDelivery] When advancing a step with passed verification on initial delivery, the response contains the guide summary alone.
-- [GuideDelivery] When advancing a step with passed verification on subsequent steps and steps remain, the response presents the guide summary above the next step section content.
-- [GuideDelivery] When advancing a step with failed verification, advancing retains the current step section and reports the failure diagnostics alongside any configured verification failure instructions.
+- [GuideDelivery] Advancing step delivers instructional text when verification passes, or retains the current milestone and reports failure diagnostics alongside verification failure instructions when verification fails.
 
 GROUNDING_ARGUMENT:
 - Receives verification_passed and failure_diagnostics directly as parameters, evaluates the active delivery state against remaining sections on self, advances or retains the step state based on verification, and formats the response content combining any configured verification failure instructions using tool_provider.Response.

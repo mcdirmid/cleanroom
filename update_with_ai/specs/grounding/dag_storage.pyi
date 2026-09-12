@@ -6,7 +6,7 @@ from dataclasses import dataclass
 class DagStorage(Protocol):
     """
 PURPOSE:
-Defined as a system service that maintains node state, including its graph structure and change propagation
+Defined as a system service that stores graph structure, node status, and message propagation across nodes
 """
 
     @operation
@@ -130,7 +130,7 @@ Establishes that each dependency references an upstream target node
     def is_silent(self) -> bool:
         """
 PURPOSE:
-Indicates that a dependency can be silent when the dependent node does not depend on its content
+Indicates that a dependency can be silent to preclude change propagation from that dependency
 """
         ...
 
@@ -175,7 +175,7 @@ Text content explaining why the node requires cleaning
 class Feedback(Message):
     """
 PURPOSE:
-Introduces feedback messages informing of issues detected by downstream dependents
+Introduces feedback messages informing of defects detected by downstream dependents
 """
 
     def __init__(self, content: str=..., target: Optional[Node]=...) -> None:

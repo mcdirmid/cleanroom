@@ -90,7 +90,7 @@ class BazelRunner(bazel_runner.BazelRunner, Singleton):
 
     def mark_node_dirty(self, target: dag_storage.Node, message: dag_storage.Change) -> None:
         # Requirement: Marking a node dirty injects a change message with text set to check.
-        # Requirement: [BazelRunner] A bazel runner marks a target node dirty by injecting a non-triggering check change message into its pending messages in dag storage.
+        # Requirement: [BazelRunner] A bazel runner marks a target node dirty by injecting a change message into its pending messages in dag storage.
         storage = get_singleton(dag_storage.DagStorage)
         storage.add_message(message, to=target)
 

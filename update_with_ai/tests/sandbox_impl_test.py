@@ -241,7 +241,7 @@ class SandboxImplTest(unittest.TestCase):
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             sb = scope.get_singleton(Sandbox)
-            # Requirement: [Sandbox] The sandbox exposes startup tool executions as an ordered sequence of initial tool executions based on active configuration, ordering startup reads deterministically by file alias short name.
+            # Requirement: [Sandbox] The sandbox exposes startup tool executions as an ordered sequence of initial tool executions based on active configuration.
             executions = sb.get_startup_tool_executions()
 
             self.assertEqual(len(executions), 4)

@@ -60,10 +60,10 @@ FRESH_REQUIREMENTS:
     def mark_node_dirty(self, target: dag_storage.Node, message: dag_storage.Change) -> None:
         """
 PURPOSE:
-Marks a target node dirty by injecting a check change message into its pending messages
+Marks a target node dirty by injecting a change message into its pending messages
 
 FRESH_REQUIREMENTS:
-- A bazel runner marks a target node dirty by injecting a non-triggering check change message into its pending messages in dag storage.
+- A bazel runner marks a target node dirty by injecting a change message into its pending messages in dag storage.
 """
         ...
 

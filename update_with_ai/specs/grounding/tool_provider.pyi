@@ -457,6 +457,6 @@ PURPOSE:
 Executes tools by name with wire parameter bindings at the request of the agent
 
 FRESH_REQUIREMENTS:
-- Executing a tool by name with wire parameter bindings produces the same response as executing the tool directly.
+- Executing a tool by name with wire parameter bindings produces the tool response upon resolving parameter conversions.
 """
         ...

@@ -10,10 +10,30 @@ Multi-step agent workflows require coordinated incremental execution to avoid re
 
 ## Types and Behavior
 
-A *node* identifies a discrete unit of work in the graph. A *dag storage* is a system service that maintains node state, including its graph structure and change propagation. A node in a dag storage has:
+A *node* identifies a discrete unit of work in the graph.
 
-- *Dependencies* that refer to the node's upstream nodes in the graph. A dependency can be *silent* to indicate that the dependent node does not depend on the dependency's content and so does not need to receive change messages about the dependency.
+A *message* explains why a node requires cleaning, carrying text *content*. A message is either:
 
-- *Dependents* that refer to downstream nodes depending on it. A node can be *registered* as a dependent to all of its non-silent dependencies so that it can be notified when dependencies change. The dependents of a node can be *cleared* to avoid stale dependent relationships.
+- A *change* message, informing of modifications made to upstream dependencies.
 
-- *Messages* explaining why the node requires cleaning. A message has *content* explaining why the node requires cleaning. A message can either indicate *change*, which informs of modifications made to upstream dependencies, or *feedback*, which informs of issues detected by downstream dependents and can be addressed to a specific dependency node. A node is *dirty*, meaning it needs to be cleaned, if, but not only if, it has messages. Messages can be *added* to a node, to inform on why it needs to be cleaned, as well as *cleared*, to inform that it no longer needs to be cleaned.
+- A *feedback* message, informing of defects detected by downstream dependents and addressed to a specific dependency node.
+
+A node is *dirty*, meaning it requires cleaning, if, but not only if, it has messages.
+
+A *dag storage* is a system service that stores graph structure, node status, and message propagation across nodes.
+
+A dag storage:
+
+- Stores node *dependencies* referring to upstream nodes in the graph, identifying whether a dependency is *silent* to preclude change propagation from that dependency.
+
+- Stores node *dependents* referring to downstream nodes depending on that node.
+
+- Can *register* a node as a dependent to all of its non-silent dependencies.
+
+- Can *clear* the dependents of a node.
+
+- Exposes whether a node is dirty.
+
+- Can *add* messages to a node.
+
+- Can *clear* messages from a node.

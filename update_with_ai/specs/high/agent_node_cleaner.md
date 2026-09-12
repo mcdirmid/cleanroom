@@ -21,3 +21,5 @@ An agent node cleaner cleans a dirty node within an agent session phase. Cleanin
 - Producing feedback messages containing the blame explanation and addressed to the blamed dependency node when blame is signaled.
 
 - Leaving the node clean with no produced messages when cleaning succeeds without workspace file modifications.
+
+- Leaving the node dirty with no produced messages and halting continuation when cleaning fails.

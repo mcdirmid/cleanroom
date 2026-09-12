@@ -13,7 +13,7 @@ Agent guidance documents contain disparate front-matter, structural summaries, a
 
 ## Types and Behavior
 
-When initialized for an agent session, the guide delivery obtains its guide parsed from configured guide file content, capturing verification failure instructions when a section heading begins with `Verification failure` and omitting sections whose title begins with `Lint checks` or `Verification failure` from progressive step sections.
+When initialized for an agent session, the guide delivery obtains its guide parsed from configured guide file content. Parsing extracts the guide summary from content preceding the first section heading, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Lint checks` or `Verification failure`.
 
 Initially, before any step has been advanced, the guide delivery is positioned prior to the first step section. When advancing a step with passed verification:
 

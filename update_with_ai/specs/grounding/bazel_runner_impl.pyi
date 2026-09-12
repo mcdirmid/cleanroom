@@ -55,7 +55,7 @@ FRESH_REQUIREMENTS:
 - Marking a node dirty injects a change message with text set to check.
 
 INHERITED_REQUIREMENTS:
-- [BazelRunner] A bazel runner marks a target node dirty by injecting a non-triggering check change message into its pending messages in dag storage.
+- [BazelRunner] A bazel runner marks a target node dirty by injecting a change message into its pending messages in dag storage.
 
 GROUNDING_ARGUMENT:
 - Receives target and message parameters directly and injects the check change message into target's pending messages in imported dag_storage in the same system lifecycle tier.
