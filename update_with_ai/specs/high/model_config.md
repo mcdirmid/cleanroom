@@ -35,3 +35,5 @@ The model config provides:
 - Whether the agent should perform *startup reads* to inspect declared files at session start.
 
 - Whether the agent should *inject followups* to execute follow-up tool calls specified by tool responses.
+
+- A *node visit limit* bounding the maximum number of times any node can be visited during dag cleaning.

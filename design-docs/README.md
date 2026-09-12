@@ -17,6 +17,10 @@ The design documentation is organized across four foundational areas:
   - Formulates natural language behavioral contracts and assumption preconditions.
   - Distinguishes caller-satisfied assumptions (preconditions) from callee guarantees (requirements).
   - Outlines the grounded failure principle, boundary defense, and rules for avoiding ungrounded error branches.
+- **[Markdown Template Format & System Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/template_format.md)** (`template_format.md`):
+  - Definitive reference for Cleanroom's formatter-resilient Markdown templating system.
+  - Explains the spec-as-sample philosophy, CommonMark HTML comment block and line-suffix directives (`<!-- if: ... -->`, `<!-- for: ... in ... -->`), parameter interpolation (`<name>`), and preservation of unrendered template structures.
+  - Details integration with Starlark build rules (`update_with_ai.bzl`), session configuration (`node_config`), read tooling (`ReadTool`), and startup template materialization (`EditManager`).
 
 ### 2. Grounding & Ontological Modeling
 - **[Grounding Specification Format: Python Interface Stubs (`.pyi`)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/new_grounding_format.md)** (`new_grounding_format.md`):

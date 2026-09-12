@@ -96,7 +96,7 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "bazel_node_config_impl",
-    module_deps = ['bazel_manifest_loader', 'dag_node_cleaner', 'dag_storage', 'file_alias', 'file_paths', 'node_config', 'sandbox_file_editor', 'sandbox_guide_delivery', 'sandbox_run_control', 'tool_provider'],
+    module_deps = ['bazel_manifest_loader', 'dag_node_cleaner', 'dag_storage', 'file_alias', 'file_paths', 'model_config', 'node_config', 'sandbox_file_editor', 'sandbox_guide_delivery', 'sandbox_run_control', 'tool_provider'],
 )
 
 update_python_with_ai(
@@ -136,7 +136,7 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "dag_cleaner_impl",
-    module_deps = ['dag_cleaner', 'dag_node_cleaner', 'dag_storage'],
+    module_deps = ['dag_cleaner', 'dag_node_cleaner', 'dag_storage', 'model_config'],
 )
 
 update_python_with_ai(
@@ -165,6 +165,11 @@ update_python_with_ai(
 )
 
 update_python_with_ai(
+    name = "commonmark_ext",
+    module_deps = [],
+)
+
+update_python_with_ai(
     name = "filesystem_ext",
     module_deps = [],
 )
@@ -186,7 +191,7 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "node_config",
-    module_deps = ['file_alias', 'sandbox_file_editor', 'sandbox_guide_delivery', 'sandbox_run_control'],
+    module_deps = ['file_alias', 'model_config', 'sandbox_file_editor', 'sandbox_guide_delivery', 'sandbox_run_control'],
 )
 
 update_python_with_ai(
@@ -211,7 +216,7 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "sandbox_asm",
-    module_deps = ['sandbox_change_summary_validator_impl', 'sandbox_file_editor_impl', 'sandbox_file_reader_impl', 'sandbox_guide_delivery_impl', 'sandbox_impl', 'sandbox_run_control_impl', 'tool_provider_impl'],
+    module_deps = ['sandbox_change_summary_validator_impl', 'sandbox_file_editor_impl', 'sandbox_file_reader_impl', 'sandbox_guide_delivery_impl', 'sandbox_impl', 'sandbox_run_control_impl', 'template_format_impl', 'tool_provider_impl'],
 )
 
 update_python_with_ai(
@@ -231,7 +236,7 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "sandbox_file_editor_impl",
-    module_deps = ['file_alias', 'filesystem_ext', 'node_config', 'sandbox_file_editor', 'tool_provider'],
+    module_deps = ['file_alias', 'filesystem_ext', 'node_config', 'sandbox_file_editor', 'template_format', 'tool_provider'],
 )
 
 update_python_with_ai(
@@ -241,7 +246,7 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "sandbox_file_reader_impl",
-    module_deps = ['file_alias', 'filesystem_ext', 'node_config', 'sandbox_file_reader', 'tool_provider'],
+    module_deps = ['file_alias', 'filesystem_ext', 'node_config', 'sandbox_file_reader', 'template_format', 'tool_provider'],
 )
 
 update_python_with_ai(
@@ -267,6 +272,16 @@ update_python_with_ai(
 update_python_with_ai(
     name = "sandbox_run_control_impl",
     module_deps = ['dag_storage', 'file_alias', 'node_config', 'sandbox_file_editor', 'sandbox_guide_delivery', 'sandbox_run_control', 'tool_provider'],
+)
+
+update_python_with_ai(
+    name = "template_format",
+    module_deps = [],
+)
+
+update_python_with_ai(
+    name = "template_format_impl",
+    module_deps = ['commonmark_ext', 'template_format'],
 )
 
 update_python_with_ai(

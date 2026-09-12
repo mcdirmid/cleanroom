@@ -1,8 +1,8 @@
 # bazel_asm assembly component
 
 assembles: agent_asm, bazel_graph_storage_impl, bazel_manifest_loader_impl, bazel_model_config_impl, bazel_node_config_impl, bazel_node_id_utils_impl, bazel_runner_impl, dag_asm, file_paths_impl, runner_logger_impl, sandbox_asm
-imports: bazel_target_labels_ext, filesystem_ext, json_manifest_ext, model_config_ext, openai_ext, update_with_ai_proto_ext
-implements: agent_conversation_history, agent_loop_guard, agent_node_cleaner, agent_runner, bazel_graph_storage, bazel_manifest_loader, bazel_node_id_utils, bazel_runner, dag_cleaner, dag_node_cleaner, dag_storage, file_alias, file_paths, model_config, node_config, runner_logger, sandbox, sandbox_change_summary_validator, sandbox_file_editor, sandbox_file_reader, sandbox_guide_delivery, sandbox_run_control, tool_provider
+imports: bazel_target_labels_ext, commonmark_ext, filesystem_ext, json_manifest_ext, model_config_ext, openai_ext, update_with_ai_proto_ext
+implements: agent_conversation_history, agent_loop_guard, agent_node_cleaner, agent_runner, bazel_graph_storage, bazel_manifest_loader, bazel_node_id_utils, bazel_runner, dag_cleaner, dag_node_cleaner, dag_storage, file_alias, file_paths, model_config, node_config, runner_logger, sandbox, sandbox_change_summary_validator, sandbox_file_editor, sandbox_file_reader, sandbox_guide_delivery, sandbox_run_control, template_format, tool_provider
 
 ## Purpose
 

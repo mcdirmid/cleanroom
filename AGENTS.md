@@ -16,6 +16,7 @@ Always read and maintain in context the relevant guide from `update_python_with_
 - **Grounding to Library Code Alignment**: `update_python_with_ai/guides/grounding_to_lib.md`
 - **Grounding to Unit Tests Alignment**: `update_python_with_ai/guides/grounding_to_test.md`
 - **QA Verification**: `update_python_with_ai/guides/qa.md`
+- **Coverage Arbiter**: `update_python_with_ai/guides/coverage.md`
 
 ## Bazel Test Execution Flags
 - **Required Flags**: When running tests via `bazel test`, ALWAYS include `--test_output=errors --test_timeout=100` and `--noshow_progress --noshow_loading_progress`.

@@ -242,7 +242,7 @@ _lls_lint_test = rule(
 # Macro: update_python_with_ai (specification nodes)
 # ============================================================================
 
-def _update_python_with_ai(name, prompt = "", src = "", deps = [], module_deps = [], star_deps = [], feedback_deps = [], silent_deps = [], silent_srcs = [], template = None, guide = None, verify = "", visibility = None):
+def _update_python_with_ai(name, prompt = "", src = "", deps = [], module_deps = [], star_deps = [], feedback_deps = [], silent_deps = [], silent_srcs = [], template = None, template_parameters = None, guide = None, allows_step_mode = True, verify = "", visibility = None):
     """Create a spec node by delegating to update_with_ai.
 
     The single common spec-node entry: forwards the spec-specific arguments
@@ -274,6 +274,8 @@ def _update_python_with_ai(name, prompt = "", src = "", deps = [], module_deps =
             file one level up).
         template: Optional template file label whose content initializes the
             spec file at run start when the file does not exist on disk.
+        guide: Optional node target whose declared source is the run's guide.
+        allows_step_mode: Whether the node permits guide step mode.
         verify: Shell command to run when the agent calls verify()
             (default: empty = no verify tool).
         visibility: Optional visibility applied to all generated targets;
@@ -293,7 +295,9 @@ def _update_python_with_ai(name, prompt = "", src = "", deps = [], module_deps =
         prompt = prompt,
         src = src,
         template = template,
+        template_parameters = template_parameters,
         guide = guide,
+        allows_step_mode = allows_step_mode,
         deps = deps,
         silent_deps = silent_deps,
         star_deps = module_deps + star_deps,
@@ -304,12 +308,21 @@ def _update_python_with_ai(name, prompt = "", src = "", deps = [], module_deps =
     )
     return ":" + name
 
-def update_python_with_ai(name, module_deps, visibility = None):
+def _merge_dicts(base, overrides):
+    """Merge two dictionaries, with overrides taking precedence."""
+    merged = dict(base)
+    if overrides:
+        for k, v in overrides.items():
+            merged[k] = v
+    return merged
+
+def update_python_with_ai(name, module_deps, template_parameters = None, visibility = None):
     """Create a spec node for each root in spec_dep_roots.
 
     Args:
         name: Target name prefix (e.g. "dag_storage").
         module_deps: List of dependency spec/module labels (e.g. [":dag_clean_logic"]); each is a readable spec dependency and a pyright_dep of the module.
+        template_parameters: Optional dictionary of template parameters for template evaluation.
         visibility: Optional visibility applied to all generated targets
             (node, *_clean, *_feedback, *_prompt); needed for cross-package
             deps.
@@ -317,15 +330,84 @@ def update_python_with_ai(name, module_deps, visibility = None):
     Returns:
         List of the created spec node labels (":" + name).
     """
+    is_impl = name.endswith("_impl")
+    is_asm = name.endswith("_asm")
+    is_ext = name.endswith("_ext")
+    is_interface = not (is_impl or is_asm or is_ext)
+    component_type = "implementation" if is_impl else ("assembly" if is_asm else ("external" if is_ext else "interface"))
+    dep_names = [dep.split(":")[-1] for dep in module_deps]
+
+    base_params = {
+        "name": name,
+        "component_name": name,
+        "component_type": component_type,
+        "is_impl": is_impl,
+        "is_asm": is_asm,
+        "is_ext": is_ext,
+        "is_interface": is_interface,
+        "is_not_ext": not is_ext,
+        "needs_implements": is_impl or is_asm,
+        "target_module": name,
+        "target_impl": name,
+        "module_deps": dep_names,
+    }
+
+    high_params = _merge_dicts(base_params, {
+        "target_file": "high/" + name + ".md",
+        "spec_file": name + ".md",
+    })
+    if template_parameters:
+        high_params = _merge_dicts(high_params, template_parameters)
+
+    low_params = _merge_dicts(base_params, {
+        "target_file": "grounding/" + name + ".pyi",
+        "spec_file": name + ".pyi",
+    })
+    if template_parameters:
+        low_params = _merge_dicts(low_params, template_parameters)
+
+    lib_params = _merge_dicts(base_params, {
+        "target_file": name + ".py",
+        "spec_file": name + ".pyi",
+    })
+    if template_parameters:
+        lib_params = _merge_dicts(lib_params, template_parameters)
+
+    if is_impl:
+        test_params = _merge_dicts(base_params, {
+            "target_file": name + "_test.py",
+            "target_impl": name,
+            "spec_file": name + ".pyi",
+        })
+        if template_parameters:
+            test_params = _merge_dicts(test_params, template_parameters)
+
+        qa_params = _merge_dicts(base_params, {
+            "target_file": name + "_qa.log",
+            "target_impl": name,
+            "spec_file": name + ".pyi",
+        })
+        if template_parameters:
+            qa_params = _merge_dicts(qa_params, template_parameters)
+
+        coverage_params = _merge_dicts(base_params, {
+            "target_file": name + "_coverage.log",
+            "target_impl": name,
+            "spec_file": name + ".pyi",
+        })
+        if template_parameters:
+            coverage_params = _merge_dicts(coverage_params, template_parameters)
+
     hls_spec_deps = [dep + "_high" for dep in module_deps]
     _update_python_with_ai(
         name = name + "_high",
         prompt = (
             "Align the high-level specification for component %s (%s.md) with its " +
-            "dependencies per the guide. Call advance to proceed."
+            "dependencies per the guide."
         ) % (name, name),
         src = "high/" + name + ".md",
         template = "//update_python_with_ai/templates:hls",
+        template_parameters = high_params,
         guide = "//update_python_with_ai/guides:high_level_spec",
         module_deps = hls_spec_deps,
         verify = "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{}:{}_high_lint --test_output=errors --noshow_progress 2>&1".format(
@@ -354,10 +436,11 @@ def update_python_with_ai(name, module_deps, visibility = None):
         name = name + "_low",
         prompt = (
             "Align the grounding specification for component %s (%s.pyi) with the " +
-            "high-level specification (%s.md) per the guide. Call advance to proceed."
+            "high-level specification (%s.md) per the guide."
         ) % (name, name, name),
         src = "grounding/" + name + ".pyi",
         template = "//update_python_with_ai/templates:empty",
+        template_parameters = low_params,
         guide = "//update_python_with_ai/guides:high_to_grounding",
         module_deps = lls_spec_deps,
         deps = [":" + name + "_high"],
@@ -419,20 +502,23 @@ def update_python_with_ai(name, module_deps, visibility = None):
         prompt = (
             "Align the lib module for component %s (%s.py) with its grounding " +
             "specification (%s.pyi) per the guide. " +
-            _lib_kind_clause + " Call advance to proceed."
-        ) % (name, name, name),
+            _lib_kind_clause
+        ).strip() % (name, name, name),
         src = "../lib/" + name + ".py",
         template = "//update_python_with_ai/templates:lib",
+        template_parameters = lib_params,
         guide = "//update_python_with_ai/guides:grounding_to_lib",
         deps = _lib_deps,
         module_deps = [":" + name + "_low"],
         silent_deps = [dep + "_lib" for dep in module_deps],
         verify = (
             "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_with_ai/support/lib/lib_lint.py " +
-            "{}/lib/BUILD.bazel {}/lib/{}.py {} {} && " +
+            "{}/lib/BUILD.bazel {}/lib/{}.py --pyi {}/specs/grounding/{}.pyi {} {} && " +
             "bazel test //{}/lib:{}_type_check --test_output=errors --noshow_progress 2>&1"
         ).format(
             _parent_pkg,
+            _parent_pkg,
+            name,
             _parent_pkg,
             name,
             "--deps " + ",".join([dep.split(":")[-1] for dep in module_deps])
@@ -460,10 +546,11 @@ def update_python_with_ai(name, module_deps, visibility = None):
             name = name + "_test",
             prompt = (
                 "Write the test module for component %s (%s_test.py) from the " +
-                "grounding specification (%s.pyi) per the guide. Call advance to proceed."
+                "grounding specification (%s.pyi) per the guide."
             ) % (name, name, name),
             src = "../tests/" + name + "_test.py",
             template = "//update_python_with_ai/templates:test",
+            template_parameters = test_params,
             guide = "//update_python_with_ai/guides:grounding_to_test",
             deps = _lib_deps,
             module_deps = [":" + name + "_low"],
@@ -504,17 +591,47 @@ def update_python_with_ai(name, module_deps, visibility = None):
         _qa_log_path = "{}/logs/{}_qa.log".format(native.package_name(), name)
         _update_python_with_ai(
             name = name + "_qa",
-            prompt = "Call advance to run verification and arbitrate failures per the guide.",
+            prompt = "Evaluate test execution and arbitrate failures per the guide.",
             src = "logs/" + name + "_qa.log",
             template = "//update_python_with_ai/templates:empty",
+            template_parameters = qa_params,
             guide = "//update_python_with_ai/guides:qa",
+            allows_step_mode = False,
             deps = _lib_deps,
             star_deps = [":" + name + "_low"],
             feedback_deps = [":" + name + "_lib", ":" + name + "_test"],
             verify = (
                 "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{}/tests:{}_test --test_output=errors --noshow_progress 2>&1 && " +
-                "if [ -s {} ]; then echo 'QA log is not empty: delete all lines (0 bytes, remove any headers) and call advance again.'; exit 1; fi"
+                "if [ -s {} ]; then echo 'QA log is not empty: delete all lines (0 bytes, remove any headers).'; exit 1; fi"
             ).format(_parent_pkg, name, _qa_log_path),
+            visibility = visibility,
+        )
+
+        # The coverage arbiter node (implementations only):
+        # evaluates statement coverage of the implementation module exercised by
+        # its unit test suite, updates logs/<name>_coverage.log with coverage metrics,
+        # and guides the agent to translate missing coverage into missing grounding
+        # requirements to deliver blame feedback to the test agent (or add # pragma: no cover
+        # for impossible cases/caller assumptions).
+        _coverage_log_path = "{}/logs/{}_coverage.log".format(native.package_name(), name)
+        _update_python_with_ai(
+            name = name + "_coverage",
+            prompt = "Evaluate test execution and evaluate test coverage per the guide.",
+            src = "logs/" + name + "_coverage.log",
+            template = "//update_python_with_ai/templates:empty",
+            template_parameters = coverage_params,
+            guide = "//update_python_with_ai/guides:coverage",
+            allows_step_mode = False,
+            deps = _lib_deps,
+            silent_deps = [":" + name + "_qa"],
+            star_deps = [":" + name + "_low"],
+            feedback_deps = [":" + name + "_lib", ":" + name + "_test"],
+            verify = (
+                "cd $BUILD_WORKSPACE_DIRECTORY && " +
+                "bazel test //{}/tests:{}_test --test_output=errors --noshow_progress 2>&1 && " +
+                "python3 update_with_ai/support/lib/evaluate_coverage.py --impl {}/lib/{}.py --test {}/tests/{}_test.py --threshold 100.0 && " +
+                "if [ -s {} ]; then echo 'Coverage log is not empty: delete all lines (0 bytes, remove any headers).'; exit 1; fi"
+            ).format(_parent_pkg, name, _parent_pkg, name, _parent_pkg, name, _coverage_log_path),
             visibility = visibility,
         )
     elif name.endswith("_asm"):
@@ -527,6 +644,18 @@ def update_python_with_ai(name, module_deps, visibility = None):
             prompt = "",
             src = "",
             deps = _qa_deps,
+            visibility = visibility,
+        )
+
+        # The coverage aggregation node for assemblies: has no prompt and no src file.
+        # It depends on the _coverage targets of all composed implementations and
+        # sub-assemblies so that cleaning this node verifies coverage across the composite subsystem.
+        _coverage_deps = [dep + "_coverage" for dep in module_deps if dep.endswith("_impl") or dep.endswith("_asm")]
+        _update_python_with_ai(
+            name = name + "_coverage",
+            prompt = "",
+            src = "",
+            deps = _coverage_deps,
             visibility = visibility,
         )
     return ":" + name

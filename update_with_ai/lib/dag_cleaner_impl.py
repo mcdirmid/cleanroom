@@ -3,18 +3,20 @@ from typing import Dict, List, Optional, Set
 from . import dag_cleaner
 from . import dag_node_cleaner
 from . import dag_storage
+from . import model_config
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
 
 class DagCleaner(dag_cleaner.DagCleaner, Singleton):
     tier = "system"
 
     def __init__(self) -> None:
-        self._execution_limit = 500
+        pass
 
     @property
-    def execution_limit(self) -> int:
-        # Requirement: The execution limit is hardcoded to 500.
-        return self._execution_limit
+    def node_visit_limit(self) -> int:
+        # Requirement: The node visit limit is obtained from the model config.
+        cfg = get_singleton(model_config.ModelConfig)
+        return cfg.node_visit_limit
 
     def _collect_subgraph(self, root: dag_storage.Node, storage: dag_storage.DagStorage) -> Set[dag_storage.Node]:
         # Requirement: Cleaning a target node collects all reachable dependencies from the node.
@@ -75,9 +77,9 @@ class DagCleaner(dag_cleaner.DagCleaner, Singleton):
                     continue
 
                 visits[curr] += 1
-                # Requirement: If visiting any node exceeds the execution limit, the dag cleaner halts with an unexpected failure.
-                if visits[curr] > self.execution_limit:
-                    raise RuntimeError(f"Node {curr.address} exceeded execution limit of {self.execution_limit}")
+                # Requirement: If visiting any node exceeds the node visit limit, the dag cleaner halts with an unexpected failure.
+                if visits[curr] > self.node_visit_limit:
+                    raise RuntimeError(f"Node {curr.address} exceeded node visit limit of {self.node_visit_limit}")
 
                 # Requirement: When cleaning a dirty node, the node cleaner is invoked to clean the node.
                 # Requirement: [DagCleaner] When cleaning a dirty node using the node cleaner, cleaning delegates to the node cleaner.

@@ -29,12 +29,18 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
             return True
         return self._step_index < len(self._guide.sections)
 
+    @property
+    def guide(self) -> Optional[sandbox_guide_delivery.Guide]:
+        # Requirement: Exposes the configured guide for the session.
+        return self._guide
+
     def parse_guide(self, content: file_alias.FileContent) -> sandbox_guide_delivery.Guide:
-        # Requirement: Guide parsing extracts the summary from content preceding the first section heading and excludes sections whose title begins with `Lint checks`.
+        # Requirement: Guide parsing extracts the summary from content preceding the first section heading, captures verification failure instructions when a section heading begins with `Verification failure`, and excludes sections whose title begins with `Lint checks` or `Verification failure`.
         raw = str(content)
         lines = raw.splitlines()
         summary_lines: List[str] = []
         sections: List[sandbox_guide_delivery.StepSection] = []
+        verification_failure_lines: Optional[List[str]] = None
 
         current_title: Optional[str] = None
         current_section_lines: List[str] = []
@@ -44,7 +50,9 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
                 if current_title is None:
                     summary_lines = list(current_section_lines)
                 else:
-                    if not current_title.startswith("Lint checks"):
+                    if current_title.startswith("Verification failure"):
+                        verification_failure_lines = list(current_section_lines)
+                    elif not current_title.startswith("Lint checks"):
                         sections.append(
                             sandbox_guide_delivery.StepSection(
                                 index=len(sections),
@@ -58,7 +66,9 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
                 current_section_lines.append(line)
 
         if current_title is not None:
-            if not current_title.startswith("Lint checks"):
+            if current_title.startswith("Verification failure"):
+                verification_failure_lines = list(current_section_lines)
+            elif not current_title.startswith("Lint checks"):
                 sections.append(
                     sandbox_guide_delivery.StepSection(
                         index=len(sections),
@@ -70,9 +80,16 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
         elif not summary_lines:
             summary_lines = current_section_lines
 
+        vf_text = (
+            "\n".join(verification_failure_lines).strip()
+            if verification_failure_lines is not None
+            else None
+        )
+
         return sandbox_guide_delivery.Guide(
             summary="\n".join(summary_lines).strip(),
             sections=sections,
+            verification_failure=vf_text,
         )
 
     def advance_step(
@@ -84,13 +101,16 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
 
         if not verification_passed:
             diag_text = failure_diagnostics or ""
+            vf_block = ""
+            if self._guide.verification_failure:
+                vf_block = f"\n\n## Verification failure\n{self._guide.verification_failure}"
             if self._step_index == 0:
-                # Requirement: When advancing a step with failed verification, if no step section has been delivered yet, the guide delivery retains its index and emits a response combining the guide summary and failure diagnostics.
-                content = f"{self._guide.summary}\n\nVerification failed:\n{diag_text}".strip()
+                # Requirement: When advancing a step with failed verification, if no step section has been delivered yet, the guide delivery retains its index and emits a response combining the guide summary, any configured verification failure instructions, and failure diagnostics.
+                content = f"{self._guide.summary}{vf_block}\n\nVerification failed:\n{diag_text}".strip()
             else:
-                # Requirement: When advancing a step with failed verification, if a step section is currently active, the guide delivery retains the current step index without advancement and emits a response combining the guide summary, the current step section content introduced by `Now check carefully:`, and the failure diagnostics.
+                # Requirement: When advancing a step with failed verification, if a step section is currently active, the guide delivery retains the current step index without advancement and emits a response combining the guide summary, the current step section content introduced by `Now check carefully:`, any configured verification failure instructions, and the failure diagnostics.
                 section = self._guide.sections[self._step_index - 1]
-                content = f"{self._guide.summary}\n\n## {section.title}\nNow check carefully:\n{section.content}\n\nVerification failed:\n{diag_text}".strip()
+                content = f"{self._guide.summary}\n\n## {section.title}\nNow check carefully:\n{section.content}{vf_block}\n\nVerification failed:\n{diag_text}".strip()
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,

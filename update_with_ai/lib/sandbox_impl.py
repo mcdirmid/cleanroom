@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Set, Tuple, Union
 from . import model_config
 from . import node_config
 from . import sandbox
@@ -23,9 +23,10 @@ class Sandbox(sandbox.Sandbox, Singleton):
     def get_startup_tool_executions(self) -> List[sandbox.StartupToolExecution]:
         executions: List[sandbox.StartupToolExecution] = []
         m_cfg = get_singleton(model_config.ModelConfig)
+        n_cfg = get_singleton(node_config.NodeConfig)
 
         # Requirement: When using step mode to communicate a guide progressively, startup tool executions include an initial advance tool execution with the name of the advance tool, empty wire parameter bindings, and the response produced by executing the advance tool.
-        if m_cfg.is_step_mode:
+        if n_cfg.is_step_mode:
             adv_tool = get_singleton(sandbox_run_control.AdvanceTool)
             resp = adv_tool.execute_tool(tool_provider.ActualParameterBindings(bindings=set()))
             executions.append(
@@ -38,17 +39,30 @@ class Sandbox(sandbox.Sandbox, Singleton):
 
         # Requirement: When performing startup reads to inspect declared files at session start, startup tool executions include file read executions for all declared read-only files from node config ordered deterministically by file alias short name, positioned after any advance tool execution.
         if m_cfg.is_startup_reads:
-            n_cfg = get_singleton(node_config.NodeConfig)
             read_tool = get_singleton(sandbox_file_reader.ReadTool)
+            read_mgr = get_singleton(sandbox_file_reader.ReadManager)
             for ro in sorted(n_cfg.read_only_files, key=lambda x: x.short_name):
-                bindings = {(read_tool.file_alias_parameter, ro)}
-                # Requirement: Each file read execution uses the name of the read tool, specifies wire parameter bindings mapping the file alias parameter of the read tool to the read-only file alias short name while omitting line numbers, and captures the response produced by executing the read tool.
+                needs_ln = read_mgr.requires_line_numbers(ro)
+                # Requirement: Each file read execution uses the name of the read tool, specifies wire parameter bindings mapping the file alias parameter of the read tool to the read-only file alias short name, supplies line numbers as determined by the read manager for source code files, and captures the response produced by executing the read tool.
+                wire_bindings: Set[Tuple[str, Union[str, int, bool]]]
+                if needs_ln:
+                    bindings = {
+                        (read_tool.file_alias_parameter, ro),
+                        (read_tool.line_numbers_parameter, True),
+                    }
+                    wire_bindings = {
+                        (read_tool.file_alias_parameter.name, ro.short_name),
+                        (read_tool.line_numbers_parameter.name, True),
+                    }
+                else:
+                    bindings = {(read_tool.file_alias_parameter, ro)}
+                    wire_bindings = {(read_tool.file_alias_parameter.name, ro.short_name)}
                 resp = read_tool.execute_tool(tool_provider.ActualParameterBindings(bindings=bindings))
                 executions.append(
                     sandbox.StartupToolExecution(
                         tool_name=read_tool.name,
                         wire_parameter_bindings=tool_provider.WireParameterBindings(
-                            bindings={(read_tool.file_alias_parameter.name, ro.short_name)}
+                            bindings=wire_bindings
                         ),
                         response=resp,
                     )

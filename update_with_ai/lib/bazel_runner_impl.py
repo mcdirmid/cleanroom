@@ -48,17 +48,34 @@ class BazelRunner(bazel_runner.BazelRunner, Singleton):
         # Requirement: The bazel runner executes cleaning passes in topological order using the dag cleaner and the node cleaner.
         # Requirement: [BazelRunner] A bazel runner cleans dirty nodes in topological order using the dag cleaner and the node cleaner.
         # Requirement: [BazelRunner] A bazel runner executes a cleaning pass over an acyclic subgraph rooted at a target node in dag storage.
+        failure_reason: Optional[str] = None
         try:
             cleaner.clean(root, node_cleaner)
-            success = not storage.is_dirty(root)
-        except RuntimeError:
-            # Requirement: The bazel runner halts cleaning and reports failure if a node cleaning fails or a cycle is encountered.
+            reachable: Set[dag_storage.Node] = set()
+            check_queue = [root]
+            while check_queue:
+                curr_node = check_queue.pop(0)
+                if curr_node not in reachable:
+                    reachable.add(curr_node)
+                    for dep in storage.get_dependencies(curr_node):
+                        if dep.node not in reachable:
+                            check_queue.append(dep.node)
+            # Requirement: The bazel runner halts cleaning and reports failure if a node cleaning fails, if an unexpected failure occurs during cleaning capturing the failure reason in the build summary, or if any reachable node in the target subgraph remains dirty after cleaning.
+            if any(storage.is_dirty(n) for n in reachable | visited):
+                success = False
+                failure_reason = "reachable nodes remain dirty"
+            else:
+                success = True
+        except RuntimeError as e:
+            # Requirement: The bazel runner halts cleaning and reports failure if a node cleaning fails, if an unexpected failure occurs during cleaning capturing the failure reason in the build summary, or if any reachable node in the target subgraph remains dirty after cleaning.
             success = False
+            failure_reason = str(e)
 
         if success:
             summary = f"Cleaning pass succeeded for {root.address}"
         else:
-            summary = f"Cleaning pass failed for {root.address}"
+            reason_suffix = f": {failure_reason}" if failure_reason else ""
+            summary = f"Cleaning pass failed for {root.address}{reason_suffix}"
 
         # Requirement: [BazelRunner] A bazel runner logs execution events to standard output and transcript files using the runner logger.
         logger.consume(

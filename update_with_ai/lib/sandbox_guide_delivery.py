@@ -16,11 +16,15 @@ class StepSection:
 class Guide:
     summary: str
     sections: List[StepSection]
+    verification_failure: Optional[str] = None
 
 
 class GuideDelivery(Protocol):
     @property
     def has_steps_remaining(self) -> bool: ...
+
+    @property
+    def guide(self) -> Optional[Guide]: ...
 
     def parse_guide(self, content: file_alias.FileContent) -> Guide: ...
 

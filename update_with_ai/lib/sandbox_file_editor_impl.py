@@ -3,6 +3,7 @@ from typing import Optional, Set
 from . import file_alias
 from . import node_config
 from . import sandbox_file_editor
+from . import template_format
 from . import tool_provider
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
 
@@ -63,18 +64,20 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
             self.record_initial_content(host_path)
 
     def materialize_templates(self) -> None:
-        # Requirement: Materializing templates retrieves configured templates from the node config, checks whether files exist using the filesystem at the host path formed from the alias manager workspace root and workspace path, and writes template content to missing target files while preserving existing files.
+        # Requirement: Materializing templates retrieves configured templates from the node config, formats initial template content using the template formatter with session template parameters, checks whether target files exist in the filesystem at the host path formed from the alias manager workspace root and the read-write file workspace path, and writes formatted template content for missing files while preserving existing files.
         # Requirement: [EditManager] Materializing templates populates missing read-write files with initial template content without overwriting existing files.
         cfg = get_singleton(node_config.NodeConfig)
         alias_mgr = get_singleton(file_alias.AliasManager)
+        formatter = get_singleton(template_format.TemplateFormatter)
 
         for bound_file, content in cfg.templates:
             host_path = os.path.join(alias_mgr.workspace_root.path, bound_file.workspace_path.path)
             if not os.path.exists(host_path):
                 os.makedirs(os.path.dirname(host_path), exist_ok=True)
+                formatted_content = formatter.format_template(str(content), cfg.template_parameters)
                 with open(host_path, "w", encoding="utf-8") as f:
-                    f.write(str(content))
-                self.record_initial_content(host_path, str(content))
+                    f.write(formatted_content)
+                self.record_initial_content(host_path, formatted_content)
 
 
 class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
@@ -135,7 +138,7 @@ class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
         target_text = str(bindings_map.get("target_text", ""))
         replacement_text = str(bindings_map.get("replacement_text", ""))
 
-        # Requirement: [EditingTool] Executing an editing tool with a file alias that is not a read-write file fails, providing a response reminding the agent that only declared read-write files can be modified.
+        # Requirement: [EditingTool] Editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
         if not isinstance(target_file, file_alias.ReadWriteFile):
             return tool_provider.Response(
                 is_failed=True,
@@ -182,6 +185,15 @@ class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
         # Requirement: On successful text replacement tool execution, the unique occurrence of the target text is replaced with the replacement text, written using the filesystem, and file modifications are recorded.
         # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
         new_content = content.replace(target_text, replacement_text, 1)
+        # Requirement: [EditingTool] Editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
+        if new_content == content:
+            return tool_provider.Response(
+                is_failed=True,
+                is_terminated=False,
+                content="Error: replacement produced no change to file content.",
+                reminder="Your edit had no effect, and such edits will fail.",
+            )
+
         with open(host_path, "w", encoding="utf-8") as f:
             f.write(new_content)
 
@@ -277,7 +289,7 @@ class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
         end_line = int(bindings_map.get("end_line", 1))
         replacement_text = str(bindings_map.get("replacement_text", ""))
 
-        # Requirement: [EditingTool] Executing an editing tool with a file alias that is not a read-write file fails, providing a response reminding the agent that only declared read-write files can be modified.
+        # Requirement: [EditingTool] Editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
         if not isinstance(target_file, file_alias.ReadWriteFile):
             return tool_provider.Response(
                 is_failed=True,
@@ -302,9 +314,8 @@ class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
                 content=f"Error: start_line {start_line} out of bounds (1..{total_lines + 1}).",
             )
 
+        # Requirement: Replacing or inserting lines treats each replacement line as a complete newline-terminated line, preserving subsequent line boundaries when replacement text lacks a trailing newline.
         rep_lines = [l + "\n" if not l.endswith("\n") else l for l in replacement_text.splitlines()]
-        if not replacement_text.endswith("\n") and rep_lines:
-            rep_lines[-1] = rep_lines[-1].rstrip("\n")
 
         if start_line <= end_line:
             # Requirement: When the start line is less than or equal to the end line, executing the line update tool fails if the end line exceeds the total line count.
@@ -321,6 +332,15 @@ class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
             # Requirement: When the start line exceeds the end line, successful execution inserts the replacement lines before the start line, writes using the filesystem, and records file modifications.
             # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
             new_lines = lines[: start_line - 1] + rep_lines + lines[start_line - 1 :]
+
+        # Requirement: [EditingTool] Editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
+        if new_lines == lines:
+            return tool_provider.Response(
+                is_failed=True,
+                is_terminated=False,
+                content="Error: line update produced no change to file content.",
+                reminder="Your edit had no effect, and such edits will fail.",
+            )
 
         edit_mgr = get_singleton(EditManager)
         edit_mgr.record_initial_content(host_path, "".join(lines))

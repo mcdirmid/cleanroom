@@ -35,3 +35,10 @@ update_guide_with_ai(
     deps = [],
 )
 
+update_guide_with_ai(
+    name = "coverage",
+    src = "coverage.md",
+    display_name = "coverage arbiter guide",
+    deps = [],
+)
+

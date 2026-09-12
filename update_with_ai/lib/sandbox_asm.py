@@ -7,6 +7,7 @@ from . import sandbox_file_reader_impl
 from . import sandbox_guide_delivery_impl
 from . import sandbox_impl
 from . import sandbox_run_control_impl
+from . import template_format_impl
 from . import tool_provider_impl
 
 CONSTITUENTS = (
@@ -16,6 +17,7 @@ CONSTITUENTS = (
     sandbox_guide_delivery_impl,
     sandbox_impl,
     sandbox_run_control_impl,
+    template_format_impl,
     tool_provider_impl,
 )
 

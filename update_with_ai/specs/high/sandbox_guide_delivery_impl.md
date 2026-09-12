@@ -13,7 +13,7 @@ Agent guidance documents contain disparate front-matter, structural summaries, a
 
 ## Types and Behavior
 
-When initialized for an agent session, the guide delivery obtains its guide parsed from configured guide file content.
+When initialized for an agent session, the guide delivery obtains its guide parsed from configured guide file content, capturing verification failure instructions when a section heading begins with `Verification failure` and omitting sections whose title begins with `Lint checks` or `Verification failure` from progressive step sections.
 
 Initially, before any step has been advanced, the guide delivery is positioned prior to the first step section. When advancing a step with passed verification:
 
@@ -23,8 +23,8 @@ Initially, before any step has been advanced, the guide delivery is positioned p
 
 Failing verification halts progression and provides diagnostic feedback. When advancing a step with failed verification:
 
-- If no step section has been delivered yet, the guide delivery retains its index and emits a response combining the guide summary and failure diagnostics.
+- If no step section has been delivered yet, the guide delivery retains its index and emits a response combining the guide summary, any configured verification failure instructions, and failure diagnostics.
 
-- If a step section is currently active, the guide delivery retains the current step index without advancement and emits a response combining the guide summary, the current step section content introduced by `Now check carefully:`, and the failure diagnostics.
+- If a step section is currently active, the guide delivery retains the current step index without advancement and emits a response combining the guide summary, the current step section content introduced by `Now check carefully:`, any configured verification failure instructions, and the failure diagnostics.
 
 When no guide is configured or no step sections remain, the guide delivery indicates that no steps remain and advancing produces no response.

@@ -1,30 +1,56 @@
-"""Tests for <name> per its implementation LLS.
+"""Tests for <target_impl> per its grounding specification.
 
-Written from the LLS alone; the implementation Python file is not consulted.
+Written from <target_impl>.pyi and its dependency closure alone;
+the library implementation Python file is never consulted.
 """
 
+from __future__ import annotations
 
 import unittest
-from typing import Any, Dict, List  # TODO: adjust imports to what the LLS requires
+from typing import Any, Dict, List, Optional, Set
+from unittest.mock import MagicMock, patch
 
-# TODO: import library modules under test using: from lib.<module> import ...
-# TODO: implement the dependency interfaces as mocks from their LLSs (the
-# transitive closure in the LLS dependency comment); each mock records calls,
-# returns scripted results, and enforces the interface's preconditions.
+# INITIAL AUTHORING INSTRUCTIONS:
+# 1. Immediate Goal:
+#    - Produce a minimal compiling test module that passes initial verification immediately.
+#    - Do NOT attempt comprehensive CUJ test coverage in your first turn.
+# 2. Imports:
+#    - Target implementation: from lib.<target_impl> import <TargetClass>, __initialize__
+#    - Collaborator interfaces and concrete data types: from lib.<interface> import <Protocol>, <Data>
+#    - Lifecycle registry: from support.lib.lifecycle import LifecycleRegistry, enter_phase
+# 3. Minimal Setup & Collaborators:
+#    - In test setUp():
+#        self.registry = LifecycleRegistry()
+#        __initialize__(self.registry)
+#    - Concrete data types are constructed directly; never mock data types.
+#    - Collaborator protocols are provided as minimal stubs or mock instances (duck-typed only; NEVER subclass Protocol):
+#        self.registry.register_instance(mock_obj, keys=[InterfaceProtocol], tier="system")
+#        self.registry.register_singleton(MockClass, keys=[InterfaceProtocol], tier="system")
+#    - NEVER mock the target class under test (<TargetClass>).
+# 4. Starter Test:
+#    - Add a single minimal test method exercising basic instantiation or a trivial operation to verify the module runs.
+# 5. Untested Requirements:
+#    - List all remaining unexercised requirements from <target_impl>.pyi under '# Untested requirements:' at the bottom.
+# 6. Advance:
+#    - Call advance() to pass initial verification. Subsequent checklist steps will guide adding comprehensive CUJs,
+#      edge cases, failure signals, and stateful collaborator mock transitions.
+# 7. Cleanup:
+#    - Delete these initial authoring instruction comments from this test module before completing the task.
 
 
-class <Name>Test(unittest.TestCase):
-    """TODO: group tests into classes by concern (success routing, failure
-    handling, invariants, config)."""
+class <TargetClass>Test(unittest.TestCase):
+    """Group tests into classes by cohesive Customer User Journeys (CUJs) and edge cases."""
 
-    def test_placeholder(self) -> None:
-        """TODO: replace with a test derived from the LLS:
-        - Behavioral Description: each bullet -> one or more outcome tests
-        - Failure Handling: each expected failure signal -> a test
-        - Invariants: sequence-of-operations tests
-        - Non-Concerns: pinned choices asserted; open choices never tested"""
+    def test_cuj_workflow(self) -> None:
+        """CUJ: Concise description of the user journey or edge case scenario."""
+        # Setup minimal collaborator mocks modeling state transitions
+        # Requirement: <exact requirement text from FRESH_REQUIREMENTS or INHERITED_REQUIREMENTS>
+        # Assert postconditions and state changes
         self.assertTrue(True)
 
 
 if __name__ == "__main__":
     unittest.main()
+
+# Untested requirements:
+# None

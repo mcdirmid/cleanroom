@@ -155,6 +155,7 @@ pyright_test(
         "//update_with_ai/lib:dag_cleaner_impl",
         "//update_with_ai/lib:dag_node_cleaner",
         "//update_with_ai/lib:dag_storage",
+        "//update_with_ai/lib:model_config",
         "//update_python_with_ai/support/lib:lifecycle",
     ],
 )
@@ -193,6 +194,7 @@ pyright_test(
         "//update_with_ai/lib:sandbox_file_editor",
         "//update_with_ai/lib:sandbox_file_editor_impl",
         "//update_with_ai/lib:sandbox_guide_delivery",
+        "//update_with_ai/lib:template_format",
         "//update_with_ai/lib:tool_provider",
         "//update_with_ai/lib:file_paths",
         "//update_with_ai/lib:sandbox_run_control",
@@ -210,6 +212,7 @@ pyright_test(
         "//update_with_ai/lib:sandbox_file_reader",
         "//update_with_ai/lib:sandbox_file_reader_impl",
         "//update_with_ai/lib:sandbox_guide_delivery",
+        "//update_with_ai/lib:template_format",
         "//update_with_ai/lib:tool_provider",
         "//update_with_ai/lib:file_paths",
         "//update_with_ai/lib:sandbox_run_control",
@@ -282,5 +285,15 @@ pyright_test(
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/lib:file_paths",
         "//update_with_ai/lib:file_paths_impl",
+    ],
+)
+
+pyright_test(
+    name = "template_format_impl_test",
+    srcs = ["template_format_impl_test.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/lib:template_format",
+        "//update_with_ai/lib:template_format_impl",
     ],
 )

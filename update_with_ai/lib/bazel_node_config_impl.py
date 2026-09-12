@@ -2,7 +2,7 @@ import json
 import os
 import re
 import subprocess
-from typing import Dict, List, Optional, Set, Tuple, Type
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple, Type
 from . import bazel_manifest_loader
 from . import bazel_node_id_utils
 from . import dag_node_cleaner
@@ -16,7 +16,7 @@ from . import sandbox_run_control
 from . import tool_provider
 from support.lib.lifecycle import LifecycleRegistry, LifecycleResolutionError, Singleton, get_default_registry, get_singleton
 
-class CommandVerificationCheck(sandbox_run_control.VerificationCheck):
+class _CommandVerificationCheck(sandbox_run_control.VerificationCheck):
     def __init__(self, command: str, cwd: Optional[str] = None) -> None:
         self._command = command
         self._cwd = cwd
@@ -47,10 +47,14 @@ class NodeConfig(node_config.NodeConfig, Singleton):
         self._read_only_files: Set[file_alias.BoundFile] = set()
         self._read_write_files: Set[file_alias.BoundFile] = set()
         self._templates: Set[Tuple[file_alias.BoundFile, file_alias.FileContent]] = set()
+        self._template_parameters: Dict[str, Any] = {}
+        self._allows_step_mode: bool = True
+        self._is_step_mode: bool = False
         self._guide_file: Optional[file_alias.UnboundFile] = None
         self._guide: Optional[sandbox_guide_delivery.Guide] = None
         self._blame_targets: Set[file_alias.BoundFile] = set()
         self._verification_checks: List[sandbox_run_control.VerificationCheck] = []
+        self._feedback: Tuple[str, ...] = ()
 
     def initialize(self) -> None:
         try:
@@ -58,6 +62,13 @@ class NodeConfig(node_config.NodeConfig, Singleton):
             node = cleaned_node.node
         except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
             return
+
+        try:
+            storage = get_singleton(dag_storage.DagStorage)
+            msgs = storage.get_messages(node)
+            self._feedback = tuple(m.content for m in msgs if isinstance(m, dag_storage.Feedback) and m.content)
+        except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+            self._feedback = ()
 
         loader = get_singleton(bazel_manifest_loader.BazelManifestLoader)
         manifest_raw = loader.get_manifest(node)
@@ -118,6 +129,18 @@ class NodeConfig(node_config.NodeConfig, Singleton):
                 for rw in self._read_write_files:
                     self._templates.add((rw, content_obj))
 
+        # 2.5 Template parameters
+        raw_params = data.get("template_parameters")
+        if isinstance(raw_params, dict):
+            self._template_parameters = dict(raw_params)
+        elif isinstance(raw_params, str):
+            try:
+                decoded = json.loads(raw_params)
+                if isinstance(decoded, dict):
+                    self._template_parameters = decoded
+            except (json.JSONDecodeError, ValueError):
+                pass
+
         # 3. Guide
         guide_target = data.get("guide")
         m_cfg: Optional[model_config.ModelConfig] = None
@@ -125,34 +148,36 @@ class NodeConfig(node_config.NodeConfig, Singleton):
             m_cfg = get_singleton(model_config.ModelConfig)
         except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
             pass
-        is_step_mode = m_cfg.is_step_mode if m_cfg is not None else False
+        model_step_mode = m_cfg.is_step_mode if m_cfg is not None else False
+        allows_step = data.get("allows_step_mode", data.get("step_mode", data.get("step_sections", True)))
+        self._allows_step_mode = bool(allows_step)
+        self._is_step_mode = model_step_mode and self._allows_step_mode and not bool(self._feedback)
 
-        if guide_target:
+        if guide_target and self._is_step_mode:
             guide_filename = guide_target.split(":")[-1] if ":" in guide_target else os.path.basename(guide_target)
             if not guide_filename.endswith(".md"):
                 guide_filename += ".md"
             self._guide_file = file_alias.UnboundFile(short_name=guide_filename)
 
-            if is_step_mode:
-                guide_cand_paths = [
-                    os.path.join(os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""), "update_python_with_ai/guides", guide_filename),
-                    os.path.join("update_python_with_ai/guides", guide_filename),
-                ]
-                for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):
-                    if base:
-                        guide_cand_paths.extend([
-                            os.path.join(base, "update_python_with_ai/guides", guide_filename),
-                            os.path.join(base, "_main/update_python_with_ai/guides", guide_filename),
-                        ])
-                for gp in guide_cand_paths:
-                    if gp and os.path.exists(gp) and os.path.isfile(gp):
-                        try:
-                            with open(gp, "r", encoding="utf-8") as gf:
-                                g_text = gf.read()
-                            self._guide = _parse_guide_markdown(g_text)
-                            break
-                        except (OSError, UnicodeDecodeError):
-                            pass
+            guide_cand_paths = [
+                os.path.join(os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""), "update_python_with_ai/guides", guide_filename),
+                os.path.join("update_python_with_ai/guides", guide_filename),
+            ]
+            for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):
+                if base:
+                    guide_cand_paths.extend([
+                        os.path.join(base, "update_python_with_ai/guides", guide_filename),
+                        os.path.join(base, "_main/update_python_with_ai/guides", guide_filename),
+                    ])
+            for gp in guide_cand_paths:
+                if gp and os.path.exists(gp) and os.path.isfile(gp):
+                    try:
+                        with open(gp, "r", encoding="utf-8") as gf:
+                            g_text = gf.read()
+                        self._guide = _parse_guide_markdown(g_text)
+                        break
+                    except (OSError, UnicodeDecodeError):
+                        pass
 
         # 4. Read-only files from direct deps and transitive star_deps
         deps = data.get("deps", [])
@@ -184,7 +209,7 @@ class NodeConfig(node_config.NodeConfig, Singleton):
         for dep_label in all_deps:
             if dep_label in silent_deps:
                 continue
-            if is_step_mode and guide_target and dep_label == guide_target:
+            if self._is_step_mode and guide_target and dep_label == guide_target:
                 continue
 
             dep_node = node_util.normalize(dep_label)
@@ -228,7 +253,7 @@ class NodeConfig(node_config.NodeConfig, Singleton):
         verify_cmd = data.get("verify")
         if verify_cmd and str(verify_cmd).strip():
             ws_dir = os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd()
-            self._verification_checks.append(CommandVerificationCheck(command=str(verify_cmd).strip(), cwd=ws_dir))
+            self._verification_checks.append(_CommandVerificationCheck(command=str(verify_cmd).strip(), cwd=ws_dir))
 
     @property
     def read_only_files(self) -> Set[file_alias.BoundFile]:
@@ -241,9 +266,24 @@ class NodeConfig(node_config.NodeConfig, Singleton):
         return self._read_write_files
 
     @property
+    def allows_step_mode(self) -> bool:
+        # Requirement: The node config exposes whether the node allows step mode from the target node manifest.
+        return self._allows_step_mode
+
+    @property
+    def is_step_mode(self) -> bool:
+        # Requirement: The node config exposes whether step mode is active, enabled when the model config enables step mode and the node allows step mode.
+        return self._is_step_mode
+
+    @property
     def templates(self) -> Set[Tuple[file_alias.BoundFile, file_alias.FileContent]]:
         # Requirement: The node config exposes templates mapping read-write files to initial file content.
         return self._templates
+
+    @property
+    def template_parameters(self) -> Mapping[str, Any]:
+        # Requirement: The node config exposes declared template parameters from the manifest.
+        return self._template_parameters
 
     @property
     def guide_file(self) -> Optional[file_alias.UnboundFile]:
@@ -265,6 +305,11 @@ class NodeConfig(node_config.NodeConfig, Singleton):
         # Requirement: The node config exposes declared verification checks from the manifest verification command.
         return list(self._verification_checks)
 
+    @property
+    def feedback(self) -> Sequence[str]:
+        # Requirement: Declared feedback messages retrieved from graph storage for the target node as the session feedback.
+        return self._feedback
+
 def _make_host_path(cls, path: str):
     if issubclass(cls, str):
         return cls(path)
@@ -277,6 +322,7 @@ def _parse_guide_markdown(content: str) -> sandbox_guide_delivery.Guide:
     lines = content.splitlines()
     summary_lines: List[str] = []
     sections: List[sandbox_guide_delivery.StepSection] = []
+    verification_failure_lines: Optional[List[str]] = None
 
     current_title: Optional[str] = None
     current_section_lines: List[str] = []
@@ -286,7 +332,9 @@ def _parse_guide_markdown(content: str) -> sandbox_guide_delivery.Guide:
             if current_title is None:
                 summary_lines = list(current_section_lines)
             else:
-                if not current_title.startswith("Lint checks"):
+                if current_title.startswith("Verification failure"):
+                    verification_failure_lines = list(current_section_lines)
+                elif not current_title.startswith("Lint checks"):
                     sections.append(
                         sandbox_guide_delivery.StepSection(
                             index=len(sections),
@@ -300,7 +348,9 @@ def _parse_guide_markdown(content: str) -> sandbox_guide_delivery.Guide:
             current_section_lines.append(line)
 
     if current_title is not None:
-        if not current_title.startswith("Lint checks"):
+        if current_title.startswith("Verification failure"):
+            verification_failure_lines = list(current_section_lines)
+        elif not current_title.startswith("Lint checks"):
             sections.append(
                 sandbox_guide_delivery.StepSection(
                     index=len(sections),
@@ -310,7 +360,12 @@ def _parse_guide_markdown(content: str) -> sandbox_guide_delivery.Guide:
             )
 
     summary = "\n".join(summary_lines).strip()
-    return sandbox_guide_delivery.Guide(summary=summary, sections=sections)
+    vf_text = "\n".join(verification_failure_lines).strip() if verification_failure_lines is not None else None
+    return sandbox_guide_delivery.Guide(
+        summary=summary,
+        sections=sections,
+        verification_failure=vf_text,
+    )
 
 
 class AliasManager(file_alias.AliasManager, Singleton):

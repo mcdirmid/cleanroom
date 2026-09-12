@@ -18,8 +18,10 @@ Model configurations emitted by Cleanroom build rules provide JSON dictionary st
 - `timeout: float` (optional): Per-request network timeout duration in seconds (default: 60.0).
 - `max_tokens: Optional[int]` (optional): Upper bound on generated response tokens.
 - `session_start_reads: bool` (optional): Indicates whether startup tool execution inspects declared read-only files.
-- `step_sections: bool` (optional): Indicates whether guide delivery operates in progressive step mode.
+- `do_step_mode: bool` (optional): Indicates whether guide delivery operates in progressive step mode.
+- `step_sections: bool` (optional): Backward-compatibility alias for do_step_mode.
 - `inject_followups: bool` (optional): Indicates whether the agent should execute follow-up tool calls specified by tool responses.
+- `node_visit_limit: int` (optional): Bound on maximum visits to any node during graph cleaning (default: 500).
 
 **Target Configuration Discovery & Resolution**
 
@@ -50,6 +52,7 @@ When no target configuration module is located on disk, parameters fall back to 
 - Step mode: `os.environ.get("STEP_MODE", "true").lower() in ("true", "1")`
 - Startup reads: `os.environ.get("STARTUP_READS", "true").lower() in ("true", "1")`
 - Inject followups: `os.environ.get("INJECT_FOLLOWUPS", "true").lower() in ("true", "1")`
+- Node visit limit: `int(os.environ.get("NODE_VISIT_LIMIT", "500"))`
 
 ## Build Dependencies
 

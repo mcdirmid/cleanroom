@@ -22,10 +22,12 @@ import sys
 
 from build_lint_common import (
     check_dataclass_stubs,
+    check_dead_code,
     check_exception_eating,
     check_framework_imports,
     check_impl_imports,
     check_lib_structure,
+    check_public_types,
     check_sibling_imports,
     check_syntax,
     check_type_ignore,
@@ -82,6 +84,11 @@ def main() -> int:
         "--pyi-deps",
         default="",
         help="comma-separated paths to dependent .pyi specification files",
+    )
+    ap.add_argument(
+        "--pyi",
+        default="",
+        help="path to the module's grounding .pyi specification file",
     )
     args = ap.parse_args()
 
@@ -165,6 +172,13 @@ def main() -> int:
     framework_errors = check_framework_imports(args.module_path)
     dataclass_errors = check_dataclass_stubs(args.module_path)
     type_ignore_errors = check_type_ignore(args.module_path)
+    type_errors = check_public_types(
+        args.module_path,
+        pyi_path=args.pyi or None,
+        pyi_deps=pyi_paths,
+        build_path=args.build_path,
+    )
+    dead_code_errors = check_dead_code(args.module_path)
     all_errors = (
         structure_errors
         + import_errors
@@ -173,6 +187,8 @@ def main() -> int:
         + framework_errors
         + dataclass_errors
         + type_ignore_errors
+        + type_errors
+        + dead_code_errors
     )
     if all_errors:
         for err in all_errors:

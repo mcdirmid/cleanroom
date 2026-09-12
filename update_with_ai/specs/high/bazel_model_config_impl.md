@@ -39,4 +39,6 @@ The model config provides:
 
 - Whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
 
+- The node visit limit bounding node visits during graph cleaning.
+
 When the target module is absent, execution parameters and authentication credentials fall back to ambient environment variables and standard defaults.

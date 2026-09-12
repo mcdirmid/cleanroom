@@ -1,6 +1,7 @@
-from typing import Optional, Protocol, Sequence, Set, Tuple
+from typing import Any, Mapping, Optional, Protocol, Sequence, Set, Tuple
 from framework import singleton_type
 import file_alias
+import model_config
 import sandbox_guide_delivery
 import sandbox_run_control
 
@@ -34,13 +35,35 @@ FRESH_REQUIREMENTS:
         ...
 
     @property
+    def allows_step_mode(self) -> bool:
+        """
+PURPOSE:
+Whether the node allows guide step mode
+
+FRESH_REQUIREMENTS:
+- The node config indicates whether the node allows step mode.
+"""
+        ...
+
+    @property
+    def is_step_mode(self) -> bool:
+        """
+PURPOSE:
+Whether session step mode is active, enabled when model config enables step mode, the node allows step mode, and session feedback is absent
+
+FRESH_REQUIREMENTS:
+- The node config indicates whether session step mode is active.
+"""
+        ...
+
+    @property
     def guide_file(self) -> Optional[file_alias.UnboundFile]:
         """
 PURPOSE:
-Unbound file configured when progressive guidance is active
+Unbound file configured when guide step mode is active
 
 FRESH_REQUIREMENTS:
-- The node config provides the session guide file when progressive guidance is configured.
+- The node config provides the session guide file when step mode is active.
 """
         ...
 
@@ -56,13 +79,24 @@ FRESH_REQUIREMENTS:
         ...
 
     @property
+    def template_parameters(self) -> Mapping[str, Any]:
+        """
+PURPOSE:
+Parameter bindings for template evaluation
+
+FRESH_REQUIREMENTS:
+- The node config provides the session template parameters, providing parameter bindings for template evaluation.
+"""
+        ...
+
+    @property
     def guide(self) -> Optional[sandbox_guide_delivery.Guide]:
         """
 PURPOSE:
-Structured instructional text for progressive guidance
+Structured instructional text for guide step mode
 
 FRESH_REQUIREMENTS:
-- The node config provides the session guide for progressive guidance when progressive guidance is configured.
+- The node config provides the session guide, providing structured instructional text when step mode is active.
 """
         ...
 
@@ -85,5 +119,16 @@ Session verification checks evaluated during session advancement
 
 FRESH_REQUIREMENTS:
 - The node config provides the session verification checks evaluated during session advancement.
+"""
+        ...
+
+    @property
+    def feedback(self) -> Sequence[str]:
+        """
+PURPOSE:
+Incoming feedback delivered to the node when present
+
+FRESH_REQUIREMENTS:
+- The node config provides the session feedback, exposing incoming feedback delivered to the node when present.
 """
         ...

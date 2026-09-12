@@ -1,6 +1,6 @@
 # sandbox_file_reader_impl implementation component
 
-imports: filesystem_ext, tool_provider, file_alias, node_config
+imports: filesystem_ext, tool_provider, file_alias, node_config, template_format
 implements: sandbox_file_reader
 
 ## Purpose
@@ -13,11 +13,11 @@ Permissive or forgiving tool implementations allow agents to drift into ambiguou
 
 ## Types and Behavior
 
-The read manager provides the read tool for the agent session and omits the search tool, obtaining declared read-only files, read-write files, and the guide file, when configured, from the session node configuration.
+The read manager provides the read tool for the agent session and omits the search tool, obtaining declared read-only files, read-write files, and the guide file, when configured, from the session node configuration. The read manager identifies that read-write files and source code files require line numbers when read, identifying files ending with `.py` as source code files.
 
-The read tool is named `read_file`, accepting a file alias *file* parameter and a boolean *line numbers* parameter that must be true when reading read-write files and false or omitted when reading read-only files. The read tool reads file content from the filesystem at the host path formed from the alias manager workspace root and the bound file workspace path. Successful read tool execution requires:
+The read tool is named `read_file`, accepting a file alias *file* parameter and a boolean *line numbers* parameter that must be true when reading read-write files and source code files, and false or omitted when reading non-source read-only files. The read tool reads file content from the filesystem at the host path formed from the alias manager workspace root and the bound file workspace path, formatting read-only markdown files ending with `.md` using the template formatter with session template parameters after filtering out paragraphs beginning with `> META:`. Successful read tool execution requires:
 
-- Requesting line numbers when reading a read-write file, and omitting line numbers when reading a read-only file; violating either requirement causes execution to fail, reminds the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files, and specifies a follow-up execution of the read tool on the file with line numbers requested for a read-write file and line numbers omitted for a read-only file.
+- Requesting line numbers when reading a read-write file or source code file, and omitting line numbers when reading a non-source read-only file; violating either requirement causes execution to fail, reminds the agent that line numbers must be requested when reading read-write files and source code files and omitted when reading non-source read-only files, and specifies a follow-up execution of the read tool on the file with line numbers requested for a read-write file or source code file and line numbers omitted for a non-source read-only file.
 
 - A bound file. If an unbound file is supplied, execution fails with a response guiding agent recovery, and reminds the agent that only declared files can be inspected. This response lists available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead.
 

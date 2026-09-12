@@ -261,14 +261,7 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
                         transcript_representation=str(e),
                     )
                 )
-                last_response = tool_provider.Response(
-                    is_failed=True, is_terminated=True, content=f"Model error: {e}"
-                )
-                return agent_runner.AgentOutcome(
-                    is_success=False,
-                    response=last_response,
-                    conversation_history=history,
-                )
+                raise RuntimeError(f"Model error: {e}")
 
             choice = completion.choices[0]
             finish_reason = choice.finish_reason
@@ -378,7 +371,8 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
 
                 actual_bindings = tool_provider.ActualParameterBindings(bindings=actual_bindings_set)
 
-                # Requirement: Before executing each tool call, the agent runner records the tool execution in the loop guard, injecting a loop reminder into the conversation history when a reminder is produced, or concluding the run with a failure outcome when a loop failure is produced.
+                # Requirement: Before executing each tool call, the agent runner records the tool execution in the loop guard, injecting a loop reminder into the conversation history when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
+                # Requirement: [AgentRunner] The agent runner evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
                 guard_outcome = guard.record_tool_execution(fn_name, actual_bindings)
                 if isinstance(guard_outcome, agent_loop_guard.LoopFailure):
                     logger.consume(
@@ -388,14 +382,7 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
                             transcript_representation=guard_outcome.explanation,
                         )
                     )
-                    last_response = tool_provider.Response(
-                        is_failed=True, is_terminated=True, content=guard_outcome.explanation
-                    )
-                    return agent_runner.AgentOutcome(
-                        is_success=False,
-                        response=last_response,
-                        conversation_history=history,
-                    )
+                    raise RuntimeError(f"Loop failure: {guard_outcome.explanation}")
 
                 resp = tool_mgr.execute_tool(
                     fn_name, tool_provider.WireParameterBindings(bindings=wire_bindings)
@@ -508,33 +495,29 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
                         guard.record_progress()
                     curr_resp = follow_resp
                     if curr_resp.is_terminated:
+                        if curr_resp.is_failed:
+                            raise RuntimeError(f"Agent failed: {curr_resp.content}")
                         return agent_runner.AgentOutcome(
-                            is_success=not curr_resp.is_failed,
+                            is_success=True,
                             response=curr_resp,
                             conversation_history=history,
                         )
 
                 # Requirement: When tool execution produces a non-terminating failure response, the failure feedback is appended to the conversation history and the run continues.
-                # Requirement: When tool execution produces a terminating response, the agent runner concludes the run and returns an agent outcome.
+                # Requirement: When tool execution produces a terminating response, the agent runner concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
+                # Requirement: [AgentRunner] When tool execution produces a termination outcome, the agent runner concludes and returns an agent outcome, or halts with an unexpected failure if the termination indicates a failing outcome.
                 if resp.is_terminated:
+                    if resp.is_failed:
+                        raise RuntimeError(f"Agent failed: {resp.content}")
                     return agent_runner.AgentOutcome(
-                        is_success=not resp.is_failed,
+                        is_success=True,
                         response=resp,
                         conversation_history=history,
                     )
 
-        # Requirement: When turns reach the conversation limit from model config, the agent runner concludes with a failure outcome.
-        is_success = not last_response.is_failed if turns < limit else False
-        final_resp = (
-            last_response
-            if turns < limit
-            else tool_provider.Response(is_failed=True, is_terminated=True, content="Conversation limit reached")
-        )
-        return agent_runner.AgentOutcome(
-            is_success=is_success,
-            response=final_resp,
-            conversation_history=history,
-        )
+        # Requirement: When turns reach the conversation limit from model config, the agent runner halts with an unexpected failure.
+        # Requirement: [AgentRunner] When the conversation limit from model config is exceeded, the agent runner halts with an unexpected failure.
+        raise RuntimeError(f"Conversation limit reached ({limit} turns)")
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry

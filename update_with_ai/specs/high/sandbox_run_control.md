@@ -24,8 +24,10 @@ The run controller:
 
 - Installs an *advance tool* when guide step mode is active, coordinating step progression through guide delivery.
 
-- Installs a *finish tool* that concludes the session and enforces change documentation. Executing the finish tool while guide steps remain fails with a reminder to execute the advance tool, specifying the advance tool as a follow-up tool call.
+- Installs a *finish tool* that concludes the session and enforces change documentation.
 
 - Installs a *fail tool* that terminates the run in failure.
 
-- Installs a *blame tool* that attributes task failure to an upstream dependency node. The run controller installs the blame tool when blame targets are configured. Executing the blame tool fails if the target is not one of the blame targets, and terminates the run with diagnostic feedback attributed to the owning node on success.
+- Installs a *run tests tool* that directs the agent to run tests through the advance tool or finish tool.
+
+- Installs a *blame tool* when blame targets are configured, attributing task failure to an upstream dependency node.

@@ -40,6 +40,14 @@ Configured with a guide file as an unbound file when step-mode is active
 """
         ...
 
+    @operation
+    def requires_line_numbers(self, file: file_alias.FileAlias) -> bool:
+        """
+PURPOSE:
+Identifies whether an inspected file requires line numbers to be requested when read
+"""
+        ...
+
 @singleton_type('agent_session')
 class ReadTool(tool_provider.Tool, Protocol):
     """
@@ -75,6 +83,7 @@ Provides that executing the read tool reads file content and distinguishes readi
 
 FRESH_REQUIREMENTS:
 - Executing the read tool on the guide file provides progressive delivery feedback to the agent.
+- When reading markdown files, paragraphs beginning with > META: are filtered out.
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.

@@ -26,10 +26,11 @@ INHERITED_ASSUMPTIONS:
     def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
         """
 PURPOSE:
-Executing an editing tool with a file alias that is not a read-write file fails
+Executing an editing tool modifies a read-write file
 
 FRESH_REQUIREMENTS:
-- Executing an editing tool with a file alias that is not a read-write file fails, providing a response reminding the agent that only declared read-write files can be modified.
+- Editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+- Editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
 - On successful execution, an editing tool produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
 
 INHERITED_REQUIREMENTS:
@@ -151,7 +152,8 @@ PURPOSE:
 Executing an editing tool with a file alias that is not a read-write file fails
 
 INHERITED_REQUIREMENTS:
-- [EditingTool] Executing an editing tool with a file alias that is not a read-write file fails, providing a response reminding the agent that only declared read-write files can be modified.
+- [EditingTool] Editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+- [EditingTool] Editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
 - [EditingTool] On successful execution, an editing tool produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
 - [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
@@ -235,7 +237,8 @@ PURPOSE:
 Executing an editing tool with a file alias that is not a read-write file fails
 
 INHERITED_REQUIREMENTS:
-- [EditingTool] Executing an editing tool with a file alias that is not a read-write file fails, providing a response reminding the agent that only declared read-write files can be modified.
+- [EditingTool] Editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+- [EditingTool] Editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
 - [EditingTool] On successful execution, an editing tool produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
 - [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.

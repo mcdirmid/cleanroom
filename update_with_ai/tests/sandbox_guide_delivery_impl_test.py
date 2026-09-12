@@ -16,8 +16,9 @@ from lib.tool_provider import Response
 class MockNodeConfig:
     tier = "agent_session"
 
-    def __init__(self, guide: Optional[Guide] = None) -> None:
+    def __init__(self, guide: Optional[Guide] = None, feedback: Tuple[str, ...] = ()) -> None:
         self._guide = guide
+        self._feedback = feedback
 
     @property
     def read_only_files(self) -> Set[BoundFile]:
@@ -39,9 +40,21 @@ class MockNodeConfig:
     def guide(self) -> Optional[Guide]:
         return self._guide
 
+    @guide.setter
+    def guide(self, value: Optional[Guide]) -> None:
+        self._guide = value
+
     @property
     def blame_targets(self) -> Set[BoundFile]:
         return set()
+
+    @property
+    def feedback(self) -> Tuple[str, ...]:
+        return self._feedback
+
+    @feedback.setter
+    def feedback(self, value: Tuple[str, ...]) -> None:
+        self._feedback = value
 
 
 class SandboxGuideDeliveryImplTest(unittest.TestCase):
@@ -66,6 +79,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
         """CUJ: Parsing markdown guide extracts summary and sections, skipping Lint checks."""
         content = (
             "This is the summary text.\n\n"
+            "## Verification failure\nCheck error logs carefully.\n\n"
             "## Step 1\nDo the first task.\n\n"
             "## Lint checks\nRun pyright and check for warnings.\n\n"
             "## Step 2\nDo the second task."
@@ -74,9 +88,10 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             delivery = scope.get_singleton(GuideDelivery)
             parsed = delivery.parse_guide(content)
 
-            # Requirement: Guide parsing extracts the summary from content preceding the first section heading and excludes sections whose title begins with `Lint checks`.
-            # Requirement: [GuideDelivery] Parsing file content extracts the summary from content preceding the first section heading and excludes sections whose title begins with `Lint checks`.
+            # Requirement: Guide parsing extracts the summary from content preceding the first section heading, populates verification failure instructions from any section titled 'Verification failure', and excludes sections whose title begins with 'Lint checks' or equals 'Verification failure'.
+            # Requirement: [GuideDelivery] Parsing file content extracts the summary from content preceding the first section heading, populates verification failure instructions from any section titled 'Verification failure', and excludes sections whose title begins with 'Lint checks' or equals 'Verification failure'.
             self.assertEqual(parsed.summary, "This is the summary text.")
+            self.assertEqual(parsed.verification_failure, "Check error logs carefully.")
             self.assertEqual(len(parsed.sections), 2)
             self.assertEqual(parsed.sections[0].title, "Step 1")
             self.assertEqual(parsed.sections[0].content, "Do the first task.")
@@ -85,6 +100,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
 
             plain = delivery.parse_guide("Just a guide summary without headings.")
             self.assertEqual(plain.summary, "Just a guide summary without headings.")
+            self.assertIsNone(plain.verification_failure)
             self.assertEqual(len(plain.sections), 0)
 
     def test_advance_step_lifecycle(self) -> None:
@@ -98,6 +114,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
 
         guide = Guide(
             summary="High-level summary",
+            verification_failure="Fix failure instructions",
             sections=[
                 StepSection(index=0, title="Step 1", content="Content 1"),
                 StepSection(index=1, title="Step 2", content="Content 2"),
@@ -110,6 +127,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             # Requirement: Initializing the guide delivery obtains its guide from the node config.
             # Requirement: [GuideDelivery] Steps remaining indicates whether further step sections remain to be completed.
             self.assertTrue(delivery.has_steps_remaining)
+            self.assertIs(delivery.guide, guide)
 
             # Verification failure before any steps delivered emits summary and failure diagnostics
             # Requirement: When advancing a step with failed verification, if no step section has been delivered yet, the guide delivery retains its index and emits a response combining the guide summary and failure diagnostics.
@@ -119,6 +137,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             self.assertTrue(res_fail0.is_failed)
             self.assertFalse(res_fail0.is_terminated)
             self.assertIn("High-level summary", res_fail0.content)
+            self.assertIn("## Verification failure\nFix failure instructions", res_fail0.content)
             self.assertTrue(delivery.has_steps_remaining)
 
             # Initial passing advance produces summary alone without step section
@@ -130,6 +149,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             self.assertFalse(res0.is_failed)
             self.assertFalse(res0.is_terminated)
             self.assertEqual(res0.content, "High-level summary")
+            self.assertNotIn("## Verification failure", res0.content)
             self.assertTrue(delivery.has_steps_remaining)
 
             # Advance to first step section
@@ -156,6 +176,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             self.assertIn("High-level summary", res_fail1.content)
             self.assertIn("Step 1", res_fail1.content)
             self.assertIn("Now check carefully:\nContent 1", res_fail1.content)
+            self.assertIn("## Verification failure\nFix failure instructions", res_fail1.content)
             self.assertTrue(delivery.has_steps_remaining)
 
             # Advance to second step section
@@ -172,6 +193,16 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             # Subsequent advance when exhausted produces None
             res3 = delivery.advance_step(verification_passed=True)
             self.assertIsNone(res3)
+
+    def test_has_steps_remaining_when_no_guide(self) -> None:
+        """CUJ: When no guide is configured, steps remaining evaluates to false."""
+        self.node_cfg._guide = None
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            delivery = scope.get_singleton(GuideDelivery)
+            # Requirement: Steps remaining evaluates to false once all step sections have been delivered or when no guide is configured.
+            # Requirement: [GuideDelivery] Steps remaining indicates whether further step sections remain to be completed.
+            self.assertFalse(delivery.has_steps_remaining)
+            self.assertIsNone(delivery.advance_step(verification_passed=True))
 
 
 if __name__ == "__main__":

@@ -125,3 +125,14 @@ FRESH_REQUIREMENTS:
 - The model config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
 """
         ...
+
+    @property
+    def node_visit_limit(self) -> int:
+        """
+PURPOSE:
+Bound on the maximum number of times any node can be visited during dag cleaning
+
+FRESH_REQUIREMENTS:
+- The model config provides a node visit limit bounding node visits during graph cleaning.
+"""
+        ...

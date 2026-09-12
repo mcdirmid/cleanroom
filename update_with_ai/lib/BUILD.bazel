@@ -14,6 +14,23 @@ pyright_library(
 )
 
 pyright_library(
+    name = "template_format",
+    srcs = ["template_format.py"],
+    pyright_deps = [],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "template_format_impl",
+    srcs = ["template_format_impl.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        ":template_format",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
     name = "runner_logger",
     srcs = ["runner_logger.py"],
     pyright_deps = [],
@@ -239,6 +256,7 @@ pyright_library(
         ":dag_cleaner",
         ":dag_node_cleaner",
         ":dag_storage",
+        ":model_config",
         "//update_python_with_ai/support/lib:lifecycle",
     ],
     visibility = ["//visibility:public"],
@@ -398,6 +416,7 @@ pyright_library(
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/lib:node_config",
         "//update_with_ai/lib:sandbox_file_reader",
+        "//update_with_ai/lib:template_format",
         "//update_with_ai/lib:tool_provider",
         "//update_with_ai/lib:dag_storage",
         "//update_with_ai/lib:file_paths",
@@ -415,6 +434,7 @@ pyright_library(
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/lib:node_config",
         "//update_with_ai/lib:sandbox_file_editor",
+        "//update_with_ai/lib:template_format",
         "//update_with_ai/lib:tool_provider",
         "//update_with_ai/lib:dag_storage",
         "//update_with_ai/lib:file_paths",
@@ -559,6 +579,8 @@ pyright_library(
         "//update_with_ai/lib:sandbox_impl",
         "//update_with_ai/lib:sandbox_run_control",
         "//update_with_ai/lib:sandbox_run_control_impl",
+        "//update_with_ai/lib:template_format",
+        "//update_with_ai/lib:template_format_impl",
         "//update_with_ai/lib:tool_provider",
         "//update_with_ai/lib:tool_provider_impl",
     ],
@@ -618,6 +640,7 @@ pyright_library(
         "//update_with_ai/lib:sandbox_guide_delivery_impl",
         "//update_with_ai/lib:sandbox_impl",
         "//update_with_ai/lib:sandbox_run_control_impl",
+        "//update_with_ai/lib:template_format_impl",
         "//update_with_ai/lib:tool_provider_impl",
         "//update_with_ai/lib:dag_storage",
         "//update_with_ai/lib:file_alias",
@@ -630,6 +653,7 @@ pyright_library(
         "//update_with_ai/lib:sandbox_file_reader",
         "//update_with_ai/lib:sandbox_guide_delivery",
         "//update_with_ai/lib:sandbox_run_control",
+        "//update_with_ai/lib:template_format",
         "//update_with_ai/lib:tool_provider",
     ],
     visibility = ["//visibility:public"],

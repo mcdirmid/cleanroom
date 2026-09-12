@@ -81,6 +81,9 @@ class BazelModelConfigImplTest(unittest.TestCase):
             # Requirement: The model config provides the max tokens bound resolved from the target module.
             # Requirement: [ModelConfig] The model config provides a max tokens upper bound specifying the maximum number of response tokens permitted per request when token generation is constrained.
             self.assertIsNone(cfg.max_tokens)
+            # Requirement: The model config provides the node visit limit bound resolved from the target module.
+            # Requirement: [ModelConfig] The model config provides a node visit limit bounding node visits during graph cleaning.
+            self.assertEqual(cfg.node_visit_limit, 500)
 
     def test_environment_overrides(self) -> None:
         """CUJ: Overriding configuration via explicit ambient environment variables."""
@@ -96,6 +99,7 @@ class BazelModelConfigImplTest(unittest.TestCase):
         os.environ["STEP_MODE"] = "false"
         os.environ["STARTUP_READS"] = "0"
         os.environ["INJECT_FOLLOWUPS"] = "false"
+        os.environ["NODE_VISIT_LIMIT"] = "42"
         sys.argv = ["script.py"]
 
         reg = LifecycleRegistry()
@@ -123,6 +127,8 @@ class BazelModelConfigImplTest(unittest.TestCase):
             self.assertFalse(cfg.is_startup_reads)
             # Requirement: The model config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
             self.assertFalse(cfg.inject_followups)
+            # Requirement: The model config provides the node visit limit bound resolved from the target module.
+            self.assertEqual(cfg.node_visit_limit, 42)
 
     def test_target_module_resolution_model_config_target(self) -> None:
         """CUJ: Resolving configuration from target module file via MODEL_CONFIG_TARGET."""
@@ -138,9 +144,10 @@ class BazelModelConfigImplTest(unittest.TestCase):
                 "max_iterations": 45,
                 "temperature": 0.7,
                 "max_tokens": 4096,
-                "step_sections": False,
+                "do_step_mode": False,
                 "session_start_reads": False,
                 "inject_followups": False,
+                "node_visit_limit": 450,
             }
             with open(cfg_file, "w", encoding="utf-8") as f:
                 json.dump(data, f)
@@ -175,6 +182,8 @@ class BazelModelConfigImplTest(unittest.TestCase):
                 self.assertFalse(cfg.is_startup_reads)
                 # Requirement: The model config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
                 self.assertFalse(cfg.inject_followups)
+                # Requirement: The model config provides the node visit limit bound resolved from the target module.
+                self.assertEqual(cfg.node_visit_limit, 450)
 
     def test_target_module_resolution_agent_config_target(self) -> None:
         """CUJ: Resolving configuration from target module file via AGENT_CONFIG_TARGET."""

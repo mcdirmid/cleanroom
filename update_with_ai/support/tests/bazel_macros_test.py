@@ -24,6 +24,7 @@ class TestBazelMacros(unittest.TestCase):
             "star_deps": ["//pkg:star_dep"],
             "src": "src1.txt",
             "template": "//update_python_with_ai/templates:lls",
+            "template_parameters": {"name": "TestComponent"},
             "guide": "//update_python_with_ai/guides:high_to_low",
             "silent_srcs": [":silent_src1"],
             "dependency_paths": [],
@@ -39,6 +40,7 @@ class TestBazelMacros(unittest.TestCase):
         self.assertIn("star_deps", manifest)
         self.assertIn("src", manifest)
         self.assertIn("template", manifest)
+        self.assertIn("template_parameters", manifest)
         self.assertIn("guide", manifest)
         self.assertIn("silent_srcs", manifest)
         
@@ -50,6 +52,7 @@ class TestBazelMacros(unittest.TestCase):
         self.assertIsInstance(manifest["star_deps"], list)
         self.assertIsInstance(manifest["src"], str)
         self.assertIsInstance(manifest["template"], str)
+        self.assertIsInstance(manifest["template_parameters"], dict)
         self.assertIsInstance(manifest["silent_srcs"], list)
     
     def test_graph_structure(self):
@@ -112,6 +115,54 @@ class TestBazelMacrosIntegration(unittest.TestCase):
         self.assertIn("src", content)
         self.assertIn("silent_srcs", content)
 
+    def test_update_python_with_ai_template_parameters(self):
+        """Test template parameters computation for update_python_with_ai components."""
+        def compute_params(name, module_deps, template_parameters=None):
+            is_impl = name.endswith("_impl")
+            is_asm = name.endswith("_asm")
+            is_ext = name.endswith("_ext")
+            is_interface = not (is_impl or is_asm or is_ext)
+            component_type = "implementation" if is_impl else ("assembly" if is_asm else ("external" if is_ext else "interface"))
+            dep_names = [dep.split(":")[-1] for dep in module_deps]
+            base = {
+                "name": name,
+                "component_name": name,
+                "component_type": component_type,
+                "is_impl": is_impl,
+                "is_asm": is_asm,
+                "is_ext": is_ext,
+                "is_interface": is_interface,
+                "is_not_ext": not is_ext,
+                "needs_implements": is_impl or is_asm,
+                "target_module": name,
+                "target_impl": name,
+                "module_deps": dep_names,
+            }
+            if template_parameters:
+                base.update(template_parameters)
+            return base
+
+        impl_params = compute_params("foo_impl", [":dep1", "//pkg:dep2"])
+        self.assertEqual(impl_params["name"], "foo_impl")
+        self.assertEqual(impl_params["component_type"], "implementation")
+        self.assertTrue(impl_params["is_impl"])
+        self.assertFalse(impl_params["is_interface"])
+        self.assertTrue(impl_params["is_not_ext"])
+        self.assertTrue(impl_params["needs_implements"])
+        self.assertEqual(impl_params["target_impl"], "foo_impl")
+        self.assertEqual(impl_params["module_deps"], ["dep1", "dep2"])
+
+        ext_params = compute_params("bar_ext", [])
+        self.assertEqual(ext_params["component_type"], "external")
+        self.assertTrue(ext_params["is_ext"])
+        self.assertFalse(ext_params["is_not_ext"])
+        self.assertFalse(ext_params["needs_implements"])
+
+        interface_params = compute_params("baz", [])
+        self.assertEqual(interface_params["component_type"], "interface")
+        self.assertTrue(interface_params["is_interface"])
+        self.assertFalse(interface_params["needs_implements"])
+
     def test_binary_preamble_and_lifecycle_resolution(self):
         """Test that generated binary preamble resolves all singletons without LifecycleResolutionError."""
         try:
@@ -132,6 +183,15 @@ class TestBazelMacrosIntegration(unittest.TestCase):
 
         loader = get_singleton(BazelManifestLoader)
         self.assertIsNotNone(loader)
+
+        manifest_content = loader.get_manifest(node)
+        if manifest_content is not None:
+            data = json.loads(manifest_content)
+            self.assertIn("template_parameters", data)
+            self.assertEqual(data["template_parameters"]["name"], "dag_storage")
+            self.assertEqual(data["template_parameters"]["component_type"], "interface")
+            self.assertTrue(data["template_parameters"]["is_interface"])
+            self.assertEqual(data["template_parameters"]["target_file"], "dag_storage.py")
 
         storage = get_singleton(DagStorage)
         self.assertIsNotNone(storage)

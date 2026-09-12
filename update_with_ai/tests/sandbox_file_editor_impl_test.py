@@ -4,7 +4,7 @@ import os
 import shutil
 import tempfile
 import unittest
-from typing import Any, Optional, Set, Tuple
+from typing import Any, Mapping, Optional, Set, Tuple
 
 from lib.dag_storage import Node
 from lib.file_alias import (
@@ -20,6 +20,7 @@ from lib.file_alias import (
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from lib.node_config import NodeConfig
+from lib.template_format import TemplateFormatter
 from lib.sandbox_file_editor import (
     EditManager,
     LineUpdateTool,
@@ -103,11 +104,30 @@ class MockAliasManager:
         return text
 
 
+class MockTemplateFormatter:
+    tier = "agent_session"
+
+    def format_template(self, content: str, parameters: Mapping[str, Any]) -> str:
+        res = content
+        for k, v in parameters.items():
+            res = res.replace(f"<{k}>", str(v))
+        return res
+
+
 class MockNodeConfig:
     tier = "agent_session"
 
-    def __init__(self, templates: Set[Tuple[BoundFile, FileContent]]) -> None:
+    def __init__(
+        self,
+        templates: Set[Tuple[BoundFile, FileContent]],
+        template_parameters: Optional[Mapping[str, Any]] = None,
+    ) -> None:
         self._templates = templates
+        self._template_parameters = template_parameters or {}
+
+    @property
+    def template_parameters(self) -> Mapping[str, Any]:
+        return self._template_parameters
 
     @property
     def read_only_files(self) -> Set[BoundFile]:
@@ -166,11 +186,13 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         self.str_conv = MockStringConverter()
         self.int_conv = MockIntegerConverter()
         self.alias_mgr = MockAliasManager(self.test_dir)
+        self.template_formatter = MockTemplateFormatter()
         self.node_cfg = MockNodeConfig(
             templates={
                 (self.rw_file, "Existing overwrite attempt"),
-                (self.missing_bound, "Starter template content"),
-            }
+                (self.missing_bound, "Starter template <param> content"),
+            },
+            template_parameters={"param": "materialized"},
         )
 
         self.registry.register_instance(self.tool_mgr, keys=[ToolManager], tier="agent_session")
@@ -182,6 +204,9 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         )
         self.registry.register_instance(self.alias_mgr, keys=[AliasManager], tier="agent_session")
         self.registry.register_instance(self.node_cfg, keys=[NodeConfig], tier="agent_session")
+        self.registry.register_instance(
+            self.template_formatter, keys=[TemplateFormatter], tier="agent_session"
+        )
 
     def tearDown(self) -> None:
         shutil.rmtree(self.test_dir, ignore_errors=True)
@@ -200,7 +225,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
             self.assertFalse(edit_mgr.has_modifications)
 
-            # Requirement: Materializing templates retrieves configured templates from the node config, checks whether files exist using the filesystem at the host path formed from the alias manager workspace root and workspace path, and writes template content to missing target files while preserving existing files.
+            # Requirement: Materializing templates retrieves configured templates from the node config, formats initial template content using the template formatter with session template parameters, checks whether target files exist in the filesystem at the host path formed from the alias manager workspace root and the read-write file workspace path, and writes formatted template content for missing files while preserving existing files.
             # Requirement: [EditManager] Materializing templates populates missing read-write files with initial template content without overwriting existing files.
             edit_mgr.materialize_templates()
 
@@ -208,7 +233,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             missing_host = os.path.join(self.test_dir, "missing.txt")
             self.assertTrue(os.path.isfile(missing_host))
             with open(missing_host, "r", encoding="utf-8") as f:
-                self.assertEqual(f.read(), "Starter template content")
+                self.assertEqual(f.read(), "Starter template materialized content")
 
             # Existing file NOT overwritten
             with open(self.target_path, "r", encoding="utf-8") as f:
@@ -230,7 +255,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.replacement_text_parameter, "New Line 2"),
                 }
             )
-            # Requirement: [EditingTool] Executing an editing tool with a file alias that is not a read-write file fails, providing a response reminding the agent that only declared read-write files can be modified.
+            # Requirement: [EditingTool] Editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
             resp_ro = replace_tool.execute_tool(b_ro)
             self.assertTrue(resp_ro.is_failed)
             self.assertEqual(resp_ro.reminder, "Only declared read-write files can be modified.")
@@ -299,6 +324,23 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertTrue(resp_huge.is_failed)
             self.assertEqual(resp_huge.reminder, "Target text for replacement must not exceed 100,000 characters.")
 
+            # 6. Replacement producing no change to file content fails
+            with open(self.target_path, "w", encoding="utf-8") as f:
+                f.write("Line 1\nLine 2\nLine 3\n")
+            b_no_change = ActualParameterBindings(
+                bindings={
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_text_parameter, "Line 2"),
+                    (replace_tool.replacement_text_parameter, "Line 2"),
+                }
+            )
+            # Requirement: [EditingTool] Editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
+            resp_no_change = replace_tool.execute_tool(b_no_change)
+            self.assertTrue(resp_no_change.is_failed)
+            self.assertEqual(resp_no_change.reminder, "Your edit had no effect, and such edits will fail.")
+            self.assertIsNone(resp_no_change.suppression_key)
+            self.assertIsNone(resp_no_change.follow_up_tool_call)
+
     def test_line_update_tool_bounds_and_insertion(self) -> None:
         """CUJ: LineUpdateTool updates line ranges and performs insertion when start > end."""
         with enter_phase("agent_session", registry=self.registry) as scope:
@@ -316,7 +358,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (line_tool.replacement_text_parameter, "New\n"),
                 }
             )
-            # Requirement: [EditingTool] Executing an editing tool with a file alias that is not a read-write file fails, providing a response reminding the agent that only declared read-write files can be modified.
+            # Requirement: [EditingTool] Editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
             resp_line_ro = line_tool.execute_tool(b_ro)
             self.assertTrue(resp_line_ro.is_failed)
             self.assertEqual(resp_line_ro.reminder, "Only declared read-write files can be modified.")
@@ -365,6 +407,39 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             with open(self.target_path, "r", encoding="utf-8") as f:
                 self.assertEqual(f.read(), "Replaced 1 and 2\nInserted Line\nLine 3\n")
 
+            # 2b. Replacement lacking trailing newline preserves subsequent line boundaries
+            b_no_newline = ActualParameterBindings(
+                bindings={
+                    (line_tool.file_alias_parameter, self.rw_file),
+                    (line_tool.start_line_parameter, 1),
+                    (line_tool.end_line_parameter, 1),
+                    (line_tool.replacement_text_parameter, "Line 1 without newline"),
+                }
+            )
+            # Requirement: Replacing or inserting lines treats each replacement line as a complete newline-terminated line, preserving subsequent line boundaries when replacement text lacks a trailing newline.
+            resp_nn = line_tool.execute_tool(b_no_newline)
+            self.assertFalse(resp_nn.is_failed)
+            with open(self.target_path, "r", encoding="utf-8") as f:
+                self.assertEqual(f.read(), "Line 1 without newline\nInserted Line\nLine 3\n")
+
+            # 2c. Insertion lacking trailing newline preserves surrounding lines
+            b_insert_nn = ActualParameterBindings(
+                bindings={
+                    (line_tool.file_alias_parameter, self.rw_file),
+                    (line_tool.start_line_parameter, 2),
+                    (line_tool.end_line_parameter, 1),
+                    (line_tool.replacement_text_parameter, "Multi\nNo trailing"),
+                }
+            )
+            # Requirement: Replacing or inserting lines treats each replacement line as a complete newline-terminated line, preserving subsequent line boundaries when replacement text lacks a trailing newline.
+            resp_inn = line_tool.execute_tool(b_insert_nn)
+            self.assertFalse(resp_inn.is_failed)
+            with open(self.target_path, "r", encoding="utf-8") as f:
+                self.assertEqual(
+                    f.read(),
+                    "Line 1 without newline\nMulti\nNo trailing\nInserted Line\nLine 3\n",
+                )
+
             # 3. Out-of-bounds start line fails
             b_oob_start = ActualParameterBindings(
                 bindings={
@@ -399,6 +474,38 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 }
             )
             self.assertFalse(line_tool.execute_tool(b_no_nl).is_failed)
+
+            # 6. Line update producing no change to file content fails
+            b_no_change_line = ActualParameterBindings(
+                bindings={
+                    (line_tool.file_alias_parameter, self.rw_file),
+                    (line_tool.start_line_parameter, 1),
+                    (line_tool.end_line_parameter, 1),
+                    (line_tool.replacement_text_parameter, "No newline\n"),
+                }
+            )
+            # Requirement: [EditingTool] Editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
+            resp_no_change_line = line_tool.execute_tool(b_no_change_line)
+            self.assertTrue(resp_no_change_line.is_failed)
+            self.assertEqual(resp_no_change_line.reminder, "Your edit had no effect, and such edits will fail.")
+            self.assertIsNone(resp_no_change_line.suppression_key)
+            self.assertIsNone(resp_no_change_line.follow_up_tool_call)
+
+            # 7. Insertion producing no change to file content fails
+            b_no_change_insert = ActualParameterBindings(
+                bindings={
+                    (line_tool.file_alias_parameter, self.rw_file),
+                    (line_tool.start_line_parameter, 2),
+                    (line_tool.end_line_parameter, 1),
+                    (line_tool.replacement_text_parameter, ""),
+                }
+            )
+            # Requirement: [EditingTool] Editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
+            resp_no_change_insert = line_tool.execute_tool(b_no_change_insert)
+            self.assertTrue(resp_no_change_insert.is_failed)
+            self.assertEqual(resp_no_change_insert.reminder, "Your edit had no effect, and such edits will fail.")
+            self.assertIsNone(resp_no_change_insert.suppression_key)
+            self.assertIsNone(resp_no_change_insert.follow_up_tool_call)
 
     def test_diff_based_has_modifications(self) -> None:
         """CUJ: EditManager tracks real content differences and detects reverted modifications."""
@@ -435,7 +542,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: [EditManager] The edit manager exposes whether workspace file modifications occurred during the session, determined by whether workspace file contents differ from their initial state prior to editing.
             self.assertFalse(edit_mgr.has_modifications)
 
-            # 3. No-op replacement with identical text -> has_modifications remains False
+            # 3. No-op replacement with identical text -> fails and has_modifications remains False
             b_noop = ActualParameterBindings(
                 bindings={
                     (replace_tool.file_alias_parameter, self.rw_file),
@@ -443,8 +550,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.replacement_text_parameter, "Line 2"),
                 }
             )
+            # Requirement: [EditingTool] Editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
             resp3 = replace_tool.execute_tool(b_noop)
-            self.assertFalse(resp3.is_failed)
+            self.assertTrue(resp3.is_failed)
+            self.assertEqual(resp3.reminder, "Your edit had no effect, and such edits will fail.")
             self.assertFalse(edit_mgr.has_modifications)
 
     def test_file_update_revision(self) -> None:

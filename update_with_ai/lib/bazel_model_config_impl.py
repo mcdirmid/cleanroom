@@ -95,10 +95,17 @@ class ModelConfig(model_config.ModelConfig, Singleton):
         self._timeout = int(float(data["timeout"])) if "timeout" in data else int(os.environ.get("MODEL_TIMEOUT", "60"))
         self._conversation_limit = int(data["max_iterations"]) if "max_iterations" in data else int(os.environ.get("MODEL_CONVERSATION_LIMIT", "20"))
         self._temperature = float(data["temperature"]) if "temperature" in data else float(os.environ.get("MODEL_TEMPERATURE", "0.0"))
-        self._max_tokens = int(data["max_tokens"]) if data.get("max_tokens") is not None else (int(os.environ["MODEL_MAX_TOKENS"]) if os.environ.get("MODEL_MAX_TOKENS") else None)
-        self._is_step_mode = bool(data["step_sections"]) if "step_sections" in data else os.environ.get("STEP_MODE", "true").lower() in ("true", "1")
+        if "max_tokens" in data and data["max_tokens"] is not None:
+            self._max_tokens: Optional[int] = int(data["max_tokens"])
+        elif os.environ.get("MODEL_MAX_TOKENS"):
+            self._max_tokens = int(os.environ["MODEL_MAX_TOKENS"])
+        else:
+            self._max_tokens = None
+        raw_step = data.get("do_step_mode", data.get("step_sections"))
+        self._is_step_mode = bool(raw_step) if raw_step is not None else os.environ.get("STEP_MODE", "true").lower() in ("true", "1")
         self._is_startup_reads = bool(data["session_start_reads"]) if "session_start_reads" in data else os.environ.get("STARTUP_READS", "true").lower() in ("true", "1")
         self._inject_followups = bool(data["inject_followups"]) if "inject_followups" in data else os.environ.get("INJECT_FOLLOWUPS", "true").lower() in ("true", "1")
+        self._node_visit_limit = int(data["node_visit_limit"]) if "node_visit_limit" in data else int(os.environ.get("NODE_VISIT_LIMIT", "500"))
 
     @property
     def model_name(self) -> str:
@@ -149,6 +156,11 @@ class ModelConfig(model_config.ModelConfig, Singleton):
     def inject_followups(self) -> bool:
         # Requirement: The model config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
         return self._inject_followups
+
+    @property
+    def node_visit_limit(self) -> int:
+        # Requirement: The model config provides the node visit limit bound resolved from the target module.
+        return self._node_visit_limit
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:

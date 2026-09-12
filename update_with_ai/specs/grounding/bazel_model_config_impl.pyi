@@ -195,3 +195,21 @@ GROUNDING_ARGUMENT:
 - Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
 """
         ...
+
+    @property
+    @override
+    def node_visit_limit(self) -> int:
+        """
+PURPOSE:
+Bound on the maximum number of times any node can be visited during dag cleaning
+
+FRESH_REQUIREMENTS:
+- The model config provides the node visit limit bound resolved from the target module.
+
+INHERITED_REQUIREMENTS:
+- [ModelConfig] The model config provides a node visit limit bounding node visits during graph cleaning.
+
+GROUNDING_ARGUMENT:
+- Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
+"""
+        ...

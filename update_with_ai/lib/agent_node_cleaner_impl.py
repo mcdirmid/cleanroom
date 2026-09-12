@@ -62,29 +62,47 @@ class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
             # Requirement: The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content, and paired startup tool executions from the sandbox.
             if defn is not None and defn.task_prompt:
                 task_prompt = str(defn.task_prompt)
-                # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when progressive guidance is active, or identifying the guide file by its file alias when progressive guidance is inactive.
+                # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete when guide step mode is inactive.
                 n_cfg = session.get_singleton(node_config.NodeConfig)
+                guide_short_name: Optional[str] = None
                 if n_cfg.guide_file is not None:
-                    m_cfg = session.get_singleton(model_config.ModelConfig)
-                    if m_cfg.is_step_mode:
+                    guide_short_name = n_cfg.guide_file.short_name
+                else:
+                    for ro in n_cfg.read_only_files:
+                        if ro.short_name.endswith(".md"):
+                            guide_short_name = ro.short_name
+                            break
+                if guide_short_name is not None:
+                    if n_cfg.is_step_mode:
                         task_prompt += "\n\nCall advance() without arguments to view each guide step. Do not supply change_summary until all guide steps are complete."
                     else:
-                        task_prompt += f"\n\nThe guide is in file {n_cfg.guide_file.short_name}."
+                        task_prompt += f"\n\nThe guide is in file {guide_short_name}. Call finish with a change summary describing modifications when complete."
                 hist.append_message(
                     agent_conversation_history.Message(role="user", content=task_prompt)
                 )
 
             # Requirement: The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox.
+            # Requirement: When guide step mode is active, incoming feedback messages are omitted from the initial seeded conversation history prompt and delivered through guide advancement instead.
+            # Requirement: When guide step mode is inactive, incoming feedback messages are formatted as actionable instructions prefaced with directives to fix read-write target files based on the feedback.
             messages_sorted = sorted(
                 storage.get_messages(node),
                 key=lambda m: (m.content, type(m).__name__),
             )
+            n_cfg = session.get_singleton(node_config.NodeConfig)
+            rw_names = ", ".join(sorted(f.short_name for f in n_cfg.read_write_files))
+
             for msg in messages_sorted:
-                prefix = f"Incoming {type(msg).__name__.lower()}"
-                body = f"{prefix}: {msg.content}" if msg.content else prefix
-                hist.append_message(
-                    agent_conversation_history.Message(role="user", content=body)
-                )
+                if isinstance(msg, dag_storage.Feedback):
+                    body = f"Fix {rw_names} based on feedback: {msg.content}"
+                    hist.append_message(
+                        agent_conversation_history.Message(role="user", content=body)
+                    )
+                else:
+                    prefix = f"Incoming {type(msg).__name__.lower()}"
+                    body = f"{prefix}: {msg.content}" if msg.content else prefix
+                    hist.append_message(
+                        agent_conversation_history.Message(role="user", content=body)
+                    )
 
             # Requirement: The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox.
             for i, startup_exec in enumerate(sb.get_startup_tool_executions()):

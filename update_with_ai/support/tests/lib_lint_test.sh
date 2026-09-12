@@ -256,6 +256,8 @@ else
         echo "FAIL: c13 did not report expected framework decorator errors" >&2
         fail=1
     fi
+fi
+
 # Case 14: '# type: ignore' in library module -> rejected with error.
 mkdir -p "$tmp/c14/lib"
 cat > "$tmp/c14/lib/main.py" <<'EOF'
@@ -270,6 +272,101 @@ else
         echo "PASS: c14 rejected '# type: ignore' in library module"
     else
         echo "FAIL: c14 did not report type: ignore error" >&2
+        fail=1
+    fi
+fi
+
+# Case 15: Implementation class named with 'Impl' suffix -> rejected with mismatch against spec.
+mkdir -p "$tmp/c15/lib" "$tmp/c15/specs/grounding"
+cat > "$tmp/c15/specs/grounding/widget_impl.pyi" <<'EOF'
+class Widget:
+    ...
+EOF
+cat > "$tmp/c15/lib/widget_impl.py" <<'EOF'
+class WidgetImpl:
+    pass
+EOF
+if ( cd "$tmp/c15" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/widget_impl.py 2>"$tmp/c15/err.log" ); then
+    echo "FAIL: c15 expected failure when implementation class has Impl suffix" >&2
+    fail=1
+else
+    if grep -q "public type 'WidgetImpl' is defined in library code but is not declared in grounding specification" "$tmp/c15/err.log" && \
+       grep -q "type 'Widget' declared in grounding specification 'widget_impl.pyi' is not defined in library code" "$tmp/c15/err.log"; then
+        echo "PASS: c15 rejected WidgetImpl and required Widget from specification"
+    else
+        echo "FAIL: c15 did not report expected public type mismatch errors" >&2
+        fail=1
+    fi
+fi
+
+# Case 16: Extra public helper class without preceding underscore -> rejected with error.
+mkdir -p "$tmp/c16/lib" "$tmp/c16/specs/grounding"
+cat > "$tmp/c16/specs/grounding/service_impl.pyi" <<'EOF'
+class Service:
+    ...
+EOF
+cat > "$tmp/c16/lib/service_impl.py" <<'EOF'
+class Service:
+    pass
+
+class Helper:
+    pass
+EOF
+if ( cd "$tmp/c16" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/service_impl.py 2>"$tmp/c16/err.log" ); then
+    echo "FAIL: c16 expected failure when helper class lacks preceding underscore" >&2
+    fail=1
+else
+    if grep -q "public type 'Helper' is defined in library code but is not declared in grounding specification" "$tmp/c16/err.log"; then
+        echo "PASS: c16 rejected public helper class without underscore"
+    else
+        echo "FAIL: c16 did not report missing underscore error for helper class" >&2
+        fail=1
+    fi
+fi
+
+# Case 17: Helper class with preceding underscore and referenced -> passes cleanly.
+mkdir -p "$tmp/c17/lib" "$tmp/c17/specs/grounding"
+cat > "$tmp/c17/specs/grounding/clean_impl.pyi" <<'EOF'
+class CleanService:
+    ...
+EOF
+cat > "$tmp/c17/lib/clean_impl.py" <<'EOF'
+class _InternalHelper:
+    pass
+
+class CleanService:
+    _helper = _InternalHelper
+EOF
+if ( cd "$tmp/c17" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/clean_impl.py 2>"$tmp/c17/err.log" ); then
+    echo "PASS: c17 accepted helper class with preceding underscore"
+else
+    echo "FAIL: c17 failed unexpectedly on helper class with preceding underscore" >&2
+    cat "$tmp/c17/err.log" >&2
+    fail=1
+fi
+
+# Case 18: Unused private helper function -> rejected with dead code error.
+mkdir -p "$tmp/c18/lib" "$tmp/c18/specs/grounding"
+cat > "$tmp/c18/specs/grounding/service_impl.pyi" <<'EOF'
+class Service:
+    ...
+EOF
+cat > "$tmp/c18/lib/service_impl.py" <<'EOF'
+class Service:
+    pass
+
+def _unused_helper():
+    pass
+EOF
+if ( cd "$tmp/c18" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/service_impl.py 2>"$tmp/c18/err.log" ); then
+    echo "FAIL: c18 expected failure when private function is unreferenced" >&2
+    fail=1
+else
+    if grep -q "private function '_unused_helper' is defined in library code but never referenced (dead code)" "$tmp/c18/err.log"; then
+        echo "PASS: c18 rejected unused private function as dead code"
+    else
+        echo "FAIL: c18 did not report dead code error for unused private function" >&2
+        cat "$tmp/c18/err.log" >&2
         fail=1
     fi
 fi

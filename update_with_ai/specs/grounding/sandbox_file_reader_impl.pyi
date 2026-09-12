@@ -4,6 +4,7 @@ import file_alias
 import filesystem_ext
 import node_config
 import sandbox_file_reader
+import template_format
 import tool_provider
 
 @singleton_type('agent_session')
@@ -75,6 +76,22 @@ GROUNDING_ARGUMENT:
 """
         ...
 
+    @operation
+    @override
+    def requires_line_numbers(self, file: file_alias.FileAlias) -> bool:
+        """
+PURPOSE:
+Identifies whether an inspected file requires line numbers to be requested when read, requiring line numbers for read-write files and source code files
+
+FRESH_REQUIREMENTS:
+- The read manager identifies that read-write files and source code files require line numbers when read.
+- The read manager identifies files ending with `.py` as source code files requiring line numbers.
+
+GROUNDING_ARGUMENT:
+- Checks if the file is an instance of file_alias.ReadWriteFile or if the file's short name ends with '.py'.
+"""
+        ...
+
 @singleton_type('agent_session')
 class ReadTool(sandbox_file_reader.ReadTool):
     """
@@ -90,7 +107,7 @@ FRESH_REQUIREMENTS:
 - The read tool line numbers parameter uses the boolean parameter converter.
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, ReadTool executes file inspection across declared session files, interacting with imported file_alias.AliasManager, node_config.NodeConfig, and tool_provider in the same session lifecycle tier.
+- As an agent_session singleton, ReadTool executes file inspection across declared session files, interacting with imported file_alias.AliasManager, node_config.NodeConfig, template_format.TemplateFormatter, and tool_provider in the same session lifecycle tier.
 """
 
     @property
@@ -122,7 +139,7 @@ GROUNDING_ARGUMENT:
     def line_numbers_parameter(self) -> tool_provider.Parameter:
         """
 PURPOSE:
-Parameter that must be true when reading read-write files, and false or omitted when reading read-only files
+Parameter that must be true when reading read-write files and source code files, and false or omitted when reading non-source read-only files
 
 GROUNDING_ARGUMENT:
 - Constant parameter descriptor configured with boolean parameter converter.
@@ -138,19 +155,22 @@ Implements execute_tool on the read tool to read file content with line number f
 
 FRESH_REQUIREMENTS:
 - Executing the read tool reads file content using the filesystem at the host path formed from the alias manager workspace root and bound file workspace path.
-- Executing the read tool fails if line numbers are not requested when reading a read-write file, reminding the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files, and specifying a follow-up execution of the read tool on the file with line numbers requested.
-- Executing the read tool fails if line numbers are requested when reading a read-only file, reminding the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files, and specifying a follow-up execution of the read tool on the file with line numbers omitted.
+- Executing the read tool fails if line numbers are not requested when reading a read-write file or source code file, reminding the agent that line numbers must be requested when reading read-write files and source code files and omitted when reading non-source read-only files, and specifying a follow-up execution of the read tool on the file with line numbers requested.
+- Executing the read tool fails if line numbers are requested when reading a non-source read-only file, reminding the agent that line numbers must be requested when reading read-write files and source code files and omitted when reading non-source read-only files, and specifying a follow-up execution of the read tool on the file with line numbers omitted.
 - Executing the read tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.
 - When an unbound file equals the guide file configured for step-mode, the read tool failure response indicates that `advance` must be called to read the guide instead.
 - Read tool responses for read-write files carry a suppression key matching the file's short name, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
+- When reading markdown files ending with .md, paragraphs beginning with > META: are filtered out from the returned content.
+- When reading read-only markdown files ending with .md, content is formatted using the template formatter with session template parameters after filtering out paragraphs beginning with > META:.
 
 INHERITED_REQUIREMENTS:
 - [ReadTool] Executing the read tool on the guide file provides progressive delivery feedback to the agent.
+- [ReadTool] When reading markdown files, paragraphs beginning with > META: are filtered out.
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
 - [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, resolves host paths using imported file_alias.AliasManager workspace root in the same session lifecycle tier, reads file content via the filesystem, checks line number formatting rules for read-only and read-write files, specifies follow-up read tool calls with corrected line numbers on failure, attaches the file's short name as a suppression key on responses for read-write files while omitting it for read-only files, and masks host paths in read-only output.
+- Receives actual parameter bindings, queries line number requirement from ReadManager in the same session lifecycle tier, resolves host paths using imported file_alias.AliasManager workspace root in the same session lifecycle tier, reads file content via the filesystem, filters > META: paragraphs for markdown files, formats read-only markdown content using imported template_format.TemplateFormatter and node_config.NodeConfig.template_parameters in the same session lifecycle tier, checks line number formatting rules for read-only, read-write, and source code files, specifies follow-up read tool calls with corrected line numbers on failure, attaches the file's short name as a suppression key on responses for read-write files while omitting it for read-only files, and masks host paths in read-only output.
 """
         ...
 

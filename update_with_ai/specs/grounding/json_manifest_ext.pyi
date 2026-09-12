@@ -18,7 +18,9 @@ Build manifests emitted by Cleanroom build rules provide JSON dictionary structu
 - `star_deps: List[str]` (optional): Dependencies whose transitive closure over star deps is readable.
 - `src: str` (optional): The node's declared primary writable source file path (readable by deps).
 - `template: Optional[str]` (optional): Repo-relative template file path initializing `src` if absent.
+- `template_parameters: Optional[Mapping[str, Any]]` (optional): Dictionary of parameter bindings for template evaluation (default: `{}`).
 - `guide: Optional[str]` (optional): Optional target label providing task guidance.
+- `allows_step_mode: bool` (optional): Indicates whether the node permits guide step mode (default: True).
 - `silent_srcs: List[str]` (optional): Paths the agent can write that are not readable by deps.
 - `verify: Optional[str]` (optional): Shell command string executed on verification.
 - `dependency_paths: List[Mapping[str, str]]` (optional): List of mappings from dependency target label to file path.
@@ -71,7 +73,9 @@ def parse_target_manifest_file(manifest_path: str) -> Tuple[bool, Mapping[str, A
             "star_deps": raw_data.get("star_deps", []),
             "src": raw_data.get("src", ""),
             "template": raw_data.get("template"),
+            "template_parameters": raw_data.get("template_parameters", {}),
             "guide": raw_data.get("guide"),
+            "allows_step_mode": raw_data.get("allows_step_mode", True),
             "silent_srcs": raw_data.get("silent_srcs", []),
             "verify": raw_data.get("verify"),
             "dependency_paths": raw_data.get("dependency_paths", []),

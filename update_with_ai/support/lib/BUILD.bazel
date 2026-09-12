@@ -85,5 +85,6 @@ py_binary(
     name = "evaluate_coverage",
     srcs = ["evaluate_coverage.py"],
     main = "evaluate_coverage.py",
+    deps = [":lifecycle"],
     visibility = ["//visibility:public"],
 )

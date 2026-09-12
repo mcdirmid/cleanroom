@@ -1,51 +1,37 @@
-# <name>
+# <name> <component_type> component
 
-imports: <dep1>, <dep2>                         # optional
-terms from <dep>: ...                           # optional
-terms (owned): ...                             # optional
+<!-- if: is_asm -->
+assembles: <constituent_modules>
+<!-- endif -->
+imports: <imported_modules>
+<!-- if: needs_implements -->
+implements: <implemented_interfaces>
+<!-- endif -->
 
 ## Purpose
 
-<TODO: what the component provides; may name its operation families>
+The <name> <component_type> component <TODO: provides ...>.
 
-## Terms                    # present iff terms (owned)
+<TODO: one or two paragraphs of architectural rationale motivating the component from a system perspective.>
 
-- <term>: <use-level definition>
-<TODO: define each owned term; delete this section when no terms are owned>
+**Out of scope:** <TODO: client workflow purpose, background intent, or caller motivations>; these are handled by other components.
 
-## Contract
+<!-- if: is_ext -->
+## Grounding Gaps Covered
 
-**Inputs**                  # optional; "configured:" vs "per call:"
-- <client-supplied values>
-<TODO: fill in, distinguishing configured from per-call inputs>
+<TODO: describe external domain knowledge, mechanics, foreign serialization formats, or third-party SDK concepts.>
+<!-- endif -->
+<!-- if: is_not_ext -->
+## Types and Behavior
 
-**Operations**
-- <what the client may do>
-<TODO: fill in>
-
-**Guarantees**
-- <one fact per line; factor shared state effects>
-<TODO: fill in>
-
-**Assumptions**
-- <one per line>
-<TODO: fill in or delete the block>
-
-**<Named block>**           # optional; any single concern (Logging, Events, Stubbing, ...)
-- <one per line>
-<TODO: fill in or delete the block>
-
-## Non-concerns
-
-- <one per line>
-<TODO: fill in or delete the section>
+<TODO: literate prose describing types and behavior with semantic italics on concept introductions.>
+<!-- endif -->
 
 <!--
 TODO: work through this template section by section:
   - replace every TODO marker with content derived from the source materials
-  - the section inventory is closed (interfaces: Purpose/Terms/Contract/Non-concerns)
-  - the HLS is declarative: no mechanism, no "returns", one fact per line
-  - every term used is owned or listed in `terms from <dep>:`
-  - remove this comment block when the document is complete
+  - the section inventory is closed strictly to ## Purpose and ## Types and Behavior (or ## Grounding Gaps Covered for external components)
+  - the HLS is declarative: no mechanism, no pseudo-code, no bolding, no nested bullets
+  - delete this comment block when the document is complete
 -->
 

@@ -1,6 +1,6 @@
 # node_config interface component
 
-imports: file_alias, sandbox_guide_delivery, sandbox_file_editor, sandbox_run_control
+imports: file_alias, sandbox_guide_delivery, sandbox_file_editor, sandbox_run_control, model_config
 
 ## Purpose
 
@@ -20,12 +20,20 @@ The node config provides:
 
 - The session read-write files, permitting bound files for inspection and modification.
 
-- The session guide file when progressive guidance is configured.
+- Whether the node *allows step mode*, permitting guide step mode when enabled by model config.
+
+- Whether session *step mode* is active, enabled when model config enables step mode, the node allows step mode, and session feedback is absent.
+
+- The session guide file when step mode is active.
 
 - The session templates, mapping read-write files to initial file content.
 
-- The session guide, providing structured instructional text when progressive guidance is configured.
+- The session *template parameters*, providing parameter bindings for template evaluation.
+
+- The session guide, providing structured instructional text when step mode is active.
 
 - The session blame targets, which are bound files owned by upstream dependency nodes eligible for defect attribution.
 
 - The session verification checks evaluated during session advancement.
+
+- The session *feedback*, exposing incoming feedback delivered to the node when present.

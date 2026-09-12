@@ -52,13 +52,13 @@ PURPOSE:
 Implements parse_guide to extract summary and step sections from file content
 
 FRESH_REQUIREMENTS:
-- Guide parsing extracts the summary from content preceding the first section heading and excludes sections whose title begins with `Lint checks`.
+- Guide parsing extracts the summary from content preceding the first section heading, captures verification failure instructions when a section heading begins with `Verification failure`, and excludes sections whose title begins with `Lint checks` or `Verification failure`.
 
 INHERITED_REQUIREMENTS:
-- [GuideDelivery] Parsing file content extracts the summary from content preceding the first section heading and excludes sections whose title begins with `Lint checks`.
+- [GuideDelivery] Parsing file content extracts the summary from content preceding the first section heading, captures verification failure instructions when a section heading begins with `Verification failure`, and excludes sections whose title begins with `Lint checks` or `Verification failure`.
 
 GROUNDING_ARGUMENT:
-- Receives content directly as a parameter and parses the markdown text into summary and step sections, excluding sections titled with Lint checks.
+- Receives content directly as a parameter and parses the markdown text into summary, verification failure instructions, and step sections, excluding sections titled with Lint checks or Verification failure.
 """
         ...
 
@@ -72,16 +72,28 @@ Implements advance_step to deliver initial summary alone, subsequent step conten
 FRESH_REQUIREMENTS:
 - When advancing a step with passed verification, if no steps have been delivered yet, the guide delivery emits a response containing the guide summary alone without delivering a step section.
 - When advancing a step with passed verification, if steps have already been delivered and further step sections remain, the guide delivery emits a response presenting the guide summary above the next step section content introduced by `Now check carefully:` and advances its index to that section.
-- When advancing a step with failed verification, if no step section has been delivered yet, the guide delivery retains its index and emits a response combining the guide summary and failure diagnostics.
-- When advancing a step with failed verification, if a step section is currently active, the guide delivery retains the current step index without advancement and emits a response combining the guide summary, the current step section content introduced by `Now check carefully:`, and the failure diagnostics.
+- When advancing a step with failed verification, if no step section has been delivered yet, the guide delivery retains its index and emits a response combining the guide summary, any configured verification failure instructions, and failure diagnostics.
+- When advancing a step with failed verification, if a step section is currently active, the guide delivery retains the current step index without advancement and emits a response combining the guide summary, the current step section content introduced by `Now check carefully:`, any configured verification failure instructions, and the failure diagnostics.
 - When no guide is configured or no step sections remain, the guide delivery indicates that no steps remain and advancing produces no response.
 
 INHERITED_REQUIREMENTS:
 - [GuideDelivery] When advancing a step with passed verification on initial delivery, the response contains the guide summary alone.
 - [GuideDelivery] When advancing a step with passed verification on subsequent steps and steps remain, the response presents the guide summary above the next step section content.
-- [GuideDelivery] When advancing a step with failed verification, advancing retains the current step section and reports the failure diagnostics.
+- [GuideDelivery] When advancing a step with failed verification, advancing retains the current step section and reports the failure diagnostics alongside any configured verification failure instructions.
 
 GROUNDING_ARGUMENT:
-- Receives verification_passed and failure_diagnostics directly as parameters, evaluates the active delivery state against remaining sections on self, advances or retains the step state based on verification, and formats the response content using tool_provider.Response.
+- Receives verification_passed and failure_diagnostics directly as parameters, evaluates the active delivery state against remaining sections on self, advances or retains the step state based on verification, and formats the response content combining any configured verification failure instructions using tool_provider.Response.
+"""
+        ...
+
+    @property
+    @override
+    def guide(self) -> Optional[sandbox_guide_delivery.Guide]:
+        """
+PURPOSE:
+Exposes the configured guide for the session
+
+GROUNDING_ARGUMENT:
+- Returns the parsed guide instance stored on self.
 """
         ...

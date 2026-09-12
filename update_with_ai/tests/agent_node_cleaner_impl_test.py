@@ -1,6 +1,7 @@
 """Unit tests for agent_node_cleaner_impl aligned with grounding specifications."""
 
 import unittest
+from pathlib import Path
 from typing import List, Optional, Set
 
 from lib.agent_conversation_history import ConversationHistory, Message, ModelRequest
@@ -14,12 +15,18 @@ from lib.agent_runner import AgentOutcome, AgentRunner
 from lib.bazel_graph_storage import BazelGraphStorage, NodeDefinition, TaskPrompt
 from lib.dag_node_cleaner import CleanedNode
 from lib.dag_storage import Change, Dependency, Feedback, Message as DagMessage, Node
-from lib.file_alias import BoundFile, FileContent, UnboundFile
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from lib.file_alias import BoundFile, FileContent, ReadWriteFile, UnboundFile, WorkspacePath
+from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton
 from lib.model_config import ModelConfig
 from lib.node_config import NodeConfig
 from lib.sandbox import Sandbox, StartupToolExecution
 from lib.tool_provider import Response, WireParameterBindings
+
+
+def _make_workspace_path(path: str) -> WorkspacePath:
+    obj = object.__new__(WorkspacePath)
+    object.__setattr__(obj, "path", path)
+    return obj
 
 
 class MockStorage:
@@ -118,9 +125,12 @@ class MockRunner:
             conversation_history=MockHistory(),
         )
         self.run_count = 0
+        self.error: Optional[Exception] = None
 
     def run(self) -> AgentOutcome:
         self.run_count += 1
+        if self.error is not None:
+            raise self.error
         return self.outcome
 
 
@@ -142,14 +152,36 @@ class MockModelConfig:
 class MockNodeConfig:
     tier = "agent_session"
 
-    def __init__(self, guide_file: Optional[UnboundFile] = None) -> None:
+    def __init__(
+        self,
+        guide_file: Optional[UnboundFile] = None,
+        is_step_mode: Optional[bool] = None,
+        allows_step_mode: bool = True,
+    ) -> None:
         self.read_only_files: Set[BoundFile] = set()
         self.read_write_files: Set[BoundFile] = set()
         self.guide_file = guide_file
+        self._is_step_mode = is_step_mode
+        self.allows_step_mode = allows_step_mode
         self.templates: Set[tuple[BoundFile, FileContent]] = set()
         self.guide = None
         self.blame_targets: Set[BoundFile] = set()
         self.verification_checks = []
+        self.feedback: List[str] = []
+
+    @property
+    def is_step_mode(self) -> bool:
+        if self._is_step_mode is not None:
+            return self._is_step_mode
+        try:
+            m_cfg = get_singleton(ModelConfig)
+            return m_cfg.is_step_mode and self.allows_step_mode
+        except Exception:
+            return False
+
+    @is_step_mode.setter
+    def is_step_mode(self, val: bool) -> None:
+        self._is_step_mode = val
 
 
 class AgentNodeCleanerImplTest(unittest.TestCase):
@@ -191,6 +223,12 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             node=node,
             task_prompt=TaskPrompt("Clean this node"),
         )
+        rw_file = ReadWriteFile(
+            short_name="foo.py",
+            workspace_path=_make_workspace_path("/tmp/foo.py"),
+            owning_node=node,
+        )
+        self.node_cfg.read_write_files = {rw_file}
         self.storage.messages[node.address] = {
             Feedback(content="Z defect explanation"),
             Change(content="A spec updated"),
@@ -216,11 +254,41 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             history_contents = [m.content for m in self.history.messages]
             self.assertTrue(any("Clean this node" in c for c in history_contents))
             # Verify messages are ordered deterministically by content and formatted with their content
+            # Requirement: When incoming feedback messages are present, they are formatted as actionable instructions prefaced with directives to fix read-write target files based on the feedback.
             change_idx = next(i for i, c in enumerate(history_contents) if "Incoming change: A spec updated" in c)
-            feedback_idx = next(i for i, c in enumerate(history_contents) if "Incoming feedback: Z defect explanation" in c)
+            feedback_idx = next(i for i, c in enumerate(history_contents) if "Fix foo.py based on feedback: Z defect explanation" in c)
             self.assertLess(change_idx, feedback_idx)
             self.assertTrue(any("spec content" in c for c in history_contents))
             self.assertEqual(self.history.tool_responses[0][3], startup_exec.wire_parameter_bindings)
+
+    def test_clean_node_formats_feedback_in_prompt_when_feedback_present(self) -> None:
+        """CUJ: Incoming feedback messages are formatted into seeded history as actionable instructions."""
+        node = Node(address="//pkg:step_fb_test")
+        self.storage.definitions[node.address] = NodeDefinition(
+            node=node,
+            task_prompt=TaskPrompt("Clean this node in step mode"),
+        )
+        rw_file = ReadWriteFile(
+            short_name="foo.py",
+            workspace_path=_make_workspace_path("/tmp/foo.py"),
+            owning_node=node,
+        )
+        self.node_cfg.read_write_files = {rw_file}
+        self.storage.messages[node.address] = {
+            Feedback(content="Z defect explanation"),
+            Change(content="A spec updated"),
+        }
+        self.model_cfg.is_step_mode = True
+
+        with enter_phase("system", registry=self.registry) as scope:
+            cleaner = scope.get_singleton(AgentNodeCleaner)
+            # Requirement: When incoming feedback messages are present, they are formatted as actionable instructions prefaced with directives to fix read-write target files based on the feedback.
+            _ = cleaner.clean_node(node)
+
+            history_contents = [m.content for m in self.history.messages]
+            self.assertTrue(any("Clean this node in step mode" in c for c in history_contents))
+            self.assertTrue(any("Incoming change: A spec updated" in c for c in history_contents))
+            self.assertTrue(any("Fix foo.py based on feedback: Z defect explanation" in c for c in history_contents))
 
     def test_clean_node_with_file_modifications_produces_change_message(self) -> None:
         """CUJ: Producing Change message when run succeeds with file modifications."""
@@ -306,6 +374,19 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             self.assertTrue(self.storage.is_dirty(node))
             self.assertGreater(len(self.storage.get_messages(node)), 0)
             self.assertNotIn(node, self.storage.registered_dependents)
+
+    def test_clean_node_runner_runtime_error_propagates(self) -> None:
+        """CUJ: RuntimeError from agent runner propagates through clean_node and clean."""
+        node = Node(address="//pkg:error_test")
+        self.storage.definitions[node.address] = NodeDefinition(node=node, task_prompt=TaskPrompt("Task prompt"))
+        self.runner.error = RuntimeError("Agent failed: unrecoverable tool error")
+
+        with enter_phase("system", registry=self.registry) as scope:
+            cleaner = scope.get_singleton(AgentNodeCleaner)
+            # Requirement: Node cleaning executes an agent runner with the sandbox and conversation history.
+            with self.assertRaises(RuntimeError) as ctx:
+                cleaner.clean_node(node)
+            self.assertIn("Agent failed: unrecoverable tool error", str(ctx.exception))
 
     def test_clean_node_without_task_prompt_resolves_without_runner(self) -> None:
         """CUJ: Cleaning a dirty node defining no task prompt resolves without agent runner and produces change messages when incoming messages indicate change."""
@@ -437,7 +518,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=self.registry) as scope:
             cleaner = scope.get_singleton(AgentNodeCleaner)
-            # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when progressive guidance is active, or identifying the guide file by its file alias when progressive guidance is inactive.
+            # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias when guide step mode is inactive.
             _ = cleaner.clean_node(node)
 
             history_contents = [m.content for m in self.history.messages]
@@ -458,12 +539,14 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=self.registry) as scope:
             cleaner = scope.get_singleton(AgentNodeCleaner)
-            # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when progressive guidance is active, or identifying the guide file by its file alias when progressive guidance is inactive.
+            # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete when guide step mode is inactive.
             _ = cleaner.clean_node(node)
 
             history_contents = [m.content for m in self.history.messages]
             prompt_content = next(c for c in history_contents if "Ensure the lib conforms" in c)
             self.assertIn("my_guide.md", prompt_content)
+            self.assertIn("finish", prompt_content)
+            self.assertIn("change summary", prompt_content)
             self.assertNotIn("advance", prompt_content)
 
     def test_clean_node_seeds_history_without_guide_leaves_prompt_unaugmented(self) -> None:
@@ -482,6 +565,34 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             history_contents = [m.content for m in self.history.messages]
             prompt_content = next(c for c in history_contents if "Ensure the lib conforms without guide" in c)
             self.assertEqual(prompt_content, "Ensure the lib conforms without guide")
+
+    def test_clean_node_seeds_history_node_disallows_step_mode(self) -> None:
+        """CUJ: When node disallows step mode, model step mode is overridden: feedback is included and guide file is named."""
+        node = Node(address="//pkg:disallowed_step_test")
+        self.storage.definitions[node.address] = NodeDefinition(
+            node=node,
+            task_prompt=TaskPrompt("Ensure the lib conforms to the guide"),
+        )
+        self.node_cfg.guide_file = UnboundFile(short_name="qa.md")
+        self.node_cfg.allows_step_mode = False
+        self.model_cfg.is_step_mode = True
+        self.storage.messages[node.address] = {
+            Feedback(content="Fix defect 1"),
+        }
+
+        with enter_phase("system", registry=self.registry) as scope:
+            cleaner = scope.get_singleton(AgentNodeCleaner)
+            # Requirement: When incoming feedback messages are present, they are formatted as actionable instructions prefaced with directives to fix read-write target files based on the feedback.
+            # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete when guide step mode is inactive.
+            _ = cleaner.clean_node(node)
+
+            history_contents = [m.content for m in self.history.messages]
+            prompt_content = next(c for c in history_contents if "Ensure the lib conforms" in c)
+            self.assertIn("qa.md", prompt_content)
+            self.assertIn("finish", prompt_content)
+            self.assertIn("change summary", prompt_content)
+            self.assertNotIn("advance", prompt_content)
+            self.assertTrue(any("feedback: Fix defect 1" in c for c in history_contents))
 
 
 if __name__ == "__main__":

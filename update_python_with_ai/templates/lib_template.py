@@ -1,37 +1,49 @@
 """
-<TODO: module docstring — the LLS this module implements (interface or implementation)>
+Implementation of <name> per its grounding specification (<name>.pyi).
 """
 
 from __future__ import annotations
+from typing import Optional
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
 
 # TODO: import the interface types this module implements and uses, e.g.
 # from .inventory import Inventory, Sku, Quantity
 
 
-class <Name>(Protocol):  # interface module: delete when this is an implementation module
+class <TargetClass>(Protocol):  # interface module: delete when this is an implementation module
     """<TODO: interface operations become the Protocol's methods>"""
 
     def operation(self, param: str) -> str:
-        """<TODO: operation contract per the interface LLS>"""
+        """<TODO: operation contract per the grounding specification>"""
         ...
 
 
-class <Name>Impl(<Interface>):  # implementation module: delete when this is an interface module
-    """<TODO: fulfills the <Interface> contract per its LLS>"""
+class <TargetClass>(<interface>.<InterfaceProtocol>, Singleton):  # implementation module: delete when this is an interface module
+    """<TODO: fulfills the grounding contract per its grounding specification>"""
+    tier = "system"  # or "agent_session"
 
-    def __init__(self, config: <Config>) -> None:
-        """<TODO: configuration per the implementation LLS (capability bundling)>"""
-        ...
+    def __init__(self) -> None:
+        """<TODO: zero-argument constructor; collaborator singletons accessed via get_singleton>"""
+        pass
 
     def operation(self, param: str) -> str:
-        """<TODO: implement each operation per the interface LLS —
+        """<TODO: implement each operation per the grounding specification —
         signatures verbatim, preconditions honored, postconditions satisfied,
-        expected failures as the LLS's return signals>"""
+        expected failures as the specification's return signals>"""
         raise NotImplementedError
 
 
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:  # implementation module: delete when this is an interface module
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        <TargetClass>,
+        keys=[<TargetClass>, <interface>.<InterfaceProtocol>],
+        tier="system",  # or "agent_session"
+    )
+
+
 # TODO: work through this module:
-#   - the LLS is the contract; implement every operation, invariant, and pin
+#   - the grounding specification is the contract; implement every operation, invariant, and requirement
 #   - keep the module layout and stubs the template provides; replace placeholders
-#   - expected failures use the LLS's return signals; unexpected failures propagate
+#   - expected failures use the specification's return signals; unexpected failures propagate
 

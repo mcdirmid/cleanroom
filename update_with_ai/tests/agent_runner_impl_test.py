@@ -239,7 +239,7 @@ class AgentRunnerImplTest(unittest.TestCase):
 
             # Requirement: When a model response produces no tool executions, the agent runner appends a prompt to the conversation history reminding that progress and conclusion require invoking tools, and continues the turn loop.
             # Requirement: [AgentRunner] When a model response contains no tool executions, the agent runner injects a tool reminder into the conversation history and continues the turn loop.
-            # Requirement: When tool execution produces a terminating response, the agent runner concludes the run and returns an agent outcome.
+            # Requirement: When tool execution produces a terminating response, the agent runner concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
             self.assertTrue(outcome.is_success)
             self.assertEqual(len(self.history.messages), 4)
             self.assertEqual(self.history.messages[0].role, "assistant")
@@ -268,12 +268,12 @@ class AgentRunnerImplTest(unittest.TestCase):
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             runner = scope.get_singleton(AgentRunner)
-            outcome = runner.run()
 
-            # Requirement: When turns reach the conversation limit from model config, the agent runner concludes with a failure outcome.
-            # Requirement: [AgentRunner] When the conversation limit from model config is exceeded, the agent runner concludes with a failure outcome.
-            self.assertFalse(outcome.is_success)
-            self.assertTrue(outcome.response.is_failed)
+            # Requirement: When turns reach the conversation limit from model config, the agent runner halts with an unexpected failure.
+            # Requirement: [AgentRunner] When the conversation limit from model config is exceeded, the agent runner halts with an unexpected failure.
+            with self.assertRaises(RuntimeError) as ctx:
+                runner.run()
+            self.assertIn("Conversation limit reached", str(ctx.exception))
             self.assertEqual(mock_client.chat.completions.create.call_count, 5)
 
     @patch("lib.agent_runner_impl.OpenAI")
@@ -319,8 +319,8 @@ class AgentRunnerImplTest(unittest.TestCase):
             outcome = runner.run()
 
             # Requirement: [AgentRunner] The agent runner drives turns by sending model requests to a language model and executing requested tools.
-            # Requirement: When tool execution produces a terminating response, the agent runner concludes the run and returns an agent outcome.
-            # Requirement: [AgentRunner] When tool execution produces a termination outcome, the agent runner concludes and returns an agent outcome.
+            # Requirement: When tool execution produces a terminating response, the agent runner concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
+            # Requirement: [AgentRunner] When tool execution produces a termination outcome, the agent runner concludes and returns an agent outcome, or halts with an unexpected failure if the termination indicates a failing outcome.
             self.assertTrue(outcome.is_success)
             self.assertTrue(outcome.response.is_terminated)
             self.assertEqual(outcome.response.content, "Task completed successfully")
@@ -359,7 +359,7 @@ class AgentRunnerImplTest(unittest.TestCase):
             self.assertEqual(tool_res_msg["tool_call_id"], "call_fail")
 
             # Requirement: When tool execution produces a non-terminating failure response, the failure feedback is appended to the conversation history and the run continues.
-            # Requirement: When tool execution produces a terminating response, the agent runner concludes the run and returns an agent outcome.
+            # Requirement: When tool execution produces a terminating response, the agent runner concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
             self.assertTrue(outcome.is_success)
             self.assertEqual(len(self.history.tool_responses), 2)
             self.assertTrue(self.history.tool_responses[0][0].is_failed)
@@ -368,15 +368,23 @@ class AgentRunnerImplTest(unittest.TestCase):
             self.assertEqual(self.history.tool_responses[1][0].content, "Recovered")
 
     @patch("lib.agent_runner_impl.OpenAI")
-    def test_truncation_continuation(self, mock_openai_cls: MagicMock) -> None:
-        """CUJ: Resuming generation with continuation turn when length-truncated."""
+    def test_continuation_turn_on_truncated_response(self, mock_openai_cls: MagicMock) -> None:
+        """CUJ: Model response truncated due to finish_reason='length' triggers continuation turn."""
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
 
-        comp_truncated = DummyCompletion([DummyChoice(DummyMessage("Part 1"), finish_reason="length")])
-        tc = DummyToolCall(id="call_finish", name="finish_task", arguments=json.dumps({"summary": "done"}))
-        comp_final = DummyCompletion([DummyChoice(DummyMessage("Part 2", tool_calls=[tc]), finish_reason="stop")])
-        mock_client.chat.completions.create.side_effect = [comp_truncated, comp_final]
+        # Turn 1: Truncated response (no tool calls, finish_reason="length")
+        comp1 = DummyCompletion([DummyChoice(
+            DummyMessage("Part 1: The analysis begins..."),
+            finish_reason="length",
+        )])
+        # Turn 2: Completes and calls tool
+        tc = DummyToolCall(id="call_finish", name="finish_task", arguments="{}")
+        comp2 = DummyCompletion([DummyChoice(
+            DummyMessage("Part 2: concluding.", tool_calls=[tc]),
+            finish_reason="stop",
+        )])
+        mock_client.chat.completions.create.side_effect = [comp1, comp2]
 
         self.tool_mgr.responses["finish_task"] = Response(is_failed=False, is_terminated=True, content="Done")
 
@@ -385,7 +393,7 @@ class AgentRunnerImplTest(unittest.TestCase):
             outcome = runner.run()
 
             # Requirement: When a model response is truncated at the generation limit, the agent runner resumes generation with a continuation turn.
-            # Requirement: When tool execution produces a terminating response, the agent runner concludes the run and returns an agent outcome.
+            # Requirement: When tool execution produces a terminating response, the agent runner concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
             self.assertTrue(outcome.is_success)
             # Expect: assistant Part 1 -> user continuation prompt -> assistant Part 2 -> tool response
             self.assertEqual(len(self.history.messages), 4)
@@ -404,12 +412,11 @@ class AgentRunnerImplTest(unittest.TestCase):
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             runner = scope.get_singleton(AgentRunner)
-            outcome = runner.run()
+            with self.assertRaises(RuntimeError) as ctx:
+                runner.run()
 
+            self.assertIn("Model error: API Rate Limited", str(ctx.exception))
             # Requirement: The agent runner logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
-            self.assertFalse(outcome.is_success)
-            self.assertTrue(outcome.response.is_failed)
-            self.assertTrue(outcome.response.is_terminated)
             self.assertTrue(any(e.event_name == "model_error" and "[Turn 1] Model error:" in e.summary for e in self.logger.events))
 
     @patch("lib.agent_runner_impl.OpenAI")
@@ -476,8 +483,8 @@ class AgentRunnerImplTest(unittest.TestCase):
             runner = scope.get_singleton(AgentRunner)
             outcome = runner.run()
 
-            # Requirement: Before executing each tool call, the agent runner records the tool execution in the loop guard, injecting a loop reminder into the conversation history when a reminder is produced, or concluding the run with a failure outcome when a loop failure is produced.
-            # Requirement: [AgentRunner] The agent runner evaluates tool executions with the loop guard, injecting reminders or terminating on failure.
+            # Requirement: Before executing each tool call, the agent runner records the tool execution in the loop guard, injecting a loop reminder into the conversation history when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
+            # Requirement: [AgentRunner] The agent runner evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
             self.assertTrue(outcome.is_success)
             self.assertTrue(any(e.event_name == "loop_reminder" for e in self.logger.events))
             reminder_msgs = [m for m in self.history.messages if m.role == "user" and "repeated 3 times" in m.content]
@@ -496,13 +503,12 @@ class AgentRunnerImplTest(unittest.TestCase):
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             runner = scope.get_singleton(AgentRunner)
-            outcome = runner.run()
+            with self.assertRaises(RuntimeError) as ctx:
+                runner.run()
 
-            # Requirement: Before executing each tool call, the agent runner records the tool execution in the loop guard, injecting a loop reminder into the conversation history when a reminder is produced, or concluding the run with a failure outcome when a loop failure is produced.
-            self.assertFalse(outcome.is_success)
-            self.assertTrue(outcome.response.is_failed)
-            self.assertTrue(outcome.response.is_terminated)
-            self.assertEqual(outcome.response.content, "Fatal loop detected: tool executed 5 times.")
+            # Requirement: Before executing each tool call, the agent runner records the tool execution in the loop guard, injecting a loop reminder into the conversation history when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
+            # Requirement: [AgentRunner] The agent runner evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
+            self.assertIn("Fatal loop detected: tool executed 5 times.", str(ctx.exception))
             self.assertTrue(any(e.event_name == "loop_failure" for e in self.logger.events))
             self.assertEqual(len(self.tool_mgr.executions), 0)
 
@@ -770,6 +776,26 @@ class AgentRunnerImplTest(unittest.TestCase):
             # followup_tool was NOT dispatched automatically
             executed_names = [e[0] for e in self.tool_mgr.executions]
             self.assertEqual(executed_names, ["initial_tool", "finish_tool"])
+
+    @patch("lib.agent_runner_impl.OpenAI")
+    def test_terminating_failure_tool_raises_runtime_error(self, mock_openai_cls: MagicMock) -> None:
+        """CUJ: Tool execution producing terminating failure raises RuntimeError."""
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        tc = DummyToolCall(id="call_fail", name="fail", arguments=json.dumps({"reason": "Cannot proceed"}))
+        comp = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc]))])
+        mock_client.chat.completions.create.return_value = comp
+
+        self.tool_mgr.responses["fail"] = Response(is_failed=True, is_terminated=True, content="Cannot proceed")
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            runner = scope.get_singleton(AgentRunner)
+            with self.assertRaises(RuntimeError) as ctx:
+                runner.run()
+
+            # Requirement: When tool execution produces a terminating response, the agent runner concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
+            # Requirement: [AgentRunner] When tool execution produces a termination outcome, the agent runner concludes and returns an agent outcome, or halts with an unexpected failure if the termination indicates a failing outcome.
+            self.assertIn("Agent failed: Cannot proceed", str(ctx.exception))
 
 
 if __name__ == "__main__":

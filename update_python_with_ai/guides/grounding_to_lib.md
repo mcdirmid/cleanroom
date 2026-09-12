@@ -2,9 +2,18 @@
 
 ## Summary
 
-The module `<component-name>.py` implements `<component-name>.pyi` (an implementation grounding specification is implemented by `<component-name>_impl.py`). The lib node has write access only to its library implementation file (`<name>.py`); test files (`<name>_test.py`) are strictly read-only. The grounding specification and its dependency closure are the module's only contract. External boundary specifications (`<name>_ext.pyi`) have no library implementation file; their documented external mechanics, build dependencies, and usage snippets guide implementation modules that import external libraries directly. A file that is a template is filled in. If the pre-existing file already satisfies all contracts and constraints, no edits are made. The files and specifications provided in context at session start are the complete and only source of truth required to implement the module.
+The module `<name>.py` implements `<name>.pyi`. The lib node has write access only to its library implementation file (`<name>.py`); test files (`<target_impl>_test.py`) are strictly read-only. The grounding specification and its dependency closure are the module's only contract. External boundary specifications (`<name>_ext.pyi`) have no library implementation file; their documented external mechanics, build dependencies, and usage snippets guide implementation modules that import external libraries directly. A file that is a template is filled in. If the pre-existing file already satisfies all contracts and constraints, no edits are made. The files and specifications provided in context at session start are the complete and only source of truth required to implement the module.
 
-The module defines clean Python runtime types and implementations realizing the grounding specification's contracts: dataclasses declare fields as typed class-level attributes without stub constructors (`__init__`) or property getters (`@property`), interface protocols declare operation signatures, and specification framework decorators (`@data_type`, `@operation`, `@singleton_type`) and specification docstrings (`PURPOSE:`, `FRESH_REQUIREMENTS:`) are omitted. Operations implement their contracts, invariants hold, comments cite exact requirements verbatim (`# Requirement: <exact text>`), unexpected failures raise unhandled exceptions, and inventing unmandated behavior or stubs is prohibited. Implementation editing is incremental and targeted, using `update_lines` for multi-line blocks or classes (`replace` is restricted to short single-line changes < 200 characters), never rewriting unchanged files or replacing clean dataclass attributes with specification stubs. When resolving incoming feedback messages, edits are surgical and targeted specifically to the cited defect or failing test; whole-file rewrites and replacing working code are prohibited. The search tool is never installed.
+The module defines clean Python runtime types and implementations realizing the grounding specification's contracts: dataclasses declare fields as typed class-level attributes without stub constructors (`__init__`) or property getters (`@property`), interface protocols declare operation signatures, and specification framework decorators (`@data_type`, `@operation`, `@singleton_type`) and specification docstrings (`PURPOSE:`, `FRESH_REQUIREMENTS:`, `GROUNDING_ARGUMENT:`, `INHERITED_REQUIREMENTS:`, `INHERITED_ASSUMPTIONS:`) are omitted; copying specification docstrings into implementation files is prohibited. Implementation classes share the exact class name declared in the grounding specification (subclassing the interface Protocol and Singleton: `class Alpha(alpha.Alpha, Singleton):`), with zero-argument `__init__`, and are registered in `__initialize__`. Operations implement their contracts, invariants hold, comments cite exact requirements verbatim (`# Requirement: <exact text>`), unexpected failures raise unhandled exceptions, and inventing unmandated behavior, stubs, or retaining dead code is prohibited. Implementation editing is incremental and targeted, using `update_lines` for multi-line blocks or classes (`replace` is restricted to short single-line changes < 200 characters), never rewriting unchanged files or replacing clean dataclass attributes with specification stubs. The search tool is never installed.
+
+> META: "Library implementation files realize grounding specifications directly; contracts and requirement docstrings are never copied into the implementation."
+
+## Verification failure
+
+- [ ] Diagnostics from a failed verification are addressed surgically in the writable library file without whole-file rewrites or modifying unreferenced code
+- [ ] If verification failure reports test failures or type errors, edits target only the specific failing functions or classes cited in the diagnostic output
+- [ ] Calling the fail tool is restricted to defects that cannot be resolved within the writable library file (e.g. invalid specification requirements); the fail tool is never called for fixable local syntax, typing, or logic errors
+- [ ] Calling advance without modifying workspace files repeats the previous failure; files must be updated before calling advance again
 
 ## Module layout
 
@@ -12,7 +21,7 @@ The module defines clean Python runtime types and implementations realizing the 
 - [ ] External boundary specifications (`<name>_ext.pyi`) define no library implementation module (no `<name>_ext.py` file exists)
 - [ ] Interface specifications defining only data types or variants without singleton services define no implementation module (no `<name>_impl.py` exists)
 - [ ] An interface module (`<name>.py` for a specification with no `_impl.pyi`) defines runtime Protocol classes, standard dataclasses, and type aliases only; no concrete implementation class, specification framework decorator, or specification docstring appears in an interface module
-- [ ] An implementation class appears only in the module of an implementation specification (`<name>_impl.py`), sharing the exact class name from the specification and subclassing the interface Protocol and Singleton without an `Impl` suffix: `class Alpha(alpha.Alpha, Singleton):`
+- [ ] An implementation class appears only in the module of an implementation specification (`<name>_impl.py`), sharing the exact class name from the specification and subclassing the interface Protocol and Singleton: `class Alpha(alpha.Alpha, Singleton):`
 - [ ] Every singleton implementation class subclasses `Singleton`, declares a zero-argument constructor `def __init__(self) -> None:`, initializes its lifecycle tier (`tier = "system"` or `tier = "agent_session"`), and optionally implements `def initialize(self) -> None:` if post-construction initialization is required
 - [ ] Every implementation module defines a top-level `__initialize__(registry: Optional[LifecycleRegistry] = None) -> None:` method that registers each singleton class under all inherited singleton types and the implementation class itself (`keys=[Alpha, alpha.Alpha, ...]`), with its lifecycle tier (`system` or `agent_session`)
 - [ ] An implementation module implements (closes) interface components by implementing all of their declared singleton types, listing implemented interface components in `implements` and used non-implemented components in `imports`
@@ -68,10 +77,13 @@ The module defines clean Python runtime types and implementations realizing the 
 - [ ] Non-assembly library modules must not import from any implementation module (`*_impl.py`) or assembly module (`*_asm.py`)
 - [ ] Library modules must not import from `framework`
 - [ ] Dataclasses in library modules must not declare `def __init__` or `@property` stubs
+- [ ] Only public types declared in the grounding specification appear in the library module without a preceding underscore, and all declared types are defined
+- [ ] Class names must match the exact type name declared in the grounding specification without an 'Impl' suffix
 - [ ] Library modules must not call `unittest.main()` (test runners belong in test modules only)
 - [ ] Library modules must not catch broad exceptions (bare 'except:', 'except Exception:', 'except BaseException:') without re-raising
 - [ ] All module imports and transitive closure are resolvable
 - [ ] All imported modules and symbols are referenced in the module's AST (zero unused imports)
+- [ ] Private helper functions and classes defined in the library module are referenced in the module's AST (zero unused dead code)
 - [ ] Library modules must not contain type suppression comments ('# type: ignore')
 - [ ] The package BUILD file contains the `pyright_library` target with required dependencies
 
@@ -81,7 +93,7 @@ The module defines clean Python runtime types and implementations realizing the 
 - [ ] Creating an implementation module for a data-type-only interface specification that defines no singletons
 - [ ] Importing from `framework` or applying specification AST decorators (`@data_type`, `@operation`, `@singleton_type`, etc.) in library modules
 - [ ] Defining dataclass fields as empty `def __init__` or `@property` stubs instead of class attribute annotations
-- [ ] Copying specification docstring sections (`PURPOSE:`, `FRESH_REQUIREMENTS:`) into library modules
+- [ ] Copying specification docstring sections (`PURPOSE:`, `FRESH_REQUIREMENTS:`, `GROUNDING_ARGUMENT:`, `INHERITED_REQUIREMENTS:`, `INHERITED_ASSUMPTIONS:`) into library modules
 - [ ] Unused imports — importing modules or symbols that are never referenced in the implementation's AST
 - [ ] Suppressing type checker errors using '# type: ignore' instead of properly typing and resolving symbols
 - [ ] Constructor injection of collaborator singletons instead of zero-argument `__init__` and on-demand `get_singleton`

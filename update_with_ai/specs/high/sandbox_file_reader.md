@@ -16,8 +16,10 @@ The *read manager* is an agent session service that manages inspection of worksp
 
 The read manager provides:
 
-- A *read tool* that reads file content, taking a file alias *file parameter* and a boolean *line numbers parameter*. Executing the read tool distinguishes reading attempts on the guide file to provide *progressive delivery* feedback.
+- A *read tool* that reads file content, taking a file alias *file parameter* and a boolean *line numbers parameter*. Executing the read tool distinguishes reading attempts on the guide file to provide *progressive delivery* feedback, and filters out meta note paragraphs beginning with `> META:` when reading markdown files.
 
 - A *search tool* that searches pattern matches across the session's read-only and read-write files, accepting a regex pattern *pattern parameter*.
+
+The read manager determines whether an inspected file *requires line numbers*, accepting a file alias *file*, identifying read-write files and source code files as requiring line numbers, with files ending with `.py` identified as source code files.
 
 To support session startup context injection, the read manager exposes the agent session's set of read-only files and read-write files. When a guide is provided by step-mode, the read manager is configured with a *guide file*, which is an unbound file, so that an agent trying to read the guide file will receive corrective error responses.

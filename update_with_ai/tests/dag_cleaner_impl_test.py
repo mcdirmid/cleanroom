@@ -6,7 +6,15 @@ from lib.dag_cleaner import DagCleaner
 from lib.dag_cleaner_impl import DagCleaner as DagCleanerImpl, __initialize__
 from lib.dag_node_cleaner import NodeCleaner
 from lib.dag_storage import DagStorage, Dependency, Message, Node
+from lib.model_config import ModelConfig
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
+
+
+class MockModelConfig:
+    tier = "system"
+
+    def __init__(self, node_visit_limit: int = 500) -> None:
+        self.node_visit_limit = node_visit_limit
 
 
 class MockDagStorage:
@@ -61,9 +69,11 @@ class RecordingNodeCleaner:
 class DagCleanerImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.storage = MockDagStorage()
+        self.model_cfg = MockModelConfig()
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
         self.registry.register_instance(self.storage, keys=[DagStorage], tier="system")
+        self.registry.register_instance(self.model_cfg, keys=[ModelConfig], tier="system")
 
     def test_single_node_clean_success(self) -> None:
         """CUJ: Cleaning an isolated dirty root node."""
@@ -173,12 +183,13 @@ class DagCleanerImplTest(unittest.TestCase):
             self.assertEqual(cleaner.cleaned_calls, [dep])
             self.assertNotIn(root, cleaner.cleaned_calls)
 
-    def test_execution_limit(self) -> None:
-        """CUJ: Exceeding execution limit halts with an unexpected failure."""
+    def test_node_visit_limit(self) -> None:
+        """CUJ: Exceeding node visit limit halts with an unexpected failure."""
+        self.model_cfg.node_visit_limit = 2
         with enter_phase("system", registry=self.registry) as scope:
             dag_cleaner = scope.get_singleton(DagCleanerImpl)
-            # Requirement: The execution limit is hardcoded to 500.
-            self.assertEqual(dag_cleaner.execution_limit, 500)
+            # Requirement: The node visit limit is obtained from the model config.
+            self.assertEqual(dag_cleaner.node_visit_limit, 2)
 
             root = Node(address="//pkg:infinite")
             self.storage.dirty_nodes.add(root)
@@ -187,7 +198,7 @@ class DagCleanerImplTest(unittest.TestCase):
                 def clean(self, node: Node) -> bool:
                     return True
 
-            # Requirement: If visiting any node exceeds the execution limit, the dag cleaner halts with an unexpected failure.
+            # Requirement: If visiting any node exceeds the node visit limit, the dag cleaner halts with an unexpected failure.
             with self.assertRaises(RuntimeError):
                 dag_cleaner.clean(root, NonResolvingCleaner())
 

@@ -1,10 +1,11 @@
-from typing import List, Optional, Sequence, Set, Tuple, Type
+from typing import Any, List, Mapping, Optional, Sequence, Set, Tuple, Type
 from framework import operation, override, singleton_type
 import bazel_manifest_loader
 import dag_node_cleaner
 import dag_storage
 import file_alias
 import file_paths
+import model_config
 import node_config
 import sandbox_file_editor
 import sandbox_guide_delivery
@@ -59,6 +60,60 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
+    def allows_step_mode(self) -> bool:
+        """
+PURPOSE:
+Whether the node allows step mode from the manifest
+
+FRESH_REQUIREMENTS:
+- The node config exposes whether the node allows step mode from the target node manifest.
+
+INHERITED_REQUIREMENTS:
+- [NodeConfig] The node config indicates whether the node allows step mode.
+
+GROUNDING_ARGUMENT:
+- Derived by loading the target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node) and extracting allows_step_mode.
+"""
+        ...
+
+    @property
+    @override
+    def is_step_mode(self) -> bool:
+        """
+PURPOSE:
+Whether step mode is active for the session
+
+FRESH_REQUIREMENTS:
+- The node config exposes whether step mode is active, enabled when the model config enables step mode, the node allows step mode, and session feedback is absent.
+
+INHERITED_REQUIREMENTS:
+- [NodeConfig] The node config indicates whether session step mode is active.
+
+GROUNDING_ARGUMENT:
+- Derived by querying model_config.ModelConfig.is_step_mode in the system lifecycle tier, self.allows_step_mode, and verifying that self.feedback is empty, enabling step mode only when all conditions are satisfied.
+"""
+        ...
+
+    @property
+    @override
+    def guide_file(self) -> Optional[file_alias.UnboundFile]:
+        """
+PURPOSE:
+Guide file configured when step mode is active
+
+FRESH_REQUIREMENTS:
+- The node config exposes the declared guide target as the guide file when step mode is active.
+
+INHERITED_REQUIREMENTS:
+- [NodeConfig] The node config provides the session guide file when step mode is active.
+
+GROUNDING_ARGUMENT:
+- Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), constructing an UnboundFile for the declared guide target when step mode is active.
+"""
+        ...
+
+    @property
+    @override
     def templates(self) -> Set[Tuple[file_alias.BoundFile, file_alias.FileContent]]:
         """
 PURPOSE:
@@ -77,19 +132,19 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def guide_file(self) -> Optional[file_alias.UnboundFile]:
+    def template_parameters(self) -> Mapping[str, Any]:
         """
 PURPOSE:
-Guide file configured when step mode is active
+Declared template parameters from the manifest
 
 FRESH_REQUIREMENTS:
-- The node config exposes the declared guide target as the guide file when step mode is active.
+- The node config exposes declared template parameters from the manifest.
 
 INHERITED_REQUIREMENTS:
-- [NodeConfig] The node config provides the session guide file when progressive guidance is configured.
+- [NodeConfig] The node config provides the session template parameters, providing parameter bindings for template evaluation.
 
 GROUNDING_ARGUMENT:
-- Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), constructing an UnboundFile for the declared guide target when step mode is active.
+- Extracted from the target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node).
 """
         ...
 
@@ -104,7 +159,7 @@ FRESH_REQUIREMENTS:
 - The node config exposes the declared guide target as the task guide when step mode is active.
 
 INHERITED_REQUIREMENTS:
-- [NodeConfig] The node config provides the session guide for progressive guidance when progressive guidance is configured.
+- [NodeConfig] The node config provides the session guide, providing structured instructional text when step mode is active.
 
 GROUNDING_ARGUMENT:
 - Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), reading and parsing the guide markdown via sandbox_guide_delivery when step mode is active.
@@ -144,6 +199,24 @@ INHERITED_REQUIREMENTS:
 
 GROUNDING_ARGUMENT:
 - Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), constructing a CommandVerificationCheck from the declared verify command string when present.
+"""
+        ...
+
+    @property
+    @override
+    def feedback(self) -> Sequence[str]:
+        """
+PURPOSE:
+Session feedback retrieved from graph storage for the target node
+
+FRESH_REQUIREMENTS:
+- Declared feedback messages retrieved from graph storage for the target node as the session feedback.
+
+INHERITED_REQUIREMENTS:
+- [NodeConfig] The node config provides the session feedback, exposing incoming feedback delivered to the node when present.
+
+GROUNDING_ARGUMENT:
+- Derived by querying dag_storage.DagStorage for incoming feedback messages for get_singleton(dag_node_cleaner.CleanedNode).node.
 """
         ...
 

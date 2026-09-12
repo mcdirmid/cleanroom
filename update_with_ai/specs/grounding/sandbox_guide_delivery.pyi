@@ -47,7 +47,7 @@ PURPOSE:
 Structured instructional text containing a summary and sequential step sections
 """
 
-    def __init__(self, summary: str, sections: List[StepSection]) -> None:
+    def __init__(self, summary: str, sections: List[StepSection], verification_failure: Optional[str]=None) -> None:
         ...
 
     @property
@@ -63,6 +63,14 @@ Established as the high-level overview of the guide
         """
 PURPOSE:
 Established as the sequential milestone sections of the guide
+"""
+        ...
+
+    @property
+    def verification_failure(self) -> Optional[str]:
+        """
+PURPOSE:
+Established as optional instructions delivered when verification fails
 """
         ...
 
@@ -84,6 +92,14 @@ Exposes whether progressive step sections remain to be completed
 """
         ...
 
+    @property
+    def guide(self) -> Optional[Guide]:
+        """
+PURPOSE:
+Exposes the configured guide for the session
+"""
+        ...
+
     @operation
     def parse_guide(self, content: file_alias.FileContent) -> Guide:
         """
@@ -91,7 +107,7 @@ PURPOSE:
 Parses file content into a task guide, extracting summary and step sections
 
 FRESH_REQUIREMENTS:
-- Parsing file content extracts the summary from content preceding the first section heading and excludes sections whose title begins with `Lint checks`.
+- Parsing file content extracts the summary from content preceding the first section heading, captures verification failure instructions when a section heading begins with `Verification failure`, and excludes sections whose title begins with `Lint checks` or `Verification failure`.
 """
         ...
 
@@ -104,6 +120,6 @@ Advances to the next step section if verification passed, or retains the current
 FRESH_REQUIREMENTS:
 - When advancing a step with passed verification on initial delivery, the response contains the guide summary alone.
 - When advancing a step with passed verification on subsequent steps and steps remain, the response presents the guide summary above the next step section content.
-- When advancing a step with failed verification, advancing retains the current step section and reports the failure diagnostics.
+- When advancing a step with failed verification, advancing retains the current step section and reports the failure diagnostics alongside any configured verification failure instructions.
 """
         ...

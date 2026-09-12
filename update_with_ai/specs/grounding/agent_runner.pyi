@@ -60,9 +60,9 @@ FRESH_REQUIREMENTS:
 - The agent runner appends model responses and correlates tool responses with tool call identifiers in conversation history.
 - The agent runner can dispatch follow-up tool calls specified by tool responses through the tool manager, appending an antecedent synthetic assistant tool invocation message and the follow-up tool response to the conversation history immediately following the originating response.
 - The agent runner records log events for model requests, responses, and tool executions to the runner logger, providing summaries with turn progress, tool calls with arguments or text snippets, and execution outcomes.
-- The agent runner evaluates tool executions with the loop guard, injecting reminders or terminating on failure.
+- The agent runner evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
 - When a model response contains no tool executions, the agent runner injects a tool reminder into the conversation history and continues the turn loop.
-- When tool execution produces a termination outcome, the agent runner concludes and returns an agent outcome.
-- When the conversation limit from model config is exceeded, the agent runner concludes with a failure outcome.
+- When tool execution produces a termination outcome, the agent runner concludes and returns an agent outcome, or halts with an unexpected failure if the termination indicates a failing outcome.
+- When the conversation limit from model config is exceeded, the agent runner halts with an unexpected failure.
 """
         ...

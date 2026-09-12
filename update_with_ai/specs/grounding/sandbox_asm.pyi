@@ -10,6 +10,7 @@ CONSTITUENTS:
 - sandbox_run_control_impl
 - sandbox_guide_delivery_impl
 - sandbox_change_summary_validator_impl
+- template_format_impl
 - tool_provider_impl
 """
     ...

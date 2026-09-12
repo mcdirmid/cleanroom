@@ -29,7 +29,7 @@ Executes a complete topological cleaning pass over the acyclic subgraph rooted a
 FRESH_REQUIREMENTS:
 - The bazel runner resolves target labels and loads workspace target graphs into dag storage using a manifest loader.
 - The bazel runner executes cleaning passes in topological order using the dag cleaner and the node cleaner.
-- The bazel runner halts cleaning and reports failure if a node cleaning fails or a cycle is encountered.
+- The bazel runner halts cleaning and reports failure if a node cleaning fails, if an unexpected failure occurs during cleaning capturing the failure reason in the build summary, or if any reachable node in the target subgraph remains dirty after cleaning.
 - When an agent session concludes, the bazel runner logs cumulative token usage and pass duration.
 
 INHERITED_REQUIREMENTS:

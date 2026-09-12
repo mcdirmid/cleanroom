@@ -6,24 +6,31 @@ A guide is read by an LLM that produces an artifact satisfying the guide's const
 
 The reader is an LLM consuming the guide through tool reads; it has only the current message and the artifact, and it takes every sentence literally. Every line must be actionable.
 
-The Summary drives the initial write or edit in one or at most two concise paragraphs: it states the high-level subject and core constraints completely so the initial revision is accurate in substance, without detailing fine-grained checks that checklist sections verify. Because linters run immediately upon advancing, structural problems are exposed early, keeping the Summary light and focused on core constraints rather than deep rule duplication.
+The Summary drives the initial write or edit in one or at most two concise paragraphs: it states the high-level subject and core constraints completely so the initial revision is accurate in substance, without detailing fine-grained checks that checklist sections verify. Its purpose is twofold: (a) preserve an already working artifact without unnecessary edits, and (b) when an artifact is missing or starting from a template, establish a minimal valid artifact that passes initial verification before advancing, delegating expanded coverage and fine-grained refinement to progressive checklist steps. Initial creation and bootstrapping instructions belong as comments directly inside templates rather than in the Summary; checklist sections verify that template instruction comments are deleted from the final artifact. Because linters run immediately upon advancing, structural problems are exposed early, keeping the Summary light and focused on core constraints rather than deep rule duplication.
 
-A guide never triggers. The prompt asks for alignment or conformance with the guide and the other input files, and it drives the loop; the guide stakes constraints and requirements only. Directive verbs aimed at the reader ("ensure", "produce", "apply", "verify the checklist", "call advance") are prohibited; declarative constraints ("the module must", "X matches Y") are the rule. Guides and prompts never advise about tool arguments: they can refer to advance, but they cannot refer to tool arguments or the content of advance. Prompts state what the artifact is, never what it is not. Prompts never provide negative instructions, never speculate about other modules or unreadable files, and never instruct on editing mechanics or tool usage. Prompts state the target artifact and call advance to proceed.
+A guide never triggers. The prompt asks for alignment or conformance with the guide and the other input files, and it drives the loop; the guide stakes constraints and requirements only. Directive verbs aimed at the reader ("ensure", "produce", "apply", "verify the checklist", "call advance") are prohibited; declarative constraints ("the module must", "X matches Y") are the rule. Guides and prompts never advise about tool arguments: they can refer to advance, but they cannot refer to tool arguments or the content of advance. Prompts state what the artifact is, never what it is not. Prompts never provide negative instructions, never speculate about other modules or unreadable files, and never instruct on editing mechanics or tool usage. Prompts state the target artifact.
 
 Every guide follows this structure:
 
-- `# Guide: <title>`, then `## Summary`, then `## <checklist sections>`.
-- The first `##` heading is the Summary; every `##` after it is a checklist point; no other `##` headings exist.
-- The boundary is positional: the Summary runs to the second `##` heading; each checklist section runs to the next `##` heading or end of file.
+- `# Guide: <title>`, then `## Summary`, then optional non-step sections (`## Verification failure`, `## Lint checks`), then `## <checklist sections>`.
+- The first `##` heading is the Summary.
+- An optional `## Verification failure` section defines failure-recovery rules and diagnostic-handling constraints delivered only upon verification failure; it is never delivered as a progression step.
+- If the artifact has a linter, a `## Lint checks` section describes what is checked; it is never delivered as a progression step.
+- The boundary is positional: the Summary runs to the next `##` heading; each checklist section runs to the next `##` heading or end of file.
 - Checklist sections contain only `- [ ] <item>` lines.
-- If the artifact has a linter, a `## Lint checks` section describes what is checked.
+- Meta notes in guides are expressed as single-paragraph blockquotes: `> META: "one paragraph of meta note."`. Meta notes provide context or rationale for human authors and tooling, and are filtered out by file readers when read by an LLM agent.
 - The guide reads coherently whole (Summary then sections in order) and sectioned (Summary first, then one section at a time).
+
+> META: "Guides are written for LLM readers that take every sentence literally; meta notes provide guidance for human authors and tooling while remaining invisible to the agent during execution. For the Markdown template format used to structure initial templates with HTML comment directives and parameters, see design-docs/template_format.md."
 
 ## Guide structure
 
-- [ ] File is `# Guide: <title>` → `## Summary` → `## <section>` headings, in that order
-- [ ] The first `##` heading is the Summary; every subsequent `##` heading is a checklist point; no other `##` headings
-- [ ] If the artifact has a linter, a section titled `## Lint checks` describes what the linter checks
+- [ ] File is `# Guide: <title>` → `## Summary` → optional non-step sections (`## Verification failure`, `## Lint checks`) → `## <section>` headings, in that order
+- [ ] The first `##` heading is the Summary
+- [ ] An optional section titled `## Verification failure` states instructions or restrictions that apply only when verification fails; it is never delivered as a progression step
+- [ ] If the artifact has a linter, a section titled `## Lint checks` describes what the linter checks; it is never delivered as a progression step
+- [ ] Meta notes are expressed as single-paragraph blockquotes starting with `> META: "one paragraph of meta note."`
+- [ ] Meta notes contain guidance or rationale intended for human authors and meta-tools, never normative requirements or constraints for the agent (since agent readers filter out `> META:` paragraphs)
 - [ ] Checklist sections contain only `- [ ] <item>` lines — no prose, no nested headings
 - [ ] The guide reads coherently whole and sectioned
 
@@ -31,8 +38,9 @@ Every guide follows this structure:
 
 - [ ] The Summary states the guide's subject declaratively: an alignment guide names the artifact and its source ("The module implements `low/<name>.md`"); a conformance guide names the artifact ("The artifact conforms to this guide")
 - [ ] The Summary is concise (one or at most two paragraphs), stating complete high-level requirements so the initial write or edit is accurate in substance, while leaving fine-grained rules to checklist sections
+- [ ] The Summary serves two purposes: (a) preserving an already working artifact without edits when contracts and verification pass, and (b) establishing a minimal valid artifact that passes initial verification when starting from scratch or a template, delegating expanded coverage to checklist steps
 - [ ] File references never use file paths; only virtual file names are used (except when files share names, where the directory prefix is appended, mainly `low/<name>.md` and `high/<name>.md`)
-- [ ] Rules governing the editing process, tool usage, incremental editing strategy, or write permissions belong in the `## Summary` (which is visible before editing begins and throughout all steps in step mode); checklist items verify the artifact after changes are made and show up too late to control how editing is done
+- [ ] Rules governing the editing process, tool usage, incremental editing strategy, or write permissions belong in the `## Summary` (which is visible before editing begins and throughout all steps in step mode); checklist items verify the artifact after changes are made and show up too late to control how editing is done; rules that apply specifically and exclusively to recovering from verification failure belong in `## Verification failure`
 - [ ] Applicability restrictions and not-applicable conditions (e.g. only applying to implementation specs whose name ends in `_impl.md`) are never in the Summary; they belong in `## Lint checks`
 - [ ] No directive framing — never "ensure", "produce", "transform" (the file pre-exists; the prompt triggers, the guide constrains)
 - [ ] Build-critical requirements come first (BUILD entries, required structure) — nothing builds without them
@@ -42,7 +50,9 @@ Every guide follows this structure:
 - [ ] No instruction to do what the reader cannot do — the reader's capabilities are fixed (file reads, edits, and advance; the search tool is never installed; no execution, no shell, no test runs); a capability the reader lacks is never stated as a requirement and never as a prohibition — the reader already knows it lacks it
 - [ ] No reference to files the reader cannot read (other guides, HLS files, implementations); a label in the source material that names an unreadable file gets one sentence saying it carries no requirements
 - [ ] External domain knowledge and foreign formats (third-party APIs, foreign serialization formats, runtime identifiers) are excluded from guides; external boundaries are specified in dedicated external boundary specifications (`low/<name>_ext.md`)
-- [ ] Templates mentioned at most once ("a file that is a template is filled in")
+- [ ] Templates provide initial creation and bootstrapping guidance through inline instruction comments; checklist sections verify that template instruction comments are deleted before final artifact completion
+- [ ] Templates follow the Markdown template format in design-docs/template_format.md, using HTML comment directives and placeholder parameters that remain readable without bindings
+- [ ] The Summary mentions templates at most once to describe initial bootstrapping ("When starting from a template, the template's inline instructions guide creating a minimal artifact...")
 - [ ] No meta-commentary, no rationale, no examples — state the constraint
 
 ## Checklist sections
@@ -62,6 +72,7 @@ Every guide follows this structure:
 
 - [ ] In step mode the reader sees the Summary and one section at a time; earlier sections are stubbed — each section is self-sufficient: a rule the section depends on appears in that section or in the Summary
 - [ ] Checklist sections are delivered after edits are made and an advance is called: they cannot control how editing is done because they show up too late; all editing workflow and tool rules live in `## Summary`
+- [ ] Since guide delivery does not advance to subsequent sections until verification passes, checklist items cannot help the reader resolve verification errors; rules that govern resolving verification failures belong in `## Verification failure`
 - [ ] A rule with no document region (it constrains the whole artifact) lives in the Summary, never in a section
 - [ ] All items in a section concern one step of producing the artifact; if the items split into two concerns, split the section
 - [ ] If one item can undo another, they are one item stating both constraints, or two items in the same section with the clobbered rule first
@@ -115,10 +126,12 @@ Every guide follows this structure:
 - [ ] Mixed lint/judgment points — a point the linter half-checks left whole — split: the linter part in `## Lint checks`, the judgment part in its content section
 - [ ] Deterministic checks outside Lint checks — placing string-presence or string-absence checks in content sections instead of `## Lint checks`
 - [ ] Process rules in checklist — placing editing strategy, tool usage, or step-by-step modification rules in checklist sections instead of `## Summary` where they are visible before editing
+- [ ] Failure recovery in Summary or checklist — placing verification-failure recovery rules (such as fail-tool escalation or diagnostic triage) in `## Summary` or checklist sections instead of `## Verification failure`
 - [ ] Missing Lint checks section — omitting `## Lint checks` when a linter is present
 - [ ] Implicit requirements — required structure shown only by example — say "must contain"; list the structure
 - [ ] Over-general rules — a prohibition without its exception — state the exception beside the rule
 - [ ] Rule-breaking examples — a snippet that violates the guide — every example must conform
 - [ ] Context examples — a snippet lifted from surrounding code or specs — use synthetic examples that obey the guide's rules
 - [ ] Triggering — a sentence that instructs the reader ("ensure the module...") — the guide constrains; the prompt triggers
+- [ ] Checklist items helping with verification — attempting to use checklist sections to guide the reader through resolving verification errors; because guides do not advance until verification passes, checklist items cannot help the reader fix verification failures
 - [ ] Capability noise — telling the reader to run or interpret checks it has no tool for, or stating what it cannot do — the reader's capabilities are fixed; mention only actions the reader can take

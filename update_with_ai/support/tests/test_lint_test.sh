@@ -251,5 +251,115 @@ else
     echo "PASS: c11 rejected test with broken import in dry-run"
 fi
 
+# Case 12: test imports class with Impl suffix -> rejected
+mkdir -p "$tmp/c12/lib" "$tmp/c12/tests"
+cat > "$tmp/c12/lib/widget_impl.py" <<'EOF'
+class Widget:
+    pass
+EOF
+cat > "$tmp/c12/tests/widget_impl_test.py" <<'EOF'
+import unittest
+from lib.widget_impl import WidgetImpl
+class WidgetTest(unittest.TestCase):
+    def test_basic(self):
+        pass
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c12" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/widget_impl_test.py --lib-pkg lib 2>"$tmp/c12/err.log" ); then
+    echo "FAIL: c12 expected failure when test imports class with Impl suffix" >&2
+    fail=1
+else
+    if grep -q "implementation classes do not use an 'Impl' suffix; import 'Widget' instead of 'WidgetImpl'" "$tmp/c12/err.log"; then
+        echo "PASS: c12 rejected import with Impl suffix and guided to Widget"
+    else
+        echo "FAIL: c12 did not report expected Impl suffix error" >&2
+        fail=1
+    fi
+fi
+
+# Case 13: test defines Mock<Target> class -> rejected
+mkdir -p "$tmp/c13/lib" "$tmp/c13/tests"
+cat > "$tmp/c13/lib/widget_impl.py" <<'EOF'
+class Widget:
+    pass
+EOF
+cat > "$tmp/c13/tests/widget_impl_test.py" <<'EOF'
+import unittest
+from lib.widget_impl import Widget
+class MockWidget:
+    pass
+class WidgetTest(unittest.TestCase):
+    def test_basic(self):
+        pass
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c13" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/widget_impl_test.py --lib-pkg lib 2>"$tmp/c13/err.log" ); then
+    echo "FAIL: c13 expected failure when test defines MockWidget" >&2
+    fail=1
+else
+    if grep -q "class under test 'Widget' must never be mocked" "$tmp/c13/err.log"; then
+        echo "PASS: c13 rejected MockWidget definition"
+    else
+        echo "FAIL: c13 did not report expected MockWidget error" >&2
+        fail=1
+    fi
+fi
+
+# Case 14: test redefines class under test -> rejected
+mkdir -p "$tmp/c14/lib" "$tmp/c14/tests"
+cat > "$tmp/c14/lib/widget_impl.py" <<'EOF'
+class Widget:
+    pass
+EOF
+cat > "$tmp/c14/tests/widget_impl_test.py" <<'EOF'
+import unittest
+class Widget:
+    pass
+class WidgetTest(unittest.TestCase):
+    def test_basic(self):
+        pass
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c14" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/widget_impl_test.py --lib-pkg lib 2>"$tmp/c14/err.log" ); then
+    echo "FAIL: c14 expected failure when test redefines Widget class" >&2
+    fail=1
+else
+    if grep -q "test module must not define class 'Widget' under test" "$tmp/c14/err.log"; then
+        echo "PASS: c14 rejected Widget redefinition"
+    else
+        echo "FAIL: c14 did not report expected Widget redefinition error" >&2
+        fail=1
+    fi
+fi
+
+# Case 15: test does not import target implementation module -> rejected
+mkdir -p "$tmp/c15/lib" "$tmp/c15/tests"
+cat > "$tmp/c15/lib/widget_impl.py" <<'EOF'
+class Widget:
+    pass
+EOF
+cat > "$tmp/c15/tests/widget_impl_test.py" <<'EOF'
+import unittest
+class WidgetTest(unittest.TestCase):
+    def test_basic(self):
+        pass
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c15" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/widget_impl_test.py --lib-pkg lib 2>"$tmp/c15/err.log" ); then
+    echo "FAIL: c15 expected failure when test does not import target implementation" >&2
+    fail=1
+else
+    if grep -q "test module must import target implementation module 'lib.widget_impl'" "$tmp/c15/err.log"; then
+        echo "PASS: c15 rejected test missing target implementation import"
+    else
+        echo "FAIL: c15 did not report missing target import error" >&2
+        fail=1
+    fi
+fi
+
 exit "$fail"
 

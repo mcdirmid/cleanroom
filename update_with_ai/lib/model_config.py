@@ -36,3 +36,6 @@ class ModelConfig(Protocol):
     @property
     def inject_followups(self) -> bool: ...
 
+    @property
+    def node_visit_limit(self) -> int: ...
+

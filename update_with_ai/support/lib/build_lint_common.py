@@ -670,6 +670,10 @@ def check_test_impl_imports(lib_pkg: str, file_path: str) -> list[str]:
             tree = ast.parse(f.read(), filename=file_path)
     except OSError:
         return errors
+
+    target_imported = False
+    imported_target_classes: set[str] = set()
+
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
@@ -678,10 +682,12 @@ def check_test_impl_imports(lib_pkg: str, file_path: str) -> list[str]:
                     errors.append(
                         f"{file_path}:{node.lineno}: error: test module must only import target implementation module '{target_stem}', but imports '{alias.name}'"
                     )
-                elif alias.name.endswith("Impl") and mod_name != target_stem:
+                elif alias.name.endswith("Impl"):
                     errors.append(
-                        f"{file_path}:{node.lineno}: error: test module must not import foreign implementation class '{alias.name}'"
+                        f"{file_path}:{node.lineno}: error: implementation classes do not use an 'Impl' suffix; import '{alias.name[:-4]}' instead of '{alias.name}'"
                     )
+                if alias.name in (f"lib.{target_stem}", target_stem):
+                    target_imported = True
         elif isinstance(node, ast.ImportFrom):
             if node.module:
                 mod_name = node.module.split(".")[-1]
@@ -689,12 +695,40 @@ def check_test_impl_imports(lib_pkg: str, file_path: str) -> list[str]:
                     errors.append(
                         f"{file_path}:{node.lineno}: error: test module must only import target implementation module '{target_stem}', but imports from '{node.module}'"
                     )
-                elif mod_name != target_stem:
+                if node.module in (f"lib.{target_stem}", target_stem):
+                    target_imported = True
                     for alias in node.names:
-                        if alias.name.endswith("Impl"):
-                            errors.append(
-                                f"{file_path}:{node.lineno}: error: test module must not import foreign implementation class '{alias.name}' from '{node.module}'"
-                            )
+                        imported_target_classes.add(alias.name)
+            for alias in node.names:
+                if alias.name.endswith("Impl"):
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: implementation classes do not use an 'Impl' suffix; import '{alias.name[:-4]}' instead of '{alias.name}'"
+                    )
+
+    impl_py = os.path.join(lib_pkg, target_stem + ".py")
+    if target_stem.endswith("_impl") and os.path.isfile(impl_py):
+        impl_classes: set[str] = set()
+        try:
+            with open(impl_py, encoding="utf-8") as f:
+                impl_tree = ast.parse(f.read(), filename=impl_py)
+            for node in impl_tree.body:
+                if isinstance(node, ast.ClassDef) and not node.name.startswith("_"):
+                    impl_classes.add(node.name)
+        except (OSError, SyntaxError):
+            pass
+
+        if not target_imported:
+            errors.append(
+                f"{file_path}: error: test module must import target implementation module 'lib.{target_stem}'"
+            )
+        elif impl_classes and not (imported_target_classes & impl_classes):
+            has_impl_suffix_match = any(f"{c}Impl" in imported_target_classes for c in impl_classes)
+            if not has_impl_suffix_match:
+                expected_str = ", ".join(sorted(impl_classes))
+                errors.append(
+                    f"{file_path}: error: test module must import target class ({expected_str}) from 'lib.{target_stem}'"
+                )
+
     return errors
 
 
@@ -739,7 +773,7 @@ STDLIB_MODULES = {
 
 def check_test_mocks(file_path: str) -> list[str]:
     """Check that patch() calls in test modules do not target standard library
-    modules directly (they should target the module under test) and that @patch
+    modules directly, the module or class under test is never mocked, and @patch
     decorators have matching parameters on the test method."""
     errors: list[str] = []
     if not os.path.exists(file_path):
@@ -750,8 +784,28 @@ def check_test_mocks(file_path: str) -> list[str]:
     except OSError:
         return errors
 
+    base = os.path.basename(file_path)
+    target_stem = base[:-8] if base.endswith("_test.py") else ""
+    target_camel = ""
+    if target_stem:
+        prefix = target_stem[:-5] if target_stem.endswith("_impl") else target_stem
+        target_camel = "".join(part.capitalize() for part in prefix.split("_"))
+
     for node in ast.walk(tree):
-        # 1. Check patch calls (both function calls and decorators)
+        # 1. Check for mock or redefined classes of the system under test
+        if isinstance(node, ast.ClassDef) and target_camel:
+            forbidden_sut_names = {target_camel, f"{target_camel}Impl"}
+            forbidden_mock_names = {f"Mock{target_camel}", f"Mock{target_camel}Impl"}
+            if node.name in forbidden_sut_names:
+                errors.append(
+                    f"{file_path}:{node.lineno}: error: test module must not define class '{node.name}' under test; import it from 'lib.{target_stem}'"
+                )
+            elif node.name in forbidden_mock_names:
+                errors.append(
+                    f"{file_path}:{node.lineno}: error: class under test '{target_camel}' must never be mocked; only collaborator interfaces may be mocked (found '{node.name}')"
+                )
+
+        # 2. Check patch calls (both function calls and decorators)
         if isinstance(node, ast.Call):
             is_patch = False
             if isinstance(node.func, ast.Name) and node.func.id == "patch":
@@ -769,8 +823,19 @@ def check_test_mocks(file_path: str) -> list[str]:
                             f"{file_path}:{node.lineno}: error: patch('{target}') targets standard library directly; "
                             f"patch where it is looked up in the module under test (e.g. 'lib.<module>.{target}')"
                         )
+                    elif target_stem and target == f"lib.{target_stem}":
+                        errors.append(
+                            f"{file_path}:{node.lineno}: error: module under test 'lib.{target_stem}' must not be mocked"
+                        )
+                    elif target_camel and target in (
+                        f"lib.{target_stem}.{target_camel}",
+                        f"lib.{target_stem}.{target_camel}Impl",
+                    ):
+                        errors.append(
+                            f"{file_path}:{node.lineno}: error: class under test '{target_camel}' must not be mocked"
+                        )
 
-        # 2. Check test method decorator arity
+        # 3. Check test method decorator arity
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             injected_patches = 0
             for dec in node.decorator_list:
@@ -863,3 +928,160 @@ def check_test_dry_run(lib_pkg: str, module_path: str) -> list[str]:
     return errors
 
 
+def extract_public_types(file_path: str) -> dict[str, int]:
+    """Extract top-level public types (classes, type aliases, and type assignments)
+    defined in a Python or .pyi file, mapping each type name to its definition line number.
+    Private types (prefixed with '_') and non-type constants (ALL_CAPS) are ignored."""
+    if not os.path.exists(file_path):
+        return {}
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=file_path)
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        return {}
+
+    types: dict[str, int] = {}
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            if not node.name.startswith("_"):
+                types[node.name] = node.lineno
+        elif hasattr(ast, "TypeAlias") and isinstance(node, ast.TypeAlias):
+            alias_name = node.name.id if isinstance(node.name, ast.Name) else str(node.name)
+            if not alias_name.startswith("_"):
+                types[alias_name] = node.lineno
+        elif isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Name) and not t.id.startswith("_"):
+                    if t.id[0].isupper() and any(c.islower() for c in t.id):
+                        types[t.id] = node.lineno
+        elif isinstance(node, ast.AnnAssign):
+            if isinstance(node.target, ast.Name) and not node.target.id.startswith("_"):
+                if node.target.id[0].isupper() and any(c.islower() for c in node.target.id):
+                    types[node.target.id] = node.lineno
+    return types
+
+
+def find_spec_pyi(
+    module_path: str,
+    pyi_path: Optional[str] = None,
+    pyi_deps: Sequence[str] = (),
+    build_path: Optional[str] = None,
+) -> Optional[str]:
+    """Locate the grounding specification .pyi file corresponding to a module."""
+    if pyi_path and os.path.isfile(pyi_path):
+        return pyi_path
+    base = os.path.basename(module_path)
+    stem = base[:-3] if base.endswith(".py") else base
+    spec_name = f"{stem}.pyi"
+    for p in pyi_deps:
+        if os.path.basename(p) == spec_name and os.path.isfile(p):
+            return p
+    module_dir = os.path.dirname(module_path)
+    search_dirs = [
+        os.path.join(module_dir, "..", "specs", "grounding"),
+    ]
+    if build_path:
+        search_dirs.append(os.path.join(os.path.dirname(build_path), "..", "specs", "grounding"))
+    search_dirs.extend([
+        "update_with_ai/specs/grounding",
+        "specs/grounding",
+    ])
+    for d in search_dirs:
+        candidate = os.path.join(d, spec_name)
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def check_public_types(
+    module_path: str,
+    pyi_path: Optional[str] = None,
+    pyi_deps: Sequence[str] = (),
+    build_path: Optional[str] = None,
+) -> list[str]:
+    """Check that only types declared in the grounding specification are defined
+    in the library code without a preceding underscore, and that all declared types
+    are defined in the library code."""
+    errors: list[str] = []
+    base = os.path.basename(module_path)
+    if not base.endswith(".py") or base.endswith("_asm.py"):
+        return errors
+    if not os.path.exists(module_path):
+        return errors
+
+    spec_file = find_spec_pyi(module_path, pyi_path=pyi_path, pyi_deps=pyi_deps, build_path=build_path)
+    if not spec_file:
+        return errors
+
+    expected_types = extract_public_types(spec_file)
+    actual_types = extract_public_types(module_path)
+    spec_display = os.path.basename(spec_file)
+
+    # Extra public types in library module
+    for name, lineno in sorted(actual_types.items()):
+        if name not in expected_types:
+            errors.append(
+                f"{module_path}:{lineno}: error: public type '{name}' is defined in library code "
+                f"but is not declared in grounding specification '{spec_display}'; "
+                f"helper types must be prefixed with an underscore (e.g. '_{name}')"
+            )
+
+    # Missing public types in library module
+    for name in sorted(expected_types.keys()):
+        if name not in actual_types:
+            errors.append(
+                f"{module_path}: error: type '{name}' declared in grounding specification "
+                f"'{spec_display}' is not defined in library code"
+            )
+
+    return errors
+
+
+def check_dead_code(module_path: str) -> list[str]:
+    """Check for unused private helper functions and classes in library code.
+
+    A private helper definition starting with an underscore (and not a dunder like __init__
+    or __initialize__) must be referenced at least once in the module's AST; otherwise it is
+    dead code.
+    """
+    errors: list[str] = []
+    base = os.path.basename(module_path)
+    if not base.endswith(".py") or base.endswith("_asm.py"):
+        return errors
+    if not os.path.exists(module_path):
+        return errors
+
+    try:
+        with open(module_path, "r", encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=module_path)
+    except SyntaxError:
+        return errors
+
+    private_defs: list[Tuple[str, int, str]] = []
+
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.name.startswith("_") and not (node.name.startswith("__") and node.name.endswith("__")):
+                private_defs.append((node.name, node.lineno, "function"))
+        elif isinstance(node, ast.ClassDef):
+            if node.name.startswith("_") and not (node.name.startswith("__") and node.name.endswith("__")):
+                private_defs.append((node.name, node.lineno, "class"))
+
+    if not private_defs:
+        return errors
+
+    used_identifiers: set[str] = set()
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Name):
+            used_identifiers.add(n.id)
+        elif isinstance(n, ast.Attribute):
+            used_identifiers.add(n.attr)
+
+    for name, lineno, kind in sorted(private_defs, key=lambda x: x[1]):
+        if name not in used_identifiers:
+            errors.append(
+                f"{module_path}:{lineno}: error: private {kind} '{name}' is defined in library code "
+                f"but never referenced (dead code)"
+            )
+
+    return errors

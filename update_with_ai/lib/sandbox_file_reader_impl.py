@@ -4,6 +4,7 @@ from typing import Any, Optional, Set, Type, cast
 from . import file_alias
 from . import node_config
 from . import sandbox_file_reader
+from . import template_format
 from . import tool_provider
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
 
@@ -36,6 +37,15 @@ class ReadManager(sandbox_file_reader.ReadManager, Singleton):
         cfg = get_singleton(node_config.NodeConfig)
         return cfg.guide_file
 
+    def requires_line_numbers(self, file: file_alias.FileAlias) -> bool:
+        # Requirement: The read manager identifies that read-write files and source code files require line numbers when read.
+        # Requirement: The read manager identifies files ending with `.py` as source code files requiring line numbers.
+        if isinstance(file, file_alias.ReadWriteFile):
+            return True
+        if file.short_name.endswith(".py"):
+            return True
+        return False
+
 
 class ReadTool(sandbox_file_reader.ReadTool, Singleton):
     tier = "agent_session"
@@ -66,7 +76,7 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
         bool_conv = get_singleton(tool_provider.BooleanParameterConverter)
         return tool_provider.Parameter(
             name="line_numbers",
-            description="Must be true when reading read-write files; must be false or omitted when reading read-only files.",
+            description="Must be true when reading read-write files and source code files (.py); must be false or omitted when reading non-source read-only files.",
             parameter_converter=bool_conv,
             is_required=False,
         )
@@ -98,8 +108,9 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
                 reminder="Only declared files can be inspected.",
             )
 
-        # Requirement: Executing the read tool fails if line numbers are not requested when reading a read-write file, reminding the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files, and specifying a follow-up execution of the read tool on the file with line numbers requested.
-        if isinstance(target_file, file_alias.ReadWriteFile) and not line_numbers:
+        needs_line_numbers = read_mgr.requires_line_numbers(target_file)
+        # Requirement: Executing the read tool fails if line numbers are not requested when reading a read-write file or source code file, reminding the agent that line numbers must be requested when reading read-write files and source code files and omitted when reading non-source read-only files, and specifying a follow-up execution of the read tool on the file with line numbers requested.
+        if needs_line_numbers and not line_numbers:
             follow_up = tool_provider.FollowUpToolCall(
                 tool_name="read_file",
                 wire_parameter_bindings=tool_provider.WireParameterBindings(
@@ -109,16 +120,17 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
                     }
                 ),
             )
+            file_kind = "source code file" if target_file.short_name.endswith(".py") else "read-write file"
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
-                content=f"Error: line_numbers must be requested when reading read-write file '{target_file.short_name}'.",
-                reminder="Line numbers must be requested when reading read-write files and omitted when reading read-only files.",
+                content=f"Error: line_numbers must be requested when reading {file_kind} '{target_file.short_name}'.",
+                reminder="Line numbers must be requested when reading read-write files and source code files (.py), and omitted when reading non-source read-only files.",
                 follow_up_tool_call=follow_up,
             )
 
-        # Requirement: Executing the read tool fails if line numbers are requested when reading a read-only file, reminding the agent that line numbers must be requested when reading read-write files and omitted when reading read-only files, and specifying a follow-up execution of the read tool on the file with line numbers omitted.
-        if isinstance(target_file, file_alias.ReadOnlyFile) and line_numbers:
+        # Requirement: Executing the read tool fails if line numbers are requested when reading a non-source read-only file, reminding the agent that line numbers must be requested when reading read-write files and source code files and omitted when reading non-source read-only files, and specifying a follow-up execution of the read tool on the file with line numbers omitted.
+        if not needs_line_numbers and line_numbers:
             follow_up = tool_provider.FollowUpToolCall(
                 tool_name="read_file",
                 wire_parameter_bindings=tool_provider.WireParameterBindings(
@@ -130,8 +142,8 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
-                content=f"Error: line_numbers must not be requested when reading read-only file '{target_file.short_name}'.",
-                reminder="Line numbers must be requested when reading read-write files and omitted when reading read-only files.",
+                content=f"Error: line_numbers must not be requested when reading non-source read-only file '{target_file.short_name}'.",
+                reminder="Line numbers must be requested when reading read-write files and source code files (.py), and omitted when reading non-source read-only files.",
                 follow_up_tool_call=follow_up,
             )
 
@@ -142,6 +154,40 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
 
         with open(host_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
+
+        # Requirement: When reading markdown files ending with .md, paragraphs beginning with > META: are filtered out from the returned content.
+        if target_file.short_name.endswith(".md") or target_file.workspace_path.path.endswith(".md"):
+            paragraphs: list[list[str]] = []
+            current_para: list[str] = []
+            for line in lines:
+                if line.strip() == "":
+                    if current_para:
+                        paragraphs.append(current_para)
+                        current_para = []
+                else:
+                    current_para.append(line)
+            if current_para:
+                paragraphs.append(current_para)
+
+            filtered_lines: list[str] = []
+            for para in paragraphs:
+                first_line = para[0].strip()
+                if first_line.startswith("> META:"):
+                    continue
+                if filtered_lines:
+                    if not filtered_lines[-1].endswith("\n"):
+                        filtered_lines[-1] += "\n"
+                    filtered_lines.append("\n")
+                filtered_lines.extend(para)
+            lines = filtered_lines
+
+            # Requirement: When reading read-only markdown files ending with .md, content is formatted using the template formatter with session template parameters after filtering out paragraphs beginning with > META:.
+            if isinstance(target_file, file_alias.ReadOnlyFile):
+                raw_text = "".join(lines)
+                cfg = get_singleton(node_config.NodeConfig)
+                formatter = get_singleton(template_format.TemplateFormatter)
+                formatted_text = formatter.format_template(raw_text, cfg.template_parameters)
+                lines = formatted_text.splitlines(keepends=True)
 
         if line_numbers:
             content = "".join(f"{i + 1}: {line}" for i, line in enumerate(lines))

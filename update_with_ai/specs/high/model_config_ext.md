@@ -12,7 +12,7 @@ Configuring language model execution requires binding declarative build target p
 
 The model_config_ext component provides external serialization and discovery knowledge for model configuration files emitted by model_config.bzl:
 
-- Model configuration JSON extraction: Extracts the model configuration dictionary schema emitted by model_config.bzl, defining mappings for target label, target name, model identifier, remote API base url endpoint, designated API key environment variable name, request timeout duration, maximum conversation turn limit, temperature, maximum token limit, guide step mode setting, startup file inspection setting, and follow-up tool call injection setting.
+- Model configuration JSON extraction: Extracts the model configuration dictionary schema emitted by model_config.bzl, defining mappings for target label, target name, model identifier, remote API base url endpoint, designated API key environment variable name, request timeout duration, maximum conversation turn limit, temperature, maximum token limit, guide step mode setting, startup file inspection setting, follow-up tool call injection setting, and node visit limit setting.
 
 - Configuration file discovery: Locates target configuration JSON files in the workspace Bazel runfiles tree, build output directory, or directory adjacent to the running executable based on the parsed target package and target name.
 

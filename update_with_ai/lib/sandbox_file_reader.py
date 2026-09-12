@@ -15,6 +15,9 @@ class ReadManager(Protocol):
     def guide_file(self) -> Optional[file_alias.UnboundFile]:
         ...
 
+    def requires_line_numbers(self, file: file_alias.FileAlias) -> bool:
+        ...
+
 class ReadTool(tool_provider.Tool, Protocol):
     @property
     def file_alias_parameter(self) -> tool_provider.Parameter:

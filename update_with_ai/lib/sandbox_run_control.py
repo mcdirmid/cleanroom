@@ -29,3 +29,6 @@ class FailTool(tool_provider.Tool, Protocol):
 class BlameTool(tool_provider.Tool, Protocol):
     pass
 
+class RunTestsTool(tool_provider.Tool, Protocol):
+    pass
+

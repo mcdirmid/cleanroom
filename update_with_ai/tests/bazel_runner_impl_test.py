@@ -90,7 +90,7 @@ class MockDagCleaner(dag_cleaner.DagCleaner):
 
     def clean(self, node: dag_storage.Node, cleaner: dag_node_cleaner.NodeCleaner) -> None:
         if self.should_fail:
-            raise RuntimeError("Build pass failed due to cycle or error")
+            raise RuntimeError("Simulated cleaner failure")
         self.cleaned_nodes.append(node)
         cleaner.clean(node)
         self.storage.dirty_nodes.discard(node)
@@ -220,15 +220,15 @@ class BazelRunnerImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=self.registry):
             runner = get_singleton(bazel_runner.BazelRunner)
-            # Requirement: The bazel runner halts cleaning and reports failure if a node cleaning fails or a cycle is encountered.
+            # Requirement: The bazel runner halts cleaning and reports failure if a node cleaning fails, if an unexpected failure occurs during cleaning capturing the failure reason in the build summary, or if any reachable node in the target subgraph remains dirty after cleaning.
             result = runner.run_cleaning_pass(root)
 
             self.assertFalse(result.success)
-            self.assertIn("failed", result.summary)
+            self.assertEqual(result.summary, "Cleaning pass failed for //pkg:failing: Simulated cleaner failure")
 
             end_events = [e for e in self.logger.events if e.event_name == "build_pass_end"]
             self.assertEqual(len(end_events), 1)
-            self.assertIn("failed", end_events[0].summary)
+            self.assertEqual(end_events[0].summary, "Cleaning pass failed for //pkg:failing: Simulated cleaner failure")
 
     def test_run_cleaning_pass_remaining_dirty(self) -> None:
         """Tests cleaning pass reporting failure if root remains dirty after cleaning."""
@@ -247,7 +247,32 @@ class BazelRunnerImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=self.registry):
             runner = get_singleton(bazel_runner.BazelRunner)
-            # Requirement: The bazel runner halts cleaning and reports failure if a node cleaning fails or a cycle is encountered.
+            # Requirement: The bazel runner halts cleaning and reports failure if a node cleaning fails, if an unexpected failure occurs during cleaning capturing the failure reason in the build summary, or if any reachable node in the target subgraph remains dirty after cleaning.
+            result = runner.run_cleaning_pass(root)
+
+            self.assertFalse(result.success)
+            self.assertIn("failed", result.summary)
+
+    def test_run_cleaning_pass_dependency_remaining_dirty(self) -> None:
+        """Tests cleaning pass reporting failure if a dependency remains dirty after cleaning."""
+        root = dag_storage.Node(address="//pkg:clean_root")
+        dep = dag_storage.Node(address="//pkg:dirty_dep")
+        self.storage.dependencies_map[root] = {dag_storage.Dependency(node=dep)}
+
+        class PersistentDirtyCleaner(dag_cleaner.DagCleaner):
+            def clean(self, node: dag_storage.Node, cleaner: dag_node_cleaner.NodeCleaner) -> None:
+                pass
+
+        self.storage.dirty_nodes.add(dep)
+        self.registry.register_instance(
+            PersistentDirtyCleaner(),
+            keys=[dag_cleaner.DagCleaner],
+            tier="system",
+        )
+
+        with enter_phase("system", registry=self.registry):
+            runner = get_singleton(bazel_runner.BazelRunner)
+            # Requirement: The bazel runner halts cleaning and reports failure if a node cleaning fails, if an unexpected failure occurs during cleaning capturing the failure reason in the build summary, or if any reachable node in the target subgraph remains dirty after cleaning.
             result = runner.run_cleaning_pass(root)
 
             self.assertFalse(result.success)

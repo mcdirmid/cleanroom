@@ -6,6 +6,8 @@ The artifact is a High-Level Specification (HLS) that defines a software compone
 
 Component visibility and lifetimes are governed by flat lifecycle tiers (system and agent session) where services access each other directly without object type containment or factory plumbing. Specifications follow a closed two-section layout: a why-focused `## Purpose` section with an `**Out of scope:**` boundary disclaimer, and either a unified `## Types and Behavior` section expressed in literate prose with semantic italics on concept introductions (for interface, implementation, and assembly specifications), or a `## Grounding Gaps Covered` section in plain prose without semantic italics (for external boundary specifications).
 
+> META: "High-level specifications establish declarative component architectures and contracts; cycles and unmandated behaviors are avoided."
+
 ## Lint checks
 
 - [ ] Header must match `# <name> <component_type> component` where `<component_type>` is `interface`, `implementation`, `external`, or `assembly`

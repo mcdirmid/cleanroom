@@ -5,12 +5,12 @@ from typing import Any, List, Optional, Set, Tuple
 
 from lib.dag_storage import Node
 from lib.file_alias import BoundFile, FileContent, ReadOnlyFile, UnboundFile, WorkspacePath
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton
 from lib.model_config import ModelConfig
 from lib.node_config import NodeConfig
 from lib.sandbox import Sandbox, StartupToolExecution
 from lib.sandbox_file_editor import EditManager
-from lib.sandbox_file_reader import ReadTool
+from lib.sandbox_file_reader import ReadManager, ReadTool
 from lib.sandbox_guide_delivery import Guide
 from lib.sandbox_impl import Sandbox as SandboxImpl, __initialize__
 from lib.sandbox_run_control import AdvanceTool
@@ -44,8 +44,29 @@ class MockModelConfig:
 class MockNodeConfig:
     tier = "agent_session"
 
-    def __init__(self, read_only_files: Set[BoundFile]) -> None:
+    def __init__(
+        self,
+        read_only_files: Set[BoundFile],
+        is_step_mode: Optional[bool] = None,
+        allows_step_mode: bool = True,
+    ) -> None:
         self.read_only_files = read_only_files
+        self._is_step_mode = is_step_mode
+        self.allows_step_mode = allows_step_mode
+
+    @property
+    def is_step_mode(self) -> bool:
+        if self._is_step_mode is not None:
+            return self._is_step_mode
+        try:
+            m_cfg = get_singleton(ModelConfig)
+            return m_cfg.is_step_mode and self.allows_step_mode
+        except Exception:
+            return False
+
+    @is_step_mode.setter
+    def is_step_mode(self, val: bool) -> None:
+        self._is_step_mode = val
 
     @property
     def read_write_files(self) -> Set[BoundFile]:
@@ -126,6 +147,12 @@ class MockReadTool:
             parameter_converter=DummyConverter(),
             is_required=True,
         )
+        self.line_numbers_parameter = Parameter(
+            name="line_numbers",
+            description="line numbers",
+            parameter_converter=DummyConverter(),
+            is_required=False,
+        )
 
     @property
     def name(self) -> str:
@@ -137,7 +164,7 @@ class MockReadTool:
 
     @property
     def parameters(self) -> Set[Parameter]:
-        return {self.file_alias_parameter}
+        return {self.file_alias_parameter, self.line_numbers_parameter}
 
     def execute_tool(self, actual_parameter_bindings: ActualParameterBindings) -> Response:
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
@@ -145,6 +172,13 @@ class MockReadTool:
         if isinstance(target, BoundFile):
             self.executed_files.append(target)
         return Response(is_failed=False, is_terminated=False, content=f"Content of {target}")
+
+
+class MockReadManager:
+    tier = "agent_session"
+
+    def requires_line_numbers(self, file: BoundFile) -> bool:
+        return file.short_name.endswith(".py")
 
 
 def _make_workspace_path(path: str) -> WorkspacePath:
@@ -170,12 +204,14 @@ class SandboxImplTest(unittest.TestCase):
         self.edit_mgr = MockEditManager()
         self.adv_tool = MockAdvanceTool()
         self.read_tool = MockReadTool()
+        self.read_mgr = MockReadManager()
 
         self.registry.register_instance(self.model_cfg, keys=[ModelConfig], tier="system")
         self.registry.register_instance(self.node_cfg, keys=[NodeConfig], tier="agent_session")
         self.registry.register_instance(self.edit_mgr, keys=[EditManager], tier="agent_session")
         self.registry.register_instance(self.adv_tool, keys=[AdvanceTool], tier="agent_session")
         self.registry.register_instance(self.read_tool, keys=[ReadTool], tier="agent_session")
+        self.registry.register_instance(self.read_mgr, keys=[ReadManager], tier="agent_session")
 
     def test_has_modifications_and_template_materialization_delegation(self) -> None:
         """CUJ: Sandbox delegates modification checking and template materialization to EditManager."""
@@ -199,7 +235,8 @@ class SandboxImplTest(unittest.TestCase):
         node = Node(address="//pkg:target")
         ro_file_z = ReadOnlyFile(short_name="z_spec.md", workspace_path=_make_workspace_path("pkg/z_spec.md"), owning_node=node)
         ro_file_a = ReadOnlyFile(short_name="a_spec.md", workspace_path=_make_workspace_path("pkg/a_spec.md"), owning_node=node)
-        ro_files: Set[BoundFile] = {ro_file_z, ro_file_a}
+        ro_file_py = ReadOnlyFile(short_name="m_lib.py", workspace_path=_make_workspace_path("pkg/m_lib.py"), owning_node=node)
+        ro_files: Set[BoundFile] = {ro_file_z, ro_file_a, ro_file_py}
         self.node_cfg.read_only_files = ro_files
 
         with enter_phase("agent_session", registry=self.registry) as scope:
@@ -207,24 +244,29 @@ class SandboxImplTest(unittest.TestCase):
             # Requirement: [Sandbox] The sandbox exposes startup tool executions as an ordered sequence of initial tool executions based on active configuration, ordering startup reads deterministically by file alias short name.
             executions = sb.get_startup_tool_executions()
 
-            self.assertEqual(len(executions), 3)
+            self.assertEqual(len(executions), 4)
             # First is advance
             # Requirement: When using step mode to communicate a guide progressively, startup tool executions include an initial advance tool execution with the name of the advance tool, empty wire parameter bindings, and the response produced by executing the advance tool.
             self.assertEqual(executions[0].tool_name, "advance")
             self.assertEqual(executions[0].wire_parameter_bindings.bindings, set())
             self.assertEqual(executions[0].response.content, "Guide step 1")
 
-            # Second is read_file for a_spec.md (ordered deterministically before z_spec.md)
+            # Second is read_file for a_spec.md (ordered deterministically before m_lib.py and z_spec.md)
             # Requirement: When performing startup reads to inspect declared files at session start, startup tool executions include file read executions for all declared read-only files from node config ordered deterministically by file alias short name, positioned after any advance tool execution.
-            # Requirement: Each file read execution uses the name of the read tool, specifies wire parameter bindings mapping the file alias parameter of the read tool to the read-only file alias short name while omitting line numbers, and captures the response produced by executing the read tool.
+            # Requirement: Each file read execution uses the name of the read tool, specifies wire parameter bindings mapping the file alias parameter of the read tool to the read-only file alias short name while supplying line numbers as determined by the read manager for source code files, and captures the response produced by executing the read tool.
             self.assertEqual(executions[1].tool_name, "read_file")
             self.assertEqual(executions[1].wire_parameter_bindings.bindings, {("file", "a_spec.md")})
             self.assertIn("a_spec.md", executions[1].response.content)
 
-            # Third is read_file for z_spec.md
+            # Third is read_file for m_lib.py (supplies line_numbers=True for source code file)
             self.assertEqual(executions[2].tool_name, "read_file")
-            self.assertEqual(executions[2].wire_parameter_bindings.bindings, {("file", "z_spec.md")})
-            self.assertIn("z_spec.md", executions[2].response.content)
+            self.assertEqual(executions[2].wire_parameter_bindings.bindings, {("file", "m_lib.py"), ("line_numbers", True)})
+            self.assertIn("m_lib.py", executions[2].response.content)
+
+            # Fourth is read_file for z_spec.md
+            self.assertEqual(executions[3].tool_name, "read_file")
+            self.assertEqual(executions[3].wire_parameter_bindings.bindings, {("file", "z_spec.md")})
+            self.assertIn("z_spec.md", executions[3].response.content)
 
     def test_get_startup_tool_executions_disabled_modes(self) -> None:
         """CUJ: Omits advance when step mode is off, and omits reads when startup reads are off."""
@@ -235,6 +277,18 @@ class SandboxImplTest(unittest.TestCase):
             sb = scope.get_singleton(Sandbox)
             # Requirement: When step mode is not used, startup tool executions contain no advance tool execution.
             # Requirement: When startup reads are not performed, startup tool executions contain no file read executions.
+            executions = sb.get_startup_tool_executions()
+            self.assertEqual(len(executions), 0)
+
+    def test_get_startup_tool_executions_node_disallows_step_mode(self) -> None:
+        """CUJ: Omits advance when node disallows step mode even if model config enables it."""
+        self.model_cfg.is_step_mode = True
+        self.model_cfg.is_startup_reads = False
+        self.node_cfg.allows_step_mode = False
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            sb = scope.get_singleton(Sandbox)
+            # Requirement: When step mode is not used, startup tool executions contain no advance tool execution.
             executions = sb.get_startup_tool_executions()
             self.assertEqual(len(executions), 0)
 

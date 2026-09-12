@@ -5,13 +5,9 @@ Measures statement and line coverage for a single *_impl.py file in
 update_with_ai/lib/ when exercised by its corresponding *_impl_test.py
 test suite in update_with_ai/tests/.
 
-Specifically evaluates only one test at a time, strictly excluding lifecycle.py
-and non-implementation modules.
-
-Can be run directly via:
-    python3 update_with_ai/tool/evaluate_coverage.py <target>
-or via Bazel:
-    bazel run //update_with_ai/tool:evaluate_coverage -- <target>
+Evaluates one test at a time, strictly excluding lifecycle.py and non-implementation
+modules. Formats uncovered lines into contiguous spans, clamping presentation to at most
+3 non-continuous spans per cycle. Updates coverage logs with structured guidance for agents.
 """
 
 import argparse
@@ -40,6 +36,9 @@ class ModuleCoverage:
     coverage_pct: float
     missing_lines: List[int]
     missing_ranges: str
+    missing_spans: List[Tuple[int, int]]
+    test_passed: bool = True
+    test_error: Optional[str] = None
 
 
 def find_repo_root() -> Path:
@@ -67,6 +66,8 @@ def find_repo_root() -> Path:
 def get_available_targets(lib_dir: Path, tests_dir: Path) -> Dict[str, Tuple[Path, Path]]:
     """Return a mapping of normalized target names to (impl_path, test_path)."""
     mapping: Dict[str, Tuple[Path, Path]] = {}
+    if not lib_dir.is_dir() or not tests_dir.is_dir():
+        return mapping
     impl_files = sorted(
         [f for f in lib_dir.iterdir() if f.is_file() and f.name.endswith("_impl.py")]
     )
@@ -74,7 +75,6 @@ def get_available_targets(lib_dir: Path, tests_dir: Path) -> Dict[str, Tuple[Pat
         test_file = tests_dir / f"{impl_path.stem}_test.py"
         if test_file.is_file():
             base_name = impl_path.stem[:-5] if impl_path.stem.endswith("_impl") else impl_path.stem
-            # Register aliases for easy command line lookup
             mapping[impl_path.name] = (impl_path, test_file)
             mapping[impl_path.stem] = (impl_path, test_file)
             mapping[test_file.name] = (impl_path, test_file)
@@ -146,6 +146,23 @@ def format_ranges(lines: List[int]) -> str:
     return ", ".join(ranges)
 
 
+def group_into_spans(lines: List[int]) -> List[Tuple[int, int]]:
+    """Group sorted integer line numbers into contiguous (start, end) span tuples."""
+    if not lines:
+        return []
+    spans: List[Tuple[int, int]] = []
+    start = lines[0]
+    end = lines[0]
+    for n in lines[1:]:
+        if n == end + 1:
+            end = n
+        else:
+            spans.append((start, end))
+            start = end = n
+    spans.append((start, end))
+    return spans
+
+
 def normalize_target_query(raw_query: str) -> str:
     """Normalize input query string by removing Bazel target or path prefixes."""
     q = raw_query.strip()
@@ -172,16 +189,16 @@ def measure_single_target_coverage(
     non_exec = get_non_executable_lines(impl_path)
     exec_lines = raw_exec - non_exec
 
-    module_base = impl_path.stem  # e.g. dag_cleaner_impl
+    module_base = impl_path.stem
     lib_mod_name = f"lib.{module_base}"
-    test_mod_name = f"tests.{module_base}_test"
+    test_mod_name = f"tests.{test_path.stem}"
 
     # Clean sys.modules of target and test to ensure clean import under tracer
     for m in list(sys.modules.keys()):
         if m.startswith(lib_mod_name) or m.startswith(test_mod_name):
             del sys.modules[m]
 
-    # Ensure 'lib' package in sys.modules points to update_with_ai/lib
+    # Ensure 'lib' and 'tests' packages in sys.modules point to target directories
     import types
     if "lib" not in sys.modules or not getattr(sys.modules["lib"], "__path__", None):
         lib_pkg = types.ModuleType("lib")
@@ -192,42 +209,79 @@ def measure_single_target_coverage(
         if lib_dir_str not in sys.modules["lib"].__path__:
             sys.modules["lib"].__path__.insert(0, lib_dir_str)
 
+    if "tests" not in sys.modules or not getattr(sys.modules["tests"], "__path__", None):
+        tests_pkg = types.ModuleType("tests")
+        tests_pkg.__path__ = [str(test_path.parent)]
+        sys.modules["tests"] = tests_pkg
+    else:
+        test_dir_str = str(test_path.parent)
+        if test_dir_str not in sys.modules["tests"].__path__:
+            sys.modules["tests"].__path__.insert(0, test_dir_str)
+
     tracer = trace.Trace(count=1, trace=0)
 
     test_load_error: Optional[str] = None
+    test_failures_str: Optional[str] = None
+    test_passed = True
 
     def run_suite() -> None:
-        nonlocal test_load_error
-        import contextlib
+        nonlocal test_load_error, test_failures_str, test_passed
         loader = unittest.TestLoader()
-        suite = loader.loadTestsFromName(test_mod_name)
+        try:
+            suite = loader.loadTestsFromName(test_mod_name)
+        except Exception as e:
+            test_load_error = str(e)
+            test_passed = False
+            return
+
         runner = unittest.TextTestRunner(stream=io.StringIO(), verbosity=0)
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             res = runner.run(suite)
         if res.errors:
-            # Check for module load failures
             for test_case, err_trace in res.errors:
                 if "Failed to import test module" in err_trace:
                     test_load_error = err_trace
+                    test_passed = False
                     return
+        if not res.wasSuccessful():
+            test_passed = False
+            fail_lines = []
+            for test_case, err in res.failures + res.errors:
+                fail_lines.append(f"{test_case}:\n{err}")
+            test_failures_str = "\n".join(fail_lines)
 
     tracer.runfunc(run_suite)
-    if test_load_error:
-        print(f"Error loading test suite '{test_mod_name}':\n{test_load_error}", file=sys.stderr)
-        sys.exit(1)
+
+    if not test_passed:
+        err_msg = test_load_error or test_failures_str or "Test suite execution failed."
+        return ModuleCoverage(
+            module_name=impl_path.name,
+            test_name=test_path.name,
+            file_path=str(impl_path),
+            test_path=str(test_path),
+            total_executable=len(exec_lines),
+            covered=0,
+            missed=len(exec_lines),
+            coverage_pct=0.0,
+            missing_lines=sorted(list(exec_lines)),
+            missing_ranges=format_ranges(sorted(list(exec_lines))),
+            missing_spans=group_into_spans(sorted(list(exec_lines))),
+            test_passed=False,
+            test_error=err_msg,
+        )
 
     results = tracer.results()
 
     abs_impl = str(impl_path.resolve())
     covered_lines: Set[int] = set()
     for (fn, ln), _ in results.counts.items():
-        # Match either exact path or basename to handle Bazel runfiles symlinks
         if (os.path.abspath(fn) == abs_impl or Path(fn).name == impl_path.name) and ln in exec_lines:
             covered_lines.add(ln)
 
     missed_lines = sorted(list(exec_lines - covered_lines))
     total_exec = len(exec_lines)
     cov_pct = (len(covered_lines) / total_exec * 100) if total_exec else 100.0
+    spans = group_into_spans(missed_lines)
 
     return ModuleCoverage(
         module_name=impl_path.name,
@@ -240,22 +294,73 @@ def measure_single_target_coverage(
         coverage_pct=cov_pct,
         missing_lines=missed_lines,
         missing_ranges=format_ranges(missed_lines),
+        missing_spans=spans,
+        test_passed=True,
     )
 
 
-def print_detail(coverage: ModuleCoverage) -> None:
-    """Print source code snippets for missing lines."""
-    if not coverage.missing_lines:
-        return
-    with open(coverage.file_path, "r", encoding="utf-8") as f:
+def format_spans_report(cov: ModuleCoverage, max_spans: int = 3) -> str:
+    """Format uncovered spans clamping presentation to at most max_spans."""
+    if not cov.missing_spans:
+        return "All statements covered."
+    with open(cov.file_path, "r", encoding="utf-8") as f:
         src_lines = f.readlines()
 
-    print(f"\nUncovered lines in {coverage.module_name}:")
-    for ln in coverage.missing_lines:
-        idx = ln - 1
-        if 0 <= idx < len(src_lines):
-            line_text = src_lines[idx].rstrip("\r\n")
-            print(f"  Line {ln:4d}: {line_text}")
+    shown_spans = cov.missing_spans[:max_spans]
+    lines: List[str] = []
+    lines.append(f"Uncovered statement spans in {cov.module_name}:")
+    for idx, (start, end) in enumerate(shown_spans, 1):
+        span_label = f"line {start}" if start == end else f"lines {start}-{end}"
+        lines.append(f"\n  Span {idx} ({span_label}):")
+        for ln in range(start, end + 1):
+            if ln in cov.missing_lines:
+                text = src_lines[ln - 1].rstrip("\r\n") if 0 < ln <= len(src_lines) else ""
+                lines.append(f"    {ln:4d}: {text}")
+
+    omitted = len(cov.missing_spans) - len(shown_spans)
+    if omitted > 0:
+        lines.append(
+            f"\nNote: Clamped presentation to first {max_spans} non-continuous spans ({omitted} additional uncovered span{'s' if omitted > 1 else ''} omitted)."
+        )
+    return "\n".join(lines)
+
+
+def format_coverage_report(cov: ModuleCoverage, threshold: float, max_spans: int = 3) -> str:
+    """Format full structured report suitable for console and log file."""
+    if not cov.test_passed:
+        return (
+            f"================================================================================\n"
+            f"UNIT TEST FAILURE in {cov.test_name}\n"
+            f"================================================================================\n"
+            f"Coverage cannot be evaluated because the unit test suite failed:\n\n"
+            f"{cov.test_error}\n"
+        )
+
+    if cov.missed == 0:
+        return f"✓ 100.0% coverage - all {cov.total_executable} executable statements executed by {cov.test_name}.\n"
+
+    spans_detail = format_spans_report(cov, max_spans=max_spans)
+    return (
+        f"================================================================================\n"
+        f"COVERAGE DEFICIT DETECTED: {cov.coverage_pct:.1f}% (Threshold: {threshold:.1f}%)\n"
+        f"================================================================================\n"
+        f"Test Suite:      {cov.test_name}\n"
+        f"Implementation:  {cov.module_name}\n"
+        f"Statements:      {cov.total_executable} executable, {cov.covered} covered, {cov.missed} missed\n"
+        f"Total Spans:     {len(cov.missing_spans)} non-continuous span{'s' if len(cov.missing_spans) > 1 else ''}\n"
+        f"--------------------------------------------------------------------------------\n"
+        f"{spans_detail}\n"
+        f"--------------------------------------------------------------------------------\n"
+        f"AGENT GUIDANCE:\n"
+        f"1. Read the library implementation file with line numbers enabled to analyze uncovered cases.\n"
+        f"2. Translate each uncovered statement into missing requirements with respect to the grounding specification.\n"
+        f"3. Deliver blame feedback to the test agent exclusively using the language of the grounding specification.\n"
+        f"   DO NOT cite library file names, file paths, or line numbers in the feedback.\n"
+        f"4. If an uncovered line represents an impossible case or caller assumption guaranteed by the grounding contract,\n"
+        f"   the ONLY permitted blame feedback to the library implementation is to mark the line with:\n"
+        f"   # pragma: no cover (assumption: <reason>)\n"
+        f"================================================================================\n"
+    )
 
 
 def main() -> int:
@@ -268,6 +373,18 @@ def main() -> int:
         help="The single test or implementation target to evaluate (e.g. dag_cleaner, agent_runner_impl_test).",
     )
     parser.add_argument(
+        "--impl",
+        help="Path to implementation file (e.g. update_with_ai/lib/foo_impl.py)",
+    )
+    parser.add_argument(
+        "--test",
+        help="Path to test file (e.g. update_with_ai/tests/foo_impl_test.py)",
+    )
+    parser.add_argument(
+        "--update-log",
+        help="Path to coverage log file to update (e.g. update_with_ai/logs/foo_impl_coverage.log)",
+    )
+    parser.add_argument(
         "--no-snippets",
         action="store_true",
         help="Suppress printing source snippets for missed lines.",
@@ -277,7 +394,7 @@ def main() -> int:
         "-t",
         type=float,
         default=0.0,
-        help="Minimum coverage percentage required to exit successfully (e.g. 90.0).",
+        help="Minimum coverage percentage required to exit successfully (e.g. 100.0).",
     )
     parser.add_argument(
         "--json",
@@ -289,79 +406,86 @@ def main() -> int:
     args = parser.parse_args()
 
     repo_root = find_repo_root()
-    lib_dir = repo_root / "update_with_ai" / "lib"
-    tests_dir = repo_root / "update_with_ai" / "tests"
 
-    # Configure sys.path and explicitly bind 'lib' and 'tests' packages
-    update_with_ai_dir = str(repo_root / "update_with_ai")
-    if update_with_ai_dir not in sys.path:
-        sys.path.insert(0, update_with_ai_dir)
+    # Configure sys.path so update_python_with_ai and update_with_ai are resolvable
+    for p in [
+        repo_root / "update_python_with_ai",
+        repo_root / "update_with_ai",
+        repo_root,
+    ]:
+        ps = str(p)
+        if ps not in sys.path:
+            sys.path.insert(0, ps)
 
-    import types
-    lib_pkg = types.ModuleType("lib")
-    lib_pkg.__path__ = [str(lib_dir)]
-    sys.modules["lib"] = lib_pkg
-
-    tests_pkg = types.ModuleType("tests")
-    tests_pkg.__path__ = [str(tests_dir)]
-    sys.modules["tests"] = tests_pkg
-
-    target_map = get_available_targets(lib_dir, tests_dir)
-    distinct_targets = sorted(
-        list({impl.stem: (impl, test) for impl, test in target_map.values()}.items())
-    )
-
-    if not args.target:
-        print("Error: Please specify exactly one test or implementation target.\n", file=sys.stderr)
-        print("Usage: evaluate_coverage <target_test_or_module> [options]\n", file=sys.stderr)
+    if args.impl and args.test:
+        impl_path = Path(args.impl)
+        if not impl_path.is_absolute():
+            impl_path = (repo_root / impl_path).resolve()
+        test_path = Path(args.test)
+        if not test_path.is_absolute():
+            test_path = (repo_root / test_path).resolve()
+        if not impl_path.is_file():
+            print(f"Error: Implementation file not found: {impl_path}", file=sys.stderr)
+            return 1
+        if not test_path.is_file():
+            print(f"Error: Test file not found: {test_path}", file=sys.stderr)
+            return 1
+    elif args.target:
+        lib_dir = repo_root / "update_with_ai" / "lib"
+        tests_dir = repo_root / "update_with_ai" / "tests"
+        target_map = get_available_targets(lib_dir, tests_dir)
+        distinct_targets = sorted(
+            list({impl.stem: (impl, test) for impl, test in target_map.values()}.items())
+        )
+        query = normalize_target_query(args.target)
+        if query not in target_map:
+            print(f"Error: Unrecognized target '{args.target}'.\n", file=sys.stderr)
+            print(f"Available targets ({len(distinct_targets)}):", file=sys.stderr)
+            for idx, (stem, (impl, test)) in enumerate(distinct_targets, 1):
+                print(f"  {idx:2d}. {test.stem:<42} -> {impl.name}", file=sys.stderr)
+            return 1
+        impl_path, test_path = target_map[query]
+    else:
+        lib_dir = repo_root / "update_with_ai" / "lib"
+        tests_dir = repo_root / "update_with_ai" / "tests"
+        target_map = get_available_targets(lib_dir, tests_dir)
+        distinct_targets = sorted(
+            list({impl.stem: (impl, test) for impl, test in target_map.values()}.items())
+        )
+        print("Error: Please specify --impl and --test, or target name.\n", file=sys.stderr)
+        print("Usage: evaluate_coverage --impl <path> --test <path> [--update-log <path>] [--threshold 100.0]\n", file=sys.stderr)
         print(f"Available targets ({len(distinct_targets)}):", file=sys.stderr)
         for idx, (stem, (impl, test)) in enumerate(distinct_targets, 1):
             print(f"  {idx:2d}. {test.stem:<42} -> {impl.name}", file=sys.stderr)
         return 1
 
-    query = normalize_target_query(args.target)
-    if query not in target_map:
-        print(f"Error: Unrecognized target '{args.target}'.\n", file=sys.stderr)
-        print(f"Available targets ({len(distinct_targets)}):", file=sys.stderr)
-        for idx, (stem, (impl, test)) in enumerate(distinct_targets, 1):
-            print(f"  {idx:2d}. {test.stem:<42} -> {impl.name}", file=sys.stderr)
-        return 1
-
-    impl_path, test_path = target_map[query]
     cov = measure_single_target_coverage(impl_path, test_path)
 
     if args.json_output:
         print(json.dumps(asdict(cov), indent=2))
-        return 0 if cov.coverage_pct >= args.threshold else 2
+        return 0 if (cov.test_passed and cov.coverage_pct >= args.threshold) else 1
 
-    print(f"\nEvaluating single test coverage: {cov.test_name} -> {cov.module_name}")
-    print("=" * 85)
-    print(f"Test Suite:      update_with_ai/tests/{cov.test_name}")
-    print(f"Implementation:  update_with_ai/lib/{cov.module_name}")
-    print("-" * 85)
-    print(
-        f"Total Statements: {cov.total_executable:<5} | "
-        f"Covered: {cov.covered:<5} | "
-        f"Missed: {cov.missed:<5} | "
-        f"Coverage: {cov.coverage_pct:.1f}%"
-    )
-    print("-" * 85)
+    report = format_coverage_report(cov, args.threshold, max_spans=3)
 
-    if cov.missed == 0:
-        print("✓ 100.0% coverage - all statements executed by test suite.")
-    else:
-        print(f"Missed lines: {cov.missing_ranges}")
-        if not args.no_snippets:
-            print_detail(cov)
+    if args.update_log:
+        log_path = Path(args.update_log)
+        if not log_path.is_absolute():
+            log_path = repo_root / log_path
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        if cov.test_passed and cov.missed == 0:
+            with open(log_path, "w", encoding="utf-8") as f:
+                pass
+        else:
+            with open(log_path, "w", encoding="utf-8") as f:
+                f.write(report)
 
-    print("=" * 85)
+    print(report)
+
+    if not cov.test_passed:
+        return 1
 
     if cov.coverage_pct < args.threshold:
-        print(
-            f"\nCoverage check FAILED: {cov.coverage_pct:.1f}% is below threshold {args.threshold:.1f}%",
-            file=sys.stderr,
-        )
-        return 2
+        return 1
 
     return 0
 

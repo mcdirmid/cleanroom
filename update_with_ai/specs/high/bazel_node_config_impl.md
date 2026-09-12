@@ -1,6 +1,6 @@
 # bazel_node_config_impl implementation component
 
-imports: dag_storage, dag_node_cleaner, bazel_manifest_loader, tool_provider, sandbox_guide_delivery, sandbox_file_editor, file_paths, sandbox_run_control
+imports: dag_storage, dag_node_cleaner, bazel_manifest_loader, tool_provider, sandbox_guide_delivery, sandbox_file_editor, file_paths, sandbox_run_control, model_config
 implements: node_config, file_alias
 
 ## Purpose
@@ -23,13 +23,21 @@ The node config provides:
 
 - Declared source files and templates from the manifest as the session read-write files and templates, mapping read-write files to initial file content.
 
+- Declared template parameters from the manifest as the session template parameters.
+
 - Declared direct dependencies and transitive star dependencies resolved across dependency manifests as the session read-only files, excluding declared silent dependencies and their source files.
 
-- Declared guide targets from the manifest as the guide file and task guide when step mode is active and guidance is configured.
+- Whether the node allows step mode, resolved from the target node manifest.
+
+- Whether step mode is active, enabled when the model config enables step mode, the node allows step mode, and session feedback is absent.
+
+- Declared guide targets from the manifest as the guide file and task guide when guide step mode is active.
 
 - Declared feedback dependencies from the manifest as blame targets mapped to their owning dependency nodes.
 
 - Declared verification checks from the manifest's verification command as the session verification checks.
+
+- Declared feedback messages retrieved from graph storage for the target node as the session feedback.
 
 The alias manager maintains virtual file addressing and path masking for the active session.
 

@@ -96,7 +96,9 @@ def _update_with_ai_impl(ctx):
         "star_deps": [_apparent_label(dep.label) for dep in ctx.attr.star_deps],
         "src": ctx.attr.src,
         "template": ctx.file.template.short_path if ctx.file.template else None,
+        "template_parameters": json.decode(ctx.attr.template_parameters) if ctx.attr.template_parameters else {},
         "guide": _apparent_label(ctx.attr.guide.label) if ctx.attr.guide else None,
+        "allows_step_mode": ctx.attr.allows_step_mode,
         "silent_srcs": [str(s) for s in ctx.attr.silent_srcs],
         "verify": ctx.attr.verify if ctx.attr.verify else None,
         "dependency_paths": deps_data,
@@ -184,9 +186,17 @@ _update_with_ai_rule = rule(
             allow_single_file = True,
             doc = "Optional file label whose content initializes the declared source file at run start when the file does not exist on disk; the manifest stores the template file's repo-relative path and the runtime reads its content",
         ),
+        "template_parameters": attr.string(
+            default = "{}",
+            doc = "JSON-encoded dictionary of template parameters",
+        ),
         "guide": attr.label(
             aspects = [_collect_manifests],
             doc = "Optional node target whose declared source is the run's guide: a readable file in the guide format (# Guide: ... ## Summary ...). The guide node is cleaned before this node; the guide's readable and delivery treatment follows the agent configuration's step-sections gate (when step mode is enabled the guide is not readable and its content reaches the agent only through advance outputs).",
+        ),
+        "allows_step_mode": attr.bool(
+            default = True,
+            doc = "Whether the node permits guide step mode. Stepping is active when model config enables stepping unless disabled by this attribute.",
         ),
         "silent_srcs": attr.string_list(
             doc = "Paths (relative to the node's package directory) the agent can write that are NOT readable by deps",
@@ -213,7 +223,11 @@ def update_with_ai(
         star_deps = [],
         src = "",
         template = None,
+        template_parameters = None,
         guide = None,
+        allows_step_mode = True,
+        step_mode = None,
+        step_sections = None,
         silent_srcs = [],
         verify = "",
         config = None,
@@ -313,6 +327,18 @@ def update_with_ai(
     if visibility != None:
         _rule_kwargs["visibility"] = visibility
 
+    if step_mode != None:
+        allows_step_mode = step_mode
+    elif step_sections != None:
+        allows_step_mode = step_sections
+
+    template_params_json = "{}"
+    if template_parameters != None:
+        if type(template_parameters) == "string":
+            template_params_json = template_parameters
+        else:
+            template_params_json = json.encode(template_parameters)
+
     # Create the node target (using the rule directly)
     _update_with_ai_rule(
         name = name,
@@ -324,7 +350,9 @@ def update_with_ai(
         star_deps = star_deps,
         src = src,
         template = template,
+        template_parameters = template_params_json,
         guide = guide,
+        allows_step_mode = allows_step_mode,
         silent_srcs = silent_srcs,
         verify = verify,
         **_rule_kwargs
@@ -719,8 +747,8 @@ def _update_ai_node_feedback_impl(ctx):
         "    target_node = node_util.normalize(node_label)",
         "    runner = get_singleton(BazelRunner)",
         "    try:",
-        "        for _ in messages:",
-        "            runner.inject_node_feedback(target_node, Feedback())",
+        "        for m in messages:",
+        "            runner.inject_node_feedback(target_node, Feedback(content=m))",
         "    except KeyboardInterrupt:",
         '        print("Interrupted.", file=sys.stderr)',
         "        sys.exit(130)",
@@ -854,7 +882,7 @@ def _update_ai_node_dirty_impl(ctx):
         "    target_node = node_util.normalize(node_label)",
         "    runner = get_singleton(BazelRunner)",
         "    try:",
-        "        runner.mark_node_dirty(target_node, Change())",
+        "        runner.mark_node_dirty(target_node, Change(content=change))",
         "    except KeyboardInterrupt:",
         '        print("Interrupted.", file=sys.stderr)',
         "        sys.exit(130)",
@@ -992,7 +1020,7 @@ def _update_ai_node_change_impl(ctx):
         "    origin_node = node_util.normalize(node_label)",
         "    runner = get_singleton(BazelRunner)",
         "    try:",
-        "        runner.broadcast_node_change(origin_node, Change())",
+        "        runner.broadcast_node_change(origin_node, Change(content=change))",
         "    except KeyboardInterrupt:",
         '        print("Interrupted.", file=sys.stderr)',
         "        sys.exit(130)",

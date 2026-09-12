@@ -4,6 +4,7 @@ import file_alias
 import filesystem_ext
 import node_config
 import sandbox_file_editor
+import template_format
 import tool_provider
 
 @singleton_type('agent_session')
@@ -17,7 +18,7 @@ INHERITED_REQUIREMENTS:
 - [EditManager] Modifying a file records that workspace file modifications occurred during the session.
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, EditManager coordinates editing tool installation and template materialization, interacting with imported tool_provider.ToolManager, node_config.NodeConfig, and file_alias.AliasManager in the same session lifecycle tier.
+- As an agent_session singleton, EditManager coordinates editing tool installation and template materialization, interacting with imported tool_provider.ToolManager, node_config.NodeConfig, file_alias.AliasManager, and template_format.TemplateFormatter in the same session lifecycle tier.
 """
 
     @property
@@ -60,13 +61,13 @@ PURPOSE:
 Materializes templates retrieved from node config to missing target files on disk while preserving existing files
 
 FRESH_REQUIREMENTS:
-- Materializing templates retrieves configured templates from the node config, checks whether files exist using the filesystem at the host path formed from the alias manager workspace root and workspace path, and writes template content to missing target files while preserving existing files.
+- Materializing templates retrieves configured templates from the node config, formats initial template content using the template formatter with session template parameters, checks whether target files exist in the filesystem at the host path formed from the alias manager workspace root and the read-write file workspace path, and writes formatted template content for missing files while preserving existing files.
 
 INHERITED_REQUIREMENTS:
 - [EditManager] Materializing templates populates missing read-write files with initial template content without overwriting existing files.
 
 GROUNDING_ARGUMENT:
-- Obtains template mappings from imported node_config.NodeConfig, resolves host paths using imported file_alias.AliasManager workspace root in the same session lifecycle tier, and writes missing files via the filesystem.
+- Obtains template mappings and template parameters from imported node_config.NodeConfig, formats template content using imported template_format.TemplateFormatter, resolves host paths using imported file_alias.AliasManager workspace root in the same session lifecycle tier, and writes missing files via the filesystem.
 """
         ...
 
@@ -171,7 +172,8 @@ FRESH_REQUIREMENTS:
 - Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
 
 INHERITED_REQUIREMENTS:
-- [EditingTool] Executing an editing tool with a file alias that is not a read-write file fails, providing a response reminding the agent that only declared read-write files can be modified.
+- [EditingTool] Editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+- [EditingTool] Editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
 - [EditingTool] On successful execution, an editing tool produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
 - [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
@@ -298,10 +300,12 @@ FRESH_REQUIREMENTS:
 - When the start line is less than or equal to the end line, executing the line update tool fails if the end line exceeds the total line count.
 - When the start line is less than or equal to the end line, successful execution replaces lines within the range, writes using the filesystem, and records file modifications.
 - When the start line exceeds the end line, successful execution inserts the replacement lines before the start line, writes using the filesystem, and records file modifications.
+- Replacing or inserting lines treats each replacement line as a complete newline-terminated line, preserving subsequent line boundaries when replacement text lacks a trailing newline.
 - Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
 
 INHERITED_REQUIREMENTS:
-- [EditingTool] Executing an editing tool with a file alias that is not a read-write file fails, providing a response reminding the agent that only declared read-write files can be modified.
+- [EditingTool] Editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+- [EditingTool] Editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
 - [EditingTool] On successful execution, an editing tool produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
 - [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.

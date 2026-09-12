@@ -66,6 +66,8 @@ def _model_config_impl(ctx):
     label = _apparent_label(ctx.label)
     max_tokens = ctx.attr.max_tokens if ctx.attr.max_tokens else None  # 0 == unset
 
+    do_step_mode = ctx.attr.do_step_mode and ctx.attr.step_sections
+
     config = {
         "label": label,
         "name": name,
@@ -77,15 +79,18 @@ def _model_config_impl(ctx):
         "timeout": float(ctx.attr.timeout_seconds),
         "max_tokens": max_tokens,
         "session_start_reads": ctx.attr.session_start_reads,
-        "step_sections": ctx.attr.step_sections,
+        "do_step_mode": do_step_mode,
+        "step_sections": do_step_mode,
         "inject_followups": ctx.attr.inject_followups,
+        "node_visit_limit": ctx.attr.node_visit_limit,
     }
 
     # Python module: json-encoded strings are valid Python string literals.
     entries = []
     for key in ("label", "name", "model", "base_url", "api_key_env",
                 "max_iterations", "temperature", "timeout", "max_tokens",
-                "session_start_reads", "step_sections", "inject_followups"):
+                "session_start_reads", "do_step_mode", "step_sections", "inject_followups",
+                "node_visit_limit"):
         entries.append('    "{}": {},'.format(key, _py_literal(config[key])))
 
     py_content = "\n".join(
@@ -140,13 +145,17 @@ _model_config = rule(
                 + "read-only files (rendered at the beginning of the run before "
                 + "the model's first turn). Defaults to enabled.",
         ),
-        "step_sections": attr.bool(
+        "do_step_mode": attr.bool(
             default = True,
             doc = "Whether the run's sandbox delivers the guide in step mode: the "
                 + "guide summary at run start and a checklist section after each "
                 + "advance that passed verification (the guide is then not readable "
                 + "and reaches the agent only through advance outputs). Defaults to "
                 + "enabled.",
+        ),
+        "step_sections": attr.bool(
+            default = True,
+            doc = "Backward compatibility alias for do_step_mode.",
         ),
         "inject_followups": attr.bool(
             default = True,
@@ -166,6 +175,10 @@ _model_config = rule(
         "max_tokens": attr.int(
             default = 0,
             doc = "Maximum tokens per response; 0 means unset (no max_tokens).",
+        ),
+        "node_visit_limit": attr.int(
+            default = 500,
+            doc = "Bound on the maximum number of times any node can be visited during dag cleaning.",
         ),
     },
 )
