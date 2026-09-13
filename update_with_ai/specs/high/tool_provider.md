@@ -34,7 +34,7 @@ The *tool manager* is an agent session service that maintains tools for an agent
 
 The tool manager:
 
-- Installs tools for the agent session, assuming all installed tools have unique names.
+- *Installs tools* for the agent session, assuming all installed tools have unique names.
 
 - Exposes *installed tools* available for execution.
 

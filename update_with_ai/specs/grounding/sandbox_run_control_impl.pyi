@@ -1,8 +1,8 @@
 from typing import Sequence, Set, Tuple
 from framework import operation, override, singleton_type
 import dag_storage
-import file_alias
-import node_config
+import agent_file_alias
+import agent_node_config
 import sandbox_file_editor
 import sandbox_guide_delivery
 import sandbox_run_control
@@ -24,30 +24,30 @@ INHERITED_REQUIREMENTS:
 - [RunController] The run controller installs a blame tool when blame targets are configured, attributing task failure to an upstream dependency node.
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, RunController installs run control tools and exposes verification check sequences delegated from imported node_config.NodeConfig, coordinating with tool_provider.ToolManager and sandbox_file_editor.EditManager in the same session lifecycle tier.
+- As an agent_session singleton, RunController installs run control tools and exposes verification check sequences delegated from imported agent_node_config.NodeConfig, coordinating with tool_provider.ToolManager and sandbox_file_editor.EditManager in the same session lifecycle tier.
 """
 
     @property
     @override
-    def verification_checks(self) -> Sequence[node_config.VerificationCheck]:
+    def verification_checks(self) -> Sequence[agent_node_config.VerificationCheck]:
         """
 PURPOSE:
 Sequence of verification checks evaluated during session advancement
 
 GROUNDING_ARGUMENT:
-- Delegated from imported collaborator node_config.NodeConfig.verification_checks in the same session lifecycle tier.
+- Delegated from imported collaborator agent_node_config.NodeConfig.verification_checks in the same session lifecycle tier.
 """
         ...
 
     @property
     @override
-    def blame_targets(self) -> Set[file_alias.BoundFile]:
+    def blame_targets(self) -> Set[agent_file_alias.BoundFile]:
         """
 PURPOSE:
 Configured set of upstream bound files eligible for blame attribution obtained from node config
 
 GROUNDING_ARGUMENT:
-- Delegated from imported collaborator node_config.NodeConfig.blame_targets in the same session lifecycle tier.
+- Delegated from imported collaborator agent_node_config.NodeConfig.blame_targets in the same session lifecycle tier.
 """
         ...
 
@@ -62,7 +62,7 @@ FRESH_REQUIREMENTS:
 - Verification checks exposed by the run controller include the session verification checks from node config.
 
 GROUNDING_ARGUMENT:
-- Reads step mode, blame targets, and verification checks from imported node_config.NodeConfig, and installs FinishTool, FailTool, RunTestsTool, optionally AdvanceTool, and optionally BlameTool directly into imported tool_provider.ToolManager in the same session lifecycle tier.
+- Reads step mode, blame targets, and verification checks from imported agent_node_config.NodeConfig, and installs FinishTool, FailTool, RunTestsTool, optionally AdvanceTool, and optionally BlameTool directly into imported tool_provider.ToolManager in the same session lifecycle tier.
 """
         ...
 
@@ -154,7 +154,7 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Evaluates verification via RunController.evaluate_verification in the same session lifecycle tier, queries steps remaining and advances steps via imported sandbox_guide_delivery.GuideDelivery, checks workspace modifications via imported sandbox_file_editor.EditManager, sanitizes diagnostics through imported file_alias.AliasManager, attaches suppression key 'advance', and specifies FinishTool as follow_up_tool_call when no steps remain and no files were modified.
+- Evaluates verification via RunController.evaluate_verification in the same session lifecycle tier, queries steps remaining and advances steps via imported sandbox_guide_delivery.GuideDelivery, checks workspace modifications via imported sandbox_file_editor.EditManager, sanitizes diagnostics through imported agent_file_alias.AliasManager, attaches suppression key 'advance', and specifies FinishTool as follow_up_tool_call when no steps remain and no files were modified.
 """
         ...
 
@@ -172,7 +172,7 @@ FRESH_REQUIREMENTS:
 - The finish tool change summary parameter uses a string parameter converter to accept text.
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, FinishTool validates session completion criteria, interacting with imported sandbox_guide_delivery.GuideDelivery, sandbox_file_editor.EditManager, node_config.NodeConfig, and RunController in the same session lifecycle tier.
+- As an agent_session singleton, FinishTool validates session completion criteria, interacting with imported sandbox_guide_delivery.GuideDelivery, sandbox_file_editor.EditManager, agent_node_config.NodeConfig, and RunController in the same session lifecycle tier.
 """
 
     @property
@@ -243,7 +243,7 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings directly, extracts change_summary, queries step mode from imported node_config.NodeConfig and steps remaining from imported sandbox_guide_delivery.GuideDelivery returning a failure response specifying AdvanceTool as follow_up_tool_call if steps remain, inspects workspace modifications via imported sandbox_file_editor.EditManager, evaluates verification checks via RunController.evaluate_verification in the same session tier, sanitizes diagnostics through imported file_alias.AliasManager, attaches suppression key 'finish', and produces a terminating response on success.
+- Receives actual parameter bindings directly, extracts change_summary, queries step mode from imported agent_node_config.NodeConfig and steps remaining from imported sandbox_guide_delivery.GuideDelivery returning a failure response specifying AdvanceTool as follow_up_tool_call if steps remain, inspects workspace modifications via imported sandbox_file_editor.EditManager, evaluates verification checks via RunController.evaluate_verification in the same session tier, sanitizes diagnostics through imported agent_file_alias.AliasManager, attaches suppression key 'finish', and produces a terminating response on success.
 """
         ...
 
@@ -345,7 +345,7 @@ FRESH_REQUIREMENTS:
 - The blame tool explanation parameter uses a string parameter converter to accept text.
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, BlameTool attributes prerequisite defects to dependency nodes, coordinating with RunController and imported file_alias.AliasManager in the same session lifecycle tier.
+- As an agent_session singleton, BlameTool attributes prerequisite defects to dependency nodes, coordinating with RunController and imported agent_file_alias.AliasManager in the same session lifecycle tier.
 """
 
     @property
@@ -398,7 +398,7 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, resolves the blame target via imported file_alias.AliasManager, validates the target against RunController.blame_targets in the same session lifecycle tier, and constructs a terminating feedback response.
+- Receives actual parameter bindings, resolves the blame target via imported agent_file_alias.AliasManager, validates the target against RunController.blame_targets in the same session lifecycle tier, and constructs a terminating feedback response.
 """
         ...
 
@@ -496,6 +496,6 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Evaluates verification via RunController.evaluate_verification in the same session lifecycle tier, sanitizes diagnostics through imported file_alias.AliasManager, formats failure instructions from imported sandbox_guide_delivery.GuideDelivery, attaches suppression key 'run_tests', and constructs a tool_provider.Response presenting verification outcome alongside check output.
+- Evaluates verification via RunController.evaluate_verification in the same session lifecycle tier, sanitizes diagnostics through imported agent_file_alias.AliasManager, formats failure instructions from imported sandbox_guide_delivery.GuideDelivery, attaches suppression key 'run_tests', and constructs a tool_provider.Response presenting verification outcome alongside check output.
 """
         ...

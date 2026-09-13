@@ -14,6 +14,4 @@ A *log event* is a record of an observable execution event that provides an *eve
 
 The *runner logger* is a system service that formats and records log events. The runner logger:
 
-- *Consumes* log events, writing compact single-line summaries to standard output.
-
-- Writes unbuffered verbose transcript records to a transcript log file.
+- *Consumes* log events, writing compact single-line summaries to standard output and full verbose records to a transcript log file.

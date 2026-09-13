@@ -1,7 +1,7 @@
 import os
 from typing import Optional, Set
-from . import file_alias
-from . import node_config
+from . import agent_file_alias
+from . import agent_node_config
 from . import sandbox_file_editor
 from . import template_format
 from . import tool_provider
@@ -66,8 +66,8 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
     def materialize_templates(self) -> None:
         # Requirement: Materializing templates retrieves configured templates from the node config, formats initial template content using the template formatter with session template parameters, checks whether target files exist in the filesystem at the host path formed from the alias manager workspace root and the read-write file workspace path, and writes formatted template content for missing files while preserving existing files.
         # Requirement: [EditManager] Materializing templates populates missing read-write files with initial template content without overwriting existing files.
-        cfg = get_singleton(node_config.NodeConfig)
-        alias_mgr = get_singleton(file_alias.AliasManager)
+        cfg = get_singleton(agent_node_config.NodeConfig)
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
         formatter = get_singleton(template_format.TemplateFormatter)
 
         for bound_file, content in cfg.templates:
@@ -96,7 +96,7 @@ class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
 
     @property
     def file_alias_parameter(self) -> tool_provider.Parameter:
-        alias_mgr = get_singleton(file_alias.AliasManager)
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
         return tool_provider.Parameter(
             name="file",
             description="Target file alias",
@@ -139,7 +139,7 @@ class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
         replacement_text = str(bindings_map.get("replacement_text", ""))
 
         # Requirement: Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
-        if not isinstance(target_file, file_alias.ReadWriteFile):
+        if not isinstance(target_file, agent_file_alias.ReadWriteFile):
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
@@ -156,7 +156,7 @@ class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
                 reminder="Target text for replacement must not exceed 100,000 characters.",
             )
 
-        alias_mgr = get_singleton(file_alias.AliasManager)
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
         host_path = os.path.join(alias_mgr.workspace_root.path, target_file.workspace_path.path)
 
         # Requirement: Executing the text replacement tool reads file content using the filesystem.
@@ -235,7 +235,7 @@ class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
 
     @property
     def file_alias_parameter(self) -> tool_provider.Parameter:
-        alias_mgr = get_singleton(file_alias.AliasManager)
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
         return tool_provider.Parameter(
             name="file",
             description="Target file alias",
@@ -290,7 +290,7 @@ class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
         replacement_text = str(bindings_map.get("replacement_text", ""))
 
         # Requirement: Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
-        if not isinstance(target_file, file_alias.ReadWriteFile):
+        if not isinstance(target_file, agent_file_alias.ReadWriteFile):
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
@@ -298,7 +298,7 @@ class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
                 reminder="Only declared read-write files can be modified.",
             )
 
-        alias_mgr = get_singleton(file_alias.AliasManager)
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
         host_path = os.path.join(alias_mgr.workspace_root.path, target_file.workspace_path.path)
 
         # Requirement: Executing the line update tool reads file content using the filesystem.

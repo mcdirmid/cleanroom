@@ -2,7 +2,7 @@ from framework import operation, override, singleton_type
 import dag_cleaner
 import dag_node_cleaner
 import dag_storage
-import model_config
+import dag_config
 
 @singleton_type('system')
 class DagCleaner(dag_cleaner.DagCleaner):
@@ -11,10 +11,10 @@ PURPOSE:
 Implements dag cleaner to execute iterative topological graph cleaning
 
 FRESH_REQUIREMENTS:
-- The node visit limit is obtained from the model config.
+- The node visit limit is obtained from the dag config.
 
 GROUNDING_ARGUMENT:
-- As a system singleton, DagCleaner orchestrates topological traversal and node cleaning passes, interacting with imported dag_storage and model_config in the same system lifecycle tier and the polymorphic dag_node_cleaner.NodeCleaner.
+- As a system singleton, DagCleaner orchestrates topological traversal and node cleaning passes, interacting with imported dag_storage and dag_config in the same system lifecycle tier and the polymorphic dag_node_cleaner.NodeCleaner.
 """
 
     @property
@@ -24,7 +24,7 @@ PURPOSE:
 Established as the node visit limit bounding the maximum times any node can be visited
 
 GROUNDING_ARGUMENT:
-- Obtained from imported model_config.ModelConfig in the same system lifecycle tier to bound node visits.
+- Obtained from imported dag_config.DagConfig in the same system lifecycle tier to bound node visits.
 """
         ...
 

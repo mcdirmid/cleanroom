@@ -14,10 +14,9 @@ from lib.agent_driver import AgentOutcome, AgentDriver
 from lib.agent_storage import AgentStorage, NodeDefinition, TaskPrompt
 from lib.dag_node_cleaner import CleanedNode, NodeCleaner
 from lib.dag_storage import Change, Dependency, Feedback, Message as DagMessage, Node
-from lib.file_alias import BoundFile, FileContent, ReadOnlyFile, ReadWriteFile, UnboundFile, WorkspacePath
+from lib.agent_file_alias import BoundFile, FileContent, ReadOnlyFile, ReadWriteFile, UnboundFile, WorkspacePath
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton
-from lib.model_config import ModelConfig
-from lib.node_config import NodeConfig
+from lib.agent_node_config import NodeConfig
 from lib.sandbox import Sandbox, StartupToolExecution
 from lib.tool_provider import Response, WireParameterBindings
 
@@ -133,21 +132,6 @@ class MockRunner:
         return self.outcome
 
 
-class MockModelConfig:
-    tier = "system"
-
-    def __init__(self, is_step_mode: bool = False) -> None:
-        self.is_step_mode = is_step_mode
-        self.model_name = "test-model"
-        self.base_url = None
-        self.api_key = None
-        self.timeout = 60
-        self.conversation_limit = 100
-        self.temperature = 0.0
-        self.max_tokens = None
-        self.is_startup_reads = True
-
-
 class MockNodeConfig:
     tier = "agent_session"
 
@@ -171,12 +155,8 @@ class MockNodeConfig:
     @property
     def is_step_mode(self) -> bool:
         if self._is_step_mode is not None:
-            return self._is_step_mode
-        try:
-            m_cfg = get_singleton(ModelConfig)
-            return m_cfg.is_step_mode and self.allows_step_mode
-        except Exception:
-            return False
+            return self._is_step_mode and self.allows_step_mode
+        return False
 
     @is_step_mode.setter
     def is_step_mode(self, val: bool) -> None:
@@ -192,14 +172,12 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.history = MockHistory()
         self.runner = MockRunner()
         self.node_cfg = MockNodeConfig()
-        self.model_cfg = MockModelConfig()
 
         self.registry.register_instance(self.storage, keys=[AgentStorage], tier="system")
         self.registry.register_instance(self.sandbox, keys=[Sandbox], tier="agent_session")
         self.registry.register_instance(self.history, keys=[Conversation], tier="agent_session")
         self.registry.register_instance(self.runner, keys=[AgentDriver], tier="agent_session")
         self.registry.register_instance(self.node_cfg, keys=[NodeConfig], tier="agent_session")
-        self.registry.register_instance(self.model_cfg, keys=[ModelConfig], tier="system")
 
     def test_cleaned_node_lifecycle(self) -> None:
         """CUJ: CleanedNode holds and exposes the target node in the session tier."""
@@ -276,7 +254,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             Feedback(content="Z defect explanation"),
             Change(content="A spec updated"),
         }
-        self.model_cfg.is_step_mode = True
+        self.node_cfg.is_step_mode = True
 
         with enter_phase("system", registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
@@ -578,7 +556,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             task_prompt=TaskPrompt("Ensure the lib conforms to the guide"),
         )
         self.node_cfg.guide_file = UnboundFile(short_name="guide.md")
-        self.model_cfg.is_step_mode = True
+        self.node_cfg.is_step_mode = True
 
         with enter_phase("system", registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
@@ -599,7 +577,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             task_prompt=TaskPrompt("Ensure the lib conforms to the guide"),
         )
         self.node_cfg.guide_file = UnboundFile(short_name="my_guide.md")
-        self.model_cfg.is_step_mode = False
+        self.node_cfg.is_step_mode = False
 
         with enter_phase("system", registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
@@ -646,7 +624,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
                 owning_node=node,
             )
         )
-        self.model_cfg.is_step_mode = False
+        self.node_cfg.is_step_mode = False
 
         with enter_phase("system", registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
@@ -667,7 +645,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         )
         self.node_cfg.guide_file = UnboundFile(short_name="qa.md")
         self.node_cfg.allows_step_mode = False
-        self.model_cfg.is_step_mode = True
+        self.node_cfg.is_step_mode = True
         self.storage.messages[node.address] = {
             Feedback(content="Fix defect 1"),
         }

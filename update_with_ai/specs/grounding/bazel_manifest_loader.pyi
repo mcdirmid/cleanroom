@@ -3,8 +3,8 @@ from framework import data_type, operation, singleton_type
 import agent_storage
 import bazel_target
 import dag_storage
-import file_alias
-import node_config
+import agent_file_alias
+import agent_node_config
 
 @data_type
 class Manifest(str):

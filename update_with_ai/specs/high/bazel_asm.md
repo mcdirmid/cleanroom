@@ -1,24 +1,22 @@
 # bazel_asm assembly component
 
-assembles: agent_asm, bazel_manifest_loader_impl, bazel_model_config_impl, bazel_node_config_impl, bazel_runner_impl, bazel_storage_impl, bazel_target_impl, dag_asm, file_paths_impl, runner_logger_impl, sandbox_asm
-imports: bazel_target_labels_ext, commonmark_ext, filesystem_ext, json_manifest_ext, model_config_ext, openai_ext, update_with_ai_proto_ext
-implements: agent_conversation, agent_driver, agent_loop_guard, agent_storage, bazel_manifest_loader, bazel_target, dag_cleaner, dag_node_cleaner, dag_runner, dag_storage, file_alias, file_paths, model_config, node_config, runner_logger, sandbox, sandbox_change_summary_validator, sandbox_file_editor, sandbox_file_reader, sandbox_guide_delivery, sandbox_run_control, template_format, tool_provider
+assembles: bazel_manifest_loader_impl, bazel_model_config_impl, bazel_node_config_impl, bazel_runner_impl, bazel_storage_impl, bazel_target_impl, file_paths_impl
+imports: bazel_target_labels_ext, dag_cleaner, dag_node_cleaner, filesystem_ext, json_manifest_ext, model_config_ext, runner_logger, tool_provider, update_with_ai_proto_ext
+implements: agent_config, agent_file_alias, agent_node_config, agent_storage, bazel_manifest_loader, bazel_target, dag_config, dag_runner, dag_storage, file_paths, openai_config
 
 ## Purpose
 
-The bazel_asm assembly component aggregates Bazel build coordination, workspace manifest loading, dependency graph storage, message persistence, and execution configuration along with agent, DAG, and sandbox subsystems into the complete Cleanroom Bazel system assembly.
+The bazel_asm assembly component aggregates Bazel build coordination, workspace manifest loading, dependency graph storage, message persistence, target resolution, and node configuration implementations into a unified Bazel workspace subsystem assembly.
 
-Building an autonomous multi-agent development environment requires integrating build graph parsing, persistent message delivery, topological DAG execution, language model interaction loops, and guarded sandbox toolkits into a single executable system. Fragmented assembly structures force entry points to orchestrate cross-cutting subsystem initializations imperatively, introducing initialization order defects and partial subsystem configurations. The bazel_asm assembly component forms the root assembly that closes all interface components across the application, resolving internal dependencies among sub-assemblies and leaving only external boundary protocols as external imports.
+Building an autonomous multi-agent development environment requires integrating build graph parsing, persistent message delivery, topological target execution, and sanitized file alias configuration into a cohesive Bazel subsystem. Fragmented workspace configuration forces callers to orchestrate individual Bazel infrastructure components imperatively, introducing initialization order defects and incomplete workspace bindings. The bazel_asm assembly component unifies these implementations into a dedicated assembly, realizing workspace contracts while propagating unclosed service dependencies to the root program assembly.
 
-**Out of scope:** The bazel_asm assembly component does not parse command-line options, define remote provider communication protocols, or manage host operating system processes; these are handled by other components.
+**Out of scope:** The bazel_asm assembly component does not parse command-line options, define remote provider communication protocols, manage host operating system processes, or assemble agent, DAG, and sandbox subsystems; these are handled by other components.
 
 ## Types and Behavior
 
-The *bazel assembly* unites the sub-assemblies and Bazel workspace implementations into a complete system that is ready to execute. The bazel assembly initializes its constituent assemblies and implementations recursively, registering all singleton services with the system lifecycle prototype to achieve complete interface closure.
+The *bazel assembly* unites the Bazel workspace implementations into a cohesive subsystem. The bazel assembly initializes its constituent implementations recursively, registering all singleton services with the system lifecycle prototype to achieve interface closure across Bazel workspace contracts.
 
 The bazel assembly aggregates the following constituents:
-
-- The file paths implementation from file_paths_impl, closing the file paths interface to create, validate, and resolve path representations against the physical workspace root.
 
 - The bazel runner implementation from bazel_runner_impl, closing the dag runner interface to coordinate build graph execution and change propagation across workspace targets.
 
@@ -28,14 +26,8 @@ The bazel assembly aggregates the following constituents:
 
 - The bazel target implementation from bazel_target_impl, closing the bazel target interface to normalize target labels and resolve package directory paths.
 
-- The bazel model config implementation from bazel_model_config_impl, closing the model config interface to load language model parameters and authentication credentials.
+- The bazel model config implementation from bazel_model_config_impl, closing the agent config, dag config, and openai config interfaces to load language model parameters, execution limits, and authentication credentials.
 
-- The bazel node config implementation from bazel_node_config_impl, closing the node config and file alias interfaces to configure target session boundaries and resolve sanitized file aliases.
+- The bazel node config implementation from bazel_node_config_impl, closing the agent node config and agent file alias interfaces to configure target session boundaries and resolve sanitized file aliases.
 
-- The runner logger implementation from runner_logger_impl, closing the runner logger interface to stream terminal progress summaries and unbuffered transcript logs.
-
-- The agent assembly from agent_asm, closing the agent driver, agent conversation, agent loop guard, and dag node cleaner interfaces.
-
-- The dag assembly from dag_asm, closing the dag cleaner interface.
-
-- The sandbox assembly from sandbox_asm, closing the sandbox, sandbox file reader, sandbox file editor, sandbox run control, sandbox guide delivery, sandbox change summary validator, template format, and tool provider interfaces.
+- The file paths implementation from file_paths_impl, closing the file paths interface to create, validate, and resolve path representations against the physical workspace root.

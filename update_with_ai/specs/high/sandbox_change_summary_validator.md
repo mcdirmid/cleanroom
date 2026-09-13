@@ -1,6 +1,6 @@
 # sandbox_change_summary_validator interface component
 
-imports: node_config, file_alias
+imports: agent_node_config, agent_file_alias
 
 ## Purpose
 
@@ -12,7 +12,7 @@ Language models often write change descriptions that do not match actual modific
 
 ## Types and Behavior
 
-A *diff summary* is a formatted representation of line changes across modified files. A *net change* is an observable difference between a file's initial content and its current content.
+A *diff summary* is a formatted representation of line changes across modified files, having a *summary text*. A *net change* is an observable difference between a *file*'s *initial content* and its *current content*.
 
 The *change summary validator* is an agent session service that is a verification check.
 

@@ -1,16 +1,18 @@
 from typing import Optional
 from framework import override, singleton_type
-import model_config
+import agent_config
+import dag_config
+import openai_config
 
 @singleton_type('system')
-class ModelConfig(model_config.ModelConfig):
+class ModelConfig(agent_config.AgentConfig, dag_config.DagConfig, openai_config.OpenaiConfig):
     """
 PURPOSE:
-Implements model config loaded from target module and environment credentials
+Implements openai config, agent config, and dag config loaded from target module and environment credentials
 
 FRESH_REQUIREMENTS:
-- The model config resolves the target configuration from the MODEL_CONFIG_TARGET environment variable, the AGENT_CONFIG_TARGET environment variable, or the --config command-line argument, defaulting to the standard //model_configs:default target.
-- The model config loads execution parameters from a target module located in the workspace runfiles tree or build output directory.
+- The openai config, agent config, and dag config resolve the target configuration from the MODEL_CONFIG_TARGET environment variable, the AGENT_CONFIG_TARGET environment variable, or the --config command-line argument, defaulting to the standard //model_configs:default target.
+- The openai config, agent config, and dag config load execution parameters and authentication credentials for language model agent runs from the target module.
 
 GROUNDING_ARGUMENT:
 - As a system singleton, ModelConfig resolves execution parameters from static target configuration modules and environment variables using model_config_ext without requiring collaborator singleton services.
@@ -24,10 +26,10 @@ PURPOSE:
 Target model identifier
 
 FRESH_REQUIREMENTS:
-- The model config provides the model name resolved from the target module.
+- The openai config provides the model name designating the target model.
 
 INHERITED_REQUIREMENTS:
-- [ModelConfig] The model config provides a model name designating the target model.
+- [OpenaiConfig] The openai config provides a model name designating the target model.
 
 GROUNDING_ARGUMENT:
 - Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
@@ -42,10 +44,10 @@ PURPOSE:
 Remote model API endpoint address
 
 FRESH_REQUIREMENTS:
-- The model config provides the base url resolved from the target module.
+- The openai config provides the base url designating the remote model API endpoint address.
 
 INHERITED_REQUIREMENTS:
-- [ModelConfig] The model config provides a base url designating the remote model API endpoint address when custom endpoint routing applies.
+- [OpenaiConfig] The openai config provides a base url designating the remote model API endpoint address when custom endpoint routing applies.
 
 GROUNDING_ARGUMENT:
 - Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
@@ -60,10 +62,10 @@ PURPOSE:
 Authentication credentials for the model API
 
 FRESH_REQUIREMENTS:
-- The model config reads authentication credentials from the designated environment variable specified in the target module.
+- The openai config provides the api key providing authentication credentials from the designated environment variable, or ambient environment credentials.
 
 INHERITED_REQUIREMENTS:
-- [ModelConfig] The model config provides an api key providing authentication credentials when designated environment secrets apply.
+- [OpenaiConfig] The openai config provides an api key providing authentication credentials when designated environment secrets apply.
 
 GROUNDING_ARGUMENT:
 - Resolved from the designated environment variable specified in the target module via model_config_ext.
@@ -78,10 +80,10 @@ PURPOSE:
 Maximum duration in seconds permitted for a model request
 
 FRESH_REQUIREMENTS:
-- The model config provides the timeout resolved from the target module.
+- The openai config provides the timeout specifying the maximum request duration in seconds.
 
 INHERITED_REQUIREMENTS:
-- [ModelConfig] The model config provides a timeout specifying the maximum duration in seconds permitted for a model request.
+- [OpenaiConfig] The openai config provides a timeout specifying the maximum duration in seconds permitted for a model request.
 
 GROUNDING_ARGUMENT:
 - Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
@@ -90,16 +92,16 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def conversation_limit(self) -> model_config.ConversationLimit:
+    def conversation_limit(self) -> agent_config.ConversationLimit:
         """
 PURPOSE:
 Bound on the maximum number of model interaction turns
 
 FRESH_REQUIREMENTS:
-- The model config provides the conversation limit resolved from the target module.
+- The agent config provides the conversation limit bounding interaction turns.
 
 INHERITED_REQUIREMENTS:
-- [ModelConfig] The model config provides the conversation limit bounding interaction turns.
+- [AgentConfig] The agent config provides the conversation limit bounding interaction turns.
 
 GROUNDING_ARGUMENT:
 - Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
@@ -114,10 +116,10 @@ PURPOSE:
 Sampling temperature for model requests
 
 FRESH_REQUIREMENTS:
-- The model config provides the temperature specifying the sampling temperature for model requests resolved from the target module.
+- The openai config provides the temperature specifying the sampling temperature for model requests.
 
 INHERITED_REQUIREMENTS:
-- [ModelConfig] The model config provides a temperature specifying the sampling temperature for model requests.
+- [OpenaiConfig] The openai config provides a temperature specifying the sampling temperature for model requests.
 
 GROUNDING_ARGUMENT:
 - Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
@@ -132,10 +134,10 @@ PURPOSE:
 Upper bound on generated response tokens per model interaction
 
 FRESH_REQUIREMENTS:
-- The model config provides the max tokens bound resolved from the target module.
+- The openai config provides the max tokens bound resolved from the target module when token generation is constrained.
 
 INHERITED_REQUIREMENTS:
-- [ModelConfig] The model config provides a max tokens upper bound specifying the maximum number of response tokens permitted per request when token generation is constrained.
+- [OpenaiConfig] The openai config provides a max tokens upper bound specifying the maximum number of response tokens permitted per request when token generation is constrained.
 
 GROUNDING_ARGUMENT:
 - Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
@@ -150,10 +152,10 @@ PURPOSE:
 Indicates whether the agent should use step mode to communicate a guide progressively
 
 FRESH_REQUIREMENTS:
-- The model config provides whether the agent should use step mode to communicate a guide progressively from the target module.
+- The agent config provides whether the agent should use step mode to communicate a guide progressively.
 
 INHERITED_REQUIREMENTS:
-- [ModelConfig] The model config provides whether the agent should use step mode to communicate a guide progressively.
+- [AgentConfig] The agent config provides whether the agent should use step mode to communicate a guide progressively.
 
 GROUNDING_ARGUMENT:
 - Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
@@ -168,10 +170,10 @@ PURPOSE:
 Indicates whether the agent should perform startup reads to inspect declared files at session start
 
 FRESH_REQUIREMENTS:
-- The model config provides whether the agent should perform startup reads to inspect declared files at session start from the target module.
+- The agent config provides whether the agent should perform startup reads to inspect declared files at session start.
 
 INHERITED_REQUIREMENTS:
-- [ModelConfig] The model config provides whether the agent should perform startup reads to inspect declared files at session start.
+- [AgentConfig] The agent config provides whether the agent should perform startup reads to inspect declared files at session start.
 
 GROUNDING_ARGUMENT:
 - Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
@@ -186,10 +188,10 @@ PURPOSE:
 Indicates whether the agent should inject followups to execute follow-up tool calls specified by tool responses
 
 FRESH_REQUIREMENTS:
-- The model config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
+- The agent config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
 
 INHERITED_REQUIREMENTS:
-- [ModelConfig] The model config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
+- [AgentConfig] The agent config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
 
 GROUNDING_ARGUMENT:
 - Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
@@ -198,16 +200,16 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def node_visit_limit(self) -> int:
+    def node_visit_limit(self) -> dag_config.NodeVisitLimit:
         """
 PURPOSE:
 Bound on the maximum number of times any node can be visited during dag cleaning
 
 FRESH_REQUIREMENTS:
-- The model config provides the node visit limit bound resolved from the target module.
+- The dag config provides the node visit limit bounding node visits during graph cleaning.
 
 INHERITED_REQUIREMENTS:
-- [ModelConfig] The model config provides a node visit limit bounding node visits during graph cleaning.
+- [DagConfig] The dag config provides the node visit limit bounding node visits during graph cleaning.
 
 GROUNDING_ARGUMENT:
 - Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.

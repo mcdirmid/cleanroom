@@ -4,10 +4,10 @@ import unittest
 from typing import Any, List, Optional, Set, Tuple
 
 from lib.dag_storage import Node
-from lib.file_alias import BoundFile, FileContent, ReadOnlyFile, UnboundFile, WorkspacePath
+from lib.agent_file_alias import BoundFile, FileContent, ReadOnlyFile, UnboundFile, WorkspacePath
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton
-from lib.model_config import ModelConfig
-from lib.node_config import Guide, NodeConfig
+from lib.agent_config import AgentConfig
+from lib.agent_node_config import Guide, NodeConfig
 from lib.sandbox import Sandbox, StartupToolExecution
 from lib.sandbox_file_editor import EditManager
 from lib.sandbox_file_reader import ReadManager, ReadTool
@@ -25,19 +25,14 @@ from lib.tool_provider import (
 )
 
 
-class MockModelConfig:
+class MockAgentConfig:
     tier = "system"
 
     def __init__(self, is_step_mode: bool = False, is_startup_reads: bool = False) -> None:
         self.is_step_mode = is_step_mode
         self.is_startup_reads = is_startup_reads
-        self.model_name = "test-model"
-        self.base_url = None
-        self.api_key = None
-        self.timeout = 30
         self.conversation_limit = 10
-        self.temperature = 0.0
-        self.max_tokens = None
+        self.inject_followups = False
 
 
 class MockNodeConfig:
@@ -58,8 +53,8 @@ class MockNodeConfig:
         if self._is_step_mode is not None:
             return self._is_step_mode
         try:
-            m_cfg = get_singleton(ModelConfig)
-            return m_cfg.is_step_mode and self.allows_step_mode
+            a_cfg = get_singleton(AgentConfig)
+            return a_cfg.is_step_mode and self.allows_step_mode
         except Exception:
             return False
 
@@ -198,14 +193,14 @@ class SandboxImplTest(unittest.TestCase):
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
 
-        self.model_cfg = MockModelConfig(is_step_mode=True, is_startup_reads=True)
+        self.agent_cfg = MockAgentConfig(is_step_mode=True, is_startup_reads=True)
         self.node_cfg = MockNodeConfig(read_only_files={self.ro_file})
         self.edit_mgr = MockEditManager()
         self.adv_tool = MockAdvanceTool()
         self.read_tool = MockReadTool()
         self.read_mgr = MockReadManager()
 
-        self.registry.register_instance(self.model_cfg, keys=[ModelConfig], tier="system")
+        self.registry.register_instance(self.agent_cfg, keys=[AgentConfig], tier="system")
         self.registry.register_instance(self.node_cfg, keys=[NodeConfig], tier="agent_session")
         self.registry.register_instance(self.edit_mgr, keys=[EditManager], tier="agent_session")
         self.registry.register_instance(self.adv_tool, keys=[AdvanceTool], tier="agent_session")
@@ -269,8 +264,8 @@ class SandboxImplTest(unittest.TestCase):
 
     def test_get_startup_tool_executions_disabled_modes(self) -> None:
         """CUJ: Omits advance when step mode is off, and omits reads when startup reads are off."""
-        self.model_cfg.is_step_mode = False
-        self.model_cfg.is_startup_reads = False
+        self.agent_cfg.is_step_mode = False
+        self.agent_cfg.is_startup_reads = False
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             sb = scope.get_singleton(Sandbox)
@@ -281,8 +276,8 @@ class SandboxImplTest(unittest.TestCase):
 
     def test_get_startup_tool_executions_node_disallows_step_mode(self) -> None:
         """CUJ: Omits advance when node disallows step mode even if model config enables it."""
-        self.model_cfg.is_step_mode = True
-        self.model_cfg.is_startup_reads = False
+        self.agent_cfg.is_step_mode = True
+        self.agent_cfg.is_startup_reads = False
         self.node_cfg.allows_step_mode = False
 
         with enter_phase("agent_session", registry=self.registry) as scope:

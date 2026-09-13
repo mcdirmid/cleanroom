@@ -1,7 +1,7 @@
 from typing import List
 from framework import operation, override, singleton_type
-import model_config
-import node_config
+import agent_config
+import agent_node_config
 import sandbox
 import sandbox_file_editor
 import sandbox_file_reader
@@ -21,7 +21,7 @@ INHERITED_REQUIREMENTS:
 - [Sandbox] The sandbox exposes whether workspace file modifications occurred during the session.
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, Sandbox coordinates startup tool execution sequences and template materialization, accessing collaborator singletons in the same session lifecycle tier (node_config.NodeConfig, sandbox_file_editor.EditManager, sandbox_file_reader.ReadTool, sandbox_run_control.AdvanceTool) and model_config.ModelConfig in the more general system lifecycle tier.
+- As an agent_session singleton, Sandbox coordinates startup tool execution sequences and template materialization, accessing collaborator singletons in the same session lifecycle tier (agent_node_config.NodeConfig, sandbox_file_editor.EditManager, sandbox_file_reader.ReadTool, sandbox_run_control.AdvanceTool) and agent_config.AgentConfig in the more general system lifecycle tier.
 """
 
     @property
@@ -54,7 +54,7 @@ INHERITED_REQUIREMENTS:
 - [Sandbox] The sandbox exposes startup tool executions as an ordered sequence of initial tool executions based on active configuration.
 
 GROUNDING_ARGUMENT:
-- Reads step mode and startup reads from imported model_config.ModelConfig (system tier), retrieves declared read-only files from imported node_config.NodeConfig (session tier) ordered deterministically by file alias short name, executes imported sandbox_run_control.AdvanceTool and sandbox_file_reader.ReadTool (session tier), and pairs tool requests with responses into StartupToolExecution records.
+- Reads step mode and startup reads from imported agent_config.AgentConfig (system tier), retrieves declared read-only files from imported agent_node_config.NodeConfig (session tier) ordered deterministically by file alias short name, executes imported sandbox_run_control.AdvanceTool and sandbox_file_reader.ReadTool (session tier), and pairs tool requests with responses into StartupToolExecution records.
 """
         ...
 

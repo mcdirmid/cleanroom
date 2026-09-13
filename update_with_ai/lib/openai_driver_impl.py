@@ -1,9 +1,10 @@
 import json
 from typing import Any, Optional, Set, Tuple
+from . import agent_config
 from . import agent_conversation
 from . import agent_loop_guard
 from . import agent_driver
-from . import model_config
+from . import openai_config
 from . import runner_logger
 from . import tool_provider
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
@@ -144,7 +145,8 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
         pass
 
     def run(self) -> agent_driver.AgentOutcome:
-        model_cfg = get_singleton(model_config.ModelConfig)
+        openai_cfg = get_singleton(openai_config.OpenaiConfig)
+        agent_cfg = get_singleton(agent_config.AgentConfig)
         logger = get_singleton(runner_logger.RunnerLogger)
         history = get_singleton(agent_conversation.Conversation)
         guard = get_singleton(agent_loop_guard.LoopGuard)
@@ -153,13 +155,13 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
         client: Any = None
         if OpenAI is not None:
             client = OpenAI(
-                api_key=model_cfg.api_key if model_cfg.api_key else "none",
-                base_url=model_cfg.base_url,
-                timeout=float(model_cfg.timeout),
+                api_key=openai_cfg.api_key if openai_cfg.api_key else "none",
+                base_url=openai_cfg.base_url,
+                timeout=float(openai_cfg.timeout),
             )
 
 
-        # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from model config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
+        # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
         tools_payload: list[dict[str, Any]] = []
         for t in sorted(tool_mgr.installed_tools, key=lambda x: x.name):
             props = {}
@@ -183,7 +185,7 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
         if tools_payload:
             tools_payload = json.loads(json.dumps(tools_payload, sort_keys=True))
 
-        limit = model_cfg.conversation_limit
+        limit = agent_cfg.conversation_limit
         turns = 0
         last_response: tool_provider.Response = tool_provider.Response(
             is_failed=False, is_terminated=False, content="Initialized"
@@ -241,16 +243,16 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
             prev_messages_payload = json.loads(json.dumps(messages_payload))
 
             try:
-                # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from model config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
+                # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
                 create_kwargs: dict[str, Any] = {
-                    "model": model_cfg.model_name,
+                    "model": openai_cfg.model_name,
                     "messages": messages_payload,
                     "tools": tools_payload if tools_payload else None,
-                    "temperature": model_cfg.temperature,
-                    "timeout": float(model_cfg.timeout),
+                    "temperature": openai_cfg.temperature,
+                    "timeout": float(openai_cfg.timeout),
                 }
-                if model_cfg.max_tokens is not None:
-                    create_kwargs["max_tokens"] = model_cfg.max_tokens
+                if openai_cfg.max_tokens is not None:
+                    create_kwargs["max_tokens"] = openai_cfg.max_tokens
 
                 completion = client.chat.completions.create(**create_kwargs)
             except OpenAIError as e:
@@ -441,12 +443,12 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                 if not resp.is_failed and fn_name in ("replace", "update_lines", "advance"):
                     guard.record_progress()
 
-                # Requirement: When configured by model configuration to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool, appending a synthetic assistant invocation carrying the follow-up tool call's reasoning text as prior thought preceding the requested tool execution and the resulting follow-up response to the conversation immediately following the originating response.
+                # Requirement: When configured by agent configuration to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool, appending a synthetic assistant invocation carrying the follow-up tool call's reasoning text as prior thought preceding the requested tool execution and the resulting follow-up response to the conversation immediately following the originating response.
                 # Requirement: [AgentDriver] The agent driver can dispatch follow-up tool calls specified by tool responses, recording the follow-up execution in the conversation.
                 curr_resp = resp
                 curr_call_id = tc.id
                 followup_count = 0
-                while model_cfg.inject_followups and curr_resp.follow_up_tool_call is not None and not curr_resp.is_terminated:
+                while agent_cfg.inject_followups and curr_resp.follow_up_tool_call is not None and not curr_resp.is_terminated:
                     followup = curr_resp.follow_up_tool_call
                     followup_count += 1
                     synth_call_id = f"{curr_call_id}_followup_{followup_count}"
@@ -515,8 +517,8 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                         conversation=history,
                     )
 
-        # Requirement: When turns reach the conversation limit from model config, the agent driver halts with an unexpected failure.
-        # Requirement: [AgentDriver] When the conversation limit from model config is exceeded, the agent driver halts with an unexpected failure.
+        # Requirement: When turns reach the conversation limit from agent config, the agent driver halts with an unexpected failure.
+        # Requirement: [AgentDriver] When the conversation limit from agent config is exceeded, the agent driver halts with an unexpected failure.
         raise RuntimeError(f"Conversation limit reached ({limit} turns)")
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:

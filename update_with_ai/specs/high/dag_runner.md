@@ -14,7 +14,7 @@ Executing multi-stage agent workflows across interdependent graph structures req
 
 A *cleaning pass* is an execution run that cleans dirty nodes across a target subgraph.
 
-A *build result* is the final outcome of a cleaning pass, reporting overall success or failure along with an execution summary.
+A *build result* is the final outcome of a cleaning pass, reporting overall *success* or failure along with an execution *summary*.
 
 The *dag runner* is a system service that executes topological build and cleaning passes across workspace nodes.
 

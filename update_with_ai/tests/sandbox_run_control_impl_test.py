@@ -4,7 +4,7 @@ import unittest
 from typing import Any, List, Optional, Sequence, Set, Tuple
 
 from lib.dag_storage import Node
-from lib.file_alias import (
+from lib.agent_file_alias import (
     AliasManager,
     BoundFile,
     DirectoryPath,
@@ -16,7 +16,7 @@ from lib.file_alias import (
     WorkspacePath,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
-from lib.node_config import Guide, NodeConfig, VerificationCheck
+from lib.agent_node_config import Guide, NodeConfig, VerificationCheck
 from lib.sandbox_file_editor import EditManager
 from lib.sandbox_guide_delivery import GuideDelivery
 from lib.sandbox_run_control import (

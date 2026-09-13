@@ -341,6 +341,7 @@ class TestLifecycle(unittest.TestCase):
 
     def test_assembly_initialize_traversal(self) -> None:
         from update_with_ai.lib import (
+            program_asm,
             bazel_asm,
             agent_asm,
             dag_asm,
@@ -352,13 +353,14 @@ class TestLifecycle(unittest.TestCase):
         )
 
         test_reg = LifecycleRegistry()
-        # Verify bazel_asm recursively invokes constituent assemblies without error
-        bazel_asm.__initialize__(test_reg)
+        # Verify program_asm recursively invokes constituent assemblies without error
+        program_asm.__initialize__(test_reg)
 
-        # Confirm constituents are registered in bazel_asm CONSTITUENTS
-        self.assertIn(agent_asm, bazel_asm.CONSTITUENTS)
-        self.assertIn(dag_asm, bazel_asm.CONSTITUENTS)
-        self.assertIn(sandbox_asm, bazel_asm.CONSTITUENTS)
+        # Confirm constituents are registered in program_asm and bazel_asm CONSTITUENTS
+        self.assertIn(agent_asm, program_asm.CONSTITUENTS)
+        self.assertIn(bazel_asm, program_asm.CONSTITUENTS)
+        self.assertIn(dag_asm, program_asm.CONSTITUENTS)
+        self.assertIn(sandbox_asm, program_asm.CONSTITUENTS)
         self.assertIn(bazel_runner_impl, bazel_asm.CONSTITUENTS)
         self.assertIn(openai_driver_impl, agent_asm.CONSTITUENTS)
         self.assertIn(dag_cleaner_impl, dag_asm.CONSTITUENTS)

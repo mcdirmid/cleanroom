@@ -8,7 +8,7 @@ from unittest.mock import patch
 from typing import Any, Mapping, Optional, Set, Tuple
 
 from lib.dag_storage import Node
-from lib.file_alias import (
+from lib.agent_file_alias import (
     AliasManager,
     BoundFile,
     DirectoryPath,
@@ -20,7 +20,7 @@ from lib.file_alias import (
     WorkspacePath,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
-from lib.node_config import NodeConfig
+from lib.agent_node_config import Guide, NodeConfig
 from lib.template_format import TemplateFormatter
 from lib.sandbox_file_editor import (
     EditManager,
@@ -33,7 +33,6 @@ from lib.sandbox_file_editor_impl import (
     TextReplacementTool as TextReplacementToolImpl,
     __initialize__,
 )
-from lib.node_config import Guide
 from lib.tool_provider import (
     ActualParameterBindings,
     IntegerParameterConverter,

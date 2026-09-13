@@ -5,8 +5,7 @@ import agent_driver
 import agent_storage
 import dag_node_cleaner
 import dag_storage
-import model_config
-import node_config
+import agent_node_config
 import sandbox
 
 @singleton_type('system')
@@ -39,7 +38,7 @@ FRESH_REQUIREMENTS:
 - Retries execution of the agent session phase a second time before propagating the failure when an agent session phase encounters an unexpected execution failure during node cleaning.
 
 GROUNDING_ARGUMENT:
-- Receives node as an input argument and retrieves task prompt and node definition from imported agent_storage in the same system lifecycle tier. When a dirty node defines no task prompt, it resolves without executing an agent session phase, producing change messages if incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise. Within the orchestrated agent session phase, it configures CleanedNode, materializes startup templates from sandbox, seeds conversation with incoming pending messages ordered deterministically by content and augmenting the task prompt with guide instructions based on imported node_config and model_config, executes agent_driver, and maps the resulting agent outcome to change or feedback messages for dag_storage, relying on the requirements of collaborator types to satisfy message generation and dirty state management.
+- Receives node as an input argument and retrieves task prompt and node definition from imported agent_storage in the same system lifecycle tier. When a dirty node defines no task prompt, it resolves without executing an agent session phase, producing change messages if incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise. Within the orchestrated agent session phase, it configures CleanedNode, materializes startup templates from sandbox, seeds conversation with incoming pending messages ordered deterministically by content and augmenting the task prompt with guide instructions based on imported agent_node_config, executes agent_driver, and maps the resulting agent outcome to change or feedback messages for dag_storage, relying on the requirements of collaborator types to satisfy message generation and dirty state management.
 """
         ...
 

@@ -1,6 +1,6 @@
 # agent_node_cleaner_impl implementation component
 
-imports: dag_storage, agent_driver, sandbox, agent_conversation, agent_storage, node_config, model_config
+imports: agent_conversation, agent_driver, agent_node_config, agent_storage, dag_storage, sandbox
 implements: dag_node_cleaner
 
 ## Purpose

@@ -1,21 +1,21 @@
 from typing import Optional, Protocol, Set
-from . import file_alias
+from . import agent_file_alias
 from . import tool_provider
 
 class ReadManager(Protocol):
     @property
-    def read_only_files(self) -> Set[file_alias.ReadOnlyFile]:
+    def read_only_files(self) -> Set[agent_file_alias.ReadOnlyFile]:
         ...
 
     @property
-    def read_write_files(self) -> Set[file_alias.ReadWriteFile]:
+    def read_write_files(self) -> Set[agent_file_alias.ReadWriteFile]:
         ...
 
     @property
-    def guide_file(self) -> Optional[file_alias.UnboundFile]:
+    def guide_file(self) -> Optional[agent_file_alias.UnboundFile]:
         ...
 
-    def requires_line_numbers(self, file: file_alias.FileAlias) -> bool:
+    def requires_line_numbers(self, file: agent_file_alias.FileAlias) -> bool:
         ...
 
 class ReadTool(tool_provider.Tool, Protocol):

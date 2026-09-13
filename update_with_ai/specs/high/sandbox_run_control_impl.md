@@ -1,6 +1,6 @@
 # sandbox_run_control_impl implementation component
 
-imports: tool_provider, file_alias, dag_storage, sandbox_file_editor, sandbox_guide_delivery, node_config
+imports: tool_provider, agent_file_alias, dag_storage, sandbox_file_editor, sandbox_guide_delivery, agent_node_config
 implements: sandbox_run_control
 
 ## Purpose

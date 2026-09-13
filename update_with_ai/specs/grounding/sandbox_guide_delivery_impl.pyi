@@ -1,7 +1,7 @@
 from typing import Optional
 from framework import operation, override, singleton_type
-import file_alias
-import node_config
+import agent_file_alias
+import agent_node_config
 import sandbox_guide_delivery
 import tool_provider
 
@@ -15,7 +15,7 @@ INHERITED_REQUIREMENTS:
 - [GuideDelivery] Steps remaining indicates whether further step sections remain to be completed.
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, GuideDelivery parses markdown guides and delivers progressive step sections, interacting with imported node_config.NodeConfig in the same session lifecycle tier.
+- As an agent_session singleton, GuideDelivery parses markdown guides and delivers progressive step sections, interacting with imported agent_node_config.NodeConfig in the same session lifecycle tier.
 """
 
     @property
@@ -26,7 +26,7 @@ PURPOSE:
 Indicates whether a guide is configured and the current step index is less than the total count of step sections
 
 GROUNDING_ARGUMENT:
-- Computed from internal delivery state tracking the current step index against the total count of sections parsed from node_config.NodeConfig.guide, updated as steps advance via mutable operation advance_step.
+- Computed from internal delivery state tracking the current step index against the total count of sections parsed from agent_node_config.NodeConfig.guide, updated as steps advance via mutable operation advance_step.
 """
         ...
 
@@ -40,13 +40,13 @@ FRESH_REQUIREMENTS:
 - Initializing the guide delivery obtains its guide from the node config.
 
 GROUNDING_ARGUMENT:
-- Obtains the configured task guide directly from imported node_config.NodeConfig in the same session lifecycle tier.
+- Obtains the configured task guide directly from imported agent_node_config.NodeConfig in the same session lifecycle tier.
 """
         ...
 
     @operation
     @override
-    def parse_guide(self, content: file_alias.FileContent) -> node_config.Guide:
+    def parse_guide(self, content: agent_file_alias.FileContent) -> agent_node_config.Guide:
         """
 PURPOSE:
 Implements parse_guide to extract summary and step sections from file content
@@ -83,7 +83,7 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def guide(self) -> Optional[node_config.Guide]:
+    def guide(self) -> Optional[agent_node_config.Guide]:
         """
 PURPOSE:
 Exposes the configured guide for the session

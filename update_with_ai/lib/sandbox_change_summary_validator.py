@@ -1,18 +1,18 @@
 from typing import Protocol, Tuple
 from dataclasses import dataclass
-from . import file_alias
-from . import node_config
+from . import agent_file_alias
+from . import agent_node_config
 
 @dataclass(frozen=True)
 class NetChange:
-    file: file_alias.ReadWriteFile
-    initial_content: file_alias.FileContent
-    current_content: file_alias.FileContent
+    file: agent_file_alias.ReadWriteFile
+    initial_content: agent_file_alias.FileContent
+    current_content: agent_file_alias.FileContent
 
 @dataclass(frozen=True)
 class DiffSummary:
     summary_text: str
 
-class ChangeSummaryValidator(node_config.VerificationCheck, Protocol):
+class ChangeSummaryValidator(agent_node_config.VerificationCheck, Protocol):
     def verify(self) -> Tuple[bool, str]:
         ...

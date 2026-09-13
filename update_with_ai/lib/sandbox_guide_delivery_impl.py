@@ -1,6 +1,6 @@
 from typing import List, Optional
-from . import file_alias
-from . import node_config
+from . import agent_file_alias
+from . import agent_node_config
 from . import sandbox_guide_delivery
 from . import tool_provider
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
@@ -9,13 +9,13 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
     tier = "agent_session"
 
     def __init__(self) -> None:
-        self._guide: Optional[node_config.Guide] = None
+        self._guide: Optional[agent_node_config.Guide] = None
         self._initial_delivered: bool = False
         self._step_index: int = 0
 
     def initialize(self) -> None:
         # Requirement: Initializing the guide delivery obtains its guide from the node config.
-        cfg = get_singleton(node_config.NodeConfig)
+        cfg = get_singleton(agent_node_config.NodeConfig)
         self._guide = cfg.guide
         self._initial_delivered = False
         self._step_index = 0
@@ -30,15 +30,15 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
         return self._step_index < len(self._guide.sections)
 
     @property
-    def guide(self) -> Optional[node_config.Guide]:
+    def guide(self) -> Optional[agent_node_config.Guide]:
         return self._guide
 
-    def parse_guide(self, content: file_alias.FileContent) -> node_config.Guide:
+    def parse_guide(self, content: agent_file_alias.FileContent) -> agent_node_config.Guide:
         # Requirement: Guide parsing extracts the summary from content preceding the first section heading, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Lint checks` or `Verification failure`.
         raw = str(content)
         lines = raw.splitlines()
         summary_lines: List[str] = []
-        sections: List[node_config.StepSection] = []
+        sections: List[agent_node_config.StepSection] = []
         verification_failure_lines: Optional[List[str]] = None
 
         current_title: Optional[str] = None
@@ -53,7 +53,7 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
                         verification_failure_lines = list(current_section_lines)
                     elif not current_title.startswith("Lint checks"):
                         sections.append(
-                            node_config.StepSection(
+                            agent_node_config.StepSection(
                                 index=len(sections),
                                 title=current_title,
                                 content="\n".join(current_section_lines).strip(),
@@ -69,7 +69,7 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
                 verification_failure_lines = list(current_section_lines)
             elif not current_title.startswith("Lint checks"):
                 sections.append(
-                    node_config.StepSection(
+                    agent_node_config.StepSection(
                         index=len(sections),
                         title=current_title,
                         content="\n".join(current_section_lines).strip(),
@@ -85,7 +85,7 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
             else None
         )
 
-        return node_config.Guide(
+        return agent_node_config.Guide(
             summary="\n".join(summary_lines).strip(),
             sections=sections,
             verification_failure=vf_text,

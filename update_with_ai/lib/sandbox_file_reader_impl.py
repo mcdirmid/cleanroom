@@ -1,8 +1,8 @@
 import os
 import re
 from typing import Any, Optional, Set, Type, cast
-from . import file_alias
-from . import node_config
+from . import agent_file_alias
+from . import agent_node_config
 from . import sandbox_file_reader
 from . import template_format
 from . import tool_provider
@@ -20,27 +20,27 @@ class ReadManager(sandbox_file_reader.ReadManager, Singleton):
         tm.install_tool(get_singleton(ReadTool))
 
     @property
-    def read_only_files(self) -> Set[file_alias.ReadOnlyFile]:
+    def read_only_files(self) -> Set[agent_file_alias.ReadOnlyFile]:
         # Requirement: The read manager exposes declared read-only files, read-write files, and optional guide file obtained from the node config.
-        cfg = get_singleton(node_config.NodeConfig)
-        return {f for f in cfg.read_only_files if isinstance(f, file_alias.ReadOnlyFile)}
+        cfg = get_singleton(agent_node_config.NodeConfig)
+        return {f for f in cfg.read_only_files if isinstance(f, agent_file_alias.ReadOnlyFile)}
 
     @property
-    def read_write_files(self) -> Set[file_alias.ReadWriteFile]:
+    def read_write_files(self) -> Set[agent_file_alias.ReadWriteFile]:
         # Requirement: The read manager exposes declared read-only files, read-write files, and optional guide file obtained from the node config.
-        cfg = get_singleton(node_config.NodeConfig)
-        return {f for f in cfg.read_write_files if isinstance(f, file_alias.ReadWriteFile)}
+        cfg = get_singleton(agent_node_config.NodeConfig)
+        return {f for f in cfg.read_write_files if isinstance(f, agent_file_alias.ReadWriteFile)}
 
     @property
-    def guide_file(self) -> Optional[file_alias.UnboundFile]:
+    def guide_file(self) -> Optional[agent_file_alias.UnboundFile]:
         # Requirement: The read manager exposes declared read-only files, read-write files, and optional guide file obtained from the node config.
-        cfg = get_singleton(node_config.NodeConfig)
+        cfg = get_singleton(agent_node_config.NodeConfig)
         return cfg.guide_file
 
-    def requires_line_numbers(self, file: file_alias.FileAlias) -> bool:
+    def requires_line_numbers(self, file: agent_file_alias.FileAlias) -> bool:
         # Requirement: The read manager identifies that read-write files and source code files require line numbers when read.
         # Requirement: The read manager identifies files ending with `.py` as source code files requiring line numbers.
-        if isinstance(file, file_alias.ReadWriteFile):
+        if isinstance(file, agent_file_alias.ReadWriteFile):
             return True
         if file.short_name.endswith(".py"):
             return True
@@ -63,7 +63,7 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
 
     @property
     def file_alias_parameter(self) -> tool_provider.Parameter:
-        alias_mgr = get_singleton(file_alias.AliasManager)
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
         return tool_provider.Parameter(
             name="file",
             description="Target file alias",
@@ -87,12 +87,12 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
 
     def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
-        target_file = cast(file_alias.FileAlias, bindings_map.get("file"))
+        target_file = cast(agent_file_alias.FileAlias, bindings_map.get("file"))
         line_numbers = bool(bindings_map.get("line_numbers", False))
 
         read_mgr = get_singleton(ReadManager)
         # Requirement: When an unbound file equals the guide file configured for step-mode, the read tool failure response indicates that `advance` must be called to read the guide instead.
-        if isinstance(target_file, file_alias.UnboundFile):
+        if isinstance(target_file, agent_file_alias.UnboundFile):
             if read_mgr.guide_file and target_file.short_name == read_mgr.guide_file.short_name:
                 return tool_provider.Response(
                     is_failed=True,
@@ -148,8 +148,8 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
             )
 
         # Requirement: Executing the read tool reads file content using the filesystem at the host path formed from the alias manager workspace root and bound file workspace path.
-        assert isinstance(target_file, file_alias.BoundFile)
-        alias_mgr = get_singleton(file_alias.AliasManager)
+        assert isinstance(target_file, agent_file_alias.BoundFile)
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
         host_path = os.path.join(alias_mgr.workspace_root.path, target_file.workspace_path.path)
 
         with open(host_path, "r", encoding="utf-8") as f:
@@ -182,9 +182,9 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
             lines = filtered_lines
 
             # Requirement: When reading read-only markdown files ending with .md, content is formatted using the template formatter with session template parameters after filtering out paragraphs beginning with > META:.
-            if isinstance(target_file, file_alias.ReadOnlyFile):
+            if isinstance(target_file, agent_file_alias.ReadOnlyFile):
                 raw_text = "".join(lines)
-                cfg = get_singleton(node_config.NodeConfig)
+                cfg = get_singleton(agent_node_config.NodeConfig)
                 formatter = get_singleton(template_format.TemplateFormatter)
                 formatted_text = formatter.format_template(raw_text, cfg.template_parameters)
                 lines = formatted_text.splitlines(keepends=True)
@@ -195,7 +195,7 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
             content = "".join(lines)
 
         # Requirement: Read tool responses for read-write files carry a suppression key matching the file's short name, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
-        if isinstance(target_file, file_alias.ReadWriteFile):
+        if isinstance(target_file, agent_file_alias.ReadWriteFile):
             suppression_key = target_file.short_name
             final_content = content
         else:
@@ -217,15 +217,15 @@ class RegexPatternConverter(tool_provider.ParameterConverter, Singleton):
 
     @property
     def actual_type(self) -> Type:
-        return file_alias.RegexPattern
+        return agent_file_alias.RegexPattern
 
     @property
     def wire_type(self) -> tool_provider.WireType:
         return tool_provider.String()
 
-    def convert(self, wire_value: Any) -> file_alias.RegexPattern:
+    def convert(self, wire_value: Any) -> agent_file_alias.RegexPattern:
         # Requirement: The regex pattern converter converts a wire type string into a regex pattern.
-        return file_alias.RegexPattern(str(wire_value))
+        return agent_file_alias.RegexPattern(str(wire_value))
 
 class SearchTool(sandbox_file_reader.SearchTool, Singleton):
     tier = "agent_session"
@@ -271,7 +271,7 @@ class SearchTool(sandbox_file_reader.SearchTool, Singleton):
             )
 
         read_mgr = get_singleton(ReadManager)
-        alias_mgr = get_singleton(file_alias.AliasManager)
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
 
         results = []
         # Requirement: The search tool searches for regex pattern matches across read-only files and read-write files using the filesystem.

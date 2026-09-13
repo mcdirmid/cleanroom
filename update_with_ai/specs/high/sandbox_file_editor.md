@@ -1,6 +1,6 @@
 # sandbox_file_editor interface component
 
-imports: tool_provider, file_alias
+imports: tool_provider, agent_file_alias
 
 ## Purpose
 

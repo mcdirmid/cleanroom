@@ -1,7 +1,7 @@
 # bazel_model_config_impl implementation component
 
 imports: model_config_ext
-implements: model_config
+implements: agent_config, dag_config, openai_config
 
 ## Purpose
 
@@ -13,11 +13,11 @@ Connecting declarative build targets to concrete language model parameters requi
 
 ## Types and Behavior
 
-The model config resolves the target configuration from the `MODEL_CONFIG_TARGET` environment variable, the `AGENT_CONFIG_TARGET` environment variable, or the `--config` command-line argument, defaulting to the standard `//model_configs:default` target.
+The openai config, agent config, and dag config resolve the target configuration from the `MODEL_CONFIG_TARGET` environment variable, the `AGENT_CONFIG_TARGET` environment variable, or the `--config` command-line argument, defaulting to the standard `//model_configs:default` target.
 
-The model config loads execution parameters and authentication credentials for language model agent runs from the target module.
+The openai config, agent config, and dag config load execution parameters and authentication credentials for language model agent runs from the target module.
 
-The model config provides:
+The openai config provides:
 
 - The model name designating the target model.
 
@@ -27,17 +27,21 @@ The model config provides:
 
 - The timeout specifying the maximum request duration in seconds.
 
-- The conversation limit bounding interaction turns.
-
 - The temperature specifying the sampling temperature for model requests.
 
 - The max tokens bound resolved from the target module when token generation is constrained.
+
+The agent config provides:
+
+- The conversation limit bounding interaction turns.
 
 - Whether the agent should use step mode to communicate a guide to the agent progressively.
 
 - Whether the agent should perform startup reads to inspect declared files at session start.
 
 - Whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
+
+The dag config provides:
 
 - The node visit limit bounding node visits during graph cleaning.
 

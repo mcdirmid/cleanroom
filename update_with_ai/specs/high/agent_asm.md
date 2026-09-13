@@ -1,7 +1,7 @@
 # agent_asm assembly component
 
 assembles: agent_loop_guard_impl, agent_node_cleaner_impl, openai_conversation_impl, openai_driver_impl
-imports: agent_storage, dag_storage, model_config, node_config, runner_logger, sandbox, tool_provider, openai_ext
+imports: agent_config, agent_node_config, agent_storage, dag_storage, openai_config, openai_ext, runner_logger, sandbox, tool_provider
 implements: agent_conversation, agent_driver, agent_loop_guard, dag_node_cleaner
 
 ## Purpose

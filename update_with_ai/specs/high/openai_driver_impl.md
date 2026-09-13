@@ -1,21 +1,21 @@
 # openai_driver_impl implementation component
 
-imports: tool_provider, agent_conversation, agent_loop_guard, runner_logger, openai_ext, model_config
+imports: agent_config, agent_conversation, agent_loop_guard, openai_config, openai_ext, runner_logger, tool_provider
 implements: agent_driver
 
 ## Purpose
 
 The openai_driver_impl implementation component realizes language model completion requests, tool execution dispatch, output continuation, and termination handling for agent turns.
 
-Executing robust model loops requires managing protocol-level token limits, handling tool failures gracefully, and binding runtime parameters to API completion endpoints. The openai_driver_impl implementation component constructs completion requests using model parameters from model config, dispatches model-invoked tool executions through the tool manager, injects recovery guidance on failures, and resumes truncated completions.
+Executing robust model loops requires managing protocol-level token limits, handling tool failures gracefully, and binding runtime parameters to API completion endpoints. The openai_driver_impl implementation component constructs completion requests using configuration parameters from openai config and agent config, dispatches model-invoked tool executions through the tool manager, injects recovery guidance on failures, and resumes truncated completions.
 
 **Out of scope:** The openai_driver_impl implementation component does not parse tool argument schemas, format disk transcripts, or discover build target manifests; these are handled by other components.
 
 ## Types and Behavior
 
-The agent driver coordinates interaction turns using the session conversation, installed tools, the loop guard, the model configuration, and the runner logger.
+The agent driver coordinates interaction turns using the session conversation, installed tools, the loop guard, the openai config, the agent config, and the runner logger.
 
-When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from the model configuration, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions. When a model response is truncated at the generation limit, the agent driver resumes generation with a continuation turn.
+When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from the openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions. When a model response is truncated at the generation limit, the agent driver resumes generation with a continuation turn.
 
 The agent driver logs log events for turn requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool call names and arguments or text response previews, and tool execution status and diagnostic outcomes including corrective reminders in the transcript when present.
 
@@ -23,8 +23,8 @@ Before each tool execution, the agent driver evaluates the tool invocation with 
 
 When tool execution produces a response indicating failure without terminating the run, the agent driver appends the failure feedback to the conversation and continues the turn loop. When tool execution produces a response indicating terminating failure, the agent driver halts execution with an unexpected failure carrying the failure explanation. When tool execution produces a response indicating successful session termination, the agent driver concludes the run and returns a successful agent outcome.
 
-When configured by model configuration to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool, appending a synthetic assistant invocation carrying the follow-up tool call's reasoning text as prior thought preceding the requested tool execution and the resulting follow-up response to the conversation immediately following the originating response.
+When configured by agent configuration to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool, appending a synthetic assistant invocation carrying the follow-up tool call's reasoning text as prior thought preceding the requested tool execution and the resulting follow-up response to the conversation immediately following the originating response.
 
 When a model response produces no tool executions, the agent driver appends a prompt to the conversation reminding that progress and conclusion require invoking tools, and continues the turn loop.
 
-When interaction turns reach the conversation limit from the model configuration, the agent driver halts execution with an unexpected failure indicating that the conversation limit was reached.
+When interaction turns reach the conversation limit from the agent configuration, the agent driver halts execution with an unexpected failure indicating that the conversation limit was reached.

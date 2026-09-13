@@ -1,6 +1,6 @@
 # sandbox_impl implementation component
 
-imports: tool_provider, sandbox_file_reader, sandbox_file_editor, sandbox_run_control, node_config, model_config
+imports: agent_config, agent_node_config, sandbox_file_editor, sandbox_file_reader, sandbox_run_control, tool_provider
 implements: sandbox
 
 ## Purpose

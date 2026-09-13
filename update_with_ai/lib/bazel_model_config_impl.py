@@ -2,12 +2,12 @@ import json
 import os
 import sys
 from typing import Any, Mapping, Optional
-from . import model_config
+from . import agent_config, dag_config, openai_config
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
 
 
 def _resolve_target_label() -> str:
-    # Requirement: The model config resolves the target configuration from the MODEL_CONFIG_TARGET environment variable, the AGENT_CONFIG_TARGET environment variable, or the --config command-line argument, defaulting to the standard //model_configs:default target.
+    # Requirement: The openai config, agent config, and dag config resolve the target configuration from the MODEL_CONFIG_TARGET environment variable, the AGENT_CONFIG_TARGET environment variable, or the --config command-line argument, defaulting to the standard //model_configs:default target.
     label = os.environ.get("MODEL_CONFIG_TARGET") or os.environ.get("AGENT_CONFIG_TARGET")
     if label:
         return label.strip()
@@ -23,7 +23,7 @@ def _resolve_target_label() -> str:
 
 
 def _find_target_config_file(target_label: str) -> Optional[str]:
-    # Requirement: The model config loads execution parameters from a target module located in the workspace runfiles tree or build output directory.
+    # Requirement: The openai config, agent config, and dag config load execution parameters and authentication credentials for language model agent runs from the target module.
     clean = target_label.strip()
     if clean.startswith("@@//"):
         clean = clean[2:]
@@ -71,7 +71,12 @@ def _find_target_config_file(target_label: str) -> Optional[str]:
     return None
 
 
-class ModelConfig(model_config.ModelConfig, Singleton):
+class ModelConfig(
+    openai_config.OpenaiConfig,
+    agent_config.AgentConfig,
+    dag_config.DagConfig,
+    Singleton,
+):
     tier = "system"
 
     def __init__(self) -> None:
@@ -109,57 +114,57 @@ class ModelConfig(model_config.ModelConfig, Singleton):
 
     @property
     def model_name(self) -> str:
-        # Requirement: The model config provides the model name resolved from the target module.
+        # Requirement: The openai config provides the model name designating the target model.
         return self._model_name
 
     @property
     def base_url(self) -> Optional[str]:
-        # Requirement: The model config provides the base url resolved from the target module.
+        # Requirement: The openai config provides the base url designating the remote model API endpoint address.
         return self._base_url
 
     @property
     def api_key(self) -> Optional[str]:
-        # Requirement: The model config reads authentication credentials from the designated environment variable specified in the target module.
+        # Requirement: The openai config provides the api key providing authentication credentials from the designated environment variable, or ambient environment credentials.
         return self._api_key
 
     @property
     def timeout(self) -> int:
-        # Requirement: The model config provides the timeout resolved from the target module.
+        # Requirement: The openai config provides the timeout specifying the maximum request duration in seconds.
         return self._timeout
 
     @property
-    def conversation_limit(self) -> model_config.ConversationLimit:
-        # Requirement: The model config provides the conversation limit resolved from the target module.
+    def conversation_limit(self) -> agent_config.ConversationLimit:
+        # Requirement: The agent config provides the conversation limit bounding interaction turns.
         return self._conversation_limit
 
     @property
     def temperature(self) -> float:
-        # Requirement: The model config provides the temperature specifying the sampling temperature for model requests resolved from the target module.
+        # Requirement: The openai config provides the temperature specifying the sampling temperature for model requests.
         return self._temperature
 
     @property
     def max_tokens(self) -> Optional[int]:
-        # Requirement: The model config provides the max tokens bound resolved from the target module.
+        # Requirement: The openai config provides the max tokens bound resolved from the target module when token generation is constrained.
         return self._max_tokens
 
     @property
     def is_step_mode(self) -> bool:
-        # Requirement: The model config provides whether the agent should use step mode to communicate a guide progressively from the target module.
+        # Requirement: The agent config provides whether the agent should use step mode to communicate a guide progressively.
         return self._is_step_mode
 
     @property
     def is_startup_reads(self) -> bool:
-        # Requirement: The model config provides whether the agent should perform startup reads to inspect declared files at session start from the target module.
+        # Requirement: The agent config provides whether the agent should perform startup reads to inspect declared files at session start.
         return self._is_startup_reads
 
     @property
     def inject_followups(self) -> bool:
-        # Requirement: The model config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
+        # Requirement: The agent config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
         return self._inject_followups
 
     @property
-    def node_visit_limit(self) -> int:
-        # Requirement: The model config provides the node visit limit bound resolved from the target module.
+    def node_visit_limit(self) -> dag_config.NodeVisitLimit:
+        # Requirement: The dag config provides the node visit limit bounding node visits during graph cleaning.
         return self._node_visit_limit
 
 
@@ -167,6 +172,11 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         ModelConfig,
-        keys=[ModelConfig, model_config.ModelConfig],
+        keys=[
+            ModelConfig,
+            openai_config.OpenaiConfig,
+            agent_config.AgentConfig,
+            dag_config.DagConfig,
+        ],
         tier="system",
     )

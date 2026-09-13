@@ -2,7 +2,7 @@
 
 import unittest
 from lib.dag_storage import Node
-from lib.file_alias import ReadWriteFile, WorkspacePath
+from lib.agent_file_alias import ReadWriteFile, WorkspacePath
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from lib.sandbox_change_summary_validator import (
     ChangeSummaryValidator,
@@ -13,7 +13,7 @@ from lib.sandbox_change_summary_validator_impl import (
     ChangeSummaryValidator as ChangeSummaryValidatorImpl,
     __initialize__,
 )
-from lib.node_config import VerificationCheck
+from lib.agent_node_config import VerificationCheck
 
 
 def _make_workspace_path(path: str) -> WorkspacePath:

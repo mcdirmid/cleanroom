@@ -1,8 +1,8 @@
 from typing import Protocol, Set
-from . import file_alias
+from . import agent_file_alias
 from . import tool_provider
 
-class Template(file_alias.FileContent):
+class Template(agent_file_alias.FileContent):
     pass
 
 class EditingTool(tool_provider.Tool, Protocol):

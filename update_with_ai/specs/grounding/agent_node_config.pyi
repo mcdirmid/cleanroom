@@ -1,8 +1,8 @@
 from typing import Any, List, Mapping, Optional, Protocol, Sequence, Set, Tuple
 from framework import data_type, operation, poly_type, singleton_type
 from dataclasses import dataclass
-import file_alias
-import model_config
+import agent_file_alias
+import agent_config
 
 @dataclass(frozen=True)
 @data_type
@@ -97,7 +97,7 @@ Defined as an agent session service exposing configuration parameters for the se
 """
 
     @property
-    def read_only_files(self) -> Set[file_alias.BoundFile]:
+    def read_only_files(self) -> Set[agent_file_alias.BoundFile]:
         """
 PURPOSE:
 Bound files restricted to inspection
@@ -108,7 +108,7 @@ FRESH_REQUIREMENTS:
         ...
 
     @property
-    def read_write_files(self) -> Set[file_alias.BoundFile]:
+    def read_write_files(self) -> Set[agent_file_alias.BoundFile]:
         """
 PURPOSE:
 Bound files permitted for inspection and modification
@@ -133,7 +133,7 @@ FRESH_REQUIREMENTS:
     def is_step_mode(self) -> bool:
         """
 PURPOSE:
-Whether session step mode is active, enabled when model config enables step mode, the node allows step mode, and session feedback is absent
+Whether session step mode is active, enabled when agent config enables step mode, the node allows step mode, and session feedback is absent
 
 FRESH_REQUIREMENTS:
 - The node config indicates whether session step mode is active.
@@ -141,7 +141,7 @@ FRESH_REQUIREMENTS:
         ...
 
     @property
-    def guide_file(self) -> Optional[file_alias.UnboundFile]:
+    def guide_file(self) -> Optional[agent_file_alias.UnboundFile]:
         """
 PURPOSE:
 Unbound file configured when guide step mode is active
@@ -152,7 +152,7 @@ FRESH_REQUIREMENTS:
         ...
 
     @property
-    def templates(self) -> Set[Tuple[file_alias.BoundFile, file_alias.FileContent]]:
+    def templates(self) -> Set[Tuple[agent_file_alias.BoundFile, agent_file_alias.FileContent]]:
         """
 PURPOSE:
 Mapping read-write files to initial file content
@@ -185,7 +185,7 @@ FRESH_REQUIREMENTS:
         ...
 
     @property
-    def blame_targets(self) -> Set[file_alias.BoundFile]:
+    def blame_targets(self) -> Set[agent_file_alias.BoundFile]:
         """
 PURPOSE:
 Bound files owned by upstream dependency nodes eligible for defect attribution

@@ -3,7 +3,7 @@ from typing import Protocol
 from dataclasses import dataclass
 import agent_conversation
 import agent_loop_guard
-import model_config
+import agent_config
 import runner_logger
 import tool_provider
 
@@ -63,6 +63,6 @@ FRESH_REQUIREMENTS:
 - The agent driver evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
 - When a model response contains no tool executions, the agent driver injects a tool reminder into the conversation and continues the turn loop.
 - When tool execution produces a termination outcome, the agent driver concludes and returns an agent outcome, or halts with an unexpected failure if the termination indicates a failing outcome.
-- When the conversation limit from model config is exceeded, the agent driver halts with an unexpected failure.
+- When the conversation limit from agent config is exceeded, the agent driver halts with an unexpected failure.
 """
         ...

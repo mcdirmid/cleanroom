@@ -4,13 +4,13 @@ import unittest
 from typing import Dict, List, Set
 from lib.dag_cleaner import DagCleaner
 from lib.dag_cleaner_impl import DagCleaner as DagCleanerImpl, __initialize__
+from lib.dag_config import DagConfig
 from lib.dag_node_cleaner import NodeCleaner
 from lib.dag_storage import DagStorage, Dependency, Message, Node
-from lib.model_config import ModelConfig
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 
 
-class MockModelConfig:
+class MockDagConfig:
     tier = "system"
 
     def __init__(self, node_visit_limit: int = 500) -> None:
@@ -69,11 +69,11 @@ class RecordingNodeCleaner:
 class DagCleanerImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.storage = MockDagStorage()
-        self.model_cfg = MockModelConfig()
+        self.dag_cfg = MockDagConfig()
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
         self.registry.register_instance(self.storage, keys=[DagStorage], tier="system")
-        self.registry.register_instance(self.model_cfg, keys=[ModelConfig], tier="system")
+        self.registry.register_instance(self.dag_cfg, keys=[DagConfig], tier="system")
 
     def test_single_node_clean_success(self) -> None:
         """CUJ: Cleaning an isolated dirty root node."""
@@ -185,10 +185,10 @@ class DagCleanerImplTest(unittest.TestCase):
 
     def test_node_visit_limit(self) -> None:
         """CUJ: Exceeding node visit limit halts with an unexpected failure."""
-        self.model_cfg.node_visit_limit = 2
+        self.dag_cfg.node_visit_limit = 2
         with enter_phase("system", registry=self.registry) as scope:
             dag_cleaner = scope.get_singleton(DagCleanerImpl)
-            # Requirement: The node visit limit is obtained from the model config.
+            # Requirement: The node visit limit is obtained from the dag config.
             self.assertEqual(dag_cleaner.node_visit_limit, 2)
 
             root = Node(address="//pkg:infinite")

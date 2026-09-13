@@ -1,8 +1,8 @@
 from typing import Protocol, Sequence, Set, Tuple
 from framework import operation, override, singleton_type
 import dag_storage
-import file_alias
-import node_config
+import agent_file_alias
+import agent_node_config
 import sandbox_file_editor
 import sandbox_guide_delivery
 import tool_provider
@@ -24,7 +24,7 @@ FRESH_REQUIREMENTS:
 """
 
     @property
-    def verification_checks(self) -> Sequence[node_config.VerificationCheck]:
+    def verification_checks(self) -> Sequence[agent_node_config.VerificationCheck]:
         """
 PURPOSE:
 Verification checks configured for the session
@@ -32,7 +32,7 @@ Verification checks configured for the session
         ...
 
     @property
-    def blame_targets(self) -> Set[file_alias.BoundFile]:
+    def blame_targets(self) -> Set[agent_file_alias.BoundFile]:
         """
 PURPOSE:
 Upstream bound files that can be attributed when prerequisite defects occur

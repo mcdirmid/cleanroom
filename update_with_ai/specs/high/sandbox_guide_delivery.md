@@ -1,6 +1,6 @@
 # sandbox_guide_delivery interface component
 
-imports: tool_provider, file_alias, node_config
+imports: tool_provider, agent_file_alias, agent_node_config
 
 ## Purpose
 
@@ -12,11 +12,11 @@ Autonomous agents given monolithic instructions frequently attempt all objective
 
 ## Types and Behavior
 
-A guide delivery can *parse* file content into a guide.
-
 The *guide delivery* is an agent session service configured with a guide that delivers instructions to an agent progressively.
 
 A guide delivery:
+
+- Can *parse* file content into a guide.
 
 - Can *advance step* with a boolean *verification passed* indicator and text *failure diagnostics*, delivering instructional text when verification passes, or retaining the current milestone and reporting failure diagnostics alongside verification failure instructions when verification fails.
 

@@ -1,7 +1,7 @@
 from typing import Optional, Protocol
 from framework import operation, singleton_type
-import file_alias
-import node_config
+import agent_file_alias
+import agent_node_config
 import tool_provider
 
 @singleton_type('agent_session')
@@ -23,7 +23,7 @@ Exposes whether progressive step sections remain to be completed
         ...
 
     @property
-    def guide(self) -> Optional[node_config.Guide]:
+    def guide(self) -> Optional[agent_node_config.Guide]:
         """
 PURPOSE:
 Exposes the configured guide for the session
@@ -31,7 +31,7 @@ Exposes the configured guide for the session
         ...
 
     @operation
-    def parse_guide(self, content: file_alias.FileContent) -> node_config.Guide:
+    def parse_guide(self, content: agent_file_alias.FileContent) -> agent_node_config.Guide:
         """
 PURPOSE:
 Parses file content into a guide

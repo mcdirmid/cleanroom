@@ -1,7 +1,7 @@
 # bazel_node_config_impl implementation component
 
-imports: dag_storage, dag_node_cleaner, bazel_manifest_loader, tool_provider, file_paths, model_config
-implements: node_config, file_alias
+imports: agent_config, bazel_manifest_loader, dag_node_cleaner, dag_storage, file_paths, tool_provider
+implements: agent_node_config, agent_file_alias
 
 ## Purpose
 
@@ -29,7 +29,7 @@ The node config provides:
 
 - Whether the node allows step mode, resolved from the target node manifest.
 
-- Whether step mode is active, enabled when the model config enables step mode, the node allows step mode, and session feedback is absent.
+- Whether step mode is active, enabled when the agent config enables step mode, the node allows step mode, and session feedback is absent.
 
 - Declared guide targets from the manifest as the guide file and task guide when guide step mode is active.
 

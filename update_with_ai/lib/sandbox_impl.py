@@ -1,6 +1,6 @@
 from typing import List, Optional, Set, Tuple, Union
-from . import model_config
-from . import node_config
+from . import agent_config
+from . import agent_node_config
 from . import sandbox
 from . import sandbox_file_editor
 from . import sandbox_file_reader
@@ -22,8 +22,8 @@ class Sandbox(sandbox.Sandbox, Singleton):
 
     def get_startup_tool_executions(self) -> List[sandbox.StartupToolExecution]:
         executions: List[sandbox.StartupToolExecution] = []
-        m_cfg = get_singleton(model_config.ModelConfig)
-        n_cfg = get_singleton(node_config.NodeConfig)
+        a_cfg = get_singleton(agent_config.AgentConfig)
+        n_cfg = get_singleton(agent_node_config.NodeConfig)
 
         # Requirement: When using step mode to communicate a guide progressively, startup tool executions include an initial advance tool execution with the name of the advance tool, empty wire parameter bindings, and the response produced by executing the advance tool.
         if n_cfg.is_step_mode:
@@ -38,7 +38,7 @@ class Sandbox(sandbox.Sandbox, Singleton):
             )
 
         # Requirement: When performing startup reads to inspect declared files at session start, startup tool executions include file read executions for all declared read-only files from node config ordered deterministically by file alias short name, positioned after any advance tool execution.
-        if m_cfg.is_startup_reads:
+        if a_cfg.is_startup_reads:
             read_tool = get_singleton(sandbox_file_reader.ReadTool)
             read_mgr = get_singleton(sandbox_file_reader.ReadManager)
             for ro in sorted(n_cfg.read_only_files, key=lambda x: x.short_name):

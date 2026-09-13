@@ -1,6 +1,6 @@
 from typing import Optional, Protocol, Set
 from framework import operation, override, singleton_type
-import file_alias
+import agent_file_alias
 import tool_provider
 
 @singleton_type('agent_session')
@@ -17,7 +17,7 @@ FRESH_REQUIREMENTS:
 """
 
     @property
-    def read_only_files(self) -> Set[file_alias.ReadOnlyFile]:
+    def read_only_files(self) -> Set[agent_file_alias.ReadOnlyFile]:
         """
 PURPOSE:
 Exposes the agent session's set of read-only files to support session startup context injection
@@ -25,7 +25,7 @@ Exposes the agent session's set of read-only files to support session startup co
         ...
 
     @property
-    def read_write_files(self) -> Set[file_alias.ReadWriteFile]:
+    def read_write_files(self) -> Set[agent_file_alias.ReadWriteFile]:
         """
 PURPOSE:
 Exposes the agent session's set of read-write files to support session inspection
@@ -33,7 +33,7 @@ Exposes the agent session's set of read-write files to support session inspectio
         ...
 
     @property
-    def guide_file(self) -> Optional[file_alias.UnboundFile]:
+    def guide_file(self) -> Optional[agent_file_alias.UnboundFile]:
         """
 PURPOSE:
 Configured with a guide file as an unbound file when step-mode is active
@@ -41,7 +41,7 @@ Configured with a guide file as an unbound file when step-mode is active
         ...
 
     @operation
-    def requires_line_numbers(self, file: file_alias.FileAlias) -> bool:
+    def requires_line_numbers(self, file: agent_file_alias.FileAlias) -> bool:
         """
 PURPOSE:
 Identifies whether an inspected file requires line numbers to be requested when read

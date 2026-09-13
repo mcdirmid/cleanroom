@@ -1,0 +1,19 @@
+"""Agent configuration interface and data types."""
+
+from typing import Protocol
+
+ConversationLimit = int
+
+
+class AgentConfig(Protocol):
+    @property
+    def conversation_limit(self) -> ConversationLimit: ...
+
+    @property
+    def inject_followups(self) -> bool: ...
+
+    @property
+    def is_step_mode(self) -> bool: ...
+
+    @property
+    def is_startup_reads(self) -> bool: ...

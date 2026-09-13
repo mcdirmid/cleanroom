@@ -19,7 +19,7 @@ from lib.bazel_node_config_impl import (
 from lib.bazel_target import BazelTarget, NodeDirectory
 from lib.dag_node_cleaner import CleanedNode
 from lib.dag_storage import DagStorage, Feedback, Message, Node
-from lib.file_alias import (
+from lib.agent_file_alias import (
     AliasManager,
     BoundFile,
     FileAlias,
@@ -29,8 +29,8 @@ from lib.file_alias import (
     WorkspacePath,
 )
 from support.lib.lifecycle import LifecycleRegistry, Singleton, enter_phase
-from lib.model_config import ModelConfig
-from lib.node_config import Guide, NodeConfig, StepSection
+from lib.agent_config import AgentConfig
+from lib.agent_node_config import Guide, NodeConfig, StepSection
 from lib.tool_provider import ParameterConverter, String
 
 
@@ -129,7 +129,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             # Requirement: The node config exposes whether the node allows step mode from the target node manifest.
             # Requirement: [NodeConfig] The node config indicates whether the node allows step mode.
             self.assertFalse(cfg.allows_step_mode)
-            # Requirement: The node config exposes whether step mode is active, enabled when the model config enables step mode, the node allows step mode, and session feedback is absent.
+            # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the node allows step mode, and session feedback is absent.
             # Requirement: [NodeConfig] The node config indicates whether session step mode is active.
             self.assertFalse(cfg.is_step_mode)
             cfg._allows_step_mode = True
@@ -355,7 +355,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             def get_messages(self, node: Node) -> Set[Message]:
                 return set()
 
-        class MockModelConfig(ModelConfig, Singleton):
+        class MockAgentConfig(AgentConfig, Singleton):
             tier = "system"
             @property
             def is_step_mode(self) -> bool:
@@ -367,29 +367,8 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             def inject_followups(self) -> bool:
                 return True
             @property
-            def model_name(self) -> str:
-                return "test-model"
-            @property
-            def base_url(self) -> Optional[str]:
-                return None
-            @property
-            def api_key(self) -> Optional[str]:
-                return None
-            @property
-            def timeout(self) -> int:
-                return 60
-            @property
             def conversation_limit(self) -> int:
                 return 20
-            @property
-            def temperature(self) -> float:
-                return 0.0
-            @property
-            def max_tokens(self) -> Optional[int]:
-                return None
-            @property
-            def node_visit_limit(self) -> int:
-                return 500
 
         reg = LifecycleRegistry()
         __initialize__(reg)
@@ -397,7 +376,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         reg.register(MockManifestLoader, keys=[BazelManifestLoader])
         reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
         reg.register(MockDagStorage, keys=[DagStorage])
-        reg.register(MockModelConfig, keys=[ModelConfig])
+        reg.register(MockAgentConfig, keys=[AgentConfig])
 
         with enter_phase("system", registry=reg) as sys_scope:
             with enter_phase("agent_session", registry=reg) as scope:
@@ -407,7 +386,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 # Requirement: The node config exposes whether the node allows step mode from the target node manifest.
                 # Requirement: [NodeConfig] The node config indicates whether the node allows step mode.
                 self.assertFalse(cfg.allows_step_mode)
-                # Requirement: The node config exposes whether step mode is active, enabled when the model config enables step mode, the node allows step mode, and session feedback is absent.
+                # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the node allows step mode, and session feedback is absent.
                 # Requirement: [NodeConfig] The node config indicates whether session step mode is active.
                 self.assertFalse(cfg.is_step_mode)
                 self.assertIsNone(cfg.guide_file)
@@ -421,7 +400,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 self.assertIsInstance(alias, ReadOnlyFile)
 
     def test_lifecycle_initialization_step_mode_disabled_when_feedback_present(self) -> None:
-        """CUJ: When session feedback is present, step mode is disabled even if model_config and node allow it, and guide is kept as read-only file."""
+        """CUJ: When session feedback is present, step mode is disabled even if agent_config and node allow it, and guide is kept as read-only file."""
         class MockCleanedNode(CleanedNode, Singleton):
             tier = "agent_session"
             def __init__(self) -> None:
@@ -458,7 +437,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             def get_messages(self, node: Node) -> Set[Message]:
                 return {Feedback(content="Fix failing mock test")}
 
-        class MockModelConfig(ModelConfig, Singleton):
+        class MockAgentConfig(AgentConfig, Singleton):
             tier = "system"
             @property
             def is_step_mode(self) -> bool:
@@ -470,29 +449,8 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             def inject_followups(self) -> bool:
                 return True
             @property
-            def model_name(self) -> str:
-                return "test-model"
-            @property
-            def base_url(self) -> Optional[str]:
-                return None
-            @property
-            def api_key(self) -> Optional[str]:
-                return None
-            @property
-            def timeout(self) -> int:
-                return 60
-            @property
             def conversation_limit(self) -> int:
                 return 20
-            @property
-            def temperature(self) -> float:
-                return 0.0
-            @property
-            def max_tokens(self) -> Optional[int]:
-                return None
-            @property
-            def node_visit_limit(self) -> int:
-                return 500
 
         reg = LifecycleRegistry()
         __initialize__(reg)
@@ -500,7 +458,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         reg.register(MockManifestLoader, keys=[BazelManifestLoader])
         reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
         reg.register(MockDagStorage, keys=[DagStorage])
-        reg.register(MockModelConfig, keys=[ModelConfig])
+        reg.register(MockAgentConfig, keys=[AgentConfig])
 
         with enter_phase("system", registry=reg) as sys_scope:
             with enter_phase("agent_session", registry=reg) as scope:
@@ -511,7 +469,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 # Requirement: [NodeConfig] The node config indicates whether the node allows step mode.
                 self.assertTrue(cfg.allows_step_mode)
                 self.assertEqual(cfg.feedback, ("Fix failing mock test",))
-                # Requirement: The node config exposes whether step mode is active, enabled when the model config enables step mode, the node allows step mode, and session feedback is absent.
+                # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the node allows step mode, and session feedback is absent.
                 # Requirement: [NodeConfig] The node config indicates whether session step mode is active.
                 self.assertFalse(cfg.is_step_mode)
                 self.assertIsNone(cfg.guide_file)
@@ -712,7 +670,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 def extract_directory(self, node: Node) -> NodeDirectory:
                     return _make_node_directory("pkg")
 
-            class MockModelConfig(ModelConfig, Singleton):
+            class MockAgentConfig(AgentConfig, Singleton):
                 tier = "system"
                 @property
                 def is_step_mode(self) -> bool:
@@ -724,36 +682,15 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 def inject_followups(self) -> bool:
                     return True
                 @property
-                def model_name(self) -> str:
-                    return "test-model"
-                @property
-                def base_url(self) -> Optional[str]:
-                    return None
-                @property
-                def api_key(self) -> Optional[str]:
-                    return None
-                @property
-                def timeout(self) -> int:
-                    return 60
-                @property
                 def conversation_limit(self) -> int:
                     return 20
-                @property
-                def temperature(self) -> float:
-                    return 0.0
-                @property
-                def max_tokens(self) -> Optional[int]:
-                    return None
-                @property
-                def node_visit_limit(self) -> int:
-                    return 500
 
             reg = LifecycleRegistry()
             __initialize__(reg)
             reg.register(MockCleanedNode, keys=[CleanedNode])
             reg.register(MockManifestLoader, keys=[BazelManifestLoader])
             reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
-            reg.register(MockModelConfig, keys=[ModelConfig])
+            reg.register(MockAgentConfig, keys=[AgentConfig])
 
             original_open = open
             def failing_open(path, *args, **kwargs):
@@ -874,7 +811,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 def extract_directory(self, node: Node) -> NodeDirectory:
                     return _make_node_directory("pkg")
 
-            class MockModelConfig(ModelConfig, Singleton):
+            class MockAgentConfig(AgentConfig, Singleton):
                 tier = "system"
                 @property
                 def is_step_mode(self) -> bool:
@@ -886,36 +823,15 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 def inject_followups(self) -> bool:
                     return True
                 @property
-                def model_name(self) -> str:
-                    return "test-model"
-                @property
-                def base_url(self) -> Optional[str]:
-                    return None
-                @property
-                def api_key(self) -> Optional[str]:
-                    return None
-                @property
-                def timeout(self) -> int:
-                    return 60
-                @property
                 def conversation_limit(self) -> int:
                     return 20
-                @property
-                def temperature(self) -> float:
-                    return 0.0
-                @property
-                def max_tokens(self) -> Optional[int]:
-                    return None
-                @property
-                def node_visit_limit(self) -> int:
-                    return 500
 
             reg = LifecycleRegistry()
             __initialize__(reg)
             reg.register(MockCleanedNode, keys=[CleanedNode])
             reg.register(MockManifestLoader, keys=[BazelManifestLoader])
             reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
-            reg.register(MockModelConfig, keys=[ModelConfig])
+            reg.register(MockAgentConfig, keys=[AgentConfig])
 
             old_env = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
             try:
@@ -925,7 +841,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                         cfg = scope.get_singleton(NodeConfig)
                         alias_mgr = scope.get_singleton(AliasManager)
 
-                        # Requirement: The node config exposes whether step mode is active, enabled when the model config enables step mode, the node allows step mode, and session feedback is absent.
+                        # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the node allows step mode, and session feedback is absent.
                         # Requirement: [NodeConfig] The node config indicates whether session step mode is active.
                         self.assertTrue(cfg.is_step_mode)
 

@@ -11,6 +11,7 @@ pyright_test(
         "//update_with_ai/lib:agent_asm",
         "//update_with_ai/lib:bazel_asm",
         "//update_with_ai/lib:dag_asm",
+        "//update_with_ai/lib:program_asm",
         "//update_with_ai/lib:sandbox_asm",
     ],
     visibility = ["//visibility:public"],

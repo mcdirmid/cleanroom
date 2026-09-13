@@ -15,8 +15,9 @@ from lib.openai_driver_impl import (
     _DEFAULT_CONVERTER,
     _measure_prefix_reuse,
 )
+from lib.agent_config import AgentConfig
+from lib.openai_config import OpenaiConfig
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
-from lib.model_config import ModelConfig
 from lib.runner_logger import LogEvent, RunnerLogger
 from lib.tool_provider import (
     ActualParameterBindings,
@@ -207,7 +208,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         self.loop_guard = MockLoopGuard()
         self.tool_mgr = MockToolManager()
 
-        self.registry.register_instance(self.model_cfg, keys=[ModelConfig], tier="system")
+        self.registry.register_instance(self.model_cfg, keys=[OpenaiConfig, AgentConfig], tier="system")
         self.registry.register_instance(self.logger, keys=[RunnerLogger], tier="system")
         self.registry.register_instance(
             self.history, keys=[Conversation], tier="agent_session"
@@ -275,8 +276,8 @@ class OpenAIDriverImplTest(unittest.TestCase):
         with enter_phase("agent_session", registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
 
-            # Requirement: When turns reach the conversation limit from model config, the agent driver halts with an unexpected failure.
-            # Requirement: [AgentDriver] When the conversation limit from model config is exceeded, the agent driver halts with an unexpected failure.
+            # Requirement: When turns reach the conversation limit from agent config, the agent driver halts with an unexpected failure.
+            # Requirement: [AgentDriver] When the conversation limit from agent config is exceeded, the agent driver halts with an unexpected failure.
             with self.assertRaises(RuntimeError) as ctx:
                 runner.run()
             self.assertIn("Conversation limit reached", str(ctx.exception))
@@ -463,7 +464,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         with enter_phase("agent_session", registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             runner.run()
-            # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from model config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
+            # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
             call_kwargs = mock_client.chat.completions.create.call_args.kwargs
             self.assertEqual(call_kwargs["temperature"], 0.7)
             self.assertEqual(call_kwargs["timeout"], 100.0)
@@ -722,7 +723,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
-            # Requirement: When configured by model configuration to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool, appending a synthetic assistant invocation carrying the follow-up tool call's reasoning text as prior thought preceding the requested tool execution and the resulting follow-up response to the conversation immediately following the originating response.
+            # Requirement: When configured by agent configuration to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool, appending a synthetic assistant invocation carrying the follow-up tool call's reasoning text as prior thought preceding the requested tool execution and the resulting follow-up response to the conversation immediately following the originating response.
             # Requirement: [AgentDriver] The agent driver can dispatch follow-up tool calls specified by tool responses, recording the follow-up execution in the conversation.
             self.assertTrue(outcome.is_success)
             self.assertTrue(outcome.response.is_terminated)

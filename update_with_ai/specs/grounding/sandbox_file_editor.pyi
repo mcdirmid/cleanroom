@@ -1,10 +1,10 @@
 from typing import Protocol, Set
 from framework import data_type, operation, override, poly_type, singleton_type
-import file_alias
+import agent_file_alias
 import tool_provider
 
 @data_type
-class Template(file_alias.FileContent):
+class Template(agent_file_alias.FileContent):
     """
 PURPOSE:
 Introduces template as initial file content for a read-write file

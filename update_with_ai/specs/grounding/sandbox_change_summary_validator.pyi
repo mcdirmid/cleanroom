@@ -1,8 +1,8 @@
 from typing import Protocol, Tuple
 from framework import data_type, operation, override, singleton_type
 from dataclasses import dataclass
-import file_alias
-import node_config
+import agent_file_alias
+import agent_node_config
 
 @dataclass(frozen=True)
 @data_type
@@ -12,11 +12,11 @@ PURPOSE:
 Observable difference between initial and current file content
 """
 
-    def __init__(self, file: file_alias.ReadWriteFile, initial_content: file_alias.FileContent, current_content: file_alias.FileContent) -> None:
+    def __init__(self, file: agent_file_alias.ReadWriteFile, initial_content: agent_file_alias.FileContent, current_content: agent_file_alias.FileContent) -> None:
         ...
 
     @property
-    def file(self) -> file_alias.ReadWriteFile:
+    def file(self) -> agent_file_alias.ReadWriteFile:
         """
 PURPOSE:
 Modified file exhibiting net changes
@@ -24,7 +24,7 @@ Modified file exhibiting net changes
         ...
 
     @property
-    def initial_content(self) -> file_alias.FileContent:
+    def initial_content(self) -> agent_file_alias.FileContent:
         """
 PURPOSE:
 Baseline content at session start
@@ -32,7 +32,7 @@ Baseline content at session start
         ...
 
     @property
-    def current_content(self) -> file_alias.FileContent:
+    def current_content(self) -> agent_file_alias.FileContent:
         """
 PURPOSE:
 Current content on disk
@@ -59,13 +59,13 @@ Formatted diff representation
         ...
 
 @singleton_type('agent_session')
-class ChangeSummaryValidator(node_config.VerificationCheck, Protocol):
+class ChangeSummaryValidator(agent_node_config.VerificationCheck, Protocol):
     """
 PURPOSE:
 Defined as an agent session service verifying change summaries
 
 INHERITANCE:
-- node_config.VerificationCheck: Implements verification check evaluated during session advancement
+- agent_node_config.VerificationCheck: Implements verification check evaluated during session advancement
 """
 
     @operation

@@ -1,6 +1,6 @@
 # agent_driver interface component
 
-imports: tool_provider, agent_conversation, agent_loop_guard, runner_logger, model_config
+imports: agent_config, agent_conversation, agent_loop_guard, runner_logger, tool_provider
 
 ## Purpose
 
@@ -18,7 +18,7 @@ The *agent driver* is an agent session service that coordinates the turn loop fo
 
 The agent driver:
 
-- Drives turns by sending a model request to a language model and executing requested tools.
+- Can *run* to drive turns by sending a model request to a language model and executing requested tools.
 
 - Appends model responses and correlates tool execution responses with originating tool call identifiers in the conversation.
 

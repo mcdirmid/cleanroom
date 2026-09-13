@@ -1,6 +1,6 @@
 # sandbox_file_reader_impl implementation component
 
-imports: filesystem_ext, tool_provider, file_alias, node_config, template_format
+imports: filesystem_ext, tool_provider, agent_file_alias, agent_node_config, template_format
 implements: sandbox_file_reader
 
 ## Purpose

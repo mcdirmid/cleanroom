@@ -7,14 +7,14 @@ from . import bazel_manifest_loader
 from . import bazel_target
 from . import dag_node_cleaner
 from . import dag_storage
-from . import file_alias
+from . import agent_file_alias
 from . import file_paths
-from . import model_config
-from . import node_config
+from . import agent_config
+from . import agent_node_config
 from . import tool_provider
 from support.lib.lifecycle import LifecycleRegistry, LifecycleResolutionError, Singleton, get_default_registry, get_singleton
 
-class _CommandVerificationCheck(node_config.VerificationCheck):
+class _CommandVerificationCheck(agent_node_config.VerificationCheck):
     def __init__(self, command: str, cwd: Optional[str] = None) -> None:
         self._command = command
         self._cwd = cwd
@@ -38,20 +38,20 @@ class _CommandVerificationCheck(node_config.VerificationCheck):
         except (subprocess.SubprocessError, OSError) as e:
             return False, str(e)
 
-class NodeConfig(node_config.NodeConfig, Singleton):
+class NodeConfig(agent_node_config.NodeConfig, Singleton):
     tier = "agent_session"
 
     def __init__(self) -> None:
-        self._read_only_files: Set[file_alias.BoundFile] = set()
-        self._read_write_files: Set[file_alias.BoundFile] = set()
-        self._templates: Set[Tuple[file_alias.BoundFile, file_alias.FileContent]] = set()
+        self._read_only_files: Set[agent_file_alias.BoundFile] = set()
+        self._read_write_files: Set[agent_file_alias.BoundFile] = set()
+        self._templates: Set[Tuple[agent_file_alias.BoundFile, agent_file_alias.FileContent]] = set()
         self._template_parameters: Dict[str, Any] = {}
         self._allows_step_mode: bool = True
         self._is_step_mode: bool = False
-        self._guide_file: Optional[file_alias.UnboundFile] = None
-        self._guide: Optional[node_config.Guide] = None
-        self._blame_targets: Set[file_alias.BoundFile] = set()
-        self._verification_checks: List[node_config.VerificationCheck] = []
+        self._guide_file: Optional[agent_file_alias.UnboundFile] = None
+        self._guide: Optional[agent_node_config.Guide] = None
+        self._blame_targets: Set[agent_file_alias.BoundFile] = set()
+        self._verification_checks: List[agent_node_config.VerificationCheck] = []
         self._verification_success_message: Optional[str] = None
         self._feedback: Tuple[str, ...] = ()
 
@@ -87,18 +87,18 @@ class NodeConfig(node_config.NodeConfig, Singleton):
         src = data.get("src")
         if src:
             norm_rel = os.path.normpath(os.path.join(pkg_path, src))
-            ws_path = _make_host_path(file_alias.WorkspacePath, norm_rel)
+            ws_path = _make_host_path(agent_file_alias.WorkspacePath, norm_rel)
             short_name = os.path.basename(norm_rel)
-            rw = file_alias.ReadWriteFile(short_name=short_name, workspace_path=ws_path, owning_node=node)
+            rw = agent_file_alias.ReadWriteFile(short_name=short_name, workspace_path=ws_path, owning_node=node)
             self._read_write_files.add(rw)
 
         # Silent sources -> read_write_files
         silent_srcs = data.get("silent_srcs", [])
         for s_src in silent_srcs:
             norm_rel = os.path.normpath(os.path.join(pkg_path, s_src))
-            ws_path = _make_host_path(file_alias.WorkspacePath, norm_rel)
+            ws_path = _make_host_path(agent_file_alias.WorkspacePath, norm_rel)
             short_name = os.path.basename(norm_rel)
-            rw = file_alias.ReadWriteFile(short_name=short_name, workspace_path=ws_path, owning_node=node)
+            rw = agent_file_alias.ReadWriteFile(short_name=short_name, workspace_path=ws_path, owning_node=node)
             self._read_write_files.add(rw)
 
         # 2. Templates
@@ -124,7 +124,7 @@ class NodeConfig(node_config.NodeConfig, Singleton):
                     except (OSError, UnicodeDecodeError):
                         pass
             if content_str is not None:
-                content_obj = file_alias.FileContent(content_str)
+                content_obj = agent_file_alias.FileContent(content_str)
                 for rw in self._read_write_files:
                     self._templates.add((rw, content_obj))
 
@@ -142,9 +142,9 @@ class NodeConfig(node_config.NodeConfig, Singleton):
 
         # 3. Guide
         guide_target = data.get("guide")
-        m_cfg: Optional[model_config.ModelConfig] = None
+        m_cfg: Optional[agent_config.AgentConfig] = None
         try:
-            m_cfg = get_singleton(model_config.ModelConfig)
+            m_cfg = get_singleton(agent_config.AgentConfig)
         except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
             pass
         model_step_mode = m_cfg.is_step_mode if m_cfg is not None else False
@@ -156,7 +156,7 @@ class NodeConfig(node_config.NodeConfig, Singleton):
             guide_filename = guide_target.split(":")[-1] if ":" in guide_target else os.path.basename(guide_target)
             if not guide_filename.endswith(".md"):
                 guide_filename += ".md"
-            self._guide_file = file_alias.UnboundFile(short_name=guide_filename)
+            self._guide_file = agent_file_alias.UnboundFile(short_name=guide_filename)
 
             guide_cand_paths = [
                 os.path.join(os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""), "update_python_with_ai/guides", guide_filename),
@@ -241,9 +241,9 @@ class NodeConfig(node_config.NodeConfig, Singleton):
 
             for ds in dep_srcs:
                 norm_rel = os.path.normpath(os.path.join(dep_pkg, ds))
-                ws_path = _make_host_path(file_alias.WorkspacePath, norm_rel)
+                ws_path = _make_host_path(agent_file_alias.WorkspacePath, norm_rel)
                 short_name = os.path.basename(norm_rel)
-                ro = file_alias.ReadOnlyFile(short_name=short_name, workspace_path=ws_path, owning_node=dep_node)
+                ro = agent_file_alias.ReadOnlyFile(short_name=short_name, workspace_path=ws_path, owning_node=dep_node)
                 self._read_only_files.add(ro)
                 if is_blame:
                     self._blame_targets.add(ro)
@@ -259,12 +259,12 @@ class NodeConfig(node_config.NodeConfig, Singleton):
             self._verification_success_message = str(v_msg).strip()
 
     @property
-    def read_only_files(self) -> Set[file_alias.BoundFile]:
+    def read_only_files(self) -> Set[agent_file_alias.BoundFile]:
         # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies.
         return self._read_only_files
 
     @property
-    def read_write_files(self) -> Set[file_alias.BoundFile]:
+    def read_write_files(self) -> Set[agent_file_alias.BoundFile]:
         # Requirement: The node config exposes declared source files and silent source files as read-write files.
         return self._read_write_files
 
@@ -275,11 +275,11 @@ class NodeConfig(node_config.NodeConfig, Singleton):
 
     @property
     def is_step_mode(self) -> bool:
-        # Requirement: The node config exposes whether step mode is active, enabled when the model config enables step mode, the node allows step mode, and session feedback is absent.
+        # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the node allows step mode, and session feedback is absent.
         return self._is_step_mode
 
     @property
-    def templates(self) -> Set[Tuple[file_alias.BoundFile, file_alias.FileContent]]:
+    def templates(self) -> Set[Tuple[agent_file_alias.BoundFile, agent_file_alias.FileContent]]:
         # Requirement: The node config exposes templates mapping read-write files to initial file content.
         return self._templates
 
@@ -289,22 +289,22 @@ class NodeConfig(node_config.NodeConfig, Singleton):
         return self._template_parameters
 
     @property
-    def guide_file(self) -> Optional[file_alias.UnboundFile]:
+    def guide_file(self) -> Optional[agent_file_alias.UnboundFile]:
         # Requirement: The node config exposes the declared guide target as the guide file when step mode is active.
         return self._guide_file
 
     @property
-    def guide(self) -> Optional[node_config.Guide]:
+    def guide(self) -> Optional[agent_node_config.Guide]:
         # Requirement: The node config exposes the declared guide target as the task guide when step mode is active.
         return self._guide
 
     @property
-    def blame_targets(self) -> Set[file_alias.BoundFile]:
+    def blame_targets(self) -> Set[agent_file_alias.BoundFile]:
         # Requirement: The node config exposes declared feedback dependencies as blame targets mapped to owning dependency nodes.
         return set(self._blame_targets)
 
     @property
-    def verification_checks(self) -> List[node_config.VerificationCheck]:
+    def verification_checks(self) -> List[agent_node_config.VerificationCheck]:
         # Requirement: The node config exposes declared verification checks from the manifest verification command.
         return list(self._verification_checks)
 
@@ -326,10 +326,10 @@ def _make_host_path(cls, path: str):
     return obj
 
 
-def _parse_guide_markdown(content: str) -> node_config.Guide:
+def _parse_guide_markdown(content: str) -> agent_node_config.Guide:
     lines = content.splitlines()
     summary_lines: List[str] = []
-    sections: List[node_config.StepSection] = []
+    sections: List[agent_node_config.StepSection] = []
     verification_failure_lines: Optional[List[str]] = None
 
     current_title: Optional[str] = None
@@ -344,7 +344,7 @@ def _parse_guide_markdown(content: str) -> node_config.Guide:
                     verification_failure_lines = list(current_section_lines)
                 elif not current_title.startswith("Lint checks"):
                     sections.append(
-                        node_config.StepSection(
+                        agent_node_config.StepSection(
                             index=len(sections),
                             title=current_title,
                             content="\n".join(current_section_lines).strip(),
@@ -360,7 +360,7 @@ def _parse_guide_markdown(content: str) -> node_config.Guide:
             verification_failure_lines = list(current_section_lines)
         elif not current_title.startswith("Lint checks"):
             sections.append(
-                node_config.StepSection(
+                agent_node_config.StepSection(
                     index=len(sections),
                     title=current_title,
                     content="\n".join(current_section_lines).strip(),
@@ -369,18 +369,18 @@ def _parse_guide_markdown(content: str) -> node_config.Guide:
 
     summary = "\n".join(summary_lines).strip()
     vf_text = "\n".join(verification_failure_lines).strip() if verification_failure_lines is not None else None
-    return node_config.Guide(
+    return agent_node_config.Guide(
         summary=summary,
         sections=sections,
         verification_failure=vf_text,
     )
 
 
-class AliasManager(file_alias.AliasManager, Singleton):
+class AliasManager(agent_file_alias.AliasManager, Singleton):
     tier = "agent_session"
 
     def __init__(self) -> None:
-        self._aliases: Dict[str, file_alias.FileAlias] = {}
+        self._aliases: Dict[str, agent_file_alias.FileAlias] = {}
         self._paths: Dict[str, str] = {}
         self._masking_patterns: List[Tuple[re.Pattern[str], str]] = []
         env_root = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
@@ -389,7 +389,7 @@ class AliasManager(file_alias.AliasManager, Singleton):
 
     def initialize(self) -> None:
         try:
-            n_cfg = get_singleton(node_config.NodeConfig)
+            n_cfg = get_singleton(agent_node_config.NodeConfig)
         except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
             return
 
@@ -417,15 +417,15 @@ class AliasManager(file_alias.AliasManager, Singleton):
 
     @property
     def actual_type(self) -> Type:
-        return file_alias.FileAlias
+        return agent_file_alias.FileAlias
 
     @property
     def wire_type(self) -> tool_provider.WireType:
         return tool_provider.String()
 
-    def convert(self, wire_value: str) -> file_alias.FileAlias:
+    def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
         # Requirement: The alias manager converts short names to matching file aliases, producing unbound files when unmapped.
-        return self._aliases.get(wire_value, file_alias.UnboundFile(wire_value))
+        return self._aliases.get(wire_value, agent_file_alias.UnboundFile(wire_value))
 
     def sanitize_text(self, text: str) -> str:
         # Requirement: The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its minimal short name, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking.
@@ -445,11 +445,11 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         NodeConfig,
-        keys=[NodeConfig, node_config.NodeConfig],
+        keys=[NodeConfig, agent_node_config.NodeConfig],
         tier="agent_session",
     )
     reg.register_singleton(
         AliasManager,
-        keys=[AliasManager, file_alias.AliasManager, tool_provider.ParameterConverter],
+        keys=[AliasManager, agent_file_alias.AliasManager, tool_provider.ParameterConverter],
         tier="agent_session",
     )

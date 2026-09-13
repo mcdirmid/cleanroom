@@ -1,13 +1,13 @@
 from typing import Protocol, Sequence, Set, Tuple
-from . import file_alias, node_config, tool_provider
+from . import agent_file_alias, agent_node_config, tool_provider
 
 class RunController(Protocol):
     @property
-    def verification_checks(self) -> Sequence[node_config.VerificationCheck]:
+    def verification_checks(self) -> Sequence[agent_node_config.VerificationCheck]:
         ...
 
     @property
-    def blame_targets(self) -> Set[file_alias.BoundFile]:
+    def blame_targets(self) -> Set[agent_file_alias.BoundFile]:
         ...
 
 class AdvanceTool(tool_provider.Tool, Protocol):

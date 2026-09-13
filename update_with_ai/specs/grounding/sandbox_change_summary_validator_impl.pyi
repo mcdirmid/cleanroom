@@ -1,6 +1,6 @@
 from typing import Tuple
 from framework import operation, override, singleton_type
-import file_alias
+import agent_file_alias
 import sandbox_change_summary_validator
 import sandbox_run_control
 

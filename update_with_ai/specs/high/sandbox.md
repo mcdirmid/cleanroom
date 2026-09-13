@@ -1,6 +1,6 @@
 # sandbox interface component
 
-imports: tool_provider, model_config
+imports: agent_config, tool_provider
 
 ## Purpose
 

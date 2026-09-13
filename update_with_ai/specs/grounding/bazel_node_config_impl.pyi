@@ -3,14 +3,14 @@ from framework import operation, override, singleton_type
 import bazel_manifest_loader
 import dag_node_cleaner
 import dag_storage
-import file_alias
+import agent_file_alias
 import file_paths
-import model_config
-import node_config
+import agent_config
+import agent_node_config
 import tool_provider
 
 @singleton_type('agent_session')
-class NodeConfig(node_config.NodeConfig):
+class NodeConfig(agent_node_config.NodeConfig):
     """
 PURPOSE:
 Implements node config from node manifest metadata
@@ -21,7 +21,7 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def read_only_files(self) -> Set[file_alias.BoundFile]:
+    def read_only_files(self) -> Set[agent_file_alias.BoundFile]:
         """
 PURPOSE:
 Declared direct dependencies and transitive star dependencies
@@ -39,7 +39,7 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def read_write_files(self) -> Set[file_alias.BoundFile]:
+    def read_write_files(self) -> Set[agent_file_alias.BoundFile]:
         """
 PURPOSE:
 Declared source files and silent source files
@@ -81,19 +81,19 @@ PURPOSE:
 Whether step mode is active for the session
 
 FRESH_REQUIREMENTS:
-- The node config exposes whether step mode is active, enabled when the model config enables step mode, the node allows step mode, and session feedback is absent.
+- The node config exposes whether step mode is active, enabled when the agent config enables step mode, the node allows step mode, and session feedback is absent.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config indicates whether session step mode is active.
 
 GROUNDING_ARGUMENT:
-- Derived by querying model_config.ModelConfig.is_step_mode in the system lifecycle tier, self.allows_step_mode, and verifying that self.feedback is empty, enabling step mode only when all conditions are satisfied.
+- Derived by querying agent_config.AgentConfig.is_step_mode in the system lifecycle tier, self.allows_step_mode, and verifying that self.feedback is empty, enabling step mode only when all conditions are satisfied.
 """
         ...
 
     @property
     @override
-    def guide_file(self) -> Optional[file_alias.UnboundFile]:
+    def guide_file(self) -> Optional[agent_file_alias.UnboundFile]:
         """
 PURPOSE:
 Guide file configured when step mode is active
@@ -111,7 +111,7 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def templates(self) -> Set[Tuple[file_alias.BoundFile, file_alias.FileContent]]:
+    def templates(self) -> Set[Tuple[agent_file_alias.BoundFile, agent_file_alias.FileContent]]:
         """
 PURPOSE:
 Startup template mappings for declared source files
@@ -147,7 +147,7 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def guide(self) -> Optional[node_config.Guide]:
+    def guide(self) -> Optional[agent_node_config.Guide]:
         """
 PURPOSE:
 Task guide configured when step mode is active
@@ -165,7 +165,7 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def blame_targets(self) -> Set[file_alias.BoundFile]:
+    def blame_targets(self) -> Set[agent_file_alias.BoundFile]:
         """
 PURPOSE:
 Blame targets mapped to owning dependency nodes
@@ -183,7 +183,7 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def verification_checks(self) -> List[node_config.VerificationCheck]:
+    def verification_checks(self) -> List[agent_node_config.VerificationCheck]:
         """
 PURPOSE:
 Session verification checks derived from the manifest verification command
@@ -236,7 +236,7 @@ GROUNDING_ARGUMENT:
         ...
 
 @singleton_type('agent_session')
-class AliasManager(file_alias.AliasManager):
+class AliasManager(agent_file_alias.AliasManager):
     """
 PURPOSE:
 Implements alias manager with minimal unambiguous short names
@@ -274,7 +274,7 @@ GROUNDING_ARGUMENT:
 
     @operation
     @override
-    def convert(self, wire_value: str) -> file_alias.FileAlias:
+    def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
         """
 PURPOSE:
 Converts short names to matching file aliases

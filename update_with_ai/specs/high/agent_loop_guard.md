@@ -12,7 +12,7 @@ Language models occasionally get trapped repeating identical tool calls or oscil
 
 ## Types and Behavior
 
-A *loop reminder* is diagnostic feedback warning an agent of detected repetition. A *loop failure* is an outcome signaling that an agent session has failed due to unresolvable repetition.
+A *loop reminder* is diagnostic *feedback* warning an agent of detected repetition. A *loop failure* is an outcome signaling that an agent session has failed due to unresolvable repetition, carrying an *explanation*.
 
 The *loop guard* is an agent session service that tracks repetitive execution patterns across turns.
 

@@ -2,9 +2,9 @@
 
 import unittest
 from typing import Optional, Set, Tuple
-from lib.file_alias import BoundFile, FileContent, UnboundFile
+from lib.agent_file_alias import BoundFile, FileContent, UnboundFile
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
-from lib.node_config import Guide, NodeConfig, StepSection
+from lib.agent_node_config import Guide, NodeConfig, StepSection
 from lib.sandbox_guide_delivery import GuideDelivery
 from lib.sandbox_guide_delivery_impl import (
     GuideDelivery as GuideDeliveryImpl,

@@ -1,6 +1,6 @@
 from typing import Optional, Sequence, Set, Tuple
-from . import file_alias
-from . import node_config
+from . import agent_file_alias
+from . import agent_node_config
 from . import sandbox_file_editor
 from . import sandbox_guide_delivery
 from . import sandbox_run_control
@@ -19,7 +19,7 @@ class RunController(sandbox_run_control.RunController, Singleton):
         # Requirement: The run controller unconditionally installs the finish tool, fail tool, and run tests tool for the agent session, installs the advance tool only when guide step mode is active, and obtains configured blame targets and verification checks from the node config, installing the blame tool only when blame targets are configured.
         # Requirement: Verification checks exposed by the run controller include the session verification checks from node config.
         tm = get_singleton(tool_provider.ToolManager)
-        cfg = get_singleton(node_config.NodeConfig)
+        cfg = get_singleton(agent_node_config.NodeConfig)
         if cfg.is_step_mode:
             tm.install_tool(get_singleton(AdvanceTool))
         tm.install_tool(get_singleton(FinishTool))
@@ -29,13 +29,13 @@ class RunController(sandbox_run_control.RunController, Singleton):
             tm.install_tool(get_singleton(BlameTool))
 
     @property
-    def verification_checks(self) -> Sequence[node_config.VerificationCheck]:
-        cfg = get_singleton(node_config.NodeConfig)
+    def verification_checks(self) -> Sequence[agent_node_config.VerificationCheck]:
+        cfg = get_singleton(agent_node_config.NodeConfig)
         return cfg.verification_checks
 
     @property
-    def blame_targets(self) -> Set[file_alias.BoundFile]:
-        cfg = get_singleton(node_config.NodeConfig)
+    def blame_targets(self) -> Set[agent_file_alias.BoundFile]:
+        cfg = get_singleton(agent_node_config.NodeConfig)
         return cfg.blame_targets
 
     def evaluate_verification(self) -> Tuple[bool, str]:
@@ -47,7 +47,7 @@ class RunController(sandbox_run_control.RunController, Singleton):
         if self._cached_revision is not None and current_rev == self._cached_revision:
             return self._cached_passed or False, self._cached_diag
 
-        alias_mgr = get_singleton(file_alias.AliasManager)
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
         passed = True
         diag_out = ""
         for check in self.verification_checks:
@@ -200,7 +200,7 @@ class FinishTool(sandbox_run_control.FinishTool, Singleton):
         summary_str = str(bindings_map.get("change_summary", "") or "").strip()
 
         guide_del = get_singleton(sandbox_guide_delivery.GuideDelivery)
-        cfg = get_singleton(node_config.NodeConfig)
+        cfg = get_singleton(agent_node_config.NodeConfig)
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
         rc = get_singleton(RunController)
 
@@ -322,7 +322,7 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
 
     @property
     def blame_target(self) -> tool_provider.Parameter:
-        alias_mgr = get_singleton(file_alias.AliasManager)
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
         return tool_provider.Parameter(
             name="target",
             description="Target bound file to blame",
@@ -392,7 +392,7 @@ class RunTestsTool(sandbox_run_control.RunTestsTool, Singleton):
         rc = get_singleton(RunController)
         guide_del = get_singleton(sandbox_guide_delivery.GuideDelivery)
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
-        cfg = get_singleton(node_config.NodeConfig)
+        cfg = get_singleton(agent_node_config.NodeConfig)
 
         # Requirement: [RunController] The run controller installs a run tests tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
         passed, diag = rc.evaluate_verification()

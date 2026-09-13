@@ -1,6 +1,6 @@
 # sandbox_guide_delivery_impl implementation component
 
-imports: tool_provider, file_alias, node_config
+imports: tool_provider, agent_file_alias, agent_node_config
 implements: sandbox_guide_delivery
 
 ## Purpose

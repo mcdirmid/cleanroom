@@ -1,6 +1,6 @@
 # sandbox_change_summary_validator_impl implementation component
 
-imports: node_config, file_alias
+imports: agent_node_config, agent_file_alias
 implements: sandbox_change_summary_validator
 
 ## Purpose

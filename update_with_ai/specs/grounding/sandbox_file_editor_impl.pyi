@@ -1,8 +1,8 @@
 from typing import Set
 from framework import operation, override, singleton_type
-import file_alias
+import agent_file_alias
 import filesystem_ext
-import node_config
+import agent_node_config
 import sandbox_file_editor
 import template_format
 import tool_provider
@@ -18,7 +18,7 @@ INHERITED_REQUIREMENTS:
 - [EditManager] Modifying a file records that workspace file modifications occurred during the session.
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, EditManager coordinates editing tool installation and template materialization, interacting with imported tool_provider.ToolManager, node_config.NodeConfig, file_alias.AliasManager, and template_format.TemplateFormatter in the same session lifecycle tier.
+- As an agent_session singleton, EditManager coordinates editing tool installation and template materialization, interacting with imported tool_provider.ToolManager, agent_node_config.NodeConfig, agent_file_alias.AliasManager, and template_format.TemplateFormatter in the same session lifecycle tier.
 """
 
     @property
@@ -67,7 +67,7 @@ INHERITED_REQUIREMENTS:
 - [EditManager] Materializing templates populates missing read-write files with initial template content without overwriting existing files.
 
 GROUNDING_ARGUMENT:
-- Obtains template mappings and template parameters from imported node_config.NodeConfig, formats template content using imported template_format.TemplateFormatter, resolves host paths using imported file_alias.AliasManager workspace root in the same session lifecycle tier, and writes missing files via the filesystem.
+- Obtains template mappings and template parameters from imported agent_node_config.NodeConfig, formats template content using imported template_format.TemplateFormatter, resolves host paths using imported agent_file_alias.AliasManager workspace root in the same session lifecycle tier, and writes missing files via the filesystem.
 """
         ...
 
@@ -105,7 +105,7 @@ FRESH_REQUIREMENTS:
 - The text replacement tool replacement text parameter uses a string parameter converter to accept text.
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, TextReplacementTool performs text replacements on declared read-write files, coordinating with imported file_alias.AliasManager, EditManager, and tool_provider in the same session lifecycle tier.
+- As an agent_session singleton, TextReplacementTool performs text replacements on declared read-write files, coordinating with imported agent_file_alias.AliasManager, EditManager, and tool_provider in the same session lifecycle tier.
 """
 
     @property
@@ -179,7 +179,7 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, resolves the target read-write file via imported file_alias.AliasManager, inspects and updates file content using the filesystem, attaches the read-write file's short name as a suppression key on successful responses, and notifies EditManager in the same session lifecycle tier that workspace files were modified.
+- Receives actual parameter bindings, resolves the target read-write file via imported agent_file_alias.AliasManager, inspects and updates file content using the filesystem, attaches the read-write file's short name as a suppression key on successful responses, and notifies EditManager in the same session lifecycle tier that workspace files were modified.
 """
         ...
 
@@ -224,7 +224,7 @@ FRESH_REQUIREMENTS:
 - The line update tool replacement text parameter uses a string parameter converter to accept text.
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, LineUpdateTool performs line replacements and insertions on declared read-write files, coordinating with imported file_alias.AliasManager, EditManager, and tool_provider in the same session lifecycle tier.
+- As an agent_session singleton, LineUpdateTool performs line replacements and insertions on declared read-write files, coordinating with imported agent_file_alias.AliasManager, EditManager, and tool_provider in the same session lifecycle tier.
 """
 
     @property
@@ -311,7 +311,7 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, resolves the target read-write file via imported file_alias.AliasManager, reads and updates file content using the filesystem, attaches the read-write file's short name as a suppression key on successful responses, and notifies EditManager in the same session lifecycle tier that workspace files were modified.
+- Receives actual parameter bindings, resolves the target read-write file via imported agent_file_alias.AliasManager, reads and updates file content using the filesystem, attaches the read-write file's short name as a suppression key on successful responses, and notifies EditManager in the same session lifecycle tier that workspace files were modified.
 """
         ...
 

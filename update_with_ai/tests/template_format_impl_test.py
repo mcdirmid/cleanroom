@@ -29,6 +29,9 @@ class TemplateFormatImplTest(unittest.TestCase):
 
             result = formatter.format_template(template, params)
             expected = "# AuthService\nPackage: auth_core\nOwner: alice\nUnknown: <unbound_param>"
+            # Requirement: [TemplateFormatter] The template formatter formats template text using parameters to produce formatted text.
+            # Requirement: [TemplateFormatter] Substitutes parameter placeholders matching bound keys with their corresponding string representations.
+            # Requirement: [TemplateFormatter] Preserves parameter placeholders whose keys are absent from the supplied parameters as unrendered placeholders.
             # Requirement: Replaces parameter placeholder tokens matching dot-separated keys in the parameters with string representations of their resolved values.
             self.assertEqual(result, expected)
 
@@ -61,6 +64,8 @@ class TemplateFormatImplTest(unittest.TestCase):
 
             result = formatter.format_template(template, params)
             expected = "Header\nLine 1\nLine 3\nFooter"
+            # Requirement: Identifies line-suffix conditional comments matching conditional markers, retaining the preceding line content when the condition key evaluates to true and omitting the line when false.
+            # Requirement: [TemplateFormatter] Evaluates conditional blocks and line-suffix conditionals based on the truthiness of their condition keys in the parameters, including enclosed content when true and omitting content when false.
             self.assertEqual(result, expected)
 
     def test_line_suffix_loop(self) -> None:
@@ -93,6 +98,8 @@ class TemplateFormatImplTest(unittest.TestCase):
                 "| `id` | `int` |\n"
                 "| `name` | `str` |"
             )
+            # Requirement: Identifies line-suffix loop comments matching collection iteration markers, repeating the preceding line content for each item in the resolved sequence with the item variable bound in the parameter context.
+            # Requirement: [TemplateFormatter] Repeats loop blocks and line-suffix loops across items when the collection key resolves to a sequence in the parameters, binding loop item variables during repetition.
             self.assertEqual(result, expected)
 
     def test_block_conditional(self) -> None:
@@ -120,6 +127,8 @@ class TemplateFormatImplTest(unittest.TestCase):
 
             result = formatter.format_template(template, params)
             expected = "Intro\n## Terms\n- auth_token: definition\nOutro"
+            # Requirement: Identifies block conditional markers enclosing multi-line sections, including enclosed lines when the condition key evaluates to true and omitting enclosed lines when false.
+            # Requirement: [TemplateFormatter] Evaluates conditional blocks and line-suffix conditionals based on the truthiness of their condition keys in the parameters, including enclosed content when true and omitting content when false.
             self.assertEqual(result, expected)
 
     def test_block_loop(self) -> None:
@@ -149,6 +158,8 @@ class TemplateFormatImplTest(unittest.TestCase):
                 "### `logout`\n"
                 "**Purpose:** End session"
             )
+            # Requirement: Identifies block loop markers enclosing multi-line sections, repeating enclosed lines for each element in the resolved sequence with the loop variable bound in the parameter context.
+            # Requirement: [TemplateFormatter] Repeats loop blocks and line-suffix loops across items when the collection key resolves to a sequence in the parameters, binding loop item variables during repetition.
             self.assertEqual(result, expected)
 
     def test_formatter_whitespace_normalization(self) -> None:
@@ -172,6 +183,7 @@ class TemplateFormatImplTest(unittest.TestCase):
 
             result = formatter.format_template(formatted_template, params)
             expected = "# Header\n\n- `item1`\n- `item2`\n\n## Footer"
+            # Requirement: Normalizes extraneous blank lines introduced around block directive comments by formatting tools to preserve tight list spacing.
             self.assertEqual(result, expected)
 
     def test_nested_and_unbound_loops(self) -> None:

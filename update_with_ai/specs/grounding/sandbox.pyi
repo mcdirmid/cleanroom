@@ -1,7 +1,7 @@
 from typing import List, Protocol
 from framework import data_type, operation, singleton_type
 from dataclasses import dataclass
-import model_config
+import agent_config
 import tool_provider
 
 @dataclass(frozen=True)

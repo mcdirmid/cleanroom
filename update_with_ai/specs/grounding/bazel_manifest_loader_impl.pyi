@@ -4,9 +4,9 @@ import agent_storage
 import bazel_manifest_loader
 import bazel_target
 import dag_storage
-import file_alias
+import agent_file_alias
 import json_manifest_ext
-import node_config
+import agent_node_config
 
 @singleton_type('system')
 class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader):

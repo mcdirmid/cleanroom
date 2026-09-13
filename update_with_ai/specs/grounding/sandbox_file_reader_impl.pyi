@@ -1,8 +1,8 @@
 from typing import Optional, Set, Type
 from framework import operation, override, singleton_type
-import file_alias
+import agent_file_alias
 import filesystem_ext
-import node_config
+import agent_node_config
 import sandbox_file_reader
 import template_format
 import tool_provider
@@ -23,42 +23,42 @@ INHERITED_REQUIREMENTS:
 - [ReadManager] When step-mode is active, the read manager is configured with a guide file that is an unbound file.
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, ReadManager coordinates file inspection tools and declared file sets, interacting with imported node_config.NodeConfig and tool_provider.ToolManager in the same session lifecycle tier.
+- As an agent_session singleton, ReadManager coordinates file inspection tools and declared file sets, interacting with imported agent_node_config.NodeConfig and tool_provider.ToolManager in the same session lifecycle tier.
 """
 
     @property
     @override
-    def read_only_files(self) -> Set[file_alias.ReadOnlyFile]:
+    def read_only_files(self) -> Set[agent_file_alias.ReadOnlyFile]:
         """
 PURPOSE:
 Obtains declared read-only files from node config
 
 GROUNDING_ARGUMENT:
-- Delegated from imported collaborator node_config.NodeConfig.read_only_files in the same session lifecycle tier.
+- Delegated from imported collaborator agent_node_config.NodeConfig.read_only_files in the same session lifecycle tier.
 """
         ...
 
     @property
     @override
-    def read_write_files(self) -> Set[file_alias.ReadWriteFile]:
+    def read_write_files(self) -> Set[agent_file_alias.ReadWriteFile]:
         """
 PURPOSE:
 Obtains declared read-write files from node config
 
 GROUNDING_ARGUMENT:
-- Delegated from imported collaborator node_config.NodeConfig.read_write_files in the same session lifecycle tier.
+- Delegated from imported collaborator agent_node_config.NodeConfig.read_write_files in the same session lifecycle tier.
 """
         ...
 
     @property
     @override
-    def guide_file(self) -> Optional[file_alias.UnboundFile]:
+    def guide_file(self) -> Optional[agent_file_alias.UnboundFile]:
         """
 PURPOSE:
 Obtains configured guide file from node config
 
 GROUNDING_ARGUMENT:
-- Delegated from imported collaborator node_config.NodeConfig.guide_file in the same session lifecycle tier.
+- Delegated from imported collaborator agent_node_config.NodeConfig.guide_file in the same session lifecycle tier.
 """
         ...
 
@@ -78,7 +78,7 @@ GROUNDING_ARGUMENT:
 
     @operation
     @override
-    def requires_line_numbers(self, file: file_alias.FileAlias) -> bool:
+    def requires_line_numbers(self, file: agent_file_alias.FileAlias) -> bool:
         """
 PURPOSE:
 Identifies whether an inspected file requires line numbers to be requested when read, requiring line numbers for read-write files and source code files
@@ -88,7 +88,7 @@ FRESH_REQUIREMENTS:
 - The read manager identifies files ending with `.py` as source code files requiring line numbers.
 
 GROUNDING_ARGUMENT:
-- Checks if the file is an instance of file_alias.ReadWriteFile or if the file's short name ends with '.py'.
+- Checks if the file is an instance of agent_file_alias.ReadWriteFile or if the file's short name ends with '.py'.
 """
         ...
 
@@ -107,7 +107,7 @@ FRESH_REQUIREMENTS:
 - The read tool line numbers parameter uses the boolean parameter converter.
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, ReadTool executes file inspection across declared session files, interacting with imported file_alias.AliasManager, node_config.NodeConfig, template_format.TemplateFormatter, and tool_provider in the same session lifecycle tier.
+- As an agent_session singleton, ReadTool executes file inspection across declared session files, interacting with imported agent_file_alias.AliasManager, agent_node_config.NodeConfig, template_format.TemplateFormatter, and tool_provider in the same session lifecycle tier.
 """
 
     @property
@@ -168,7 +168,7 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, queries line number requirement from ReadManager in the same session lifecycle tier, resolves host paths using imported file_alias.AliasManager workspace root in the same session lifecycle tier, reads file content via the filesystem, filters > META: paragraphs for markdown files, formats read-only markdown content using imported template_format.TemplateFormatter and node_config.NodeConfig.template_parameters in the same session lifecycle tier, checks line number formatting rules for read-only, read-write, and source code files, specifies follow-up read tool calls with corrected line numbers on failure, attaches the file's short name as a suppression key on responses for read-write files while omitting it for read-only files, and masks host paths in read-only output.
+- Receives actual parameter bindings, queries line number requirement from ReadManager in the same session lifecycle tier, resolves host paths using imported agent_file_alias.AliasManager workspace root in the same session lifecycle tier, reads file content via the filesystem, filters > META: paragraphs for markdown files, formats read-only markdown content using imported template_format.TemplateFormatter and agent_node_config.NodeConfig.template_parameters in the same session lifecycle tier, checks line number formatting rules for read-only, read-write, and source code files, specifies follow-up read tool calls with corrected line numbers on failure, attaches the file's short name as a suppression key on responses for read-write files while omitting it for read-only files, and masks host paths in read-only output.
 """
         ...
 
@@ -232,7 +232,7 @@ GROUNDING_ARGUMENT:
 
     @operation
     @override
-    def convert(self, wire_value: str) -> file_alias.RegexPattern:
+    def convert(self, wire_value: str) -> agent_file_alias.RegexPattern:
         """
 PURPOSE:
 Converts a wire type string to a regex pattern
@@ -241,7 +241,7 @@ FRESH_REQUIREMENTS:
 - The regex pattern converter converts a wire type string into a regex pattern.
 
 GROUNDING_ARGUMENT:
-- Receives wire_value directly as a parameter and constructs a file_alias.RegexPattern record.
+- Receives wire_value directly as a parameter and constructs a agent_file_alias.RegexPattern record.
 """
         ...
 
@@ -262,7 +262,7 @@ INHERITED_REQUIREMENTS:
 - [SearchTool] The search tool accepts a regex pattern parameter.
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, SearchTool searches regex patterns across workspace files, coordinating with imported ReadManager, file_alias.AliasManager, and tool_provider in the same session lifecycle tier.
+- As an agent_session singleton, SearchTool searches regex patterns across workspace files, coordinating with imported ReadManager, agent_file_alias.AliasManager, and tool_provider in the same session lifecycle tier.
 """
 
     @property
@@ -308,7 +308,7 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, queries readable file sets from ReadManager, searches file contents via filesystem, and sanitizes matched paths using imported file_alias.AliasManager in the same session lifecycle tier.
+- Receives actual parameter bindings, queries readable file sets from ReadManager, searches file contents via filesystem, and sanitizes matched paths using imported agent_file_alias.AliasManager in the same session lifecycle tier.
 """
         ...
 

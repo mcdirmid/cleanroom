@@ -1,11 +1,10 @@
 from typing import Optional, Set
 from . import agent_conversation
 from . import agent_driver
+from . import agent_node_config
 from . import agent_storage
 from . import dag_node_cleaner
 from . import dag_storage
-from . import model_config
-from . import node_config
 from . import sandbox
 from support.lib.lifecycle import LifecycleRegistry, LifecycleScope, Singleton, enter_phase, get_default_registry, get_singleton
 
@@ -64,7 +63,7 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
                 if defn is not None and defn.task_prompt:
                     task_prompt = str(defn.task_prompt)
                     # Requirement: When seeding conversation with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete, or call finish without arguments if no workspace files were modified when guide step mode is inactive.
-                    n_cfg = session.get_singleton(node_config.NodeConfig)
+                    n_cfg = session.get_singleton(agent_node_config.NodeConfig)
                     guide_short_name: Optional[str] = None
                     if n_cfg.guide_file is not None:
                         guide_short_name = n_cfg.guide_file.short_name
@@ -88,7 +87,7 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
                     storage.get_messages(node),
                     key=lambda m: (m.content, type(m).__name__),
                 )
-                n_cfg = session.get_singleton(node_config.NodeConfig)
+                n_cfg = session.get_singleton(agent_node_config.NodeConfig)
                 rw_names = ", ".join(sorted(f.short_name for f in n_cfg.read_write_files))
 
                 for msg in messages_sorted:
@@ -136,7 +135,7 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
                     else:
                         blame_target_str = after_blamed.strip()
 
-                    n_cfg = session.get_singleton(node_config.NodeConfig)
+                    n_cfg = session.get_singleton(agent_node_config.NodeConfig)
                     blamed_node: Optional[dag_storage.Node] = None
                     for bt in n_cfg.blame_targets:
                         if bt.short_name == blame_target_str or str(bt) == blame_target_str:

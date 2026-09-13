@@ -1,6 +1,6 @@
 # sandbox_run_control interface component
 
-imports: tool_provider, file_alias, dag_storage, node_config
+imports: tool_provider, agent_file_alias, dag_storage, agent_node_config
 
 ## Purpose
 

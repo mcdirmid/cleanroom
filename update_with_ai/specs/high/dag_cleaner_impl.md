@@ -1,6 +1,6 @@
 # dag_cleaner_impl implementation component
 
-imports: dag_storage, dag_node_cleaner, model_config
+imports: dag_config, dag_node_cleaner, dag_storage
 implements: dag_cleaner
 
 ## Purpose
@@ -13,7 +13,7 @@ Unbounded feedback loops between dependent tasks can cause graph cleaners to run
 
 ## Types and Behavior
 
-A dag cleaner obtains its *node visit limit* from the model config bounding the maximum times any node can be visited to check whether it is dirty.
+A dag cleaner obtains its *node visit limit* from the dag config bounding the maximum times any node can be visited to check whether it is dirty.
 
 A dag cleaner cleans a target node by collecting all reachable dependencies from the node and executing them in dependency-first topological order.
 
