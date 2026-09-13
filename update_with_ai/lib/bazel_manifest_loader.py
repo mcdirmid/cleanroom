@@ -1,5 +1,5 @@
 from typing import Optional, Protocol, Sequence
-from . import bazel_graph_storage
+from . import agent_storage
 from . import dag_storage
 
 class Manifest(str):
@@ -10,6 +10,6 @@ class BazelManifestLoader(Protocol):
         ...
 
     def load_manifest(
-        self, content: Manifest, storage: bazel_graph_storage.BazelGraphStorage
-    ) -> Sequence[bazel_graph_storage.NodeDefinition]:
+        self, content: Manifest, storage: agent_storage.AgentStorage
+    ) -> Sequence[agent_storage.NodeDefinition]:
         ...

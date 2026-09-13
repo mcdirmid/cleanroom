@@ -1,6 +1,6 @@
 # sandbox_run_control interface component
 
-imports: tool_provider, file_alias, dag_storage
+imports: tool_provider, file_alias, dag_storage, node_config
 
 ## Purpose
 
@@ -11,8 +11,6 @@ Autonomous agents require unambiguous control tools to signal when a task is fin
 **Out of scope:** The sandbox_run_control interface component does not execute build runners, format source files, inject startup tool calls, or manage filesystem state; these are handled by other components.
 
 ## Types and Behavior
-
-A *verification check* is a polymorphic service that validates session criteria, communicating whether verification passed and diagnostic feedback on failure.
 
 The *run controller* is an agent session service configured with *blame targets*, which are bound files owned by upstream dependency nodes in dag storage, and verification checks. The run controller provides tools for terminating agent sessions and attributing outcomes.
 

@@ -1,6 +1,6 @@
 from typing import Optional, Protocol, Sequence
 from framework import data_type, operation, singleton_type
-import bazel_graph_storage
+import agent_storage
 import bazel_node_id_utils
 import dag_storage
 import file_alias
@@ -33,13 +33,13 @@ FRESH_REQUIREMENTS:
         ...
 
     @operation
-    def load_manifest(self, content: Manifest, storage: bazel_graph_storage.BazelGraphStorage) -> Sequence[bazel_graph_storage.NodeDefinition]:
+    def load_manifest(self, content: Manifest, storage: agent_storage.AgentStorage) -> Sequence[agent_storage.NodeDefinition]:
         """
 PURPOSE:
-Resolves a manifest into target nodes, dependencies, node definitions, task prompts, and node configurations, populating the bazel graph storage
+Resolves a manifest into target nodes, dependencies, node definitions, task prompts, and node configurations, populating the agent storage
 
 FRESH_REQUIREMENTS:
-- A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using a node identifier utility, populating the bazel graph storage.
+- A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using a node identifier utility, populating the agent storage.
 - A manifest loader resolves declared source files and templates into read-write files and templates in node configurations.
 - A manifest loader resolves declared silent source files into read-write files while excluding them from dependent read-only files.
 - A manifest loader resolves declared direct dependencies into read-only files, and star dependencies into transitive read-only file closures.

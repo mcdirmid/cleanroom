@@ -32,7 +32,7 @@ pyright_test(
         "//update_with_ai/lib:agent_node_cleaner",
         "//update_with_ai/lib:agent_node_cleaner_impl",
         "//update_with_ai/lib:agent_runner",
-        "//update_with_ai/lib:bazel_graph_storage",
+        "//update_with_ai/lib:agent_storage",
         "//update_with_ai/lib:dag_node_cleaner",
         "//update_with_ai/lib:dag_storage",
         "//update_with_ai/lib:file_alias",
@@ -63,12 +63,12 @@ pyright_test(
 )
 
 pyright_test(
-    name = "bazel_graph_storage_impl_test",
-    srcs = ["bazel_graph_storage_impl_test.py"],
+    name = "bazel_storage_impl_test",
+    srcs = ["bazel_storage_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:bazel_graph_storage",
-        "//update_with_ai/lib:bazel_graph_storage_impl",
+        "//update_with_ai/lib:agent_storage",
         "//update_with_ai/lib:bazel_node_id_utils",
+        "//update_with_ai/lib:bazel_storage_impl",
         "//update_with_ai/lib:dag_storage",
         "//update_with_ai/lib:file_paths",
         "//update_with_ai/lib:file_paths_impl",
@@ -80,7 +80,7 @@ pyright_test(
     name = "bazel_manifest_loader_impl_test",
     srcs = ["bazel_manifest_loader_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:bazel_graph_storage",
+        "//update_with_ai/lib:agent_storage",
         "//update_with_ai/lib:bazel_manifest_loader",
         "//update_with_ai/lib:bazel_manifest_loader_impl",
         "//update_with_ai/lib:bazel_node_id_utils",
@@ -112,11 +112,9 @@ pyright_test(
         "//update_with_ai/lib:file_paths",
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/lib:node_config",
-        "//update_with_ai/lib:sandbox_guide_delivery",
         "//update_with_ai/lib:tool_provider",
-        "//update_with_ai/lib:bazel_graph_storage",
+        "//update_with_ai/lib:agent_storage",
         "//update_with_ai/lib:model_config",
-        "//update_with_ai/lib:sandbox_run_control",
     ],
 )
 
@@ -135,7 +133,7 @@ pyright_test(
     name = "bazel_runner_impl_test",
     srcs = ["bazel_runner_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:bazel_graph_storage",
+        "//update_with_ai/lib:agent_storage",
         "//update_with_ai/lib:bazel_manifest_loader",
         "//update_with_ai/lib:bazel_runner",
         "//update_with_ai/lib:bazel_runner_impl",
@@ -177,6 +175,7 @@ pyright_test(
         "//update_with_ai/lib:dag_storage",
         "//update_with_ai/lib:file_alias",
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/lib:node_config",
         "//update_with_ai/lib:sandbox_change_summary_validator",
         "//update_with_ai/lib:sandbox_change_summary_validator_impl",
         "//update_with_ai/lib:sandbox_run_control",

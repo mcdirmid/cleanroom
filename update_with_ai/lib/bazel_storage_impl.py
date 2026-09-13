@@ -1,23 +1,22 @@
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Set
-from . import bazel_graph_storage
+from . import agent_storage
 from . import bazel_node_id_utils
 from . import dag_storage
 from . import file_paths
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
 
-class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage, Singleton):
+class AgentStorage(agent_storage.AgentStorage, Singleton):
     tier = "system"
 
     def __init__(self) -> None:
-        self._definitions: Dict[dag_storage.Node, bazel_graph_storage.NodeDefinition] = {}
+        self._definitions: Dict[dag_storage.Node, agent_storage.NodeDefinition] = {}
         self._dependencies: Dict[dag_storage.Node, Set[dag_storage.Dependency]] = {}
         self._source_files: Dict[dag_storage.Node, str] = {}
 
     def _get_store_path(self, node: dag_storage.Node) -> Path:
         # Requirement: All nodes located within the same package directory resolved by the bazel node identifier utility from bazel node id utils share a common package message file named `.update_with_ai.textproto`.
-        # Requirement: [BazelGraphStorage] The bazel graph storage persists pending messages and reverse dependencies across package directories resolved by the bazel node identifier utility from bazel node id utils.
-        # Requirement: The bazel graph storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
+        # Requirement: The agent storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
         node_util = get_singleton(bazel_node_id_utils.BazelNodeIdentifierUtility)
         pkg_dir = node_util.extract_directory(node)
         paths_service = get_singleton(file_paths.FilePaths)
@@ -31,7 +30,7 @@ class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage, Singleton):
             return {}
         content = path.read_text(encoding="utf-8")
 
-        # Requirement: The bazel graph storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files using proto package store from update with ai proto ext.
+        # Requirement: The agent storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files using proto package store from update with ai proto ext.
         nodes: Dict[str, Dict[str, Any]] = {}
         current_node_id: Optional[str] = None
         current_messages: List[Dict[str, str]] = []
@@ -86,17 +85,17 @@ class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage, Singleton):
         except OSError:
             return False
 
-    def get_node_definition(self, node: dag_storage.Node) -> Optional[bazel_graph_storage.NodeDefinition]:
-        # Requirement: [BazelGraphStorage] The bazel graph storage provides task prompts and node definitions for declared nodes.
-        # Requirement: The bazel graph storage maintains node definitions and task prompts mapped to nodes in dag storage.
+    def get_node_definition(self, node: dag_storage.Node) -> Optional[agent_storage.NodeDefinition]:
+        # Requirement: [AgentStorage] The agent storage provides task prompts and node definitions for declared nodes.
+        # Requirement: The agent storage maintains node definitions and task prompts mapped to nodes in dag storage.
         return self._definitions.get(node)
 
     def get_dependencies(self, node: dag_storage.Node) -> Set[dag_storage.Dependency]:
-        # Requirement: [BazelGraphStorage] The bazel graph storage maintains nodes, dependencies, reverse dependencies, and pending messages from workspace targets.
+        # Requirement: [AgentStorage] The agent storage maintains nodes, dependencies, reverse dependencies, and pending messages from workspace targets.
         return set(self._dependencies.get(node, set()))
 
     def get_dependents(self, node: dag_storage.Node) -> Set[dag_storage.Node]:
-        # Requirement: [BazelGraphStorage] The bazel graph storage persists pending messages and reverse dependencies across package directories resolved by the bazel node identifier utility from bazel node id utils.
+        # Requirement: All nodes located within the same package directory resolved by the bazel node identifier utility from bazel node id utils share a common package message file named `.update_with_ai.textproto`.
         path = self._get_store_path(node)
         data = self._load_package_data(path)
         record = data.get(node.address, {})
@@ -107,7 +106,7 @@ class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage, Singleton):
         return deps
 
     def get_messages(self, node: dag_storage.Node) -> Set[dag_storage.Message]:
-        # Requirement: [BazelGraphStorage] The bazel graph storage persists pending messages and reverse dependencies across package directories resolved by the bazel node identifier utility from bazel node id utils.
+        # Requirement: All nodes located within the same package directory resolved by the bazel node identifier utility from bazel node id utils share a common package message file named `.update_with_ai.textproto`.
         path = self._get_store_path(node)
         data = self._load_package_data(path)
         record = data.get(node.address, {})
@@ -179,12 +178,12 @@ class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage, Singleton):
             self._save_package_data(path, data)
 
 # Compatibility alias
-DagStorage = BazelGraphStorage
+DagStorage = AgentStorage
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
-        BazelGraphStorage,
-        keys=[BazelGraphStorage, bazel_graph_storage.BazelGraphStorage, dag_storage.DagStorage],
+        AgentStorage,
+        keys=[AgentStorage, agent_storage.AgentStorage, dag_storage.DagStorage],
         tier="system",
     )

@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 from typing import Dict, Optional, Set
 
-from lib.bazel_graph_storage import BazelGraphStorage, NodeDefinition, TaskPrompt
+from lib.agent_storage import AgentStorage, NodeDefinition, TaskPrompt
 from lib.bazel_manifest_loader import BazelManifestLoader, Manifest
 from lib.bazel_manifest_loader_impl import (
     BazelManifestLoader as BazelManifestLoaderImpl,
@@ -93,7 +93,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
         self.registry.register_instance(
             self.node_utils, keys=[BazelNodeIdentifierUtility], tier="system"
         )
-        self.registry.register_instance(self.storage, keys=[BazelGraphStorage], tier="system")
+        self.registry.register_instance(self.storage, keys=[AgentStorage], tier="system")
 
     def tearDown(self) -> None:
         shutil.rmtree(self.test_dir, ignore_errors=True)

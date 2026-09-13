@@ -3,7 +3,7 @@ from framework import operation, override, singleton_type
 import agent_conversation_history
 import agent_node_cleaner
 import agent_runner
-import bazel_graph_storage
+import agent_storage
 import dag_node_cleaner
 import dag_storage
 import model_config
@@ -17,7 +17,7 @@ PURPOSE:
 Implements agent node cleaner orchestrating sandbox and agent runner
 
 GROUNDING_ARGUMENT:
-- Through the agent session phase boundary, As a system singleton, AgentNodeCleaner coordinates system singletons (bazel_graph_storage, dag_storage) in the same lifecycle. While system singletons cannot directly access narrower agent_session singletons under static lifecycle isolation, this service initiates and executes within an explicit agent session phase that instantiates and scopes session-level singletons (agent_runner, sandbox, agent_conversation_history, CleanedNode), with defining modules all imported.
+- Through the agent session phase boundary, As a system singleton, AgentNodeCleaner coordinates system singletons (agent_storage, dag_storage) in the same lifecycle. While system singletons cannot directly access narrower agent_session singletons under static lifecycle isolation, this service initiates and executes within an explicit agent session phase that instantiates and scopes session-level singletons (agent_runner, sandbox, agent_conversation_history, CleanedNode), with defining modules all imported.
 """
 
     @operation
@@ -48,7 +48,7 @@ INHERITED_REQUIREMENTS:
 - [AgentNodeCleaner] When cleaning fails, the node remains dirty with no produced messages and continuation halts.
 
 GROUNDING_ARGUMENT:
-- Receives node as an input argument and retrieves task prompt and node definition from imported bazel_graph_storage in the same system lifecycle tier. When a dirty node defines no task prompt, it resolves without executing an agent session phase, producing change messages if incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise. Within the orchestrated agent session phase, it configures CleanedNode, materializes startup templates from sandbox, seeds conversation history with incoming pending messages ordered deterministically by content and augmenting the task prompt with guide instructions based on imported node_config and model_config, executes agent_runner, and maps the resulting agent outcome to change or feedback messages for dag_storage, relying on the requirements of collaborator types to satisfy message generation and dirty state management.
+- Receives node as an input argument and retrieves task prompt and node definition from imported agent_storage in the same system lifecycle tier. When a dirty node defines no task prompt, it resolves without executing an agent session phase, producing change messages if incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise. Within the orchestrated agent session phase, it configures CleanedNode, materializes startup templates from sandbox, seeds conversation history with incoming pending messages ordered deterministically by content and augmenting the task prompt with guide instructions based on imported node_config and model_config, executes agent_runner, and maps the resulting agent outcome to change or feedback messages for dag_storage, relying on the requirements of collaborator types to satisfy message generation and dirty state management.
 """
         ...
 

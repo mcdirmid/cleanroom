@@ -11,12 +11,10 @@ from . import file_alias
 from . import file_paths
 from . import model_config
 from . import node_config
-from . import sandbox_guide_delivery
-from . import sandbox_run_control
 from . import tool_provider
 from support.lib.lifecycle import LifecycleRegistry, LifecycleResolutionError, Singleton, get_default_registry, get_singleton
 
-class _CommandVerificationCheck(sandbox_run_control.VerificationCheck):
+class _CommandVerificationCheck(node_config.VerificationCheck):
     def __init__(self, command: str, cwd: Optional[str] = None) -> None:
         self._command = command
         self._cwd = cwd
@@ -51,9 +49,9 @@ class NodeConfig(node_config.NodeConfig, Singleton):
         self._allows_step_mode: bool = True
         self._is_step_mode: bool = False
         self._guide_file: Optional[file_alias.UnboundFile] = None
-        self._guide: Optional[sandbox_guide_delivery.Guide] = None
+        self._guide: Optional[node_config.Guide] = None
         self._blame_targets: Set[file_alias.BoundFile] = set()
-        self._verification_checks: List[sandbox_run_control.VerificationCheck] = []
+        self._verification_checks: List[node_config.VerificationCheck] = []
         self._verification_success_message: Optional[str] = None
         self._feedback: Tuple[str, ...] = ()
 
@@ -296,7 +294,7 @@ class NodeConfig(node_config.NodeConfig, Singleton):
         return self._guide_file
 
     @property
-    def guide(self) -> Optional[sandbox_guide_delivery.Guide]:
+    def guide(self) -> Optional[node_config.Guide]:
         # Requirement: The node config exposes the declared guide target as the task guide when step mode is active.
         return self._guide
 
@@ -306,7 +304,7 @@ class NodeConfig(node_config.NodeConfig, Singleton):
         return set(self._blame_targets)
 
     @property
-    def verification_checks(self) -> List[sandbox_run_control.VerificationCheck]:
+    def verification_checks(self) -> List[node_config.VerificationCheck]:
         # Requirement: The node config exposes declared verification checks from the manifest verification command.
         return list(self._verification_checks)
 
@@ -328,10 +326,10 @@ def _make_host_path(cls, path: str):
     return obj
 
 
-def _parse_guide_markdown(content: str) -> sandbox_guide_delivery.Guide:
+def _parse_guide_markdown(content: str) -> node_config.Guide:
     lines = content.splitlines()
     summary_lines: List[str] = []
-    sections: List[sandbox_guide_delivery.StepSection] = []
+    sections: List[node_config.StepSection] = []
     verification_failure_lines: Optional[List[str]] = None
 
     current_title: Optional[str] = None
@@ -346,7 +344,7 @@ def _parse_guide_markdown(content: str) -> sandbox_guide_delivery.Guide:
                     verification_failure_lines = list(current_section_lines)
                 elif not current_title.startswith("Lint checks"):
                     sections.append(
-                        sandbox_guide_delivery.StepSection(
+                        node_config.StepSection(
                             index=len(sections),
                             title=current_title,
                             content="\n".join(current_section_lines).strip(),
@@ -362,7 +360,7 @@ def _parse_guide_markdown(content: str) -> sandbox_guide_delivery.Guide:
             verification_failure_lines = list(current_section_lines)
         elif not current_title.startswith("Lint checks"):
             sections.append(
-                sandbox_guide_delivery.StepSection(
+                node_config.StepSection(
                     index=len(sections),
                     title=current_title,
                     content="\n".join(current_section_lines).strip(),
@@ -371,7 +369,7 @@ def _parse_guide_markdown(content: str) -> sandbox_guide_delivery.Guide:
 
     summary = "\n".join(summary_lines).strip()
     vf_text = "\n".join(verification_failure_lines).strip() if verification_failure_lines is not None else None
-    return sandbox_guide_delivery.Guide(
+    return node_config.Guide(
         summary=summary,
         sections=sections,
         verification_failure=vf_text,

@@ -1,37 +1,36 @@
 from typing import Optional, Set
 from framework import operation, override, singleton_type
-import bazel_graph_storage
+import agent_storage
 import bazel_node_id_utils
 import dag_storage
 import file_paths
 import update_with_ai_proto_ext
 
 @singleton_type('system')
-class BazelGraphStorage(bazel_graph_storage.BazelGraphStorage):
+class AgentStorage(agent_storage.AgentStorage):
     """
 PURPOSE:
 Implements graph storage with in-memory definitions, manifest loader coordination, and package textproto persistence
 
 FRESH_REQUIREMENTS:
-- The bazel graph storage maintains node definitions and task prompts mapped to nodes in dag storage.
-- The bazel graph storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files using proto package store from update with ai proto ext.
+- The agent storage maintains node definitions and task prompts mapped to nodes in dag storage.
+- The agent storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files using proto package store from update with ai proto ext.
 - All nodes located within the same package directory resolved by the bazel node identifier utility from bazel node id utils share a common package message file named `.update_with_ai.textproto`.
-- The bazel graph storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
+- The agent storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
 - Propagating dependencies exclude silent dependencies declared on a node.
 
 INHERITED_REQUIREMENTS:
-- [BazelGraphStorage] The bazel graph storage maintains nodes, dependencies, reverse dependencies, and pending messages from workspace targets.
-- [BazelGraphStorage] The bazel graph storage provides task prompts and node definitions for declared nodes.
-- [BazelGraphStorage] Declared dependencies marked propagating mark dependent nodes dirty when changed.
-- [BazelGraphStorage] The bazel graph storage persists pending messages and reverse dependencies across package directories resolved by the bazel node identifier utility from bazel node id utils.
+- [AgentStorage] The agent storage maintains nodes, dependencies, reverse dependencies, and pending messages from workspace targets.
+- [AgentStorage] The agent storage provides task prompts and node definitions for declared nodes.
+- [AgentStorage] Declared dependencies marked propagating mark dependent nodes dirty when changed.
 
 GROUNDING_ARGUMENT:
-- As a system singleton, BazelGraphStorage maintains node definitions and task prompts mapped to nodes in dag storage, coordinates with imported bazel_node_id_utils and file_paths in the same system lifecycle tier, and persists pending messages and reverse dependencies to package textproto files via update_with_ai_proto_ext.
+- As a system singleton, AgentStorage maintains node definitions and task prompts mapped to nodes in dag storage, coordinates with imported bazel_node_id_utils and file_paths in the same system lifecycle tier, and persists pending messages and reverse dependencies to package textproto files via update_with_ai_proto_ext.
 """
 
     @operation
     @override
-    def get_node_definition(self, node: dag_storage.Node) -> Optional[bazel_graph_storage.NodeDefinition]:
+    def get_node_definition(self, node: dag_storage.Node) -> Optional[agent_storage.NodeDefinition]:
         """
 PURPOSE:
 Retrieves stored metadata definition for a node

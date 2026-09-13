@@ -1,10 +1,7 @@
 from typing import Protocol, Sequence, Set, Tuple
-from . import file_alias
-from . import tool_provider
+from . import file_alias, node_config, tool_provider
 
-class VerificationCheck(Protocol):
-    def verify(self) -> Tuple[bool, str]:
-        ...
+VerificationCheck = node_config.VerificationCheck
 
 class RunController(Protocol):
     @property

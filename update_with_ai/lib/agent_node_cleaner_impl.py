@@ -2,7 +2,7 @@ from typing import Optional, Set
 from . import agent_conversation_history
 from . import agent_node_cleaner
 from . import agent_runner
-from . import bazel_graph_storage
+from . import agent_storage
 from . import dag_node_cleaner
 from . import dag_storage
 from . import model_config
@@ -34,7 +34,7 @@ class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
         self._last_outcome: Optional[agent_runner.AgentOutcome] = None
 
     def clean_node(self, node: dag_storage.Node) -> Set[dag_storage.Message]:
-        storage = get_singleton(bazel_graph_storage.BazelGraphStorage)
+        storage = get_singleton(agent_storage.AgentStorage)
         defn = storage.get_node_definition(node)
 
         # Requirement: When a dirty node defines no task prompt, cleaning resolves the node without executing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
@@ -167,7 +167,7 @@ class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
         return set()  # pragma: no cover (assumption: unreachable statement after 2-iteration retry loop)
 
     def clean(self, node: dag_storage.Node) -> bool:
-        storage = get_singleton(bazel_graph_storage.BazelGraphStorage)
+        storage = get_singleton(agent_storage.AgentStorage)
         msgs = self.clean_node(node)
         if self._last_outcome is not None and not self._last_outcome.is_success:
             # Requirement: When the agent outcome indicates failure, the node remains dirty and no propagating messages are produced.

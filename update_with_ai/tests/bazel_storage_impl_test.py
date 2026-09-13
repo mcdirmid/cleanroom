@@ -1,13 +1,13 @@
-"""Unit tests for bazel_graph_storage_impl aligned with grounding specifications."""
+"""Unit tests for bazel_storage_impl aligned with grounding specifications."""
 
 import os
 import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
-from lib.bazel_graph_storage import BazelGraphStorage, NodeDefinition, TaskPrompt
-from lib.bazel_graph_storage_impl import (
-    BazelGraphStorage as BazelGraphStorageImpl,
+from lib.agent_storage import AgentStorage, NodeDefinition, TaskPrompt
+from lib.bazel_storage_impl import (
+    AgentStorage as AgentStorageImpl,
     __initialize__,
 )
 from lib.file_paths import (
@@ -88,7 +88,7 @@ class MockFilePaths:
         return obj
 
 
-class BazelGraphStorageImplTest(unittest.TestCase):
+class BazelStorageImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.test_dir = tempfile.mkdtemp()
         self.orig_env = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
@@ -118,20 +118,20 @@ class BazelGraphStorageImplTest(unittest.TestCase):
         defn = NodeDefinition(node=node, task_prompt=TaskPrompt("Clean prompt"))
 
         with enter_phase("system", registry=self.registry) as scope:
-            storage = scope.get_singleton(BazelGraphStorage)
-            self.assertIsInstance(storage, BazelGraphStorageImpl)
-            assert isinstance(storage, BazelGraphStorageImpl)
+            storage = scope.get_singleton(AgentStorage)
+            self.assertIsInstance(storage, AgentStorageImpl)
+            assert isinstance(storage, AgentStorageImpl)
 
             # Node definition
             storage._definitions[node] = defn
-            # Requirement: [BazelGraphStorage] The bazel graph storage provides task prompts and node definitions for declared nodes.
-            # Requirement: The bazel graph storage maintains node definitions and task prompts mapped to nodes in dag storage.
+            # Requirement: [AgentStorage] The agent storage provides task prompts and node definitions for declared nodes.
+            # Requirement: The agent storage maintains node definitions and task prompts mapped to nodes in dag storage.
             self.assertEqual(storage.get_node_definition(node), defn)
 
             # Dependencies
             dep = Dependency(node=dep_node, is_silent=False)
             storage._dependencies[node] = {dep}
-            # Requirement: [BazelGraphStorage] The bazel graph storage maintains nodes, dependencies, reverse dependencies, and pending messages from workspace targets.
+            # Requirement: [AgentStorage] The agent storage maintains nodes, dependencies, reverse dependencies, and pending messages from workspace targets.
             self.assertEqual(storage.get_dependencies(node), {dep})
 
     def test_messages_persistence_and_dirty_state(self) -> None:
@@ -139,15 +139,15 @@ class BazelGraphStorageImplTest(unittest.TestCase):
         node = Node(address="//pkg/sub:target")
 
         with enter_phase("system", registry=self.registry) as scope:
-            storage = scope.get_singleton(BazelGraphStorage)
-            # Requirement: The bazel graph storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
+            storage = scope.get_singleton(AgentStorage)
+            # Requirement: The agent storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
             self.assertFalse(storage.is_dirty(node))
             self.assertEqual(storage.get_messages(node), set())
 
             # Add Change and Feedback messages
             # Requirement: Adding a message to a node records the message explaining why the node requires cleaning.
             # Requirement: [DagStorage] Adding a message to a node records the message for that node.
-            # Requirement: The bazel graph storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files using proto package store from update with ai proto ext.
+            # Requirement: The agent storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files using proto package store from update with ai proto ext.
             storage.add_message(Change(), to=node)
             storage.add_message(Feedback(), to=node)
 
@@ -161,7 +161,6 @@ class BazelGraphStorageImplTest(unittest.TestCase):
 
             # Verify textproto file was written to package directory
             # Requirement: All nodes located within the same package directory resolved by the bazel node identifier utility from bazel node id utils share a common package message file named `.update_with_ai.textproto`.
-            # Requirement: [BazelGraphStorage] The bazel graph storage persists pending messages and reverse dependencies across package directories resolved by the bazel node identifier utility from bazel node id utils.
             proto_path = os.path.join(self.test_dir, "pkg/sub", ".update_with_ai.textproto")
             self.assertTrue(os.path.isfile(proto_path))
 
@@ -176,8 +175,8 @@ class BazelGraphStorageImplTest(unittest.TestCase):
         """CUJ: A node is dirty when its declared source file is missing from the workspace root."""
         node = Node(address="//pkg/src:target")
         with enter_phase("system", registry=self.registry) as scope:
-            storage = scope.get_singleton(BazelGraphStorage)
-            assert isinstance(storage, BazelGraphStorageImpl)
+            storage = scope.get_singleton(AgentStorage)
+            assert isinstance(storage, AgentStorageImpl)
 
             # Node with declared source file that does not exist yet
             rel_path = "pkg/src/target.py"
@@ -200,8 +199,8 @@ class BazelGraphStorageImplTest(unittest.TestCase):
         silent_upstream = Node(address="//pkg/silent:tool")
 
         with enter_phase("system", registry=self.registry) as scope:
-            storage = scope.get_singleton(BazelGraphStorage)
-            assert isinstance(storage, BazelGraphStorageImpl)
+            storage = scope.get_singleton(AgentStorage)
+            assert isinstance(storage, AgentStorageImpl)
 
             # Set dependencies: one normal, one silent
             storage._dependencies[downstream] = {
@@ -230,17 +229,17 @@ class BazelGraphStorageImplTest(unittest.TestCase):
         """CUJ: Resolving singleton via DagStorage protocol alias."""
         with enter_phase("system", registry=self.registry) as scope:
             dag = scope.get_singleton(DagStorage)
-            graph = scope.get_singleton(BazelGraphStorage)
+            graph = scope.get_singleton(AgentStorage)
             self.assertIs(dag, graph)
 
     def test_save_package_data_os_error_handled(self) -> None:
         """CUJ: Handling filesystem write errors during package data persistence."""
         node = Node(address="//pkg/err:target")
         with enter_phase("system", registry=self.registry) as scope:
-            storage = scope.get_singleton(BazelGraphStorage)
-            assert isinstance(storage, BazelGraphStorageImpl)
-            with patch("lib.bazel_graph_storage_impl.Path.write_text", side_effect=OSError("Disk write failed")):
-                # Requirement: The bazel graph storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
+            storage = scope.get_singleton(AgentStorage)
+            assert isinstance(storage, AgentStorageImpl)
+            with patch("lib.bazel_storage_impl.Path.write_text", side_effect=OSError("Disk write failed")):
+                # Requirement: The agent storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
                 # Requirement: [DagStorage] Adding a message to a node records the message for that node.
                 storage.add_message(Change(), to=node)
                 self.assertEqual(storage.get_messages(node), set())
@@ -250,4 +249,4 @@ if __name__ == "__main__":
     unittest.main()
 
 # Untested requirements:
-# - [BazelGraphStorage] Declared dependencies marked propagating mark dependent nodes dirty when changed.
+# - [AgentStorage] Declared dependencies marked propagating mark dependent nodes dirty when changed.

@@ -2,7 +2,7 @@ from typing import Protocol, Tuple
 from framework import data_type, operation, override, singleton_type
 from dataclasses import dataclass
 import file_alias
-import sandbox_run_control
+import node_config
 
 @dataclass(frozen=True)
 @data_type
@@ -59,13 +59,13 @@ Formatted diff representation
         ...
 
 @singleton_type('agent_session')
-class ChangeSummaryValidator(sandbox_run_control.VerificationCheck, Protocol):
+class ChangeSummaryValidator(node_config.VerificationCheck, Protocol):
     """
 PURPOSE:
 Defined as an agent session service verifying change summaries
 
 INHERITANCE:
-- sandbox_run_control.VerificationCheck: Implements verification check evaluated during session advancement
+- node_config.VerificationCheck: Implements verification check evaluated during session advancement
 """
 
     @operation

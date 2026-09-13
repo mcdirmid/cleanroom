@@ -7,9 +7,6 @@ import file_alias
 import file_paths
 import model_config
 import node_config
-import sandbox_file_editor
-import sandbox_guide_delivery
-import sandbox_run_control
 import tool_provider
 
 @singleton_type('agent_session')
@@ -150,7 +147,7 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def guide(self) -> Optional[sandbox_guide_delivery.Guide]:
+    def guide(self) -> Optional[node_config.Guide]:
         """
 PURPOSE:
 Task guide configured when step mode is active
@@ -162,7 +159,7 @@ INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session guide, providing structured instructional text when step mode is active.
 
 GROUNDING_ARGUMENT:
-- Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), reading and parsing the guide markdown via sandbox_guide_delivery when step mode is active.
+- Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), reading and parsing the guide markdown when step mode is active.
 """
         ...
 
@@ -186,7 +183,7 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def verification_checks(self) -> List[sandbox_run_control.VerificationCheck]:
+    def verification_checks(self) -> List[node_config.VerificationCheck]:
         """
 PURPOSE:
 Session verification checks derived from the manifest verification command

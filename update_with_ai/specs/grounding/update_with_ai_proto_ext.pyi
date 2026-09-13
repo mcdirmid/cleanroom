@@ -3,7 +3,7 @@
 
 ## External Mechanics & API Documentation
 
-The `update_with_ai_proto_ext` external component specifies message store persistence in `.update_with_ai.textproto` files using the Python Protobuf text format API. External boundary specifications define no standalone library files; dependent implementation components (specifically `bazel_graph_storage_impl`) import and invoke Google Protobuf text format serialization directly.
+The `update_with_ai_proto_ext` external component specifies message store persistence in `.update_with_ai.textproto` files using the Python Protobuf text format API. External boundary specifications define no standalone library files; dependent implementation components (specifically `bazel_storage_impl`) import and invoke Google Protobuf text format serialization directly.
 
 **Protobuf Text Format Schema & Record Structure**
 

@@ -6,7 +6,7 @@ import tempfile
 from typing import Optional, Sequence, Set
 import unittest
 from unittest.mock import MagicMock, patch
-from lib.bazel_graph_storage import NodeDefinition
+from lib.agent_storage import NodeDefinition
 from lib.bazel_manifest_loader import BazelManifestLoader, Manifest
 from lib.bazel_node_config_impl import (
     AliasManager as AliasManagerImpl,
@@ -30,8 +30,7 @@ from lib.file_alias import (
 )
 from support.lib.lifecycle import LifecycleRegistry, Singleton, enter_phase
 from lib.model_config import ModelConfig
-from lib.node_config import NodeConfig
-from lib.sandbox_guide_delivery import Guide, StepSection
+from lib.node_config import Guide, NodeConfig, StepSection
 from lib.tool_provider import ParameterConverter, String
 
 

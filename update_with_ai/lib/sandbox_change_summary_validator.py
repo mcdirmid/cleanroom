@@ -1,7 +1,7 @@
 from typing import Protocol, Tuple
 from dataclasses import dataclass
 from . import file_alias
-from . import sandbox_run_control
+from . import node_config
 
 @dataclass(frozen=True)
 class NetChange:
@@ -13,6 +13,6 @@ class NetChange:
 class DiffSummary:
     summary_text: str
 
-class ChangeSummaryValidator(sandbox_run_control.VerificationCheck, Protocol):
+class ChangeSummaryValidator(node_config.VerificationCheck, Protocol):
     def verify(self) -> Tuple[bool, str]:
         ...

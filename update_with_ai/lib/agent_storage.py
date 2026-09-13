@@ -10,6 +10,6 @@ class NodeDefinition:
     node: dag_storage.Node
     task_prompt: TaskPrompt
 
-class BazelGraphStorage(dag_storage.DagStorage, Protocol):
+class AgentStorage(dag_storage.DagStorage, Protocol):
     def get_node_definition(self, node: dag_storage.Node) -> Optional[NodeDefinition]:
         ...

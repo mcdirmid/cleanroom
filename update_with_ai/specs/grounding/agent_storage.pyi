@@ -1,7 +1,6 @@
 from typing import Optional, Protocol, Set
 from framework import data_type, operation, override, singleton_type
 from dataclasses import dataclass
-import bazel_node_id_utils
 import dag_storage
 
 @data_type
@@ -40,7 +39,7 @@ Instructions for cleaning the node
         ...
 
 @singleton_type('system')
-class BazelGraphStorage(dag_storage.DagStorage, Protocol):
+class AgentStorage(dag_storage.DagStorage, Protocol):
     """
 PURPOSE:
 Defined as a system service backed by target manifests
@@ -49,10 +48,9 @@ INHERITANCE:
 - dag_storage.DagStorage: Extends dag storage with target manifest metadata
 
 FRESH_REQUIREMENTS:
-- The bazel graph storage maintains nodes, dependencies, reverse dependencies, and pending messages from workspace targets.
-- The bazel graph storage provides task prompts and node definitions for declared nodes.
+- The agent storage maintains nodes, dependencies, reverse dependencies, and pending messages from workspace targets.
+- The agent storage provides task prompts and node definitions for declared nodes.
 - Declared dependencies marked propagating mark dependent nodes dirty when changed.
-- The bazel graph storage persists pending messages and reverse dependencies across package directories resolved by the bazel node identifier utility from bazel node id utils.
 """
 
     @operation

@@ -1,9 +1,93 @@
-from typing import Any, Mapping, Optional, Protocol, Sequence, Set, Tuple
-from framework import singleton_type
+from typing import Any, List, Mapping, Optional, Protocol, Sequence, Set, Tuple
+from framework import data_type, operation, poly_type, singleton_type
+from dataclasses import dataclass
 import file_alias
 import model_config
-import sandbox_guide_delivery
-import sandbox_run_control
+
+@dataclass(frozen=True)
+@data_type
+class StepSection:
+    """
+PURPOSE:
+Discrete milestone section within a guide
+"""
+
+    def __init__(self, index: int, title: str, content: str) -> None:
+        ...
+
+    @property
+    def index(self) -> int:
+        """
+PURPOSE:
+Established as the sequential index of the step section
+"""
+        ...
+
+    @property
+    def title(self) -> str:
+        """
+PURPOSE:
+Established as the heading or title of the step section
+"""
+        ...
+
+    @property
+    def content(self) -> str:
+        """
+PURPOSE:
+Established as the instructional content of the step section
+"""
+        ...
+
+@dataclass(frozen=True)
+@data_type
+class Guide:
+    """
+PURPOSE:
+Structured instructional text containing a summary, sequential step sections, and verification failure instructions
+"""
+
+    def __init__(self, summary: str, sections: List[StepSection], verification_failure: Optional[str]=None) -> None:
+        ...
+
+    @property
+    def summary(self) -> str:
+        """
+PURPOSE:
+Established as the high-level overview of the guide
+"""
+        ...
+
+    @property
+    def sections(self) -> List[StepSection]:
+        """
+PURPOSE:
+Established as the sequential milestone sections of the guide
+"""
+        ...
+
+    @property
+    def verification_failure(self) -> Optional[str]:
+        """
+PURPOSE:
+Established as instructions delivered when verification fails
+"""
+        ...
+
+@poly_type
+class VerificationCheck(Protocol):
+    """
+PURPOSE:
+Polymorphic service that validates session criteria
+"""
+
+    @operation
+    def verify(self) -> Tuple[bool, str]:
+        """
+PURPOSE:
+Validates session criteria, returning whether verification passed and diagnostic feedback
+"""
+        ...
 
 @singleton_type('agent_session')
 class NodeConfig(Protocol):
@@ -90,7 +174,7 @@ FRESH_REQUIREMENTS:
         ...
 
     @property
-    def guide(self) -> Optional[sandbox_guide_delivery.Guide]:
+    def guide(self) -> Optional[Guide]:
         """
 PURPOSE:
 Structured instructional text for guide step mode
@@ -112,7 +196,7 @@ FRESH_REQUIREMENTS:
         ...
 
     @property
-    def verification_checks(self) -> Sequence[sandbox_run_control.VerificationCheck]:
+    def verification_checks(self) -> Sequence[VerificationCheck]:
         """
 PURPOSE:
 Session verification checks evaluated during session advancement

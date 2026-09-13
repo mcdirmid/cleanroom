@@ -1,6 +1,6 @@
 # sandbox_guide_delivery interface component
 
-imports: tool_provider, file_alias
+imports: tool_provider, file_alias, node_config
 
 ## Purpose
 
@@ -12,12 +12,12 @@ Autonomous agents given monolithic instructions frequently attempt all objective
 
 ## Types and Behavior
 
-A *guide* provides structured instructional text containing a *summary*, sequential *step sections*, and *verification failure* instructions. A *step section* is a milestone section within a guide having an *index*, a *title*, and *content*. A guide delivery can *parse* file content into a guide.
+A guide delivery can *parse* file content into a guide.
 
-A *guide delivery* is an agent session service configured with a guide that delivers instructions to an agent progressively.
+The *guide delivery* is an agent session service configured with a guide that delivers instructions to an agent progressively.
 
 A guide delivery:
 
 - Can *advance step* with a boolean *verification passed* indicator and text *failure diagnostics*, delivering instructional text when verification passes, or retaining the current milestone and reporting failure diagnostics alongside verification failure instructions when verification fails.
 
-- Exposes whether progressive *steps remain* to be completed, and exposes its configured *guide*.
+- Exposes whether progressive *steps remain* to be completed, and exposes its configured guide.

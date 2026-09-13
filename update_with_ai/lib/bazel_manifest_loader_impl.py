@@ -1,7 +1,7 @@
 import json
 import os
 from typing import Any, Dict, List, Optional, Sequence, Set, cast
-from . import bazel_graph_storage
+from . import agent_storage
 from . import bazel_manifest_loader
 from . import bazel_node_id_utils
 from . import dag_storage
@@ -53,12 +53,12 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
         return None
 
     def load_manifest(
-        self, content: bazel_manifest_loader.Manifest, storage: bazel_graph_storage.BazelGraphStorage
-    ) -> Sequence[bazel_graph_storage.NodeDefinition]:
+        self, content: bazel_manifest_loader.Manifest, storage: agent_storage.AgentStorage
+    ) -> Sequence[agent_storage.NodeDefinition]:
         # Requirement: A manifest loader parses JSON manifests using the filesystem into json manifest records.
         data = json.loads(str(content))
         node_util = get_singleton(bazel_node_id_utils.BazelNodeIdentifierUtility)
-        results: List[bazel_graph_storage.NodeDefinition] = []
+        results: List[agent_storage.NodeDefinition] = []
 
         targets = data.get("targets", [data]) if isinstance(data, dict) else []
         for t in targets:
@@ -68,11 +68,11 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
             # Cache the manifest for this node
             self._manifests[node] = bazel_manifest_loader.Manifest(json.dumps(t) if "targets" in data else str(content))
 
-            prompt = bazel_graph_storage.TaskPrompt(t.get("prompt", t.get("task_prompt", "")))
-            defn = bazel_graph_storage.NodeDefinition(node=node, task_prompt=prompt)
+            prompt = agent_storage.TaskPrompt(t.get("prompt", t.get("task_prompt", "")))
+            defn = agent_storage.NodeDefinition(node=node, task_prompt=prompt)
             results.append(defn)
 
-            # Requirement: [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using a node identifier utility, populating the bazel graph storage.
+            # Requirement: [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using a node identifier utility, populating the agent storage.
             storage_any = cast(Any, storage)
             if hasattr(storage_any, "_definitions"):
                 storage_any._definitions[node] = defn

@@ -1,6 +1,6 @@
 # bazel_node_config_impl implementation component
 
-imports: dag_storage, dag_node_cleaner, bazel_manifest_loader, tool_provider, sandbox_guide_delivery, sandbox_file_editor, file_paths, sandbox_run_control, model_config
+imports: dag_storage, dag_node_cleaner, bazel_manifest_loader, tool_provider, file_paths, model_config
 implements: node_config, file_alias
 
 ## Purpose

@@ -1,6 +1,6 @@
 # sandbox_change_summary_validator interface component
 
-imports: sandbox_run_control, file_alias
+imports: node_config, file_alias
 
 ## Purpose
 

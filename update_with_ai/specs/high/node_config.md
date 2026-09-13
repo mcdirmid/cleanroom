@@ -1,6 +1,6 @@
 # node_config interface component
 
-imports: file_alias, sandbox_guide_delivery, sandbox_file_editor, sandbox_run_control, model_config
+imports: file_alias, model_config
 
 ## Purpose
 
@@ -11,6 +11,12 @@ Multi-step agent workflows execute under varying constraints—such as source is
 **Out of scope:** The node_config interface component does not parse build manifests, validate file permissions, or initialize session services; these are handled by other components.
 
 ## Types and Behavior
+
+A *step section* is a milestone section within a guide having an *index*, a *title*, and *content*.
+
+A *guide* provides structured instructional text containing a *summary*, sequential step sections, and *verification failure* instructions.
+
+A *verification check* is a polymorphic service that validates session criteria, communicating whether verification passed and diagnostic feedback on failure.
 
 The *node config* is an agent session service that exposes configuration parameters for the session execution environment.
 

@@ -2,7 +2,7 @@
 
 import unittest
 from typing import Optional, Sequence, Set
-from lib import bazel_graph_storage
+from lib import agent_storage
 from lib import bazel_manifest_loader
 from lib import bazel_runner
 from lib import bazel_runner_impl
@@ -36,8 +36,8 @@ class MockManifestLoader(bazel_manifest_loader.BazelManifestLoader):
     def load_manifest(
         self,
         content: bazel_manifest_loader.Manifest,
-        storage: bazel_graph_storage.BazelGraphStorage,
-    ) -> Sequence[bazel_graph_storage.NodeDefinition]:
+        storage: agent_storage.AgentStorage,
+    ) -> Sequence[agent_storage.NodeDefinition]:
         self.loaded.append(content)
         return []
 

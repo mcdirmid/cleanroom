@@ -12,7 +12,7 @@ from lib.agent_node_cleaner_impl import (
     __initialize__,
 )
 from lib.agent_runner import AgentOutcome, AgentRunner
-from lib.bazel_graph_storage import BazelGraphStorage, NodeDefinition, TaskPrompt
+from lib.agent_storage import AgentStorage, NodeDefinition, TaskPrompt
 from lib.dag_node_cleaner import CleanedNode
 from lib.dag_storage import Change, Dependency, Feedback, Message as DagMessage, Node
 from lib.file_alias import BoundFile, FileContent, ReadOnlyFile, ReadWriteFile, UnboundFile, WorkspacePath
@@ -195,7 +195,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.node_cfg = MockNodeConfig()
         self.model_cfg = MockModelConfig()
 
-        self.registry.register_instance(self.storage, keys=[BazelGraphStorage], tier="system")
+        self.registry.register_instance(self.storage, keys=[AgentStorage], tier="system")
         self.registry.register_instance(self.sandbox, keys=[Sandbox], tier="agent_session")
         self.registry.register_instance(self.history, keys=[ConversationHistory], tier="agent_session")
         self.registry.register_instance(self.runner, keys=[AgentRunner], tier="agent_session")

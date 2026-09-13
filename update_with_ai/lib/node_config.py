@@ -1,7 +1,26 @@
 """Node configuration interface and types."""
 
-from typing import Any, Mapping, Optional, Protocol, Sequence, Set, Tuple
-from . import file_alias, sandbox_guide_delivery, sandbox_run_control
+from dataclasses import dataclass
+from typing import Any, List, Mapping, Optional, Protocol, Sequence, Set, Tuple
+from . import file_alias
+
+
+@dataclass(frozen=True)
+class StepSection:
+    index: int
+    title: str
+    content: str
+
+
+@dataclass(frozen=True)
+class Guide:
+    summary: str
+    sections: List[StepSection]
+    verification_failure: Optional[str] = None
+
+
+class VerificationCheck(Protocol):
+    def verify(self) -> Tuple[bool, str]: ...
 
 
 class NodeConfig(Protocol):
@@ -27,13 +46,13 @@ class NodeConfig(Protocol):
     def template_parameters(self) -> Mapping[str, Any]: ...
 
     @property
-    def guide(self) -> Optional[sandbox_guide_delivery.Guide]: ...
+    def guide(self) -> Optional[Guide]: ...
 
     @property
     def blame_targets(self) -> Set[file_alias.BoundFile]: ...
 
     @property
-    def verification_checks(self) -> Sequence[sandbox_run_control.VerificationCheck]: ...
+    def verification_checks(self) -> Sequence[VerificationCheck]: ...
 
     @property
     def verification_success_message(self) -> Optional[str]: ...

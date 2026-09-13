@@ -7,7 +7,7 @@ CONSTITUENTS:
 - file_paths_impl
 - bazel_runner_impl
 - bazel_manifest_loader_impl
-- bazel_graph_storage_impl
+- bazel_storage_impl
 - bazel_node_id_utils_impl
 - bazel_model_config_impl
 - bazel_node_config_impl

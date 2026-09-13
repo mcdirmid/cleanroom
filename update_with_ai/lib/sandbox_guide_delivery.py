@@ -1,22 +1,8 @@
-"""Sandbox guide delivery interface and data types."""
+from typing import Optional, Protocol
+from . import file_alias, node_config, tool_provider
 
-from dataclasses import dataclass
-from typing import List, Optional, Protocol
-from . import file_alias, tool_provider
-
-
-@dataclass(frozen=True)
-class StepSection:
-    index: int
-    title: str
-    content: str
-
-
-@dataclass(frozen=True)
-class Guide:
-    summary: str
-    sections: List[StepSection]
-    verification_failure: Optional[str] = None
+StepSection = node_config.StepSection
+Guide = node_config.Guide
 
 
 class GuideDelivery(Protocol):

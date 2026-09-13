@@ -1,25 +1,11 @@
 from typing import Protocol, Sequence, Set, Tuple
-from framework import operation, override, poly_type, singleton_type
+from framework import operation, override, singleton_type
 import dag_storage
 import file_alias
+import node_config
 import sandbox_file_editor
 import sandbox_guide_delivery
 import tool_provider
-
-@poly_type
-class VerificationCheck(Protocol):
-    """
-PURPOSE:
-Polymorphic service that validates session criteria
-"""
-
-    @operation
-    def verify(self) -> Tuple[bool, str]:
-        """
-PURPOSE:
-Validates session criteria, returning whether verification passed and diagnostic feedback
-"""
-        ...
 
 @singleton_type('agent_session')
 class RunController(Protocol):
@@ -38,7 +24,7 @@ FRESH_REQUIREMENTS:
 """
 
     @property
-    def verification_checks(self) -> Sequence[VerificationCheck]:
+    def verification_checks(self) -> Sequence[node_config.VerificationCheck]:
         """
 PURPOSE:
 Verification checks configured for the session

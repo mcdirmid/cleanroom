@@ -1,6 +1,6 @@
 # bazel_manifest_loader interface component
 
-imports: dag_storage, node_config, file_alias, bazel_node_id_utils, bazel_graph_storage
+imports: dag_storage, node_config, file_alias, bazel_node_id_utils, agent_storage
 
 ## Purpose
 
@@ -20,7 +20,7 @@ The bazel manifest loader:
 
 - Retrieves the manifest for a node.
 
-- Resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using the bazel node identifier utility, populating the bazel graph storage.
+- Resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using the bazel node identifier utility, populating the agent storage.
 
 - Resolves declared source files and templates from manifests into read-write files and templates in a node configuration.
 
