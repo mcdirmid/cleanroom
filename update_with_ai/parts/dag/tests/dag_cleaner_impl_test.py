@@ -3,10 +3,18 @@
 import unittest
 from typing import Dict, List, Set
 from update_with_ai.parts.dag.lib.dag_cleaner import DagCleaner
-from update_with_ai.parts.dag.lib.dag_cleaner_impl import DagCleaner as DagCleanerImpl, __initialize__
+from update_with_ai.parts.dag.lib.dag_cleaner_impl import (
+    DagCleaner as DagCleanerImpl,
+    __initialize__,
+)
 from update_with_ai.parts.dag.lib.dag_config import DagConfig
 from update_with_ai.parts.dag.lib.dag_node_cleaner import NodeCleaner
-from update_with_ai.parts.dag.lib.dag_storage import DagStorage, Dependency, Message, Node
+from update_with_ai.parts.dag.lib.dag_storage import (
+    DagStorage,
+    Dependency,
+    Message,
+    Node,
+)
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 
 
@@ -124,7 +132,10 @@ class DagCleanerImplTest(unittest.TestCase):
         right = Node(address="//pkg:right")
         bottom = Node(address="//pkg:bottom")
 
-        self.storage.dependencies[root] = {Dependency(node=left), Dependency(node=right)}
+        self.storage.dependencies[root] = {
+            Dependency(node=left),
+            Dependency(node=right),
+        }
         self.storage.dependencies[left] = {Dependency(node=bottom)}
         self.storage.dependencies[right] = {Dependency(node=bottom)}
         self.storage.dirty_nodes.update([root, left, right, bottom])
@@ -207,4 +218,3 @@ if __name__ == "__main__":
     unittest.main()
 
 # Untested requirements: None
-

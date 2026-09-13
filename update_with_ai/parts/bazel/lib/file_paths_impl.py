@@ -62,12 +62,16 @@ class FilePaths(FilePathsInterface, Singleton):
             root_path = os.getcwd()
         return _make_host_path(WorkspaceRoot, os.path.normpath(root_path))
 
-    def resolve_directory(self, root: WorkspaceRoot, relative: WorkspacePath) -> DirectoryPath:
+    def resolve_directory(
+        self, root: WorkspaceRoot, relative: WorkspacePath
+    ) -> DirectoryPath:
         # Requirement: [FilePaths] Returns a directory path formed by joining the workspace root and the workspace path.
         joined = os.path.join(root.path, relative.path)
         return _make_host_path(DirectoryPath, os.path.normpath(joined))
 
-    def resolve_path(self, root: WorkspaceRoot, relative: WorkspacePath) -> AbsolutePath:
+    def resolve_path(
+        self, root: WorkspaceRoot, relative: WorkspacePath
+    ) -> AbsolutePath:
         # Requirement: [FilePaths] Returns an absolute path formed by joining the workspace root and the workspace path.
         joined = os.path.join(root.path, relative.path)
         return _make_host_path(AbsolutePath, os.path.normpath(joined))

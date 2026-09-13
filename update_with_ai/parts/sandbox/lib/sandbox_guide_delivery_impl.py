@@ -3,7 +3,13 @@ from update_with_ai.parts.agent.lib import agent_file_alias
 from update_with_ai.parts.agent.lib import agent_node_config
 from . import sandbox_guide_delivery
 from . import tool_provider
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
+
 
 class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
     tier = "agent_session"
@@ -33,7 +39,9 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
     def guide(self) -> Optional[agent_node_config.Guide]:
         return self._guide
 
-    def parse_guide(self, content: agent_file_alias.FileContent) -> agent_node_config.Guide:
+    def parse_guide(
+        self, content: agent_file_alias.FileContent
+    ) -> agent_node_config.Guide:
         # Requirement: Guide parsing extracts the summary from content preceding the first section heading, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Lint checks` or `Verification failure`.
         raw = str(content)
         lines = raw.splitlines()
@@ -102,7 +110,9 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
             diag_text = failure_diagnostics or ""
             vf_block = ""
             if self._guide.verification_failure:
-                vf_block = f"\n\n## Verification failure\n{self._guide.verification_failure}"
+                vf_block = (
+                    f"\n\n## Verification failure\n{self._guide.verification_failure}"
+                )
             if self._step_index == 0:
                 # Requirement: When advancing a step with failed verification, if no step section has been delivered yet, the guide delivery retains its index and emits a response combining the guide summary, any configured verification failure instructions, and failure diagnostics.
                 content = f"{self._guide.summary}{vf_block}\n\nVerification failed:\n{diag_text}".strip()
@@ -134,6 +144,7 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
             is_terminated=False,
             content=content,
         )
+
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry

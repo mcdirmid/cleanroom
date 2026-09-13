@@ -74,7 +74,9 @@ def generate_asm_content(dir_name: str, raw_deps: list[str]) -> str:
         lines.append(f"    {dep},")
     lines.append(")")
     lines.append("")
-    lines.append("def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:")
+    lines.append(
+        "def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:"
+    )
     lines.append("    for mod in CONSTITUENTS:")
     lines.append("        mod.__initialize__(registry)")
     lines.append("")
@@ -115,7 +117,10 @@ def main() -> int:
         asm_content = generate_asm_content(dir_name, raw_deps)
         if dir_name:
             os.makedirs(dir_name, exist_ok=True)
-        if not os.path.exists(args.module_path) or read_text(args.module_path) != asm_content:
+        if (
+            not os.path.exists(args.module_path)
+            or read_text(args.module_path) != asm_content
+        ):
             write_text(args.module_path, asm_content)
 
     syntax_errors = check_syntax(args.module_path)
@@ -131,7 +136,9 @@ def main() -> int:
         if stem_d.endswith("_ext"):
             # External specification dependency: find its .pyi file
             candidates = [
-                p for p in pyi_paths if os.path.splitext(os.path.basename(p))[0] == stem_d
+                p
+                for p in pyi_paths
+                if os.path.splitext(os.path.basename(p))[0] == stem_d
             ]
             if not candidates:
                 spec_file = f"{stem_d}.pyi"
@@ -146,8 +153,13 @@ def main() -> int:
                     if os.path.isfile(candidate):
                         pyi_paths.append(candidate)
                         break
-                if not any(os.path.splitext(os.path.basename(p))[0] == stem_d for p in pyi_paths):
-                    for cand in Path("update_with_ai/parts").glob(f"*/grounding/{spec_file}"):
+                if not any(
+                    os.path.splitext(os.path.basename(p))[0] == stem_d
+                    for p in pyi_paths
+                ):
+                    for cand in Path("update_with_ai/parts").glob(
+                        f"*/grounding/{spec_file}"
+                    ):
                         pyi_paths.append(str(cand))
                         break
         else:

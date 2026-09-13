@@ -11,7 +11,12 @@ from update_with_ai.parts.agent.lib.agent_loop_guard_impl import (
     __initialize__,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
-from update_with_ai.parts.sandbox.lib.tool_provider import ActualParameterBindings, Parameter, String, WireType
+from update_with_ai.parts.sandbox.lib.tool_provider import (
+    ActualParameterBindings,
+    Parameter,
+    String,
+    WireType,
+)
 
 
 class DummyConverter:
@@ -62,7 +67,9 @@ class AgentLoopGuardImplTest(unittest.TestCase):
             res2 = guard.record_tool_execution("read_file", bindings)
             self.assertIsInstance(res2, LoopReminder)
             assert isinstance(res2, LoopReminder)
-            self.assertIn("no new information will be revealed by this tool call", res2.feedback)
+            self.assertIn(
+                "no new information will be revealed by this tool call", res2.feedback
+            )
 
             # Call 3 & 4 -> LoopReminder
             res3 = guard.record_tool_execution("read_file", bindings)
@@ -83,14 +90,22 @@ class AgentLoopGuardImplTest(unittest.TestCase):
             bindings = ActualParameterBindings(bindings={(self.param, "target.py")})
 
             # Call 1 -> None
-            self.assertIsNone(guard.record_tool_execution("replace_file_content", bindings))
+            self.assertIsNone(
+                guard.record_tool_execution("replace_file_content", bindings)
+            )
             # Call 2 -> LoopReminder at threshold of 2
             # Requirement: Produces a loop reminder at the reminder threshold of two repetitions when consecutive edits target the same file and line range.
-            self.assertIsInstance(guard.record_tool_execution("replace_file_content", bindings), LoopReminder)
+            self.assertIsInstance(
+                guard.record_tool_execution("replace_file_content", bindings),
+                LoopReminder,
+            )
             guard.record_tool_execution("replace_file_content", bindings)
             guard.record_tool_execution("replace_file_content", bindings)
             # Requirement: Produces a loop failure at the fatal threshold when consecutive edits target the same file and line range.
-            self.assertIsInstance(guard.record_tool_execution("replace_file_content", bindings), LoopFailure)
+            self.assertIsInstance(
+                guard.record_tool_execution("replace_file_content", bindings),
+                LoopFailure,
+            )
 
     def test_record_progress_resets_counters(self) -> None:
         """CUJ: Forward progress resets consecutive repetition counters."""
@@ -100,7 +115,9 @@ class AgentLoopGuardImplTest(unittest.TestCase):
 
             # 2 calls reaching reminder
             self.assertIsNone(guard.record_tool_execution("read_file", bindings))
-            self.assertIsInstance(guard.record_tool_execution("read_file", bindings), LoopReminder)
+            self.assertIsInstance(
+                guard.record_tool_execution("read_file", bindings), LoopReminder
+            )
 
             # Reset progress
             # Requirement: A tool execution demonstrating forward progress resets repetition counters in the loop guard.

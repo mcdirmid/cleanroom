@@ -5,7 +5,13 @@ from update_with_ai.parts.dag.lib import dag_node_cleaner
 from update_with_ai.parts.dag.lib import dag_runner
 from update_with_ai.parts.dag.lib import dag_storage
 from update_with_ai.parts.core.lib import runner_logger
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
+
 
 class DagRunner(dag_runner.DagRunner, Singleton):
     tier = "system"
@@ -84,24 +90,31 @@ class DagRunner(dag_runner.DagRunner, Singleton):
         # Requirement: [DagRunner] A dag runner produces a build result upon pass completion.
         return dag_runner.BuildResult(success=success, summary=summary)
 
-    def mark_node_dirty(self, target: dag_storage.Node, message: dag_storage.Change) -> None:
+    def mark_node_dirty(
+        self, target: dag_storage.Node, message: dag_storage.Change
+    ) -> None:
         # Requirement: Marking a node dirty injects a change message with text set to check.
         # Requirement: [DagRunner] A dag runner marks a target node dirty by injecting a change message into its pending messages in dag storage.
         storage = get_singleton(dag_storage.DagStorage)
         storage.add_message(message, to=target)
 
-    def inject_node_feedback(self, target: dag_storage.Node, feedback: dag_storage.Feedback) -> None:
+    def inject_node_feedback(
+        self, target: dag_storage.Node, feedback: dag_storage.Feedback
+    ) -> None:
         # Requirement: Injecting feedback or broadcasting changes transmits caller-provided message content.
         # Requirement: [DagRunner] A dag runner injects a caller-supplied feedback message into a target node.
         storage = get_singleton(dag_storage.DagStorage)
         storage.add_message(feedback, to=target)
 
-    def broadcast_node_change(self, origin: dag_storage.Node, change: dag_storage.Change) -> None:
+    def broadcast_node_change(
+        self, origin: dag_storage.Node, change: dag_storage.Change
+    ) -> None:
         # Requirement: Injecting feedback or broadcasting changes transmits caller-provided message content.
         # Requirement: [DagRunner] A dag runner broadcasts a caller-supplied change message from a node to all of its reverse dependencies.
         storage = get_singleton(dag_storage.DagStorage)
         for dependent in storage.get_dependents(origin):
             storage.add_message(change, to=dependent)
+
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry

@@ -44,7 +44,9 @@ class DummyTool:
     def parameters(self) -> Set[Parameter]:
         return self._parameters
 
-    def execute_tool(self, actual_parameter_bindings: ActualParameterBindings) -> Response:
+    def execute_tool(
+        self, actual_parameter_bindings: ActualParameterBindings
+    ) -> Response:
         self.last_bindings = actual_parameter_bindings
         return Response(is_failed=False, is_terminated=False, content="dummy executed")
 
@@ -88,7 +90,12 @@ class ToolProviderImplTest(unittest.TestCase):
             manager = scope.get_singleton(ToolManager)
             str_conv = scope.get_singleton(StringParameterConverter)
 
-            param = Parameter(name="arg1", description="an argument", parameter_converter=str_conv, is_required=True)
+            param = Parameter(
+                name="arg1",
+                description="an argument",
+                parameter_converter=str_conv,
+                is_required=True,
+            )
             tool = DummyTool("my_tool", {param})
             manager.install_tool(tool)
 
@@ -110,7 +117,9 @@ class ToolProviderImplTest(unittest.TestCase):
         """CUJ: Executing a tool that is not installed fails."""
         with enter_phase("agent_session", registry=self.registry) as scope:
             manager = scope.get_singleton(ToolManager)
-            resp = manager.execute_tool("nonexistent", WireParameterBindings(bindings=set()))
+            resp = manager.execute_tool(
+                "nonexistent", WireParameterBindings(bindings=set())
+            )
             # Requirement: Executing a tool by name fails if no installed tool matches the requested name.
             self.assertTrue(resp.is_failed)
 
@@ -121,28 +130,40 @@ class ToolProviderImplTest(unittest.TestCase):
             tool = DummyTool("tool_no_params", set())
             manager.install_tool(tool)
 
-            resp = manager.execute_tool("tool_no_params", WireParameterBindings(bindings={("bogus", "val")}))
+            resp = manager.execute_tool(
+                "tool_no_params", WireParameterBindings(bindings={("bogus", "val")})
+            )
             # Requirement: Executing a tool by name fails if a parameter name does not match any parameter of the tool, and reminds the agent that only declared parameters of the tool can be provided.
             self.assertTrue(resp.is_failed)
-            self.assertEqual(resp.reminder, "Only declared parameters of the tool can be provided.")
+            self.assertEqual(
+                resp.reminder, "Only declared parameters of the tool can be provided."
+            )
 
     def test_tool_manager_missing_required_parameter(self) -> None:
         """CUJ: Executing a tool without supplying a required parameter fails."""
         with enter_phase("agent_session", registry=self.registry) as scope:
             manager = scope.get_singleton(ToolManager)
             str_conv = scope.get_singleton(StringParameterConverter)
-            param = Parameter(name="req_arg", description="required", parameter_converter=str_conv, is_required=True)
+            param = Parameter(
+                name="req_arg",
+                description="required",
+                parameter_converter=str_conv,
+                is_required=True,
+            )
             tool = DummyTool("tool_req", {param})
             manager.install_tool(tool)
 
-            resp = manager.execute_tool("tool_req", WireParameterBindings(bindings=set()))
+            resp = manager.execute_tool(
+                "tool_req", WireParameterBindings(bindings=set())
+            )
             # Requirement: Executing a tool by name fails if an argument is not supplied for a required parameter of the tool, and reminds the agent that required parameters of the tool must be supplied.
             self.assertTrue(resp.is_failed)
-            self.assertEqual(resp.reminder, "Required parameters of the tool must be supplied.")
+            self.assertEqual(
+                resp.reminder, "Required parameters of the tool must be supplied."
+            )
 
 
 if __name__ == "__main__":
     unittest.main()
 
 # Untested requirements: None
-

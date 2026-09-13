@@ -104,6 +104,20 @@ model_config(
     max_tokens = 4096,
 )
 
+model_config(
+    name = "qwen-flash-next-q3",
+    model = "Qwen3.8-Flash-Next-Q3",
+    base_url = "http://localhost:8000/v1",
+    max_iterations = 100,
+    temperature = "0.7",
+    timeout_seconds = "100.0",
+    api_key_env = "OPENAI_API_KEY",
+    # so spiraling is detected quickly.
+    max_tokens = 4096,
+)
+
+
+
 # All configs bundled into every *_clean binary's runfiles so any of them can
 # be selected at run time. Add personal configs to this list.
 filegroup(

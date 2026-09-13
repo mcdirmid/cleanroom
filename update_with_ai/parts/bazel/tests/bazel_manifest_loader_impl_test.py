@@ -8,8 +8,15 @@ import unittest
 from unittest.mock import patch
 from typing import Dict, Optional, Set
 
-from update_with_ai.parts.agent.lib.agent_storage import AgentStorage, NodeDefinition, TaskPrompt
-from update_with_ai.parts.bazel.lib.bazel_manifest_loader import BazelManifestLoader, Manifest
+from update_with_ai.parts.agent.lib.agent_storage import (
+    AgentStorage,
+    NodeDefinition,
+    TaskPrompt,
+)
+from update_with_ai.parts.bazel.lib.bazel_manifest_loader import (
+    BazelManifestLoader,
+    Manifest,
+)
 from update_with_ai.parts.bazel.lib.bazel_manifest_loader_impl import (
     BazelManifestLoader as BazelManifestLoaderImpl,
     __initialize__,
@@ -93,7 +100,9 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
         self.registry.register_instance(
             self.node_utils, keys=[BazelTarget], tier="system"
         )
-        self.registry.register_instance(self.storage, keys=[AgentStorage], tier="system")
+        self.registry.register_instance(
+            self.storage, keys=[AgentStorage], tier="system"
+        )
 
     def tearDown(self) -> None:
         shutil.rmtree(self.test_dir, ignore_errors=True)
@@ -131,7 +140,9 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             runfiles_dir = os.path.join(self.test_dir, "runfiles")
             rf_main = os.path.join(runfiles_dir, "_main")
             os.makedirs(rf_main, exist_ok=True)
-            with open(os.path.join(rf_main, "rf_node_manifest.json"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(rf_main, "rf_node_manifest.json"), "w", encoding="utf-8"
+            ) as f:
                 f.write('{"label": "//pkg/rf:rf_node"}')
             rf_node = Node(address="//pkg/rf:rf_node")
             with patch.dict(os.environ, {"RUNFILES_DIR": runfiles_dir}):
@@ -146,7 +157,9 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             err_node = Node(address="//pkg/err:err_node")
             err_pkg = os.path.join(self.test_dir, "pkg/err")
             os.makedirs(err_pkg, exist_ok=True)
-            with open(os.path.join(err_pkg, ".manifest.json"), "w", encoding="utf-8") as f:
+            with open(
+                os.path.join(err_pkg, ".manifest.json"), "w", encoding="utf-8"
+            ) as f:
                 f.write('{"label": "//pkg/err:err_node"}')
             with patch("builtins.open", side_effect=OSError("Read error")):
                 # Requirement: The bazel manifest loader retrieves target manifests from workspace directories or runfiles trees for nodes in dag storage.
@@ -260,4 +273,3 @@ if __name__ == "__main__":
 # - [BazelManifestLoader] A manifest loader resolves declared feedback dependencies into blame targets mapped to their owning dependency nodes in node configurations.
 # - [BazelManifestLoader] A manifest loader generates node configurations with minimally disambiguated file aliases.
 # - [BazelManifestLoader] A manifest loader synthesizes definitions for declared dependencies lacking explicit manifests.
-

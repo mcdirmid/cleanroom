@@ -50,7 +50,12 @@ def find_repo_root() -> Path:
             return p
 
     current = Path(__file__).resolve().parent
-    for p in [current, current.parent, current.parent.parent, current.parent.parent.parent]:
+    for p in [
+        current,
+        current.parent,
+        current.parent.parent,
+        current.parent.parent.parent,
+    ]:
         if (p / "update_with_ai").is_dir():
             return p
 
@@ -76,7 +81,11 @@ def get_available_targets(repo_root: Path) -> Dict[str, Tuple[Path, Path]]:
             domain = impl_path.parent.parent.name
             test_file = parts_dir / domain / "tests" / f"{impl_path.stem}_test.py"
             if test_file.is_file():
-                base_name = impl_path.stem[:-5] if impl_path.stem.endswith("_impl") else impl_path.stem
+                base_name = (
+                    impl_path.stem[:-5]
+                    if impl_path.stem.endswith("_impl")
+                    else impl_path.stem
+                )
                 mapping[impl_path.name] = (impl_path, test_file)
                 mapping[impl_path.stem] = (impl_path, test_file)
                 mapping[test_file.name] = (impl_path, test_file)
@@ -123,7 +132,11 @@ def get_non_executable_lines(file_path: Path) -> Set[int]:
                 for l in range(node.lineno + 1, first_body.lineno):
                     non_exec.add(l)
         # Docstrings at any level
-        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+        if (
+            isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
+        ):
             start = node.lineno
             end = getattr(node, "end_lineno", node.lineno)
             for l in range(start, end + 1):
@@ -179,9 +192,7 @@ def normalize_target_query(raw_query: str) -> str:
     return q
 
 
-def measure_single_target_coverage(
-    impl_path: Path, test_path: Path
-) -> ModuleCoverage:
+def measure_single_target_coverage(impl_path: Path, test_path: Path) -> ModuleCoverage:
     """Run the unit test for a single _impl module and evaluate coverage."""
     raw_exec = {
         ln
@@ -202,6 +213,7 @@ def measure_single_target_coverage(
 
     # Ensure 'lib' and 'tests' packages in sys.modules point to target directories
     import types
+
     if "lib" not in sys.modules or not getattr(sys.modules["lib"], "__path__", None):
         lib_pkg = types.ModuleType("lib")
         lib_pkg.__path__ = [str(impl_path.parent)]
@@ -211,7 +223,9 @@ def measure_single_target_coverage(
         if lib_dir_str not in sys.modules["lib"].__path__:
             sys.modules["lib"].__path__.insert(0, lib_dir_str)
 
-    if "tests" not in sys.modules or not getattr(sys.modules["tests"], "__path__", None):
+    if "tests" not in sys.modules or not getattr(
+        sys.modules["tests"], "__path__", None
+    ):
         tests_pkg = types.ModuleType("tests")
         tests_pkg.__path__ = [str(test_path.parent)]
         sys.modules["tests"] = tests_pkg
@@ -237,7 +251,10 @@ def measure_single_target_coverage(
             return
 
         runner = unittest.TextTestRunner(stream=io.StringIO(), verbosity=0)
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        with (
+            contextlib.redirect_stdout(io.StringIO()),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
             res = runner.run(suite)
         if res.errors:
             for test_case, err_trace in res.errors:
@@ -277,7 +294,9 @@ def measure_single_target_coverage(
     abs_impl = str(impl_path.resolve())
     covered_lines: Set[int] = set()
     for (fn, ln), _ in results.counts.items():
-        if (os.path.abspath(fn) == abs_impl or Path(fn).name == impl_path.name) and ln in exec_lines:
+        if (
+            os.path.abspath(fn) == abs_impl or Path(fn).name == impl_path.name
+        ) and ln in exec_lines:
             covered_lines.add(ln)
 
     missed_lines = sorted(list(exec_lines - covered_lines))
@@ -316,7 +335,9 @@ def format_spans_report(cov: ModuleCoverage, max_spans: int = 3) -> str:
         lines.append(f"\n  Span {idx} ({span_label}):")
         for ln in range(start, end + 1):
             if ln in cov.missing_lines:
-                text = src_lines[ln - 1].rstrip("\r\n") if 0 < ln <= len(src_lines) else ""
+                text = (
+                    src_lines[ln - 1].rstrip("\r\n") if 0 < ln <= len(src_lines) else ""
+                )
                 lines.append(f"    {ln:4d}: {text}")
 
     omitted = len(cov.missing_spans) - len(shown_spans)
@@ -327,7 +348,9 @@ def format_spans_report(cov: ModuleCoverage, max_spans: int = 3) -> str:
     return "\n".join(lines)
 
 
-def format_coverage_report(cov: ModuleCoverage, threshold: float, max_spans: int = 3) -> str:
+def format_coverage_report(
+    cov: ModuleCoverage, threshold: float, max_spans: int = 3
+) -> str:
     """Format full structured report suitable for console and log file."""
     if not cov.test_passed:
         return (
@@ -435,7 +458,9 @@ def main() -> int:
     elif args.target:
         target_map = get_available_targets(repo_root)
         distinct_targets = sorted(
-            list({impl.stem: (impl, test) for impl, test in target_map.values()}.items())
+            list(
+                {impl.stem: (impl, test) for impl, test in target_map.values()}.items()
+            )
         )
         query = normalize_target_query(args.target)
         if query not in target_map:
@@ -448,10 +473,18 @@ def main() -> int:
     else:
         target_map = get_available_targets(repo_root)
         distinct_targets = sorted(
-            list({impl.stem: (impl, test) for impl, test in target_map.values()}.items())
+            list(
+                {impl.stem: (impl, test) for impl, test in target_map.values()}.items()
+            )
         )
-        print("Error: Please specify --impl and --test, or target name.\n", file=sys.stderr)
-        print("Usage: evaluate_coverage --impl <path> --test <path> [--update-log <path>] [--threshold 100.0]\n", file=sys.stderr)
+        print(
+            "Error: Please specify --impl and --test, or target name.\n",
+            file=sys.stderr,
+        )
+        print(
+            "Usage: evaluate_coverage --impl <path> --test <path> [--update-log <path>] [--threshold 100.0]\n",
+            file=sys.stderr,
+        )
         print(f"Available targets ({len(distinct_targets)}):", file=sys.stderr)
         for idx, (stem, (impl, test)) in enumerate(distinct_targets, 1):
             print(f"  {idx:2d}. {test.stem:<42} -> {impl.name}", file=sys.stderr)

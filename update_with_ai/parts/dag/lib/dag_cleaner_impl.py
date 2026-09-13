@@ -4,7 +4,13 @@ from . import dag_cleaner
 from . import dag_config
 from . import dag_node_cleaner
 from . import dag_storage
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
+
 
 class DagCleaner(dag_cleaner.DagCleaner, Singleton):
     tier = "system"
@@ -18,7 +24,9 @@ class DagCleaner(dag_cleaner.DagCleaner, Singleton):
         cfg = get_singleton(dag_config.DagConfig)
         return cfg.node_visit_limit
 
-    def _collect_subgraph(self, root: dag_storage.Node, storage: dag_storage.DagStorage) -> Set[dag_storage.Node]:
+    def _collect_subgraph(
+        self, root: dag_storage.Node, storage: dag_storage.DagStorage
+    ) -> Set[dag_storage.Node]:
         # Requirement: Cleaning a target node collects all reachable dependencies from the node.
         visited: Set[dag_storage.Node] = set()
         queue: deque[dag_storage.Node] = deque([root])
@@ -30,7 +38,9 @@ class DagCleaner(dag_cleaner.DagCleaner, Singleton):
                     queue.append(dep.node)
         return visited
 
-    def _topological_sort(self, nodes: Set[dag_storage.Node], storage: dag_storage.DagStorage) -> List[dag_storage.Node]:
+    def _topological_sort(
+        self, nodes: Set[dag_storage.Node], storage: dag_storage.DagStorage
+    ) -> List[dag_storage.Node]:
         # Requirement: In each cleaning iteration, reachable nodes are visited in topological order.
         # Requirement: [DagCleaner] Cleaning a node cleans dirty nodes in dependency-first topological order, ensuring all dependencies of a node are clean before that node is cleaned.
         in_degree: Dict[dag_storage.Node, int] = {n: 0 for n in nodes}
@@ -42,7 +52,9 @@ class DagCleaner(dag_cleaner.DagCleaner, Singleton):
                     adj[dep.node].append(n)
                     in_degree[n] += 1
 
-        queue: deque[dag_storage.Node] = deque([n for n, deg in in_degree.items() if deg == 0])
+        queue: deque[dag_storage.Node] = deque(
+            [n for n, deg in in_degree.items() if deg == 0]
+        )
         order: List[dag_storage.Node] = []
 
         while queue:
@@ -55,7 +67,9 @@ class DagCleaner(dag_cleaner.DagCleaner, Singleton):
 
         return order
 
-    def clean(self, node: dag_storage.Node, cleaner: dag_node_cleaner.NodeCleaner) -> None:
+    def clean(
+        self, node: dag_storage.Node, cleaner: dag_node_cleaner.NodeCleaner
+    ) -> None:
         # Requirement: Cleaning succeeds when all reachable nodes in the subgraph are clean.
         # Requirement: [DagCleaner] Cleaning concludes when all nodes in the subgraph rooted at the node are clean.
         storage = get_singleton(dag_storage.DagStorage)
@@ -72,14 +86,20 @@ class DagCleaner(dag_cleaner.DagCleaner, Singleton):
                     continue
 
                 # Requirement: A node is cleaned only if it is dirty and all of its dependencies are clean.
-                deps_clean = all(not storage.is_dirty(d.node) for d in storage.get_dependencies(curr) if d.node in nodes)
+                deps_clean = all(
+                    not storage.is_dirty(d.node)
+                    for d in storage.get_dependencies(curr)
+                    if d.node in nodes
+                )
                 if not deps_clean:  # pragma: no cover (assumption: acyclic graph ensures dependencies precede dependents)
                     continue
 
                 visits[curr] += 1
                 # Requirement: If visiting any node exceeds the node visit limit, the dag cleaner halts with an unexpected failure.
                 if visits[curr] > self.node_visit_limit:
-                    raise RuntimeError(f"Node {curr.address} exceeded node visit limit of {self.node_visit_limit}")
+                    raise RuntimeError(
+                        f"Node {curr.address} exceeded node visit limit of {self.node_visit_limit}"
+                    )
 
                 # Requirement: When cleaning a dirty node, the node cleaner is invoked to clean the node.
                 # Requirement: [DagCleaner] When cleaning a dirty node using the node cleaner, cleaning delegates to the node cleaner.
@@ -90,9 +110,12 @@ class DagCleaner(dag_cleaner.DagCleaner, Singleton):
                 if not should_continue:
                     return
 
-            if not cleaned_in_pass and any(storage.is_dirty(n) for n in nodes):  # pragma: no cover (assumption: acyclic graph prevents deadlocks)
+            if not cleaned_in_pass and any(
+                storage.is_dirty(n) for n in nodes
+            ):  # pragma: no cover (assumption: acyclic graph prevents deadlocks)
                 # Stalled or circular dirty dependencies
                 break
+
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry

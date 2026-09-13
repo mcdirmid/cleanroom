@@ -55,7 +55,9 @@ class MockToolManager:
     def install_tool(self, tool: Tool) -> None:
         self.installed_tools.add(tool)
 
-    def execute_tool(self, name: str, wire_parameter_bindings: WireParameterBindings) -> Response:
+    def execute_tool(
+        self, name: str, wire_parameter_bindings: WireParameterBindings
+    ) -> Response:
         return Response(is_failed=False, is_terminated=False, content="")
 
 
@@ -195,15 +197,21 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             template_parameters={"param": "materialized"},
         )
 
-        self.registry.register_instance(self.tool_mgr, keys=[ToolManager], tier="agent_session")
+        self.registry.register_instance(
+            self.tool_mgr, keys=[ToolManager], tier="agent_session"
+        )
         self.registry.register_instance(
             self.str_conv, keys=[StringParameterConverter], tier="agent_session"
         )
         self.registry.register_instance(
             self.int_conv, keys=[IntegerParameterConverter], tier="agent_session"
         )
-        self.registry.register_instance(self.alias_mgr, keys=[AliasManager], tier="agent_session")
-        self.registry.register_instance(self.node_cfg, keys=[NodeConfig], tier="agent_session")
+        self.registry.register_instance(
+            self.alias_mgr, keys=[AliasManager], tier="agent_session"
+        )
+        self.registry.register_instance(
+            self.node_cfg, keys=[NodeConfig], tier="agent_session"
+        )
         self.registry.register_instance(
             self.template_formatter, keys=[TemplateFormatter], tier="agent_session"
         )
@@ -258,7 +266,9 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
             resp_ro = replace_tool.execute_tool(b_ro)
             self.assertTrue(resp_ro.is_failed)
-            self.assertEqual(resp_ro.reminder, "Only declared read-write files can be modified.")
+            self.assertEqual(
+                resp_ro.reminder, "Only declared read-write files can be modified."
+            )
 
             # 2. Text not found fails
             b_not_found = ActualParameterBindings(
@@ -290,7 +300,9 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertIsNotNone(resp.follow_up_tool_call)
             assert resp.follow_up_tool_call is not None
             self.assertEqual(resp.follow_up_tool_call.tool_name, "read_file")
-            bindings_dict = dict(resp.follow_up_tool_call.wire_parameter_bindings.bindings)
+            bindings_dict = dict(
+                resp.follow_up_tool_call.wire_parameter_bindings.bindings
+            )
             self.assertEqual(bindings_dict.get("file"), self.rw_file.short_name)
             self.assertTrue(bindings_dict.get("line_numbers"))
             self.assertIsNotNone(resp.reminder)
@@ -322,7 +334,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Executing the text replacement tool fails if the target text exceeds 100,000 characters, and reminds the agent that target text for replacement must not exceed 100,000 characters.
             resp_huge = replace_tool.execute_tool(b_huge)
             self.assertTrue(resp_huge.is_failed)
-            self.assertEqual(resp_huge.reminder, "Target text for replacement must not exceed 100,000 characters.")
+            self.assertEqual(
+                resp_huge.reminder,
+                "Target text for replacement must not exceed 100,000 characters.",
+            )
 
             # 6. Replacement producing no change to file content fails
             with open(self.target_path, "w", encoding="utf-8") as f:
@@ -337,7 +352,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
             resp_no_change = replace_tool.execute_tool(b_no_change)
             self.assertTrue(resp_no_change.is_failed)
-            self.assertEqual(resp_no_change.reminder, "The edit had no effect, and such edits will fail.")
+            self.assertEqual(
+                resp_no_change.reminder,
+                "The edit had no effect, and such edits will fail.",
+            )
             self.assertIsNone(resp_no_change.suppression_key)
             self.assertIsNone(resp_no_change.follow_up_tool_call)
 
@@ -361,7 +379,9 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
             resp_line_ro = line_tool.execute_tool(b_ro)
             self.assertTrue(resp_line_ro.is_failed)
-            self.assertEqual(resp_line_ro.reminder, "Only declared read-write files can be modified.")
+            self.assertEqual(
+                resp_line_ro.reminder, "Only declared read-write files can be modified."
+            )
 
             # 1. Replace lines 1 and 2
             b_replace = ActualParameterBindings(
@@ -382,7 +402,9 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertIsNotNone(resp1.follow_up_tool_call)
             assert resp1.follow_up_tool_call is not None
             self.assertEqual(resp1.follow_up_tool_call.tool_name, "read_file")
-            bindings_dict = dict(resp1.follow_up_tool_call.wire_parameter_bindings.bindings)
+            bindings_dict = dict(
+                resp1.follow_up_tool_call.wire_parameter_bindings.bindings
+            )
             self.assertEqual(bindings_dict.get("file"), self.rw_file.short_name)
             self.assertTrue(bindings_dict.get("line_numbers"))
             self.assertIsNotNone(resp1.reminder)
@@ -420,7 +442,9 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             resp_nn = line_tool.execute_tool(b_no_newline)
             self.assertFalse(resp_nn.is_failed)
             with open(self.target_path, "r", encoding="utf-8") as f:
-                self.assertEqual(f.read(), "Line 1 without newline\nInserted Line\nLine 3\n")
+                self.assertEqual(
+                    f.read(), "Line 1 without newline\nInserted Line\nLine 3\n"
+                )
 
             # 2c. Insertion lacking trailing newline preserves surrounding lines
             b_insert_nn = ActualParameterBindings(
@@ -487,7 +511,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
             resp_no_change_line = line_tool.execute_tool(b_no_change_line)
             self.assertTrue(resp_no_change_line.is_failed)
-            self.assertEqual(resp_no_change_line.reminder, "The edit had no effect, and such edits will fail.")
+            self.assertEqual(
+                resp_no_change_line.reminder,
+                "The edit had no effect, and such edits will fail.",
+            )
             self.assertIsNone(resp_no_change_line.suppression_key)
             self.assertIsNone(resp_no_change_line.follow_up_tool_call)
 
@@ -503,7 +530,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
             resp_no_change_insert = line_tool.execute_tool(b_no_change_insert)
             self.assertTrue(resp_no_change_insert.is_failed)
-            self.assertEqual(resp_no_change_insert.reminder, "The edit had no effect, and such edits will fail.")
+            self.assertEqual(
+                resp_no_change_insert.reminder,
+                "The edit had no effect, and such edits will fail.",
+            )
             self.assertIsNone(resp_no_change_insert.suppression_key)
             self.assertIsNone(resp_no_change_insert.follow_up_tool_call)
 
@@ -553,7 +583,9 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
             resp3 = replace_tool.execute_tool(b_noop)
             self.assertTrue(resp3.is_failed)
-            self.assertEqual(resp3.reminder, "The edit had no effect, and such edits will fail.")
+            self.assertEqual(
+                resp3.reminder, "The edit had no effect, and such edits will fail."
+            )
             self.assertFalse(edit_mgr.has_modifications)
 
     def test_file_update_revision(self) -> None:
@@ -592,7 +624,9 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertFalse(resp2.is_failed)
             self.assertEqual(edit_mgr.file_update_revision, 2)
 
-    def test_edit_manager_initial_content_detection_and_filesystem_modifications(self) -> None:
+    def test_edit_manager_initial_content_detection_and_filesystem_modifications(
+        self,
+    ) -> None:
         """CUJ: EditManager records initial contents from filesystem and detects creations, deletions, and errors."""
         with enter_phase("agent_session", registry=self.registry) as scope:
             edit_mgr = scope.get_singleton(EditManager)
@@ -647,20 +681,35 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             line_tool = scope.get_singleton(LineUpdateTool)
 
             # Requirement: The text replacement tool file parameter uses the alias manager to convert a file alias.
-            self.assertIs(replace_tool.file_alias_parameter.parameter_converter, self.alias_mgr)
+            self.assertIs(
+                replace_tool.file_alias_parameter.parameter_converter, self.alias_mgr
+            )
             # Requirement: The text replacement tool target text parameter uses a string parameter converter to accept text.
-            self.assertIs(replace_tool.target_text_parameter.parameter_converter, self.str_conv)
+            self.assertIs(
+                replace_tool.target_text_parameter.parameter_converter, self.str_conv
+            )
             # Requirement: The text replacement tool replacement text parameter uses a string parameter converter to accept text.
-            self.assertIs(replace_tool.replacement_text_parameter.parameter_converter, self.str_conv)
+            self.assertIs(
+                replace_tool.replacement_text_parameter.parameter_converter,
+                self.str_conv,
+            )
 
             # Requirement: The line update tool file parameter uses the alias manager to convert a file alias.
-            self.assertIs(line_tool.file_alias_parameter.parameter_converter, self.alias_mgr)
+            self.assertIs(
+                line_tool.file_alias_parameter.parameter_converter, self.alias_mgr
+            )
             # Requirement: The line update tool start line parameter uses an integer parameter converter to accept an integer.
-            self.assertIs(line_tool.start_line_parameter.parameter_converter, self.int_conv)
+            self.assertIs(
+                line_tool.start_line_parameter.parameter_converter, self.int_conv
+            )
             # Requirement: The line update tool end line parameter uses an integer parameter converter to accept an integer.
-            self.assertIs(line_tool.end_line_parameter.parameter_converter, self.int_conv)
+            self.assertIs(
+                line_tool.end_line_parameter.parameter_converter, self.int_conv
+            )
             # Requirement: The line update tool replacement text parameter uses a string parameter converter to accept text.
-            self.assertIs(line_tool.replacement_text_parameter.parameter_converter, self.str_conv)
+            self.assertIs(
+                line_tool.replacement_text_parameter.parameter_converter, self.str_conv
+            )
 
 
 if __name__ == "__main__":
@@ -669,4 +718,3 @@ if __name__ == "__main__":
 # Untested requirements:
 # - [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
 # - [Tool] When a parameter is required, an argument must be supplied for tool execution.
-

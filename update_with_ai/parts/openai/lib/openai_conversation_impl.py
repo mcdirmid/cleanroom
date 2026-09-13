@@ -4,6 +4,7 @@ from update_with_ai.parts.agent.lib import agent_conversation
 from update_with_ai.parts.sandbox.lib import tool_provider
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
 
+
 class Conversation(agent_conversation.Conversation, Singleton):
     tier = "agent_session"
 
@@ -34,7 +35,11 @@ class Conversation(agent_conversation.Conversation, Singleton):
             for m in self._messages
         )
         if not has_assistant_call:
-            args_dict = dict(wire_parameter_bindings.bindings) if wire_parameter_bindings is not None else {}
+            args_dict = (
+                dict(wire_parameter_bindings.bindings)
+                if wire_parameter_bindings is not None
+                else {}
+            )
             self._messages.append(
                 agent_conversation.Message(
                     role="assistant",
@@ -50,7 +55,10 @@ class Conversation(agent_conversation.Conversation, Singleton):
         if response.suppression_key is not None:
             # Requirement: A tool response's suppression key identifies the latest preceding response with the same key in the conversation for replacement with a stub, while responses with unmatched keys are preserved intact.
             for i in range(len(self._messages) - 1, -1, -1):
-                if self._suppression_keys[i] == response.suppression_key and not self._messages[i].is_stub:
+                if (
+                    self._suppression_keys[i] == response.suppression_key
+                    and not self._messages[i].is_stub
+                ):
                     old_msg = self._messages[i]
                     if effective_reminder is None:
                         # Requirement: A stub retains the reminder from the superseded tool response, which the newly appended response inherits when omitted.
@@ -99,6 +107,7 @@ class Conversation(agent_conversation.Conversation, Singleton):
                 )
             )
         return agent_conversation.ModelRequest(messages=formatted)
+
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry

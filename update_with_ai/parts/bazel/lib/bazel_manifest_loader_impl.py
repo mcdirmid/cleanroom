@@ -5,7 +5,13 @@ from update_with_ai.parts.agent.lib import agent_storage
 from . import bazel_manifest_loader
 from . import bazel_target
 from update_with_ai.parts.dag.lib import dag_storage
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
+
 
 class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
     tier = "system"
@@ -13,7 +19,9 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
     def __init__(self) -> None:
         self._manifests: Dict[dag_storage.Node, bazel_manifest_loader.Manifest] = {}
 
-    def get_manifest(self, node: dag_storage.Node) -> Optional[bazel_manifest_loader.Manifest]:
+    def get_manifest(
+        self, node: dag_storage.Node
+    ) -> Optional[bazel_manifest_loader.Manifest]:
         # Check in-memory cache first
         if node in self._manifests:
             return self._manifests[node]
@@ -22,7 +30,11 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
         # Requirement: [BazelManifestLoader] The bazel manifest loader retrieves the manifest for a node in dag storage.
         node_util = get_singleton(bazel_target.BazelTarget)
         pkg_dir = node_util.extract_directory(node)
-        target_name = node.address.split(":")[-1] if ":" in node.address else os.path.basename(node.address)
+        target_name = (
+            node.address.split(":")[-1]
+            if ":" in node.address
+            else os.path.basename(node.address)
+        )
         manifest_filename = f"{target_name}_manifest.json"
 
         candidates = [
@@ -31,14 +43,19 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
             os.path.join("bazel-bin", pkg_dir.path, manifest_filename),
             manifest_filename,
         ]
-        for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):
+        for base in (
+            os.environ.get("RUNFILES_DIR", ""),
+            os.environ.get("BAZEL_RUNFILES", ""),
+        ):
             if base:
-                candidates.extend([
-                    os.path.join(base, manifest_filename),
-                    os.path.join(base, "_main", manifest_filename),
-                    os.path.join(base, "_main", pkg_dir.path, manifest_filename),
-                    os.path.join(base, pkg_dir.path, manifest_filename),
-                ])
+                candidates.extend(
+                    [
+                        os.path.join(base, manifest_filename),
+                        os.path.join(base, "_main", manifest_filename),
+                        os.path.join(base, "_main", pkg_dir.path, manifest_filename),
+                        os.path.join(base, pkg_dir.path, manifest_filename),
+                    ]
+                )
 
         for path in candidates:
             if os.path.exists(path) and os.path.isfile(path):
@@ -53,7 +70,9 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
         return None
 
     def load_manifest(
-        self, content: bazel_manifest_loader.Manifest, storage: agent_storage.AgentStorage
+        self,
+        content: bazel_manifest_loader.Manifest,
+        storage: agent_storage.AgentStorage,
     ) -> Sequence[agent_storage.NodeDefinition]:
         # Requirement: A manifest loader parses JSON manifests using the filesystem into json manifest records.
         data = json.loads(str(content))
@@ -66,7 +85,9 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
             # Requirement: A manifest loader normalizes node references into canonical nodes using node identifier utilities.
             node = node_util.normalize(label)
             # Cache the manifest for this node
-            self._manifests[node] = bazel_manifest_loader.Manifest(json.dumps(t) if "targets" in data else str(content))
+            self._manifests[node] = bazel_manifest_loader.Manifest(
+                json.dumps(t) if "targets" in data else str(content)
+            )
 
             prompt = agent_storage.TaskPrompt(t.get("prompt", t.get("task_prompt", "")))
             defn = agent_storage.NodeDefinition(node=node, task_prompt=prompt)
@@ -97,6 +118,7 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                 storage_any._dependencies[node] = deps
 
         return results
+
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry

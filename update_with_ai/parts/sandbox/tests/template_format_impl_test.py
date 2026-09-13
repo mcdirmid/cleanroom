@@ -218,9 +218,7 @@ class TemplateFormatImplTest(unittest.TestCase):
 
             # Unbound block loop: renders body with unbound context
             unbound_block_tmpl = (
-                "<!-- for: x in absent_list -->\n"
-                "Item: <x>\n"
-                "<!-- endfor -->"
+                "<!-- for: x in absent_list -->\nItem: <x>\n<!-- endfor -->"
             )
             # Requirement: Identifies block loop markers enclosing multi-line sections, repeating enclosed lines for each element in the resolved sequence with the loop variable bound in the parameter context.
             res_unbound_block = formatter.format_template(unbound_block_tmpl, {})
@@ -247,11 +245,7 @@ class TemplateFormatImplTest(unittest.TestCase):
             self.assertEqual(res_nested_if, "Outer\nInner")
 
             # Unbound block if: retains body content
-            unbound_if_tmpl = (
-                "<!-- if: absent_flag -->\n"
-                "Default text\n"
-                "<!-- endif -->"
-            )
+            unbound_if_tmpl = "<!-- if: absent_flag -->\nDefault text\n<!-- endif -->"
             # Requirement: Identifies block conditional markers enclosing multi-line sections, including enclosed lines when the condition key evaluates to true and omitting enclosed lines when false.
             res_unbound_if = formatter.format_template(unbound_if_tmpl, {})
             self.assertEqual(res_unbound_if, "Default text")

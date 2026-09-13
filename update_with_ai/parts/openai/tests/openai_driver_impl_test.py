@@ -5,8 +5,16 @@ import unittest
 from typing import Any, List, Optional, Set
 from unittest.mock import MagicMock, patch
 
-from update_with_ai.parts.agent.lib.agent_conversation import Conversation, Message, ModelRequest
-from update_with_ai.parts.agent.lib.agent_loop_guard import LoopFailure, LoopGuard, LoopReminder
+from update_with_ai.parts.agent.lib.agent_conversation import (
+    Conversation,
+    Message,
+    ModelRequest,
+)
+from update_with_ai.parts.agent.lib.agent_loop_guard import (
+    LoopFailure,
+    LoopGuard,
+    LoopReminder,
+)
 from update_with_ai.parts.agent.lib.agent_driver import AgentOutcome, AgentDriver
 from update_with_ai.parts.openai.lib.openai_driver_impl import (
     AgentDriver as AgentDriverImpl,
@@ -126,7 +134,9 @@ class MockToolManager:
     def install_tool(self, tool: Tool) -> None:
         self._tools.add(tool)
 
-    def execute_tool(self, name: str, wire_parameter_bindings: WireParameterBindings) -> Response:
+    def execute_tool(
+        self, name: str, wire_parameter_bindings: WireParameterBindings
+    ) -> Response:
         self.executions.append((name, wire_parameter_bindings))
         if name in self.handlers:
             return self.handlers[name](wire_parameter_bindings)
@@ -165,7 +175,9 @@ class DummyTool:
     def parameters(self) -> Set[Parameter]:
         return self._parameters
 
-    def execute_tool(self, actual_parameter_bindings: ActualParameterBindings) -> Response:
+    def execute_tool(
+        self, actual_parameter_bindings: ActualParameterBindings
+    ) -> Response:
         return Response(is_failed=False, is_terminated=False, content="ok")
 
 
@@ -182,7 +194,9 @@ class DummyToolCall:
 
 
 class DummyMessage:
-    def __init__(self, content: str | None, tool_calls: List[DummyToolCall] | None = None) -> None:
+    def __init__(
+        self, content: str | None, tool_calls: List[DummyToolCall] | None = None
+    ) -> None:
         self.content = content
         self.tool_calls = tool_calls or []
 
@@ -208,32 +222,48 @@ class OpenAIDriverImplTest(unittest.TestCase):
         self.loop_guard = MockLoopGuard()
         self.tool_mgr = MockToolManager()
 
-        self.registry.register_instance(self.model_cfg, keys=[OpenaiConfig, AgentConfig], tier="system")
+        self.registry.register_instance(
+            self.model_cfg, keys=[OpenaiConfig, AgentConfig], tier="system"
+        )
         self.registry.register_instance(self.logger, keys=[RunnerLogger], tier="system")
         self.registry.register_instance(
             self.history, keys=[Conversation], tier="agent_session"
         )
-        self.registry.register_instance(self.loop_guard, keys=[LoopGuard], tier="agent_session")
-        self.registry.register_instance(self.tool_mgr, keys=[ToolManager], tier="agent_session")
+        self.registry.register_instance(
+            self.loop_guard, keys=[LoopGuard], tier="agent_session"
+        )
+        self.registry.register_instance(
+            self.tool_mgr, keys=[ToolManager], tier="agent_session"
+        )
 
     def test_agent_outcome_dataclass(self) -> None:
         """CUJ: Instantiating AgentOutcome dataclass."""
         resp = Response(is_failed=False, is_terminated=True, content="Success")
-        outcome = AgentOutcome(is_success=True, response=resp, conversation=self.history)
+        outcome = AgentOutcome(
+            is_success=True, response=resp, conversation=self.history
+        )
         self.assertTrue(outcome.is_success)
         self.assertEqual(outcome.response, resp)
         self.assertEqual(outcome.conversation_history, self.history)
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
-    def test_response_without_tool_calls_prompts_reminder_and_continues(self, mock_openai_cls: MagicMock) -> None:
+    def test_response_without_tool_calls_prompts_reminder_and_continues(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
         """CUJ: Injecting tool reminder and continuing when model returns no tool calls."""
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
 
         # Turn 1: Model returns text without tool calls
-        comp1 = DummyCompletion([DummyChoice(DummyMessage("I will inspect the files."))])
+        comp1 = DummyCompletion(
+            [DummyChoice(DummyMessage("I will inspect the files."))]
+        )
         # Turn 2: Model invokes terminating tool call
-        tc = DummyToolCall(id="call_finish", name="finish_task", arguments=json.dumps({"summary": "done"}))
+        tc = DummyToolCall(
+            id="call_finish",
+            name="finish_task",
+            arguments=json.dumps({"summary": "done"}),
+        )
         comp2 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc]))])
         mock_client.chat.completions.create.side_effect = [comp1, comp2]
 
@@ -250,23 +280,33 @@ class OpenAIDriverImplTest(unittest.TestCase):
             self.assertTrue(outcome.is_success)
             self.assertEqual(len(self.history.messages), 4)
             self.assertEqual(self.history.messages[0].role, "assistant")
-            self.assertEqual(self.history.messages[0].content, "I will inspect the files.")
+            self.assertEqual(
+                self.history.messages[0].content, "I will inspect the files."
+            )
             self.assertEqual(self.history.messages[1].role, "user")
             self.assertIn("No tools were executed", self.history.messages[1].content)
             self.assertEqual(self.history.messages[2].role, "assistant")
             # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
             # Requirement: [AgentDriver] The agent driver records log events for interaction turns, tool executions, and turn outcomes to the runner logger.
-            comp_events = [e for e in self.logger.events if e.event_name == "model_completion"]
+            comp_events = [
+                e for e in self.logger.events if e.event_name == "model_completion"
+            ]
             self.assertTrue(len(comp_events) >= 2)
             self.assertIn("[Turn 1] Assistant (text):", comp_events[0].summary)
             self.assertIn("[Turn 2] Assistant: finish_task", comp_events[1].summary)
 
-            tool_events = [e for e in self.logger.events if e.event_name == "tool_execution"]
+            tool_events = [
+                e for e in self.logger.events if e.event_name == "tool_execution"
+            ]
             self.assertTrue(len(tool_events) >= 1)
-            self.assertIn("[Turn 2] Tool finish_task: COMPLETED -> Done", tool_events[0].summary)
+            self.assertIn(
+                "[Turn 2] Tool finish_task: COMPLETED -> Done", tool_events[0].summary
+            )
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
-    def test_conversation_limit_exceeded_fails(self, mock_openai_cls: MagicMock) -> None:
+    def test_conversation_limit_exceeded_fails(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
         """CUJ: Concluding with failure when turns reach the conversation limit."""
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
@@ -289,11 +329,17 @@ class OpenAIDriverImplTest(unittest.TestCase):
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
 
-        tc = DummyToolCall(id="call_1", name="finish_task", arguments=json.dumps({"summary": "all done"}))
+        tc = DummyToolCall(
+            id="call_1",
+            name="finish_task",
+            arguments=json.dumps({"summary": "all done"}),
+        )
         completion = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc]))])
         mock_client.chat.completions.create.return_value = completion
 
-        term_resp = Response(is_failed=False, is_terminated=True, content="Task completed successfully")
+        term_resp = Response(
+            is_failed=False, is_terminated=True, content="Task completed successfully"
+        )
         self.tool_mgr.responses["finish_task"] = term_resp
 
         class DummyTool(Tool):
@@ -316,7 +362,9 @@ class OpenAIDriverImplTest(unittest.TestCase):
                     )
                 }
 
-            def execute_tool(self, actual_parameter_bindings: ActualParameterBindings) -> Response:
+            def execute_tool(
+                self, actual_parameter_bindings: ActualParameterBindings
+            ) -> Response:
                 return term_resp
 
         self.tool_mgr.install_tool(DummyTool())
@@ -338,19 +386,31 @@ class OpenAIDriverImplTest(unittest.TestCase):
             self.assertEqual(self.history.tool_responses[0][1], "finish_task")
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
-    def test_non_terminating_tool_failure_continues_run(self, mock_openai_cls: MagicMock) -> None:
+    def test_non_terminating_tool_failure_continues_run(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
         """CUJ: Non-terminating tool failure appends feedback and run continues."""
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
 
-        tc1 = DummyToolCall(id="call_fail", name="edit_file", arguments=json.dumps({"path": "foo.py"}))
+        tc1 = DummyToolCall(
+            id="call_fail", name="edit_file", arguments=json.dumps({"path": "foo.py"})
+        )
         comp1 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc1]))])
-        tc2 = DummyToolCall(id="call_finish", name="finish_task", arguments=json.dumps({"summary": "recovered"}))
+        tc2 = DummyToolCall(
+            id="call_finish",
+            name="finish_task",
+            arguments=json.dumps({"summary": "recovered"}),
+        )
         comp2 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc2]))])
         mock_client.chat.completions.create.side_effect = [comp1, comp2]
 
-        self.tool_mgr.responses["edit_file"] = Response(is_failed=True, is_terminated=False, content="Error: file not found")
-        self.tool_mgr.responses["finish_task"] = Response(is_failed=False, is_terminated=True, content="Recovered")
+        self.tool_mgr.responses["edit_file"] = Response(
+            is_failed=True, is_terminated=False, content="Error: file not found"
+        )
+        self.tool_mgr.responses["finish_task"] = Response(
+            is_failed=False, is_terminated=True, content="Recovered"
+        )
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
@@ -358,10 +418,18 @@ class OpenAIDriverImplTest(unittest.TestCase):
 
             # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from model config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
             self.assertEqual(mock_client.chat.completions.create.call_count, 2)
-            turn2_messages = mock_client.chat.completions.create.call_args_list[1].kwargs["messages"]
-            asst_tc_msg = next(m for m in turn2_messages if m["role"] == "assistant" and "tool_calls" in m)
+            turn2_messages = mock_client.chat.completions.create.call_args_list[
+                1
+            ].kwargs["messages"]
+            asst_tc_msg = next(
+                m
+                for m in turn2_messages
+                if m["role"] == "assistant" and "tool_calls" in m
+            )
             self.assertEqual(asst_tc_msg["tool_calls"][0]["id"], "call_fail")
-            self.assertEqual(asst_tc_msg["tool_calls"][0]["function"]["name"], "edit_file")
+            self.assertEqual(
+                asst_tc_msg["tool_calls"][0]["function"]["name"], "edit_file"
+            )
             tool_res_msg = next(m for m in turn2_messages if m["role"] == "tool")
             self.assertEqual(tool_res_msg["tool_call_id"], "call_fail")
 
@@ -370,30 +438,44 @@ class OpenAIDriverImplTest(unittest.TestCase):
             self.assertTrue(outcome.is_success)
             self.assertEqual(len(self.history.tool_responses), 2)
             self.assertTrue(self.history.tool_responses[0][0].is_failed)
-            self.assertEqual(self.history.tool_responses[0][0].content, "Error: file not found")
+            self.assertEqual(
+                self.history.tool_responses[0][0].content, "Error: file not found"
+            )
             self.assertFalse(self.history.tool_responses[1][0].is_failed)
             self.assertEqual(self.history.tool_responses[1][0].content, "Recovered")
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
-    def test_continuation_turn_on_truncated_response(self, mock_openai_cls: MagicMock) -> None:
+    def test_continuation_turn_on_truncated_response(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
         """CUJ: Model response truncated due to finish_reason='length' triggers continuation turn."""
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
 
         # Turn 1: Truncated response (no tool calls, finish_reason="length")
-        comp1 = DummyCompletion([DummyChoice(
-            DummyMessage("Part 1: The analysis begins..."),
-            finish_reason="length",
-        )])
+        comp1 = DummyCompletion(
+            [
+                DummyChoice(
+                    DummyMessage("Part 1: The analysis begins..."),
+                    finish_reason="length",
+                )
+            ]
+        )
         # Turn 2: Completes and calls tool
         tc = DummyToolCall(id="call_finish", name="finish_task", arguments="{}")
-        comp2 = DummyCompletion([DummyChoice(
-            DummyMessage("Part 2: concluding.", tool_calls=[tc]),
-            finish_reason="stop",
-        )])
+        comp2 = DummyCompletion(
+            [
+                DummyChoice(
+                    DummyMessage("Part 2: concluding.", tool_calls=[tc]),
+                    finish_reason="stop",
+                )
+            ]
+        )
         mock_client.chat.completions.create.side_effect = [comp1, comp2]
 
-        self.tool_mgr.responses["finish_task"] = Response(is_failed=False, is_terminated=True, content="Done")
+        self.tool_mgr.responses["finish_task"] = Response(
+            is_failed=False, is_terminated=True, content="Done"
+        )
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
@@ -415,7 +497,9 @@ class OpenAIDriverImplTest(unittest.TestCase):
         """CUJ: Handling OpenAIError by logging and returning a failed outcome."""
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
-        mock_client.chat.completions.create.side_effect = OpenAIError("API Rate Limited")
+        mock_client.chat.completions.create.side_effect = OpenAIError(
+            "API Rate Limited"
+        )
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
@@ -424,18 +508,37 @@ class OpenAIDriverImplTest(unittest.TestCase):
 
             self.assertIn("Model error: API Rate Limited", str(ctx.exception))
             # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
-            self.assertTrue(any(e.event_name == "model_error" and "[Turn 1] Model error:" in e.summary for e in self.logger.events))
+            self.assertTrue(
+                any(
+                    e.event_name == "model_error"
+                    and "[Turn 1] Model error:" in e.summary
+                    for e in self.logger.events
+                )
+            )
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
-    def test_completion_request_uses_temperature_0_2(self, mock_openai_cls: MagicMock) -> None:
+    def test_completion_request_uses_temperature_0_2(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
         """CUJ: Transmitting completion request with temperature=0.2."""
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
-        comp = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[
-            DummyToolCall(id="c1", name="finish", arguments="{}")
-        ]))])
+        comp = DummyCompletion(
+            [
+                DummyChoice(
+                    DummyMessage(
+                        None,
+                        tool_calls=[
+                            DummyToolCall(id="c1", name="finish", arguments="{}")
+                        ],
+                    )
+                )
+            ]
+        )
         mock_client.chat.completions.create.return_value = comp
-        self.tool_mgr.responses["finish"] = Response(is_failed=False, is_terminated=True, content="Done")
+        self.tool_mgr.responses["finish"] = Response(
+            is_failed=False, is_terminated=True, content="Done"
+        )
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
@@ -447,7 +550,9 @@ class OpenAIDriverImplTest(unittest.TestCase):
             self.assertNotIn("max_tokens", call_kwargs)
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
-    def test_model_config_parameters_forwarded_to_completion_request(self, mock_openai_cls: MagicMock) -> None:
+    def test_model_config_parameters_forwarded_to_completion_request(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
         """CUJ: Transmitting completion request with temperature, timeout, and max_tokens from model config."""
         self.model_cfg.temperature = 0.7
         self.model_cfg.timeout = 100
@@ -455,11 +560,22 @@ class OpenAIDriverImplTest(unittest.TestCase):
 
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
-        comp = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[
-            DummyToolCall(id="c1", name="finish", arguments="{}")
-        ]))])
+        comp = DummyCompletion(
+            [
+                DummyChoice(
+                    DummyMessage(
+                        None,
+                        tool_calls=[
+                            DummyToolCall(id="c1", name="finish", arguments="{}")
+                        ],
+                    )
+                )
+            ]
+        )
         mock_client.chat.completions.create.return_value = comp
-        self.tool_mgr.responses["finish"] = Response(is_failed=False, is_terminated=True, content="Done")
+        self.tool_mgr.responses["finish"] = Response(
+            is_failed=False, is_terminated=True, content="Done"
+        )
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
@@ -471,20 +587,31 @@ class OpenAIDriverImplTest(unittest.TestCase):
             self.assertEqual(call_kwargs["max_tokens"], 4096)
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
-    def test_loop_guard_reminder_injected_into_conversation(self, mock_openai_cls: MagicMock) -> None:
+    def test_loop_guard_reminder_injected_into_conversation(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
         """CUJ: Injecting loop reminder into conversation history when loop guard warns."""
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
-        tc = DummyToolCall(id="call_read", name="read_file", arguments=json.dumps({"file": "foo.py"}))
+        tc = DummyToolCall(
+            id="call_read", name="read_file", arguments=json.dumps({"file": "foo.py"})
+        )
         comp1 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc]))])
         tc_term = DummyToolCall(id="call_finish", name="finish", arguments="{}")
         comp2 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc_term]))])
         mock_client.chat.completions.create.side_effect = [comp1, comp2]
 
-        self.tool_mgr.responses["read_file"] = Response(is_failed=False, is_terminated=False, content="file content")
-        self.tool_mgr.responses["finish"] = Response(is_failed=False, is_terminated=True, content="Done")
+        self.tool_mgr.responses["read_file"] = Response(
+            is_failed=False, is_terminated=False, content="file content"
+        )
+        self.tool_mgr.responses["finish"] = Response(
+            is_failed=False, is_terminated=True, content="Done"
+        )
 
-        self.loop_guard.return_values = [LoopReminder(feedback="Tool 'read_file' has repeated 3 times."), None]
+        self.loop_guard.return_values = [
+            LoopReminder(feedback="Tool 'read_file' has repeated 3 times."),
+            None,
+        ]
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
@@ -493,20 +620,32 @@ class OpenAIDriverImplTest(unittest.TestCase):
             # Requirement: Before executing each tool call, the agent driver records the tool execution in the loop guard, injecting a loop reminder into the conversation when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
             # Requirement: [AgentDriver] The agent driver evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
             self.assertTrue(outcome.is_success)
-            self.assertTrue(any(e.event_name == "loop_reminder" for e in self.logger.events))
-            reminder_msgs = [m for m in self.history.messages if m.role == "user" and "repeated 3 times" in m.content]
+            self.assertTrue(
+                any(e.event_name == "loop_reminder" for e in self.logger.events)
+            )
+            reminder_msgs = [
+                m
+                for m in self.history.messages
+                if m.role == "user" and "repeated 3 times" in m.content
+            ]
             self.assertEqual(len(reminder_msgs), 1)
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
-    def test_loop_guard_failure_terminates_run(self, mock_openai_cls: MagicMock) -> None:
+    def test_loop_guard_failure_terminates_run(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
         """CUJ: Terminating session immediately upon fatal loop failure."""
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
-        tc = DummyToolCall(id="call_repeat", name="read_file", arguments=json.dumps({"file": "foo.py"}))
+        tc = DummyToolCall(
+            id="call_repeat", name="read_file", arguments=json.dumps({"file": "foo.py"})
+        )
         comp = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc]))])
         mock_client.chat.completions.create.return_value = comp
 
-        self.loop_guard.return_value = LoopFailure(explanation="Fatal loop detected: tool executed 5 times.")
+        self.loop_guard.return_value = LoopFailure(
+            explanation="Fatal loop detected: tool executed 5 times."
+        )
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
@@ -515,25 +654,49 @@ class OpenAIDriverImplTest(unittest.TestCase):
 
             # Requirement: Before executing each tool call, the agent driver records the tool execution in the loop guard, injecting a loop reminder into the conversation when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
             # Requirement: [AgentDriver] The agent driver evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
-            self.assertIn("Fatal loop detected: tool executed 5 times.", str(ctx.exception))
-            self.assertTrue(any(e.event_name == "loop_failure" for e in self.logger.events))
+            self.assertIn(
+                "Fatal loop detected: tool executed 5 times.", str(ctx.exception)
+            )
+            self.assertTrue(
+                any(e.event_name == "loop_failure" for e in self.logger.events)
+            )
             self.assertEqual(len(self.tool_mgr.executions), 0)
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
-    def test_productive_progress_clears_loop_guard(self, mock_openai_cls: MagicMock) -> None:
+    def test_productive_progress_clears_loop_guard(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
         """CUJ: Forward progress (edit / advance) clears loop guard repetition tracking."""
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
 
-        tc_read = DummyToolCall(id="c1", name="read_file", arguments=json.dumps({"file": "a.py"}))
-        tc_replace = DummyToolCall(id="c2", name="replace", arguments=json.dumps({"file": "a.py", "target": "1", "rep": "2"}))
+        tc_read = DummyToolCall(
+            id="c1", name="read_file", arguments=json.dumps({"file": "a.py"})
+        )
+        tc_replace = DummyToolCall(
+            id="c2",
+            name="replace",
+            arguments=json.dumps({"file": "a.py", "target": "1", "rep": "2"}),
+        )
         tc_advance = DummyToolCall(id="c3", name="advance", arguments="{}")
-        comp1 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc_read, tc_replace, tc_advance]))])
+        comp1 = DummyCompletion(
+            [
+                DummyChoice(
+                    DummyMessage(None, tool_calls=[tc_read, tc_replace, tc_advance])
+                )
+            ]
+        )
         mock_client.chat.completions.create.return_value = comp1
 
-        self.tool_mgr.responses["read_file"] = Response(is_failed=False, is_terminated=False, content="read")
-        self.tool_mgr.responses["replace"] = Response(is_failed=False, is_terminated=False, content="replaced")
-        self.tool_mgr.responses["advance"] = Response(is_failed=False, is_terminated=True, content="advanced")
+        self.tool_mgr.responses["read_file"] = Response(
+            is_failed=False, is_terminated=False, content="read"
+        )
+        self.tool_mgr.responses["replace"] = Response(
+            is_failed=False, is_terminated=False, content="replaced"
+        )
+        self.tool_mgr.responses["advance"] = Response(
+            is_failed=False, is_terminated=True, content="advanced"
+        )
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
@@ -544,7 +707,9 @@ class OpenAIDriverImplTest(unittest.TestCase):
             self.assertEqual(self.loop_guard.progress_count, 2)
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
-    def test_completion_request_orders_tools_and_parameters_deterministically(self, mock_openai_cls: MagicMock) -> None:
+    def test_completion_request_orders_tools_and_parameters_deterministically(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
         """CUJ: Completion requests sort tools by name and parameters by name deterministically."""
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
@@ -554,16 +719,33 @@ class OpenAIDriverImplTest(unittest.TestCase):
         mock_client.chat.completions.create.return_value = comp
 
         conv = MockConverter()
-        param_z = Parameter(name="z_param", description="z desc", parameter_converter=conv, is_required=True)
-        param_a = Parameter(name="a_param", description="a desc", parameter_converter=conv, is_required=False)
-        param_b = Parameter(name="b_param", description="b desc", parameter_converter=conv, is_required=True)
+        param_z = Parameter(
+            name="z_param",
+            description="z desc",
+            parameter_converter=conv,
+            is_required=True,
+        )
+        param_a = Parameter(
+            name="a_param",
+            description="a desc",
+            parameter_converter=conv,
+            is_required=False,
+        )
+        param_b = Parameter(
+            name="b_param",
+            description="b desc",
+            parameter_converter=conv,
+            is_required=True,
+        )
 
         tool_zebra = DummyTool(name="zebra", parameters={param_z, param_a})
         tool_alpha = DummyTool(name="alpha", parameters={param_b, param_a})
 
         self.tool_mgr.install_tool(tool_zebra)
         self.tool_mgr.install_tool(tool_alpha)
-        self.tool_mgr.responses["zebra"] = Response(is_failed=False, is_terminated=True, content="done")
+        self.tool_mgr.responses["zebra"] = Response(
+            is_failed=False, is_terminated=True, content="done"
+        )
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
@@ -571,19 +753,27 @@ class OpenAIDriverImplTest(unittest.TestCase):
 
             self.assertTrue(outcome.is_success)
             # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from model config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
-            tools_arg = mock_client.chat.completions.create.call_args.kwargs.get("tools")
+            tools_arg = mock_client.chat.completions.create.call_args.kwargs.get(
+                "tools"
+            )
             self.assertIsNotNone(tools_arg)
             tool_names = [t["function"]["name"] for t in tools_arg]
             self.assertEqual(tool_names, ["alpha", "zebra"])
 
-            alpha_params = list(tools_arg[0]["function"]["parameters"]["properties"].keys())
+            alpha_params = list(
+                tools_arg[0]["function"]["parameters"]["properties"].keys()
+            )
             self.assertEqual(alpha_params, ["a_param", "b_param"])
 
-            zebra_params = list(tools_arg[1]["function"]["parameters"]["properties"].keys())
+            zebra_params = list(
+                tools_arg[1]["function"]["parameters"]["properties"].keys()
+            )
             self.assertEqual(zebra_params, ["a_param", "z_param"])
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
-    def test_tool_execution_logs_corrective_reminder_in_transcript(self, mock_openai_cls: MagicMock) -> None:
+    def test_tool_execution_logs_corrective_reminder_in_transcript(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
         """CUJ: Tool execution log event transcript representation includes corrective reminder when present."""
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
@@ -613,13 +803,20 @@ class OpenAIDriverImplTest(unittest.TestCase):
 
             self.assertTrue(outcome.is_success)
             # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
-            tool_events = [e for e in self.logger.events if e.event_name == "tool_execution"]
+            tool_events = [
+                e for e in self.logger.events if e.event_name == "tool_execution"
+            ]
             self.assertEqual(len(tool_events), 2)
-            self.assertIn("Ensure parameters are non-empty.", tool_events[0].transcript_representation)
+            self.assertIn(
+                "Ensure parameters are non-empty.",
+                tool_events[0].transcript_representation,
+            )
             self.assertNotIn("Reminder:", tool_events[1].transcript_representation)
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
-    def test_prefix_reuse_measured_and_logged_across_turns(self, mock_openai_cls: MagicMock) -> None:
+    def test_prefix_reuse_measured_and_logged_across_turns(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
         """CUJ: Measuring and logging prefix reuse for conversations sent to OpenAI across turns."""
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
@@ -647,7 +844,9 @@ class OpenAIDriverImplTest(unittest.TestCase):
 
             self.assertTrue(outcome.is_success)
             # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
-            req_events = [e for e in self.logger.events if e.event_name == "model_request"]
+            req_events = [
+                e for e in self.logger.events if e.event_name == "model_request"
+            ]
             self.assertEqual(len(req_events), 2)
             self.assertIn("[Turn 1] initial request", req_events[0].summary)
             self.assertIn("Prefix reuse: N/A", req_events[0].transcript_representation)
@@ -656,7 +855,9 @@ class OpenAIDriverImplTest(unittest.TestCase):
             self.assertIn("Prefix intact:", req_events[1].transcript_representation)
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
-    def test_prefix_reuse_divergence_diagnostics_logged(self, mock_openai_cls: MagicMock) -> None:
+    def test_prefix_reuse_divergence_diagnostics_logged(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
         """CUJ: Measuring and logging prefix reuse divergence diagnostics when previous turn message diverges."""
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
@@ -686,14 +887,21 @@ class OpenAIDriverImplTest(unittest.TestCase):
 
             self.assertTrue(outcome.is_success)
             # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
-            req_events = [e for e in self.logger.events if e.event_name == "model_request"]
+            req_events = [
+                e for e in self.logger.events if e.event_name == "model_request"
+            ]
             self.assertEqual(len(req_events), 2)
             self.assertIn("diverged at msg 0", req_events[1].summary)
-            self.assertIn("Divergence detected at message index 0:", req_events[1].transcript_representation)
+            self.assertIn(
+                "Divergence detected at message index 0:",
+                req_events[1].transcript_representation,
+            )
             self.assertIn("Content changed", req_events[1].transcript_representation)
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
-    def test_follow_up_tool_call_dispatched_when_inject_followups_enabled(self, mock_openai_cls: MagicMock) -> None:
+    def test_follow_up_tool_call_dispatched_when_inject_followups_enabled(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
         """CUJ: Dispatching follow-up tool call with synthetic assistant invocation when inject_followups is True."""
         self.model_cfg.inject_followups = True
         mock_client = MagicMock()
@@ -744,10 +952,14 @@ class OpenAIDriverImplTest(unittest.TestCase):
             self.assertEqual(self.history.messages[2].role, "assistant")
             self.assertEqual(self.history.messages[2].tool_name, "followup_tool")
             self.assertEqual(self.history.messages[3].role, "tool")
-            self.assertEqual(self.history.messages[3].content, "Followup tool executed.")
+            self.assertEqual(
+                self.history.messages[3].content, "Followup tool executed."
+            )
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
-    def test_follow_up_tool_call_not_dispatched_when_inject_followups_disabled(self, mock_openai_cls: MagicMock) -> None:
+    def test_follow_up_tool_call_not_dispatched_when_inject_followups_disabled(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
         """CUJ: Follow-up tool call is ignored when inject_followups is False."""
         self.model_cfg.inject_followups = False
         mock_client = MagicMock()
@@ -785,15 +997,23 @@ class OpenAIDriverImplTest(unittest.TestCase):
             self.assertEqual(executed_names, ["initial_tool", "finish_tool"])
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
-    def test_terminating_failure_tool_raises_runtime_error(self, mock_openai_cls: MagicMock) -> None:
+    def test_terminating_failure_tool_raises_runtime_error(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
         """CUJ: Tool execution producing terminating failure raises RuntimeError."""
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
-        tc = DummyToolCall(id="call_fail", name="fail", arguments=json.dumps({"reason": "Cannot proceed"}))
+        tc = DummyToolCall(
+            id="call_fail",
+            name="fail",
+            arguments=json.dumps({"reason": "Cannot proceed"}),
+        )
         comp = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc]))])
         mock_client.chat.completions.create.return_value = comp
 
-        self.tool_mgr.responses["fail"] = Response(is_failed=True, is_terminated=True, content="Cannot proceed")
+        self.tool_mgr.responses["fail"] = Response(
+            is_failed=True, is_terminated=True, content="Cannot proceed"
+        )
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
@@ -842,16 +1062,29 @@ class OpenAIDriverImplTest(unittest.TestCase):
         self.assertIn("Current conversation is shorter than previous conversation", t4)
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
-    def test_completion_and_output_formatting_and_truncation(self, mock_openai_cls: MagicMock) -> None:
+    def test_completion_and_output_formatting_and_truncation(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
         """CUJ: Formatting and truncating long arguments, assistant previews, and tool outputs."""
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
 
         # Turn 1: tool call with arguments > 60 chars and invalid JSON arguments
         long_arg = "a" * 70
-        tc1 = DummyToolCall(id="c1", name="step_tool", arguments=f'{{"key": "{long_arg}"}}')
-        tc_bad_json = DummyToolCall(id="c_bad", name="step_tool", arguments="invalid JSON {")
-        comp1 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc1, tc_bad_json]), finish_reason="length")])
+        tc1 = DummyToolCall(
+            id="c1", name="step_tool", arguments=f'{{"key": "{long_arg}"}}'
+        )
+        tc_bad_json = DummyToolCall(
+            id="c_bad", name="step_tool", arguments="invalid JSON {"
+        )
+        comp1 = DummyCompletion(
+            [
+                DummyChoice(
+                    DummyMessage(None, tool_calls=[tc1, tc_bad_json]),
+                    finish_reason="length",
+                )
+            ]
+        )
 
         # Turn 2: text completion with length > 80 chars without tool calls
         long_text = "This is a very long text response that exceeds eighty characters in length to test preview truncation."
@@ -880,17 +1113,27 @@ class OpenAIDriverImplTest(unittest.TestCase):
             outcome = runner.run()
             # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
             self.assertTrue(outcome.is_success)
-            comp_events = [e for e in self.logger.events if e.event_name == "model_completion"]
+            comp_events = [
+                e for e in self.logger.events if e.event_name == "model_completion"
+            ]
             self.assertTrue(any("..." in e.summary for e in comp_events))
-            tool_events = [e for e in self.logger.events if e.event_name == "tool_execution"]
+            tool_events = [
+                e for e in self.logger.events if e.event_name == "tool_execution"
+            ]
             self.assertTrue(any("..." in e.summary for e in tool_events))
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
-    def test_parameter_conversion_exception_fallback(self, mock_openai_cls: MagicMock) -> None:
+    def test_parameter_conversion_exception_fallback(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
         """CUJ: Parameter converter exception falls back to unconverted wire value."""
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
-        tc = DummyToolCall(id="c1", name="custom_tool", arguments='{"param": "not_an_int", "extra": "undeclared"}')
+        tc = DummyToolCall(
+            id="c1",
+            name="custom_tool",
+            arguments='{"param": "not_an_int", "extra": "undeclared"}',
+        )
         comp = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc]))])
         mock_client.chat.completions.create.return_value = comp
 
@@ -898,11 +1141,15 @@ class OpenAIDriverImplTest(unittest.TestCase):
             def convert(self, wire_value: Any) -> Any:
                 raise ValueError("Conversion failed")
 
-        failing_param = Parameter(name="param", description="", parameter_converter=FailingConverter())
+        failing_param = Parameter(
+            name="param", description="", parameter_converter=FailingConverter()
+        )
         custom_tool = DummyTool(name="custom_tool", parameters={failing_param})
 
         self.tool_mgr.install_tool(custom_tool)
-        self.tool_mgr.responses["custom_tool"] = Response(is_failed=False, is_terminated=True, content="Done")
+        self.tool_mgr.responses["custom_tool"] = Response(
+            is_failed=False, is_terminated=True, content="Done"
+        )
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)

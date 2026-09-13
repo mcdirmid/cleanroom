@@ -6,7 +6,13 @@ from . import sandbox_file_editor
 from . import sandbox_file_reader
 from . import sandbox_run_control
 from . import tool_provider
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
+
 
 class Sandbox(sandbox.Sandbox, Singleton):
     tier = "agent_session"
@@ -28,11 +34,15 @@ class Sandbox(sandbox.Sandbox, Singleton):
         # Requirement: When using step mode to communicate a guide progressively, startup tool executions include an initial advance tool execution with the name of the advance tool, empty wire parameter bindings, and the response produced by executing the advance tool.
         if n_cfg.is_step_mode:
             adv_tool = get_singleton(sandbox_run_control.AdvanceTool)
-            resp = adv_tool.execute_tool(tool_provider.ActualParameterBindings(bindings=set()))
+            resp = adv_tool.execute_tool(
+                tool_provider.ActualParameterBindings(bindings=set())
+            )
             executions.append(
                 sandbox.StartupToolExecution(
                     tool_name=adv_tool.name,
-                    wire_parameter_bindings=tool_provider.WireParameterBindings(bindings=set()),
+                    wire_parameter_bindings=tool_provider.WireParameterBindings(
+                        bindings=set()
+                    ),
                     response=resp,
                 )
             )
@@ -56,8 +66,12 @@ class Sandbox(sandbox.Sandbox, Singleton):
                     }
                 else:
                     bindings = {(read_tool.file_alias_parameter, ro)}
-                    wire_bindings = {(read_tool.file_alias_parameter.name, ro.short_name)}
-                resp = read_tool.execute_tool(tool_provider.ActualParameterBindings(bindings=bindings))
+                    wire_bindings = {
+                        (read_tool.file_alias_parameter.name, ro.short_name)
+                    }
+                resp = read_tool.execute_tool(
+                    tool_provider.ActualParameterBindings(bindings=bindings)
+                )
                 executions.append(
                     sandbox.StartupToolExecution(
                         tool_name=read_tool.name,
@@ -74,6 +88,7 @@ class Sandbox(sandbox.Sandbox, Singleton):
         # Requirement: Materializing startup templates delegates to the edit manager to write template content to missing read-write files without overwriting existing files.
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
         edit_mgr.materialize_templates()
+
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry

@@ -104,7 +104,12 @@ class BazelModelConfigImplTest(unittest.TestCase):
 
     def test_environment_overrides(self) -> None:
         """CUJ: Overriding configuration via explicit ambient environment variables."""
-        for var in ["MODEL_CONFIG_TARGET", "AGENT_CONFIG_TARGET", "RUNFILES_DIR", "BAZEL_RUNFILES"]:
+        for var in [
+            "MODEL_CONFIG_TARGET",
+            "AGENT_CONFIG_TARGET",
+            "RUNFILES_DIR",
+            "BAZEL_RUNFILES",
+        ]:
             os.environ.pop(var, None)
         os.environ["OPENAI_MODEL"] = "custom-model"
         os.environ["OPENAI_BASE_URL"] = "http://localhost:8000/v1"
@@ -302,7 +307,10 @@ class BazelModelConfigImplTest(unittest.TestCase):
             os.environ.pop("AGENT_CONFIG_TARGET", None)
 
             # @@//model_configs:variant
-            with patch("update_with_ai.parts.bazel.lib.bazel_model_config_impl.sys.argv", ["prog", "--config", "@@//model_configs:variant"]):
+            with patch(
+                "update_with_ai.parts.bazel.lib.bazel_model_config_impl.sys.argv",
+                ["prog", "--config", "@@//model_configs:variant"],
+            ):
                 reg = LifecycleRegistry()
                 __initialize__(reg)
                 with enter_phase("system", registry=reg) as scope:
@@ -311,7 +319,10 @@ class BazelModelConfigImplTest(unittest.TestCase):
                     self.assertEqual(cfg.model_name, "variant-model")
 
             # @//model_configs:variant
-            with patch("update_with_ai.parts.bazel.lib.bazel_model_config_impl.sys.argv", ["prog", "--config", "@//model_configs:variant"]):
+            with patch(
+                "update_with_ai.parts.bazel.lib.bazel_model_config_impl.sys.argv",
+                ["prog", "--config", "@//model_configs:variant"],
+            ):
                 reg = LifecycleRegistry()
                 __initialize__(reg)
                 with enter_phase("system", registry=reg) as scope:
@@ -320,7 +331,10 @@ class BazelModelConfigImplTest(unittest.TestCase):
                     self.assertEqual(cfg.model_name, "variant-model")
 
             # @model_configs:variant
-            with patch("update_with_ai.parts.bazel.lib.bazel_model_config_impl.sys.argv", ["prog", "--config", "@model_configs:variant"]):
+            with patch(
+                "update_with_ai.parts.bazel.lib.bazel_model_config_impl.sys.argv",
+                ["prog", "--config", "@model_configs:variant"],
+            ):
                 reg = LifecycleRegistry()
                 __initialize__(reg)
                 with enter_phase("system", registry=reg) as scope:
@@ -329,7 +343,10 @@ class BazelModelConfigImplTest(unittest.TestCase):
                     self.assertEqual(cfg.model_name, "variant-model")
 
             # :variant
-            with patch("update_with_ai.parts.bazel.lib.bazel_model_config_impl.sys.argv", ["prog", "--config", ":variant"]):
+            with patch(
+                "update_with_ai.parts.bazel.lib.bazel_model_config_impl.sys.argv",
+                ["prog", "--config", ":variant"],
+            ):
                 reg = LifecycleRegistry()
                 __initialize__(reg)
                 with enter_phase("system", registry=reg) as scope:
@@ -338,7 +355,10 @@ class BazelModelConfigImplTest(unittest.TestCase):
                     self.assertEqual(cfg.model_name, "variant-model")
 
             # Shorthand //model_configs/variant
-            with patch("update_with_ai.parts.bazel.lib.bazel_model_config_impl.sys.argv", ["prog", "--config", "//model_configs/variant"]):
+            with patch(
+                "update_with_ai.parts.bazel.lib.bazel_model_config_impl.sys.argv",
+                ["prog", "--config", "//model_configs/variant"],
+            ):
                 reg = LifecycleRegistry()
                 __initialize__(reg)
                 with enter_phase("system", registry=reg) as scope:

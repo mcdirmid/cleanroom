@@ -34,24 +34,30 @@ def lint_hls_file(file_path: Path) -> list[str]:
     is_impl = stem.endswith("_impl")
     is_asm = stem.endswith("_asm")
     is_ext = stem.endswith("_ext")
-    
+
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
     except OSError as e:
         return [f"{fname}:1: error: cannot read file: {e}"]
-        
+
     if not lines:
         return [f"{fname}:1: error: empty specification file"]
-        
+
     # 1. Header Check
     first_non_empty = 0
     while first_non_empty < len(lines) and not lines[first_non_empty].strip():
         first_non_empty += 1
-        
-    if first_non_empty >= len(lines) or not lines[first_non_empty].startswith(f"# {stem}"):
-        actual = lines[first_non_empty].strip() if first_non_empty < len(lines) else "EOF"
-        errors.append(f"{fname}:{first_non_empty+1}: error: header must be '# {stem}' (found: '{actual}')")
+
+    if first_non_empty >= len(lines) or not lines[first_non_empty].startswith(
+        f"# {stem}"
+    ):
+        actual = (
+            lines[first_non_empty].strip() if first_non_empty < len(lines) else "EOF"
+        )
+        errors.append(
+            f"{fname}:{first_non_empty + 1}: error: header must be '# {stem}' (found: '{actual}')"
+        )
 
     # Front-matter Parsing
     header_lines = []
@@ -74,56 +80,81 @@ def lint_hls_file(file_path: Path) -> list[str]:
     for l_num, line_s in header_lines:
         if line_s.startswith("assembles:"):
             if last_kind > 1:
-                errors.append(f"{fname}:{l_num}: error: 'assembles:' must come before 'types from' and 'implements:'")
+                errors.append(
+                    f"{fname}:{l_num}: error: 'assembles:' must come before 'types from' and 'implements:'"
+                )
             last_kind = 1
-            assembles_type = line_s[len("assembles:"):].strip()
+            assembles_type = line_s[len("assembles:") :].strip()
         elif line_s.startswith("imports:"):
             if last_kind > 1:
-                errors.append(f"{fname}:{l_num}: error: 'imports:' must come before 'types from' and 'implements:'")
+                errors.append(
+                    f"{fname}:{l_num}: error: 'imports:' must come before 'types from' and 'implements:'"
+                )
             last_kind = 1
-            raw_deps = line_s[len("imports:"):].strip()
+            raw_deps = line_s[len("imports:") :].strip()
             imports_list = [d.strip() for d in raw_deps.split(",") if d.strip()]
-            
+
             # Check 3: No _impl or _asm imports in non-_asm
             if not is_asm:
                 for dep in imports_list:
                     if dep.endswith("_impl"):
-                        errors.append(f"{fname}:{l_num}: error: non-assembly specification must not import implementation '{dep}'")
+                        errors.append(
+                            f"{fname}:{l_num}: error: non-assembly specification must not import implementation '{dep}'"
+                        )
                     elif dep.endswith("_asm"):
-                        errors.append(f"{fname}:{l_num}: error: non-assembly specification must not import assembly '{dep}'")
-                        
+                        errors.append(
+                            f"{fname}:{l_num}: error: non-assembly specification must not import assembly '{dep}'"
+                        )
+
         elif line_s.startswith("types from "):
             if last_kind > 2:
-                errors.append(f"{fname}:{l_num}: error: 'types from' must come before 'implements:'")
+                errors.append(
+                    f"{fname}:{l_num}: error: 'types from' must come before 'implements:'"
+                )
             last_kind = 2
             m = re.match(r"^types from\s+([^:]+):\s*(.*)$", line_s)
             if not m:
-                errors.append(f"{fname}:{l_num}: error: malformed 'types from <module>: <types>' line")
+                errors.append(
+                    f"{fname}:{l_num}: error: malformed 'types from <module>: <types>' line"
+                )
             else:
                 dep_name = m.group(1).strip()
                 types = [t.strip() for t in m.group(2).split(",") if t.strip()]
                 types_from_map[dep_name] = types
                 # Check 4: types from dep must be imported
                 if dep_name not in imports_list:
-                    errors.append(f"{fname}:{l_num}: error: 'types from {dep_name}' but '{dep_name}' is not in 'imports:'")
-                    
+                    errors.append(
+                        f"{fname}:{l_num}: error: 'types from {dep_name}' but '{dep_name}' is not in 'imports:'"
+                    )
+
         elif line_s.startswith("implements:"):
             last_kind = 3
-            implements_type = line_s[len("implements:"):].strip()
+            implements_type = line_s[len("implements:") :].strip()
         elif line_s.startswith("instantiates:"):
             last_kind = 4
-            instantiates_types = [t.strip() for t in line_s[len("instantiates:"):].split(",") if t.strip()]
+            instantiates_types = [
+                t.strip()
+                for t in line_s[len("instantiates:") :].split(",")
+                if t.strip()
+            ]
         else:
-            errors.append(f"{fname}:{l_num}: error: unknown front-matter line '{line_s}'")
+            errors.append(
+                f"{fname}:{l_num}: error: unknown front-matter line '{line_s}'"
+            )
 
     # Check 5: Implementation specs must have implements, assembly specs must have assembles and implements:
     if is_impl and not implements_type:
-        errors.append(f"{fname}:1: error: implementation specification must declare 'implements: <type>' in front-matter")
+        errors.append(
+            f"{fname}:1: error: implementation specification must declare 'implements: <type>' in front-matter"
+        )
     if is_asm and not assembles_type:
-        errors.append(f"{fname}:1: error: assembly specification must declare 'assembles: <components>' in front-matter")
+        errors.append(
+            f"{fname}:1: error: assembly specification must declare 'assembles: <components>' in front-matter"
+        )
     if is_asm and not implements_type:
-        errors.append(f"{fname}:1: error: assembly specification must declare 'implements: <components>' in front-matter")
-
+        errors.append(
+            f"{fname}:1: error: assembly specification must declare 'implements: <components>' in front-matter"
+        )
 
     # Check 6: Section Headers and Behavior Structure
     if is_ext:
@@ -137,17 +168,29 @@ def lint_hls_file(file_path: Path) -> list[str]:
         if line.startswith("## "):
             current_section = line_s[3:].strip()
             if current_section not in valid_sections:
-                errors.append(f"{fname}:{l_idx}: error: unknown section '## {current_section}'")
+                errors.append(
+                    f"{fname}:{l_idx}: error: unknown section '## {current_section}'"
+                )
         elif line.startswith("### "):
-            errors.append(f"{fname}:{l_idx}: error: '###' sub-headers are prohibited in HLS specifications")
+            errors.append(
+                f"{fname}:{l_idx}: error: '###' sub-headers are prohibited in HLS specifications"
+            )
         elif current_section in ("Types and Behavior", "Types", "Behavior"):
             for dep in imports_list:
                 if "_" in dep:
                     pat = r"\b" + re.escape(dep) + r"\b"
                 else:
-                    pat = r"(`" + re.escape(dep) + r"`|\b" + re.escape(dep) + r"\s+component\b)"
+                    pat = (
+                        r"(`"
+                        + re.escape(dep)
+                        + r"`|\b"
+                        + re.escape(dep)
+                        + r"\s+component\b)"
+                    )
                 if re.search(pat, line):
-                    errors.append(f"{fname}:{l_idx}: error: imported component '{dep}' must not appear in '{current_section}'")
+                    errors.append(
+                        f"{fname}:{l_idx}: error: imported component '{dep}' must not appear in '{current_section}'"
+                    )
 
     return errors
 
@@ -160,14 +203,14 @@ def main() -> int:
     if "--" in args:
         dash_idx = args.index("--")
         pre_args = args[:dash_idx]
-        post_args = args[dash_idx + 1:]
+        post_args = args[dash_idx + 1 :]
         if "--deps" in pre_args:
             deps_idx = pre_args.index("--deps")
-            deps = [Path(p) for p in pre_args[deps_idx + 1:]]
+            deps = [Path(p) for p in pre_args[deps_idx + 1 :]]
         targets = [Path(p) for p in post_args]
     elif "--deps" in args:
         deps_idx = args.index("--deps")
-        deps = [Path(p) for p in args[deps_idx + 1:]]
+        deps = [Path(p) for p in args[deps_idx + 1 :]]
     else:
         targets = [Path(p) for p in args]
 
@@ -188,7 +231,9 @@ def main() -> int:
     if all_errors:
         for err in all_errors:
             print(err, file=sys.stderr)
-        print(f"\n[FAIL] Found {len(all_errors)} HLS structural errors.", file=sys.stderr)
+        print(
+            f"\n[FAIL] Found {len(all_errors)} HLS structural errors.", file=sys.stderr
+        )
         return 1
 
     print(f"[OK] {len(targets)} HLS specifications passed structural & boundary lint.")

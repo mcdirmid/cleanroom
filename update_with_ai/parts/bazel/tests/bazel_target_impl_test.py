@@ -59,6 +59,7 @@ class TestBazelTargetImpl(unittest.TestCase):
         - Extracts package directory relative to workspace.
         - Root target //:root_target resolves to empty path.
         """
+
         def _make_node_dir(path: str) -> NodeDirectory:
             obj = object.__new__(NodeDirectory)
             object.__setattr__(obj, "path", path)
@@ -82,5 +83,3 @@ if __name__ == "__main__":
     unittest.main()
 
 # Untested requirements: None
-
-

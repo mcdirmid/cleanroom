@@ -54,9 +54,13 @@ class FilePaths(ABC):
         pass
 
     @abstractmethod
-    def resolve_directory(self, root: WorkspaceRoot, relative: WorkspacePath) -> DirectoryPath:
+    def resolve_directory(
+        self, root: WorkspaceRoot, relative: WorkspacePath
+    ) -> DirectoryPath:
         pass
 
     @abstractmethod
-    def resolve_path(self, root: WorkspaceRoot, relative: WorkspacePath) -> AbsolutePath:
+    def resolve_path(
+        self, root: WorkspaceRoot, relative: WorkspacePath
+    ) -> AbsolutePath:
         pass

@@ -10,7 +10,9 @@ from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_regi
 
 def _resolve_target_label() -> str:
     # Requirement: The openai config, agent config, and dag config resolve the target configuration from the MODEL_CONFIG_TARGET environment variable, the AGENT_CONFIG_TARGET environment variable, or the --config command-line argument, defaulting to the standard //model_configs:default target.
-    label = os.environ.get("MODEL_CONFIG_TARGET") or os.environ.get("AGENT_CONFIG_TARGET")
+    label = os.environ.get("MODEL_CONFIG_TARGET") or os.environ.get(
+        "AGENT_CONFIG_TARGET"
+    )
     if label:
         return label.strip()
 
@@ -31,7 +33,9 @@ def _find_target_config_file(target_label: str) -> Optional[str]:
         clean = clean[2:]
     elif clean.startswith("@//"):
         clean = clean[1:]
-    elif clean.startswith("@@") or (clean.startswith("@") and not clean.startswith("//")):
+    elif clean.startswith("@@") or (
+        clean.startswith("@") and not clean.startswith("//")
+    ):
         clean = "//" + clean.lstrip("@").lstrip("/")
 
     if clean.startswith(":"):
@@ -90,18 +94,40 @@ class ModelConfig(
             with open(config_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
-        self._model_name = str(data["model"]) if "model" in data else os.environ.get("OPENAI_MODEL", "gpt-4o")
-        self._base_url = data.get("base_url") if "base_url" in data else os.environ.get("OPENAI_BASE_URL", None)
+        self._model_name = (
+            str(data["model"])
+            if "model" in data
+            else os.environ.get("OPENAI_MODEL", "gpt-4o")
+        )
+        self._base_url = (
+            data.get("base_url")
+            if "base_url" in data
+            else os.environ.get("OPENAI_BASE_URL", None)
+        )
 
         api_key_env = data.get("api_key_env")
         if api_key_env:
             self._api_key = os.environ.get(api_key_env, None)
         else:
-            self._api_key = os.environ.get("AGENT_API_KEY") or os.environ.get("OPENAI_API_KEY", None)
+            self._api_key = os.environ.get("AGENT_API_KEY") or os.environ.get(
+                "OPENAI_API_KEY", None
+            )
 
-        self._timeout = int(float(data["timeout"])) if "timeout" in data else int(os.environ.get("MODEL_TIMEOUT", "60"))
-        self._conversation_limit = int(data["max_iterations"]) if "max_iterations" in data else int(os.environ.get("MODEL_CONVERSATION_LIMIT", "20"))
-        self._temperature = float(data["temperature"]) if "temperature" in data else float(os.environ.get("MODEL_TEMPERATURE", "0.0"))
+        self._timeout = (
+            int(float(data["timeout"]))
+            if "timeout" in data
+            else int(os.environ.get("MODEL_TIMEOUT", "60"))
+        )
+        self._conversation_limit = (
+            int(data["max_iterations"])
+            if "max_iterations" in data
+            else int(os.environ.get("MODEL_CONVERSATION_LIMIT", "20"))
+        )
+        self._temperature = (
+            float(data["temperature"])
+            if "temperature" in data
+            else float(os.environ.get("MODEL_TEMPERATURE", "0.0"))
+        )
         if "max_tokens" in data and data["max_tokens"] is not None:
             self._max_tokens: Optional[int] = int(data["max_tokens"])
         elif os.environ.get("MODEL_MAX_TOKENS"):
@@ -109,10 +135,26 @@ class ModelConfig(
         else:
             self._max_tokens = None
         raw_step = data.get("do_step_mode", data.get("step_sections"))
-        self._is_step_mode = bool(raw_step) if raw_step is not None else os.environ.get("STEP_MODE", "true").lower() in ("true", "1")
-        self._is_startup_reads = bool(data["session_start_reads"]) if "session_start_reads" in data else os.environ.get("STARTUP_READS", "true").lower() in ("true", "1")
-        self._inject_followups = bool(data["inject_followups"]) if "inject_followups" in data else os.environ.get("INJECT_FOLLOWUPS", "true").lower() in ("true", "1")
-        self._node_visit_limit = int(data["node_visit_limit"]) if "node_visit_limit" in data else int(os.environ.get("NODE_VISIT_LIMIT", "500"))
+        self._is_step_mode = (
+            bool(raw_step)
+            if raw_step is not None
+            else os.environ.get("STEP_MODE", "true").lower() in ("true", "1")
+        )
+        self._is_startup_reads = (
+            bool(data["session_start_reads"])
+            if "session_start_reads" in data
+            else os.environ.get("STARTUP_READS", "true").lower() in ("true", "1")
+        )
+        self._inject_followups = (
+            bool(data["inject_followups"])
+            if "inject_followups" in data
+            else os.environ.get("INJECT_FOLLOWUPS", "true").lower() in ("true", "1")
+        )
+        self._node_visit_limit = (
+            int(data["node_visit_limit"])
+            if "node_visit_limit" in data
+            else int(os.environ.get("NODE_VISIT_LIMIT", "500"))
+        )
 
     @property
     def model_name(self) -> str:

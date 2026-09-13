@@ -6,7 +6,13 @@ from update_with_ai.parts.agent.lib import agent_node_config
 from . import sandbox_file_reader
 from . import template_format
 from . import tool_provider
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
+
 
 class ReadManager(sandbox_file_reader.ReadManager, Singleton):
     tier = "agent_session"
@@ -23,13 +29,21 @@ class ReadManager(sandbox_file_reader.ReadManager, Singleton):
     def read_only_files(self) -> Set[agent_file_alias.ReadOnlyFile]:
         # Requirement: The read manager exposes declared read-only files, read-write files, and optional guide file obtained from the node config.
         cfg = get_singleton(agent_node_config.NodeConfig)
-        return {f for f in cfg.read_only_files if isinstance(f, agent_file_alias.ReadOnlyFile)}
+        return {
+            f
+            for f in cfg.read_only_files
+            if isinstance(f, agent_file_alias.ReadOnlyFile)
+        }
 
     @property
     def read_write_files(self) -> Set[agent_file_alias.ReadWriteFile]:
         # Requirement: The read manager exposes declared read-only files, read-write files, and optional guide file obtained from the node config.
         cfg = get_singleton(agent_node_config.NodeConfig)
-        return {f for f in cfg.read_write_files if isinstance(f, agent_file_alias.ReadWriteFile)}
+        return {
+            f
+            for f in cfg.read_write_files
+            if isinstance(f, agent_file_alias.ReadWriteFile)
+        }
 
     @property
     def guide_file(self) -> Optional[agent_file_alias.UnboundFile]:
@@ -85,7 +99,9 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
     def parameters(self) -> Set[tool_provider.Parameter]:
         return {self.file_alias_parameter, self.line_numbers_parameter}
 
-    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
+    def execute_tool(
+        self, actual_parameter_bindings: tool_provider.ActualParameterBindings
+    ) -> tool_provider.Response:
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
         target_file = cast(agent_file_alias.FileAlias, bindings_map.get("file"))
         line_numbers = bool(bindings_map.get("line_numbers", False))
@@ -93,14 +109,19 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
         read_mgr = get_singleton(ReadManager)
         # Requirement: When an unbound file equals the guide file configured for step-mode, the read tool failure response indicates that `advance` must be called to read the guide instead.
         if isinstance(target_file, agent_file_alias.UnboundFile):
-            if read_mgr.guide_file and target_file.short_name == read_mgr.guide_file.short_name:
+            if (
+                read_mgr.guide_file
+                and target_file.short_name == read_mgr.guide_file.short_name
+            ):
                 return tool_provider.Response(
                     is_failed=True,
                     is_terminated=False,
                     content="To read the task guide, call 'advance' instead.",
                 )
             # Requirement: Executing the read tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.
-            readable = [f.short_name for f in read_mgr.read_only_files] + [f.short_name for f in read_mgr.read_write_files]
+            readable = [f.short_name for f in read_mgr.read_only_files] + [
+                f.short_name for f in read_mgr.read_write_files
+            ]
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
@@ -120,7 +141,11 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
                     }
                 ),
             )
-            file_kind = "source code file" if target_file.short_name.endswith(".py") else "read-write file"
+            file_kind = (
+                "source code file"
+                if target_file.short_name.endswith(".py")
+                else "read-write file"
+            )
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
@@ -150,13 +175,17 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
         # Requirement: Executing the read tool reads file content using the filesystem at the host path formed from the alias manager workspace root and bound file workspace path.
         assert isinstance(target_file, agent_file_alias.BoundFile)
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
-        host_path = os.path.join(alias_mgr.workspace_root.path, target_file.workspace_path.path)
+        host_path = os.path.join(
+            alias_mgr.workspace_root.path, target_file.workspace_path.path
+        )
 
         with open(host_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
         # Requirement: When reading markdown files ending with .md, paragraphs beginning with > META: are filtered out from the returned content.
-        if target_file.short_name.endswith(".md") or target_file.workspace_path.path.endswith(".md"):
+        if target_file.short_name.endswith(
+            ".md"
+        ) or target_file.workspace_path.path.endswith(".md"):
             paragraphs: list[list[str]] = []
             current_para: list[str] = []
             for line in lines:
@@ -176,7 +205,9 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
                     continue
                 if filtered_lines:
                     if not filtered_lines[-1].endswith("\n"):
-                        filtered_lines[-1] += "\n"  # pragma: no cover (assumption: readlines preserves newlines on non-terminal lines)
+                        filtered_lines[-1] += (
+                            "\n"  # pragma: no cover (assumption: readlines preserves newlines on non-terminal lines)
+                        )
                     filtered_lines.append("\n")
                 filtered_lines.extend(para)
             lines = filtered_lines
@@ -186,7 +217,9 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
                 raw_text = "".join(lines)
                 cfg = get_singleton(agent_node_config.NodeConfig)
                 formatter = get_singleton(template_format.TemplateFormatter)
-                formatted_text = formatter.format_template(raw_text, cfg.template_parameters)
+                formatted_text = formatter.format_template(
+                    raw_text, cfg.template_parameters
+                )
                 lines = formatted_text.splitlines(keepends=True)
 
         if line_numbers:
@@ -209,6 +242,7 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
             suppression_key=suppression_key,
         )
 
+
 class RegexPatternConverter(tool_provider.ParameterConverter, Singleton):
     tier = "agent_session"
 
@@ -226,6 +260,7 @@ class RegexPatternConverter(tool_provider.ParameterConverter, Singleton):
     def convert(self, wire_value: Any) -> agent_file_alias.RegexPattern:
         # Requirement: The regex pattern converter converts a wire type string into a regex pattern.
         return agent_file_alias.RegexPattern(str(wire_value))
+
 
 class SearchTool(sandbox_file_reader.SearchTool, Singleton):
     tier = "agent_session"
@@ -255,7 +290,9 @@ class SearchTool(sandbox_file_reader.SearchTool, Singleton):
     def parameters(self) -> Set[tool_provider.Parameter]:
         return {self.regex_pattern_parameter}
 
-    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
+    def execute_tool(
+        self, actual_parameter_bindings: tool_provider.ActualParameterBindings
+    ) -> tool_provider.Response:
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
         pat_obj = bindings_map.get("pattern")
         pattern_str = str(pat_obj or "")
@@ -276,7 +313,9 @@ class SearchTool(sandbox_file_reader.SearchTool, Singleton):
         results = []
         # Requirement: The search tool searches for regex pattern matches across read-only files and read-write files using the filesystem.
         for ro in read_mgr.read_only_files:
-            host_path = os.path.join(alias_mgr.workspace_root.path, ro.workspace_path.path)
+            host_path = os.path.join(
+                alias_mgr.workspace_root.path, ro.workspace_path.path
+            )
             if os.path.isfile(host_path):
                 with open(host_path, "r", encoding="utf-8") as f:
                     for idx, line in enumerate(f, start=1):
@@ -285,13 +324,17 @@ class SearchTool(sandbox_file_reader.SearchTool, Singleton):
                             results.append(f"{ro.short_name}:{idx}: {line.rstrip()}")
 
         for rw in read_mgr.read_write_files:
-            host_path = os.path.join(alias_mgr.workspace_root.path, rw.workspace_path.path)
+            host_path = os.path.join(
+                alias_mgr.workspace_root.path, rw.workspace_path.path
+            )
             if os.path.isfile(host_path):
                 with open(host_path, "r", encoding="utf-8") as f:
                     content = f.read()
                     if compiled.search(content):
                         # Requirement: On successful search tool execution, matches in read-write files state that matches were found but cannot be displayed to prevent unanchored edits.
-                        results.append(f"{rw.short_name}: matches found (details hidden to prevent unanchored edits)")
+                        results.append(
+                            f"{rw.short_name}: matches found (details hidden to prevent unanchored edits)"
+                        )
 
         output = "\n".join(results) if results else "No matches found."
         return tool_provider.Response(
@@ -299,6 +342,7 @@ class SearchTool(sandbox_file_reader.SearchTool, Singleton):
             is_terminated=False,
             content=alias_mgr.sanitize_text(output),
         )
+
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry

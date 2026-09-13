@@ -7,7 +7,10 @@ from typing import Optional, Sequence, Set
 import unittest
 from unittest.mock import MagicMock, patch
 from update_with_ai.parts.agent.lib.agent_storage import NodeDefinition
-from update_with_ai.parts.bazel.lib.bazel_manifest_loader import BazelManifestLoader, Manifest
+from update_with_ai.parts.bazel.lib.bazel_manifest_loader import (
+    BazelManifestLoader,
+    Manifest,
+)
 from update_with_ai.parts.bazel.lib.bazel_node_config_impl import (
     AliasManager as AliasManagerImpl,
     NodeConfig as NodeConfigImpl,
@@ -30,7 +33,11 @@ from update_with_ai.parts.agent.lib.agent_file_alias import (
 )
 from support.lib.lifecycle import LifecycleRegistry, Singleton, enter_phase
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
-from update_with_ai.parts.agent.lib.agent_node_config import Guide, NodeConfig, StepSection
+from update_with_ai.parts.agent.lib.agent_node_config import (
+    Guide,
+    NodeConfig,
+    StepSection,
+)
 from update_with_ai.parts.sandbox.lib.tool_provider import ParameterConverter, String
 
 
@@ -118,6 +125,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             class DummyCheck:
                 def verify(self):
                     return True, "ok"
+
             dummy_check = DummyCheck()
             cfg._verification_checks.append(dummy_check)
             # Requirement: The node config exposes declared verification checks from the manifest verification command.
@@ -176,7 +184,9 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             # Sanitize text
             norm_ws = "pkg/module.py"
             pat = re.compile(
-                r"/?(?:[^\s:;\"\'`()<>{}\[\]/]+/)*" + re.escape(norm_ws) + r"(?=[:\s;\"\'`()<>{}\[\]]|$)"
+                r"/?(?:[^\s:;\"\'`()<>{}\[\]/]+/)*"
+                + re.escape(norm_ws)
+                + r"(?=[:\s;\"\'`()<>{}\[\]]|$)"
             )
             alias_mgr._masking_patterns.append((pat, "module.py"))
 
@@ -193,60 +203,92 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             rel_text = "Verification failed: pkg/module.py:2: error: msg"
             rel_sanitized = alias_mgr.sanitize_text(rel_text)
-            self.assertEqual(rel_sanitized, "Verification failed: module.py:2: error: msg")
+            self.assertEqual(
+                rel_sanitized, "Verification failed: module.py:2: error: msg"
+            )
 
     def test_lifecycle_initialization_from_manifest(self) -> None:
         """CUJ: NodeConfig and AliasManager initialize from CleanedNode and BazelManifestLoader."""
+
         class MockCleanedNode(CleanedNode, Singleton):
             tier = "agent_session"
+
             def __init__(self) -> None:
                 self._node = Node(address="//test/pkg:my_target")
+
             @property
             def node(self) -> Node:
                 return self._node
+
             def set_node(self, node: Node) -> None:
                 self._node = node
 
         class MockManifestLoader(BazelManifestLoader, Singleton):
             tier = "agent_session"
+
             def get_manifest(self, node: Node) -> Optional[Manifest]:
                 if node.address == "//test/pkg:my_target":
-                    return Manifest(json.dumps({
-                        "src": "impl.py",
-                        "silent_srcs": ["internal.py"],
-                        "deps": ["//test/pkg:dep_target"],
-                        "star_deps": ["//test/pkg:star_parent"],
-                        "silent_deps": [],
-                        "feedback_deps": ["//test/pkg:dep_target"],
-                        "template_parameters": {"module_name": "MyModule", "has_ops": True},
-                        "verify": "echo verified",
-                    }))
+                    return Manifest(
+                        json.dumps(
+                            {
+                                "src": "impl.py",
+                                "silent_srcs": ["internal.py"],
+                                "deps": ["//test/pkg:dep_target"],
+                                "star_deps": ["//test/pkg:star_parent"],
+                                "silent_deps": [],
+                                "feedback_deps": ["//test/pkg:dep_target"],
+                                "template_parameters": {
+                                    "module_name": "MyModule",
+                                    "has_ops": True,
+                                },
+                                "verify": "echo verified",
+                            }
+                        )
+                    )
                 if node.address == "//test/pkg:dep_target":
-                    return Manifest(json.dumps({
-                        "src": "dep_target.py",
-                    }))
+                    return Manifest(
+                        json.dumps(
+                            {
+                                "src": "dep_target.py",
+                            }
+                        )
+                    )
                 if node.address == "//test/pkg:star_parent":
-                    return Manifest(json.dumps({
-                        "src": "star_parent.py",
-                        "star_deps": ["//test/pkg:star_transitive"],
-                    }))
+                    return Manifest(
+                        json.dumps(
+                            {
+                                "src": "star_parent.py",
+                                "star_deps": ["//test/pkg:star_transitive"],
+                            }
+                        )
+                    )
                 if node.address == "//test/pkg:star_transitive":
-                    return Manifest(json.dumps({
-                        "src": "star_transitive.py",
-                    }))
+                    return Manifest(
+                        json.dumps(
+                            {
+                                "src": "star_transitive.py",
+                            }
+                        )
+                    )
                 return None
-            def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
+
+            def load_manifest(
+                self, content: Manifest, storage: object
+            ) -> Sequence[NodeDefinition]:
                 return []
 
         class MockNodeIdentifierUtility(BazelTarget, Singleton):
             tier = "agent_session"
+
             def normalize(self, raw_label: str) -> Node:
                 return Node(address=raw_label)
+
             def extract_directory(self, node: Node) -> NodeDirectory:
                 return _make_node_directory("test/pkg")
 
         class MockDagStorage(DagStorage, Singleton):
             tier = "system"
+
             def get_messages(self, node: Node) -> Set[Message]:
                 msgs: Set[Message] = {Feedback(content="Fix type error")}
                 return msgs
@@ -266,7 +308,10 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 # Requirement: Declared feedback messages retrieved from graph storage for the target node as the session feedback.
                 # Requirement: [NodeConfig] The node config provides the session feedback, exposing incoming feedback delivered to the node when present.
                 self.assertEqual(cfg.feedback, ("Fix type error",))
-                self.assertEqual(cfg.template_parameters, {"module_name": "MyModule", "has_ops": True})
+                self.assertEqual(
+                    cfg.template_parameters,
+                    {"module_name": "MyModule", "has_ops": True},
+                )
 
             # Requirement: The node config exposes declared source files and silent source files as read-write files.
             # Requirement: [NodeConfig] The node config provides the session read-write files permitted for inspection and modification.
@@ -319,53 +364,72 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
     def test_lifecycle_initialization_step_mode_disabled(self) -> None:
         """CUJ: When allows_step_mode is false, step mode is disabled and guide is kept as read-only file."""
+
         class MockCleanedNode(CleanedNode, Singleton):
             tier = "agent_session"
+
             def __init__(self) -> None:
                 self._node = Node(address="//test/pkg:my_target")
+
             @property
             def node(self) -> Node:
                 return self._node
+
             def set_node(self, node: Node) -> None:
                 self._node = node
 
         class MockManifestLoader(BazelManifestLoader, Singleton):
             tier = "agent_session"
+
             def get_manifest(self, node: Node) -> Optional[Manifest]:
                 if node.address == "//test/pkg:my_target":
-                    return Manifest(json.dumps({
-                        "src": "impl.py",
-                        "guide": "//update_python_with_ai/guides:qa",
-                        "allows_step_mode": False,
-                        "deps": ["//update_python_with_ai/guides:qa"],
-                    }))
+                    return Manifest(
+                        json.dumps(
+                            {
+                                "src": "impl.py",
+                                "guide": "//update_python_with_ai/guides:qa",
+                                "allows_step_mode": False,
+                                "deps": ["//update_python_with_ai/guides:qa"],
+                            }
+                        )
+                    )
                 return None
-            def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
+
+            def load_manifest(
+                self, content: Manifest, storage: object
+            ) -> Sequence[NodeDefinition]:
                 return []
 
         class MockNodeIdentifierUtility(BazelTarget, Singleton):
             tier = "agent_session"
+
             def normalize(self, raw_label: str) -> Node:
                 return Node(address=raw_label)
+
             def extract_directory(self, node: Node) -> NodeDirectory:
                 return _make_node_directory("test/pkg")
 
         class MockDagStorage(DagStorage, Singleton):
             tier = "system"
+
             def get_messages(self, node: Node) -> Set[Message]:
                 return set()
 
         class MockAgentConfig(AgentConfig, Singleton):
             tier = "system"
+
             @property
             def is_step_mode(self) -> bool:
                 return True
+
             @property
             def is_startup_reads(self) -> bool:
                 return True
+
             @property
             def inject_followups(self) -> bool:
                 return True
+
             @property
             def conversation_limit(self) -> int:
                 return 20
@@ -399,55 +463,76 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 alias = alias_mgr.convert("qa.md")
                 self.assertIsInstance(alias, ReadOnlyFile)
 
-    def test_lifecycle_initialization_step_mode_disabled_when_feedback_present(self) -> None:
+    def test_lifecycle_initialization_step_mode_disabled_when_feedback_present(
+        self,
+    ) -> None:
         """CUJ: When session feedback is present, step mode is disabled even if agent_config and node allow it, and guide is kept as read-only file."""
+
         class MockCleanedNode(CleanedNode, Singleton):
             tier = "agent_session"
+
             def __init__(self) -> None:
                 self._node = Node(address="//test/pkg:my_target")
+
             @property
             def node(self) -> Node:
                 return self._node
+
             def set_node(self, node: Node) -> None:
                 self._node = node
 
         class MockManifestLoader(BazelManifestLoader, Singleton):
             tier = "agent_session"
+
             def get_manifest(self, node: Node) -> Optional[Manifest]:
                 if node.address == "//test/pkg:my_target":
-                    return Manifest(json.dumps({
-                        "src": "impl.py",
-                        "guide": "//update_python_with_ai/guides:qa",
-                        "allows_step_mode": True,
-                        "deps": ["//update_python_with_ai/guides:qa"],
-                    }))
+                    return Manifest(
+                        json.dumps(
+                            {
+                                "src": "impl.py",
+                                "guide": "//update_python_with_ai/guides:qa",
+                                "allows_step_mode": True,
+                                "deps": ["//update_python_with_ai/guides:qa"],
+                            }
+                        )
+                    )
                 return None
-            def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
+
+            def load_manifest(
+                self, content: Manifest, storage: object
+            ) -> Sequence[NodeDefinition]:
                 return []
 
         class MockNodeIdentifierUtility(BazelTarget, Singleton):
             tier = "agent_session"
+
             def normalize(self, raw_label: str) -> Node:
                 return Node(address=raw_label)
+
             def extract_directory(self, node: Node) -> NodeDirectory:
                 return _make_node_directory("test/pkg")
 
         class MockDagStorage(DagStorage, Singleton):
             tier = "system"
+
             def get_messages(self, node: Node) -> Set[Message]:
                 return {Feedback(content="Fix failing mock test")}
 
         class MockAgentConfig(AgentConfig, Singleton):
             tier = "system"
+
             @property
             def is_step_mode(self) -> bool:
                 return True
+
             @property
             def is_startup_reads(self) -> bool:
                 return True
+
             @property
             def inject_followups(self) -> bool:
                 return True
+
             @property
             def conversation_limit(self) -> int:
                 return 20
@@ -483,12 +568,16 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 self.assertIsInstance(alias, ReadOnlyFile)
 
     @patch("update_with_ai.parts.bazel.lib.bazel_node_config_impl.subprocess.run")
-    def test_command_verification_check_stderr_and_errors(self, mock_run: MagicMock) -> None:
+    def test_command_verification_check_stderr_and_errors(
+        self, mock_run: MagicMock
+    ) -> None:
         """CUJ: _CommandVerificationCheck handles stderr output, combined output, and subprocess errors."""
         check = _CommandVerificationCheck(command="test_cmd", cwd="/tmp")
 
         # Stderr only on failure
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="compilation error")
+        mock_run.return_value = MagicMock(
+            returncode=1, stdout="", stderr="compilation error"
+        )
         passed, diag = check.verify()
         # Requirement: The node config exposes declared verification checks from the manifest verification command.
         # Requirement: [NodeConfig] The node config provides the session verification checks evaluated during session advancement.
@@ -496,7 +585,9 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         self.assertEqual(diag, "compilation error")
 
         # Stdout and Stderr together
-        mock_run.return_value = MagicMock(returncode=0, stdout="some warning", stderr="non-fatal warning")
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout="some warning", stderr="non-fatal warning"
+        )
         passed, diag = check.verify()
         self.assertTrue(passed)
         self.assertEqual(diag, "some warning\nnon-fatal warning")
@@ -525,21 +616,28 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         # 2. DagStorage missing / failing -> self._feedback = ()
         class MockCleanedNode(CleanedNode, Singleton):
             tier = "agent_session"
+
             @property
             def node(self) -> Node:
                 return Node(address="//pkg:tgt")
 
         class MockManifestLoaderNone(BazelManifestLoader, Singleton):
             tier = "agent_session"
+
             def get_manifest(self, node: Node) -> Optional[Manifest]:
                 return None
-            def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
+
+            def load_manifest(
+                self, content: Manifest, storage: object
+            ) -> Sequence[NodeDefinition]:
                 return []
 
         class MockNodeIdentifierUtility(BazelTarget, Singleton):
             tier = "agent_session"
+
             def normalize(self, raw_label: str) -> Node:
                 return Node(address=raw_label)
+
             def extract_directory(self, node: Node) -> NodeDirectory:
                 return _make_node_directory("pkg")
 
@@ -560,9 +658,13 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         # 3. Manifest is invalid JSON -> returns early
         class MockManifestLoaderBadJson(BazelManifestLoader, Singleton):
             tier = "agent_session"
+
             def get_manifest(self, node: Node) -> Optional[Manifest]:
                 return Manifest("invalid JSON {")
-            def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
+
+            def load_manifest(
+                self, content: Manifest, storage: object
+            ) -> Sequence[NodeDefinition]:
                 return []
 
         reg3 = LifecycleRegistry()
@@ -584,26 +686,37 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             class MockCleanedNode(CleanedNode, Singleton):
                 tier = "agent_session"
+
                 @property
                 def node(self) -> Node:
                     return Node(address="//pkg:my_target")
 
             class MockManifestLoader(BazelManifestLoader, Singleton):
                 tier = "agent_session"
+
                 def get_manifest(self, node: Node) -> Optional[Manifest]:
-                    return Manifest(json.dumps({
-                        "src": "impl.py",
-                        "template": template_path,
-                        "template_parameters": json.dumps({"key": "value"}),
-                        "verification_success_message": "Build passed successfully",
-                    }))
-                def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
+                    return Manifest(
+                        json.dumps(
+                            {
+                                "src": "impl.py",
+                                "template": template_path,
+                                "template_parameters": json.dumps({"key": "value"}),
+                                "verification_success_message": "Build passed successfully",
+                            }
+                        )
+                    )
+
+                def load_manifest(
+                    self, content: Manifest, storage: object
+                ) -> Sequence[NodeDefinition]:
                     return []
 
             class MockNodeIdentifierUtility(BazelTarget, Singleton):
                 tier = "agent_session"
+
                 def normalize(self, raw_label: str) -> Node:
                     return Node(address=raw_label)
+
                 def extract_directory(self, node: Node) -> NodeDirectory:
                     return _make_node_directory("pkg")
 
@@ -629,7 +742,9 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
                 # Requirement: Declared verification success message from the manifest as the session verification success message.
                 # Requirement: [NodeConfig] The node config provides the session verification success message when configured.
-                self.assertEqual(cfg.verification_success_message, "Build passed successfully")
+                self.assertEqual(
+                    cfg.verification_success_message, "Build passed successfully"
+                )
 
     def test_template_and_guide_read_errors_and_invalid_param_string(self) -> None:
         """CUJ: Gracefully handling read errors in template/guide resolution and invalid JSON parameter string."""
@@ -646,41 +761,56 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             class MockCleanedNode(CleanedNode, Singleton):
                 tier = "agent_session"
+
                 @property
                 def node(self) -> Node:
                     return Node(address="//pkg:my_target")
 
             class MockManifestLoader(BazelManifestLoader, Singleton):
                 tier = "agent_session"
+
                 def get_manifest(self, node: Node) -> Optional[Manifest]:
-                    return Manifest(json.dumps({
-                        "src": "impl.py",
-                        "template": template_path,
-                        "template_parameters": "not valid json {",
-                        "guide": "//update_python_with_ai/guides:my_guide",
-                        "allows_step_mode": True,
-                    }))
-                def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
+                    return Manifest(
+                        json.dumps(
+                            {
+                                "src": "impl.py",
+                                "template": template_path,
+                                "template_parameters": "not valid json {",
+                                "guide": "//update_python_with_ai/guides:my_guide",
+                                "allows_step_mode": True,
+                            }
+                        )
+                    )
+
+                def load_manifest(
+                    self, content: Manifest, storage: object
+                ) -> Sequence[NodeDefinition]:
                     return []
 
             class MockNodeIdentifierUtility(BazelTarget, Singleton):
                 tier = "agent_session"
+
                 def normalize(self, raw_label: str) -> Node:
                     return Node(address=raw_label)
+
                 def extract_directory(self, node: Node) -> NodeDirectory:
                     return _make_node_directory("pkg")
 
             class MockAgentConfig(AgentConfig, Singleton):
                 tier = "system"
+
                 @property
                 def is_step_mode(self) -> bool:
                     return True
+
                 @property
                 def is_startup_reads(self) -> bool:
                     return True
+
                 @property
                 def inject_followups(self) -> bool:
                     return True
+
                 @property
                 def conversation_limit(self) -> int:
                     return 20
@@ -693,6 +823,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             reg.register(MockAgentConfig, keys=[AgentConfig])
 
             original_open = open
+
             def failing_open(path, *args, **kwargs):
                 if path in (template_path, guide_path):
                     raise OSError("Simulated read failure")
@@ -777,7 +908,9 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         self.assertEqual(len(parsed_guide.sections), 2)
         self.assertEqual(parsed_guide.sections[0].title, "Step 1: Write code")
         self.assertEqual(parsed_guide.sections[1].title, "Step 2: Test code")
-        self.assertEqual(parsed_guide.verification_failure, "Review error diagnostics and retry.")
+        self.assertEqual(
+            parsed_guide.verification_failure, "Review error diagnostics and retry."
+        )
 
         with tempfile.TemporaryDirectory() as tmpdir:
             guides_dir = os.path.join(tmpdir, "update_python_with_ai", "guides")
@@ -788,40 +921,55 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             class MockCleanedNode(CleanedNode, Singleton):
                 tier = "agent_session"
+
                 @property
                 def node(self) -> Node:
                     return Node(address="//pkg:my_target")
 
             class MockManifestLoader(BazelManifestLoader, Singleton):
                 tier = "agent_session"
+
                 def get_manifest(self, node: Node) -> Optional[Manifest]:
-                    return Manifest(json.dumps({
-                        "src": "impl.py",
-                        "guide": "//update_python_with_ai/guides:my_guide",
-                        "allows_step_mode": True,
-                        "deps": ["//update_python_with_ai/guides:my_guide"],
-                    }))
-                def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
+                    return Manifest(
+                        json.dumps(
+                            {
+                                "src": "impl.py",
+                                "guide": "//update_python_with_ai/guides:my_guide",
+                                "allows_step_mode": True,
+                                "deps": ["//update_python_with_ai/guides:my_guide"],
+                            }
+                        )
+                    )
+
+                def load_manifest(
+                    self, content: Manifest, storage: object
+                ) -> Sequence[NodeDefinition]:
                     return []
 
             class MockNodeIdentifierUtility(BazelTarget, Singleton):
                 tier = "agent_session"
+
                 def normalize(self, raw_label: str) -> Node:
                     return Node(address=raw_label)
+
                 def extract_directory(self, node: Node) -> NodeDirectory:
                     return _make_node_directory("pkg")
 
             class MockAgentConfig(AgentConfig, Singleton):
                 tier = "system"
+
                 @property
                 def is_step_mode(self) -> bool:
                     return True
+
                 @property
                 def is_startup_reads(self) -> bool:
                     return True
+
                 @property
                 def inject_followups(self) -> bool:
                     return True
+
                 @property
                 def conversation_limit(self) -> int:
                     return 20
@@ -855,9 +1003,14 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                         # Requirement: [NodeConfig] The node config provides the session guide, providing structured instructional text when step mode is active.
                         self.assertIsNotNone(cfg.guide)
                         assert cfg.guide is not None
-                        self.assertEqual(cfg.guide.summary, "This is the summary of the task.")
+                        self.assertEqual(
+                            cfg.guide.summary, "This is the summary of the task."
+                        )
                         self.assertEqual(len(cfg.guide.sections), 2)
-                        self.assertEqual(cfg.guide.verification_failure, "Review error diagnostics and retry.")
+                        self.assertEqual(
+                            cfg.guide.verification_failure,
+                            "Review error diagnostics and retry.",
+                        )
 
                         # Guide is excluded from read_only_files when step mode is active
                         # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies.
@@ -878,56 +1031,82 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
     def test_dependency_resolution_branches(self) -> None:
         """CUJ: Resolving star_deps with diamond graphs, invalid JSON, silent_deps, and manifest-less specs/other dependencies."""
+
         class MockCleanedNode(CleanedNode, Singleton):
             tier = "agent_session"
+
             @property
             def node(self) -> Node:
                 return Node(address="//pkg:root")
 
         class MockManifestLoader(BazelManifestLoader, Singleton):
             tier = "agent_session"
+
             def get_manifest(self, node: Node) -> Optional[Manifest]:
                 if node.address == "//pkg:root":
-                    return Manifest(json.dumps({
-                        "src": "root.py",
-                        "deps": [
-                            "//pkg:silent_dep",
-                            "//pkg:bad_json_dep",
-                            "//specs/grounding:foo_low",
-                            "//specs/grounding:bar_grounding",
-                            "//specs/high:baz_high",
-                            "//other/pkg:util",
-                        ],
-                        "star_deps": ["//pkg:star_a", "//pkg:star_b"],
-                        "silent_deps": ["//pkg:silent_dep"],
-                    }))
+                    return Manifest(
+                        json.dumps(
+                            {
+                                "src": "root.py",
+                                "deps": [
+                                    "//pkg:silent_dep",
+                                    "//pkg:bad_json_dep",
+                                    "//specs/grounding:foo_low",
+                                    "//specs/grounding:bar_grounding",
+                                    "//specs/high:baz_high",
+                                    "//other/pkg:util",
+                                ],
+                                "star_deps": ["//pkg:star_a", "//pkg:star_b"],
+                                "silent_deps": ["//pkg:silent_dep"],
+                            }
+                        )
+                    )
                 if node.address == "//pkg:star_a":
-                    return Manifest(json.dumps({
-                        "src": "star_a.py",
-                        "star_deps": ["//pkg:star_diamond", "//pkg:star_bad_json"],
-                    }))
+                    return Manifest(
+                        json.dumps(
+                            {
+                                "src": "star_a.py",
+                                "star_deps": [
+                                    "//pkg:star_diamond",
+                                    "//pkg:star_bad_json",
+                                ],
+                            }
+                        )
+                    )
                 if node.address == "//pkg:star_b":
-                    return Manifest(json.dumps({
-                        "src": "star_b.py",
-                        "star_deps": ["//pkg:star_diamond"],
-                    }))
+                    return Manifest(
+                        json.dumps(
+                            {
+                                "src": "star_b.py",
+                                "star_deps": ["//pkg:star_diamond"],
+                            }
+                        )
+                    )
                 if node.address == "//pkg:star_diamond":
-                    return Manifest(json.dumps({
-                        "src": "star_diamond.py",
-                    }))
+                    return Manifest(
+                        json.dumps(
+                            {
+                                "src": "star_diamond.py",
+                            }
+                        )
+                    )
                 if node.address == "//pkg:star_bad_json":
                     return Manifest("not valid json {")
                 if node.address == "//pkg:bad_json_dep":
                     return Manifest("not valid json {")
                 return None
 
-            def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
+            def load_manifest(
+                self, content: Manifest, storage: object
+            ) -> Sequence[NodeDefinition]:
                 return []
 
         class MockNodeIdentifierUtility(BazelTarget, Singleton):
             tier = "agent_session"
+
             def normalize(self, raw_label: str) -> Node:
                 return Node(address=raw_label)
+
             def extract_directory(self, node: Node) -> NodeDirectory:
                 return _make_node_directory("pkg")
 
@@ -954,9 +1133,11 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
     def test_make_host_path_and_alias_manager_guards_and_fallback(self) -> None:
         """CUJ: _make_host_path with str subclass, AliasManager.initialize failure guard, and sanitize_text direct path fallback."""
+
         # 1. _make_host_path with str subclass
         class CustomPath(str):
             pass
+
         path_obj = _make_host_path(CustomPath, "foo/bar")
         self.assertIsInstance(path_obj, CustomPath)
         self.assertEqual(path_obj, "foo/bar")
@@ -987,5 +1168,3 @@ if __name__ == "__main__":
     unittest.main()
 
 # Untested requirements: None
-
-

@@ -5,7 +5,13 @@ from update_with_ai.parts.agent.lib import agent_node_config
 from . import sandbox_file_editor
 from . import template_format
 from . import tool_provider
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
+
 
 class EditManager(sandbox_file_editor.EditManager, Singleton):
     tier = "agent_session"
@@ -21,7 +27,9 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
         tm.install_tool(get_singleton(TextReplacementTool))
         tm.install_tool(get_singleton(LineUpdateTool))
 
-    def record_initial_content(self, host_path: str, content: Optional[str] = None) -> None:
+    def record_initial_content(
+        self, host_path: str, content: Optional[str] = None
+    ) -> None:
         if host_path not in self._initial_contents:
             if content is not None:
                 self._initial_contents[host_path] = content
@@ -71,10 +79,14 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
         formatter = get_singleton(template_format.TemplateFormatter)
 
         for bound_file, content in cfg.templates:
-            host_path = os.path.join(alias_mgr.workspace_root.path, bound_file.workspace_path.path)
+            host_path = os.path.join(
+                alias_mgr.workspace_root.path, bound_file.workspace_path.path
+            )
             if not os.path.exists(host_path):
                 os.makedirs(os.path.dirname(host_path), exist_ok=True)
-                formatted_content = formatter.format_template(str(content), cfg.template_parameters)
+                formatted_content = formatter.format_template(
+                    str(content), cfg.template_parameters
+                )
                 with open(host_path, "w", encoding="utf-8") as f:
                     f.write(formatted_content)
                 self.record_initial_content(host_path, formatted_content)
@@ -132,7 +144,9 @@ class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
             self.replacement_text_parameter,
         }
 
-    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
+    def execute_tool(
+        self, actual_parameter_bindings: tool_provider.ActualParameterBindings
+    ) -> tool_provider.Response:
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
         target_file = bindings_map.get("file")
         target_text = str(bindings_map.get("target_text", ""))
@@ -157,7 +171,9 @@ class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
             )
 
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
-        host_path = os.path.join(alias_mgr.workspace_root.path, target_file.workspace_path.path)
+        host_path = os.path.join(
+            alias_mgr.workspace_root.path, target_file.workspace_path.path
+        )
 
         # Requirement: Executing the text replacement tool reads file content using the filesystem.
         # Requirement: Executing the text replacement tool fails if the target text is not found in the file content.
@@ -218,6 +234,7 @@ class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
             suppression_key=target_file.short_name,
             follow_up_tool_call=follow_up,
         )
+
 
 class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
     tier = "agent_session"
@@ -282,7 +299,9 @@ class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
             self.replacement_text_parameter,
         }
 
-    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
+    def execute_tool(
+        self, actual_parameter_bindings: tool_provider.ActualParameterBindings
+    ) -> tool_provider.Response:
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
         target_file = bindings_map.get("file")
         start_line = int(bindings_map.get("start_line", 1))
@@ -299,7 +318,9 @@ class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
             )
 
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
-        host_path = os.path.join(alias_mgr.workspace_root.path, target_file.workspace_path.path)
+        host_path = os.path.join(
+            alias_mgr.workspace_root.path, target_file.workspace_path.path
+        )
 
         # Requirement: Executing the line update tool reads file content using the filesystem.
         # Requirement: Executing the line update tool fails if the start line is less than one or exceeds the total line count plus one.
@@ -315,7 +336,10 @@ class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
             )
 
         # Requirement: Replacing or inserting lines treats each replacement line as a complete newline-terminated line, preserving subsequent line boundaries when replacement text lacks a trailing newline.
-        rep_lines = [l + "\n" if not l.endswith("\n") else l for l in replacement_text.splitlines()]
+        rep_lines = [
+            l + "\n" if not l.endswith("\n") else l
+            for l in replacement_text.splitlines()
+        ]
 
         if start_line <= end_line:
             # Requirement: When the start line is less than or equal to the end line, executing the line update tool fails if the end line exceeds the total line count.
@@ -369,6 +393,7 @@ class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
             suppression_key=target_file.short_name,
             follow_up_tool_call=follow_up,
         )
+
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry

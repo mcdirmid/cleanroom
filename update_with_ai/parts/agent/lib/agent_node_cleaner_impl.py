@@ -6,7 +6,15 @@ from . import agent_storage
 from update_with_ai.parts.dag.lib import dag_node_cleaner
 from update_with_ai.parts.dag.lib import dag_storage
 from update_with_ai.parts.sandbox.lib import sandbox
-from support.lib.lifecycle import LifecycleRegistry, LifecycleScope, Singleton, enter_phase, get_default_registry, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    LifecycleScope,
+    Singleton,
+    enter_phase,
+    get_default_registry,
+    get_singleton,
+)
+
 
 class CleanedNode(dag_node_cleaner.CleanedNode, Singleton):
     tier = "agent_session"
@@ -39,7 +47,9 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
         # Requirement: When a dirty node defines no task prompt, cleaning resolves the node without executing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
         if defn is None or not defn.task_prompt:
             self._last_outcome = None
-            has_changes = any(isinstance(m, dag_storage.Change) for m in storage.get_messages(node))
+            has_changes = any(
+                isinstance(m, dag_storage.Change) for m in storage.get_messages(node)
+            )
             if has_changes:
                 return {dag_storage.Change()}
             return set()
@@ -88,7 +98,9 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
                     key=lambda m: (m.content, type(m).__name__),
                 )
                 n_cfg = session.get_singleton(agent_node_config.NodeConfig)
-                rw_names = ", ".join(sorted(f.short_name for f in n_cfg.read_write_files))
+                rw_names = ", ".join(
+                    sorted(f.short_name for f in n_cfg.read_write_files)
+                )
 
                 for msg in messages_sorted:
                     if isinstance(msg, dag_storage.Feedback):
@@ -127,7 +139,7 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
                 if content.startswith("Blamed "):
                     blame_target_str = ""
                     blame_exp = ""
-                    after_blamed = content[len("Blamed "):]
+                    after_blamed = content[len("Blamed ") :]
                     if ": " in after_blamed:
                         blame_target_str, blame_exp = after_blamed.split(": ", 1)
                         blame_target_str = blame_target_str.strip()
@@ -138,17 +150,28 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
                     n_cfg = session.get_singleton(agent_node_config.NodeConfig)
                     blamed_node: Optional[dag_storage.Node] = None
                     for bt in n_cfg.blame_targets:
-                        if bt.short_name == blame_target_str or str(bt) == blame_target_str:
+                        if (
+                            bt.short_name == blame_target_str
+                            or str(bt) == blame_target_str
+                        ):
                             blamed_node = bt.owning_node
                             break
-                        if hasattr(bt, "owning_node") and bt.owning_node is not None and bt.owning_node.address == blame_target_str:
+                        if (
+                            hasattr(bt, "owning_node")
+                            and bt.owning_node is not None
+                            and bt.owning_node.address == blame_target_str
+                        ):
                             blamed_node = bt.owning_node
                             break
 
                     if blamed_node is None:
                         blamed_node = dag_storage.Node(address=blame_target_str)
 
-                    messages.add(dag_storage.Feedback(content=blame_exp or content, target=blamed_node))
+                    messages.add(
+                        dag_storage.Feedback(
+                            content=blame_exp or content, target=blamed_node
+                        )
+                    )
                 # Requirement: When the agent outcome indicates change with workspace file modifications, change messages are produced for downstream dependent nodes, and no change messages or change summaries when no workspace files were modified.
                 elif sb.has_modifications:
                     messages.add(dag_storage.Change())
@@ -189,7 +212,9 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
                 if m.target is not None:
                     storage.add_message(m, to=m.target)
                 else:
-                    for dependency in storage.get_dependencies(node):  # pragma: no cover (assumption: feedback messages always specify an addressed target)
+                    for dependency in storage.get_dependencies(
+                        node
+                    ):  # pragma: no cover (assumption: feedback messages always specify an addressed target)
                         storage.add_message(m, to=dependency.node)
 
         # Requirement: [NodeCleaner] Cleaning a dirty node communicates whether processing should continue.

@@ -3,6 +3,7 @@ from . import bazel_target
 from update_with_ai.parts.dag.lib import dag_storage
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
 
+
 class BazelTarget(bazel_target.BazelTarget, Singleton):
     tier = "system"
 
@@ -32,6 +33,7 @@ class BazelTarget(bazel_target.BazelTarget, Singleton):
         obj = object.__new__(bazel_target.NodeDirectory)
         object.__setattr__(obj, "path", package_part)
         return obj
+
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry

@@ -5,7 +5,13 @@ from . import sandbox_file_editor
 from . import sandbox_guide_delivery
 from . import sandbox_run_control
 from . import tool_provider
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
+
 
 class RunController(sandbox_run_control.RunController, Singleton):
     tier = "agent_session"
@@ -64,6 +70,7 @@ class RunController(sandbox_run_control.RunController, Singleton):
         self._cached_revision = current_rev
         return passed, diag_out
 
+
 class AdvanceTool(sandbox_run_control.AdvanceTool, Singleton):
     tier = "agent_session"
 
@@ -84,7 +91,9 @@ class AdvanceTool(sandbox_run_control.AdvanceTool, Singleton):
         # Requirement: The advance tool is named `advance`, accepts no parameters, and shares a constant suppression key `advance`.
         return set()
 
-    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
+    def execute_tool(
+        self, actual_parameter_bindings: tool_provider.ActualParameterBindings
+    ) -> tool_provider.Response:
         guide_del = get_singleton(sandbox_guide_delivery.GuideDelivery)
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
         rc = get_singleton(RunController)
@@ -113,7 +122,9 @@ class AdvanceTool(sandbox_run_control.AdvanceTool, Singleton):
             # Requirement: Tool execution fails when verification is failing, reminding the agent that the run tests tool should be called first and specifying a follow-up execution of the run tests tool with reasoning text indicating that verification results must be inspected before advancing.
             follow_up = tool_provider.FollowUpToolCall(
                 tool_name="run_tests",
-                wire_parameter_bindings=tool_provider.WireParameterBindings(bindings=set()),
+                wire_parameter_bindings=tool_provider.WireParameterBindings(
+                    bindings=set()
+                ),
                 reasoning_text="Verification results must be inspected before advancing.",
             )
             return tool_provider.Response(
@@ -164,6 +175,7 @@ class AdvanceTool(sandbox_run_control.AdvanceTool, Singleton):
             follow_up_tool_call=follow_up,
         )
 
+
 class FinishTool(sandbox_run_control.FinishTool, Singleton):
     tier = "agent_session"
 
@@ -195,7 +207,9 @@ class FinishTool(sandbox_run_control.FinishTool, Singleton):
     def parameters(self) -> Set[tool_provider.Parameter]:
         return {self.change_summary}
 
-    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
+    def execute_tool(
+        self, actual_parameter_bindings: tool_provider.ActualParameterBindings
+    ) -> tool_provider.Response:
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
         summary_str = str(bindings_map.get("change_summary", "") or "").strip()
 
@@ -211,7 +225,9 @@ class FinishTool(sandbox_run_control.FinishTool, Singleton):
         if cfg.is_step_mode and guide_del.has_steps_remaining:
             follow_up = tool_provider.FollowUpToolCall(
                 tool_name="advance",
-                wire_parameter_bindings=tool_provider.WireParameterBindings(bindings=set()),
+                wire_parameter_bindings=tool_provider.WireParameterBindings(
+                    bindings=set()
+                ),
                 reasoning_text="Remaining guide steps must be completed before finishing.",
             )
             return tool_provider.Response(
@@ -227,7 +243,9 @@ class FinishTool(sandbox_run_control.FinishTool, Singleton):
         if not passed:
             follow_up = tool_provider.FollowUpToolCall(
                 tool_name="run_tests",
-                wire_parameter_bindings=tool_provider.WireParameterBindings(bindings=set()),
+                wire_parameter_bindings=tool_provider.WireParameterBindings(
+                    bindings=set()
+                ),
                 reasoning_text="Verification results must be inspected before finishing.",
             )
             return tool_provider.Response(
@@ -260,13 +278,18 @@ class FinishTool(sandbox_run_control.FinishTool, Singleton):
             )
 
         # Requirement: Tool execution produces a terminating response indicating that the session completed successfully when verification is passing and all completion criteria are met.
-        msg = f"Session completed successfully: {summary_str}".strip() if summary_str else "Session completed successfully."
+        msg = (
+            f"Session completed successfully: {summary_str}".strip()
+            if summary_str
+            else "Session completed successfully."
+        )
         return tool_provider.Response(
             is_failed=False,
             is_terminated=True,
             content=msg,
             suppression_key="finish",
         )
+
 
 class FailTool(sandbox_run_control.FailTool, Singleton):
     tier = "agent_session"
@@ -296,7 +319,9 @@ class FailTool(sandbox_run_control.FailTool, Singleton):
     def parameters(self) -> Set[tool_provider.Parameter]:
         return {self.explanation}
 
-    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
+    def execute_tool(
+        self, actual_parameter_bindings: tool_provider.ActualParameterBindings
+    ) -> tool_provider.Response:
         # Requirement: Executing the fail tool produces a terminating response carrying the explanation.
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
         exp = str(bindings_map.get("explanation", "Failed"))
@@ -305,6 +330,7 @@ class FailTool(sandbox_run_control.FailTool, Singleton):
             is_terminated=True,
             content=f"Failed: {exp}",
         )
+
 
 class BlameTool(sandbox_run_control.BlameTool, Singleton):
     tier = "agent_session"
@@ -344,7 +370,9 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
     def parameters(self) -> Set[tool_provider.Parameter]:
         return {self.blame_target, self.explanation}
 
-    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
+    def execute_tool(
+        self, actual_parameter_bindings: tool_provider.ActualParameterBindings
+    ) -> tool_provider.Response:
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
         target = bindings_map.get("target")
         exp = str(bindings_map.get("explanation", ""))
@@ -361,12 +389,15 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
             )
 
         # Requirement: On successful blame tool execution, the response indicates termination attributing feedback to the blame target owning node.
-        target_name = target.short_name if hasattr(target, "short_name") else str(target)
+        target_name = (
+            target.short_name if hasattr(target, "short_name") else str(target)
+        )
         return tool_provider.Response(
             is_failed=False,
             is_terminated=True,
             content=f"Blamed {target_name}: {exp}",
         )
+
 
 class RunTestsTool(sandbox_run_control.RunTestsTool, Singleton):
     tier = "agent_session"
@@ -388,7 +419,9 @@ class RunTestsTool(sandbox_run_control.RunTestsTool, Singleton):
         # Requirement: The run tests tool is named `run_tests`, accepts no parameters, and shares a constant suppression key `run_tests`.
         return set()
 
-    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
+    def execute_tool(
+        self, actual_parameter_bindings: tool_provider.ActualParameterBindings
+    ) -> tool_provider.Response:
         rc = get_singleton(RunController)
         guide_del = get_singleton(sandbox_guide_delivery.GuideDelivery)
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
@@ -398,14 +431,23 @@ class RunTestsTool(sandbox_run_control.RunTestsTool, Singleton):
         passed, diag = rc.evaluate_verification()
 
         current_rev = edit_mgr.file_update_revision
-        is_repeated = (self._last_tested_revision is not None and self._last_tested_revision == current_rev)
+        is_repeated = (
+            self._last_tested_revision is not None
+            and self._last_tested_revision == current_rev
+        )
         self._last_tested_revision = current_rev
 
         reminder: Optional[str] = None
         follow_up: Optional[tool_provider.FollowUpToolCall] = None
 
         if is_repeated:
-            rw_file = next(iter(sorted(cfg.read_write_files, key=lambda f: f.short_name)), None) if cfg.read_write_files else None
+            rw_file = (
+                next(
+                    iter(sorted(cfg.read_write_files, key=lambda f: f.short_name)), None
+                )
+                if cfg.read_write_files
+                else None
+            )
             src_name = rw_file.short_name if rw_file else "session read-write files"
             status_word = "passes" if passed else "failed"
             action_word = "advance" if cfg.is_step_mode else "finish"
@@ -437,7 +479,9 @@ class RunTestsTool(sandbox_run_control.RunTestsTool, Singleton):
             vf_block = ""
             guide_obj = getattr(guide_del, "guide", None)
             if guide_obj and getattr(guide_obj, "verification_failure", None):
-                vf_block = f"\n\n## Verification failure\n{guide_obj.verification_failure}"
+                vf_block = (
+                    f"\n\n## Verification failure\n{guide_obj.verification_failure}"
+                )
             content = f"Verification failed: {diag}{vf_block}".strip()
             return tool_provider.Response(
                 is_failed=True,
@@ -449,7 +493,10 @@ class RunTestsTool(sandbox_run_control.RunTestsTool, Singleton):
             )
 
         # Requirement: Produces a response presenting passing verification results using the session verification success message when configured or default passing verification results alongside sanitized check output when verification passes.
-        base_msg = cfg.verification_success_message or "Verification passed: All checks succeeded."
+        base_msg = (
+            cfg.verification_success_message
+            or "Verification passed: All checks succeeded."
+        )
         content = base_msg
         if diag:
             content = f"{content}\n\n{diag}".strip()
@@ -461,6 +508,7 @@ class RunTestsTool(sandbox_run_control.RunTestsTool, Singleton):
             suppression_key="run_tests",
             follow_up_tool_call=follow_up,
         )
+
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
@@ -494,4 +542,3 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         keys=[RunTestsTool, sandbox_run_control.RunTestsTool, tool_provider.Tool],
         tier="agent_session",
     )
-

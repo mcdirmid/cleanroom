@@ -119,7 +119,9 @@ class LifecyclePrototype:
         keys: Sequence[type[Any]],
     ) -> SingletonDescriptor:
         """Registers a pre-constructed instance against all its keyed protocol types."""
-        desc = SingletonDescriptor(impl=type(instance), keys=keys, phase=self.phase, instance=instance)
+        desc = SingletonDescriptor(
+            impl=type(instance), keys=keys, phase=self.phase, instance=instance
+        )
         self._descriptors.append(desc)
         for k in keys:
             self._key_to_desc[k] = desc
@@ -146,7 +148,9 @@ class LifecycleRegistry:
         self._prototypes: Dict[str, LifecyclePrototype] = {}
         # Pre-create standard phase hierarchy
         self._system_proto = LifecyclePrototype("system")
-        self._session_proto = LifecyclePrototype("agent_session", parent=self._system_proto)
+        self._session_proto = LifecyclePrototype(
+            "agent_session", parent=self._system_proto
+        )
         self._prototypes["system"] = self._system_proto
         self._prototypes["agent_session"] = self._session_proto
 
@@ -208,7 +212,9 @@ class LifecycleRegistry:
 
 _global_registry = LifecycleRegistry()
 _ambient_system_scope: Optional[LifecycleScope] = None
-_active_scope: ContextVar[Optional[LifecycleScope]] = ContextVar("_active_scope", default=None)
+_active_scope: ContextVar[Optional[LifecycleScope]] = ContextVar(
+    "_active_scope", default=None
+)
 
 # Guarantee module identity across import alias variations
 # (support.lib.lifecycle, update_python_with_ai.support.lib.lifecycle, update_with_ai.support.lib.lifecycle)
@@ -222,6 +228,7 @@ _MODULE_ALIASES = (
 
 _this_module = sys.modules.get(__name__)
 if _this_module is not None:
+
     def _ensure_module_tree(path_parts: Sequence[str], mod: _types.ModuleType) -> None:
         current: Optional[_types.ModuleType] = None
         accum = ""
@@ -303,7 +310,11 @@ def get_singleton(key: type[T]) -> T:
                 raise LifecycleIsolationError(
                     f"System singleton '{caller_name}' cannot access '{key_name}' scoped to phase '{desc.phase}'"
                 )
-            system_scope = scope if scope.phase == "system" else (scope.parent or get_ambient_system_scope())
+            system_scope = (
+                scope
+                if scope.phase == "system"
+                else (scope.parent or get_ambient_system_scope())
+            )
             return system_scope.get(key)
 
     return scope.get(key)
@@ -321,7 +332,11 @@ class LifecycleScope:
         defer_startup: bool = False,
     ) -> None:
         self.phase = phase
-        self.registry = registry if registry is not None else (parent.registry if parent else _global_registry)
+        self.registry = (
+            registry
+            if registry is not None
+            else (parent.registry if parent else _global_registry)
+        )
         self.prototype = self.registry.get_prototype(phase)
         self.parent = parent
         self._setup = setup
@@ -353,7 +368,9 @@ class LifecycleScope:
                 f"singleton is scoped to phase '{global_desc.phase}'"
             )
 
-        raise LifecycleResolutionError(f"No singleton registered for '{key_name}' in phase '{self.phase}'")
+        raise LifecycleResolutionError(
+            f"No singleton registered for '{key_name}' in phase '{self.phase}'"
+        )
 
     def get_singleton(self, key: type[T]) -> T:
         """Retrieves a singleton matching key from this scope or delegates to ancestors."""
@@ -369,7 +386,9 @@ class LifecycleScope:
             return self._instances_by_desc[desc]
 
         if state == _InitState.INITIALIZING:
-            impl_name = desc.impl.__name__ if desc.impl is not None else repr(desc.instance)
+            impl_name = (
+                desc.impl.__name__ if desc.impl is not None else repr(desc.instance)
+            )
             raise LifecycleInitializationError(
                 f"Mutual / circular dependency detected while initializing singleton '{impl_name}'"
             )
@@ -493,7 +512,11 @@ def enter_phase(
     reg = (
         registry
         if registry is not None
-        else (p.registry if p is not None else (active.registry if active is not None else _global_registry))
+        else (
+            p.registry
+            if p is not None
+            else (active.registry if active is not None else _global_registry)
+        )
     )
 
     return LifecycleScope(

@@ -2,6 +2,7 @@ from typing import Dict, Optional, Set, Tuple, Type
 from . import tool_provider
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
 
+
 class ToolManager(tool_provider.ToolManager, Singleton):
     tier = "agent_session"
 
@@ -58,7 +59,10 @@ class ToolManager(tool_provider.ToolManager, Singleton):
 
         # Requirement: When parameter mappings are successfully resolved, executing a tool by name delegates to the matching tool with the resolved actual parameter bindings and returns the tool's response.
         # Requirement: [ToolManager] Executing a tool by name with wire parameter bindings produces the tool response upon resolving parameter conversions.
-        return tool.execute_tool(tool_provider.ActualParameterBindings(bindings=actual_bindings))
+        return tool.execute_tool(
+            tool_provider.ActualParameterBindings(bindings=actual_bindings)
+        )
+
 
 class StringParameterConverter(tool_provider.StringParameterConverter, Singleton):
     tier = "agent_session"
@@ -78,6 +82,7 @@ class StringParameterConverter(tool_provider.StringParameterConverter, Singleton
         # Requirement: Converting a wire type string produces that string directly as its actual value.
         return str(wire_value)
 
+
 class IntegerParameterConverter(tool_provider.IntegerParameterConverter, Singleton):
     tier = "agent_session"
 
@@ -96,6 +101,7 @@ class IntegerParameterConverter(tool_provider.IntegerParameterConverter, Singlet
         # Requirement: Converting a wire type integer produces that integer directly as its actual value.
         return int(wire_value)
 
+
 class BooleanParameterConverter(tool_provider.BooleanParameterConverter, Singleton):
     tier = "agent_session"
 
@@ -113,6 +119,7 @@ class BooleanParameterConverter(tool_provider.BooleanParameterConverter, Singlet
     def convert(self, wire_value: bool) -> bool:
         # Requirement: Converting a wire type boolean produces that boolean directly as its actual value.
         return bool(wire_value)
+
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry

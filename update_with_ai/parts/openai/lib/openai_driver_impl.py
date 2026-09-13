@@ -7,30 +7,39 @@ from update_with_ai.parts.agent.lib import agent_driver
 from . import openai_config
 from update_with_ai.parts.core.lib import runner_logger
 from update_with_ai.parts.sandbox.lib import tool_provider
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
 
 try:  # pragma: no cover
     import openai
+
     OpenAI = openai.OpenAI
     OpenAIError = openai.OpenAIError
 except ImportError:  # pragma: no cover
     OpenAI: Any = None
+
     class _OpenAIError(Exception):
         pass
+
     OpenAIError: Any = _OpenAIError
-
-
 
 
 class _SimpleParameterConverter:
     @property
     def actual_type(self) -> type:
         return str
+
     @property
     def wire_type(self) -> tool_provider.WireType:
         return tool_provider.String()
+
     def convert(self, wire_value: Any) -> Any:
         return wire_value
+
 
 _DEFAULT_CONVERTER = _SimpleParameterConverter()
 
@@ -42,7 +51,9 @@ def _measure_prefix_reuse(
 ) -> Tuple[str, str]:
     if prev_payload is None:
         curr_wire = json.dumps(curr_payload, ensure_ascii=False)
-        tools_info = f", {len(tools_payload)} tools" if tools_payload is not None else ""
+        tools_info = (
+            f", {len(tools_payload)} tools" if tools_payload is not None else ""
+        )
         summary = f"initial request ({len(curr_payload)} messages sent to OpenAI)"
         transcript = (
             f"Prefix reuse: N/A (initial request, {len(curr_payload)} messages"
@@ -73,7 +84,9 @@ def _measure_prefix_reuse(
         common_prefix_chars += 1
 
     reuse_pct = (common_prefix_chars / len(curr_wire) * 100.0) if curr_wire else 100.0
-    prev_retained_pct = (common_prefix_chars / len(prev_wire) * 100.0) if prev_wire else 100.0
+    prev_retained_pct = (
+        (common_prefix_chars / len(prev_wire) * 100.0) if prev_wire else 100.0
+    )
 
     if divergence_idx is None:
         summary = (
@@ -93,12 +106,20 @@ def _measure_prefix_reuse(
         f"{prev_retained_pct:.1f}% of prev request retained)"
     ]
     if tools_payload is not None:
-        transcript_lines.append(f"Tools payload: {len(tools_payload)} tools, static canonical schema.")
+        transcript_lines.append(
+            f"Tools payload: {len(tools_payload)} tools, static canonical schema."
+        )
 
     if divergence_idx is not None:
-        p_m = prev_payload[divergence_idx] if divergence_idx < len(prev_payload) else None
-        c_m = curr_payload[divergence_idx] if divergence_idx < len(curr_payload) else None
-        transcript_lines.append(f"Divergence detected at message index {divergence_idx}:")
+        p_m = (
+            prev_payload[divergence_idx] if divergence_idx < len(prev_payload) else None
+        )
+        c_m = (
+            curr_payload[divergence_idx] if divergence_idx < len(curr_payload) else None
+        )
+        transcript_lines.append(
+            f"Divergence detected at message index {divergence_idx}:"
+        )
         if p_m is not None and c_m is not None:
             if p_m.get("role") != c_m.get("role"):
                 transcript_lines.append(
@@ -160,7 +181,6 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                 timeout=float(openai_cfg.timeout),
             )
 
-
         # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
         tools_payload: list[dict[str, Any]] = []
         for t in sorted(tool_mgr.installed_tools, key=lambda x: x.name):
@@ -170,18 +190,20 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                 props[p.name] = {"type": "string", "description": p.description}
                 if p.is_required:
                     req_props.append(p.name)
-            tools_payload.append({
-                "type": "function",
-                "function": {
-                    "name": t.name,
-                    "description": t.description,
-                    "parameters": {
-                        "type": "object",
-                        "properties": props,
-                        "required": req_props,
+            tools_payload.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": {
+                            "type": "object",
+                            "properties": props,
+                            "required": req_props,
+                        },
                     },
-                },
-            })
+                }
+            )
         if tools_payload:
             tools_payload = json.loads(json.dumps(tools_payload, sort_keys=True))
 
@@ -199,26 +221,30 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
             messages_payload = []
             for m in model_req.messages:
                 if m.role == "assistant" and m.tool_name:
-                    messages_payload.append({
-                        "role": "assistant",
-                        "content": m.content if m.content else None,
-                        "tool_calls": [
-                            {
-                                "id": m.tool_call_id or "call_0",
-                                "type": "function",
-                                "function": {
-                                    "name": m.tool_name,
-                                    "arguments": m.tool_arguments or "{}",
-                                },
-                            }
-                        ],
-                    })
+                    messages_payload.append(
+                        {
+                            "role": "assistant",
+                            "content": m.content if m.content else None,
+                            "tool_calls": [
+                                {
+                                    "id": m.tool_call_id or "call_0",
+                                    "type": "function",
+                                    "function": {
+                                        "name": m.tool_name,
+                                        "arguments": m.tool_arguments or "{}",
+                                    },
+                                }
+                            ],
+                        }
+                    )
                 elif m.role == "tool":
-                    messages_payload.append({
-                        "role": "tool",
-                        "content": m.content,
-                        "tool_call_id": m.tool_call_id or "",
-                    })
+                    messages_payload.append(
+                        {
+                            "role": "tool",
+                            "content": m.content,
+                            "tool_call_id": m.tool_call_id or "",
+                        }
+                    )
                 else:
                     messages_payload.append({"role": m.role, "content": m.content})
 
@@ -297,7 +323,9 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                     tc_raw_args = tc.function.arguments or ""
                     try:
                         tc_args = json.loads(tc_raw_args) if tc_raw_args else {}
-                        formatted_args = ", ".join(f"{k}={repr(v)}" for k, v in tc_args.items())
+                        formatted_args = ", ".join(
+                            f"{k}={repr(v)}" for k, v in tc_args.items()
+                        )
                     except (json.JSONDecodeError, TypeError):
                         formatted_args = tc_raw_args
                     if len(formatted_args) > 60:
@@ -308,7 +336,9 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                 text_preview = (assistant_msg.content or "").strip().replace("\n", " ")
                 if len(text_preview) > 80:
                     text_preview = text_preview[:77] + "..."
-                completion_summary = f"[Turn {turns}] Assistant (text): {json.dumps(text_preview)}"
+                completion_summary = (
+                    f"[Turn {turns}] Assistant (text): {json.dumps(text_preview)}"
+                )
 
             # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
             logger.consume(
@@ -364,14 +394,24 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                                 conv_val = v  # pragma: no cover (assumption: parameter_converter is non-null under tool_provider.Parameter grounding contract)
                             actual_bindings_set.add((p, conv_val))
                         else:
-                            dummy_p = tool_provider.Parameter(name=k, description="", parameter_converter=_DEFAULT_CONVERTER)
+                            dummy_p = tool_provider.Parameter(
+                                name=k,
+                                description="",
+                                parameter_converter=_DEFAULT_CONVERTER,
+                            )
                             actual_bindings_set.add((dummy_p, v))
                 else:
                     for k, v in args_dict.items():
-                        dummy_p = tool_provider.Parameter(name=k, description="", parameter_converter=_DEFAULT_CONVERTER)
+                        dummy_p = tool_provider.Parameter(
+                            name=k,
+                            description="",
+                            parameter_converter=_DEFAULT_CONVERTER,
+                        )
                         actual_bindings_set.add((dummy_p, v))
 
-                actual_bindings = tool_provider.ActualParameterBindings(bindings=actual_bindings_set)
+                actual_bindings = tool_provider.ActualParameterBindings(
+                    bindings=actual_bindings_set
+                )
 
                 # Requirement: Before executing each tool call, the agent driver records the tool execution in the loop guard, injecting a loop reminder into the conversation when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
                 # Requirement: [AgentDriver] The agent driver evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
@@ -397,11 +437,17 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                     first_line = first_line[:77] + "..."
 
                 if resp.is_failed:
-                    tool_status_summary = f"[Turn {turns}] Tool {fn_name}: FAILED -> {first_line}"
+                    tool_status_summary = (
+                        f"[Turn {turns}] Tool {fn_name}: FAILED -> {first_line}"
+                    )
                 elif resp.is_terminated:
-                    tool_status_summary = f"[Turn {turns}] Tool {fn_name}: COMPLETED -> {first_line}"
+                    tool_status_summary = (
+                        f"[Turn {turns}] Tool {fn_name}: COMPLETED -> {first_line}"
+                    )
                 else:
-                    tool_status_summary = f"[Turn {turns}] Tool {fn_name}: OK -> {first_line}"
+                    tool_status_summary = (
+                        f"[Turn {turns}] Tool {fn_name}: OK -> {first_line}"
+                    )
 
                 transcript_rep = (
                     f"{resp.content}\n\nReminder: {resp.reminder}"
@@ -440,7 +486,11 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                     )
 
                 # Requirement: Productive tool executions that modify workspace files or advance the guide step clear repetition tracking in the loop guard.
-                if not resp.is_failed and fn_name in ("replace", "update_lines", "advance"):
+                if not resp.is_failed and fn_name in (
+                    "replace",
+                    "update_lines",
+                    "advance",
+                ):
                     guard.record_progress()
 
                 # Requirement: When configured by agent configuration to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool, appending a synthetic assistant invocation carrying the follow-up tool call's reasoning text as prior thought preceding the requested tool execution and the resulting follow-up response to the conversation immediately following the originating response.
@@ -448,7 +498,11 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                 curr_resp = resp
                 curr_call_id = tc.id
                 followup_count = 0
-                while agent_cfg.inject_followups and curr_resp.follow_up_tool_call is not None and not curr_resp.is_terminated:
+                while (
+                    agent_cfg.inject_followups
+                    and curr_resp.follow_up_tool_call is not None
+                    and not curr_resp.is_terminated
+                ):
                     followup = curr_resp.follow_up_tool_call
                     followup_count += 1
                     synth_call_id = f"{curr_call_id}_followup_{followup_count}"
@@ -493,7 +547,11 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                         tool_name=followup.tool_name,
                         tool_call_id=synth_call_id,
                     )
-                    if not follow_resp.is_failed and followup.tool_name in ("replace", "update_lines", "advance"):
+                    if not follow_resp.is_failed and followup.tool_name in (
+                        "replace",
+                        "update_lines",
+                        "advance",
+                    ):
                         guard.record_progress()
                     curr_resp = follow_resp
                     if curr_resp.is_terminated:
@@ -520,6 +578,7 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
         # Requirement: When turns reach the conversation limit from agent config, the agent driver halts with an unexpected failure.
         # Requirement: [AgentDriver] When the conversation limit from agent config is exceeded, the agent driver halts with an unexpected failure.
         raise RuntimeError(f"Conversation limit reached ({limit} turns)")
+
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry

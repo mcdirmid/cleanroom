@@ -117,7 +117,9 @@ class ServiceWithTypo:
         visitor = SpecLintVisitor("<test>")
         visitor.visit(tree)
         messages = [d.message for d in visitor.diagnostics]
-        self.assertTrue(any("Unknown type 'NonExistentCustomType'" in m for m in messages))
+        self.assertTrue(
+            any("Unknown type 'NonExistentCustomType'" in m for m in messages)
+        )
 
     def test_singleton_without_lifecycle_arg_rejected(self):
         source = '''
@@ -135,7 +137,9 @@ class BareSingleton:
         visitor = SpecLintVisitor("<test>")
         visitor.visit(tree)
         messages = [d.message for d in visitor.diagnostics]
-        self.assertTrue(any("requires an explicit lifecycle argument" in m for m in messages))
+        self.assertTrue(
+            any("requires an explicit lifecycle argument" in m for m in messages)
+        )
 
     def test_singleton_invalid_lifecycle_arg_rejected(self):
         source = '''
@@ -153,7 +157,9 @@ class BadTierSingleton:
         visitor = SpecLintVisitor("<test>")
         visitor.visit(tree)
         messages = [d.message for d in visitor.diagnostics]
-        self.assertTrue(any("must specify a valid lifecycle tier" in m for m in messages))
+        self.assertTrue(
+            any("must specify a valid lifecycle tier" in m for m in messages)
+        )
 
     def test_poly_type_with_lifecycle_arg_rejected(self):
         source = '''
@@ -189,7 +195,12 @@ class BadInheritedSingleton(SystemService):
         visitor = SpecLintVisitor("<test>")
         visitor.visit(tree)
         messages = [d.message for d in visitor.diagnostics]
-        self.assertTrue(any("Direct inheritance from 'SystemService' is obsolete" in m for m in messages))
+        self.assertTrue(
+            any(
+                "Direct inheritance from 'SystemService' is obsolete" in m
+                for m in messages
+            )
+        )
 
     def test_inherited_decorator_rejected(self):
         source = '''
@@ -214,7 +225,12 @@ class GeneratedStub:
         tree = ast.parse(source)
         v = SpecLintVisitor("<test>")
         v.visit(tree)
-        self.assertTrue(any("Unrecognized method decorator '@inherited'" in d.message for d in v.diagnostics))
+        self.assertTrue(
+            any(
+                "Unrecognized method decorator '@inherited'" in d.message
+                for d in v.diagnostics
+            )
+        )
 
     def test_operation_decorator_enforced(self):
         source = '''
@@ -236,7 +252,12 @@ class ServiceWithoutOp:
         tree = ast.parse(source)
         v = SpecLintVisitor("<test>")
         v.visit(tree)
-        self.assertTrue(any("must be decorated with either @property or @operation" in d.message for d in v.diagnostics))
+        self.assertTrue(
+            any(
+                "must be decorated with either @property or @operation" in d.message
+                for d in v.diagnostics
+            )
+        )
 
     def test_dual_property_and_operation_rejected(self):
         source = '''
@@ -260,7 +281,12 @@ class ServiceDualDecorator:
         tree = ast.parse(source)
         v = SpecLintVisitor("<test>")
         v.visit(tree)
-        self.assertTrue(any("cannot be decorated with both @property and @operation" in d.message for d in v.diagnostics))
+        self.assertTrue(
+            any(
+                "cannot be decorated with both @property and @operation" in d.message
+                for d in v.diagnostics
+            )
+        )
 
     def test_legacy_requirements_header_rejected(self):
         source = '''
@@ -285,7 +311,12 @@ class ServiceLegacyHeader:
         tree = ast.parse(source)
         v = SpecLintVisitor("<test>")
         v.visit(tree)
-        self.assertTrue(any("Obsolete docstring section 'REQUIREMENTS:'" in d.message for d in v.diagnostics))
+        self.assertTrue(
+            any(
+                "Obsolete docstring section 'REQUIREMENTS:'" in d.message
+                for d in v.diagnostics
+            )
+        )
 
     def test_valid_assembly_spec(self):
         source = '''
@@ -320,7 +351,12 @@ def __initialize__() -> None:
         tree = ast.parse(source)
         v = SpecLintVisitor("test.pyi")
         v.visit(tree)
-        self.assertTrue(any("only permitted in assembly specifications" in d.message for d in v.diagnostics))
+        self.assertTrue(
+            any(
+                "only permitted in assembly specifications" in d.message
+                for d in v.diagnostics
+            )
+        )
 
     def test_assembly_spec_missing_constituents_rejected(self):
         source = '''
@@ -341,7 +377,7 @@ class TestSpecInherit(unittest.TestCase):
     """Tests for grounding_tool.py requirements inheritance engine."""
 
     def test_docstring_contract_roundtrip(self):
-        raw = '''
+        raw = """
 PURPOSE:
 Original service purpose
 
@@ -354,25 +390,33 @@ FRESH_REQUIREMENTS:
 
 INHERITED_REQUIREMENTS:
 - [Ancestor] Base requirement
-'''
+"""
         contract = DocstringContract(raw)
         self.assertEqual(contract.purpose, "Original service purpose")
         self.assertEqual(contract.fresh_assumptions, ["Must run in POSIX environment"])
-        self.assertEqual(contract.fresh_requirements, ["Requirement 1", "Requirement 2"])
-        self.assertEqual(contract.inherited_requirements, {"Ancestor": ["Base requirement"]})
+        self.assertEqual(
+            contract.fresh_requirements, ["Requirement 1", "Requirement 2"]
+        )
+        self.assertEqual(
+            contract.inherited_requirements, {"Ancestor": ["Base requirement"]}
+        )
 
         rendered = contract.to_docstring()
         self.assertIn("PURPOSE:\nOriginal service purpose", rendered)
         self.assertIn("FRESH_ASSUMPTIONS:\n- Must run in POSIX environment", rendered)
         self.assertIn("FRESH_REQUIREMENTS:\n- Requirement 1\n- Requirement 2", rendered)
-        self.assertIn("INHERITED_REQUIREMENTS:\n- [Ancestor] Base requirement", rendered)
+        self.assertIn(
+            "INHERITED_REQUIREMENTS:\n- [Ancestor] Base requirement", rendered
+        )
 
         # Test wipe_inherited()
         contract.wipe_inherited()
         self.assertEqual(contract.inherited_requirements, {})
         wiped_rendered = contract.to_docstring()
         self.assertNotIn("INHERITED_REQUIREMENTS:", wiped_rendered)
-        self.assertIn("FRESH_REQUIREMENTS:\n- Requirement 1\n- Requirement 2", wiped_rendered)
+        self.assertIn(
+            "FRESH_REQUIREMENTS:\n- Requirement 1\n- Requirement 2", wiped_rendered
+        )
 
     def test_inheritance_and_stub_synthesis(self):
         base_src = '''
@@ -452,7 +496,9 @@ class ChildWorker(base_mod.BaseWorker):
         # Verify execute method inherited BaseWorker execute requirements
         self.assertIn("- [BaseWorker] Must return True on success.", compiled)
         # Verify worker_id property was synthesized with @property and @override
-        self.assertIn("@property\n    @override\n    def worker_id(self) -> str:", compiled)
+        self.assertIn(
+            "@property\n    @override\n    def worker_id(self) -> str:", compiled
+        )
         # Verify 'override' and 'operation' were imported from framework
         self.assertIn("override", compiled)
         self.assertNotIn("inherited", compiled)
@@ -561,7 +607,12 @@ class ChildWorker(base_mod.BaseWorker):
 
         compiled, diags = compile_module_inheritance(registry, "child_mod")
         self.assertTrue(len(diags) > 0)
-        self.assertTrue(any("specialized_method" in d.message and "fresh contracts" in d.message for d in diags))
+        self.assertTrue(
+            any(
+                "specialized_method" in d.message and "fresh contracts" in d.message
+                for d in diags
+            )
+        )
 
     def test_idempotent_wipe_and_replace(self):
         base_src = '''
@@ -620,7 +671,9 @@ class ChildService(base_mod.BaseService):
         child_tree_run2 = ast.parse(compiled_run1)
         registry.modules["child_mod"] = child_tree_run2
         registry.module_classes[("child_mod", "ChildService")] = [
-            n for n in child_tree_run2.body if isinstance(n, ast.ClassDef) and n.name == "ChildService"
+            n
+            for n in child_tree_run2.body
+            if isinstance(n, ast.ClassDef) and n.name == "ChildService"
         ][0]
 
         # Run 2
@@ -721,7 +774,12 @@ class ServiceB:
         linker.module_exports["mod_b"] = {"ServiceB"}
 
         linker.check_all()
-        self.assertTrue(any("Symbol 'NonExistentItem' is not exported" in d.message for d in linker.diagnostics))
+        self.assertTrue(
+            any(
+                "Symbol 'NonExistentItem' is not exported" in d.message
+                for d in linker.diagnostics
+            )
+        )
 
     def test_tier_isolation_violation_rejected(self):
         linker = ClosedWorldLinker()
@@ -758,7 +816,9 @@ class SystemManager:
         linker.class_tiers["SystemManager"] = "system"
 
         linker.check_all()
-        self.assertTrue(any("Lifecycle tier violation" in d.message for d in linker.diagnostics))
+        self.assertTrue(
+            any("Lifecycle tier violation" in d.message for d in linker.diagnostics)
+        )
 
 
 class TestGroundingToolUnifiedPipeline(unittest.TestCase):
@@ -864,12 +924,12 @@ class Child(parent.Parent):
 
     def test_lint_pass_fails_on_illegal_syntax(self):
         bad_spec = self.temp_path / "bad.pyi"
-        bad_spec.write_text('''from framework import singleton_type
+        bad_spec.write_text("""from framework import singleton_type
 
 @singleton_type("agent_session")
 class Bad:
     x = 10
-''')
+""")
         exit_code = run_pipeline([bad_spec], mode="lint-only")
         self.assertEqual(exit_code, 1)
 
@@ -928,7 +988,13 @@ class MyService:
     ...
 ''')
         diags = lint_file(str(interface_spec))
-        self.assertTrue(any("'GROUNDING_ARGUMENT:' is only permitted in implementation components" in d.message for d in diags))
+        self.assertTrue(
+            any(
+                "'GROUNDING_ARGUMENT:' is only permitted in implementation components"
+                in d.message
+                for d in diags
+            )
+        )
 
     def test_grounding_argument_allowed_on_property(self):
         impl_spec = self.temp_path / "prop_impl.pyi"
@@ -978,7 +1044,13 @@ class DataRecord:
         ...
 ''')
         diags = lint_file(str(impl_spec))
-        self.assertTrue(any("'GROUNDING_ARGUMENT:' on members is only permitted on operations or properties of a @singleton_type class." in d.message for d in diags))
+        self.assertTrue(
+            any(
+                "'GROUNDING_ARGUMENT:' on members is only permitted on operations or properties of a @singleton_type class."
+                in d.message
+                for d in diags
+            )
+        )
 
     def test_grounding_argument_rejected_on_property_in_non_impl(self):
         interface_spec = self.temp_path / "prop_service.pyi"
@@ -1003,7 +1075,13 @@ class PropService:
         ...
 ''')
         diags = lint_file(str(interface_spec))
-        self.assertTrue(any("'GROUNDING_ARGUMENT:' is only permitted in implementation components" in d.message for d in diags))
+        self.assertTrue(
+            any(
+                "'GROUNDING_ARGUMENT:' is only permitted in implementation components"
+                in d.message
+                for d in diags
+            )
+        )
 
     def test_grounding_argument_preserved_during_sync(self):
         impl_spec = self.temp_path / "sync_service_impl.pyi"
@@ -1045,9 +1123,18 @@ class SyncService:
         self.assertEqual(exit_code, 0)
 
         content = impl_spec.read_text()
-        self.assertIn("GROUNDING_ARGUMENT:\nWell grounded: class level grounding argument.", content)
-        self.assertIn("GROUNDING_ARGUMENT:\nWell grounded: property level grounding argument.", content)
-        self.assertIn("GROUNDING_ARGUMENT:\nWell grounded: operation level grounding argument.", content)
+        self.assertIn(
+            "GROUNDING_ARGUMENT:\nWell grounded: class level grounding argument.",
+            content,
+        )
+        self.assertIn(
+            "GROUNDING_ARGUMENT:\nWell grounded: property level grounding argument.",
+            content,
+        )
+        self.assertIn(
+            "GROUNDING_ARGUMENT:\nWell grounded: operation level grounding argument.",
+            content,
+        )
 
 
 class TestOrphanRequirements(unittest.TestCase):
@@ -1233,7 +1320,9 @@ def __orphan__() -> None:
     ...
 ''')
         diags = lint_file(spec)
-        self.assertTrue(any("not permitted in '__orphan__'" in d.message for d in diags))
+        self.assertTrue(
+            any("not permitted in '__orphan__'" in d.message for d in diags)
+        )
 
     def test_other_top_level_function_rejected(self):
         spec = self.tmp / "sample_ext.pyi"
@@ -1261,7 +1350,13 @@ def other_func() -> None:
     ...
 ''')
         diags = lint_file(spec)
-        self.assertTrue(any("Only imports, class declarations, and '__orphan__' allowed" in d.message for d in diags))
+        self.assertTrue(
+            any(
+                "Only imports, class declarations, and '__orphan__' allowed"
+                in d.message
+                for d in diags
+            )
+        )
 
     def test_orphan_preserved_across_sync(self):
         spec = self.tmp / "sample_ext.pyi"
@@ -1375,7 +1470,12 @@ class BadSingleton:
     ...
 ''')
         diags = lint_file(spec)
-        self.assertTrue(any("@dataclass can only be applied to @data_type or @variant" in d.message for d in diags))
+        self.assertTrue(
+            any(
+                "@dataclass can only be applied to @data_type or @variant" in d.message
+                for d in diags
+            )
+        )
 
     def test_valid_external_docstring_spec(self):
         spec = self.tmp / "sample_ext.pyi"
@@ -1431,7 +1531,10 @@ class DataItem:
         exit_code = run_pipeline([spec], mode="sync")
         self.assertEqual(exit_code, 0)
         content = spec.read_text()
-        self.assertIn("def __init__(self, name: str, count: int=..., tag: Optional[str]=...) -> None:", content)
+        self.assertIn(
+            "def __init__(self, name: str, count: int=..., tag: Optional[str]=...) -> None:",
+            content,
+        )
 
     def test_dataclass_constructor_on_service_rejected(self):
         spec = self.tmp / "service_with_init.pyi"
@@ -1447,7 +1550,13 @@ class ServiceWithInit:
         ...
 ''')
         diags = lint_file(spec)
-        self.assertTrue(any("Constructor '__init__' is only permitted on @data_type or @variant dataclasses" in d.message for d in diags))
+        self.assertTrue(
+            any(
+                "Constructor '__init__' is only permitted on @data_type or @variant dataclasses"
+                in d.message
+                for d in diags
+            )
+        )
 
     def test_dataclass_constructor_with_decorator_rejected(self):
         spec = self.tmp / "init_with_dec.pyi"
@@ -1466,7 +1575,13 @@ class BadInit:
         ...
 ''')
         diags = lint_file(spec)
-        self.assertTrue(any("Dataclass constructor '__init__' must not have any decorators" in d.message for d in diags))
+        self.assertTrue(
+            any(
+                "Dataclass constructor '__init__' must not have any decorators"
+                in d.message
+                for d in diags
+            )
+        )
 
     def test_dataclass_init_false_without_constructor_allowed(self):
         spec = self.tmp / "init_false_valid.pyi"
@@ -1515,7 +1630,13 @@ class BadInitFalse:
         ...
 ''')
         diags = lint_file(spec)
-        self.assertTrue(any("specifies 'init=False' and must not declare constructor '__init__'" in d.message for d in diags))
+        self.assertTrue(
+            any(
+                "specifies 'init=False' and must not declare constructor '__init__'"
+                in d.message
+                for d in diags
+            )
+        )
 
     def test_dataclass_init_true_without_constructor_rejected(self):
         spec = self.tmp / "init_true_missing_constructor.pyi"
@@ -1538,7 +1659,13 @@ class MissingInit:
         ...
 ''')
         diags = lint_file(spec)
-        self.assertTrue(any("specifies 'init=True' (or default init) but does not declare constructor '__init__'" in d.message for d in diags))
+        self.assertTrue(
+            any(
+                "specifies 'init=True' (or default init) but does not declare constructor '__init__'"
+                in d.message
+                for d in diags
+            )
+        )
 
     def test_variant_base_with_init_rejected(self):
         spec = self.tmp / "variant_base_with_init.pyi"
@@ -1566,7 +1693,12 @@ class SubMsg(BaseMsg):
         ...
 ''')
         diags = lint_file(spec)
-        self.assertTrue(any("Base data type 'BaseMsg' has variants and must" in d.message for d in diags))
+        self.assertTrue(
+            any(
+                "Base data type 'BaseMsg' has variants and must" in d.message
+                for d in diags
+            )
+        )
 
     def test_variant_base_init_false_allowed(self):
         spec = self.tmp / "variant_base_init_false.pyi"
@@ -1598,4 +1730,3 @@ class SubMsg(BaseMsg):
 
 if __name__ == "__main__":
     unittest.main()
-

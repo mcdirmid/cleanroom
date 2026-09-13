@@ -26,7 +26,11 @@ from typing import Optional, Sequence, Tuple
 
 def load_line(names: Sequence[str]) -> str:
     """A pyright load statement loading the given names."""
-    return 'load("//bin:pyright_library.bzl", ' + ", ".join('"%s"' % n for n in names) + ")"
+    return (
+        'load("//bin:pyright_library.bzl", '
+        + ", ".join('"%s"' % n for n in names)
+        + ")"
+    )
 
 
 def package_of(build_path: str) -> str:
@@ -98,7 +102,7 @@ def _attr_list(block: str, attr: str) -> list[str]:
     j = block.find("]", m.end() - 1)
     if j == -1:
         return []
-    return re.findall(r'"([^"]*)"', block[m.end():j])
+    return re.findall(r'"([^"]*)"', block[m.end() : j])
 
 
 def _attr_expr_list(block: str, attr: str) -> list[str]:
@@ -109,7 +113,7 @@ def _attr_expr_list(block: str, attr: str) -> list[str]:
     j = block.find("]", m.end() - 1)
     if j == -1:
         return []
-    content = block[m.end():j]
+    content = block[m.end() : j]
     tokens = re.findall(r'requirement\([^)]+\)|"[^"]*"|\'[^\']*\'', content)
     return [t.strip() for t in tokens if t.strip()]
 
@@ -121,19 +125,33 @@ def _set_attr_list(block: str, attr: str, values: list[str]) -> str:
     m = re.search(r"\b" + re.escape(attr) + r"\s*=\s*\[", block)
     if m:
         j = block.find("]", m.end() - 1)
-        return block[:m.start()] + rendered + block[j + 1:]
+        return block[: m.start()] + rendered + block[j + 1 :]
     m2 = re.search(r"(\bsrcs\s*=\s*\[[^\]]*\]\s*,?)", block)
     if m2:
         srcs_part = m2.group(1).rstrip()
         if not srcs_part.endswith(","):
             srcs_part += ","
-        return block[:m2.start()] + srcs_part + "\n    " + rendered + "," + block[m2.end():]
+        return (
+            block[: m2.start()]
+            + srcs_part
+            + "\n    "
+            + rendered
+            + ","
+            + block[m2.end() :]
+        )
     m3 = re.search(r'(\bname\s*=\s*"[^"]*"\s*,?)', block)
     if m3:
         name_part = m3.group(1).rstrip()
         if not name_part.endswith(","):
             name_part += ","
-        return block[:m3.start()] + name_part + "\n    " + rendered + "," + block[m3.end():]
+        return (
+            block[: m3.start()]
+            + name_part
+            + "\n    "
+            + rendered
+            + ","
+            + block[m3.end() :]
+        )
     return block
 
 
@@ -143,19 +161,33 @@ def _set_attr_expr_list(block: str, attr: str, values: Sequence[str]) -> str:
     m = re.search(r"\b" + re.escape(attr) + r"\s*=\s*\[", block)
     if m:
         j = block.find("]", m.end() - 1)
-        return block[:m.start()] + rendered + block[j + 1:]
+        return block[: m.start()] + rendered + block[j + 1 :]
     m2 = re.search(r"(\bsrcs\s*=\s*\[[^\]]*\]\s*,?)", block)
     if m2:
         srcs_part = m2.group(1).rstrip()
         if not srcs_part.endswith(","):
             srcs_part += ","
-        return block[:m2.start()] + srcs_part + "\n    " + rendered + "," + block[m2.end():]
+        return (
+            block[: m2.start()]
+            + srcs_part
+            + "\n    "
+            + rendered
+            + ","
+            + block[m2.end() :]
+        )
     m3 = re.search(r'(\bname\s*=\s*"[^"]*"\s*,?)', block)
     if m3:
         name_part = m3.group(1).rstrip()
         if not name_part.endswith(","):
             name_part += ","
-        return block[:m3.start()] + name_part + "\n    " + rendered + "," + block[m3.end():]
+        return (
+            block[: m3.start()]
+            + name_part
+            + "\n    "
+            + rendered
+            + ","
+            + block[m3.end() :]
+        )
     return block
 
 
@@ -191,7 +223,7 @@ def ensure_load(text: str, names: Sequence[str]) -> str:
         if not missing:
             return text
         line = load_line(loaded + missing)
-        return text[: m.start()] + line + text[m.end():]
+        return text[: m.start()] + line + text[m.end() :]
     return load_line(names) + "\n" + text
 
 
@@ -199,10 +231,12 @@ def ensure_pip_load(text: str) -> str:
     """Ensure load("@pip//:requirements.bzl", "requirement") exists in text."""
     if 'load("@pip//:requirements.bzl", "requirement")' in text:
         return text
-    m = re.search(r'load\([^)]*\)\n', text)
+    m = re.search(r"load\([^)]*\)\n", text)
     if m:
         idx = m.end()
-        return text[:idx] + 'load("@pip//:requirements.bzl", "requirement")\n' + text[idx:]
+        return (
+            text[:idx] + 'load("@pip//:requirements.bzl", "requirement")\n' + text[idx:]
+        )
     return 'load("@pip//:requirements.bzl", "requirement")\n' + text
 
 
@@ -261,16 +295,11 @@ def _new_target(
     rendered_deps = _render_expr_list(target_deps or [])
     if rule == "pyright_test":
         target_str = (
-            rule + "(\n"
-            '    name = "' + stem + '",\n'
-            '    srcs = ["' + srcs + '"],\n'
+            rule + '(\n    name = "' + stem + '",\n    srcs = ["' + srcs + '"],\n'
         )
         if target_deps:
             target_str += "    deps = " + rendered_deps + ",\n"
-        target_str += (
-            "    pyright_deps = " + _render_list(want) + ",\n"
-            ")\n"
-        )
+        target_str += "    pyright_deps = " + _render_list(want) + ",\n)\n"
         return target_str
     return (
         rule + "(\n"
@@ -294,12 +323,19 @@ def ensure_target(
 ) -> str:
     """Return text with the named rule target present and its pyright_deps
     and deps covering the known deps (add-only)."""
-    want = [d if d.startswith("//") else ("//" + package + ":" + d.lstrip(":")) for d in deps]
+    want = [
+        d if d.startswith("//") else ("//" + package + ":" + d.lstrip(":"))
+        for d in deps
+    ]
     span = _find_block(text, rule, stem)
     if span is None:
         if not text.endswith("\n"):
             text += "\n"
-        return text + "\n" + _new_target(rule, stem, srcs, deps, package, target_deps=target_deps)
+        return (
+            text
+            + "\n"
+            + _new_target(rule, stem, srcs, deps, package, target_deps=target_deps)
+        )
     start, end = span
     block = text[start:end]
     existing = _attr_list(block, "pyright_deps")
@@ -329,7 +365,9 @@ def ensure_target(
             td_clean = td.strip()
             if td_clean not in new_deps and ('"' + td_clean + '"') not in new_deps:
                 new_deps.append(td_clean)
-        if new_deps != existing_deps or ("deps" not in block and (target_deps or rule != "pyright_test")):
+        if new_deps != existing_deps or (
+            "deps" not in block and (target_deps or rule != "pyright_test")
+        ):
             block = _set_attr_expr_list(block, "deps", new_deps)
 
     if rule != "pyright_test" and "visibility" not in block:
@@ -384,7 +422,11 @@ def _add_local(modules_dir: str, dotted: str, result: list[str]) -> None:
     """Add dotted's last component to result when it names a module file in
     modules_dir (and is not already present)."""
     name = dotted.split(".")[-1]
-    if name and os.path.isfile(os.path.join(modules_dir, name + ".py")) and name not in result:
+    if (
+        name
+        and os.path.isfile(os.path.join(modules_dir, name + ".py"))
+        and name not in result
+    ):
         result.append(name)
 
 
@@ -534,7 +576,9 @@ def check_framework_imports(file_path: str) -> list[str]:
                         f"specification decorators belong in .pyi grounding specifications only"
                     )
         elif isinstance(node, ast.ImportFrom):
-            if node.module == "framework" or (node.module and node.module.endswith(".framework")):
+            if node.module == "framework" or (
+                node.module and node.module.endswith(".framework")
+            ):
                 errors.append(
                     f"{file_path}:{node.lineno}: error: library module must not import from 'framework'; "
                     f"specification decorators belong in .pyi grounding specifications only"
@@ -595,7 +639,11 @@ def check_dataclass_stubs(file_path: str) -> list[str]:
                             f"not stub '__init__' methods"
                         )
                     for dec in item.decorator_list:
-                        if isinstance(dec, ast.Name) and dec.id == "property" and _is_ellipsis_body(item.body):
+                        if (
+                            isinstance(dec, ast.Name)
+                            and dec.id == "property"
+                            and _is_ellipsis_body(item.body)
+                        ):
                             errors.append(
                                 f"{file_path}:{item.lineno}: error: dataclass '{node.name}' must declare fields as class attributes, "
                                 f"not stub '@property' methods"
@@ -621,11 +669,17 @@ def check_exception_eating(file_path: str) -> list[str]:
                 is_broad = False
                 if h.type is None:
                     is_broad = True
-                elif isinstance(h.type, ast.Name) and h.type.id in ("Exception", "BaseException"):
+                elif isinstance(h.type, ast.Name) and h.type.id in (
+                    "Exception",
+                    "BaseException",
+                ):
                     is_broad = True
                 elif isinstance(h.type, ast.Tuple):
                     for elt in h.type.elts:
-                        if isinstance(elt, ast.Name) and elt.id in ("Exception", "BaseException"):
+                        if isinstance(elt, ast.Name) and elt.id in (
+                            "Exception",
+                            "BaseException",
+                        ):
                             is_broad = True
                 if is_broad:
                     has_raise = any(isinstance(stmt, ast.Raise) for stmt in ast.walk(h))
@@ -689,7 +743,10 @@ def check_test_impl_imports(lib_pkg: str, file_path: str) -> list[str]:
                     errors.append(
                         f"{file_path}:{node.lineno}: error: implementation classes do not use an 'Impl' suffix; import '{alias.name[:-4]}' instead of '{alias.name}'"
                     )
-                if alias.name in (f"lib.{target_stem}", target_stem) or alias.name.endswith(f".{target_stem}"):
+                if alias.name in (
+                    f"lib.{target_stem}",
+                    target_stem,
+                ) or alias.name.endswith(f".{target_stem}"):
                     target_imported = True
         elif isinstance(node, ast.ImportFrom):
             if node.module:
@@ -698,7 +755,10 @@ def check_test_impl_imports(lib_pkg: str, file_path: str) -> list[str]:
                     errors.append(
                         f"{file_path}:{node.lineno}: error: test module must only import target implementation module '{target_stem}', but imports from '{node.module}'"
                     )
-                if node.module in (f"lib.{target_stem}", target_stem) or node.module.endswith(f".{target_stem}"):
+                if node.module in (
+                    f"lib.{target_stem}",
+                    target_stem,
+                ) or node.module.endswith(f".{target_stem}"):
                     target_imported = True
                     for alias in node.names:
                         imported_target_classes.add(alias.name)
@@ -721,12 +781,18 @@ def check_test_impl_imports(lib_pkg: str, file_path: str) -> list[str]:
             pass
 
         if not target_imported:
-            pkg_prefix = f"{lib_pkg.replace('/', '.')}.{target_stem}" if "/" in lib_pkg else f"lib.{target_stem}"
+            pkg_prefix = (
+                f"{lib_pkg.replace('/', '.')}.{target_stem}"
+                if "/" in lib_pkg
+                else f"lib.{target_stem}"
+            )
             errors.append(
                 f"{file_path}: error: test module must import target implementation module '{pkg_prefix}'"
             )
         elif impl_classes and not (imported_target_classes & impl_classes):
-            has_impl_suffix_match = any(f"{c}Impl" in imported_target_classes for c in impl_classes)
+            has_impl_suffix_match = any(
+                f"{c}Impl" in imported_target_classes for c in impl_classes
+            )
             if not has_impl_suffix_match:
                 expected_str = ", ".join(sorted(impl_classes))
                 errors.append(
@@ -752,7 +818,9 @@ def check_test_imports(lib_pkg: str, file_path: str) -> list[str]:
             for alias in node.names:
                 name = alias.name.split(".")[-1]
                 if name and os.path.isfile(os.path.join(lib_pkg, name + ".py")):
-                    if alias.name != f"lib.{name}" and not alias.name.endswith(f".{name}"):
+                    if alias.name != f"lib.{name}" and not alias.name.endswith(
+                        f".{name}"
+                    ):
                         errors.append(
                             f"{file_path}:{node.lineno}: error: import of lib module '{alias.name}' must be 'import {expected_prefix}.{name}' or 'import lib.{name}'"
                         )
@@ -760,7 +828,9 @@ def check_test_imports(lib_pkg: str, file_path: str) -> list[str]:
             if node.module:
                 name = node.module.split(".")[-1]
                 if name and os.path.isfile(os.path.join(lib_pkg, name + ".py")):
-                    if node.module != f"lib.{name}" and not node.module.endswith(f".{name}"):
+                    if node.module != f"lib.{name}" and not node.module.endswith(
+                        f".{name}"
+                    ):
                         errors.append(
                             f"{file_path}:{node.lineno}: error: import of lib module '{node.module}' must be 'from {expected_prefix}.{name} import ...' or 'from lib.{name} import ...'"
                         )
@@ -768,10 +838,29 @@ def check_test_imports(lib_pkg: str, file_path: str) -> list[str]:
 
 
 STDLIB_MODULES = {
-    "os", "sys", "json", "shutil", "pathlib", "subprocess",
-    "time", "datetime", "requests", "urllib", "re", "math",
-    "io", "tempfile", "glob", "hashlib", "random", "socket",
-    "http", "logging", "asyncio", "threading", "multiprocessing",
+    "os",
+    "sys",
+    "json",
+    "shutil",
+    "pathlib",
+    "subprocess",
+    "time",
+    "datetime",
+    "requests",
+    "urllib",
+    "re",
+    "math",
+    "io",
+    "tempfile",
+    "glob",
+    "hashlib",
+    "random",
+    "socket",
+    "http",
+    "logging",
+    "asyncio",
+    "threading",
+    "multiprocessing",
 }
 
 
@@ -819,7 +908,9 @@ def check_test_mocks(file_path: str) -> list[str]:
 
             if is_patch and node.args:
                 first_arg = node.args[0]
-                if isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, str):
+                if isinstance(first_arg, ast.Constant) and isinstance(
+                    first_arg.value, str
+                ):
                     target = first_arg.value
                     prefix = target.split(".")[0]
                     if prefix in STDLIB_MODULES:
@@ -847,7 +938,9 @@ def check_test_mocks(file_path: str) -> list[str]:
                     is_patch = False
                     if isinstance(dec.func, ast.Name) and dec.func.id == "patch":
                         is_patch = True
-                    elif isinstance(dec.func, ast.Attribute) and dec.func.attr == "patch":
+                    elif (
+                        isinstance(dec.func, ast.Attribute) and dec.func.attr == "patch"
+                    ):
                         is_patch = True
                     if is_patch:
                         # If 'new' keyword arg is provided, patch does NOT inject a parameter
@@ -883,7 +976,9 @@ def check_test_structure(file_path: str) -> list[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef):
             for item in node.body:
-                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name.startswith("test_"):
+                if isinstance(
+                    item, (ast.FunctionDef, ast.AsyncFunctionDef)
+                ) and item.name.startswith("test_"):
                     test_method_count += 1
 
     if test_method_count == 0:
@@ -923,11 +1018,17 @@ def check_test_dry_run(lib_pkg: str, module_path: str) -> list[str]:
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         if res.returncode != 0:
             err_msg = res.stderr.strip() or res.stdout.strip()
-            errors.append(f"{module_path}: error: dry-run test collection failed:\n{err_msg}")
+            errors.append(
+                f"{module_path}: error: dry-run test collection failed:\n{err_msg}"
+            )
     except subprocess.TimeoutExpired:
-        errors.append(f"{module_path}: error: dry-run test collection timed out after 10s")
+        errors.append(
+            f"{module_path}: error: dry-run test collection timed out after 10s"
+        )
     except Exception as e:
-        errors.append(f"{module_path}: error: dry-run test collection execution error: {e}")
+        errors.append(
+            f"{module_path}: error: dry-run test collection execution error: {e}"
+        )
 
     return errors
 
@@ -950,7 +1051,9 @@ def extract_public_types(file_path: str) -> dict[str, int]:
             if not node.name.startswith("_"):
                 types[node.name] = node.lineno
         elif hasattr(ast, "TypeAlias") and isinstance(node, ast.TypeAlias):
-            alias_name = node.name.id if isinstance(node.name, ast.Name) else str(node.name)
+            alias_name = (
+                node.name.id if isinstance(node.name, ast.Name) else str(node.name)
+            )
             if not alias_name.startswith("_"):
                 types[alias_name] = node.lineno
         elif isinstance(node, ast.Assign):
@@ -960,7 +1063,9 @@ def extract_public_types(file_path: str) -> dict[str, int]:
                         types[t.id] = node.lineno
         elif isinstance(node, ast.AnnAssign):
             if isinstance(node.target, ast.Name) and not node.target.id.startswith("_"):
-                if node.target.id[0].isupper() and any(c.islower() for c in node.target.id):
+                if node.target.id[0].isupper() and any(
+                    c.islower() for c in node.target.id
+                ):
                     types[node.target.id] = node.lineno
     return types
 
@@ -987,11 +1092,15 @@ def find_spec_pyi(
     ]
     if build_path:
         search_dirs.append(os.path.join(os.path.dirname(build_path), "..", "grounding"))
-        search_dirs.append(os.path.join(os.path.dirname(build_path), "..", "specs", "grounding"))
-    search_dirs.extend([
-        "update_with_ai/specs/grounding",
-        "specs/grounding",
-    ])
+        search_dirs.append(
+            os.path.join(os.path.dirname(build_path), "..", "specs", "grounding")
+        )
+    search_dirs.extend(
+        [
+            "update_with_ai/specs/grounding",
+            "specs/grounding",
+        ]
+    )
     for d in search_dirs:
         candidate = os.path.join(d, spec_name)
         if os.path.isfile(candidate):
@@ -1018,7 +1127,9 @@ def check_public_types(
     if not os.path.exists(module_path):
         return errors
 
-    spec_file = find_spec_pyi(module_path, pyi_path=pyi_path, pyi_deps=pyi_deps, build_path=build_path)
+    spec_file = find_spec_pyi(
+        module_path, pyi_path=pyi_path, pyi_deps=pyi_deps, build_path=build_path
+    )
     if not spec_file:
         return errors
 
@@ -1070,10 +1181,14 @@ def check_dead_code(module_path: str) -> list[str]:
 
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.name.startswith("_") and not (node.name.startswith("__") and node.name.endswith("__")):
+            if node.name.startswith("_") and not (
+                node.name.startswith("__") and node.name.endswith("__")
+            ):
                 private_defs.append((node.name, node.lineno, "function"))
         elif isinstance(node, ast.ClassDef):
-            if node.name.startswith("_") and not (node.name.startswith("__") and node.name.endswith("__")):
+            if node.name.startswith("_") and not (
+                node.name.startswith("__") and node.name.endswith("__")
+            ):
                 private_defs.append((node.name, node.lineno, "class"))
 
     if not private_defs:

@@ -22,7 +22,11 @@ from update_with_ai.parts.agent.lib.agent_file_alias import (
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from update_with_ai.parts.agent.lib.agent_node_config import Guide, NodeConfig
 from update_with_ai.parts.sandbox.lib.template_format import TemplateFormatter
-from update_with_ai.parts.sandbox.lib.sandbox_file_reader import ReadManager, ReadTool, SearchTool
+from update_with_ai.parts.sandbox.lib.sandbox_file_reader import (
+    ReadManager,
+    ReadTool,
+    SearchTool,
+)
 from update_with_ai.parts.sandbox.lib.sandbox_file_reader_impl import (
     ReadManager as ReadManagerImpl,
     ReadTool as ReadToolImpl,
@@ -53,7 +57,9 @@ class MockToolManager:
     def install_tool(self, tool: Tool) -> None:
         self.installed_tools.add(tool)
 
-    def execute_tool(self, name: str, wire_parameter_bindings: WireParameterBindings) -> Response:
+    def execute_tool(
+        self, name: str, wire_parameter_bindings: WireParameterBindings
+    ) -> Response:
         return Response(is_failed=False, is_terminated=False, content="")
 
 
@@ -144,19 +150,21 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         with open(self.rw_path, "w", encoding="utf-8") as f:
             f.write("Line 1 writable\nLine 2 writable\n")
         with open(self.ro_path, "w", encoding="utf-8") as f:
-            f.write(f"Line 1 readonly at {self.test_dir}/readonly.txt\nLine 2 readonly\n")
+            f.write(
+                f"Line 1 readonly at {self.test_dir}/readonly.txt\nLine 2 readonly\n"
+            )
         with open(self.ro_py_path, "w", encoding="utf-8") as f:
             f.write("def foo():\n    pass\n")
         self.ro_md_path = os.path.join(self.test_dir, "spec.md")
         with open(self.ro_md_path, "w", encoding="utf-8") as f:
             f.write(
                 "# Title <doc_name>\n\n"
-                "> META: \"Meta note at top.\"\n\n"
+                '> META: "Meta note at top."\n\n'
                 "First section content.\n\n"
-                "> META: \"Multi-line meta note\n> continued on second line.\"\n\n"
+                '> META: "Multi-line meta note\n> continued on second line."\n\n'
                 "> NOTE: Non-meta quote.\n\n"
                 "Second section content.\n\n"
-                "> META: \"Trailing meta note.\"\n"
+                '> META: "Trailing meta note."\n'
             )
 
         node = Node(address="//pkg:test")
@@ -196,12 +204,18 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             template_parameters={"doc_name": "MyDoc"},
         )
 
-        self.registry.register_instance(self.tool_mgr, keys=[ToolManager], tier="agent_session")
+        self.registry.register_instance(
+            self.tool_mgr, keys=[ToolManager], tier="agent_session"
+        )
         self.registry.register_instance(
             self.bool_conv, keys=[BooleanParameterConverter], tier="agent_session"
         )
-        self.registry.register_instance(self.alias_mgr, keys=[AliasManager], tier="agent_session")
-        self.registry.register_instance(self.node_cfg, keys=[NodeConfig], tier="agent_session")
+        self.registry.register_instance(
+            self.alias_mgr, keys=[AliasManager], tier="agent_session"
+        )
+        self.registry.register_instance(
+            self.node_cfg, keys=[NodeConfig], tier="agent_session"
+        )
         self.registry.register_instance(
             self.template_formatter, keys=[TemplateFormatter], tier="agent_session"
         )
@@ -255,13 +269,20 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertIsInstance(read_tool.description, str)
             self.assertGreater(len(read_tool.parameters), 0)
             # Requirement: The read tool file parameter uses the alias manager to convert a file alias.
-            self.assertIs(read_tool.file_alias_parameter.parameter_converter, self.alias_mgr)
+            self.assertIs(
+                read_tool.file_alias_parameter.parameter_converter, self.alias_mgr
+            )
             # Requirement: The read tool line numbers parameter uses the boolean parameter converter.
-            self.assertIs(read_tool.line_numbers_parameter.parameter_converter, self.bool_conv)
+            self.assertIs(
+                read_tool.line_numbers_parameter.parameter_converter, self.bool_conv
+            )
 
             # 1. Non-source read-only with line_numbers=False -> succeeds
             bindings1 = ActualParameterBindings(
-                bindings={(read_tool.file_alias_parameter, self.ro_file), (read_tool.line_numbers_parameter, False)}
+                bindings={
+                    (read_tool.file_alias_parameter, self.ro_file),
+                    (read_tool.line_numbers_parameter, False),
+                }
             )
             # Requirement: Executing the read tool reads file content using the filesystem at the host path formed from the alias manager workspace root and bound file workspace path.
             # Requirement: Read tool responses for read-write files carry a suppression key matching the file's short name, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
@@ -273,7 +294,10 @@ class SandboxFileReaderImplTest(unittest.TestCase):
 
             # 2. Non-source read-only with line_numbers=True -> fails
             bindings2 = ActualParameterBindings(
-                bindings={(read_tool.file_alias_parameter, self.ro_file), (read_tool.line_numbers_parameter, True)}
+                bindings={
+                    (read_tool.file_alias_parameter, self.ro_file),
+                    (read_tool.line_numbers_parameter, True),
+                }
             )
             # Requirement: Executing the read tool fails if line numbers are requested when reading a non-source read-only file, reminding the agent that line numbers must be requested when reading read-write files and source code files and omitted when reading non-source read-only files, and specifying a follow-up execution of the read tool on the file with line numbers omitted.
             resp2 = read_tool.execute_tool(bindings2)
@@ -285,12 +309,17 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertIsNotNone(resp2.follow_up_tool_call)
             assert resp2.follow_up_tool_call is not None
             self.assertEqual(resp2.follow_up_tool_call.tool_name, "read_file")
-            bindings2_dict = dict(resp2.follow_up_tool_call.wire_parameter_bindings.bindings)
+            bindings2_dict = dict(
+                resp2.follow_up_tool_call.wire_parameter_bindings.bindings
+            )
             self.assertEqual(bindings2_dict, {"file": self.ro_file.short_name})
 
             # 3. Read-write with line_numbers=True -> succeeds with line numbers
             bindings3 = ActualParameterBindings(
-                bindings={(read_tool.file_alias_parameter, self.rw_file), (read_tool.line_numbers_parameter, True)}
+                bindings={
+                    (read_tool.file_alias_parameter, self.rw_file),
+                    (read_tool.line_numbers_parameter, True),
+                }
             )
             # Requirement: Read tool responses for read-write files carry a suppression key matching the file's short name, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
             resp3 = read_tool.execute_tool(bindings3)
@@ -300,7 +329,10 @@ class SandboxFileReaderImplTest(unittest.TestCase):
 
             # 4. Read-write with line_numbers=False -> fails
             bindings4 = ActualParameterBindings(
-                bindings={(read_tool.file_alias_parameter, self.rw_file), (read_tool.line_numbers_parameter, False)}
+                bindings={
+                    (read_tool.file_alias_parameter, self.rw_file),
+                    (read_tool.line_numbers_parameter, False),
+                }
             )
             # Requirement: Executing the read tool fails if line numbers are not requested when reading a read-write file or source code file, reminding the agent that line numbers must be requested when reading read-write files and source code files and omitted when reading non-source read-only files, and specifying a follow-up execution of the read tool on the file with line numbers requested.
             resp4 = read_tool.execute_tool(bindings4)
@@ -312,12 +344,19 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertIsNotNone(resp4.follow_up_tool_call)
             assert resp4.follow_up_tool_call is not None
             self.assertEqual(resp4.follow_up_tool_call.tool_name, "read_file")
-            bindings4_dict = dict(resp4.follow_up_tool_call.wire_parameter_bindings.bindings)
-            self.assertEqual(bindings4_dict, {"file": self.rw_file.short_name, "line_numbers": True})
+            bindings4_dict = dict(
+                resp4.follow_up_tool_call.wire_parameter_bindings.bindings
+            )
+            self.assertEqual(
+                bindings4_dict, {"file": self.rw_file.short_name, "line_numbers": True}
+            )
 
             # 5. Read-only source code file (.py) with line_numbers=True -> succeeds with line numbers
             bindings5 = ActualParameterBindings(
-                bindings={(read_tool.file_alias_parameter, self.ro_py_file), (read_tool.line_numbers_parameter, True)}
+                bindings={
+                    (read_tool.file_alias_parameter, self.ro_py_file),
+                    (read_tool.line_numbers_parameter, True),
+                }
             )
             resp5 = read_tool.execute_tool(bindings5)
             self.assertFalse(resp5.is_failed)
@@ -326,7 +365,10 @@ class SandboxFileReaderImplTest(unittest.TestCase):
 
             # 6. Read-only source code file (.py) with line_numbers=False -> fails
             bindings6 = ActualParameterBindings(
-                bindings={(read_tool.file_alias_parameter, self.ro_py_file), (read_tool.line_numbers_parameter, False)}
+                bindings={
+                    (read_tool.file_alias_parameter, self.ro_py_file),
+                    (read_tool.line_numbers_parameter, False),
+                }
             )
             # Requirement: Executing the read tool fails if line numbers are not requested when reading a read-write file or source code file, reminding the agent that line numbers must be requested when reading read-write files and source code files and omitted when reading non-source read-only files, and specifying a follow-up execution of the read tool on the file with line numbers requested.
             resp6 = read_tool.execute_tool(bindings6)
@@ -338,8 +380,13 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertIsNotNone(resp6.follow_up_tool_call)
             assert resp6.follow_up_tool_call is not None
             self.assertEqual(resp6.follow_up_tool_call.tool_name, "read_file")
-            bindings6_dict = dict(resp6.follow_up_tool_call.wire_parameter_bindings.bindings)
-            self.assertEqual(bindings6_dict, {"file": self.ro_py_file.short_name, "line_numbers": True})
+            bindings6_dict = dict(
+                resp6.follow_up_tool_call.wire_parameter_bindings.bindings
+            )
+            self.assertEqual(
+                bindings6_dict,
+                {"file": self.ro_py_file.short_name, "line_numbers": True},
+            )
 
     def test_read_tool_unbound_files(self) -> None:
         """CUJ: Handling unbound file requests (guide vs unknown files)."""
@@ -360,7 +407,9 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             )
             resp_unknown = read_tool.execute_tool(bindings_unknown)
             self.assertTrue(resp_unknown.is_failed)
-            self.assertEqual(resp_unknown.reminder, "Only declared files can be inspected.")
+            self.assertEqual(
+                resp_unknown.reminder, "Only declared files can be inspected."
+            )
 
     def test_read_tool_filters_meta_notes_in_markdown(self) -> None:
         """CUJ: Filtering > META: paragraphs when reading markdown files."""

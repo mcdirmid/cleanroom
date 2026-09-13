@@ -49,20 +49,8 @@ alias(
 )
 
 alias(
-    name = "framework_type_check",
-    actual = "//update_python_with_ai/support/lib:framework_type_check",
-    visibility = ["//visibility:public"],
-)
-
-alias(
     name = "lifecycle",
     actual = "//update_python_with_ai/support/lib:lifecycle",
-    visibility = ["//visibility:public"],
-)
-
-alias(
-    name = "lifecycle_type_check",
-    actual = "//update_python_with_ai/support/lib:lifecycle_type_check",
     visibility = ["//visibility:public"],
 )
 

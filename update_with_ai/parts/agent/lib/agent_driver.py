@@ -32,5 +32,4 @@ class AgentOutcome:
 
 
 class AgentDriver(Protocol):
-    def run(self) -> AgentOutcome:
-        ...
+    def run(self) -> AgentOutcome: ...

@@ -9,7 +9,7 @@ from pathlib import Path
 
 class TestBazelMacros(unittest.TestCase):
     """Test suite for update_with_ai.bzl rules."""
-    
+
     def test_manifest_structure(self):
         """Test that manifest contains expected fields."""
         # Simulate what the rule produces
@@ -29,7 +29,7 @@ class TestBazelMacros(unittest.TestCase):
             "silent_srcs": [":silent_src1"],
             "dependency_paths": [],
         }
-        
+
         # Verify all required fields exist
         self.assertIn("label", manifest)
         self.assertIn("prompt", manifest)
@@ -43,7 +43,7 @@ class TestBazelMacros(unittest.TestCase):
         self.assertIn("template_parameters", manifest)
         self.assertIn("guide", manifest)
         self.assertIn("silent_srcs", manifest)
-        
+
         # Verify types
         self.assertIsInstance(manifest["tools"], list)
         self.assertIsInstance(manifest["deps"], list)
@@ -54,7 +54,7 @@ class TestBazelMacros(unittest.TestCase):
         self.assertIsInstance(manifest["template"], str)
         self.assertIsInstance(manifest["template_parameters"], dict)
         self.assertIsInstance(manifest["silent_srcs"], list)
-    
+
     def test_graph_structure(self):
         """Test graph manifest structure."""
         graph = {
@@ -70,13 +70,14 @@ class TestBazelMacros(unittest.TestCase):
                 },
             },
         }
-        
+
         self.assertIn("root", graph)
         self.assertIn("nodes", graph)
         self.assertEqual(len(graph["nodes"]), 2)
-    
+
     def test_node_attributes(self):
         """Test that node has correct attributes for sandbox config."""
+
         # Simulate BuildNode with new fields
         class MockNode:
             def __init__(self):
@@ -84,32 +85,32 @@ class TestBazelMacros(unittest.TestCase):
                 self.silent_srcs = [":private.log"]
                 self.deps = ["//pkg:dep"]
                 self.silent_deps = ["//pkg:silent_dep"]
-        
+
         node = MockNode()
-        
+
         # Verify sandbox config can be derived
         writable_paths = ([node.src] if node.src else []) + list(node.silent_srcs)
         readable_paths = [node.src] if node.src else []
-        
+
         self.assertEqual(writable_paths, [":output.txt", ":private.log"])
         self.assertEqual(readable_paths, [":output.txt"])
 
 
 class TestBazelMacrosIntegration(unittest.TestCase):
     """Integration tests for bazel_macros."""
-    
+
     def test_build_file_example(self):
         """Test that BUILD.bazel.example is valid."""
         example_path = Path("tests/example/BUILD.bazel")
-        
+
         if not example_path.exists():
             self.skipTest("BUILD.bazel.example not found")
-        
+
         content = example_path.read_text()
-        
+
         # Verify the example uses update_with_ai
         self.assertIn("update_with_ai", content)
-        
+
         # Verify new attributes are used
         self.assertIn("silent_deps", content)
         self.assertIn("src", content)
@@ -117,12 +118,17 @@ class TestBazelMacrosIntegration(unittest.TestCase):
 
     def test_update_python_with_ai_template_parameters(self):
         """Test template parameters computation for update_python_with_ai components."""
+
         def compute_params(name, module_deps, template_parameters=None):
             is_impl = name.endswith("_impl")
             is_asm = name.endswith("_asm")
             is_ext = name.endswith("_ext")
             is_interface = not (is_impl or is_asm or is_ext)
-            component_type = "implementation" if is_impl else ("assembly" if is_asm else ("external" if is_ext else "interface"))
+            component_type = (
+                "implementation"
+                if is_impl
+                else ("assembly" if is_asm else ("external" if is_ext else "interface"))
+            )
             dep_names = [dep.split(":")[-1] for dep in module_deps]
             base = {
                 "name": name,
@@ -165,18 +171,23 @@ class TestBazelMacrosIntegration(unittest.TestCase):
 
     def test_update_python_with_ai_ext_lib_suppression_and_deps(self):
         """Test that _ext components do not produce _lib targets and deps exclude _ext_lib."""
+
         def compute_targets_and_deps(name, module_deps):
             is_ext = name.endswith("_ext")
             is_impl = name.endswith("_impl")
-            
+
             targets = [name + "_high", name + "_low"]
             silent_deps = {}
             if not is_ext:
                 targets.append(name + "_lib")
-                silent_deps[name + "_lib"] = [dep + "_lib" for dep in module_deps if not dep.endswith("_ext")]
+                silent_deps[name + "_lib"] = [
+                    dep + "_lib" for dep in module_deps if not dep.endswith("_ext")
+                ]
             if is_impl:
                 targets.append(name + "_test")
-                silent_deps[name + "_test"] = [":" + name + "_lib"] + [dep + "_lib" for dep in module_deps if not dep.endswith("_ext")]
+                silent_deps[name + "_test"] = [":" + name + "_lib"] + [
+                    dep + "_lib" for dep in module_deps if not dep.endswith("_ext")
+                ]
             return targets, silent_deps
 
         # External component: no _lib target generated
@@ -193,12 +204,16 @@ class TestBazelMacrosIntegration(unittest.TestCase):
         self.assertIn("bazel_model_config_impl_lib", impl_targets)
         self.assertIn("bazel_model_config_impl_test", impl_targets)
         self.assertEqual(impl_deps["bazel_model_config_impl_lib"], ["model_config_lib"])
-        self.assertNotIn("model_config_ext_lib", impl_deps["bazel_model_config_impl_lib"])
+        self.assertNotIn(
+            "model_config_ext_lib", impl_deps["bazel_model_config_impl_lib"]
+        )
         self.assertEqual(
             impl_deps["bazel_model_config_impl_test"],
             [":bazel_model_config_impl_lib", "model_config_lib"],
         )
-        self.assertNotIn("model_config_ext_lib", impl_deps["bazel_model_config_impl_test"])
+        self.assertNotIn(
+            "model_config_ext_lib", impl_deps["bazel_model_config_impl_test"]
+        )
 
     def test_binary_preamble_and_lifecycle_resolution(self):
         """Test that generated binary preamble resolves all singletons without LifecycleResolutionError."""
@@ -208,7 +223,9 @@ class TestBazelMacrosIntegration(unittest.TestCase):
             from update_python_with_ai.support.lib.lifecycle import get_singleton
         from update_with_ai.parts.program.lib import program_asm
         from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget
-        from update_with_ai.parts.bazel.lib.bazel_manifest_loader import BazelManifestLoader
+        from update_with_ai.parts.bazel.lib.bazel_manifest_loader import (
+            BazelManifestLoader,
+        )
         from update_with_ai.parts.dag.lib.dag_storage import DagStorage
         from update_with_ai.parts.dag.lib.dag_runner import DagRunner
 
@@ -228,7 +245,9 @@ class TestBazelMacrosIntegration(unittest.TestCase):
             self.assertEqual(data["template_parameters"]["name"], "dag_storage")
             self.assertEqual(data["template_parameters"]["component_type"], "interface")
             self.assertTrue(data["template_parameters"]["is_interface"])
-            self.assertEqual(data["template_parameters"]["target_file"], "dag_storage.py")
+            self.assertEqual(
+                data["template_parameters"]["target_file"], "dag_storage.py"
+            )
 
         storage = get_singleton(DagStorage)
         self.assertIsNotNone(storage)

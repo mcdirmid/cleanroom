@@ -8,7 +8,10 @@ import tempfile
 import unittest
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from update_with_ai.parts.core.lib.runner_logger import LogEvent, RunnerLogger
-from update_with_ai.parts.core.lib.runner_logger_impl import RunnerLogger as RunnerLoggerImpl, __initialize__
+from update_with_ai.parts.core.lib.runner_logger_impl import (
+    RunnerLogger as RunnerLoggerImpl,
+    __initialize__,
+)
 
 
 class RunnerLoggerTest(unittest.TestCase):
@@ -123,4 +126,3 @@ if __name__ == "__main__":
 
 # Untested requirements:
 # - The runner logger intercepts termination signals to flush and close transcript log files.
-

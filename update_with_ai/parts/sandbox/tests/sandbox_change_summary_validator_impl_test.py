@@ -75,4 +75,3 @@ if __name__ == "__main__":
 # - [ChangeSummaryValidator] The change summary validator rejects a change summary that claims changes for files with no net change.
 # - [ChangeSummaryValidator] The change summary validator produces a diff summary of modified files.
 # - [ChangeSummaryValidator] The change summary validator rejects a change summary exceeding configured length bounds with shortening guidance.
-

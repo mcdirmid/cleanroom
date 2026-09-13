@@ -4,21 +4,45 @@ import unittest
 from pathlib import Path
 from typing import List, Optional, Set
 
-from update_with_ai.parts.agent.lib.agent_conversation import Conversation, Message, ModelRequest
+from update_with_ai.parts.agent.lib.agent_conversation import (
+    Conversation,
+    Message,
+    ModelRequest,
+)
 from update_with_ai.parts.agent.lib.agent_node_cleaner_impl import (
     NodeCleaner as NodeCleanerImpl,
     CleanedNode as CleanedNodeImpl,
     __initialize__,
 )
 from update_with_ai.parts.agent.lib.agent_driver import AgentOutcome, AgentDriver
-from update_with_ai.parts.agent.lib.agent_storage import AgentStorage, NodeDefinition, TaskPrompt
+from update_with_ai.parts.agent.lib.agent_storage import (
+    AgentStorage,
+    NodeDefinition,
+    TaskPrompt,
+)
 from update_with_ai.parts.dag.lib.dag_node_cleaner import CleanedNode, NodeCleaner
-from update_with_ai.parts.dag.lib.dag_storage import Change, Dependency, Feedback, Message as DagMessage, Node
-from update_with_ai.parts.agent.lib.agent_file_alias import BoundFile, FileContent, ReadOnlyFile, ReadWriteFile, UnboundFile, WorkspacePath
+from update_with_ai.parts.dag.lib.dag_storage import (
+    Change,
+    Dependency,
+    Feedback,
+    Message as DagMessage,
+    Node,
+)
+from update_with_ai.parts.agent.lib.agent_file_alias import (
+    BoundFile,
+    FileContent,
+    ReadOnlyFile,
+    ReadWriteFile,
+    UnboundFile,
+    WorkspacePath,
+)
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton
 from update_with_ai.parts.agent.lib.agent_node_config import NodeConfig
 from update_with_ai.parts.sandbox.lib.sandbox import Sandbox, StartupToolExecution
-from update_with_ai.parts.sandbox.lib.tool_provider import Response, WireParameterBindings
+from update_with_ai.parts.sandbox.lib.tool_provider import (
+    Response,
+    WireParameterBindings,
+)
 
 
 def _make_workspace_path(path: str) -> WorkspacePath:
@@ -88,7 +112,9 @@ class MockHistory:
 
     def __init__(self) -> None:
         self._messages: List[Message] = []
-        self.tool_responses: List[tuple[Response, str, str, Optional[WireParameterBindings]]] = []
+        self.tool_responses: List[
+            tuple[Response, str, str, Optional[WireParameterBindings]]
+        ] = []
 
     @property
     def messages(self) -> List[Message]:
@@ -104,9 +130,16 @@ class MockHistory:
         tool_call_id: str,
         wire_parameter_bindings: Optional[WireParameterBindings] = None,
     ) -> None:
-        self.tool_responses.append((response, tool_name, tool_call_id, wire_parameter_bindings))
+        self.tool_responses.append(
+            (response, tool_name, tool_call_id, wire_parameter_bindings)
+        )
         self._messages.append(
-            Message(role="tool", content=response.content, tool_call_id=tool_call_id, tool_name=tool_name)
+            Message(
+                role="tool",
+                content=response.content,
+                tool_call_id=tool_call_id,
+                tool_name=tool_name,
+            )
         )
 
     def get_model_request(self) -> ModelRequest:
@@ -173,11 +206,21 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.runner = MockRunner()
         self.node_cfg = MockNodeConfig()
 
-        self.registry.register_instance(self.storage, keys=[AgentStorage], tier="system")
-        self.registry.register_instance(self.sandbox, keys=[Sandbox], tier="agent_session")
-        self.registry.register_instance(self.history, keys=[Conversation], tier="agent_session")
-        self.registry.register_instance(self.runner, keys=[AgentDriver], tier="agent_session")
-        self.registry.register_instance(self.node_cfg, keys=[NodeConfig], tier="agent_session")
+        self.registry.register_instance(
+            self.storage, keys=[AgentStorage], tier="system"
+        )
+        self.registry.register_instance(
+            self.sandbox, keys=[Sandbox], tier="agent_session"
+        )
+        self.registry.register_instance(
+            self.history, keys=[Conversation], tier="agent_session"
+        )
+        self.registry.register_instance(
+            self.runner, keys=[AgentDriver], tier="agent_session"
+        )
+        self.registry.register_instance(
+            self.node_cfg, keys=[NodeConfig], tier="agent_session"
+        )
 
     def test_cleaned_node_lifecycle(self) -> None:
         """CUJ: CleanedNode holds and exposes the target node in the session tier."""
@@ -212,8 +255,12 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         }
         startup_exec = StartupToolExecution(
             tool_name="read_file",
-            wire_parameter_bindings=WireParameterBindings(bindings={("file", "dag_storage.pyi")}),
-            response=Response(is_failed=False, is_terminated=False, content="spec content"),
+            wire_parameter_bindings=WireParameterBindings(
+                bindings={("file", "dag_storage.pyi")}
+            ),
+            response=Response(
+                is_failed=False, is_terminated=False, content="spec content"
+            ),
         )
         self.sandbox.startup_executions.append(startup_exec)
 
@@ -231,11 +278,21 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             self.assertTrue(any("Clean this node" in c for c in history_contents))
             # Verify messages are ordered deterministically by content and formatted with their content
             # Requirement: When incoming feedback messages are present, they are formatted as actionable instructions prefaced with directives to fix read-write target files based on the feedback.
-            change_idx = next(i for i, c in enumerate(history_contents) if "Incoming change: A spec updated" in c)
-            feedback_idx = next(i for i, c in enumerate(history_contents) if "Fix foo.py based on feedback: Z defect explanation" in c)
+            change_idx = next(
+                i
+                for i, c in enumerate(history_contents)
+                if "Incoming change: A spec updated" in c
+            )
+            feedback_idx = next(
+                i
+                for i, c in enumerate(history_contents)
+                if "Fix foo.py based on feedback: Z defect explanation" in c
+            )
             self.assertLess(change_idx, feedback_idx)
             self.assertTrue(any("spec content" in c for c in history_contents))
-            self.assertEqual(self.history.tool_responses[0][3], startup_exec.wire_parameter_bindings)
+            self.assertEqual(
+                self.history.tool_responses[0][3], startup_exec.wire_parameter_bindings
+            )
 
     def test_clean_node_formats_feedback_in_prompt_when_feedback_present(self) -> None:
         """CUJ: Incoming feedback messages are formatted into seeded history as actionable instructions."""
@@ -262,18 +319,31 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             _ = cleaner.clean_node(node)
 
             history_contents = [m.content for m in self.history.messages]
-            self.assertTrue(any("Clean this node in step mode" in c for c in history_contents))
-            self.assertTrue(any("Incoming change: A spec updated" in c for c in history_contents))
-            self.assertTrue(any("Fix foo.py based on feedback: Z defect explanation" in c for c in history_contents))
+            self.assertTrue(
+                any("Clean this node in step mode" in c for c in history_contents)
+            )
+            self.assertTrue(
+                any("Incoming change: A spec updated" in c for c in history_contents)
+            )
+            self.assertTrue(
+                any(
+                    "Fix foo.py based on feedback: Z defect explanation" in c
+                    for c in history_contents
+                )
+            )
 
     def test_clean_node_with_file_modifications_produces_change_message(self) -> None:
         """CUJ: Producing Change message when run succeeds with file modifications."""
         node = Node(address="//pkg:mod_test")
-        self.storage.definitions[node.address] = NodeDefinition(node=node, task_prompt=TaskPrompt("Task prompt"))
+        self.storage.definitions[node.address] = NodeDefinition(
+            node=node, task_prompt=TaskPrompt("Task prompt")
+        )
         self.sandbox.has_modifications = True
         self.runner.outcome = AgentOutcome(
             is_success=True,
-            response=Response(is_failed=False, is_terminated=True, content="Changes applied"),
+            response=Response(
+                is_failed=False, is_terminated=True, content="Changes applied"
+            ),
             conversation=self.history,
         )
 
@@ -288,10 +358,16 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
     def test_clean_node_with_blame_produces_feedback_message(self) -> None:
         """CUJ: Producing Feedback message when blame outcome occurs."""
         node = Node(address="//pkg:blame_test")
-        self.storage.definitions[node.address] = NodeDefinition(node=node, task_prompt=TaskPrompt("Task prompt"))
+        self.storage.definitions[node.address] = NodeDefinition(
+            node=node, task_prompt=TaskPrompt("Task prompt")
+        )
         self.runner.outcome = AgentOutcome(
             is_success=True,
-            response=Response(is_failed=False, is_terminated=True, content="Blamed //pkg:upstream: Syntax error in file"),
+            response=Response(
+                is_failed=False,
+                is_terminated=True,
+                content="Blamed //pkg:upstream: Syntax error in file",
+            ),
             conversation=self.history,
         )
 
@@ -310,7 +386,11 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             # 2. Blame without colon
             self.runner.outcome = AgentOutcome(
                 is_success=True,
-                response=Response(is_failed=False, is_terminated=True, content="Blamed //pkg:upstream_no_colon"),
+                response=Response(
+                    is_failed=False,
+                    is_terminated=True,
+                    content="Blamed //pkg:upstream_no_colon",
+                ),
                 conversation=self.history,
             )
             msgs2 = cleaner.clean_node(node)
@@ -330,7 +410,11 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             self.node_cfg.blame_targets.add(bt)
             self.runner.outcome = AgentOutcome(
                 is_success=True,
-                response=Response(is_failed=False, is_terminated=True, content="Blamed dep.py: Broken interface contract"),
+                response=Response(
+                    is_failed=False,
+                    is_terminated=True,
+                    content="Blamed dep.py: Broken interface contract",
+                ),
                 conversation=self.history,
             )
             msgs3 = cleaner.clean_node(node)
@@ -344,7 +428,11 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             # 4. Matching blame target in blame_targets by owning_node.address
             self.runner.outcome = AgentOutcome(
                 is_success=True,
-                response=Response(is_failed=False, is_terminated=True, content="Blamed //pkg:target_owning_node: Owning node address match"),
+                response=Response(
+                    is_failed=False,
+                    is_terminated=True,
+                    content="Blamed //pkg:target_owning_node: Owning node address match",
+                ),
                 conversation=self.history,
             )
             msgs4 = cleaner.clean_node(node)
@@ -358,11 +446,15 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
     def test_clean_node_without_modifications_produces_no_messages(self) -> None:
         """CUJ: Producing no messages when cleaning succeeds without workspace file modifications."""
         node = Node(address="//pkg:no_mod")
-        self.storage.definitions[node.address] = NodeDefinition(node=node, task_prompt=TaskPrompt("Task prompt"))
+        self.storage.definitions[node.address] = NodeDefinition(
+            node=node, task_prompt=TaskPrompt("Task prompt")
+        )
         self.sandbox.has_modifications = False
         self.runner.outcome = AgentOutcome(
             is_success=True,
-            response=Response(is_failed=False, is_terminated=True, content="Cleaned without changes"),
+            response=Response(
+                is_failed=False, is_terminated=True, content="Cleaned without changes"
+            ),
             conversation=self.history,
         )
 
@@ -376,7 +468,9 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
     def test_clean_node_failure_leaves_node_dirty_and_no_messages(self) -> None:
         """CUJ: Node remains dirty and no messages produced on agent outcome failure."""
         node = Node(address="//pkg:fail_test")
-        self.storage.definitions[node.address] = NodeDefinition(node=node, task_prompt=TaskPrompt("Task prompt"))
+        self.storage.definitions[node.address] = NodeDefinition(
+            node=node, task_prompt=TaskPrompt("Task prompt")
+        )
         self.runner.outcome = AgentOutcome(
             is_success=False,
             response=Response(is_failed=True, is_terminated=True, content="Failed"),
@@ -400,7 +494,9 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
     def test_clean_node_runner_runtime_error_propagates(self) -> None:
         """CUJ: RuntimeError from agent runner propagates through clean_node and clean."""
         node = Node(address="//pkg:error_test")
-        self.storage.definitions[node.address] = NodeDefinition(node=node, task_prompt=TaskPrompt("Task prompt"))
+        self.storage.definitions[node.address] = NodeDefinition(
+            node=node, task_prompt=TaskPrompt("Task prompt")
+        )
         self.runner.error = RuntimeError("Agent failed: unrecoverable tool error")
 
         with enter_phase("system", registry=self.registry) as scope:
@@ -413,8 +509,12 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
     def test_clean_node_without_task_prompt_resolves_without_runner(self) -> None:
         """CUJ: Cleaning a dirty node defining no task prompt resolves without agent runner and produces change messages when incoming messages indicate change."""
         node = Node(address="//pkg:promptless_change")
-        self.storage.definitions[node.address] = NodeDefinition(node=node, task_prompt=TaskPrompt(""))
-        self.storage.messages[node.address] = {Change(content="Upstream library updated")}
+        self.storage.definitions[node.address] = NodeDefinition(
+            node=node, task_prompt=TaskPrompt("")
+        )
+        self.storage.messages[node.address] = {
+            Change(content="Upstream library updated")
+        }
 
         with enter_phase("system", registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
@@ -425,7 +525,9 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             self.assertIsInstance(list(msgs)[0], Change)
             self.assertEqual(self.runner.run_count, 0)
 
-    def test_clean_node_without_task_prompt_and_no_change_messages_produces_no_messages(self) -> None:
+    def test_clean_node_without_task_prompt_and_no_change_messages_produces_no_messages(
+        self,
+    ) -> None:
         """CUJ: Cleaning a dirty node defining no task prompt produces no propagating messages when incoming pending messages contain no changes."""
         node = Node(address="//pkg:promptless_no_change")
         # Node has no entry in storage definitions (defines no task prompt)
@@ -454,7 +556,9 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             self.assertTrue(cont)
             self.assertEqual(len(self.storage.messages[node.address]), 0)
             self.assertEqual(len(self.storage.messages[dependent.address]), 1)
-            self.assertIsInstance(list(self.storage.messages[dependent.address])[0], Change)
+            self.assertIsInstance(
+                list(self.storage.messages[dependent.address])[0], Change
+            )
             self.assertEqual(self.runner.run_count, 0)
 
     def test_clean_registers_dependent_to_non_silent_dependencies(self) -> None:
@@ -480,7 +584,9 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
     def test_clean_delivers_messages_to_dependents_and_dependencies(self) -> None:
         """CUJ: Clean operation delivers Change messages to dependents and clears prior messages."""
         node = Node(address="//pkg:clean_op")
-        self.storage.definitions[node.address] = NodeDefinition(node=node, task_prompt=TaskPrompt("Task prompt"))
+        self.storage.definitions[node.address] = NodeDefinition(
+            node=node, task_prompt=TaskPrompt("Task prompt")
+        )
         dependent = Node(address="//pkg:dependent")
         self.storage.dependents[node.address] = {dependent}
         self.storage.messages[node.address] = {Feedback()}  # Prior dirty message
@@ -497,19 +603,29 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             # Dependent received Change message
             # Requirement: Change messages are delivered to downstream dependents.
             self.assertEqual(len(self.storage.messages[dependent.address]), 1)
-            self.assertIsInstance(list(self.storage.messages[dependent.address])[0], Change)
+            self.assertIsInstance(
+                list(self.storage.messages[dependent.address])[0], Change
+            )
 
-    def test_clean_without_modifications_does_not_deliver_change_messages_to_dependents(self) -> None:
+    def test_clean_without_modifications_does_not_deliver_change_messages_to_dependents(
+        self,
+    ) -> None:
         """CUJ: Clean operation does not deliver Change messages or summaries to dependents when no files modified."""
         node = Node(address="//pkg:clean_op_no_mod")
-        self.storage.definitions[node.address] = NodeDefinition(node=node, task_prompt=TaskPrompt("Task prompt"))
+        self.storage.definitions[node.address] = NodeDefinition(
+            node=node, task_prompt=TaskPrompt("Task prompt")
+        )
         dependent = Node(address="//pkg:dependent_no_mod")
         self.storage.dependents[node.address] = {dependent}
         self.storage.messages[node.address] = {Feedback()}
         self.sandbox.has_modifications = False
         self.runner.outcome = AgentOutcome(
             is_success=True,
-            response=Response(is_failed=False, is_terminated=True, content="Session completed successfully: All tests pass"),
+            response=Response(
+                is_failed=False,
+                is_terminated=True,
+                content="Session completed successfully: All tests pass",
+            ),
             conversation=self.history,
         )
 
@@ -521,18 +637,29 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
 
             self.assertTrue(cont)
             self.assertEqual(len(self.storage.messages[node.address]), 0)
-            self.assertEqual(len(self.storage.messages.get(dependent.address, set())), 0)
+            self.assertEqual(
+                len(self.storage.messages.get(dependent.address, set())), 0
+            )
 
     def test_clean_delivers_feedback_to_dependencies(self) -> None:
         """CUJ: Clean operation delivers Feedback messages specifically to addressed dependency."""
         node = Node(address="//pkg:clean_op_feedback")
-        self.storage.definitions[node.address] = NodeDefinition(node=node, task_prompt=TaskPrompt("Task prompt"))
+        self.storage.definitions[node.address] = NodeDefinition(
+            node=node, task_prompt=TaskPrompt("Task prompt")
+        )
         dependency1 = Node(address="//pkg:dependency1")
         dependency2 = Node(address="//pkg:dependency2")
-        self.storage.dependencies[node.address] = {Dependency(node=dependency1), Dependency(node=dependency2)}
+        self.storage.dependencies[node.address] = {
+            Dependency(node=dependency1),
+            Dependency(node=dependency2),
+        }
         self.runner.outcome = AgentOutcome(
             is_success=True,
-            response=Response(is_failed=False, is_terminated=True, content="Blamed //pkg:dependency1: Defect in dep 1"),
+            response=Response(
+                is_failed=False,
+                is_terminated=True,
+                content="Blamed //pkg:dependency1: Defect in dep 1",
+            ),
             conversation=self.history,
         )
 
@@ -541,12 +668,16 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             # Requirement: When delivering messages after cleaning, feedback messages are delivered to their addressed dependency node.
             cont = cleaner.clean(node)
             self.assertTrue(cont)
-            self.assertEqual(len(self.storage.messages.get(dependency1.address, set())), 1)
+            self.assertEqual(
+                len(self.storage.messages.get(dependency1.address, set())), 1
+            )
             fb = list(self.storage.messages[dependency1.address])[0]
             self.assertIsInstance(fb, Feedback)
             assert isinstance(fb, Feedback)
             self.assertEqual(fb.content, "Defect in dep 1")
-            self.assertEqual(len(self.storage.messages.get(dependency2.address, set())), 0)
+            self.assertEqual(
+                len(self.storage.messages.get(dependency2.address, set())), 0
+            )
 
     def test_clean_node_seeds_history_with_step_mode_guide(self) -> None:
         """CUJ: Seeding conversation history augments task prompt with advance instruction in step mode."""
@@ -564,7 +695,9 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             _ = cleaner.clean_node(node)
 
             history_contents = [m.content for m in self.history.messages]
-            prompt_content = next(c for c in history_contents if "Ensure the lib conforms" in c)
+            prompt_content = next(
+                c for c in history_contents if "Ensure the lib conforms" in c
+            )
             self.assertIn("advance", prompt_content)
             self.assertIn("change_summary", prompt_content)
             self.assertNotIn("guide.md", prompt_content)
@@ -585,14 +718,21 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             _ = cleaner.clean_node(node)
 
             history_contents = [m.content for m in self.history.messages]
-            prompt_content = next(c for c in history_contents if "Ensure the lib conforms" in c)
+            prompt_content = next(
+                c for c in history_contents if "Ensure the lib conforms" in c
+            )
             self.assertIn("my_guide.md", prompt_content)
             self.assertIn("finish", prompt_content)
             self.assertIn("change summary", prompt_content)
-            self.assertIn("call finish without arguments if no workspace files were modified", prompt_content)
+            self.assertIn(
+                "call finish without arguments if no workspace files were modified",
+                prompt_content,
+            )
             self.assertNotIn("advance", prompt_content)
 
-    def test_clean_node_seeds_history_without_guide_leaves_prompt_unaugmented(self) -> None:
+    def test_clean_node_seeds_history_without_guide_leaves_prompt_unaugmented(
+        self,
+    ) -> None:
         """CUJ: Seeding conversation history leaves task prompt unaugmented when no guide is configured."""
         node = Node(address="//pkg:noguide_test")
         self.storage.definitions[node.address] = NodeDefinition(
@@ -606,7 +746,11 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             _ = cleaner.clean_node(node)
 
             history_contents = [m.content for m in self.history.messages]
-            prompt_content = next(c for c in history_contents if "Ensure the lib conforms without guide" in c)
+            prompt_content = next(
+                c
+                for c in history_contents
+                if "Ensure the lib conforms without guide" in c
+            )
             self.assertEqual(prompt_content, "Ensure the lib conforms without guide")
 
     def test_clean_node_seeds_history_guide_from_read_only_files(self) -> None:
@@ -632,7 +776,9 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             _ = cleaner.clean_node(node)
 
             history_contents = [m.content for m in self.history.messages]
-            prompt_content = next(c for c in history_contents if "Ensure the lib conforms" in c)
+            prompt_content = next(
+                c for c in history_contents if "Ensure the lib conforms" in c
+            )
             self.assertIn("ro_guide.md", prompt_content)
             self.assertIn("finish", prompt_content)
 
@@ -657,13 +803,20 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             _ = cleaner.clean_node(node)
 
             history_contents = [m.content for m in self.history.messages]
-            prompt_content = next(c for c in history_contents if "Ensure the lib conforms" in c)
+            prompt_content = next(
+                c for c in history_contents if "Ensure the lib conforms" in c
+            )
             self.assertIn("qa.md", prompt_content)
             self.assertIn("finish", prompt_content)
             self.assertIn("change summary", prompt_content)
-            self.assertIn("call finish without arguments if no workspace files were modified", prompt_content)
+            self.assertIn(
+                "call finish without arguments if no workspace files were modified",
+                prompt_content,
+            )
             self.assertNotIn("advance", prompt_content)
-            self.assertTrue(any("feedback: Fix defect 1" in c for c in history_contents))
+            self.assertTrue(
+                any("feedback: Fix defect 1" in c for c in history_contents)
+            )
 
     def test_clean_node_retries_on_unexpected_execution_failure(self) -> None:
         """CUJ: Retries execution of the agent session phase a second time on unexpected failure."""
@@ -715,4 +868,3 @@ if __name__ == "__main__":
     unittest.main()
 
 # Untested requirements: None
-

@@ -5,7 +5,11 @@ import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
-from update_with_ai.parts.agent.lib.agent_storage import AgentStorage, NodeDefinition, TaskPrompt
+from update_with_ai.parts.agent.lib.agent_storage import (
+    AgentStorage,
+    NodeDefinition,
+    TaskPrompt,
+)
 from update_with_ai.parts.bazel.lib.bazel_storage_impl import (
     AgentStorage as AgentStorageImpl,
     __initialize__,
@@ -19,7 +23,13 @@ from update_with_ai.parts.bazel.lib.file_paths import (
     WorkspaceRoot,
 )
 from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget, NodeDirectory
-from update_with_ai.parts.dag.lib.dag_storage import Change, DagStorage, Dependency, Feedback, Node
+from update_with_ai.parts.dag.lib.dag_storage import (
+    Change,
+    DagStorage,
+    Dependency,
+    Feedback,
+    Node,
+)
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 
 
@@ -161,7 +171,9 @@ class BazelStorageImplTest(unittest.TestCase):
 
             # Verify textproto file was written to package directory
             # Requirement: All nodes located within the same package directory resolved by the bazel target share a common package message file named `.update_with_ai.textproto`.
-            proto_path = os.path.join(self.test_dir, "pkg/sub", ".update_with_ai.textproto")
+            proto_path = os.path.join(
+                self.test_dir, "pkg/sub", ".update_with_ai.textproto"
+            )
             self.assertTrue(os.path.isfile(proto_path))
 
             # Clear messages resets dirty state
@@ -238,7 +250,10 @@ class BazelStorageImplTest(unittest.TestCase):
         with enter_phase("system", registry=self.registry) as scope:
             storage = scope.get_singleton(AgentStorage)
             assert isinstance(storage, AgentStorageImpl)
-            with patch("update_with_ai.parts.bazel.lib.bazel_storage_impl.Path.write_text", side_effect=OSError("Disk write failed")):
+            with patch(
+                "update_with_ai.parts.bazel.lib.bazel_storage_impl.Path.write_text",
+                side_effect=OSError("Disk write failed"),
+            ):
                 # Requirement: The agent storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
                 # Requirement: [DagStorage] Adding a message to a node records the message for that node.
                 storage.add_message(Change(), to=node)

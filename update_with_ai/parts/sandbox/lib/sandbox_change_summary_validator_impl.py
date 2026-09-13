@@ -3,7 +3,10 @@ from update_with_ai.parts.agent.lib import agent_node_config
 from . import sandbox_change_summary_validator
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
 
-class ChangeSummaryValidator(sandbox_change_summary_validator.ChangeSummaryValidator, Singleton):
+
+class ChangeSummaryValidator(
+    sandbox_change_summary_validator.ChangeSummaryValidator, Singleton
+):
     tier = "agent_session"
 
     def __init__(self) -> None:
@@ -18,6 +21,7 @@ class ChangeSummaryValidator(sandbox_change_summary_validator.ChangeSummaryValid
         # Requirement: If a change summary fails to describe all files with net changes, verification fails with diagnostic feedback.
         # Requirement: If a change summary claims changes for unchanged files, verification fails with diagnostic feedback.
         return True, "Change summary is valid."
+
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry

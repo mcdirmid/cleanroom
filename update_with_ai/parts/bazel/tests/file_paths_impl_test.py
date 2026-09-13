@@ -10,7 +10,10 @@ from update_with_ai.parts.bazel.lib.file_paths import (
     DirectoryPath,
     WorkspaceRoot,
 )
-from update_with_ai.parts.bazel.lib.file_paths_impl import FilePaths as FilePathsImpl, __initialize__
+from update_with_ai.parts.bazel.lib.file_paths_impl import (
+    FilePaths as FilePathsImpl,
+    __initialize__,
+)
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 
 
@@ -113,7 +116,9 @@ class TestFilePathsImpl(unittest.TestCase):
                 self.assertIsInstance(resolved_dir, DirectoryPath)
                 self.assertEqual(resolved_dir.path, "/workspace/root/testing/specs")
 
-                rel_file = service.create_workspace_path("testing/specs/.update_with_ai.textproto")
+                rel_file = service.create_workspace_path(
+                    "testing/specs/.update_with_ai.textproto"
+                )
                 resolved_file = service.resolve_path(root, rel_file)
                 # Requirement: [FilePaths] Returns an absolute path formed by joining the workspace root and the workspace path.
                 self.assertIsInstance(resolved_file, AbsolutePath)

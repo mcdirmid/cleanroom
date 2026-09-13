@@ -4,14 +4,23 @@ import unittest
 from typing import Any, List, Optional, Set, Tuple
 
 from update_with_ai.parts.dag.lib.dag_storage import Node
-from update_with_ai.parts.agent.lib.agent_file_alias import BoundFile, FileContent, ReadOnlyFile, UnboundFile, WorkspacePath
+from update_with_ai.parts.agent.lib.agent_file_alias import (
+    BoundFile,
+    FileContent,
+    ReadOnlyFile,
+    UnboundFile,
+    WorkspacePath,
+)
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.agent.lib.agent_node_config import Guide, NodeConfig
 from update_with_ai.parts.sandbox.lib.sandbox import Sandbox, StartupToolExecution
 from update_with_ai.parts.sandbox.lib.sandbox_file_editor import EditManager
 from update_with_ai.parts.sandbox.lib.sandbox_file_reader import ReadManager, ReadTool
-from update_with_ai.parts.sandbox.lib.sandbox_impl import Sandbox as SandboxImpl, __initialize__
+from update_with_ai.parts.sandbox.lib.sandbox_impl import (
+    Sandbox as SandboxImpl,
+    __initialize__,
+)
 from update_with_ai.parts.sandbox.lib.sandbox_run_control import AdvanceTool
 from update_with_ai.parts.sandbox.lib.tool_provider import (
     ActualParameterBindings,
@@ -28,7 +37,9 @@ from update_with_ai.parts.sandbox.lib.tool_provider import (
 class MockAgentConfig:
     tier = "system"
 
-    def __init__(self, is_step_mode: bool = False, is_startup_reads: bool = False) -> None:
+    def __init__(
+        self, is_step_mode: bool = False, is_startup_reads: bool = False
+    ) -> None:
         self.is_step_mode = is_step_mode
         self.is_startup_reads = is_startup_reads
         self.conversation_limit = 10
@@ -112,7 +123,9 @@ class MockAdvanceTool:
     def parameters(self) -> Set[Parameter]:
         return set()
 
-    def execute_tool(self, actual_parameter_bindings: ActualParameterBindings) -> Response:
+    def execute_tool(
+        self, actual_parameter_bindings: ActualParameterBindings
+    ) -> Response:
         self.executed = True
         return Response(is_failed=False, is_terminated=False, content="Guide step 1")
 
@@ -160,12 +173,16 @@ class MockReadTool:
     def parameters(self) -> Set[Parameter]:
         return {self.file_alias_parameter, self.line_numbers_parameter}
 
-    def execute_tool(self, actual_parameter_bindings: ActualParameterBindings) -> Response:
+    def execute_tool(
+        self, actual_parameter_bindings: ActualParameterBindings
+    ) -> Response:
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
         target = bindings_map.get("file")
         if isinstance(target, BoundFile):
             self.executed_files.append(target)
-        return Response(is_failed=False, is_terminated=False, content=f"Content of {target}")
+        return Response(
+            is_failed=False, is_terminated=False, content=f"Content of {target}"
+        )
 
 
 class MockReadManager:
@@ -200,12 +217,24 @@ class SandboxImplTest(unittest.TestCase):
         self.read_tool = MockReadTool()
         self.read_mgr = MockReadManager()
 
-        self.registry.register_instance(self.agent_cfg, keys=[AgentConfig], tier="system")
-        self.registry.register_instance(self.node_cfg, keys=[NodeConfig], tier="agent_session")
-        self.registry.register_instance(self.edit_mgr, keys=[EditManager], tier="agent_session")
-        self.registry.register_instance(self.adv_tool, keys=[AdvanceTool], tier="agent_session")
-        self.registry.register_instance(self.read_tool, keys=[ReadTool], tier="agent_session")
-        self.registry.register_instance(self.read_mgr, keys=[ReadManager], tier="agent_session")
+        self.registry.register_instance(
+            self.agent_cfg, keys=[AgentConfig], tier="system"
+        )
+        self.registry.register_instance(
+            self.node_cfg, keys=[NodeConfig], tier="agent_session"
+        )
+        self.registry.register_instance(
+            self.edit_mgr, keys=[EditManager], tier="agent_session"
+        )
+        self.registry.register_instance(
+            self.adv_tool, keys=[AdvanceTool], tier="agent_session"
+        )
+        self.registry.register_instance(
+            self.read_tool, keys=[ReadTool], tier="agent_session"
+        )
+        self.registry.register_instance(
+            self.read_mgr, keys=[ReadManager], tier="agent_session"
+        )
 
     def test_has_modifications_and_template_materialization_delegation(self) -> None:
         """CUJ: Sandbox delegates modification checking and template materialization to EditManager."""
@@ -227,9 +256,21 @@ class SandboxImplTest(unittest.TestCase):
     def test_get_startup_tool_executions_step_mode_and_startup_reads(self) -> None:
         """CUJ: Assembling startup tool executions: advance first when in step mode, followed by read_file for read-only files."""
         node = Node(address="//pkg:target")
-        ro_file_z = ReadOnlyFile(short_name="z_spec.md", workspace_path=_make_workspace_path("pkg/z_spec.md"), owning_node=node)
-        ro_file_a = ReadOnlyFile(short_name="a_spec.md", workspace_path=_make_workspace_path("pkg/a_spec.md"), owning_node=node)
-        ro_file_py = ReadOnlyFile(short_name="m_lib.py", workspace_path=_make_workspace_path("pkg/m_lib.py"), owning_node=node)
+        ro_file_z = ReadOnlyFile(
+            short_name="z_spec.md",
+            workspace_path=_make_workspace_path("pkg/z_spec.md"),
+            owning_node=node,
+        )
+        ro_file_a = ReadOnlyFile(
+            short_name="a_spec.md",
+            workspace_path=_make_workspace_path("pkg/a_spec.md"),
+            owning_node=node,
+        )
+        ro_file_py = ReadOnlyFile(
+            short_name="m_lib.py",
+            workspace_path=_make_workspace_path("pkg/m_lib.py"),
+            owning_node=node,
+        )
         ro_files: Set[BoundFile] = {ro_file_z, ro_file_a, ro_file_py}
         self.node_cfg.read_only_files = ro_files
 
@@ -249,17 +290,24 @@ class SandboxImplTest(unittest.TestCase):
             # Requirement: When performing startup reads to inspect declared files at session start, startup tool executions include file read executions for all declared read-only files from node config ordered deterministically by file alias short name, positioned after any advance tool execution.
             # Requirement: Each file read execution uses the name of the read tool, specifies wire parameter bindings mapping the file alias parameter of the read tool to the read-only file alias short name while supplying line numbers as determined by the read manager for source code files, and captures the response produced by executing the read tool.
             self.assertEqual(executions[1].tool_name, "read_file")
-            self.assertEqual(executions[1].wire_parameter_bindings.bindings, {("file", "a_spec.md")})
+            self.assertEqual(
+                executions[1].wire_parameter_bindings.bindings, {("file", "a_spec.md")}
+            )
             self.assertIn("a_spec.md", executions[1].response.content)
 
             # Third is read_file for m_lib.py (supplies line_numbers=True for source code file)
             self.assertEqual(executions[2].tool_name, "read_file")
-            self.assertEqual(executions[2].wire_parameter_bindings.bindings, {("file", "m_lib.py"), ("line_numbers", True)})
+            self.assertEqual(
+                executions[2].wire_parameter_bindings.bindings,
+                {("file", "m_lib.py"), ("line_numbers", True)},
+            )
             self.assertIn("m_lib.py", executions[2].response.content)
 
             # Fourth is read_file for z_spec.md
             self.assertEqual(executions[3].tool_name, "read_file")
-            self.assertEqual(executions[3].wire_parameter_bindings.bindings, {("file", "z_spec.md")})
+            self.assertEqual(
+                executions[3].wire_parameter_bindings.bindings, {("file", "z_spec.md")}
+            )
             self.assertIn("z_spec.md", executions[3].response.content)
 
     def test_get_startup_tool_executions_disabled_modes(self) -> None:

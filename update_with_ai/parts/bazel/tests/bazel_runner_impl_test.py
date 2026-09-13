@@ -4,7 +4,10 @@ import unittest
 from typing import Optional, Sequence, Set
 from update_with_ai.parts.agent.lib import agent_storage
 from update_with_ai.parts.bazel.lib import bazel_manifest_loader
-from update_with_ai.parts.bazel.lib.bazel_runner_impl import DagRunner as DagRunnerImpl, __initialize__
+from update_with_ai.parts.bazel.lib.bazel_runner_impl import (
+    DagRunner as DagRunnerImpl,
+    __initialize__,
+)
 from update_with_ai.parts.dag.lib import dag_cleaner
 from update_with_ai.parts.dag.lib import dag_node_cleaner
 from update_with_ai.parts.dag.lib import dag_runner
@@ -30,7 +33,9 @@ class MockManifestLoader(bazel_manifest_loader.BazelManifestLoader):
         self.manifests: dict[str, bazel_manifest_loader.Manifest] = {}
         self.loaded: list[bazel_manifest_loader.Manifest] = []
 
-    def get_manifest(self, node: dag_storage.Node) -> Optional[bazel_manifest_loader.Manifest]:
+    def get_manifest(
+        self, node: dag_storage.Node
+    ) -> Optional[bazel_manifest_loader.Manifest]:
         return self.manifests.get(node.address)
 
     def load_manifest(
@@ -88,7 +93,9 @@ class MockDagCleaner(dag_cleaner.DagCleaner):
         self.storage = storage
         self.should_fail = should_fail
 
-    def clean(self, node: dag_storage.Node, cleaner: dag_node_cleaner.NodeCleaner) -> None:
+    def clean(
+        self, node: dag_storage.Node, cleaner: dag_node_cleaner.NodeCleaner
+    ) -> None:
         if self.should_fail:
             raise RuntimeError("Simulated cleaner failure")
         self.cleaned_nodes.append(node)
@@ -149,7 +156,9 @@ class BazelRunnerImplTest(unittest.TestCase):
     def test_build_result_dataclass(self) -> None:
         """Tests BuildResult value object instantiation and property access."""
         # Requirement: [DagRunner] A dag runner produces a build result upon pass completion.
-        result = dag_runner.BuildResult(success=True, summary="Build finished successfully")
+        result = dag_runner.BuildResult(
+            success=True, summary="Build finished successfully"
+        )
         self.assertTrue(result.success)
         self.assertEqual(result.summary, "Build finished successfully")
 
@@ -160,7 +169,9 @@ class BazelRunnerImplTest(unittest.TestCase):
     def test_run_cleaning_pass_success(self) -> None:
         """Tests successful cleaning pass execution and telemetry logging."""
         root = dag_storage.Node(address="//pkg:target")
-        self.manifest_loader.manifests["//pkg:target"] = bazel_manifest_loader.Manifest("rule()")
+        self.manifest_loader.manifests["//pkg:target"] = bazel_manifest_loader.Manifest(
+            "rule()"
+        )
         self.storage.dirty_nodes.add(root)
 
         with enter_phase("system", registry=self.registry):
@@ -177,8 +188,12 @@ class BazelRunnerImplTest(unittest.TestCase):
             self.assertTrue(result.success)
             self.assertIn("succeeded", result.summary)
 
-            start_events = [e for e in self.logger.events if e.event_name == "build_pass_start"]
-            end_events = [e for e in self.logger.events if e.event_name == "build_pass_end"]
+            start_events = [
+                e for e in self.logger.events if e.event_name == "build_pass_start"
+            ]
+            end_events = [
+                e for e in self.logger.events if e.event_name == "build_pass_end"
+            ]
             self.assertEqual(len(start_events), 1)
             self.assertEqual(len(end_events), 1)
 
@@ -229,18 +244,29 @@ class BazelRunnerImplTest(unittest.TestCase):
             result = runner.run_cleaning_pass(root)
 
             self.assertFalse(result.success)
-            self.assertEqual(result.summary, "Cleaning pass failed for //pkg:failing: Simulated cleaner failure")
+            self.assertEqual(
+                result.summary,
+                "Cleaning pass failed for //pkg:failing: Simulated cleaner failure",
+            )
 
-            end_events = [e for e in self.logger.events if e.event_name == "build_pass_end"]
+            end_events = [
+                e for e in self.logger.events if e.event_name == "build_pass_end"
+            ]
             self.assertEqual(len(end_events), 1)
-            self.assertEqual(end_events[0].summary, "Cleaning pass failed for //pkg:failing: Simulated cleaner failure")
+            self.assertEqual(
+                end_events[0].summary,
+                "Cleaning pass failed for //pkg:failing: Simulated cleaner failure",
+            )
 
     def test_run_cleaning_pass_remaining_dirty(self) -> None:
         """Tests cleaning pass reporting failure if root remains dirty after cleaning."""
         root = dag_storage.Node(address="//pkg:dirty_root")
+
         # Custom cleaner that does not clear dirty status
         class PersistentDirtyCleaner(dag_cleaner.DagCleaner):
-            def clean(self, node: dag_storage.Node, cleaner: dag_node_cleaner.NodeCleaner) -> None:
+            def clean(
+                self, node: dag_storage.Node, cleaner: dag_node_cleaner.NodeCleaner
+            ) -> None:
                 pass
 
         self.storage.dirty_nodes.add(root)
@@ -265,7 +291,9 @@ class BazelRunnerImplTest(unittest.TestCase):
         self.storage.dependencies_map[root] = {dag_storage.Dependency(node=dep)}
 
         class PersistentDirtyCleaner(dag_cleaner.DagCleaner):
-            def clean(self, node: dag_storage.Node, cleaner: dag_node_cleaner.NodeCleaner) -> None:
+            def clean(
+                self, node: dag_storage.Node, cleaner: dag_node_cleaner.NodeCleaner
+            ) -> None:
                 pass
 
         self.storage.dirty_nodes.add(dep)

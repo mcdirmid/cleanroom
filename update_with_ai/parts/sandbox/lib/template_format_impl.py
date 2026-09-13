@@ -56,7 +56,9 @@ class TemplateFormatter(template_format.TemplateFormatter, Singleton):
         result_lines = self._format_lines(lines, parameters)
         return "\n".join(result_lines)
 
-    def _format_lines(self, lines: Sequence[str], context: Mapping[str, Any]) -> list[str]:
+    def _format_lines(
+        self, lines: Sequence[str], context: Mapping[str, Any]
+    ) -> list[str]:
         output: list[str] = []
         i = 0
         n = len(lines)

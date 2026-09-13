@@ -143,7 +143,9 @@ class MockCleanedNode(Initializable):
 
     @property
     def node_id(self) -> str:
-        assert self._node_id is not None, "CleanedNode.node_id accessed before set_node_id"
+        assert self._node_id is not None, (
+            "CleanedNode.node_id accessed before set_node_id"
+        )
         return self._node_id
 
     def set_node_id(self, node_id: str) -> None:
@@ -229,7 +231,9 @@ class TestLifecycle(unittest.TestCase):
         self.registry.register(MockLogger, keys=[Logger], phase="system")
         self.registry.register(MockConfig, keys=[Config], phase="system")
         self.registry.register(MockStorage, keys=[Storage], phase="system")
-        self.registry.register(MockCleanedNode, keys=[CleanedNode], phase="agent_session")
+        self.registry.register(
+            MockCleanedNode, keys=[CleanedNode], phase="agent_session"
+        )
         self.registry.register(MockRunner, keys=[Runner], phase="agent_session")
 
         with enter_phase("system", registry=self.registry) as system_scope:
@@ -254,7 +258,9 @@ class TestLifecycle(unittest.TestCase):
                 # 3. Runner resolves CleanedNode (session) and Storage (delegated to system)
                 runner = session_scope.get(Runner)
                 result = runner.run()
-                self.assertEqual(result, "cleaned //path/to:dirty_target with storage-data-fast")
+                self.assertEqual(
+                    result, "cleaned //path/to:dirty_target with storage-data-fast"
+                )
 
                 # 4. Ambient get_singleton works identically
                 self.assertIs(get_singleton(Runner), runner)
@@ -266,8 +272,12 @@ class TestLifecycle(unittest.TestCase):
 
     def test_hybrid_phase_setup_callback(self) -> None:
         """Tests that setup callback executes lazily before eager _start_phase."""
-        self.registry.register(MockCleanedNode, keys=[CleanedNode], phase="agent_session")
-        self.registry.register(MockNodeConfig, keys=[NodeConfigService], phase="agent_session")
+        self.registry.register(
+            MockCleanedNode, keys=[CleanedNode], phase="agent_session"
+        )
+        self.registry.register(
+            MockNodeConfig, keys=[NodeConfigService], phase="agent_session"
+        )
 
         # Entering phase without setup would fail because MockNodeConfig.initialize() requires CleanedNode.node_id
         with self.assertRaises(AssertionError):
@@ -279,7 +289,9 @@ class TestLifecycle(unittest.TestCase):
             cleaned = session.get_singleton(CleanedNode)
             cleaned.set_node_id("//path/to:hybrid_target")
 
-        with enter_phase("agent_session", registry=self.registry, setup=setup_session) as scope:
+        with enter_phase(
+            "agent_session", registry=self.registry, setup=setup_session
+        ) as scope:
             cfg = scope.get_singleton(NodeConfigService)
             assert isinstance(cfg, MockNodeConfig)
             self.assertTrue(cfg.initialized)
@@ -287,10 +299,16 @@ class TestLifecycle(unittest.TestCase):
 
     def test_hybrid_phase_setup_context_manager(self) -> None:
         """Tests that session.setup() block executes lazily before eager _start_phase."""
-        self.registry.register(MockCleanedNode, keys=[CleanedNode], phase="agent_session")
-        self.registry.register(MockNodeConfig, keys=[NodeConfigService], phase="agent_session")
+        self.registry.register(
+            MockCleanedNode, keys=[CleanedNode], phase="agent_session"
+        )
+        self.registry.register(
+            MockNodeConfig, keys=[NodeConfigService], phase="agent_session"
+        )
 
-        with enter_phase("agent_session", registry=self.registry, defer_startup=True) as scope:
+        with enter_phase(
+            "agent_session", registry=self.registry, defer_startup=True
+        ) as scope:
             with scope.setup():
                 cleaned = scope.get_singleton(CleanedNode)
                 cleaned.set_node_id("//path/to:ctx_target")
@@ -401,6 +419,7 @@ class TestLifecycle(unittest.TestCase):
         from update_with_ai.parts.bazel.lib.bazel_target_impl import BazelTarget
         from update_with_ai.parts.bazel.lib.bazel_node_config_impl import NodeConfig
         from update_with_ai.parts.bazel.lib import bazel_asm
+
         bazel_asm.__initialize__()
 
         util = get_singleton(BazelTarget)
@@ -417,6 +436,7 @@ class TestLifecycle(unittest.TestCase):
         do not need boilerplate initialize() methods, and that tier mismatches during registration
         raise LifecycleError.
         """
+
         # Testing requirement: Subclass Singleton without explicit initialize does not fail
         class MyService(Singleton):
             tier = "system"
@@ -431,7 +451,9 @@ class TestLifecycle(unittest.TestCase):
 
         # Testing requirement: Tier mismatch raises LifecycleError
         with self.assertRaises(LifecycleError):
-            test_reg.register_singleton(MyService, keys=[MyService], tier="agent_session")
+            test_reg.register_singleton(
+                MyService, keys=[MyService], tier="agent_session"
+            )
 
     def test_caller_tier_isolation_enforcement(self) -> None:
         """CUJ: System singleton cannot access agent_session singleton even inside active session.
@@ -504,7 +526,9 @@ class TestLifecycle(unittest.TestCase):
         class CrossModuleService(Singleton):
             tier = "system"
 
-        mod1.get_default_registry().register_singleton(CrossModuleService, keys=[CrossModuleService])
+        mod1.get_default_registry().register_singleton(
+            CrossModuleService, keys=[CrossModuleService]
+        )
         resolved = mod2.get_singleton(CrossModuleService)
         self.assertIsInstance(resolved, CrossModuleService)
 

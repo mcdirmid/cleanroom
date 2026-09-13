@@ -3,6 +3,7 @@ from . import agent_loop_guard
 from update_with_ai.parts.sandbox.lib import tool_provider
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
 
+
 class LoopGuard(agent_loop_guard.LoopGuard, Singleton):
     tier = "agent_session"
 
@@ -16,7 +17,10 @@ class LoopGuard(agent_loop_guard.LoopGuard, Singleton):
         self, tool_name: str, bindings: tool_provider.ActualParameterBindings
     ) -> Optional[Union[agent_loop_guard.LoopReminder, agent_loop_guard.LoopFailure]]:
         # Requirement: [LoopGuard] A loop guard evaluates consecutive executions of identical tools and edits.
-        call_key = (tool_name, frozenset((p.name, str(v)) for p, v in bindings.bindings))
+        call_key = (
+            tool_name,
+            frozenset((p.name, str(v)) for p, v in bindings.bindings),
+        )
         if self._last_call == call_key:
             self._consecutive_count += 1
         else:
@@ -40,6 +44,7 @@ class LoopGuard(agent_loop_guard.LoopGuard, Singleton):
         # Requirement: [LoopGuard] Executing a tool that demonstrates progress clears repetition tracking in the loop guard.
         self._consecutive_count = 0
         self._last_call = None
+
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry

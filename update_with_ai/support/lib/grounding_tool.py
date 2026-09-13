@@ -27,21 +27,63 @@ from typing import Dict, List, Optional, Set, Tuple, cast
 PRIMARY_KINDS = {"singleton_type", "poly_type", "data_type", "variant"}
 ALLOWED_MEMBER_DECORATORS = {"property", "operation", "override"}
 BUILTIN_TYPES = {
-    "str", "int", "bool", "float", "None", "Any", "Type", "type",
-    "object", "bytes", "Optional", "Union", "Tuple", "List", "Set",
-    "Dict", "Sequence", "Mapping", "Callable", "Iterable", "Exception", "Protocol",
+    "str",
+    "int",
+    "bool",
+    "float",
+    "None",
+    "Any",
+    "Type",
+    "type",
+    "object",
+    "bytes",
+    "Optional",
+    "Union",
+    "Tuple",
+    "List",
+    "Set",
+    "Dict",
+    "Sequence",
+    "Mapping",
+    "Callable",
+    "Iterable",
+    "Exception",
+    "Protocol",
 }
 COMMON_TYPING_SYMBOLS = {
-    "Optional", "Union", "Tuple", "List", "Set", "Sequence",
-    "Any", "Type", "Dict", "Callable", "Iterable", "Mapping", "Protocol",
+    "Optional",
+    "Union",
+    "Tuple",
+    "List",
+    "Set",
+    "Sequence",
+    "Any",
+    "Type",
+    "Dict",
+    "Callable",
+    "Iterable",
+    "Mapping",
+    "Protocol",
 }
-COMMON_BUILTINS = {"int", "str", "bool", "float", "None", "bytes", "object", "Exception"}
+COMMON_BUILTINS = {
+    "int",
+    "str",
+    "bool",
+    "float",
+    "None",
+    "bytes",
+    "object",
+    "Exception",
+}
 FRAMEWORK_SYMBOLS = {
-    "singleton_type", "poly_type", "data_type", "variant",
-    "operation", "override",
+    "singleton_type",
+    "poly_type",
+    "data_type",
+    "variant",
+    "operation",
+    "override",
 }
 DATACLASS_SYMBOLS = {"dataclass"}
-
 
 
 class Diagnostic:
@@ -57,7 +99,9 @@ class Diagnostic:
         return f"{self.filename}:{self.line}:{self.col}: error: {self.message}"
 
     def __repr__(self) -> str:
-        return f"Diagnostic({self.filename!r}, {self.line}, {self.col}, {self.message!r})"
+        return (
+            f"Diagnostic({self.filename!r}, {self.line}, {self.col}, {self.message!r})"
+        )
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Diagnostic):
@@ -122,7 +166,7 @@ class DocstringContract:
                 continue
             elif stripped.startswith("INHERITED FROM "):
                 current_section = "LEGACY_INHERITED_FROM"
-                current_ancestor = stripped[len("INHERITED FROM "):].rstrip(":")
+                current_ancestor = stripped[len("INHERITED FROM ") :].rstrip(":")
                 continue
 
             if current_section == "PURPOSE" or current_section is None:
@@ -143,7 +187,9 @@ class DocstringContract:
                     stmt = m.group(2).strip()
                     self.inherited_assumptions.setdefault(anc, []).append(stmt)
                 else:
-                    item = stripped[2:].strip() if stripped.startswith("- ") else stripped
+                    item = (
+                        stripped[2:].strip() if stripped.startswith("- ") else stripped
+                    )
                     self.inherited_assumptions.setdefault("Parent", []).append(item)
             elif current_section == "INHERITED_REQUIREMENTS":
                 m = re.match(r"^-\s*\[(.*?)\]\s*(.*)$", stripped)
@@ -152,13 +198,17 @@ class DocstringContract:
                     stmt = m.group(2).strip()
                     self.inherited_requirements.setdefault(anc, []).append(stmt)
                 else:
-                    item = stripped[2:].strip() if stripped.startswith("- ") else stripped
+                    item = (
+                        stripped[2:].strip() if stripped.startswith("- ") else stripped
+                    )
                     self.inherited_requirements.setdefault("Parent", []).append(item)
             elif current_section == "GROUNDING_ARGUMENT":
                 grounding_arg_lines.append(stripped)
             elif current_section == "LEGACY_INHERITED_FROM" and current_ancestor:
                 item = stripped[2:].strip() if stripped.startswith("- ") else stripped
-                self.inherited_requirements.setdefault(current_ancestor, []).append(item)
+                self.inherited_requirements.setdefault(current_ancestor, []).append(
+                    item
+                )
 
         self.purpose = " ".join(purpose_lines)
         self.grounding_argument = "\n".join(grounding_arg_lines)
@@ -247,9 +297,16 @@ class SpecLintVisitor(ast.NodeVisitor):
         if str(self.filename).endswith("_ext.pyi"):
             doc = ast.get_docstring(node)
             if doc and "## External Mechanics & API Documentation" in doc:
-                for req_sec in ("## External Mechanics & API Documentation", "## Build Dependencies", "## Usage Snippets"):
+                for req_sec in (
+                    "## External Mechanics & API Documentation",
+                    "## Build Dependencies",
+                    "## Usage Snippets",
+                ):
                     if req_sec not in doc:
-                        self.add_error(node, f"External specification (_ext.pyi) missing required section '{req_sec}' in module docstring.")
+                        self.add_error(
+                            node,
+                            f"External specification (_ext.pyi) missing required section '{req_sec}' in module docstring.",
+                        )
                 return
 
         self._current_module_body = node.body
@@ -327,7 +384,7 @@ class SpecLintVisitor(ast.NodeVisitor):
                     else:
                         self.add_error(
                             dec,
-                            "@singleton_type must specify a valid lifecycle tier: @singleton_type(\"system\") or @singleton_type(\"agent_session\").",
+                            '@singleton_type must specify a valid lifecycle tier: @singleton_type("system") or @singleton_type("agent_session").',
                         )
                 elif func_id == "poly_type":
                     kinds.append("poly_type")
@@ -339,7 +396,9 @@ class SpecLintVisitor(ast.NodeVisitor):
                     kinds.append(func_id)
                     self.add_error(dec, f"@{func_id} does not take arguments.")
                 else:
-                    self.add_error(dec, f"Unrecognized class decorator '@{func_id}(...)'.")
+                    self.add_error(
+                        dec, f"Unrecognized class decorator '@{func_id}(...)'."
+                    )
 
             elif isinstance(dec, (ast.Name, ast.Attribute)):
                 dec_id = dec.id if isinstance(dec, ast.Name) else dec.attr
@@ -350,7 +409,7 @@ class SpecLintVisitor(ast.NodeVisitor):
                     kinds.append("singleton_type")
                     self.add_error(
                         dec,
-                        "@singleton_type requires an explicit lifecycle argument: @singleton_type(\"system\") or @singleton_type(\"agent_session\").",
+                        '@singleton_type requires an explicit lifecycle argument: @singleton_type("system") or @singleton_type("agent_session").',
                     )
                 elif dec_id in PRIMARY_KINDS:
                     kinds.append(dec_id)
@@ -396,13 +455,16 @@ class SpecLintVisitor(ast.NodeVisitor):
             if base_id in ("SystemService", "AgentSessionService"):
                 self.add_error(
                     base,
-                    f"Direct inheritance from '{base_id}' is obsolete and prohibited. Use @singleton_type(\"system\") or @singleton_type(\"agent_session\") instead.",
+                    f'Direct inheritance from \'{base_id}\' is obsolete and prohibited. Use @singleton_type("system") or @singleton_type("agent_session") instead.',
                 )
 
         # Check docstring
         docstring = ast.get_docstring(node)
         if not docstring:
-            self.add_error(node, f"Class '{node.name}' is missing a required specification docstring.")
+            self.add_error(
+                node,
+                f"Class '{node.name}' is missing a required specification docstring.",
+            )
         else:
             self._validate_docstring(node, docstring, is_class=True)
 
@@ -441,8 +503,13 @@ class SpecLintVisitor(ast.NodeVisitor):
             has_bases = len(node.bases) > 0
             is_variant_root = any(
                 isinstance(stmt, ast.ClassDef)
-                and any((isinstance(d, ast.Name) and d.id == "variant") for d in stmt.decorator_list)
-                and any((isinstance(b, ast.Name) and b.id == node.name) for b in stmt.bases)
+                and any(
+                    (isinstance(d, ast.Name) and d.id == "variant")
+                    for d in stmt.decorator_list
+                )
+                and any(
+                    (isinstance(b, ast.Name) and b.id == node.name) for b in stmt.bases
+                )
                 for stmt in getattr(self, "_current_module_body", [])
             )
             if total_members == 0 and not has_bases and not is_variant_root:
@@ -451,11 +518,19 @@ class SpecLintVisitor(ast.NodeVisitor):
                     f"Data type '{node.name}' is empty. Data types participate in structural equality and must declare at least one property or base type.",
                 )
 
-        if self.current_class_kind in ("data_type", "variant") and node.name in self.class_dataclass_init:
+        if (
+            self.current_class_kind in ("data_type", "variant")
+            and node.name in self.class_dataclass_init
+        ):
             is_variant_root = any(
                 isinstance(stmt, ast.ClassDef)
-                and any((isinstance(d, ast.Name) and d.id == "variant") for d in stmt.decorator_list)
-                and any((isinstance(b, ast.Name) and b.id == node.name) for b in stmt.bases)
+                and any(
+                    (isinstance(d, ast.Name) and d.id == "variant")
+                    for d in stmt.decorator_list
+                )
+                and any(
+                    (isinstance(b, ast.Name) and b.id == node.name) for b in stmt.bases
+                )
                 for stmt in getattr(self, "_current_module_body", [])
             )
             if is_variant_root:
@@ -470,7 +545,9 @@ class SpecLintVisitor(ast.NodeVisitor):
                         f"Base data type '{node.name}' has variants and must not declare constructor '__init__'.",
                     )
             else:
-                if self.class_dataclass_init.get(node.name) is True and not self.class_has_init.get(node.name):
+                if self.class_dataclass_init.get(
+                    node.name
+                ) is True and not self.class_has_init.get(node.name):
                     self.add_error(
                         node,
                         f"Data type '{node.name}' specifies 'init=True' (or default init) but does not declare constructor '__init__'. Either declare '__init__' or specify '@dataclass(frozen=True, init=False)'.",
@@ -505,15 +582,20 @@ class SpecLintVisitor(ast.NodeVisitor):
 
             if node.returns is not None:
                 is_none = (
-                    (isinstance(node.returns, ast.Constant) and node.returns.value is None)
-                    or (isinstance(node.returns, ast.Name) and node.returns.id == "None")
-                )
+                    isinstance(node.returns, ast.Constant)
+                    and node.returns.value is None
+                ) or (isinstance(node.returns, ast.Name) and node.returns.id == "None")
                 if not is_none:
-                    self.add_error(node.returns, "Return type of '__orphan__' must be 'None'.")
+                    self.add_error(
+                        node.returns, "Return type of '__orphan__' must be 'None'."
+                    )
 
             body = node.body
             if not body:
-                self.add_error(node, "Body of '__orphan__' cannot be empty; must contain ellipsis (...).")
+                self.add_error(
+                    node,
+                    "Body of '__orphan__' cannot be empty; must contain ellipsis (...).",
+                )
                 return
 
             has_docstring = False
@@ -534,7 +616,10 @@ class SpecLintVisitor(ast.NodeVisitor):
                     is_orphan=True,
                 )
             else:
-                self.add_error(node, "'__orphan__' must have a docstring containing 'PURPOSE:' and 'FRESH_REQUIREMENTS:'.")
+                self.add_error(
+                    node,
+                    "'__orphan__' must have a docstring containing 'PURPOSE:' and 'FRESH_REQUIREMENTS:'.",
+                )
 
             remaining = body[1:] if has_docstring else body
             if len(remaining) != 1:
@@ -545,9 +630,19 @@ class SpecLintVisitor(ast.NodeVisitor):
             else:
                 stmt = remaining[0]
                 if isinstance(stmt, ast.Pass):
-                    self.add_error(stmt, "Use of 'pass' in '__orphan__' is prohibited. Use ellipsis (...) instead.")
-                elif not (isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant) and stmt.value.value is Ellipsis):
-                    self.add_error(stmt, "Body of '__orphan__' must end with ellipsis (...). Executable statements are forbidden.")
+                    self.add_error(
+                        stmt,
+                        "Use of 'pass' in '__orphan__' is prohibited. Use ellipsis (...) instead.",
+                    )
+                elif not (
+                    isinstance(stmt, ast.Expr)
+                    and isinstance(stmt.value, ast.Constant)
+                    and stmt.value.value is Ellipsis
+                ):
+                    self.add_error(
+                        stmt,
+                        "Body of '__orphan__' must end with ellipsis (...). Executable statements are forbidden.",
+                    )
 
             return
 
@@ -580,15 +675,20 @@ class SpecLintVisitor(ast.NodeVisitor):
 
             if node.returns is not None:
                 is_none = (
-                    (isinstance(node.returns, ast.Constant) and node.returns.value is None)
-                    or (isinstance(node.returns, ast.Name) and node.returns.id == "None")
-                )
+                    isinstance(node.returns, ast.Constant)
+                    and node.returns.value is None
+                ) or (isinstance(node.returns, ast.Name) and node.returns.id == "None")
                 if not is_none:
-                    self.add_error(node.returns, f"Return type of '{node.name}' must be 'None'.")
+                    self.add_error(
+                        node.returns, f"Return type of '{node.name}' must be 'None'."
+                    )
 
             body = node.body
             if not body:
-                self.add_error(node, f"Body of '{node.name}' cannot be empty; must contain ellipsis (...).")
+                self.add_error(
+                    node,
+                    f"Body of '{node.name}' cannot be empty; must contain ellipsis (...).",
+                )
                 return
 
             has_docstring = False
@@ -610,7 +710,10 @@ class SpecLintVisitor(ast.NodeVisitor):
                     is_asm=True,
                 )
             else:
-                self.add_error(node, f"'{node.name}' must have a docstring containing 'PURPOSE:' and 'CONSTITUENTS:'.")
+                self.add_error(
+                    node,
+                    f"'{node.name}' must have a docstring containing 'PURPOSE:' and 'CONSTITUENTS:'.",
+                )
 
             remaining = body[1:] if has_docstring else body
             if len(remaining) != 1:
@@ -621,14 +724,27 @@ class SpecLintVisitor(ast.NodeVisitor):
             else:
                 stmt = remaining[0]
                 if isinstance(stmt, ast.Pass):
-                    self.add_error(stmt, f"Use of 'pass' in '{node.name}' is prohibited. Use ellipsis (...) instead.")
-                elif not (isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant) and stmt.value.value is Ellipsis):
-                    self.add_error(stmt, f"Body of '{node.name}' must end with ellipsis (...). Executable statements are forbidden.")
+                    self.add_error(
+                        stmt,
+                        f"Use of 'pass' in '{node.name}' is prohibited. Use ellipsis (...) instead.",
+                    )
+                elif not (
+                    isinstance(stmt, ast.Expr)
+                    and isinstance(stmt.value, ast.Constant)
+                    and stmt.value.value is Ellipsis
+                ):
+                    self.add_error(
+                        stmt,
+                        f"Body of '{node.name}' must end with ellipsis (...). Executable statements are forbidden.",
+                    )
 
             return
 
         if self.current_class is None:
-            self.add_error(node, f"Top-level function '{node.name}' is prohibited. Only '__orphan__' and '__initialize__' are allowed at module level.")
+            self.add_error(
+                node,
+                f"Top-level function '{node.name}' is prohibited. Only '__orphan__' and '__initialize__' are allowed at module level.",
+            )
             return
 
         if node.name == "__init__":
@@ -639,37 +755,55 @@ class SpecLintVisitor(ast.NodeVisitor):
                     node,
                     f"Constructor '__init__' is only permitted on @data_type or @variant dataclasses, not '{self.current_class_kind}'.",
                 )
-            if self.current_class and self.class_dataclass_init.get(self.current_class) is False:
+            if (
+                self.current_class
+                and self.class_dataclass_init.get(self.current_class) is False
+            ):
                 self.add_error(
                     node,
                     f"Class '{self.current_class}' specifies 'init=False' and must not declare constructor '__init__'.",
                 )
             if node.decorator_list:
-                self.add_error(node, "Dataclass constructor '__init__' must not have any decorators.")
+                self.add_error(
+                    node,
+                    "Dataclass constructor '__init__' must not have any decorators.",
+                )
 
             args = node.args
             if not args.args or args.args[0].arg != "self":
-                self.add_error(node, "Constructor '__init__' must have 'self' as its first parameter.")
+                self.add_error(
+                    node,
+                    "Constructor '__init__' must have 'self' as its first parameter.",
+                )
 
             for arg in args.args[1:]:
                 if arg.annotation is None:
-                    self.add_error(arg, f"Parameter '{arg.arg}' in constructor '__init__' is missing a type annotation.")
+                    self.add_error(
+                        arg,
+                        f"Parameter '{arg.arg}' in constructor '__init__' is missing a type annotation.",
+                    )
                 else:
                     self._check_type_annotation(arg.annotation)
 
             if node.returns is not None:
                 is_none = (
-                    (isinstance(node.returns, ast.Constant) and node.returns.value is None)
-                    or (isinstance(node.returns, ast.Name) and node.returns.id == "None")
-                )
+                    isinstance(node.returns, ast.Constant)
+                    and node.returns.value is None
+                ) or (isinstance(node.returns, ast.Name) and node.returns.id == "None")
                 if not is_none:
-                    self.add_error(node.returns, "Return type of constructor '__init__' must be 'None'.")
+                    self.add_error(
+                        node.returns,
+                        "Return type of constructor '__init__' must be 'None'.",
+                    )
 
             self.current_class_methods += 1
 
             body = node.body
             if not body:
-                self.add_error(node, "Body of '__init__' cannot be empty; must contain ellipsis (...).")
+                self.add_error(
+                    node,
+                    "Body of '__init__' cannot be empty; must contain ellipsis (...).",
+                )
                 return
 
             has_docstring = False
@@ -698,13 +832,19 @@ class SpecLintVisitor(ast.NodeVisitor):
             else:
                 stmt = remaining[0]
                 if isinstance(stmt, ast.Pass):
-                    self.add_error(stmt, "Use of 'pass' in '__init__' is prohibited. Use ellipsis (...) instead.")
+                    self.add_error(
+                        stmt,
+                        "Use of 'pass' in '__init__' is prohibited. Use ellipsis (...) instead.",
+                    )
                 elif not (
                     isinstance(stmt, ast.Expr)
                     and isinstance(stmt.value, ast.Constant)
                     and stmt.value.value is Ellipsis
                 ):
-                    self.add_error(stmt, "Body of '__init__' must end with ellipsis (...). Executable statements are forbidden.")
+                    self.add_error(
+                        stmt,
+                        "Body of '__init__' must end with ellipsis (...). Executable statements are forbidden.",
+                    )
             return
 
         is_prop = False
@@ -731,9 +871,15 @@ class SpecLintVisitor(ast.NodeVisitor):
                 )
 
         if is_prop and is_op:
-            self.add_error(node, f"Member '{node.name}' cannot be decorated with both @property and @operation.")
+            self.add_error(
+                node,
+                f"Member '{node.name}' cannot be decorated with both @property and @operation.",
+            )
         elif not is_prop and not is_op:
-            self.add_error(node, f"Member '{node.name}' must be decorated with either @property or @operation.")
+            self.add_error(
+                node,
+                f"Member '{node.name}' must be decorated with either @property or @operation.",
+            )
 
         if is_prop:
             self.current_class_properties += 1
@@ -742,7 +888,9 @@ class SpecLintVisitor(ast.NodeVisitor):
 
         args = node.args
         if not args.args or args.args[0].arg != "self":
-            self.add_error(node, f"Method '{node.name}' must have 'self' as its first parameter.")
+            self.add_error(
+                node, f"Method '{node.name}' must have 'self' as its first parameter."
+            )
 
         if is_prop:
             if len(args.args) != 1:
@@ -750,18 +898,27 @@ class SpecLintVisitor(ast.NodeVisitor):
         else:
             for arg in args.args[1:]:
                 if arg.annotation is None:
-                    self.add_error(arg, f"Parameter '{arg.arg}' in method '{node.name}' is missing a type annotation.")
+                    self.add_error(
+                        arg,
+                        f"Parameter '{arg.arg}' in method '{node.name}' is missing a type annotation.",
+                    )
                 else:
                     self._check_type_annotation(arg.annotation)
 
         if node.returns is None:
-            self.add_error(node, f"Method or property '{node.name}' is missing a return type annotation.")
+            self.add_error(
+                node,
+                f"Method or property '{node.name}' is missing a return type annotation.",
+            )
         else:
             self._check_type_annotation(node.returns)
 
         body = node.body
         if not body:
-            self.add_error(node, f"Body of '{node.name}' cannot be empty; must contain ellipsis (...).")
+            self.add_error(
+                node,
+                f"Body of '{node.name}' cannot be empty; must contain ellipsis (...).",
+            )
             return
 
         has_docstring = False
@@ -790,9 +947,19 @@ class SpecLintVisitor(ast.NodeVisitor):
         else:
             stmt = remaining[0]
             if isinstance(stmt, ast.Pass):
-                self.add_error(stmt, f"Use of 'pass' in '{node.name}' is prohibited. Use ellipsis (...) instead.")
-            elif not (isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant) and stmt.value.value is Ellipsis):
-                self.add_error(stmt, f"Body of '{node.name}' must end with ellipsis (...). Executable statements are forbidden.")
+                self.add_error(
+                    stmt,
+                    f"Use of 'pass' in '{node.name}' is prohibited. Use ellipsis (...) instead.",
+                )
+            elif not (
+                isinstance(stmt, ast.Expr)
+                and isinstance(stmt.value, ast.Constant)
+                and stmt.value.value is Ellipsis
+            ):
+                self.add_error(
+                    stmt,
+                    f"Body of '{node.name}' must end with ellipsis (...). Executable statements are forbidden.",
+                )
 
     def _validate_docstring(
         self,
@@ -814,10 +981,15 @@ class SpecLintVisitor(ast.NodeVisitor):
             self.add_error(node, "Docstring must start with 'PURPOSE:' section.")
 
         if is_orphan and "FRESH_REQUIREMENTS:" not in upper_text:
-            self.add_error(node, "'__orphan__' docstring must contain a 'FRESH_REQUIREMENTS:' section.")
+            self.add_error(
+                node,
+                "'__orphan__' docstring must contain a 'FRESH_REQUIREMENTS:' section.",
+            )
 
         if is_asm and "CONSTITUENTS:" not in upper_text:
-            self.add_error(node, "Assembly docstring must contain a 'CONSTITUENTS:' section.")
+            self.add_error(
+                node, "Assembly docstring must contain a 'CONSTITUENTS:' section."
+            )
 
         if is_asm:
             ALLOWED_SECTIONS = {
@@ -848,7 +1020,9 @@ class SpecLintVisitor(ast.NodeVisitor):
         for line in lines:
             if not line:
                 continue
-            if line in ("REQUIREMENTS:", "ASSUMPTIONS:") or line.startswith("INHERITED FROM"):
+            if line in ("REQUIREMENTS:", "ASSUMPTIONS:") or line.startswith(
+                "INHERITED FROM"
+            ):
                 self.add_error(
                     node,
                     f"Obsolete docstring section '{line}'. Use 'FRESH_REQUIREMENTS:' / 'INHERITED_REQUIREMENTS:' or 'FRESH_ASSUMPTIONS:' / 'INHERITED_ASSUMPTIONS:'.",
@@ -857,8 +1031,16 @@ class SpecLintVisitor(ast.NodeVisitor):
             if line in ALLOWED_SECTIONS:
                 current_section = line
                 if is_orphan:
-                    if line in ("GROUNDING_ARGUMENT:", "INHERITANCE:", "INHERITED_REQUIREMENTS:", "INHERITED_ASSUMPTIONS:"):
-                        self.add_error(node, f"Docstring section '{line}' is not permitted in '__orphan__'.")
+                    if line in (
+                        "GROUNDING_ARGUMENT:",
+                        "INHERITANCE:",
+                        "INHERITED_REQUIREMENTS:",
+                        "INHERITED_ASSUMPTIONS:",
+                    ):
+                        self.add_error(
+                            node,
+                            f"Docstring section '{line}' is not permitted in '__orphan__'.",
+                        )
                     continue
                 if line == "GROUNDING_ARGUMENT:":
                     is_impl = Path(self.filename).stem.endswith("_impl")
@@ -874,7 +1056,9 @@ class SpecLintVisitor(ast.NodeVisitor):
                                 f"'GROUNDING_ARGUMENT:' on classes is only permitted on @singleton_type, not '{self.current_class_kind}'.",
                             )
                     else:
-                        if (not is_operation and not is_property) or self.current_class_kind != "singleton_type":
+                        if (
+                            not is_operation and not is_property
+                        ) or self.current_class_kind != "singleton_type":
                             self.add_error(
                                 node,
                                 "'GROUNDING_ARGUMENT:' on members is only permitted on operations or properties of a @singleton_type class.",
@@ -896,8 +1080,13 @@ class SpecLintVisitor(ast.NodeVisitor):
         elif isinstance(node, ast.Attribute):
             if isinstance(node.value, ast.Name):
                 mod = node.value.id
-                if mod not in self.imported_modules and mod not in self.imported_symbols:
-                    self.add_error(node.value, f"Unknown module '{mod}'. (Not imported)")
+                if (
+                    mod not in self.imported_modules
+                    and mod not in self.imported_symbols
+                ):
+                    self.add_error(
+                        node.value, f"Unknown module '{mod}'. (Not imported)"
+                    )
         elif isinstance(node, ast.Subscript):
             self._check_type_annotation(node.value)
             if isinstance(node.slice, ast.Tuple):
@@ -913,7 +1102,9 @@ class SpecLintVisitor(ast.NodeVisitor):
             elif node.value is None:
                 pass
             else:
-                self.add_error(node, f"Invalid literal '{node.value}' in type annotation.")
+                self.add_error(
+                    node, f"Invalid literal '{node.value}' in type annotation."
+                )
         elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
             self._check_type_annotation(node.left)
             self._check_type_annotation(node.right)
@@ -922,12 +1113,19 @@ class SpecLintVisitor(ast.NodeVisitor):
                 self._check_type_annotation(elem)
 
     def _check_type_name(self, name: str, node: ast.AST):
-        if name in BUILTIN_TYPES or name in self.declared_symbols or name in self.imported_symbols:
+        if (
+            name in BUILTIN_TYPES
+            or name in self.declared_symbols
+            or name in self.imported_symbols
+        ):
             return
         known = list(BUILTIN_TYPES | self.declared_symbols | self.imported_symbols)
         matches = difflib.get_close_matches(name, known, n=1, cutoff=0.7)
         if matches:
-            self.add_error(node, f"Unknown type '{name}'. Did you mean '{matches[0]}'? (Not declared or imported)")
+            self.add_error(
+                node,
+                f"Unknown type '{name}'. Did you mean '{matches[0]}'? (Not declared or imported)",
+            )
         else:
             self.add_error(node, f"Unknown type '{name}'. (Not declared or imported)")
 
@@ -943,7 +1141,9 @@ def lint_file(filepath: str) -> List[Diagnostic]:
     try:
         tree = ast.parse(source, filename=filepath)
     except SyntaxError as e:
-        return [Diagnostic(filepath, e.lineno or 1, e.offset or 0, f"SyntaxError: {e.msg}")]
+        return [
+            Diagnostic(filepath, e.lineno or 1, e.offset or 0, f"SyntaxError: {e.msg}")
+        ]
 
     visitor = SpecLintVisitor(filepath)
     visitor.visit(tree)
@@ -1009,9 +1209,17 @@ class SpecRegistry:
                         func_id = (
                             dec.func.id
                             if isinstance(dec.func, ast.Name)
-                            else (dec.func.attr if isinstance(dec.func, ast.Attribute) else "")
+                            else (
+                                dec.func.attr
+                                if isinstance(dec.func, ast.Attribute)
+                                else ""
+                            )
                         )
-                        if func_id == "singleton_type" and dec.args and isinstance(dec.args[0], ast.Constant):
+                        if (
+                            func_id == "singleton_type"
+                            and dec.args
+                            and isinstance(dec.args[0], ast.Constant)
+                        ):
                             if dec.args[0].value == "system":
                                 tier = "system"
                             elif dec.args[0].value == "agent_session":
@@ -1019,7 +1227,9 @@ class SpecRegistry:
                         elif func_id == "dataclass":
                             has_dataclass = True
                             for kw in dec.keywords:
-                                if kw.arg == "init" and isinstance(kw.value, ast.Constant):
+                                if kw.arg == "init" and isinstance(
+                                    kw.value, ast.Constant
+                                ):
                                     dataclass_init = bool(kw.value.value)
                     elif isinstance(dec, (ast.Name, ast.Attribute)):
                         dec_name = dec.id if isinstance(dec, ast.Name) else dec.attr
@@ -1055,7 +1265,10 @@ class SpecRegistry:
                 for alias in node.names:
                     sym = alias.asname or alias.name
                     self.imports[mod_name][sym] = alias.name
-            elif isinstance(node, ast.FunctionDef) and node.name in ("__initialize__", "_initialize_"):
+            elif isinstance(node, ast.FunctionDef) and node.name in (
+                "__initialize__",
+                "_initialize_",
+            ):
                 self.module_exports[mod_name].add(node.name)
                 if mod_name.endswith("_asm"):
                     doc = ast.get_docstring(node) or ""
@@ -1074,7 +1287,9 @@ class SpecRegistry:
 
         return None
 
-    def resolve_base_class(self, current_module: str, base_expr: ast.AST) -> Optional[Tuple[str, ast.ClassDef, str]]:
+    def resolve_base_class(
+        self, current_module: str, base_expr: ast.AST
+    ) -> Optional[Tuple[str, ast.ClassDef, str]]:
         if isinstance(base_expr, ast.Attribute):
             mod_id = base_expr.value.id if isinstance(base_expr.value, ast.Name) else ""
             cls_name = base_expr.attr
@@ -1083,22 +1298,40 @@ class SpecRegistry:
         elif isinstance(base_expr, ast.Name):
             base_name = base_expr.id
             if (current_module, base_name) in self.module_classes:
-                return base_name, self.module_classes[(current_module, base_name)], current_module
+                return (
+                    base_name,
+                    self.module_classes[(current_module, base_name)],
+                    current_module,
+                )
             if base_name in self.imports.get(current_module, {}):
                 orig_mod = self.imports[current_module][base_name]
                 if (orig_mod, base_name) in self.module_classes:
-                    return base_name, self.module_classes[(orig_mod, base_name)], orig_mod
+                    return (
+                        base_name,
+                        self.module_classes[(orig_mod, base_name)],
+                        orig_mod,
+                    )
             mods = self.class_to_modules.get(base_name, set())
             non_impl = [m for m in mods if not m.endswith("_impl")]
             if non_impl:
                 target_mod = non_impl[0]
-                return base_name, self.module_classes[(target_mod, base_name)], target_mod
+                return (
+                    base_name,
+                    self.module_classes[(target_mod, base_name)],
+                    target_mod,
+                )
             elif mods:
                 target_mod = next(iter(mods))
-                return base_name, self.module_classes[(target_mod, base_name)], target_mod
+                return (
+                    base_name,
+                    self.module_classes[(target_mod, base_name)],
+                    target_mod,
+                )
         return None
 
-    def get_ancestors_mro(self, mod_name: str, class_name: str) -> List[Tuple[str, ast.ClassDef, str]]:
+    def get_ancestors_mro(
+        self, mod_name: str, class_name: str
+    ) -> List[Tuple[str, ast.ClassDef, str]]:
         if (mod_name, class_name) not in self.module_classes:
             return []
         cls_node = self.module_classes[(mod_name, class_name)]
@@ -1196,7 +1429,9 @@ class ClosedWorldLinker:
                 if self.registry.class_tiers.get(cls_name) == "unknown":
                     for b in bases:
                         if self.registry.class_tiers.get(b) in ("system", "session"):
-                            self.registry.class_tiers[cls_name] = self.registry.class_tiers[b]
+                            self.registry.class_tiers[cls_name] = (
+                                self.registry.class_tiers[b]
+                            )
                             changed = True
                             break
         for cls_name in self.registry.class_tiers:
@@ -1250,7 +1485,10 @@ class ClosedWorldLinker:
 
                     for item in node.body:
                         if isinstance(item, ast.FunctionDef):
-                            if is_override_member(item) and item.name not in ancestor_member_names:
+                            if (
+                                is_override_member(item)
+                                and item.name not in ancestor_member_names
+                            ):
                                 m_doc = ast.get_docstring(item) or ""
                                 m_contract = DocstringContract(m_doc)
                                 if (
@@ -1349,9 +1587,13 @@ class ClosedWorldLinker:
             self._verify_not_session_service(path, func.returns, cls_name, func.name)
         for arg in func.args.args[1:]:
             if arg.annotation:
-                self._verify_not_session_service(path, arg.annotation, cls_name, func.name)
+                self._verify_not_session_service(
+                    path, arg.annotation, cls_name, func.name
+                )
 
-    def _verify_not_session_service(self, path: str, type_node: ast.AST, cls_name: str, member_name: str):
+    def _verify_not_session_service(
+        self, path: str, type_node: ast.AST, cls_name: str, member_name: str
+    ):
         names = []
         if isinstance(type_node, ast.Name):
             names.append((type_node.id, type_node.lineno, type_node.col_offset))
@@ -1362,7 +1604,9 @@ class ClosedWorldLinker:
                 for el in type_node.slice.elts:
                     self._verify_not_session_service(path, el, cls_name, member_name)
             else:
-                self._verify_not_session_service(path, type_node.slice, cls_name, member_name)
+                self._verify_not_session_service(
+                    path, type_node.slice, cls_name, member_name
+                )
 
         for name, line, col in names:
             if self.registry.class_tiers.get(name) == "session":
@@ -1374,6 +1618,8 @@ class ClosedWorldLinker:
                         f"Lifecycle tier violation: System service '{cls_name}.{member_name}' references short-lived session service '{name}'.",
                     )
                 )
+
+
 def set_class_docstring(node: ast.ClassDef, doc: str):
     if not doc:
         if (
@@ -1410,13 +1656,17 @@ def set_function_docstring(node: ast.FunctionDef, doc: str):
     if not body_without_doc:
         body_without_doc = [ast.Expr(value=ast.Constant(value=Ellipsis))]
     elif not any(
-        isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant) and s.value.value is Ellipsis
+        isinstance(s, ast.Expr)
+        and isinstance(s.value, ast.Constant)
+        and s.value.value is Ellipsis
         for s in body_without_doc
     ):
         body_without_doc.append(ast.Expr(value=ast.Constant(value=Ellipsis)))
 
     if doc:
-        node.body = [cast(ast.stmt, ast.Expr(value=ast.Constant(value=doc)))] + body_without_doc
+        node.body = [
+            cast(ast.stmt, ast.Expr(value=ast.Constant(value=doc)))
+        ] + body_without_doc
     else:
         node.body = body_without_doc
 
@@ -1429,7 +1679,7 @@ class TypeQualifier(ast.NodeTransformer):
         self.current_mod = current_mod
         self.anc_mod = anc_mod
         self.local_symbols = set()
-        for (m, cls_name) in registry.module_classes.keys():
+        for m, cls_name in registry.module_classes.keys():
             if m == current_mod:
                 self.local_symbols.add(cls_name)
         for sym in registry.imports.get(current_mod, {}).keys():
@@ -1440,7 +1690,12 @@ class TypeQualifier(ast.NodeTransformer):
 
     def visit_Name(self, node: ast.Name) -> ast.AST:
         sym = node.id
-        if sym in COMMON_TYPING_SYMBOLS or sym in COMMON_BUILTINS or sym in FRAMEWORK_SYMBOLS or sym == "property":
+        if (
+            sym in COMMON_TYPING_SYMBOLS
+            or sym in COMMON_BUILTINS
+            or sym in FRAMEWORK_SYMBOLS
+            or sym == "property"
+        ):
             return node
         if sym in self.local_symbols:
             return node
@@ -1457,7 +1712,11 @@ class TypeQualifier(ast.NodeTransformer):
 
         if sym in self.registry.imports.get(self.anc_mod, {}):
             orig_mod = self.registry.imports[self.anc_mod][sym]
-            if orig_mod and orig_mod not in ("typing", "builtins") and orig_mod != self.current_mod:
+            if (
+                orig_mod
+                and orig_mod not in ("typing", "builtins")
+                and orig_mod != self.current_mod
+            ):
                 return ast.copy_location(
                     ast.Attribute(
                         value=ast.Name(id=orig_mod, ctx=ast.Load()),
@@ -1471,7 +1730,11 @@ class TypeQualifier(ast.NodeTransformer):
             mods = self.registry.class_to_modules[sym]
             non_impl = [m for m in mods if not m.endswith("_impl")]
             orig_mod = non_impl[0] if non_impl else next(iter(mods))
-            if orig_mod and orig_mod not in ("typing", "builtins") and orig_mod != self.current_mod:
+            if (
+                orig_mod
+                and orig_mod not in ("typing", "builtins")
+                and orig_mod != self.current_mod
+            ):
                 return ast.copy_location(
                     ast.Attribute(
                         value=ast.Name(id=orig_mod, ctx=ast.Load()),
@@ -1522,10 +1785,14 @@ def process_class_inheritance(
                 m_doc = ast.get_docstring(item) or ""
                 m_contract = DocstringContract(m_doc)
                 for a in m_contract.fresh_assumptions:
-                    if a not in ancestor_fresh_assumptions.setdefault(m_name, {}).setdefault(anc_name, []):
+                    if a not in ancestor_fresh_assumptions.setdefault(
+                        m_name, {}
+                    ).setdefault(anc_name, []):
                         ancestor_fresh_assumptions[m_name][anc_name].append(a)
                 for r in m_contract.fresh_requirements:
-                    if r not in ancestor_fresh_requirements.setdefault(m_name, {}).setdefault(anc_name, []):
+                    if r not in ancestor_fresh_requirements.setdefault(
+                        m_name, {}
+                    ).setdefault(anc_name, []):
                         ancestor_fresh_requirements[m_name][anc_name].append(r)
 
     new_body: list[ast.stmt] = []
@@ -1566,9 +1833,13 @@ def process_class_inheritance(
         if m_name in ancestor_members:
             item.decorator_list = adjust_override_decorators(item)
             m_contract.wipe_inherited()
-            for anc_name, ass_list in ancestor_fresh_assumptions.get(m_name, {}).items():
+            for anc_name, ass_list in ancestor_fresh_assumptions.get(
+                m_name, {}
+            ).items():
                 m_contract.inherited_assumptions[anc_name] = list(ass_list)
-            for anc_name, req_list in ancestor_fresh_requirements.get(m_name, {}).items():
+            for anc_name, req_list in ancestor_fresh_requirements.get(
+                m_name, {}
+            ).items():
                 m_contract.inherited_requirements[anc_name] = list(req_list)
             set_function_docstring(item, m_contract.to_docstring())
             new_body.append(item)
@@ -1603,9 +1874,13 @@ def process_class_inheritance(
             stub_contract.fresh_requirements = []
             stub_contract.grounding_argument = ""
             stub_contract.wipe_inherited()
-            for anc_name, ass_list in ancestor_fresh_assumptions.get(m_name, {}).items():
+            for anc_name, ass_list in ancestor_fresh_assumptions.get(
+                m_name, {}
+            ).items():
                 stub_contract.inherited_assumptions[anc_name] = list(ass_list)
-            for anc_name, req_list in ancestor_fresh_requirements.get(m_name, {}).items():
+            for anc_name, req_list in ancestor_fresh_requirements.get(
+                m_name, {}
+            ).items():
                 stub_contract.inherited_requirements[anc_name] = list(req_list)
             set_function_docstring(stub, stub_contract.to_docstring())
             stub.decorator_list = adjust_override_decorators(stub)
@@ -1622,21 +1897,30 @@ def process_class_inheritance(
     has_methods = any(isinstance(item, ast.FunctionDef) for item in new_cls.body)
     if not has_methods:
         has_ellipsis = any(
-            isinstance(item, ast.Expr) and isinstance(item.value, ast.Constant) and item.value.value is Ellipsis
+            isinstance(item, ast.Expr)
+            and isinstance(item.value, ast.Constant)
+            and item.value.value is Ellipsis
             for item in new_cls.body
         )
         if not has_ellipsis:
             new_cls.body.append(ast.Expr(value=ast.Constant(value=Ellipsis)))
     else:
         new_cls.body = [
-            item for item in new_cls.body
-            if not (isinstance(item, ast.Expr) and isinstance(item.value, ast.Constant) and item.value.value is Ellipsis)
+            item
+            for item in new_cls.body
+            if not (
+                isinstance(item, ast.Expr)
+                and isinstance(item.value, ast.Constant)
+                and item.value.value is Ellipsis
+            )
         ]
 
     return new_cls, diagnostics
 
 
-def compile_module_inheritance(registry: SpecRegistry, mod_name: str) -> Tuple[str, List[Diagnostic]]:
+def compile_module_inheritance(
+    registry: SpecRegistry, mod_name: str
+) -> Tuple[str, List[Diagnostic]]:
     orig_tree = registry.modules[mod_name]
     if mod_name.endswith(("_ext", "_asm")):
         return registry.module_sources.get(mod_name, ast.unparse(orig_tree) + "\n"), []
@@ -1647,7 +1931,9 @@ def compile_module_inheritance(registry: SpecRegistry, mod_name: str) -> Tuple[s
     new_body = []
     for item in new_tree.body:
         if isinstance(item, ast.ClassDef):
-            expanded_cls, cls_diags = process_class_inheritance(registry, item, mod_name)
+            expanded_cls, cls_diags = process_class_inheritance(
+                registry, item, mod_name
+            )
             diagnostics.extend(cls_diags)
             new_body.append(expanded_cls)
         else:
@@ -1659,7 +1945,11 @@ def compile_module_inheritance(registry: SpecRegistry, mod_name: str) -> Tuple[s
     for node in ast.walk(new_tree):
         if isinstance(node, ast.Name) and node.id in FRAMEWORK_SYMBOLS:
             used_framework.add(node.id)
-        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in FRAMEWORK_SYMBOLS:
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in FRAMEWORK_SYMBOLS
+        ):
             used_framework.add(node.func.id)
 
     found_framework_import = False
@@ -1705,7 +1995,11 @@ def compile_module_inheritance(registry: SpecRegistry, mod_name: str) -> Tuple[s
     for node in ast.walk(new_tree):
         if isinstance(node, ast.Name) and node.id in DATACLASS_SYMBOLS:
             used_dataclasses.add(node.id)
-        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in DATACLASS_SYMBOLS:
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in DATACLASS_SYMBOLS
+        ):
             used_dataclasses.add(node.func.id)
 
     found_dataclasses = False
@@ -1719,7 +2013,10 @@ def compile_module_inheritance(registry: SpecRegistry, mod_name: str) -> Tuple[s
     if not found_dataclasses and used_dataclasses:
         insert_idx = 0
         for i, stmt in enumerate(new_tree.body):
-            if isinstance(stmt, ast.ImportFrom) and stmt.module in ("framework", "typing"):
+            if isinstance(stmt, ast.ImportFrom) and stmt.module in (
+                "framework",
+                "typing",
+            ):
                 insert_idx = i + 1
         new_tree.body.insert(
             insert_idx,
@@ -1747,7 +2044,11 @@ def compile_module_inheritance(registry: SpecRegistry, mod_name: str) -> Tuple[s
         if mod != mod_name:
             insert_idx = 0
             for i, stmt in enumerate(new_tree.body):
-                if isinstance(stmt, ast.ImportFrom) and stmt.module in ("typing", "framework", "dataclasses"):
+                if isinstance(stmt, ast.ImportFrom) and stmt.module in (
+                    "typing",
+                    "framework",
+                    "dataclasses",
+                ):
                     insert_idx = i + 1
                 elif isinstance(stmt, ast.Import):
                     insert_idx = i + 1
@@ -1764,7 +2065,12 @@ def find_repo_root() -> Path:
         if (p / "update_with_ai" / "specs" / "grounding").is_dir():
             return p
     current = Path(__file__).resolve().parent
-    for p in [current, current.parent, current.parent.parent, current.parent.parent.parent]:
+    for p in [
+        current,
+        current.parent,
+        current.parent.parent,
+        current.parent.parent.parent,
+    ]:
         if (p / "update_with_ai" / "specs" / "grounding").is_dir():
             return p
     cwd = Path.cwd()
@@ -1842,7 +2148,10 @@ def run_pipeline(
         return 1 if total_errors > 0 else 0
 
     if total_errors > 0 and mode != "sync":
-        print(f"\n{total_errors} error(s) found during specification linking.", file=sys.stderr)
+        print(
+            f"\n{total_errors} error(s) found during specification linking.",
+            file=sys.stderr,
+        )
         return 1
 
     # 3. Inheritance & Drift Pass
@@ -1892,7 +2201,10 @@ def run_pipeline(
                 f.write(compiled_code)
 
     if (mode == "check" and (total_errors > 0 or drift_count > 0)) or inh_errors > 0:
-        print(f"\nFailed: {total_errors} diagnostic error(s), {drift_count} file(s) out of sync.", file=sys.stderr)
+        print(
+            f"\nFailed: {total_errors} diagnostic error(s), {drift_count} file(s) out of sync.",
+            file=sys.stderr,
+        )
         return 1
 
     return 0

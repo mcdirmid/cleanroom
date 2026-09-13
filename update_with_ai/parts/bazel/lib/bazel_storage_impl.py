@@ -4,7 +4,13 @@ from update_with_ai.parts.agent.lib import agent_storage
 from . import bazel_target
 from update_with_ai.parts.dag.lib import dag_storage
 from . import file_paths
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
+
 
 class AgentStorage(agent_storage.AgentStorage, Singleton):
     tier = "system"
@@ -58,7 +64,9 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
 
         return nodes
 
-    def _save_package_data(self, path: Path, node_records: Mapping[str, Mapping[str, Any]]) -> bool:
+    def _save_package_data(
+        self, path: Path, node_records: Mapping[str, Mapping[str, Any]]
+    ) -> bool:
         # Requirement: The agent storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files using proto package store from update with ai proto ext.
         lines: List[str] = []
         for node_id in sorted(node_records.keys()):
@@ -85,7 +93,9 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         except OSError:
             return False
 
-    def get_node_definition(self, node: dag_storage.Node) -> Optional[agent_storage.NodeDefinition]:
+    def get_node_definition(
+        self, node: dag_storage.Node
+    ) -> Optional[agent_storage.NodeDefinition]:
         # Requirement: [AgentStorage] The agent storage provides task prompts and node definitions for declared nodes.
         # Requirement: The agent storage maintains node definitions and task prompts mapped to nodes in dag storage.
         return self._definitions.get(node)
@@ -141,7 +151,9 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
             if not dep.is_silent:
                 path = self._get_store_path(dep.node)
                 data = self._load_package_data(path)
-                record = data.setdefault(dep.node.address, {"messages": [], "reverse_dependencies": []})
+                record = data.setdefault(
+                    dep.node.address, {"messages": [], "reverse_dependencies": []}
+                )
                 rev_deps = set(record.get("reverse_dependencies", []))
                 rev_deps.add(node.address)
                 record["reverse_dependencies"] = sorted(rev_deps)
@@ -161,7 +173,9 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         # Requirement: [DagStorage] Adding a message to a node records the message for that node.
         path = self._get_store_path(to)
         data = self._load_package_data(path)
-        record = data.setdefault(to.address, {"messages": [], "reverse_dependencies": []})
+        record = data.setdefault(
+            to.address, {"messages": [], "reverse_dependencies": []}
+        )
         msg_list: List[Dict[str, str]] = record.setdefault("messages", [])
         kind = "feedback" if isinstance(message, dag_storage.Feedback) else "change"
         content = message.content if hasattr(message, "content") else ""
@@ -177,8 +191,10 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
             data[node.address]["messages"] = []
             self._save_package_data(path, data)
 
+
 # Compatibility alias
 DagStorage = AgentStorage
+
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry

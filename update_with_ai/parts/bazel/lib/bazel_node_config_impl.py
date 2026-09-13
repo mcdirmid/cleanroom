@@ -12,7 +12,14 @@ from . import file_paths
 from update_with_ai.parts.agent.lib import agent_config
 from update_with_ai.parts.agent.lib import agent_node_config
 from update_with_ai.parts.sandbox.lib import tool_provider
-from support.lib.lifecycle import LifecycleRegistry, LifecycleResolutionError, Singleton, get_default_registry, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    LifecycleResolutionError,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
+
 
 class _CommandVerificationCheck(agent_node_config.VerificationCheck):
     def __init__(self, command: str, cwd: Optional[str] = None) -> None:
@@ -30,7 +37,7 @@ class _CommandVerificationCheck(agent_node_config.VerificationCheck):
                 cwd=self._cwd,
                 env=env,
             )
-            passed = (res.returncode == 0)
+            passed = res.returncode == 0
             output = res.stdout
             if res.stderr:
                 output = f"{output}\n{res.stderr}".strip() if output else res.stderr
@@ -38,13 +45,16 @@ class _CommandVerificationCheck(agent_node_config.VerificationCheck):
         except (subprocess.SubprocessError, OSError) as e:
             return False, str(e)
 
+
 class NodeConfig(agent_node_config.NodeConfig, Singleton):
     tier = "agent_session"
 
     def __init__(self) -> None:
         self._read_only_files: Set[agent_file_alias.BoundFile] = set()
         self._read_write_files: Set[agent_file_alias.BoundFile] = set()
-        self._templates: Set[Tuple[agent_file_alias.BoundFile, agent_file_alias.FileContent]] = set()
+        self._templates: Set[
+            Tuple[agent_file_alias.BoundFile, agent_file_alias.FileContent]
+        ] = set()
         self._template_parameters: Dict[str, Any] = {}
         self._allows_step_mode: bool = True
         self._is_step_mode: bool = False
@@ -65,7 +75,11 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
         try:
             storage = get_singleton(dag_storage.DagStorage)
             msgs = storage.get_messages(node)
-            self._feedback = tuple(m.content for m in msgs if isinstance(m, dag_storage.Feedback) and m.content)
+            self._feedback = tuple(
+                m.content
+                for m in msgs
+                if isinstance(m, dag_storage.Feedback) and m.content
+            )
         except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
             self._feedback = ()
 
@@ -89,7 +103,9 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
             norm_rel = os.path.normpath(os.path.join(pkg_path, src))
             ws_path = _make_host_path(agent_file_alias.WorkspacePath, norm_rel)
             short_name = os.path.basename(norm_rel)
-            rw = agent_file_alias.ReadWriteFile(short_name=short_name, workspace_path=ws_path, owning_node=node)
+            rw = agent_file_alias.ReadWriteFile(
+                short_name=short_name, workspace_path=ws_path, owning_node=node
+            )
             self._read_write_files.add(rw)
 
         # Silent sources -> read_write_files
@@ -98,7 +114,9 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
             norm_rel = os.path.normpath(os.path.join(pkg_path, s_src))
             ws_path = _make_host_path(agent_file_alias.WorkspacePath, norm_rel)
             short_name = os.path.basename(norm_rel)
-            rw = agent_file_alias.ReadWriteFile(short_name=short_name, workspace_path=ws_path, owning_node=node)
+            rw = agent_file_alias.ReadWriteFile(
+                short_name=short_name, workspace_path=ws_path, owning_node=node
+            )
             self._read_write_files.add(rw)
 
         # 2. Templates
@@ -107,14 +125,21 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
             content_str: Optional[str] = None
             cand_paths = [
                 template_rel,
-                os.path.join(os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""), template_rel),
+                os.path.join(
+                    os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""), template_rel
+                ),
             ]
-            for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):
+            for base in (
+                os.environ.get("RUNFILES_DIR", ""),
+                os.environ.get("BAZEL_RUNFILES", ""),
+            ):
                 if base:
-                    cand_paths.extend([
-                        os.path.join(base, template_rel),
-                        os.path.join(base, "_main", template_rel),
-                    ])
+                    cand_paths.extend(
+                        [
+                            os.path.join(base, template_rel),
+                            os.path.join(base, "_main", template_rel),
+                        ]
+                    )
             for cp in cand_paths:
                 if cp and os.path.exists(cp) and os.path.isfile(cp):
                     try:
@@ -148,26 +173,49 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
         except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
             pass
         model_step_mode = m_cfg.is_step_mode if m_cfg is not None else False
-        allows_step = data.get("allows_step_mode", data.get("step_mode", data.get("step_sections", True)))
+        allows_step = data.get(
+            "allows_step_mode", data.get("step_mode", data.get("step_sections", True))
+        )
         self._allows_step_mode = bool(allows_step)
-        self._is_step_mode = model_step_mode and self._allows_step_mode and not bool(self._feedback)
+        self._is_step_mode = (
+            model_step_mode and self._allows_step_mode and not bool(self._feedback)
+        )
 
         if guide_target and self._is_step_mode:
-            guide_filename = guide_target.split(":")[-1] if ":" in guide_target else os.path.basename(guide_target)
+            guide_filename = (
+                guide_target.split(":")[-1]
+                if ":" in guide_target
+                else os.path.basename(guide_target)
+            )
             if not guide_filename.endswith(".md"):
                 guide_filename += ".md"
             self._guide_file = agent_file_alias.UnboundFile(short_name=guide_filename)
 
             guide_cand_paths = [
-                os.path.join(os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""), "update_python_with_ai/guides", guide_filename),
+                os.path.join(
+                    os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""),
+                    "update_python_with_ai/guides",
+                    guide_filename,
+                ),
                 os.path.join("update_python_with_ai/guides", guide_filename),
             ]
-            for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):
+            for base in (
+                os.environ.get("RUNFILES_DIR", ""),
+                os.environ.get("BAZEL_RUNFILES", ""),
+            ):
                 if base:
-                    guide_cand_paths.extend([
-                        os.path.join(base, "update_python_with_ai/guides", guide_filename),
-                        os.path.join(base, "_main/update_python_with_ai/guides", guide_filename),
-                    ])
+                    guide_cand_paths.extend(
+                        [
+                            os.path.join(
+                                base, "update_python_with_ai/guides", guide_filename
+                            ),
+                            os.path.join(
+                                base,
+                                "_main/update_python_with_ai/guides",
+                                guide_filename,
+                            ),
+                        ]
+                    )
             for gp in guide_cand_paths:
                 if gp and os.path.exists(gp) and os.path.isfile(gp):
                     try:
@@ -230,7 +278,12 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
                     guide_fn += ".md"
                 dep_srcs.append(guide_fn)
             elif "specs" in dep_label:
-                target_base = dep_label.split(":")[-1].replace("_low", "").replace("_high", "").replace("_lib", "")
+                target_base = (
+                    dep_label.split(":")[-1]
+                    .replace("_low", "")
+                    .replace("_high", "")
+                    .replace("_lib", "")
+                )
                 if dep_label.endswith("_low") or dep_label.endswith("_grounding"):
                     dep_srcs.append(f"grounding/{target_base}.pyi")
                 elif dep_label.endswith("_high"):
@@ -243,7 +296,9 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
                 norm_rel = os.path.normpath(os.path.join(dep_pkg, ds))
                 ws_path = _make_host_path(agent_file_alias.WorkspacePath, norm_rel)
                 short_name = os.path.basename(norm_rel)
-                ro = agent_file_alias.ReadOnlyFile(short_name=short_name, workspace_path=ws_path, owning_node=dep_node)
+                ro = agent_file_alias.ReadOnlyFile(
+                    short_name=short_name, workspace_path=ws_path, owning_node=dep_node
+                )
                 self._read_only_files.add(ro)
                 if is_blame:
                     self._blame_targets.add(ro)
@@ -252,7 +307,9 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
         verify_cmd = data.get("verify")
         if verify_cmd and str(verify_cmd).strip():
             ws_dir = os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd()
-            self._verification_checks.append(_CommandVerificationCheck(command=str(verify_cmd).strip(), cwd=ws_dir))
+            self._verification_checks.append(
+                _CommandVerificationCheck(command=str(verify_cmd).strip(), cwd=ws_dir)
+            )
 
         v_msg = data.get("verification_success_message")
         if v_msg and str(v_msg).strip():
@@ -279,7 +336,9 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
         return self._is_step_mode
 
     @property
-    def templates(self) -> Set[Tuple[agent_file_alias.BoundFile, agent_file_alias.FileContent]]:
+    def templates(
+        self,
+    ) -> Set[Tuple[agent_file_alias.BoundFile, agent_file_alias.FileContent]]:
         # Requirement: The node config exposes templates mapping read-write files to initial file content.
         return self._templates
 
@@ -317,6 +376,7 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
     def feedback(self) -> Sequence[str]:
         # Requirement: Declared feedback messages retrieved from graph storage for the target node as the session feedback.
         return self._feedback
+
 
 def _make_host_path(cls, path: str):
     if issubclass(cls, str):
@@ -368,7 +428,11 @@ def _parse_guide_markdown(content: str) -> agent_node_config.Guide:
             )
 
     summary = "\n".join(summary_lines).strip()
-    vf_text = "\n".join(verification_failure_lines).strip() if verification_failure_lines is not None else None
+    vf_text = (
+        "\n".join(verification_failure_lines).strip()
+        if verification_failure_lines is not None
+        else None
+    )
     return agent_node_config.Guide(
         summary=summary,
         sections=sections,
@@ -385,7 +449,9 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
         self._masking_patterns: List[Tuple[re.Pattern[str], str]] = []
         env_root = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
         root_path = env_root if env_root and os.path.isabs(env_root) else os.getcwd()
-        self._workspace_root = _make_host_path(file_paths.WorkspaceRoot, os.path.normpath(root_path))
+        self._workspace_root = _make_host_path(
+            file_paths.WorkspaceRoot, os.path.normpath(root_path)
+        )
 
     def initialize(self) -> None:
         try:
@@ -401,12 +467,16 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
         ):
             self._aliases[f.short_name] = f
             norm_ws = os.path.normpath(f.workspace_path.path)
-            abs_path = os.path.normpath(os.path.join(self._workspace_root.path, norm_ws))
+            abs_path = os.path.normpath(
+                os.path.join(self._workspace_root.path, norm_ws)
+            )
             self._paths[abs_path] = f.short_name
             self._paths[norm_ws] = f.short_name
             escaped = re.escape(norm_ws)
             pat = re.compile(
-                r"/?(?:[^\s:;\"\'`()<>{}\[\]/]+/)*" + escaped + r"(?=[:\s;\"\'`()<>{}\[\]]|$)"
+                r"/?(?:[^\s:;\"\'`()<>{}\[\]/]+/)*"
+                + escaped
+                + r"(?=[:\s;\"\'`()<>{}\[\]]|$)"
             )
             patterns.append((pat, f.short_name))
 
@@ -441,6 +511,7 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
     def workspace_root(self) -> file_paths.WorkspaceRoot:
         return self._workspace_root
 
+
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
@@ -450,6 +521,10 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     )
     reg.register_singleton(
         AliasManager,
-        keys=[AliasManager, agent_file_alias.AliasManager, tool_provider.ParameterConverter],
+        keys=[
+            AliasManager,
+            agent_file_alias.AliasManager,
+            tool_provider.ParameterConverter,
+        ],
         tier="agent_session",
     )
