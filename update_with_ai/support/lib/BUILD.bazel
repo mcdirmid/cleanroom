@@ -6,6 +6,7 @@ load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 exports_files([
     "agent_config.bzl",
     "update_with_ai.bzl",
+    "guides.bzl",
     "hls_lint.py",
     "build_lint_common.py",
     "lib_lint.py",

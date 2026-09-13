@@ -1,10 +1,13 @@
 # update_python_with_ai/support/lib/BUILD.bazel
 
 load("//bin:pyright_library.bzl", "pyright_library")
+load("//update_with_ai/support/lib:update_with_ai.bzl", "update_with_ai")
 
 exports_files([
     "framework.py",
     "lifecycle.py",
+    "lifecycle.pyi",
+    "update_python_with_ai.bzl",
 ], visibility = ["//visibility:public"])
 
 pyright_library(
@@ -20,5 +23,12 @@ pyright_library(
     srcs = ["lifecycle.py"],
     pyright_deps = [],
     imports = ["../.."],
+    visibility = ["//visibility:public"],
+)
+
+update_with_ai(
+    name = "lifecycle_spec",
+    src = "lifecycle.pyi",
+    prompt = "Maintain the Cleanroom lifecycle specification and usage guide.",
     visibility = ["//visibility:public"],
 )

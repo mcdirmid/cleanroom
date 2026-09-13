@@ -475,7 +475,7 @@ def update_python_with_ai(name, module_deps, template_parameters = None, visibil
     # or _qa node.
     _lib_deps = []
     if name.endswith("_impl") or name.endswith("_asm"):
-        _lib_deps = ["//update_python_with_ai:lifecycle"]
+        _lib_deps = ["//update_python_with_ai/support/lib:lifecycle_spec"]
 
     if not is_ext:
         if name.endswith("_impl"):

@@ -1,3 +1,1 @@
 # update_with_ai/BUILD.bazel
-
-exports_files(["guides.bzl"])

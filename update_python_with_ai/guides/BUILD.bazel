@@ -1,4 +1,4 @@
-load("//update_with_ai:guides.bzl", "update_guide_with_ai")
+load("//update_with_ai/support/lib:guides.bzl", "update_guide_with_ai")
 
 update_guide_with_ai(
     name = "high_level_spec",

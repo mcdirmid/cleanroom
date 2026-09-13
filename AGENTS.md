@@ -7,7 +7,7 @@
   - `update_python_with_ai/`
 
 ## Guide Editing & Meta-Rules
-- **Editing Guides**: ALWAYS read and maintain in context `update_python_with_ai/guides/meta_guide.md` before creating, updating, or editing any guide.
+- **Editing Guides**: ALWAYS read and maintain in context `update_with_ai/guides/meta_guide.md` before creating, updating, or editing any guide.
 
 ## Required Guides for Alignments & Tasks
 Always read and maintain in context the relevant guide from `update_python_with_ai/guides/` when modifying specs, implementations, tests, or doing alignments:

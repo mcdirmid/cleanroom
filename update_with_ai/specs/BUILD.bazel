@@ -1,6 +1,6 @@
 # update_with_ai/specs/BUILD.bazel
 
-load("//update_python_with_ai:update_python_with_ai.bzl", "update_python_with_ai")
+load("//update_python_with_ai/support/lib:update_python_with_ai.bzl", "update_python_with_ai")
 load("//update_with_ai/support/lib:update_with_ai.bzl", "update_with_ai")
 
 filegroup(

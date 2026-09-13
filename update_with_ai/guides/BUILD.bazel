@@ -1,0 +1,14 @@
+# update_with_ai/guides/BUILD.bazel
+
+load("//update_with_ai/support/lib:guides.bzl", "update_guide_with_ai")
+
+exports_files([
+    "meta_guide.md",
+], visibility = ["//visibility:public"])
+
+update_guide_with_ai(
+    name = "meta_guide",
+    src = "meta_guide.md",
+    display_name = "guide writing meta-guide",
+    deps = [],
+)
