@@ -165,7 +165,7 @@ FRESH_REQUIREMENTS:
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
+- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
 - Receives actual parameter bindings, queries line number requirement from ReadManager in the same session lifecycle tier, resolves host paths using imported file_alias.AliasManager workspace root in the same session lifecycle tier, reads file content via the filesystem, filters > META: paragraphs for markdown files, formats read-only markdown content using imported template_format.TemplateFormatter and node_config.NodeConfig.template_parameters in the same session lifecycle tier, checks line number formatting rules for read-only, read-write, and source code files, specifies follow-up read tool calls with corrected line numbers on failure, attaches the file's short name as a suppression key on responses for read-write files while omitting it for read-only files, and masks host paths in read-only output.
@@ -305,7 +305,7 @@ FRESH_REQUIREMENTS:
 INHERITED_REQUIREMENTS:
 - [SearchTool] Executing the search tool searches pattern matches across the session's read-only and read-write files.
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
+- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
 - Receives actual parameter bindings, queries readable file sets from ReadManager, searches file contents via filesystem, and sanitizes matched paths using imported file_alias.AliasManager in the same session lifecycle tier.

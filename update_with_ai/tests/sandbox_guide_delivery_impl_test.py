@@ -102,6 +102,17 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             self.assertIsNone(plain.verification_failure)
             self.assertEqual(len(plain.sections), 0)
 
+            # When Verification failure is the trailing section heading
+            trailing_vf_content = (
+                "Summary only.\n\n"
+                "## Step 1\nFirst step.\n\n"
+                "## Verification failure\nTrailing failure instructions."
+            )
+            parsed_trailing = delivery.parse_guide(trailing_vf_content)
+            # Requirement: Guide parsing extracts the summary from content preceding the first section heading, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Lint checks` or `Verification failure`.
+            self.assertEqual(parsed_trailing.verification_failure, "Trailing failure instructions.")
+            self.assertEqual(len(parsed_trailing.sections), 1)
+
     def test_advance_step_lifecycle(self) -> None:
         """CUJ: Advancing through steps with verification passing and failing."""
         with enter_phase("agent_session", registry=self.registry) as scope:

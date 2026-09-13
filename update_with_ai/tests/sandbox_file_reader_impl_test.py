@@ -389,6 +389,8 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         """CUJ: Searching regex across files and handling invalid regex."""
         with enter_phase("agent_session", registry=self.registry) as scope:
             search_tool = scope.get_singleton(SearchTool)
+            # Requirement: [SearchTool] The search tool is named search_files.
+            self.assertEqual(search_tool.name, "search_files")
             self.assertIsInstance(search_tool.description, str)
             self.assertGreater(len(search_tool.parameters), 0)
             conv = search_tool.regex_pattern_parameter.parameter_converter

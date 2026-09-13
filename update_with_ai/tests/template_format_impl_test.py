@@ -29,7 +29,18 @@ class TemplateFormatImplTest(unittest.TestCase):
 
             result = formatter.format_template(template, params)
             expected = "# AuthService\nPackage: auth_core\nOwner: alice\nUnknown: <unbound_param>"
+            # Requirement: Replaces parameter placeholder tokens matching dot-separated keys in the parameters with string representations of their resolved values.
             self.assertEqual(result, expected)
+
+            # Object attribute lookup
+            class Lead:
+                def __init__(self, username: str) -> None:
+                    self.username = username
+
+            obj_params = {"team": Lead("charlie")}
+            obj_result = formatter.format_template("Lead: <team.username>", obj_params)
+            # Requirement: Replaces parameter placeholder tokens matching dot-separated keys in the parameters with string representations of their resolved values.
+            self.assertEqual(obj_result, "Lead: charlie")
 
     def test_line_suffix_conditional(self) -> None:
         """CUJ: Single-line conditional inclusion and exclusion."""
@@ -163,6 +174,78 @@ class TemplateFormatImplTest(unittest.TestCase):
             expected = "# Header\n\n- `item1`\n- `item2`\n\n## Footer"
             self.assertEqual(result, expected)
 
+    def test_nested_and_unbound_loops(self) -> None:
+        """CUJ: Nested loops and unbound loop variable handling."""
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            formatter = scope.get_singleton(TemplateFormatter)
+
+            # Unbound line-suffix loop: retains line and placeholder
+            line_tmpl = "- <item> <!-- for: item in missing_items -->"
+            # Requirement: Identifies line-suffix loop comments matching collection iteration markers, repeating the preceding line content for each item in the resolved sequence with the item variable bound in the parameter context.
+            # Requirement: Retains parameter placeholder tokens whose keys do not resolve to values in the parameters without modification.
+            res_line = formatter.format_template(line_tmpl, {})
+            self.assertEqual(res_line, "- <item>")
+
+            # Nested block loop
+            nested_tmpl = (
+                "<!-- for: group in groups -->\n"
+                "Group: <group.name>\n"
+                "<!-- for: member in group.members -->\n"
+                "- <member>\n"
+                "<!-- endfor -->\n"
+                "<!-- endfor -->"
+            )
+            nested_params = {
+                "groups": [
+                    {"name": "Admins", "members": ["alice", "bob"]},
+                ]
+            }
+            # Requirement: Identifies block loop markers enclosing multi-line sections, repeating enclosed lines for each element in the resolved sequence with the loop variable bound in the parameter context.
+            res_nested = formatter.format_template(nested_tmpl, nested_params)
+            self.assertEqual(res_nested, "Group: Admins\n- alice\n- bob")
+
+            # Unbound block loop: renders body with unbound context
+            unbound_block_tmpl = (
+                "<!-- for: x in absent_list -->\n"
+                "Item: <x>\n"
+                "<!-- endfor -->"
+            )
+            # Requirement: Identifies block loop markers enclosing multi-line sections, repeating enclosed lines for each element in the resolved sequence with the loop variable bound in the parameter context.
+            res_unbound_block = formatter.format_template(unbound_block_tmpl, {})
+            self.assertEqual(res_unbound_block, "Item: <x>")
+
+    def test_nested_and_unbound_conditionals(self) -> None:
+        """CUJ: Nested conditionals and unbound condition variable handling."""
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            formatter = scope.get_singleton(TemplateFormatter)
+
+            # Nested block if
+            nested_if_tmpl = (
+                "<!-- if: outer_flag -->\n"
+                "Outer\n"
+                "<!-- if: inner_flag -->\n"
+                "Inner\n"
+                "<!-- endif -->\n"
+                "<!-- endif -->"
+            )
+            # Requirement: Identifies block conditional markers enclosing multi-line sections, including enclosed lines when the condition key evaluates to true and omitting enclosed lines when false.
+            res_nested_if = formatter.format_template(
+                nested_if_tmpl, {"outer_flag": True, "inner_flag": True}
+            )
+            self.assertEqual(res_nested_if, "Outer\nInner")
+
+            # Unbound block if: retains body content
+            unbound_if_tmpl = (
+                "<!-- if: absent_flag -->\n"
+                "Default text\n"
+                "<!-- endif -->"
+            )
+            # Requirement: Identifies block conditional markers enclosing multi-line sections, including enclosed lines when the condition key evaluates to true and omitting enclosed lines when false.
+            res_unbound_if = formatter.format_template(unbound_if_tmpl, {})
+            self.assertEqual(res_unbound_if, "Default text")
+
 
 if __name__ == "__main__":
     unittest.main()
+
+# Untested requirements: None

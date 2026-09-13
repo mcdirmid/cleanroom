@@ -195,6 +195,18 @@ class AgentConversationHistoryImplTest(unittest.TestCase):
             self.assertEqual(tool_msg.tool_call_id, "c1")
             self.assertIn("line 1\nline 2\n\nReminder: Remember to write tests.", tool_msg.content)
 
+            # Response with empty content and non-empty reminder
+            empty_resp = Response(
+                is_failed=False,
+                is_terminated=False,
+                content="",
+                reminder="Remember to finish.",
+            )
+            history.append_tool_response(empty_resp, tool_name="finish", tool_call_id="c2")
+            req2 = history.get_model_request()
+            # Requirement: Tool execution response notes, content, and reminders from the tool provider are included in visible tool message content, formatting active reminders on messages and superseded stubs to remind the agent in the assembled model request.
+            self.assertEqual(req2.messages[-1].content, "Reminder: Remember to finish.")
+
 
 if __name__ == "__main__":
     unittest.main()

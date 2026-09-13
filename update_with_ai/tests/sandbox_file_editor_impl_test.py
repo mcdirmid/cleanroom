@@ -4,6 +4,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 from typing import Any, Mapping, Optional, Set, Tuple
 
 from lib.dag_storage import Node
@@ -334,10 +335,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.replacement_text_parameter, "Line 2"),
                 }
             )
-            # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
+            # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
             resp_no_change = replace_tool.execute_tool(b_no_change)
             self.assertTrue(resp_no_change.is_failed)
-            self.assertEqual(resp_no_change.reminder, "Your edit had no effect, and such edits will fail.")
+            self.assertEqual(resp_no_change.reminder, "The edit had no effect, and such edits will fail.")
             self.assertIsNone(resp_no_change.suppression_key)
             self.assertIsNone(resp_no_change.follow_up_tool_call)
 
@@ -484,10 +485,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (line_tool.replacement_text_parameter, "No newline\n"),
                 }
             )
-            # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
+            # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
             resp_no_change_line = line_tool.execute_tool(b_no_change_line)
             self.assertTrue(resp_no_change_line.is_failed)
-            self.assertEqual(resp_no_change_line.reminder, "Your edit had no effect, and such edits will fail.")
+            self.assertEqual(resp_no_change_line.reminder, "The edit had no effect, and such edits will fail.")
             self.assertIsNone(resp_no_change_line.suppression_key)
             self.assertIsNone(resp_no_change_line.follow_up_tool_call)
 
@@ -500,10 +501,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (line_tool.replacement_text_parameter, ""),
                 }
             )
-            # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
+            # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
             resp_no_change_insert = line_tool.execute_tool(b_no_change_insert)
             self.assertTrue(resp_no_change_insert.is_failed)
-            self.assertEqual(resp_no_change_insert.reminder, "Your edit had no effect, and such edits will fail.")
+            self.assertEqual(resp_no_change_insert.reminder, "The edit had no effect, and such edits will fail.")
             self.assertIsNone(resp_no_change_insert.suppression_key)
             self.assertIsNone(resp_no_change_insert.follow_up_tool_call)
 
@@ -550,10 +551,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.replacement_text_parameter, "Line 2"),
                 }
             )
-            # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
+            # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
             resp3 = replace_tool.execute_tool(b_noop)
             self.assertTrue(resp3.is_failed)
-            self.assertEqual(resp3.reminder, "Your edit had no effect, and such edits will fail.")
+            self.assertEqual(resp3.reminder, "The edit had no effect, and such edits will fail.")
             self.assertFalse(edit_mgr.has_modifications)
 
     def test_file_update_revision(self) -> None:
@@ -591,6 +592,54 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             resp2 = line_tool.execute_tool(b_line)
             self.assertFalse(resp2.is_failed)
             self.assertEqual(edit_mgr.file_update_revision, 2)
+
+    def test_edit_manager_initial_content_detection_and_filesystem_modifications(self) -> None:
+        """CUJ: EditManager records initial contents from filesystem and detects creations, deletions, and errors."""
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            edit_mgr = scope.get_singleton(EditManager)
+            assert isinstance(edit_mgr, EditManagerImpl)
+
+            # 1. File exists on disk, record_initial_content reads it
+            existing_file = os.path.join(self.test_dir, "existing.txt")
+            with open(existing_file, "w", encoding="utf-8") as f:
+                f.write("initial data")
+            # Requirement: The edit manager exposes whether workspace file modifications occurred during the session by comparing current workspace file content against initial content before editing.
+            # Requirement: [EditManager] Exposes whether file modifications occurred during the session.
+            edit_mgr.record_initial_content(existing_file)
+            self.assertFalse(edit_mgr.has_modifications)
+
+            # 2. File deleted after initial content recorded -> has_modifications is True
+            os.remove(existing_file)
+            self.assertTrue(edit_mgr.has_modifications)
+
+            # 3. Non-existent file recorded as initial content None -> has_modifications is False while absent
+            new_file = os.path.join(self.test_dir, "new_file.txt")
+            edit_mgr.record_initial_content(new_file)
+            # Recreate existing_file so it doesn't trigger has_modifications
+            with open(existing_file, "w", encoding="utf-8") as f:
+                f.write("initial data")
+            self.assertFalse(edit_mgr.has_modifications)
+
+            # 4. Creating the new file on disk -> has_modifications is True
+            with open(new_file, "w", encoding="utf-8") as f:
+                f.write("created content")
+            self.assertTrue(edit_mgr.has_modifications)
+            os.remove(new_file)
+
+            # 5. Record initial content when open raises OSError
+            err_file = os.path.join(self.test_dir, "err_file.txt")
+            with open(err_file, "w", encoding="utf-8") as f:
+                f.write("err")
+            with patch("builtins.open", side_effect=OSError("Permission denied")):
+                edit_mgr.record_initial_content(err_file)
+
+            # 6. Read fails during has_modifications comparison -> has_modifications is True
+            read_err_file = os.path.join(self.test_dir, "read_err.txt")
+            with open(read_err_file, "w", encoding="utf-8") as f:
+                f.write("initial read err")
+            edit_mgr.record_initial_content(read_err_file, "initial read err")
+            with patch("builtins.open", side_effect=OSError("Read error")):
+                self.assertTrue(edit_mgr.has_modifications)
 
     def test_tool_parameter_converters(self) -> None:
         """CUJ: Parameter converters associated with tool parameters."""

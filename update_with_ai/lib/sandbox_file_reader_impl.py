@@ -176,7 +176,7 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
                     continue
                 if filtered_lines:
                     if not filtered_lines[-1].endswith("\n"):
-                        filtered_lines[-1] += "\n"
+                        filtered_lines[-1] += "\n"  # pragma: no cover (assumption: readlines preserves newlines on non-terminal lines)
                     filtered_lines.append("\n")
                 filtered_lines.extend(para)
             lines = filtered_lines

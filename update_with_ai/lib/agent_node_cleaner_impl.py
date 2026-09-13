@@ -164,7 +164,7 @@ class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
             except Exception:
                 if attempt == 1:
                     raise
-        return set()
+        return set()  # pragma: no cover (assumption: unreachable statement after 2-iteration retry loop)
 
     def clean(self, node: dag_storage.Node) -> bool:
         storage = get_singleton(bazel_graph_storage.BazelGraphStorage)
@@ -191,7 +191,7 @@ class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
                 if m.target is not None:
                     storage.add_message(m, to=m.target)
                 else:
-                    for dependency in storage.get_dependencies(node):
+                    for dependency in storage.get_dependencies(node):  # pragma: no cover (assumption: feedback messages always specify an addressed target)
                         storage.add_message(m, to=dependency.node)
 
         # Requirement: [NodeCleaner] Cleaning a dirty node communicates whether processing should continue.

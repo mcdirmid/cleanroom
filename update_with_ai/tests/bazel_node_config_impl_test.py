@@ -1,13 +1,19 @@
 import json
 import os
 import re
+import subprocess
+import tempfile
 from typing import Optional, Sequence, Set
 import unittest
+from unittest.mock import MagicMock, patch
 from lib.bazel_graph_storage import NodeDefinition
 from lib.bazel_manifest_loader import BazelManifestLoader, Manifest
 from lib.bazel_node_config_impl import (
     AliasManager as AliasManagerImpl,
     NodeConfig as NodeConfigImpl,
+    _CommandVerificationCheck,
+    _make_host_path,
+    _parse_guide_markdown,
     __initialize__,
 )
 from lib.bazel_node_id_utils import BazelNodeIdentifierUtility, NodeDirectory
@@ -520,9 +526,552 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 alias = alias_mgr.convert("qa.md")
                 self.assertIsInstance(alias, ReadOnlyFile)
 
+    @patch("subprocess.run")
+    def test_command_verification_check_stderr_and_errors(self, mock_run: MagicMock) -> None:
+        """CUJ: _CommandVerificationCheck handles stderr output, combined output, and subprocess errors."""
+        check = _CommandVerificationCheck(command="test_cmd", cwd="/tmp")
+
+        # Stderr only on failure
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="compilation error")
+        passed, diag = check.verify()
+        # Requirement: The node config exposes declared verification checks from the manifest verification command.
+        # Requirement: [NodeConfig] The node config provides the session verification checks evaluated during session advancement.
+        self.assertFalse(passed)
+        self.assertEqual(diag, "compilation error")
+
+        # Stdout and Stderr together
+        mock_run.return_value = MagicMock(returncode=0, stdout="some warning", stderr="non-fatal warning")
+        passed, diag = check.verify()
+        self.assertTrue(passed)
+        self.assertEqual(diag, "some warning\nnon-fatal warning")
+
+        # SubprocessError exception
+        mock_run.side_effect = subprocess.SubprocessError("subprocess crashed")
+        passed, diag = check.verify()
+        self.assertFalse(passed)
+        self.assertIn("subprocess crashed", diag)
+
+        # OSError exception
+        mock_run.side_effect = OSError("command not found")
+        passed, diag = check.verify()
+        self.assertFalse(passed)
+        self.assertIn("command not found", diag)
+
+    def test_node_config_initialize_exception_guards(self) -> None:
+        """CUJ: NodeConfig.initialize handles missing CleanedNode, missing/failing DagStorage, and missing/invalid manifest."""
+        # 1. CleanedNode missing -> returns early without error
+        reg1 = LifecycleRegistry()
+        __initialize__(reg1)
+        with enter_phase("agent_session", registry=reg1) as scope:
+            cfg = scope.get_singleton(NodeConfig)
+            self.assertEqual(cfg.read_write_files, set())
+
+        # 2. DagStorage missing / failing -> self._feedback = ()
+        class MockCleanedNode(CleanedNode, Singleton):
+            tier = "agent_session"
+            @property
+            def node(self) -> Node:
+                return Node(address="//pkg:tgt")
+
+        class MockManifestLoaderNone(BazelManifestLoader, Singleton):
+            tier = "agent_session"
+            def get_manifest(self, node: Node) -> Optional[Manifest]:
+                return None
+            def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
+                return []
+
+        class MockNodeIdentifierUtility(BazelNodeIdentifierUtility, Singleton):
+            tier = "agent_session"
+            def normalize(self, raw_label: str) -> Node:
+                return Node(address=raw_label)
+            def extract_directory(self, node: Node) -> NodeDirectory:
+                return _make_node_directory("pkg")
+
+        reg2 = LifecycleRegistry()
+        __initialize__(reg2)
+        reg2.register(MockCleanedNode, keys=[CleanedNode])
+        reg2.register(MockManifestLoaderNone, keys=[BazelManifestLoader])
+        reg2.register(MockNodeIdentifierUtility, keys=[BazelNodeIdentifierUtility])
+
+        with enter_phase("agent_session", registry=reg2) as scope:
+            cfg = scope.get_singleton(NodeConfig)
+            # Requirement: Declared feedback messages retrieved from graph storage for the target node as the session feedback.
+            # Requirement: [NodeConfig] The node config provides the session feedback, exposing incoming feedback delivered to the node when present.
+            self.assertEqual(cfg.feedback, ())
+            # Manifest is None -> returns early
+            self.assertEqual(cfg.read_write_files, set())
+
+        # 3. Manifest is invalid JSON -> returns early
+        class MockManifestLoaderBadJson(BazelManifestLoader, Singleton):
+            tier = "agent_session"
+            def get_manifest(self, node: Node) -> Optional[Manifest]:
+                return Manifest("invalid JSON {")
+            def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
+                return []
+
+        reg3 = LifecycleRegistry()
+        __initialize__(reg3)
+        reg3.register(MockCleanedNode, keys=[CleanedNode])
+        reg3.register(MockManifestLoaderBadJson, keys=[BazelManifestLoader])
+        reg3.register(MockNodeIdentifierUtility, keys=[BazelNodeIdentifierUtility])
+
+        with enter_phase("agent_session", registry=reg3) as scope:
+            cfg = scope.get_singleton(NodeConfig)
+            self.assertEqual(cfg.read_write_files, set())
+
+    def test_template_resolution_and_parameters_and_verification_message(self) -> None:
+        """CUJ: Loading template content across candidate paths, handling JSON string parameters, and verification success message."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            template_path = os.path.join(tmpdir, "template.py")
+            with open(template_path, "w", encoding="utf-8") as f:
+                f.write("# Template code\n")
+
+            class MockCleanedNode(CleanedNode, Singleton):
+                tier = "agent_session"
+                @property
+                def node(self) -> Node:
+                    return Node(address="//pkg:my_target")
+
+            class MockManifestLoader(BazelManifestLoader, Singleton):
+                tier = "agent_session"
+                def get_manifest(self, node: Node) -> Optional[Manifest]:
+                    return Manifest(json.dumps({
+                        "src": "impl.py",
+                        "template": template_path,
+                        "template_parameters": json.dumps({"key": "value"}),
+                        "verification_success_message": "Build passed successfully",
+                    }))
+                def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
+                    return []
+
+            class MockNodeIdentifierUtility(BazelNodeIdentifierUtility, Singleton):
+                tier = "agent_session"
+                def normalize(self, raw_label: str) -> Node:
+                    return Node(address=raw_label)
+                def extract_directory(self, node: Node) -> NodeDirectory:
+                    return _make_node_directory("pkg")
+
+            reg = LifecycleRegistry()
+            __initialize__(reg)
+            reg.register(MockCleanedNode, keys=[CleanedNode])
+            reg.register(MockManifestLoader, keys=[BazelManifestLoader])
+            reg.register(MockNodeIdentifierUtility, keys=[BazelNodeIdentifierUtility])
+
+            with enter_phase("agent_session", registry=reg) as scope:
+                cfg = scope.get_singleton(NodeConfig)
+
+                # Requirement: The node config exposes templates mapping read-write files to initial file content.
+                # Requirement: [NodeConfig] The node config provides templates mapping read-write files to initial file content.
+                self.assertEqual(len(cfg.templates), 1)
+                for bound_f, content in cfg.templates:
+                    self.assertEqual(bound_f.short_name, "impl.py")
+                    self.assertEqual(content, "# Template code\n")
+
+                # Requirement: The node config exposes declared template parameters from the manifest.
+                # Requirement: [NodeConfig] The node config provides the session template parameters, providing parameter bindings for template evaluation.
+                self.assertEqual(cfg.template_parameters, {"key": "value"})
+
+                # Requirement: Declared verification success message from the manifest as the session verification success message.
+                # Requirement: [NodeConfig] The node config provides the session verification success message when configured.
+                self.assertEqual(cfg.verification_success_message, "Build passed successfully")
+
+    def test_template_and_guide_read_errors_and_invalid_param_string(self) -> None:
+        """CUJ: Gracefully handling read errors in template/guide resolution and invalid JSON parameter string."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            template_path = os.path.join(tmpdir, "template.py")
+            with open(template_path, "w", encoding="utf-8") as f:
+                f.write("content")
+
+            guide_dir = os.path.join(tmpdir, "update_python_with_ai", "guides")
+            os.makedirs(guide_dir, exist_ok=True)
+            guide_path = os.path.join(guide_dir, "my_guide.md")
+            with open(guide_path, "w", encoding="utf-8") as f:
+                f.write("guide text")
+
+            class MockCleanedNode(CleanedNode, Singleton):
+                tier = "agent_session"
+                @property
+                def node(self) -> Node:
+                    return Node(address="//pkg:my_target")
+
+            class MockManifestLoader(BazelManifestLoader, Singleton):
+                tier = "agent_session"
+                def get_manifest(self, node: Node) -> Optional[Manifest]:
+                    return Manifest(json.dumps({
+                        "src": "impl.py",
+                        "template": template_path,
+                        "template_parameters": "not valid json {",
+                        "guide": "//update_python_with_ai/guides:my_guide",
+                        "allows_step_mode": True,
+                    }))
+                def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
+                    return []
+
+            class MockNodeIdentifierUtility(BazelNodeIdentifierUtility, Singleton):
+                tier = "agent_session"
+                def normalize(self, raw_label: str) -> Node:
+                    return Node(address=raw_label)
+                def extract_directory(self, node: Node) -> NodeDirectory:
+                    return _make_node_directory("pkg")
+
+            class MockModelConfig(ModelConfig, Singleton):
+                tier = "system"
+                @property
+                def is_step_mode(self) -> bool:
+                    return True
+                @property
+                def is_startup_reads(self) -> bool:
+                    return True
+                @property
+                def inject_followups(self) -> bool:
+                    return True
+                @property
+                def model_name(self) -> str:
+                    return "test-model"
+                @property
+                def base_url(self) -> Optional[str]:
+                    return None
+                @property
+                def api_key(self) -> Optional[str]:
+                    return None
+                @property
+                def timeout(self) -> int:
+                    return 60
+                @property
+                def conversation_limit(self) -> int:
+                    return 20
+                @property
+                def temperature(self) -> float:
+                    return 0.0
+                @property
+                def max_tokens(self) -> Optional[int]:
+                    return None
+                @property
+                def node_visit_limit(self) -> int:
+                    return 500
+
+            reg = LifecycleRegistry()
+            __initialize__(reg)
+            reg.register(MockCleanedNode, keys=[CleanedNode])
+            reg.register(MockManifestLoader, keys=[BazelManifestLoader])
+            reg.register(MockNodeIdentifierUtility, keys=[BazelNodeIdentifierUtility])
+            reg.register(MockModelConfig, keys=[ModelConfig])
+
+            original_open = open
+            def failing_open(path, *args, **kwargs):
+                if path in (template_path, guide_path):
+                    raise OSError("Simulated read failure")
+                return original_open(path, *args, **kwargs)
+
+            old_env_runfiles = os.environ.get("RUNFILES_DIR")
+            old_env_bazel_runfiles = os.environ.get("BAZEL_RUNFILES")
+            old_env_ws = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
+            try:
+                os.environ["BUILD_WORKSPACE_DIRECTORY"] = tmpdir
+                os.environ["RUNFILES_DIR"] = tmpdir
+                os.environ["BAZEL_RUNFILES"] = tmpdir
+
+                with patch("builtins.open", side_effect=failing_open):
+                    with enter_phase("system", registry=reg) as sys_scope:
+                        with enter_phase("agent_session", registry=reg) as scope:
+                            cfg = scope.get_singleton(NodeConfig)
+                            # Template read failure results in empty templates
+                            # Requirement: The node config exposes templates mapping read-write files to initial file content.
+                            # Requirement: [NodeConfig] The node config provides templates mapping read-write files to initial file content.
+                            self.assertEqual(cfg.templates, set())
+                            # Invalid JSON param string results in default empty dict
+                            # Requirement: The node config exposes declared template parameters from the manifest.
+                            # Requirement: [NodeConfig] The node config provides the session template parameters, providing parameter bindings for template evaluation.
+                            self.assertEqual(cfg.template_parameters, {})
+                            # Guide read failure results in guide being None
+                            # Requirement: The node config exposes the declared guide target as the guide file when step mode is active.
+                            # Requirement: [NodeConfig] The node config provides the session guide file when step mode is active.
+                            self.assertIsNotNone(cfg.guide_file)
+                            self.assertIsNone(cfg.guide)
+            finally:
+                if old_env_runfiles is not None:
+                    os.environ["RUNFILES_DIR"] = old_env_runfiles
+                else:
+                    os.environ.pop("RUNFILES_DIR", None)
+                if old_env_bazel_runfiles is not None:
+                    os.environ["BAZEL_RUNFILES"] = old_env_bazel_runfiles
+                else:
+                    os.environ.pop("BAZEL_RUNFILES", None)
+                if old_env_ws is not None:
+                    os.environ["BUILD_WORKSPACE_DIRECTORY"] = old_env_ws
+                else:
+                    os.environ.pop("BUILD_WORKSPACE_DIRECTORY", None)
+
+    def test_step_mode_active_guide_parsing_and_alias_manager(self) -> None:
+        """CUJ: Step mode actively parses markdown guide, skips lint checks, captures verification failure, and registers guide file alias."""
+        # Test guide with Verification failure in middle and Lint checks at the end
+        g_mid_vf = (
+            "Summary text\n\n"
+            "## Step 1\nContent 1\n\n"
+            "## Verification failure\nVF instructions\n\n"
+            "## Lint checks\nLint instructions\n"
+        )
+        parsed1 = _parse_guide_markdown(g_mid_vf)
+        self.assertEqual(parsed1.summary, "Summary text")
+        self.assertEqual(parsed1.verification_failure, "VF instructions")
+        self.assertEqual(len(parsed1.sections), 1)
+
+        # Test guide with Lint checks in middle, normal step at end
+        g_mid_lint = (
+            "Summary\n\n"
+            "## Lint checks\nLint instructions\n\n"
+            "## Final Step\nFinal instructions\n"
+        )
+        parsed2 = _parse_guide_markdown(g_mid_lint)
+        self.assertEqual(len(parsed2.sections), 1)
+        self.assertEqual(parsed2.sections[0].title, "Final Step")
+
+        guide_content = (
+            "This is the summary of the task.\n\n"
+            "## Step 1: Write code\n"
+            "Implement the feature according to spec.\n\n"
+            "## Lint checks\n"
+            "Run flake8 and mypy.\n\n"
+            "## Step 2: Test code\n"
+            "Verify with bazel test.\n\n"
+            "## Verification failure\n"
+            "Review error diagnostics and retry.\n"
+        )
+        parsed_guide = _parse_guide_markdown(guide_content)
+        self.assertEqual(parsed_guide.summary, "This is the summary of the task.")
+        self.assertEqual(len(parsed_guide.sections), 2)
+        self.assertEqual(parsed_guide.sections[0].title, "Step 1: Write code")
+        self.assertEqual(parsed_guide.sections[1].title, "Step 2: Test code")
+        self.assertEqual(parsed_guide.verification_failure, "Review error diagnostics and retry.")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            guides_dir = os.path.join(tmpdir, "update_python_with_ai", "guides")
+            os.makedirs(guides_dir, exist_ok=True)
+            guide_file_path = os.path.join(guides_dir, "my_guide.md")
+            with open(guide_file_path, "w", encoding="utf-8") as f:
+                f.write(guide_content)
+
+            class MockCleanedNode(CleanedNode, Singleton):
+                tier = "agent_session"
+                @property
+                def node(self) -> Node:
+                    return Node(address="//pkg:my_target")
+
+            class MockManifestLoader(BazelManifestLoader, Singleton):
+                tier = "agent_session"
+                def get_manifest(self, node: Node) -> Optional[Manifest]:
+                    return Manifest(json.dumps({
+                        "src": "impl.py",
+                        "guide": "//update_python_with_ai/guides:my_guide",
+                        "allows_step_mode": True,
+                        "deps": ["//update_python_with_ai/guides:my_guide"],
+                    }))
+                def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
+                    return []
+
+            class MockNodeIdentifierUtility(BazelNodeIdentifierUtility, Singleton):
+                tier = "agent_session"
+                def normalize(self, raw_label: str) -> Node:
+                    return Node(address=raw_label)
+                def extract_directory(self, node: Node) -> NodeDirectory:
+                    return _make_node_directory("pkg")
+
+            class MockModelConfig(ModelConfig, Singleton):
+                tier = "system"
+                @property
+                def is_step_mode(self) -> bool:
+                    return True
+                @property
+                def is_startup_reads(self) -> bool:
+                    return True
+                @property
+                def inject_followups(self) -> bool:
+                    return True
+                @property
+                def model_name(self) -> str:
+                    return "test-model"
+                @property
+                def base_url(self) -> Optional[str]:
+                    return None
+                @property
+                def api_key(self) -> Optional[str]:
+                    return None
+                @property
+                def timeout(self) -> int:
+                    return 60
+                @property
+                def conversation_limit(self) -> int:
+                    return 20
+                @property
+                def temperature(self) -> float:
+                    return 0.0
+                @property
+                def max_tokens(self) -> Optional[int]:
+                    return None
+                @property
+                def node_visit_limit(self) -> int:
+                    return 500
+
+            reg = LifecycleRegistry()
+            __initialize__(reg)
+            reg.register(MockCleanedNode, keys=[CleanedNode])
+            reg.register(MockManifestLoader, keys=[BazelManifestLoader])
+            reg.register(MockNodeIdentifierUtility, keys=[BazelNodeIdentifierUtility])
+            reg.register(MockModelConfig, keys=[ModelConfig])
+
+            old_env = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
+            try:
+                os.environ["BUILD_WORKSPACE_DIRECTORY"] = tmpdir
+                with enter_phase("system", registry=reg) as sys_scope:
+                    with enter_phase("agent_session", registry=reg) as scope:
+                        cfg = scope.get_singleton(NodeConfig)
+                        alias_mgr = scope.get_singleton(AliasManager)
+
+                        # Requirement: The node config exposes whether step mode is active, enabled when the model config enables step mode, the node allows step mode, and session feedback is absent.
+                        # Requirement: [NodeConfig] The node config indicates whether session step mode is active.
+                        self.assertTrue(cfg.is_step_mode)
+
+                        # Requirement: The node config exposes the declared guide target as the guide file when step mode is active.
+                        # Requirement: [NodeConfig] The node config provides the session guide file when step mode is active.
+                        self.assertIsNotNone(cfg.guide_file)
+                        assert cfg.guide_file is not None
+                        self.assertEqual(cfg.guide_file.short_name, "my_guide.md")
+
+                        # Requirement: The node config exposes the declared guide target as the task guide when step mode is active.
+                        # Requirement: [NodeConfig] The node config provides the session guide, providing structured instructional text when step mode is active.
+                        self.assertIsNotNone(cfg.guide)
+                        assert cfg.guide is not None
+                        self.assertEqual(cfg.guide.summary, "This is the summary of the task.")
+                        self.assertEqual(len(cfg.guide.sections), 2)
+                        self.assertEqual(cfg.guide.verification_failure, "Review error diagnostics and retry.")
+
+                        # Guide is excluded from read_only_files when step mode is active
+                        # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies.
+                        # Requirement: [NodeConfig] The node config provides the session read-only files restricted to inspection.
+                        ro_names = {f.short_name for f in cfg.read_only_files}
+                        self.assertNotIn("my_guide.md", ro_names)
+
+                        # Guide file is registered in AliasManager
+                        # Requirement: The alias manager converts short names to matching file aliases, producing unbound files when unmapped.
+                        # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its short name is found, and produces an unbound file if the short name is not found.
+                        converted_guide = alias_mgr.convert("my_guide.md")
+                        self.assertEqual(converted_guide, cfg.guide_file)
+            finally:
+                if old_env is not None:
+                    os.environ["BUILD_WORKSPACE_DIRECTORY"] = old_env
+                else:
+                    os.environ.pop("BUILD_WORKSPACE_DIRECTORY", None)
+
+    def test_dependency_resolution_branches(self) -> None:
+        """CUJ: Resolving star_deps with diamond graphs, invalid JSON, silent_deps, and manifest-less specs/other dependencies."""
+        class MockCleanedNode(CleanedNode, Singleton):
+            tier = "agent_session"
+            @property
+            def node(self) -> Node:
+                return Node(address="//pkg:root")
+
+        class MockManifestLoader(BazelManifestLoader, Singleton):
+            tier = "agent_session"
+            def get_manifest(self, node: Node) -> Optional[Manifest]:
+                if node.address == "//pkg:root":
+                    return Manifest(json.dumps({
+                        "src": "root.py",
+                        "deps": [
+                            "//pkg:silent_dep",
+                            "//pkg:bad_json_dep",
+                            "//specs/grounding:foo_low",
+                            "//specs/grounding:bar_grounding",
+                            "//specs/high:baz_high",
+                            "//other/pkg:util",
+                        ],
+                        "star_deps": ["//pkg:star_a", "//pkg:star_b"],
+                        "silent_deps": ["//pkg:silent_dep"],
+                    }))
+                if node.address == "//pkg:star_a":
+                    return Manifest(json.dumps({
+                        "src": "star_a.py",
+                        "star_deps": ["//pkg:star_diamond", "//pkg:star_bad_json"],
+                    }))
+                if node.address == "//pkg:star_b":
+                    return Manifest(json.dumps({
+                        "src": "star_b.py",
+                        "star_deps": ["//pkg:star_diamond"],
+                    }))
+                if node.address == "//pkg:star_diamond":
+                    return Manifest(json.dumps({
+                        "src": "star_diamond.py",
+                    }))
+                if node.address == "//pkg:star_bad_json":
+                    return Manifest("not valid json {")
+                if node.address == "//pkg:bad_json_dep":
+                    return Manifest("not valid json {")
+                return None
+
+            def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
+                return []
+
+        class MockNodeIdentifierUtility(BazelNodeIdentifierUtility, Singleton):
+            tier = "agent_session"
+            def normalize(self, raw_label: str) -> Node:
+                return Node(address=raw_label)
+            def extract_directory(self, node: Node) -> NodeDirectory:
+                return _make_node_directory("pkg")
+
+        reg = LifecycleRegistry()
+        __initialize__(reg)
+        reg.register(MockCleanedNode, keys=[CleanedNode])
+        reg.register(MockManifestLoader, keys=[BazelManifestLoader])
+        reg.register(MockNodeIdentifierUtility, keys=[BazelNodeIdentifierUtility])
+
+        with enter_phase("agent_session", registry=reg) as scope:
+            cfg = scope.get_singleton(NodeConfig)
+
+            # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies.
+            # Requirement: [NodeConfig] The node config provides the session read-only files restricted to inspection.
+            ro_names = {f.short_name for f in cfg.read_only_files}
+            self.assertNotIn("silent_dep.py", ro_names)
+            self.assertIn("star_a.py", ro_names)
+            self.assertIn("star_b.py", ro_names)
+            self.assertIn("star_diamond.py", ro_names)
+            self.assertIn("foo.pyi", ro_names)
+            self.assertIn("bar_grounding.pyi", ro_names)
+            self.assertIn("baz.md", ro_names)
+            self.assertIn("util.py", ro_names)
+
+    def test_make_host_path_and_alias_manager_guards_and_fallback(self) -> None:
+        """CUJ: _make_host_path with str subclass, AliasManager.initialize failure guard, and sanitize_text direct path fallback."""
+        # 1. _make_host_path with str subclass
+        class CustomPath(str):
+            pass
+        path_obj = _make_host_path(CustomPath, "foo/bar")
+        self.assertIsInstance(path_obj, CustomPath)
+        self.assertEqual(path_obj, "foo/bar")
+
+        # 2. AliasManager.initialize failure guard (NodeConfig missing)
+        reg = LifecycleRegistry()
+        reg.register_singleton(
+            AliasManagerImpl,
+            keys=[AliasManager],
+            tier="agent_session",
+        )
+        with enter_phase("agent_session", registry=reg) as scope:
+            alias_mgr = scope.get_singleton(AliasManager)
+            assert isinstance(alias_mgr, AliasManagerImpl)
+            self.assertEqual(len(alias_mgr._aliases), 0)
+
+        # 3. sanitize_text direct path fallback
+        assert isinstance(alias_mgr, AliasManagerImpl)
+        alias_mgr._paths["/non_regex_matched/custom_path.py"] = "custom_path.py"
+        text = "Path without word boundary: [/non_regex_matched/custom_path.py]"
+        sanitized = alias_mgr.sanitize_text(text)
+        # Requirement: The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its minimal short name, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking.
+        # Requirement: [AliasManager] Sanitizing text masks occurrences of relative workspace paths and preceding path prefixes with the corresponding file alias short names.
+        self.assertEqual(sanitized, "Path without word boundary: [custom_path.py]")
+
 
 if __name__ == "__main__":
     unittest.main()
 
 # Untested requirements: None
+
 

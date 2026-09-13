@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 # INITIAL AUTHORING INSTRUCTIONS:
 # 1. Immediate Goal:
 #    - Produce a minimal compiling test module that passes initial verification immediately.
-#    - Do NOT attempt comprehensive CUJ test coverage in your first turn.
+#    - Do NOT attempt comprehensive CUJ test coverage in the initial turn.
 # 2. Imports:
 #    - Target implementation: from lib.<target_impl> import <TargetClass>, __initialize__
 #    - Collaborator interfaces and concrete data types: from lib.<interface> import <Protocol>, <Data>

@@ -21,7 +21,7 @@ Before modifying a file, editing tool execution fails if:
 
 - The file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
 
-- The edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
+- The edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
 
 On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
 

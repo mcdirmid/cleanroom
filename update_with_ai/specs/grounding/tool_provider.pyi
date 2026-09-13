@@ -253,7 +253,7 @@ Executed with a set of actual parameter bindings to produce a response
 
 FRESH_REQUIREMENTS:
 - When a parameter is required, an argument must be supplied for tool execution.
-- When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
+- When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 """
         ...
 
@@ -343,7 +343,7 @@ Set mapping parameter names to values of their wire types
 class FollowUpToolCall:
     """
 PURPOSE:
-Specifies a tool name, wire parameter bindings of that tool, and reasoning text representing injected model thought on why the follow up tool is being called
+Specifies a tool name, wire parameter bindings of that tool, and reasoning text representing injected model thought in the first-person perspective on why the follow-up tool is being called
 """
 
     def __init__(self, tool_name: str, wire_parameter_bindings: WireParameterBindings, reasoning_text: Optional[str]=None) -> None:

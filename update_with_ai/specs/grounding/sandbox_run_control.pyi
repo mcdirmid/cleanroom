@@ -99,7 +99,7 @@ Executed with a set of actual parameter bindings to produce a response
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
+- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 """
         ...
 
@@ -157,7 +157,7 @@ Executed with a set of actual parameter bindings to produce a response
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
+- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 """
         ...
 
@@ -207,7 +207,7 @@ Executed with a set of actual parameter bindings to produce a response
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
+- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 """
         ...
 
@@ -257,7 +257,7 @@ Executed with a set of actual parameter bindings to produce a response
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
+- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 """
         ...
 
@@ -307,6 +307,6 @@ Executed with a set of actual parameter bindings to produce a response
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
+- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 """
         ...

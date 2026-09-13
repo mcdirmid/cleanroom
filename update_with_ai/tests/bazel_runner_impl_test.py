@@ -190,17 +190,25 @@ class BazelRunnerImplTest(unittest.TestCase):
         root = dag_storage.Node(address="//pkg:root")
         dep1 = dag_storage.Node(address="//pkg:dep1")
         dep2 = dag_storage.Node(address="//pkg:dep2")
+        dep3 = dag_storage.Node(address="//pkg:dep3")
 
         root_m = bazel_manifest_loader.Manifest('{"name": "root"}')
         dep1_m = bazel_manifest_loader.Manifest('{"name": "dep1"}')
         dep2_m = bazel_manifest_loader.Manifest('{"name": "dep2"}')
+        dep3_m = bazel_manifest_loader.Manifest('{"name": "dep3"}')
 
         self.manifest_loader.manifests["//pkg:root"] = root_m
         self.manifest_loader.manifests["//pkg:dep1"] = dep1_m
         self.manifest_loader.manifests["//pkg:dep2"] = dep2_m
+        self.manifest_loader.manifests["//pkg:dep3"] = dep3_m
 
-        self.storage.dependencies_map[root] = {dag_storage.Dependency(node=dep1)}
-        self.storage.dependencies_map[dep1] = {dag_storage.Dependency(node=dep2)}
+        # Diamond dependency graph: root -> dep1, dep2 -> dep3
+        self.storage.dependencies_map[root] = {
+            dag_storage.Dependency(node=dep1),
+            dag_storage.Dependency(node=dep2),
+        }
+        self.storage.dependencies_map[dep1] = {dag_storage.Dependency(node=dep3)}
+        self.storage.dependencies_map[dep2] = {dag_storage.Dependency(node=dep3)}
 
         with enter_phase("system", registry=self.registry):
             runner = get_singleton(bazel_runner.BazelRunner)
@@ -212,6 +220,7 @@ class BazelRunnerImplTest(unittest.TestCase):
             self.assertIn(root_m, self.manifest_loader.loaded)
             self.assertIn(dep1_m, self.manifest_loader.loaded)
             self.assertIn(dep2_m, self.manifest_loader.loaded)
+            self.assertIn(dep3_m, self.manifest_loader.loaded)
 
     def test_run_cleaning_pass_runtime_error(self) -> None:
         """Tests cleaning pass failure handling when cleaner raises RuntimeError."""

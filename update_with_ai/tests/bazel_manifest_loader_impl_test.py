@@ -5,6 +5,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 from typing import Dict, Optional, Set
 
 from lib.bazel_graph_storage import BazelGraphStorage, NodeDefinition, TaskPrompt
@@ -50,6 +51,7 @@ class MockGraphStorage:
     def __init__(self) -> None:
         self._definitions: Dict[Node, NodeDefinition] = {}
         self._dependencies: Dict[Node, Set[Dependency]] = {}
+        self._source_files: Dict[Node, str] = {}
 
     def get_node_definition(self, node: Node) -> Optional[NodeDefinition]:
         return self._definitions.get(node)
@@ -120,6 +122,35 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             self.assertIsNotNone(manifest)
             assert manifest is not None
             self.assertIn("pkg/sub:target", manifest)
+
+            # In-memory cache hit returns cached instance
+            cached_manifest = loader.get_manifest(node)
+            self.assertIs(cached_manifest, manifest)
+
+            # Candidate path resolution through runfiles directory
+            runfiles_dir = os.path.join(self.test_dir, "runfiles")
+            rf_main = os.path.join(runfiles_dir, "_main")
+            os.makedirs(rf_main, exist_ok=True)
+            with open(os.path.join(rf_main, "rf_node_manifest.json"), "w", encoding="utf-8") as f:
+                f.write('{"label": "//pkg/rf:rf_node"}')
+            rf_node = Node(address="//pkg/rf:rf_node")
+            with patch.dict(os.environ, {"RUNFILES_DIR": runfiles_dir}):
+                # Requirement: The bazel manifest loader retrieves target manifests from workspace directories or runfiles trees for nodes in dag storage.
+                # Requirement: [BazelManifestLoader] The bazel manifest loader retrieves the manifest for a node in dag storage.
+                rf_manifest = loader.get_manifest(rf_node)
+                self.assertIsNotNone(rf_manifest)
+                assert rf_manifest is not None
+                self.assertIn("rf_node", rf_manifest)
+
+            # Candidate read failure suppresses OSError
+            err_node = Node(address="//pkg/err:err_node")
+            err_pkg = os.path.join(self.test_dir, "pkg/err")
+            os.makedirs(err_pkg, exist_ok=True)
+            with open(os.path.join(err_pkg, ".manifest.json"), "w", encoding="utf-8") as f:
+                f.write('{"label": "//pkg/err:err_node"}')
+            with patch("builtins.open", side_effect=OSError("Read error")):
+                # Requirement: The bazel manifest loader retrieves target manifests from workspace directories or runfiles trees for nodes in dag storage.
+                self.assertIsNone(loader.get_manifest(err_node))
 
     def test_load_manifest_normalizes_labels_and_registers_deps(self) -> None:
         """CUJ: Loading manifest resolves targets, sets definitions, and records silent/non-silent deps."""
@@ -201,6 +232,14 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             silent_y = next(d for d in deps if d.node.address == "//pkg:silent_y")
             self.assertFalse(dep_x.is_silent)
             self.assertTrue(silent_y.is_silent)
+
+            # Source files recorded in storage
+            # Requirement: [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using a node identifier utility, populating the bazel graph storage.
+            self.assertIn(defn.node, self.storage._source_files)
+            self.assertEqual(
+                self.storage._source_files[defn.node],
+                os.path.normpath(os.path.join(self.test_dir, "pkg/src.txt")),
+            )
 
 
 if __name__ == "__main__":

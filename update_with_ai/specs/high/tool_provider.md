@@ -22,13 +22,13 @@ A tool can be *executed* directly with a set of *actual parameter bindings*, whi
 
 - Whether to communicate that the agent session should *terminate*.
 
-- Textual *content* that includes underlying tool execution output. When tool execution fails, the content should include error and diagnostic messages along with guidance on how to execute the tool correctly.
+- Textual *content* that includes underlying tool execution output. When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
-- A textual *reminder* advising the agent on future actions and constraints when guidance is provided.
+- A textual *reminder* advising the agent on future actions and constraints declaratively and impersonally without second-person pronouns when guidance is provided.
 
 - If a previous conversation response content should be superceded by this execution, a textual *suppression key* identifying that response.
 
-- If there is a known tool that the agent should always call after this tool execution, a *follow-up tool call* specifying a tool name, wire parameter bindings of that tool, and *reasoning text* representing injected model thought on why the follow up tool is being called.
+- If there is a known tool that the agent should always call after this tool execution, a *follow-up tool call* specifying a tool name, wire parameter bindings of that tool, and *reasoning text* representing injected model thought in the first-person perspective on why the follow-up tool is being called.
 
 The *tool manager* is an agent session service that maintains tools for an agent session.
 

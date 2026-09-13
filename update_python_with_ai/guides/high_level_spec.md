@@ -106,6 +106,8 @@ Component visibility and lifetimes are governed by flat lifecycle tiers (system 
 - [ ] Requirements state callable operations and behavioral constraints declaratively around domain entities without micromanaging collaborator routing
 - [ ] Tool execution produces a structured response indicating whether execution succeeded (if not, failed), whether the session should terminate, and output content
 - [ ] Tool failure content provides actionable diagnostic messages and guidance on how to execute the tool correctly
+- [ ] Tool execution content, error feedback, and reminders communicate declaratively and impersonally without second-person pronouns ("you", "your")
+- [ ] Follow-up tool call reasoning text communicates injected model thoughts from a first-person perspective ("I", "let me")
 - [ ] Behavioral requirements state explicit handling for all operational outcome branches, input variants, and termination conditions without leaving unhandled edge cases to implementation guesswork
 - [ ] Architectural intent, purpose, and operational notes declared in dependent specifications are inspected during alignment, ensuring all stated operational boundaries and constraints are preserved in requirements
 - [ ] Dual or complementary constraints on an entity are combined into a cohesive sentence rather than fragmented into separate bullets
@@ -136,3 +138,4 @@ Component visibility and lifetimes are governed by flat lifecycle tiers (system 
 - [ ] Implementation delegation in out of scope — listing delegated technical tasks rather than distinguishing client workflow intent from component obligations
 - [ ] Bolding types — using `**term**` instead of `*term*` for introductions
 - [ ] Spatial containment — writing "in a <service>" instead of recognizing that tools and services are independent peer services in the session tier
+- [ ] Second-person tool feedback — specifying tool feedback, error diagnostics, or reminders using second-person pronouns ("you", "your") instead of declarative, impersonal constraints

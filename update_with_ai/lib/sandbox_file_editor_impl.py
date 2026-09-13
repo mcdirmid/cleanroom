@@ -185,13 +185,13 @@ class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
         # Requirement: On successful text replacement tool execution, the unique occurrence of the target text is replaced with the replacement text, written using the filesystem, and file modifications are recorded.
         # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
         new_content = content.replace(target_text, replacement_text, 1)
-        # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
+        # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
         if new_content == content:
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
                 content="Error: replacement produced no change to file content.",
-                reminder="Your edit had no effect, and such edits will fail.",
+                reminder="The edit had no effect, and such edits will fail.",
             )
 
         with open(host_path, "w", encoding="utf-8") as f:
@@ -214,7 +214,7 @@ class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
             is_failed=False,
             is_terminated=False,
             content="Successfully replaced text.",
-            reminder="Inspect the updated file to verify your changes.",
+            reminder="Inspect the updated file to verify changes.",
             suppression_key=target_file.short_name,
             follow_up_tool_call=follow_up,
         )
@@ -333,13 +333,13 @@ class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
             # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
             new_lines = lines[: start_line - 1] + rep_lines + lines[start_line - 1 :]
 
-        # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that their edit had no effect and such edits will fail.
+        # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
         if new_lines == lines:
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
                 content="Error: line update produced no change to file content.",
-                reminder="Your edit had no effect, and such edits will fail.",
+                reminder="The edit had no effect, and such edits will fail.",
             )
 
         edit_mgr = get_singleton(EditManager)
@@ -365,7 +365,7 @@ class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
             is_failed=False,
             is_terminated=False,
             content="Successfully updated lines.",
-            reminder="Inspect the updated file to verify your changes.",
+            reminder="Inspect the updated file to verify changes.",
             suppression_key=target_file.short_name,
             follow_up_tool_call=follow_up,
         )

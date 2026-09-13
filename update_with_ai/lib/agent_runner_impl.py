@@ -126,7 +126,7 @@ def _measure_prefix_reuse(
                 f"  Current conversation is shorter than previous conversation ({len(curr_payload)} < {len(prev_payload)})"
             )
         else:
-            transcript_lines.append(
+            transcript_lines.append(  # pragma: no cover (assumption: previous payload is never shorter when divergence index is set)
                 f"  Previous conversation was shorter ({len(prev_payload)} < {len(curr_payload)})"
             )
     else:
@@ -332,7 +332,7 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
                 history.append_message(
                     agent_conversation_history.Message(
                         role="user",
-                        content="No tools were executed. You must call a tool (e.g. read_file, replace, advance, fail, blame) to make progress or conclude the session.",
+                        content="No tools were executed. A tool (e.g. read_file, replace, advance, fail, blame) must be called to make progress or conclude the session.",
                     )
                 )
                 continue

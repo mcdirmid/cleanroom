@@ -4,6 +4,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 from lib.bazel_graph_storage import BazelGraphStorage, NodeDefinition, TaskPrompt
 from lib.bazel_graph_storage_impl import (
     BazelGraphStorage as BazelGraphStorageImpl,
@@ -231,6 +232,18 @@ class BazelGraphStorageImplTest(unittest.TestCase):
             dag = scope.get_singleton(DagStorage)
             graph = scope.get_singleton(BazelGraphStorage)
             self.assertIs(dag, graph)
+
+    def test_save_package_data_os_error_handled(self) -> None:
+        """CUJ: Handling filesystem write errors during package data persistence."""
+        node = Node(address="//pkg/err:target")
+        with enter_phase("system", registry=self.registry) as scope:
+            storage = scope.get_singleton(BazelGraphStorage)
+            assert isinstance(storage, BazelGraphStorageImpl)
+            with patch("lib.bazel_graph_storage_impl.Path.write_text", side_effect=OSError("Disk write failed")):
+                # Requirement: The bazel graph storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
+                # Requirement: [DagStorage] Adding a message to a node records the message for that node.
+                storage.add_message(Change(), to=node)
+                self.assertEqual(storage.get_messages(node), set())
 
 
 if __name__ == "__main__":

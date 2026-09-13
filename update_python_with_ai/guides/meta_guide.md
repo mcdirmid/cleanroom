@@ -8,7 +8,7 @@ The reader is an LLM consuming the guide through tool reads; it has only the cur
 
 The Summary drives the initial write or edit in one or at most two concise paragraphs: it states the high-level subject and core constraints completely so the initial revision is accurate in substance, without detailing fine-grained checks that checklist sections verify. Its purpose is twofold: (a) preserve an already working artifact without unnecessary edits, and (b) when an artifact is missing or starting from a template, establish a minimal valid artifact that passes initial verification before advancing, delegating expanded coverage and fine-grained refinement to progressive checklist steps. Initial creation and bootstrapping instructions belong as comments directly inside templates rather than in the Summary; checklist sections verify that template instruction comments are deleted from the final artifact. Because linters run immediately upon advancing, structural problems are exposed early, keeping the Summary light and focused on core constraints rather than deep rule duplication.
 
-A guide never triggers. The prompt asks for alignment or conformance with the guide and the other input files, and it drives the loop; the guide stakes constraints and requirements only. Directive verbs aimed at the reader ("ensure", "produce", "apply", "verify the checklist", "call advance") are prohibited; declarative constraints ("the module must", "X matches Y") are the rule. Guides and prompts never advise about tool arguments: they can refer to advance, but they cannot refer to tool arguments or the content of advance. Prompts state what the artifact is, never what it is not. Prompts never provide negative instructions, never speculate about other modules or unreadable files, and never instruct on editing mechanics or tool usage. Prompts state the target artifact.
+A guide never triggers. The prompt asks for alignment or conformance with the guide and the other input files, and it drives the loop; the guide stakes constraints and requirements only. Directive verbs aimed at the reader ("ensure", "produce", "apply", "verify the checklist", "call advance") are prohibited; declarative constraints ("the module must", "X matches Y") are the rule. Guides and prompts never advise about tool arguments: they can refer to advance, but they cannot refer to tool arguments or the content of advance. Prompts state what the artifact is, never what it is not. Prompts never provide negative instructions, never speculate about other modules or unreadable files, and never instruct on editing mechanics or tool usage. Prompts state the target artifact. Environmental communication to the agent (guides, prompts, tool outputs, reminders, and errors) is declarative and impersonal, stating objective state, invariants, and constraints; second-person pronouns ("you", "your") are prohibited so the agent treats the environment as an execution runtime rather than a conversational partner. Conversely, synthetic assistant turns or injected reasoning designed to steer agent cognition employ the first-person perspective ("I", "let me"), matching the assistant's internal monologue for natural token continuation into tool calls.
 
 Every guide follows this structure:
 
@@ -43,6 +43,8 @@ Every guide follows this structure:
 - [ ] Rules governing the editing process, tool usage, incremental editing strategy, or write permissions belong in the `## Summary` (which is visible before editing begins and throughout all steps in step mode); checklist items verify the artifact after changes are made and show up too late to control how editing is done; rules that apply specifically and exclusively to recovering from verification failure belong in `## Verification failure`
 - [ ] Applicability restrictions and not-applicable conditions (e.g. only applying to implementation specs whose name ends in `_impl.md`) are never in the Summary; they belong in `## Lint checks`
 - [ ] No directive framing — never "ensure", "produce", "transform" (the file pre-exists; the prompt triggers, the guide constrains)
+- [ ] Environmental communication to the agent (guides, prompts, tool outputs, reminders) is declarative and impersonal, stating environmental facts and constraints without second-person pronouns ("you", "your")
+- [ ] Injected reasoning text representing agent cognition uses the first-person perspective ("I", "let me") to match the assistant monologue and drive action continuation
 - [ ] Build-critical requirements come first (BUILD entries, required structure) — nothing builds without them
 - [ ] The guide's requirements are satisfiable from the guide alone: no reliance on the artifact's starting state — the file's existing content (a template, a prior version) is at most an efficiency boost, never the source of required structure
 - [ ] No instruction to run or interpret verification; verification is transparent and the reader's only verification action is calling `advance`; guides and prompts never advise about tool arguments: they can refer to advance, but they cannot refer to tool arguments or the content of advance
@@ -88,6 +90,8 @@ Every guide follows this structure:
 ## Wording
 
 - [ ] Headers and lists over tables; one fact per line; each line complete on its own
+- [ ] Second-person pronouns ("you", "your") are prohibited in all agent-facing environmental messages (guides, prompts, tool outputs, reminders, errors); constraints and states are stated impersonally and declaratively
+- [ ] First-person perspective ("I", "let me") is used when injecting synthetic assistant reasoning to simulate internal agent cognition and prime tool execution
 - [ ] "must", "never", "only" — never "should consider", "ideally"
 - [ ] Never state a rule as "X or Y" when the reader must choose; state the condition of the choice
 - [ ] Say what is an error and what is merely discouraged; the reader treats both as prohibitions unless told otherwise
@@ -111,6 +115,7 @@ Every guide follows this structure:
 - [ ] One-read test: given the whole guide in one read, the reader produces the required structure and applies the rules
 - [ ] No-trigger test: no sentence directs the reader to do something the prompt already drives ("ensure", "produce", "call advance")
 - [ ] Capability test: every action the guide names is one the reader can perform with its tools — no test runs, no shell, no unreadable files
+- [ ] Perspective test: all environmental communications to the agent are declarative and impersonal without second-person pronouns ("you", "your"); injected assistant reasoning uses the first-person perspective ("I", "let me")
 - [ ] Path test: no file paths appear anywhere in the guide; only virtual file names appear (with directory prefixes only for disambiguation such as `low/<name>.md` and `high/<name>.md`)
 - [ ] Linter test: if a linter exists for the artifact, a section titled `## Lint checks` lists all automated and applicability checks, and no applicability rules appear in the Summary
 - [ ] Deterministic test: every check verifiable by verifying presence or absence of a specific string or token is listed in `## Lint checks`
@@ -119,6 +124,7 @@ Every guide follows this structure:
 
 - [ ] Bloat — restated rules, meta-commentary, duplicate examples — cut each fact once
 - [ ] Chunk-fragile structure — tables, header-dependent lines, "as above" — one fact per line; lists over tables
+- [ ] Second-person environmental address — using "you" or "your" in guides, prompts, tool responses, or reminders instead of declarative, impersonal constraints; or failing to use first-person perspective when injecting assistant reasoning
 - [ ] Ambiguity — "should", "can optionally" — "must", "never", "only"
 - [ ] Buried rules — the load-bearing constraint after examples — front-load; examples after rules
 - [ ] Exposing file paths — using filesystem paths (e.g. `specs/low/<name>.md`) instead of virtual file names (`low/<name>.md`)

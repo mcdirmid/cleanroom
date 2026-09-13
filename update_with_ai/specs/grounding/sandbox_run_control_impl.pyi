@@ -151,7 +151,7 @@ FRESH_REQUIREMENTS:
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
+- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
 - Evaluates verification via RunController.evaluate_verification in the same session lifecycle tier, queries steps remaining and advances steps via imported sandbox_guide_delivery.GuideDelivery, checks workspace modifications via imported sandbox_file_editor.EditManager, sanitizes diagnostics through imported file_alias.AliasManager, attaches suppression key 'advance', and specifies FinishTool as follow_up_tool_call when no steps remain and no files were modified.
@@ -240,7 +240,7 @@ FRESH_REQUIREMENTS:
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
+- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
 - Receives actual parameter bindings directly, extracts change_summary, queries step mode from imported node_config.NodeConfig and steps remaining from imported sandbox_guide_delivery.GuideDelivery returning a failure response specifying AdvanceTool as follow_up_tool_call if steps remain, inspects workspace modifications via imported sandbox_file_editor.EditManager, evaluates verification checks via RunController.evaluate_verification in the same session tier, sanitizes diagnostics through imported file_alias.AliasManager, attaches suppression key 'finish', and produces a terminating response on success.
@@ -299,7 +299,7 @@ FRESH_REQUIREMENTS:
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
+- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
 - Receives actual parameter bindings directly, extracts the explanation parameter, and constructs a terminating failure response.
@@ -395,7 +395,7 @@ FRESH_REQUIREMENTS:
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
+- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
 - Receives actual parameter bindings, resolves the blame target via imported file_alias.AliasManager, validates the target against RunController.blame_targets in the same session lifecycle tier, and constructs a terminating feedback response.
@@ -493,7 +493,7 @@ FRESH_REQUIREMENTS:
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
+- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
 - Evaluates verification via RunController.evaluate_verification in the same session lifecycle tier, sanitizes diagnostics through imported file_alias.AliasManager, formats failure instructions from imported sandbox_guide_delivery.GuideDelivery, attaches suppression key 'run_tests', and constructs a tool_provider.Response presenting verification outcome alongside check output.

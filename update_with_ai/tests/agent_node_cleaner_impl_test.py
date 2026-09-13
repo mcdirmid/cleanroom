@@ -15,7 +15,7 @@ from lib.agent_runner import AgentOutcome, AgentRunner
 from lib.bazel_graph_storage import BazelGraphStorage, NodeDefinition, TaskPrompt
 from lib.dag_node_cleaner import CleanedNode
 from lib.dag_storage import Change, Dependency, Feedback, Message as DagMessage, Node
-from lib.file_alias import BoundFile, FileContent, ReadWriteFile, UnboundFile, WorkspacePath
+from lib.file_alias import BoundFile, FileContent, ReadOnlyFile, ReadWriteFile, UnboundFile, WorkspacePath
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton
 from lib.model_config import ModelConfig
 from lib.node_config import NodeConfig
@@ -333,6 +333,55 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             self.assertEqual(fb.content, "Syntax error in file")
             self.assertEqual(fb.target, Node(address="//pkg:upstream"))
 
+            # 2. Blame without colon
+            self.runner.outcome = AgentOutcome(
+                is_success=True,
+                response=Response(is_failed=False, is_terminated=True, content="Blamed //pkg:upstream_no_colon"),
+                conversation_history=self.history,
+            )
+            msgs2 = cleaner.clean_node(node)
+            # Requirement: When the agent outcome indicates blame, feedback messages containing the blame explanation are produced addressed to the blamed dependency node.
+            self.assertEqual(len(msgs2), 1)
+            fb2 = list(msgs2)[0]
+            assert isinstance(fb2, Feedback)
+            self.assertEqual(fb2.content, "Blamed //pkg:upstream_no_colon")
+            self.assertEqual(fb2.target, Node(address="//pkg:upstream_no_colon"))
+
+            # 3. Matching blame target in blame_targets by short_name
+            bt = ReadOnlyFile(
+                short_name="dep.py",
+                workspace_path=_make_workspace_path("pkg/dep.py"),
+                owning_node=Node(address="//pkg:target_owning_node"),
+            )
+            self.node_cfg.blame_targets.add(bt)
+            self.runner.outcome = AgentOutcome(
+                is_success=True,
+                response=Response(is_failed=False, is_terminated=True, content="Blamed dep.py: Broken interface contract"),
+                conversation_history=self.history,
+            )
+            msgs3 = cleaner.clean_node(node)
+            # Requirement: When the agent outcome indicates blame, feedback messages containing the blame explanation are produced addressed to the blamed dependency node.
+            # Requirement: [AgentNodeCleaner] When blame is signaled, the agent node cleaner produces feedback messages containing the blame explanation and addressed to the blamed dependency node.
+            self.assertEqual(len(msgs3), 1)
+            fb3 = list(msgs3)[0]
+            assert isinstance(fb3, Feedback)
+            self.assertEqual(fb3.content, "Broken interface contract")
+            self.assertEqual(fb3.target, Node(address="//pkg:target_owning_node"))
+
+            # 4. Matching blame target in blame_targets by owning_node.address
+            self.runner.outcome = AgentOutcome(
+                is_success=True,
+                response=Response(is_failed=False, is_terminated=True, content="Blamed //pkg:target_owning_node: Owning node address match"),
+                conversation_history=self.history,
+            )
+            msgs4 = cleaner.clean_node(node)
+            # Requirement: When the agent outcome indicates blame, feedback messages containing the blame explanation are produced addressed to the blamed dependency node.
+            self.assertEqual(len(msgs4), 1)
+            fb4 = list(msgs4)[0]
+            assert isinstance(fb4, Feedback)
+            self.assertEqual(fb4.content, "Owning node address match")
+            self.assertEqual(fb4.target, Node(address="//pkg:target_owning_node"))
+
     def test_clean_node_without_modifications_produces_no_messages(self) -> None:
         """CUJ: Producing no messages when cleaning succeeds without workspace file modifications."""
         node = Node(address="//pkg:no_mod")
@@ -588,6 +637,33 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             history_contents = [m.content for m in self.history.messages]
             prompt_content = next(c for c in history_contents if "Ensure the lib conforms without guide" in c)
             self.assertEqual(prompt_content, "Ensure the lib conforms without guide")
+
+    def test_clean_node_seeds_history_guide_from_read_only_files(self) -> None:
+        """CUJ: Resolving guide short name from read-only markdown files when guide_file is None."""
+        node = Node(address="//pkg:ro_guide_test")
+        self.storage.definitions[node.address] = NodeDefinition(
+            node=node,
+            task_prompt=TaskPrompt("Ensure the lib conforms to the guide"),
+        )
+        self.node_cfg.guide_file = None
+        self.node_cfg.read_only_files.add(
+            ReadOnlyFile(
+                short_name="ro_guide.md",
+                workspace_path=_make_workspace_path("pkg/ro_guide.md"),
+                owning_node=node,
+            )
+        )
+        self.model_cfg.is_step_mode = False
+
+        with enter_phase("system", registry=self.registry) as scope:
+            cleaner = scope.get_singleton(AgentNodeCleaner)
+            # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete, or call finish without arguments if no workspace files were modified when guide step mode is inactive.
+            _ = cleaner.clean_node(node)
+
+            history_contents = [m.content for m in self.history.messages]
+            prompt_content = next(c for c in history_contents if "Ensure the lib conforms" in c)
+            self.assertIn("ro_guide.md", prompt_content)
+            self.assertIn("finish", prompt_content)
 
     def test_clean_node_seeds_history_node_disallows_step_mode(self) -> None:
         """CUJ: When node disallows step mode, model step mode is overridden: feedback is included and guide file is named."""

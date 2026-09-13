@@ -8,7 +8,13 @@ from unittest.mock import MagicMock, patch
 from lib.agent_conversation_history import ConversationHistory, Message, ModelRequest
 from lib.agent_loop_guard import LoopFailure, LoopGuard, LoopReminder
 from lib.agent_runner import AgentOutcome, AgentRunner
-from lib.agent_runner_impl import AgentRunner as AgentRunnerImpl, OpenAIError, __initialize__
+from lib.agent_runner_impl import (
+    AgentRunner as AgentRunnerImpl,
+    OpenAIError,
+    __initialize__,
+    _DEFAULT_CONVERTER,
+    _measure_prefix_reuse,
+)
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from lib.model_config import ModelConfig
 from lib.runner_logger import LogEvent, RunnerLogger
@@ -796,6 +802,179 @@ class AgentRunnerImplTest(unittest.TestCase):
             # Requirement: When tool execution produces a terminating response, the agent runner concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
             # Requirement: [AgentRunner] When tool execution produces a termination outcome, the agent runner concludes and returns an agent outcome, or halts with an unexpected failure if the termination indicates a failing outcome.
             self.assertIn("Agent failed: Cannot proceed", str(ctx.exception))
+
+    def test_default_converter_and_parameter_fallback(self) -> None:
+        """CUJ: Default parameter converter properties and fallback parameter resolution."""
+        # Requirement: [AgentRunner] The agent runner drives turns by sending model requests to a language model and executing requested tools.
+        self.assertEqual(_DEFAULT_CONVERTER.actual_type, str)
+        self.assertIsNotNone(_DEFAULT_CONVERTER.wire_type)
+        self.assertEqual(_DEFAULT_CONVERTER.convert("hello"), "hello")
+
+    def test_prefix_reuse_divergence_variants(self) -> None:
+        """CUJ: Divergence reporting for role, tool call id, tool calls, and payload length mismatches."""
+        # 1. Role mismatch
+        prev1 = [{"role": "user", "content": "hello"}]
+        curr1 = [{"role": "assistant", "content": "hello"}]
+        _, t1 = _measure_prefix_reuse(prev1, curr1)
+        # Requirement: The agent runner logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+        self.assertIn("Role mismatch:", t1)
+
+        # 2. Tool call ID mismatch
+        prev2 = [{"role": "tool", "tool_call_id": "c1", "content": "ok"}]
+        curr2 = [{"role": "tool", "tool_call_id": "c2", "content": "ok"}]
+        _, t2 = _measure_prefix_reuse(prev2, curr2)
+        # Requirement: The agent runner logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+        self.assertIn("tool_call_id mismatch:", t2)
+
+        # 3. Tool calls mismatch
+        prev3 = [{"role": "assistant", "tool_calls": [{"id": "1"}]}]
+        curr3 = [{"role": "assistant", "tool_calls": [{"id": "2"}]}]
+        _, t3 = _measure_prefix_reuse(prev3, curr3)
+        # Requirement: The agent runner logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+        self.assertIn("tool_calls mismatch:", t3)
+
+        # 4. Current payload shorter than previous payload
+        prev4 = [{"role": "user", "content": "1"}, {"role": "user", "content": "2"}]
+        curr4 = [{"role": "user", "content": "1"}]
+        _, t4 = _measure_prefix_reuse(prev4, curr4)
+        # Requirement: The agent runner logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+        self.assertIn("Current conversation is shorter than previous conversation", t4)
+
+    @patch("lib.agent_runner_impl.OpenAI")
+    def test_completion_and_output_formatting_and_truncation(self, mock_openai_cls: MagicMock) -> None:
+        """CUJ: Formatting and truncating long arguments, assistant previews, and tool outputs."""
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        # Turn 1: tool call with arguments > 60 chars and invalid JSON arguments
+        long_arg = "a" * 70
+        tc1 = DummyToolCall(id="c1", name="step_tool", arguments=f'{{"key": "{long_arg}"}}')
+        tc_bad_json = DummyToolCall(id="c_bad", name="step_tool", arguments="invalid JSON {")
+        comp1 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc1, tc_bad_json]), finish_reason="length")])
+
+        # Turn 2: text completion with length > 80 chars without tool calls
+        long_text = "This is a very long text response that exceeds eighty characters in length to test preview truncation."
+        comp2 = DummyCompletion([DummyChoice(DummyMessage(long_text, tool_calls=[]))])
+
+        # Turn 3: finish tool call
+        tc3 = DummyToolCall(id="c3", name="finish", arguments="{}")
+        comp3 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc3]))])
+
+        mock_client.chat.completions.create.side_effect = [comp1, comp2, comp3]
+
+        long_output_first_line = "X" * 90 + "\nsecond line"
+        self.tool_mgr.responses["step_tool"] = Response(
+            is_failed=False,
+            is_terminated=False,
+            content=long_output_first_line,
+        )
+        self.tool_mgr.responses["finish"] = Response(
+            is_failed=False,
+            is_terminated=True,
+            content=long_output_first_line,
+        )
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            runner = scope.get_singleton(AgentRunner)
+            outcome = runner.run()
+            # Requirement: The agent runner logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+            self.assertTrue(outcome.is_success)
+            comp_events = [e for e in self.logger.events if e.event_name == "model_completion"]
+            self.assertTrue(any("..." in e.summary for e in comp_events))
+            tool_events = [e for e in self.logger.events if e.event_name == "tool_execution"]
+            self.assertTrue(any("..." in e.summary for e in tool_events))
+
+    @patch("lib.agent_runner_impl.OpenAI")
+    def test_parameter_conversion_exception_fallback(self, mock_openai_cls: MagicMock) -> None:
+        """CUJ: Parameter converter exception falls back to unconverted wire value."""
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        tc = DummyToolCall(id="c1", name="custom_tool", arguments='{"param": "not_an_int", "extra": "undeclared"}')
+        comp = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc]))])
+        mock_client.chat.completions.create.return_value = comp
+
+        class FailingConverter(MockConverter):
+            def convert(self, wire_value: Any) -> Any:
+                raise ValueError("Conversion failed")
+
+        failing_param = Parameter(name="param", description="", parameter_converter=FailingConverter())
+        custom_tool = DummyTool(name="custom_tool", parameters={failing_param})
+
+        self.tool_mgr.install_tool(custom_tool)
+        self.tool_mgr.responses["custom_tool"] = Response(is_failed=False, is_terminated=True, content="Done")
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            runner = scope.get_singleton(AgentRunner)
+            outcome = runner.run()
+            # Requirement: [AgentRunner] The agent runner drives turns by sending model requests to a language model and executing requested tools.
+            self.assertTrue(outcome.is_success)
+
+    @patch("lib.agent_runner_impl.OpenAI")
+    def test_followup_tool_execution_branches(self, mock_openai_cls: MagicMock) -> None:
+        """CUJ: Follow-up tool execution handles long summaries, failures, reminders, progress recording, and terminating errors."""
+        self.model_cfg.inject_followups = True
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        tc = DummyToolCall(id="c_start", name="start", arguments="{}")
+        comp = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc]))])
+        mock_client.chat.completions.create.return_value = comp
+
+        # Followup 1: non-terminating, failed, long content
+        long_line = "F" * 90 + "\nsecond line"
+        follow1 = FollowUpToolCall(
+            tool_name="advance",
+            wire_parameter_bindings=WireParameterBindings(bindings={("a", "1")}),
+        )
+        resp_start = Response(
+            is_failed=False,
+            is_terminated=False,
+            content="Start done",
+            follow_up_tool_call=follow1,
+        )
+        self.tool_mgr.responses["start"] = resp_start
+
+        # Followup 2: non-terminating, succeeded, advance tool name (calls guard.record_progress), with reminder
+        follow2 = FollowUpToolCall(
+            tool_name="replace",
+            wire_parameter_bindings=WireParameterBindings(bindings=set()),
+        )
+        resp_f1 = Response(
+            is_failed=True,
+            is_terminated=False,
+            content=long_line,
+            follow_up_tool_call=follow2,
+        )
+        self.tool_mgr.responses["advance"] = resp_f1
+
+        # Followup 3: terminating failure -> raises RuntimeError
+        follow3 = FollowUpToolCall(
+            tool_name="fail_followup",
+            wire_parameter_bindings=WireParameterBindings(bindings=set()),
+        )
+        resp_f2 = Response(
+            is_failed=False,
+            is_terminated=False,
+            content="OK step",
+            reminder="Check files",
+            follow_up_tool_call=follow3,
+        )
+        self.tool_mgr.responses["replace"] = resp_f2
+
+        resp_f3 = Response(
+            is_failed=True,
+            is_terminated=True,
+            content="Fatal followup error",
+        )
+        self.tool_mgr.responses["fail_followup"] = resp_f3
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            runner = scope.get_singleton(AgentRunner)
+            with self.assertRaises(RuntimeError) as ctx:
+                runner.run()
+
+            # Requirement: [AgentRunner] The agent runner can dispatch follow-up tool calls specified by tool responses, recording the follow-up execution in the conversation history.
+            self.assertIn("Agent failed: Fatal followup error", str(ctx.exception))
 
 
 if __name__ == "__main__":
