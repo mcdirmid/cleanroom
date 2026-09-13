@@ -1,0 +1,102 @@
+# update_with_ai/parts/sandbox/BUILD.bazel
+
+load("//update_python_with_ai/support/lib:update_python_with_ai.bzl", "update_python_with_ai")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "high_specs",
+    srcs = glob(["high/*.md"]),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "grounding_specs",
+    srcs = glob(["grounding/*.pyi"]),
+    visibility = ["//visibility:public"],
+)
+
+update_python_with_ai(
+    name = "sandbox",
+    module_deps = ['//update_with_ai/parts/agent:agent_config', ':tool_provider'],
+)
+
+update_python_with_ai(
+    name = "sandbox_impl",
+    module_deps = ['//update_with_ai/parts/agent:agent_config', '//update_with_ai/parts/agent:agent_node_config', ':sandbox', ':sandbox_file_editor', ':sandbox_file_reader', ':sandbox_run_control', ':tool_provider'],
+)
+
+update_python_with_ai(
+    name = "sandbox_asm",
+    module_deps = [':sandbox_change_summary_validator_impl', ':sandbox_file_editor_impl', ':sandbox_file_reader_impl', ':sandbox_guide_delivery_impl', ':sandbox_impl', ':sandbox_run_control_impl', ':template_format_impl', ':tool_provider_impl'],
+)
+
+update_python_with_ai(
+    name = "sandbox_change_summary_validator",
+    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config'],
+)
+
+update_python_with_ai(
+    name = "sandbox_change_summary_validator_impl",
+    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', ':sandbox_change_summary_validator'],
+)
+
+update_python_with_ai(
+    name = "sandbox_file_editor",
+    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', ':tool_provider'],
+)
+
+update_python_with_ai(
+    name = "sandbox_file_editor_impl",
+    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/core:filesystem_ext', '//update_with_ai/parts/agent:agent_node_config', ':sandbox_file_editor', ':template_format', ':tool_provider'],
+)
+
+update_python_with_ai(
+    name = "sandbox_file_reader",
+    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', ':tool_provider'],
+)
+
+update_python_with_ai(
+    name = "sandbox_file_reader_impl",
+    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/core:filesystem_ext', '//update_with_ai/parts/agent:agent_node_config', ':sandbox_file_reader', ':template_format', ':tool_provider'],
+)
+
+update_python_with_ai(
+    name = "sandbox_guide_delivery",
+    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', ':tool_provider'],
+)
+
+update_python_with_ai(
+    name = "sandbox_guide_delivery_impl",
+    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', ':sandbox_guide_delivery', ':tool_provider'],
+)
+
+update_python_with_ai(
+    name = "sandbox_run_control",
+    module_deps = ['//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', ':sandbox_file_editor', ':sandbox_guide_delivery', ':tool_provider'],
+)
+
+update_python_with_ai(
+    name = "sandbox_run_control_impl",
+    module_deps = ['//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', ':sandbox_file_editor', ':sandbox_guide_delivery', ':sandbox_run_control', ':tool_provider'],
+)
+
+update_python_with_ai(
+    name = "template_format",
+    module_deps = [],
+)
+
+update_python_with_ai(
+    name = "template_format_impl",
+    module_deps = ['//update_with_ai/parts/core:commonmark_ext', ':template_format'],
+)
+
+update_python_with_ai(
+    name = "tool_provider",
+    module_deps = [],
+)
+
+update_python_with_ai(
+    name = "tool_provider_impl",
+    module_deps = [':tool_provider'],
+)

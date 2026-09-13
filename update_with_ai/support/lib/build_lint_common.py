@@ -20,6 +20,7 @@ import re
 import subprocess
 import sys
 import tokenize
+from pathlib import Path
 from typing import Optional, Sequence, Tuple
 
 
@@ -293,7 +294,7 @@ def ensure_target(
 ) -> str:
     """Return text with the named rule target present and its pyright_deps
     and deps covering the known deps (add-only)."""
-    want = ["//" + package + ":" + d for d in deps]
+    want = [d if d.startswith("//") else ("//" + package + ":" + d.lstrip(":")) for d in deps]
     span = _find_block(text, rule, stem)
     if span is None:
         if not text.endswith("\n"):
@@ -400,6 +401,8 @@ def transitive_closure(modules_dir: str, roots: list[str]) -> list[str]:
         if name in seen:
             continue
         seen.add(name)
+        if name.startswith("//"):
+            continue
         path = os.path.join(modules_dir, name + ".py")
         for dep in local_imports(modules_dir, path):
             if dep not in seen:
@@ -686,7 +689,7 @@ def check_test_impl_imports(lib_pkg: str, file_path: str) -> list[str]:
                     errors.append(
                         f"{file_path}:{node.lineno}: error: implementation classes do not use an 'Impl' suffix; import '{alias.name[:-4]}' instead of '{alias.name}'"
                     )
-                if alias.name in (f"lib.{target_stem}", target_stem):
+                if alias.name in (f"lib.{target_stem}", target_stem) or alias.name.endswith(f".{target_stem}"):
                     target_imported = True
         elif isinstance(node, ast.ImportFrom):
             if node.module:
@@ -695,7 +698,7 @@ def check_test_impl_imports(lib_pkg: str, file_path: str) -> list[str]:
                     errors.append(
                         f"{file_path}:{node.lineno}: error: test module must only import target implementation module '{target_stem}', but imports from '{node.module}'"
                     )
-                if node.module in (f"lib.{target_stem}", target_stem):
+                if node.module in (f"lib.{target_stem}", target_stem) or node.module.endswith(f".{target_stem}"):
                     target_imported = True
                     for alias in node.names:
                         imported_target_classes.add(alias.name)
@@ -718,23 +721,23 @@ def check_test_impl_imports(lib_pkg: str, file_path: str) -> list[str]:
             pass
 
         if not target_imported:
+            pkg_prefix = f"{lib_pkg.replace('/', '.')}.{target_stem}" if "/" in lib_pkg else f"lib.{target_stem}"
             errors.append(
-                f"{file_path}: error: test module must import target implementation module 'lib.{target_stem}'"
+                f"{file_path}: error: test module must import target implementation module '{pkg_prefix}'"
             )
         elif impl_classes and not (imported_target_classes & impl_classes):
             has_impl_suffix_match = any(f"{c}Impl" in imported_target_classes for c in impl_classes)
             if not has_impl_suffix_match:
                 expected_str = ", ".join(sorted(impl_classes))
                 errors.append(
-                    f"{file_path}: error: test module must import target class ({expected_str}) from 'lib.{target_stem}'"
+                    f"{file_path}: error: test module must import target class ({expected_str}) from target implementation module '{target_stem}'"
                 )
 
     return errors
 
 
 def check_test_imports(lib_pkg: str, file_path: str) -> list[str]:
-    """Check that imports in a test module from the lib package use 'lib.<name>' syntax,
-    and not full package prefixes (e.g. testing.lib or update_with_ai.lib) or bare imports."""
+    """Check that imports in a test module from the lib package use standard package syntax."""
     errors: list[str] = []
     if not os.path.exists(file_path):
         return errors
@@ -743,22 +746,23 @@ def check_test_imports(lib_pkg: str, file_path: str) -> list[str]:
             tree = ast.parse(f.read(), filename=file_path)
     except OSError:
         return errors
+    expected_prefix = lib_pkg.replace("/", ".")
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 name = alias.name.split(".")[-1]
                 if name and os.path.isfile(os.path.join(lib_pkg, name + ".py")):
-                    if alias.name != f"lib.{name}":
+                    if alias.name != f"lib.{name}" and not alias.name.endswith(f".{name}"):
                         errors.append(
-                            f"{file_path}:{node.lineno}: error: import of lib module '{alias.name}' must be 'import lib.{name}'"
+                            f"{file_path}:{node.lineno}: error: import of lib module '{alias.name}' must be 'import {expected_prefix}.{name}' or 'import lib.{name}'"
                         )
         elif isinstance(node, ast.ImportFrom):
             if node.module:
                 name = node.module.split(".")[-1]
                 if name and os.path.isfile(os.path.join(lib_pkg, name + ".py")):
-                    if node.module != f"lib.{name}":
+                    if node.module != f"lib.{name}" and not node.module.endswith(f".{name}"):
                         errors.append(
-                            f"{file_path}:{node.lineno}: error: import of lib module '{node.module}' must be 'from lib.{name} import ...'"
+                            f"{file_path}:{node.lineno}: error: import of lib module '{node.module}' must be 'from {expected_prefix}.{name} import ...' or 'from lib.{name} import ...'"
                         )
     return errors
 
@@ -978,9 +982,11 @@ def find_spec_pyi(
             return p
     module_dir = os.path.dirname(module_path)
     search_dirs = [
+        os.path.join(module_dir, "..", "grounding"),
         os.path.join(module_dir, "..", "specs", "grounding"),
     ]
     if build_path:
+        search_dirs.append(os.path.join(os.path.dirname(build_path), "..", "grounding"))
         search_dirs.append(os.path.join(os.path.dirname(build_path), "..", "specs", "grounding"))
     search_dirs.extend([
         "update_with_ai/specs/grounding",
@@ -990,6 +996,9 @@ def find_spec_pyi(
         candidate = os.path.join(d, spec_name)
         if os.path.isfile(candidate):
             return candidate
+    for cand in Path("update_with_ai/parts").glob(f"*/grounding/{spec_name}"):
+        if cand.is_file():
+            return str(cand)
     return None
 
 

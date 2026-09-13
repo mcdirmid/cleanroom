@@ -46,40 +46,42 @@ def find_repo_root() -> Path:
     # Bazel run sets BUILD_WORKSPACE_DIRECTORY
     if "BUILD_WORKSPACE_DIRECTORY" in os.environ:
         p = Path(os.environ["BUILD_WORKSPACE_DIRECTORY"])
-        if (p / "update_with_ai" / "lib").is_dir():
+        if (p / "update_with_ai").is_dir():
             return p
 
     current = Path(__file__).resolve().parent
     for p in [current, current.parent, current.parent.parent, current.parent.parent.parent]:
-        if (p / "update_with_ai" / "lib").is_dir():
+        if (p / "update_with_ai").is_dir():
             return p
 
     cwd = Path.cwd()
-    if (cwd / "update_with_ai" / "lib").is_dir():
+    if (cwd / "update_with_ai").is_dir():
         return cwd
-    if (cwd / "lib").is_dir() and cwd.name == "update_with_ai":
+    if cwd.name == "update_with_ai":
         return cwd.parent
 
-    raise RuntimeError("Could not locate repository root containing update_with_ai/lib.")
+    for p in [current] + list(current.parents):
+        if (p / "WORKSPACE").exists() or (p / "MODULE.bazel").exists():
+            return p
+
+    raise RuntimeError("Could not locate repository root containing update_with_ai.")
 
 
-def get_available_targets(lib_dir: Path, tests_dir: Path) -> Dict[str, Tuple[Path, Path]]:
+def get_available_targets(repo_root: Path) -> Dict[str, Tuple[Path, Path]]:
     """Return a mapping of normalized target names to (impl_path, test_path)."""
     mapping: Dict[str, Tuple[Path, Path]] = {}
-    if not lib_dir.is_dir() or not tests_dir.is_dir():
-        return mapping
-    impl_files = sorted(
-        [f for f in lib_dir.iterdir() if f.is_file() and f.name.endswith("_impl.py")]
-    )
-    for impl_path in impl_files:
-        test_file = tests_dir / f"{impl_path.stem}_test.py"
-        if test_file.is_file():
-            base_name = impl_path.stem[:-5] if impl_path.stem.endswith("_impl") else impl_path.stem
-            mapping[impl_path.name] = (impl_path, test_file)
-            mapping[impl_path.stem] = (impl_path, test_file)
-            mapping[test_file.name] = (impl_path, test_file)
-            mapping[test_file.stem] = (impl_path, test_file)
-            mapping[base_name] = (impl_path, test_file)
+    parts_dir = repo_root / "update_with_ai" / "parts"
+    if parts_dir.is_dir():
+        for impl_path in sorted(parts_dir.glob("*/lib/*_impl.py")):
+            domain = impl_path.parent.parent.name
+            test_file = parts_dir / domain / "tests" / f"{impl_path.stem}_test.py"
+            if test_file.is_file():
+                base_name = impl_path.stem[:-5] if impl_path.stem.endswith("_impl") else impl_path.stem
+                mapping[impl_path.name] = (impl_path, test_file)
+                mapping[impl_path.stem] = (impl_path, test_file)
+                mapping[test_file.name] = (impl_path, test_file)
+                mapping[test_file.stem] = (impl_path, test_file)
+                mapping[base_name] = (impl_path, test_file)
     return mapping
 
 
@@ -431,9 +433,7 @@ def main() -> int:
             print(f"Error: Test file not found: {test_path}", file=sys.stderr)
             return 1
     elif args.target:
-        lib_dir = repo_root / "update_with_ai" / "lib"
-        tests_dir = repo_root / "update_with_ai" / "tests"
-        target_map = get_available_targets(lib_dir, tests_dir)
+        target_map = get_available_targets(repo_root)
         distinct_targets = sorted(
             list({impl.stem: (impl, test) for impl, test in target_map.values()}.items())
         )
@@ -446,9 +446,7 @@ def main() -> int:
             return 1
         impl_path, test_path = target_map[query]
     else:
-        lib_dir = repo_root / "update_with_ai" / "lib"
-        tests_dir = repo_root / "update_with_ai" / "tests"
-        target_map = get_available_targets(lib_dir, tests_dir)
+        target_map = get_available_targets(repo_root)
         distinct_targets = sorted(
             list({impl.stem: (impl, test) for impl, test in target_map.values()}.items())
         )

@@ -1,0 +1,6 @@
+# update_with_ai/parts/program/tests/BUILD.bazel
+
+load("//bin:pyright_library.bzl", "pyright_test")
+
+package(default_visibility = ["//visibility:public"])
+

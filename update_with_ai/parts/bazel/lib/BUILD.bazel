@@ -1,0 +1,163 @@
+# update_with_ai/parts/bazel/lib/BUILD.bazel
+
+load("//bin:pyright_library.bzl", "pyright_library")
+
+package(default_visibility = ["//visibility:public"])
+
+pyright_library(
+    name = "bazel_asm",
+    srcs = ["bazel_asm.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_config",
+        "//update_with_ai/parts/agent/lib:agent_file_alias",
+        "//update_with_ai/parts/agent/lib:agent_node_config",
+        "//update_with_ai/parts/agent/lib:agent_storage",
+        "//update_with_ai/parts/core/lib:runner_logger",
+        "//update_with_ai/parts/dag/lib:dag_cleaner",
+        "//update_with_ai/parts/dag/lib:dag_config",
+        "//update_with_ai/parts/dag/lib:dag_node_cleaner",
+        "//update_with_ai/parts/dag/lib:dag_runner",
+        "//update_with_ai/parts/dag/lib:dag_storage",
+        "//update_with_ai/parts/openai/lib:openai_config",
+        "//update_with_ai/parts/sandbox/lib:tool_provider",
+        ":bazel_manifest_loader",
+        ":bazel_manifest_loader_impl",
+        ":bazel_model_config_impl",
+        ":bazel_node_config_impl",
+        ":bazel_runner_impl",
+        ":bazel_storage_impl",
+        ":bazel_target",
+        ":bazel_target_impl",
+        ":file_paths",
+        ":file_paths_impl",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "bazel_manifest_loader",
+    srcs = ["bazel_manifest_loader.py"],
+    pyright_deps = [
+        "//update_with_ai/parts/agent/lib:agent_storage",
+        "//update_with_ai/parts/dag/lib:dag_storage",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "bazel_manifest_loader_impl",
+    srcs = ["bazel_manifest_loader_impl.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_file_alias",
+        "//update_with_ai/parts/agent/lib:agent_node_config",
+        "//update_with_ai/parts/agent/lib:agent_storage",
+        "//update_with_ai/parts/dag/lib:dag_storage",
+        "//update_with_ai/parts/sandbox/lib:tool_provider",
+        ":bazel_manifest_loader",
+        ":bazel_target",
+        ":file_paths",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "bazel_model_config_impl",
+    srcs = ["bazel_model_config_impl.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_config",
+        "//update_with_ai/parts/dag/lib:dag_config",
+        "//update_with_ai/parts/openai/lib:openai_config",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "bazel_node_config_impl",
+    srcs = ["bazel_node_config_impl.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_config",
+        "//update_with_ai/parts/agent/lib:agent_file_alias",
+        "//update_with_ai/parts/agent/lib:agent_node_config",
+        "//update_with_ai/parts/agent/lib:agent_storage",
+        "//update_with_ai/parts/dag/lib:dag_node_cleaner",
+        "//update_with_ai/parts/dag/lib:dag_storage",
+        "//update_with_ai/parts/sandbox/lib:tool_provider",
+        ":bazel_manifest_loader",
+        ":bazel_target",
+        ":file_paths",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "bazel_runner_impl",
+    srcs = ["bazel_runner_impl.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/core/lib:runner_logger",
+        "//update_with_ai/parts/dag/lib:dag_cleaner",
+        "//update_with_ai/parts/dag/lib:dag_node_cleaner",
+        "//update_with_ai/parts/dag/lib:dag_runner",
+        "//update_with_ai/parts/dag/lib:dag_storage",
+        ":bazel_manifest_loader",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "bazel_storage_impl",
+    srcs = ["bazel_storage_impl.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_storage",
+        "//update_with_ai/parts/dag/lib:dag_storage",
+        ":bazel_target",
+        ":file_paths",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "bazel_target",
+    srcs = ["bazel_target.py"],
+deps = [],
+    pyright_deps = [
+        "//update_with_ai/parts/dag/lib:dag_storage",
+        ":file_paths",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "bazel_target_impl",
+    srcs = ["bazel_target_impl.py"],
+deps = [],
+    pyright_deps = [
+        "//update_with_ai/parts/dag/lib:dag_storage",
+        ":bazel_target",
+        ":file_paths",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "file_paths",
+    srcs = ["file_paths.py"],
+    pyright_deps = [
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "file_paths_impl",
+    srcs = ["file_paths_impl.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        ":file_paths",
+    ],
+    visibility = ["//visibility:public"],
+)

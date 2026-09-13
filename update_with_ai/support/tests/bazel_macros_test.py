@@ -206,11 +206,11 @@ class TestBazelMacrosIntegration(unittest.TestCase):
             from support.lib.lifecycle import get_singleton
         except ImportError:
             from update_python_with_ai.support.lib.lifecycle import get_singleton
-        from lib import program_asm
-        from lib.bazel_target import BazelTarget
-        from lib.bazel_manifest_loader import BazelManifestLoader
-        from lib.dag_storage import DagStorage
-        from lib.dag_runner import DagRunner
+        from update_with_ai.parts.program.lib import program_asm
+        from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget
+        from update_with_ai.parts.bazel.lib.bazel_manifest_loader import BazelManifestLoader
+        from update_with_ai.parts.dag.lib.dag_storage import DagStorage
+        from update_with_ai.parts.dag.lib.dag_runner import DagRunner
 
         program_asm.__initialize__()
         node_util = get_singleton(BazelTarget)

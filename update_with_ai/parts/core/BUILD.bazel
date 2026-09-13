@@ -1,0 +1,52 @@
+# update_with_ai/parts/core/BUILD.bazel
+
+load("//update_python_with_ai/support/lib:update_python_with_ai.bzl", "update_python_with_ai")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "high_specs",
+    srcs = glob(["high/*.md"]),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "grounding_specs",
+    srcs = glob(["grounding/*.pyi"]),
+    visibility = ["//visibility:public"],
+)
+
+update_python_with_ai(
+    name = "runner_logger",
+    module_deps = [],
+)
+
+update_python_with_ai(
+    name = "runner_logger_impl",
+    module_deps = [':runner_logger'],
+)
+
+update_python_with_ai(
+    name = "commonmark_ext",
+    module_deps = [],
+)
+
+update_python_with_ai(
+    name = "filesystem_ext",
+    module_deps = [],
+)
+
+update_python_with_ai(
+    name = "json_manifest_ext",
+    module_deps = [],
+)
+
+update_python_with_ai(
+    name = "model_config_ext",
+    module_deps = [],
+)
+
+update_python_with_ai(
+    name = "update_with_ai_proto_ext",
+    module_deps = [],
+)

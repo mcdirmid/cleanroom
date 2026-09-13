@@ -1779,6 +1779,9 @@ def collect_paths(file_args: List[str]) -> List[Path]:
         spec_dir = root / "update_with_ai" / "specs" / "grounding"
         if spec_dir.is_dir():
             return sorted(spec_dir.glob("*.pyi"))
+        parts_dir = root / "update_with_ai" / "parts"
+        if parts_dir.is_dir():
+            return sorted(parts_dir.glob("*/grounding/*.pyi"))
         return []
 
     paths = []

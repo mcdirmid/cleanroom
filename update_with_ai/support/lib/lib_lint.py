@@ -19,6 +19,7 @@ Exits 0 when the BUILD entry is maintained; exits 1 on unexpected errors.
 import argparse
 import os
 import sys
+from pathlib import Path
 
 from build_lint_common import (
     check_dataclass_stubs,
@@ -48,17 +49,28 @@ from build_lint_common import (
 RULE = "pyright_library"
 
 
-def generate_asm_content(raw_deps: list[str]) -> str:
+def generate_asm_content(dir_name: str, raw_deps: list[str]) -> str:
     lines = [
         "from __future__ import annotations",
         "from typing import Optional",
         "from support.lib.lifecycle import LifecycleRegistry",
     ]
-    for dep in sorted(raw_deps):
-        lines.append(f"from . import {dep}")
+    dep_stems = [d.split(":")[-1] for d in raw_deps]
+    for dep in sorted(dep_stems):
+        if os.path.isfile(os.path.join(dir_name, f"{dep}.py")):
+            lines.append(f"from . import {dep}")
+        else:
+            found = False
+            for p in Path("update_with_ai/parts").glob(f"*/lib/{dep}.py"):
+                domain = p.parent.parent.name
+                lines.append(f"from update_with_ai.parts.{domain}.lib import {dep}")
+                found = True
+                break
+            if not found:
+                lines.append(f"from . import {dep}")
     lines.append("")
     lines.append("CONSTITUENTS = (")
-    for dep in sorted(raw_deps):
+    for dep in sorted(dep_stems):
         lines.append(f"    {dep},")
     lines.append(")")
     lines.append("")
@@ -97,10 +109,10 @@ def main() -> int:
     srcs = module_file(args.module_path)
     raw_deps = [d for d in args.deps.split(",") if d]
     pyi_paths = [p for p in args.pyi_deps.split(",") if p]
+    dir_name = os.path.dirname(args.module_path)
 
     if stem.endswith("_asm"):
-        asm_content = generate_asm_content(raw_deps)
-        dir_name = os.path.dirname(args.module_path)
+        asm_content = generate_asm_content(dir_name, raw_deps)
         if dir_name:
             os.makedirs(dir_name, exist_ok=True)
         if not os.path.exists(args.module_path) or read_text(args.module_path) != asm_content:
@@ -115,15 +127,17 @@ def main() -> int:
     # Separate library dependencies from external specification dependencies
     lib_deps: list[str] = []
     for d in raw_deps:
-        if d.endswith("_ext"):
+        stem_d = d.split(":")[-1]
+        if stem_d.endswith("_ext"):
             # External specification dependency: find its .pyi file
             candidates = [
-                p for p in pyi_paths if os.path.splitext(os.path.basename(p))[0] == d
+                p for p in pyi_paths if os.path.splitext(os.path.basename(p))[0] == stem_d
             ]
             if not candidates:
-                spec_file = f"{d}.pyi"
+                spec_file = f"{stem_d}.pyi"
                 build_dir = os.path.dirname(args.build_path)
                 for search_dir in [
+                    os.path.join(build_dir, "..", "grounding"),
                     os.path.join(build_dir, "..", "specs", "grounding"),
                     "update_with_ai/specs/grounding",
                     "specs/grounding",
@@ -131,6 +145,10 @@ def main() -> int:
                     candidate = os.path.join(search_dir, spec_file)
                     if os.path.isfile(candidate):
                         pyi_paths.append(candidate)
+                        break
+                if not any(os.path.splitext(os.path.basename(p))[0] == stem_d for p in pyi_paths):
+                    for cand in Path("update_with_ai/parts").glob(f"*/grounding/{spec_file}"):
+                        pyi_paths.append(str(cand))
                         break
         else:
             lib_deps.append(d)

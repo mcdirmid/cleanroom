@@ -24,6 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
 SPECS_DIR = ROOT / "update_with_ai" / "specs" / "high"
+PARTS_DIR = ROOT / "update_with_ai" / "parts"
 
 
 def lint_hls_file(file_path: Path) -> list[str]:
@@ -171,10 +172,13 @@ def main() -> int:
         targets = [Path(p) for p in args]
 
     if not targets:
-        if not SPECS_DIR.exists():
-            print(f"Error: specs directory {SPECS_DIR} does not exist", file=sys.stderr)
+        if PARTS_DIR.exists():
+            targets = sorted(PARTS_DIR.glob("*/high/*.md"))
+        elif SPECS_DIR.exists():
+            targets = sorted(SPECS_DIR.glob("*.md"))
+        else:
+            print(f"Error: specs directory does not exist", file=sys.stderr)
             return 1
-        targets = sorted(SPECS_DIR.glob("*.md"))
 
     all_errors: list[str] = []
     for f in targets:

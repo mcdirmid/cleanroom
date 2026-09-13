@@ -1,1 +1,39 @@
 # update_with_ai/BUILD.bazel
+
+filegroup(
+    name = "high_specs",
+    srcs = [
+        "//update_with_ai/parts/dag:high_specs",
+        "//update_with_ai/parts/agent:high_specs",
+        "//update_with_ai/parts/sandbox:high_specs",
+        "//update_with_ai/parts/bazel:high_specs",
+        "//update_with_ai/parts/openai:high_specs",
+        "//update_with_ai/parts/core:high_specs",
+        "//update_with_ai/parts/program:high_specs",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "grounding_specs",
+    srcs = [
+        "//update_with_ai/parts/dag:grounding_specs",
+        "//update_with_ai/parts/agent:grounding_specs",
+        "//update_with_ai/parts/sandbox:grounding_specs",
+        "//update_with_ai/parts/bazel:grounding_specs",
+        "//update_with_ai/parts/openai:grounding_specs",
+        "//update_with_ai/parts/core:grounding_specs",
+        "//update_with_ai/parts/program:grounding_specs",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+test_suite(
+    name = "high",
+    tags = ["high_lint"],
+)
+
+test_suite(
+    name = "low",
+    tags = ["low_lint"],
+)

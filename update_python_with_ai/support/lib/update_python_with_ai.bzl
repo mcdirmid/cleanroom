@@ -190,7 +190,7 @@ _hls_lint_test = rule(
             doc = "True when --deps comes from dep_srcs directly; False when it comes from the spec_deps manifest closure walk (hls_lint)",
         ),
         "_corpus": attr.label(
-            default = Label("//update_with_ai/specs:high_specs"),
+            default = Label("//update_with_ai:high_specs"),
             doc = "Canonical spec corpus used for term-ownership reference resolution",
         ),
     },
@@ -198,7 +198,7 @@ _hls_lint_test = rule(
 
 def _lls_lint_test_impl(ctx):
     src_file = ctx.file.src
-    dep_files = ctx.files.dep_srcs
+    dep_files = [f for f in ctx.files._corpus if f.path != src_file.path] if ctx.files._corpus else ctx.files.dep_srcs
     tool = ctx.file._tool
     script = ctx.actions.declare_file(ctx.label.name + ".sh")
 
@@ -230,6 +230,10 @@ _lls_lint_test = rule(
         "dep_srcs": attr.label_list(
             allow_files = True,
             doc = "Dep grounding .pyi files for symbol linking",
+        ),
+        "_corpus": attr.label(
+            default = Label("//update_with_ai:grounding_specs"),
+            doc = "Canonical grounding spec corpus",
         ),
         "_tool": attr.label(
             default = Label("//update_with_ai/support/lib:grounding_tool.py"),
@@ -316,6 +320,22 @@ def _merge_dicts(base, overrides):
         for k, v in overrides.items():
             merged[k] = v
     return merged
+
+def _dep_pyi_path(dep, current_pkg):
+    name = dep.split(":")[-1]
+    if ":" in dep and dep.startswith("//"):
+        pkg = dep[2:dep.rindex(":")]
+    else:
+        pkg = current_pkg
+    return "{}/grounding/{}.pyi".format(pkg, name)
+
+def _dep_lib_target(dep, current_pkg):
+    name = dep.split(":")[-1]
+    if ":" in dep and dep.startswith("//"):
+        pkg = dep[2:dep.rindex(":")]
+    else:
+        pkg = current_pkg
+    return "//{}/lib:{}".format(pkg, name)
 
 def update_python_with_ai(name, module_deps, template_parameters = None, visibility = None):
     """Create a spec node for each root in spec_dep_roots.
@@ -454,14 +474,13 @@ def update_python_with_ai(name, module_deps, template_parameters = None, visibil
 
 
 
-    # The lib and tests directories are one level up from this package (the
-    # parent of the instantiation package): the lib-python node writes
-    # ../lib/<name>.py and the test node writes ../tests/<name>_test.py. The
-    # package BUILD files (../lib/BUILD.bazel, ../tests/BUILD.bazel) are
+    # The lib and tests directories are inside this package: the lib-python
+    # node writes lib/<name>.py and the test node writes tests/<name>_test.py.
+    # The package BUILD files (lib/BUILD.bazel, tests/BUILD.bazel) are
     # silent sources: the agent may edit them to add the module's
     # pyright_library / pyright_test entry, whose type-check (and test)
     # targets gate the node's verify() tool.
-    _parent_pkg = "/".join(native.package_name().split("/")[:-1])
+    _pkg = native.package_name()
 
     # The lib-python node: the module that implements the LLS per
     # low_to_lib.md. Its verify runs the module's type check once the agent
@@ -501,7 +520,7 @@ def update_python_with_ai(name, module_deps, template_parameters = None, visibil
                 "specification (%s.pyi) per the guide. " +
                 _lib_kind_clause
             ).strip() % (name, name, name),
-            src = "../lib/" + name + ".py",
+            src = "lib/" + name + ".py",
             template = "//update_python_with_ai/templates:lib",
             template_parameters = lib_params,
             guide = "//update_python_with_ai/guides:grounding_to_lib",
@@ -510,21 +529,21 @@ def update_python_with_ai(name, module_deps, template_parameters = None, visibil
             silent_deps = [dep + "_lib" for dep in module_deps if not dep.endswith("_ext")],
             verify = (
                 "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_with_ai/support/lib/lib_lint.py " +
-                "{}/lib/BUILD.bazel {}/lib/{}.py --pyi {}/specs/grounding/{}.pyi {} {} && " +
+                "{}/lib/BUILD.bazel {}/lib/{}.py --pyi {}/grounding/{}.pyi {} {} && " +
                 "bazel test //{}/lib:{}_type_check --test_output=errors --noshow_progress 2>&1"
             ).format(
-                _parent_pkg,
-                _parent_pkg,
+                _pkg,
+                _pkg,
                 name,
-                _parent_pkg,
+                _pkg,
                 name,
-                "--deps " + ",".join([dep.split(":")[-1] for dep in module_deps])
+                "--deps " + ",".join([_dep_lib_target(dep, _pkg) for dep in module_deps if not dep.endswith("_ext")])
                 if module_deps
                 else "",
-                "--pyi-deps " + ",".join(["{}/specs/grounding/{}.pyi".format(_parent_pkg, dep.split(":")[-1]) for dep in module_deps])
+                "--pyi-deps " + ",".join([_dep_pyi_path(dep, _pkg) for dep in module_deps])
                 if module_deps
                 else "",
-                _parent_pkg,
+                _pkg,
                 name,
             ),
             verification_success_message = "{}.py compiles correctly. Note: this agent session must accomplish its goals without running tests.".format(name),
@@ -546,7 +565,7 @@ def update_python_with_ai(name, module_deps, template_parameters = None, visibil
                 "Write the test module for component %s (%s_test.py) from the " +
                 "grounding specification (%s.pyi) per the guide."
             ) % (name, name, name),
-            src = "../tests/" + name + "_test.py",
+            src = "tests/" + name + "_test.py",
             template = "//update_python_with_ai/templates:test",
             template_parameters = test_params,
             guide = "//update_python_with_ai/guides:grounding_to_test",
@@ -558,14 +577,12 @@ def update_python_with_ai(name, module_deps, template_parameters = None, visibil
                 "{}/tests/BUILD.bazel {}/tests/{}_test.py --lib-pkg {}/lib {} && " +
                 "bazel test //{}/tests:{}_test_type_check --test_output=errors --noshow_progress 2>&1"
             ).format(
-                _parent_pkg,
-                _parent_pkg,
+                _pkg,
+                _pkg,
                 name,
-                _parent_pkg,
-                "--deps " + ",".join([name] + [dep.split(":")[-1] for dep in module_deps])
-                if module_deps
-                else "",
-                _parent_pkg,
+                _pkg,
+                "--deps " + ",".join(["//{}/lib:{}".format(_pkg, name)] + [_dep_lib_target(dep, _pkg) for dep in module_deps if not dep.endswith("_ext")]),
+                _pkg,
                 name,
             ),
             verification_success_message = "{}_test.py compiles correctly. Note: this agent session must accomplish its goals without running tests.".format(name),
@@ -602,7 +619,7 @@ def update_python_with_ai(name, module_deps, template_parameters = None, visibil
             verify = (
                 "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{}/tests:{}_test --test_output=errors --noshow_progress 2>&1 && " +
                 "if [ -s {} ]; then echo 'QA log is not empty: delete all lines (0 bytes, remove any headers).'; exit 1; fi"
-            ).format(_parent_pkg, name, _qa_log_path),
+            ).format(_pkg, name, _qa_log_path),
             verification_success_message = "Test {}_test.py passed.".format(name),
             visibility = visibility,
         )
@@ -631,7 +648,7 @@ def update_python_with_ai(name, module_deps, template_parameters = None, visibil
                 "bazel test //{}/tests:{}_test --test_output=errors --noshow_progress 2>&1 && " +
                 "python3 update_with_ai/support/lib/evaluate_coverage.py --impl {}/lib/{}.py --test {}/tests/{}_test.py --threshold 100.0 && " +
                 "if [ -s {} ]; then echo 'Coverage log is not empty: delete all lines (0 bytes, remove any headers).'; exit 1; fi"
-            ).format(_parent_pkg, name, _parent_pkg, name, _parent_pkg, name, _coverage_log_path),
+            ).format(_pkg, name, _pkg, name, _pkg, name, _coverage_log_path),
             verification_success_message = "All lines of {}.py are covered by {}_test.py.".format(name, name),
             visibility = visibility,
         )

@@ -1,0 +1,67 @@
+# update_with_ai/parts/agent/BUILD.bazel
+
+load("//update_python_with_ai/support/lib:update_python_with_ai.bzl", "update_python_with_ai")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "high_specs",
+    srcs = glob(["high/*.md"]),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "grounding_specs",
+    srcs = glob(["grounding/*.pyi"]),
+    visibility = ["//visibility:public"],
+)
+
+update_python_with_ai(
+    name = "agent_asm",
+    module_deps = [':agent_loop_guard_impl', ':agent_node_cleaner_impl', '//update_with_ai/parts/openai:openai_conversation_impl', '//update_with_ai/parts/openai:openai_driver_impl'],
+)
+
+update_python_with_ai(
+    name = "agent_config",
+    module_deps = [],
+)
+
+update_python_with_ai(
+    name = "agent_conversation",
+    module_deps = ['//update_with_ai/parts/sandbox:tool_provider'],
+)
+
+update_python_with_ai(
+    name = "agent_driver",
+    module_deps = [':agent_config', ':agent_conversation', ':agent_loop_guard', '//update_with_ai/parts/core:runner_logger', '//update_with_ai/parts/sandbox:tool_provider'],
+)
+
+update_python_with_ai(
+    name = "agent_file_alias",
+    module_deps = ['//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/bazel:file_paths', '//update_with_ai/parts/sandbox:tool_provider'],
+)
+
+update_python_with_ai(
+    name = "agent_loop_guard",
+    module_deps = ['//update_with_ai/parts/sandbox:tool_provider'],
+)
+
+update_python_with_ai(
+    name = "agent_loop_guard_impl",
+    module_deps = [':agent_loop_guard', '//update_with_ai/parts/sandbox:tool_provider'],
+)
+
+update_python_with_ai(
+    name = "agent_node_cleaner_impl",
+    module_deps = [':agent_conversation', ':agent_driver', ':agent_node_config', ':agent_storage', '//update_with_ai/parts/dag:dag_node_cleaner', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/sandbox:sandbox'],
+)
+
+update_python_with_ai(
+    name = "agent_node_config",
+    module_deps = [':agent_config', ':agent_file_alias'],
+)
+
+update_python_with_ai(
+    name = "agent_storage",
+    module_deps = ['//update_with_ai/parts/dag:dag_storage'],
+)

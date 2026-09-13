@@ -1,0 +1,32 @@
+# update_with_ai/parts/openai/tests/BUILD.bazel
+
+load("//bin:pyright_library.bzl", "pyright_test")
+
+package(default_visibility = ["//visibility:public"])
+
+pyright_test(
+    name = "openai_conversation_impl_test",
+    srcs = ["openai_conversation_impl_test.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_conversation",
+        "//update_with_ai/parts/openai/lib:openai_conversation_impl",
+        "//update_with_ai/parts/sandbox/lib:tool_provider",
+    ],
+)
+
+pyright_test(
+    name = "openai_driver_impl_test",
+    srcs = ["openai_driver_impl_test.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_config",
+        "//update_with_ai/parts/agent/lib:agent_conversation",
+        "//update_with_ai/parts/agent/lib:agent_driver",
+        "//update_with_ai/parts/agent/lib:agent_loop_guard",
+        "//update_with_ai/parts/core/lib:runner_logger",
+        "//update_with_ai/parts/openai/lib:openai_config",
+        "//update_with_ai/parts/openai/lib:openai_driver_impl",
+        "//update_with_ai/parts/sandbox/lib:tool_provider",
+    ],
+)

@@ -340,17 +340,12 @@ class TestLifecycle(unittest.TestCase):
             self.assertEqual(cfg.get_mode(), "decorator-mode")
 
     def test_assembly_initialize_traversal(self) -> None:
-        from update_with_ai.lib import (
-            program_asm,
-            bazel_asm,
-            agent_asm,
-            dag_asm,
-            sandbox_asm,
-            bazel_runner_impl,
-            openai_driver_impl,
-            dag_cleaner_impl,
-            sandbox_impl,
-        )
+        from update_with_ai.parts.program.lib import program_asm
+        from update_with_ai.parts.bazel.lib import bazel_asm, bazel_runner_impl
+        from update_with_ai.parts.agent.lib import agent_asm
+        from update_with_ai.parts.dag.lib import dag_asm, dag_cleaner_impl
+        from update_with_ai.parts.sandbox.lib import sandbox_asm, sandbox_impl
+        from update_with_ai.parts.openai.lib import openai_driver_impl
 
         test_reg = LifecycleRegistry()
         # Verify program_asm recursively invokes constituent assemblies without error
@@ -403,9 +398,9 @@ class TestLifecycle(unittest.TestCase):
         ambient scope, whereas attempting to resolve an agent_session singleton outside
         of an active session phase raises LifecycleIsolationError.
         """
-        from update_with_ai.lib.bazel_target_impl import BazelTarget
-        from update_with_ai.lib.bazel_node_config_impl import NodeConfig
-        from update_with_ai.lib import bazel_asm
+        from update_with_ai.parts.bazel.lib.bazel_target_impl import BazelTarget
+        from update_with_ai.parts.bazel.lib.bazel_node_config_impl import NodeConfig
+        from update_with_ai.parts.bazel.lib import bazel_asm
         bazel_asm.__initialize__()
 
         util = get_singleton(BazelTarget)

@@ -1,0 +1,15 @@
+# update_with_ai/parts/core/tests/BUILD.bazel
+
+load("//bin:pyright_library.bzl", "pyright_test")
+
+package(default_visibility = ["//visibility:public"])
+
+pyright_test(
+    name = "runner_logger_impl_test",
+    srcs = ["runner_logger_impl_test.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/core/lib:runner_logger",
+        "//update_with_ai/parts/core/lib:runner_logger_impl",
+    ],
+)
