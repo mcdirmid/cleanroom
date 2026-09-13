@@ -10,7 +10,7 @@ from lib.file_paths import (
     DirectoryPath,
     WorkspaceRoot,
 )
-from lib.file_paths_impl import __initialize__
+from lib.file_paths_impl import FilePaths as FilePathsImpl, __initialize__
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 
 

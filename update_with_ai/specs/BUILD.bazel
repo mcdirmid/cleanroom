@@ -21,17 +21,17 @@ test_suite(
 
 update_python_with_ai(
     name = "agent_asm",
-    module_deps = ['agent_conversation_history_impl', 'agent_loop_guard_impl', 'agent_node_cleaner_impl', 'agent_runner_impl'],
+    module_deps = ['agent_loop_guard_impl', 'agent_node_cleaner_impl', 'openai_conversation_impl', 'openai_driver_impl'],
 )
 
 update_python_with_ai(
-    name = "agent_conversation_history",
+    name = "agent_conversation",
     module_deps = ['tool_provider'],
 )
 
 update_python_with_ai(
-    name = "agent_conversation_history_impl",
-    module_deps = ['agent_conversation_history', 'openai_ext', 'tool_provider'],
+    name = "agent_driver",
+    module_deps = ['agent_conversation', 'agent_loop_guard', 'model_config', 'runner_logger', 'tool_provider'],
 )
 
 update_python_with_ai(
@@ -45,28 +45,13 @@ update_python_with_ai(
 )
 
 update_python_with_ai(
-    name = "agent_node_cleaner",
-    module_deps = ['dag_node_cleaner', 'dag_storage'],
-)
-
-update_python_with_ai(
     name = "agent_node_cleaner_impl",
-    module_deps = ['agent_conversation_history', 'agent_node_cleaner', 'agent_runner', 'agent_storage', 'dag_storage', 'model_config', 'node_config', 'sandbox'],
-)
-
-update_python_with_ai(
-    name = "agent_runner",
-    module_deps = ['agent_conversation_history', 'agent_loop_guard', 'model_config', 'runner_logger', 'tool_provider'],
-)
-
-update_python_with_ai(
-    name = "agent_runner_impl",
-    module_deps = ['agent_conversation_history', 'agent_loop_guard', 'agent_runner', 'model_config', 'openai_ext', 'runner_logger', 'tool_provider'],
+    module_deps = ['agent_conversation', 'agent_driver', 'agent_storage', 'dag_node_cleaner', 'dag_storage', 'model_config', 'node_config', 'sandbox'],
 )
 
 update_python_with_ai(
     name = "bazel_asm",
-    module_deps = ['agent_asm', 'bazel_manifest_loader_impl', 'bazel_model_config_impl', 'bazel_node_config_impl', 'bazel_node_id_utils_impl', 'bazel_runner_impl', 'bazel_storage_impl', 'dag_asm', 'file_paths_impl', 'runner_logger_impl', 'sandbox_asm'],
+    module_deps = ['agent_asm', 'bazel_manifest_loader_impl', 'bazel_model_config_impl', 'bazel_node_config_impl', 'bazel_runner_impl', 'bazel_storage_impl', 'bazel_target_impl', 'dag_asm', 'file_paths_impl', 'runner_logger_impl', 'sandbox_asm'],
 )
 
 update_python_with_ai(
@@ -76,17 +61,17 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "bazel_storage_impl",
-    module_deps = ['agent_storage', 'bazel_node_id_utils', 'file_paths', 'update_with_ai_proto_ext'],
+    module_deps = ['agent_storage', 'bazel_target', 'file_paths', 'update_with_ai_proto_ext'],
 )
 
 update_python_with_ai(
     name = "bazel_manifest_loader",
-    module_deps = ['agent_storage', 'bazel_node_id_utils', 'dag_storage', 'file_alias', 'node_config'],
+    module_deps = ['agent_storage', 'bazel_target', 'dag_storage', 'file_alias', 'node_config'],
 )
 
 update_python_with_ai(
     name = "bazel_manifest_loader_impl",
-    module_deps = ['agent_storage', 'bazel_manifest_loader', 'bazel_node_id_utils', 'dag_storage', 'file_alias', 'json_manifest_ext', 'node_config'],
+    module_deps = ['agent_storage', 'bazel_manifest_loader', 'bazel_target', 'dag_storage', 'file_alias', 'json_manifest_ext', 'node_config'],
 )
 
 update_python_with_ai(
@@ -100,23 +85,28 @@ update_python_with_ai(
 )
 
 update_python_with_ai(
-    name = "bazel_node_id_utils",
+    name = "bazel_target",
     module_deps = ['dag_storage', 'file_paths'],
 )
 
 update_python_with_ai(
-    name = "bazel_node_id_utils_impl",
-    module_deps = ['bazel_node_id_utils', 'bazel_target_labels_ext', 'dag_storage', 'file_paths'],
+    name = "bazel_target_impl",
+    module_deps = ['bazel_target', 'bazel_target_labels_ext', 'dag_storage', 'file_paths'],
 )
 
 update_python_with_ai(
-    name = "bazel_runner",
-    module_deps = ['bazel_manifest_loader', 'dag_cleaner', 'dag_node_cleaner', 'dag_storage', 'runner_logger'],
+    name = "openai_conversation_impl",
+    module_deps = ['agent_conversation', 'openai_ext', 'tool_provider'],
+)
+
+update_python_with_ai(
+    name = "openai_driver_impl",
+    module_deps = ['agent_conversation', 'agent_driver', 'agent_loop_guard', 'model_config', 'openai_ext', 'runner_logger', 'tool_provider'],
 )
 
 update_python_with_ai(
     name = "bazel_runner_impl",
-    module_deps = ['bazel_manifest_loader', 'bazel_runner', 'dag_cleaner', 'dag_node_cleaner', 'dag_storage', 'runner_logger'],
+    module_deps = ['bazel_manifest_loader', 'dag_cleaner', 'dag_node_cleaner', 'dag_runner', 'dag_storage', 'runner_logger'],
 )
 
 update_python_with_ai(
@@ -141,6 +131,11 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "dag_node_cleaner",
+    module_deps = ['dag_storage'],
+)
+
+update_python_with_ai(
+    name = "dag_runner",
     module_deps = ['dag_storage'],
 )
 

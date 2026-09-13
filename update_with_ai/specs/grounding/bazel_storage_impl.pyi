@@ -1,7 +1,7 @@
 from typing import Optional, Set
 from framework import operation, override, singleton_type
 import agent_storage
-import bazel_node_id_utils
+import bazel_target
 import dag_storage
 import file_paths
 import update_with_ai_proto_ext
@@ -15,7 +15,7 @@ Implements graph storage with in-memory definitions, manifest loader coordinatio
 FRESH_REQUIREMENTS:
 - The agent storage maintains node definitions and task prompts mapped to nodes in dag storage.
 - The agent storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files using proto package store from update with ai proto ext.
-- All nodes located within the same package directory resolved by the bazel node identifier utility from bazel node id utils share a common package message file named `.update_with_ai.textproto`.
+- All nodes located within the same package directory resolved by the bazel target share a common package message file named `.update_with_ai.textproto`.
 - The agent storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
 - Propagating dependencies exclude silent dependencies declared on a node.
 
@@ -25,7 +25,7 @@ INHERITED_REQUIREMENTS:
 - [AgentStorage] Declared dependencies marked propagating mark dependent nodes dirty when changed.
 
 GROUNDING_ARGUMENT:
-- As a system singleton, AgentStorage maintains node definitions and task prompts mapped to nodes in dag storage, coordinates with imported bazel_node_id_utils and file_paths in the same system lifecycle tier, and persists pending messages and reverse dependencies to package textproto files via update_with_ai_proto_ext.
+- As a system singleton, AgentStorage maintains node definitions and task prompts mapped to nodes in dag storage, coordinates with imported bazel_target and file_paths in the same system lifecycle tier, and persists pending messages and reverse dependencies to package textproto files via update_with_ai_proto_ext.
 """
 
     @operation
@@ -134,7 +134,7 @@ PURPOSE:
 Implements dag storage maintaining graph structure, dependents, and pending messages
 
 GROUNDING_ARGUMENT:
-- As a system singleton, DagStorage maintains dependency graph topology and persists message and dependent records to package textproto files via bazel_node_id_utils and update_with_ai_proto_ext in the same system lifecycle tier.
+- As a system singleton, DagStorage maintains dependency graph topology and persists message and dependent records to package textproto files via bazel_target and update_with_ai_proto_ext in the same system lifecycle tier.
 """
 
     @operation
@@ -157,7 +157,7 @@ PURPOSE:
 Retrieves downstream dependents for a node
 
 GROUNDING_ARGUMENT:
-- Receives the node parameter directly and queries reverse dependencies from package textproto files using bazel_node_id_utils and update_with_ai_proto_ext.
+- Receives the node parameter directly and queries reverse dependencies from package textproto files using bazel_target and update_with_ai_proto_ext.
 """
         ...
 
@@ -169,7 +169,7 @@ PURPOSE:
 Retrieves pending messages for a node
 
 GROUNDING_ARGUMENT:
-- Receives the node parameter directly and queries pending messages from package textproto files using bazel_node_id_utils and update_with_ai_proto_ext.
+- Receives the node parameter directly and queries pending messages from package textproto files using bazel_target and update_with_ai_proto_ext.
 """
         ...
 
@@ -205,7 +205,7 @@ INHERITED_REQUIREMENTS:
 - [DagStorage] Registering a node as a dependent adds the node to the dependents of all of its non-silent dependencies.
 
 GROUNDING_ARGUMENT:
-- Receives the node parameter directly, inspects its non-silent dependencies from local state, and writes updated reverse dependencies to package textproto files using bazel_node_id_utils and update_with_ai_proto_ext.
+- Receives the node parameter directly, inspects its non-silent dependencies from local state, and writes updated reverse dependencies to package textproto files using bazel_target and update_with_ai_proto_ext.
 """
         ...
 
@@ -223,7 +223,7 @@ INHERITED_REQUIREMENTS:
 - [DagStorage] Clearing the dependents of a node empties all recorded dependents for that node.
 
 GROUNDING_ARGUMENT:
-- Receives the node parameter directly and empties recorded dependents for that node in package textproto storage using bazel_node_id_utils and update_with_ai_proto_ext.
+- Receives the node parameter directly and empties recorded dependents for that node in package textproto storage using bazel_target and update_with_ai_proto_ext.
 """
         ...
 
@@ -241,7 +241,7 @@ INHERITED_REQUIREMENTS:
 - [DagStorage] Adding a message to a node records the message for that node.
 
 GROUNDING_ARGUMENT:
-- Receives message and target node as parameters and records the message in package textproto storage using bazel_node_id_utils and update_with_ai_proto_ext.
+- Receives message and target node as parameters and records the message in package textproto storage using bazel_target and update_with_ai_proto_ext.
 """
         ...
 
@@ -259,6 +259,6 @@ INHERITED_REQUIREMENTS:
 - [DagStorage] Clearing messages for a node removes all recorded messages for that node.
 
 GROUNDING_ARGUMENT:
-- Receives the node parameter directly and clears recorded messages in package textproto storage using bazel_node_id_utils and update_with_ai_proto_ext.
+- Receives the node parameter directly and clears recorded messages in package textproto storage using bazel_target and update_with_ai_proto_ext.
 """
         ...

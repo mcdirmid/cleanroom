@@ -7,7 +7,7 @@ from . import file_paths
 class NodeDirectory(file_paths.WorkspacePath):
     pass
 
-class BazelNodeIdentifierUtility(Protocol):
+class BazelTarget(Protocol):
     def normalize(self, raw_label: str) -> dag_storage.Node:
         ...
 

@@ -1,7 +1,6 @@
 from typing import Optional, Set
-from . import agent_conversation_history
-from . import agent_node_cleaner
-from . import agent_runner
+from . import agent_conversation
+from . import agent_driver
 from . import agent_storage
 from . import dag_node_cleaner
 from . import dag_storage
@@ -27,11 +26,12 @@ class CleanedNode(dag_node_cleaner.CleanedNode, Singleton):
         # Requirement: The cleaned node is configured with the node currently being cleaned within the agent session phase.
         self._node = node
 
-class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
+
+class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
     tier = "system"
 
     def __init__(self) -> None:
-        self._last_outcome: Optional[agent_runner.AgentOutcome] = None
+        self._last_outcome: Optional[agent_driver.AgentOutcome] = None
 
     def clean_node(self, node: dag_storage.Node) -> Set[dag_storage.Message]:
         storage = get_singleton(agent_storage.AgentStorage)
@@ -59,11 +59,11 @@ class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
                 sb = session.get_singleton(sandbox.Sandbox)
                 sb.materialize_startup_templates()
 
-                hist = session.get_singleton(agent_conversation_history.ConversationHistory)
-                # Requirement: The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content, and paired startup tool executions from the sandbox.
+                hist = session.get_singleton(agent_conversation.Conversation)
+                # Requirement: The conversation is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox.
                 if defn is not None and defn.task_prompt:
                     task_prompt = str(defn.task_prompt)
-                    # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete, or call finish without arguments if no workspace files were modified when guide step mode is inactive.
+                    # Requirement: When seeding conversation with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete, or call finish without arguments if no workspace files were modified when guide step mode is inactive.
                     n_cfg = session.get_singleton(node_config.NodeConfig)
                     guide_short_name: Optional[str] = None
                     if n_cfg.guide_file is not None:
@@ -79,12 +79,11 @@ class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
                         else:
                             task_prompt += f"\n\nThe guide is in file {guide_short_name}. Call finish with a change summary describing modifications when complete, or call finish without arguments if no workspace files were modified."
                     hist.append_message(
-                        agent_conversation_history.Message(role="user", content=task_prompt)
+                        agent_conversation.Message(role="user", content=task_prompt)
                     )
 
-                # Requirement: The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox.
-                # Requirement: When guide step mode is active, incoming feedback messages are omitted from the initial seeded conversation history prompt and delivered through guide advancement instead.
-                # Requirement: When guide step mode is inactive, incoming feedback messages are formatted as actionable instructions prefaced with directives to fix read-write target files based on the feedback.
+                # Requirement: The conversation is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox.
+                # Requirement: When incoming feedback messages are present, they are formatted as actionable instructions prefaced with directives to fix read-write target files based on the feedback.
                 messages_sorted = sorted(
                     storage.get_messages(node),
                     key=lambda m: (m.content, type(m).__name__),
@@ -96,16 +95,16 @@ class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
                     if isinstance(msg, dag_storage.Feedback):
                         body = f"Fix {rw_names} based on feedback: {msg.content}"
                         hist.append_message(
-                            agent_conversation_history.Message(role="user", content=body)
+                            agent_conversation.Message(role="user", content=body)
                         )
                     else:
                         prefix = f"Incoming {type(msg).__name__.lower()}"
                         body = f"{prefix}: {msg.content}" if msg.content else prefix
                         hist.append_message(
-                            agent_conversation_history.Message(role="user", content=body)
+                            agent_conversation.Message(role="user", content=body)
                         )
 
-                # Requirement: The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox.
+                # Requirement: The conversation is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox.
                 for i, startup_exec in enumerate(sb.get_startup_tool_executions()):
                     hist.append_tool_response(
                         response=startup_exec.response,
@@ -114,8 +113,8 @@ class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
                         wire_parameter_bindings=startup_exec.wire_parameter_bindings,
                     )
 
-                # Requirement: Node cleaning executes an agent runner with the sandbox and conversation history.
-                runner = session.get_singleton(agent_runner.AgentRunner)
+                # Requirement: Node cleaning executes an agent driver with the sandbox and conversation.
+                runner = session.get_singleton(agent_driver.AgentDriver)
                 outcome = runner.run()
                 self._last_outcome = outcome
 
@@ -176,7 +175,7 @@ class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
                 storage.add_message(dag_storage.Feedback(), to=node)
             return False
 
-        # Requirement: After a dirty node is cleaned, the agent node cleaner registers the node as a dependent to its non-silent dependencies.
+        # Requirement: After a dirty node is cleaned, the node cleaner registers the node as a dependent to its non-silent dependencies.
         storage.register_dependent(node)
 
         storage.clear_messages(node)
@@ -197,11 +196,12 @@ class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner, Singleton):
         # Requirement: [NodeCleaner] Cleaning a dirty node communicates whether processing should continue.
         return True
 
+
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
-        AgentNodeCleaner,
-        keys=[AgentNodeCleaner, agent_node_cleaner.AgentNodeCleaner, dag_node_cleaner.NodeCleaner],
+        NodeCleaner,
+        keys=[NodeCleaner, dag_node_cleaner.NodeCleaner],
         tier="system",
     )
     reg.register_singleton(

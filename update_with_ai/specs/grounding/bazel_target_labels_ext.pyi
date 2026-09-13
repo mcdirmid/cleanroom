@@ -3,7 +3,7 @@
 
 ## External Mechanics & API Documentation
 
-The `bazel_target_labels_ext` external component specifies syntax normalization rules for Bazel target labels and resolves package directories against workspace roots using standard Python string and regex operations. External boundary specifications define no standalone library files; dependent implementation components (specifically `bazel_node_id_utils_impl`) implement normalization logic directly.
+The `bazel_target_labels_ext` external component specifies syntax normalization rules for Bazel target labels and resolves package directories against workspace roots using standard Python string and regex operations. External boundary specifications define no standalone library files; dependent implementation components (specifically `bazel_target_impl`) implement normalization logic directly.
 
 **Target Label Syntax & Transformation Rules**
 

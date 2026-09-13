@@ -346,7 +346,7 @@ class TestLifecycle(unittest.TestCase):
             dag_asm,
             sandbox_asm,
             bazel_runner_impl,
-            agent_runner_impl,
+            openai_driver_impl,
             dag_cleaner_impl,
             sandbox_impl,
         )
@@ -360,7 +360,7 @@ class TestLifecycle(unittest.TestCase):
         self.assertIn(dag_asm, bazel_asm.CONSTITUENTS)
         self.assertIn(sandbox_asm, bazel_asm.CONSTITUENTS)
         self.assertIn(bazel_runner_impl, bazel_asm.CONSTITUENTS)
-        self.assertIn(agent_runner_impl, agent_asm.CONSTITUENTS)
+        self.assertIn(openai_driver_impl, agent_asm.CONSTITUENTS)
         self.assertIn(dag_cleaner_impl, dag_asm.CONSTITUENTS)
         self.assertIn(sandbox_impl, sandbox_asm.CONSTITUENTS)
 
@@ -401,13 +401,12 @@ class TestLifecycle(unittest.TestCase):
         ambient scope, whereas attempting to resolve an agent_session singleton outside
         of an active session phase raises LifecycleIsolationError.
         """
-        # Testing requirement: Ambient system scope can resolve system-tier singletons
-        from update_with_ai.lib.bazel_node_id_utils_impl import BazelNodeIdentifierUtility
+        from update_with_ai.lib.bazel_target_impl import BazelTarget
         from update_with_ai.lib.bazel_node_config_impl import NodeConfig
         from update_with_ai.lib import bazel_asm
         bazel_asm.__initialize__()
 
-        util = get_singleton(BazelNodeIdentifierUtility)
+        util = get_singleton(BazelTarget)
         self.assertIsNotNone(util)
 
         # Testing requirement: Resolving session singleton outside session raises LifecycleIsolationError

@@ -3,11 +3,11 @@
 load("//bin:pyright_library.bzl", "pyright_test")
 
 pyright_test(
-    name = "agent_conversation_history_impl_test",
-    srcs = ["agent_conversation_history_impl_test.py"],
+    name = "openai_conversation_impl_test",
+    srcs = ["openai_conversation_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:agent_conversation_history",
-        "//update_with_ai/lib:agent_conversation_history_impl",
+        "//update_with_ai/lib:agent_conversation",
+        "//update_with_ai/lib:openai_conversation_impl",
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/lib:tool_provider",
     ],
@@ -28,10 +28,9 @@ pyright_test(
     name = "agent_node_cleaner_impl_test",
     srcs = ["agent_node_cleaner_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:agent_conversation_history",
-        "//update_with_ai/lib:agent_node_cleaner",
+        "//update_with_ai/lib:agent_conversation",
+        "//update_with_ai/lib:agent_driver",
         "//update_with_ai/lib:agent_node_cleaner_impl",
-        "//update_with_ai/lib:agent_runner",
         "//update_with_ai/lib:agent_storage",
         "//update_with_ai/lib:dag_node_cleaner",
         "//update_with_ai/lib:dag_storage",
@@ -48,13 +47,13 @@ pyright_test(
 )
 
 pyright_test(
-    name = "agent_runner_impl_test",
-    srcs = ["agent_runner_impl_test.py"],
+    name = "openai_driver_impl_test",
+    srcs = ["openai_driver_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:agent_conversation_history",
+        "//update_with_ai/lib:agent_conversation",
+        "//update_with_ai/lib:agent_driver",
         "//update_with_ai/lib:agent_loop_guard",
-        "//update_with_ai/lib:agent_runner",
-        "//update_with_ai/lib:agent_runner_impl",
+        "//update_with_ai/lib:openai_driver_impl",
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/lib:model_config",
         "//update_with_ai/lib:runner_logger",
@@ -67,11 +66,10 @@ pyright_test(
     srcs = ["bazel_storage_impl_test.py"],
     pyright_deps = [
         "//update_with_ai/lib:agent_storage",
-        "//update_with_ai/lib:bazel_node_id_utils",
+        "//update_with_ai/lib:bazel_target",
         "//update_with_ai/lib:bazel_storage_impl",
         "//update_with_ai/lib:dag_storage",
         "//update_with_ai/lib:file_paths",
-        "//update_with_ai/lib:file_paths_impl",
         "//update_python_with_ai/support/lib:lifecycle",
     ],
 )
@@ -83,7 +81,7 @@ pyright_test(
         "//update_with_ai/lib:agent_storage",
         "//update_with_ai/lib:bazel_manifest_loader",
         "//update_with_ai/lib:bazel_manifest_loader_impl",
-        "//update_with_ai/lib:bazel_node_id_utils",
+        "//update_with_ai/lib:bazel_target",
         "//update_with_ai/lib:dag_storage",
         "//update_python_with_ai/support/lib:lifecycle",
     ],
@@ -105,7 +103,7 @@ pyright_test(
     pyright_deps = [
         "//update_with_ai/lib:bazel_manifest_loader",
         "//update_with_ai/lib:bazel_node_config_impl",
-        "//update_with_ai/lib:bazel_node_id_utils",
+        "//update_with_ai/lib:bazel_target",
         "//update_with_ai/lib:dag_node_cleaner",
         "//update_with_ai/lib:dag_storage",
         "//update_with_ai/lib:file_alias",
@@ -119,11 +117,11 @@ pyright_test(
 )
 
 pyright_test(
-    name = "bazel_node_id_utils_impl_test",
-    srcs = ["bazel_node_id_utils_impl_test.py"],
+    name = "bazel_target_impl_test",
+    srcs = ["bazel_target_impl_test.py"],
     pyright_deps = [
-        "//update_with_ai/lib:bazel_node_id_utils",
-        "//update_with_ai/lib:bazel_node_id_utils_impl",
+        "//update_with_ai/lib:bazel_target",
+        "//update_with_ai/lib:bazel_target_impl",
         "//update_with_ai/lib:dag_storage",
         "//update_python_with_ai/support/lib:lifecycle",
     ],
@@ -135,10 +133,10 @@ pyright_test(
     pyright_deps = [
         "//update_with_ai/lib:agent_storage",
         "//update_with_ai/lib:bazel_manifest_loader",
-        "//update_with_ai/lib:bazel_runner",
         "//update_with_ai/lib:bazel_runner_impl",
         "//update_with_ai/lib:dag_cleaner",
         "//update_with_ai/lib:dag_node_cleaner",
+        "//update_with_ai/lib:dag_runner",
         "//update_with_ai/lib:dag_storage",
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/lib:runner_logger",

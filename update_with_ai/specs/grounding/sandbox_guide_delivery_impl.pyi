@@ -46,7 +46,7 @@ GROUNDING_ARGUMENT:
 
     @operation
     @override
-    def parse_guide(self, content: file_alias.FileContent) -> sandbox_guide_delivery.Guide:
+    def parse_guide(self, content: file_alias.FileContent) -> node_config.Guide:
         """
 PURPOSE:
 Implements parse_guide to extract summary and step sections from file content
@@ -83,7 +83,7 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def guide(self) -> Optional[sandbox_guide_delivery.Guide]:
+    def guide(self) -> Optional[node_config.Guide]:
         """
 PURPOSE:
 Exposes the configured guide for the session

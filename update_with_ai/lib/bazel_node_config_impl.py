@@ -4,7 +4,7 @@ import re
 import subprocess
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple, Type
 from . import bazel_manifest_loader
-from . import bazel_node_id_utils
+from . import bazel_target
 from . import dag_node_cleaner
 from . import dag_storage
 from . import file_alias
@@ -74,7 +74,7 @@ class NodeConfig(node_config.NodeConfig, Singleton):
         if manifest_raw is None:
             return
 
-        node_util = get_singleton(bazel_node_id_utils.BazelNodeIdentifierUtility)
+        node_util = get_singleton(bazel_target.BazelTarget)
         pkg_dir = node_util.extract_directory(node)
         pkg_path = pkg_dir.path.lstrip("/")
 
@@ -275,7 +275,7 @@ class NodeConfig(node_config.NodeConfig, Singleton):
 
     @property
     def is_step_mode(self) -> bool:
-        # Requirement: The node config exposes whether step mode is active, enabled when the model config enables step mode and the node allows step mode.
+        # Requirement: The node config exposes whether step mode is active, enabled when the model config enables step mode, the node allows step mode, and session feedback is absent.
         return self._is_step_mode
 
     @property

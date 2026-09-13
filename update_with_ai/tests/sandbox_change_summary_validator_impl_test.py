@@ -13,7 +13,7 @@ from lib.sandbox_change_summary_validator_impl import (
     ChangeSummaryValidator as ChangeSummaryValidatorImpl,
     __initialize__,
 )
-from lib.sandbox_run_control import VerificationCheck
+from lib.node_config import VerificationCheck
 
 
 def _make_workspace_path(path: str) -> WorkspacePath:

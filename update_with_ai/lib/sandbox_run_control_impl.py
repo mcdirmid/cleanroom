@@ -29,7 +29,7 @@ class RunController(sandbox_run_control.RunController, Singleton):
             tm.install_tool(get_singleton(BlameTool))
 
     @property
-    def verification_checks(self) -> Sequence[sandbox_run_control.VerificationCheck]:
+    def verification_checks(self) -> Sequence[node_config.VerificationCheck]:
         cfg = get_singleton(node_config.NodeConfig)
         return cfg.verification_checks
 
@@ -394,7 +394,7 @@ class RunTestsTool(sandbox_run_control.RunTestsTool, Singleton):
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
         cfg = get_singleton(node_config.NodeConfig)
 
-        # Requirement: Executing the run tests tool updates verification results if outdated.
+        # Requirement: [RunController] The run controller installs a run tests tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
         passed, diag = rc.evaluate_verification()
 
         current_rev = edit_mgr.file_update_revision

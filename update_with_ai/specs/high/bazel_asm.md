@@ -1,8 +1,8 @@
 # bazel_asm assembly component
 
-assembles: agent_asm, bazel_manifest_loader_impl, bazel_model_config_impl, bazel_node_config_impl, bazel_node_id_utils_impl, bazel_runner_impl, bazel_storage_impl, dag_asm, file_paths_impl, runner_logger_impl, sandbox_asm
+assembles: agent_asm, bazel_manifest_loader_impl, bazel_model_config_impl, bazel_node_config_impl, bazel_runner_impl, bazel_storage_impl, bazel_target_impl, dag_asm, file_paths_impl, runner_logger_impl, sandbox_asm
 imports: bazel_target_labels_ext, commonmark_ext, filesystem_ext, json_manifest_ext, model_config_ext, openai_ext, update_with_ai_proto_ext
-implements: agent_conversation_history, agent_loop_guard, agent_node_cleaner, agent_runner, agent_storage, bazel_manifest_loader, bazel_node_id_utils, bazel_runner, dag_cleaner, dag_node_cleaner, dag_storage, file_alias, file_paths, model_config, node_config, runner_logger, sandbox, sandbox_change_summary_validator, sandbox_file_editor, sandbox_file_reader, sandbox_guide_delivery, sandbox_run_control, template_format, tool_provider
+implements: agent_conversation, agent_driver, agent_loop_guard, agent_storage, bazel_manifest_loader, bazel_target, dag_cleaner, dag_node_cleaner, dag_runner, dag_storage, file_alias, file_paths, model_config, node_config, runner_logger, sandbox, sandbox_change_summary_validator, sandbox_file_editor, sandbox_file_reader, sandbox_guide_delivery, sandbox_run_control, template_format, tool_provider
 
 ## Purpose
 
@@ -20,13 +20,13 @@ The bazel assembly aggregates the following constituents:
 
 - The file paths implementation from file_paths_impl, closing the file paths interface to create, validate, and resolve path representations against the physical workspace root.
 
-- The bazel runner implementation from bazel_runner_impl, closing the bazel runner interface to coordinate build graph execution and change propagation across workspace targets.
+- The bazel runner implementation from bazel_runner_impl, closing the dag runner interface to coordinate build graph execution and change propagation across workspace targets.
 
 - The bazel manifest loader implementation from bazel_manifest_loader_impl, closing the bazel manifest loader interface to parse JSON manifests, resolve node references, and compute dependency closures.
 
 - The bazel storage implementation from bazel_storage_impl, closing the agent storage and dag storage interfaces to provide in-memory graph indexing and durable message and reverse dependency persistence.
 
-- The bazel node identifier utility implementation from bazel_node_id_utils_impl, closing the bazel node identifier utility interface to normalize target labels and resolve package directory paths.
+- The bazel target implementation from bazel_target_impl, closing the bazel target interface to normalize target labels and resolve package directory paths.
 
 - The bazel model config implementation from bazel_model_config_impl, closing the model config interface to load language model parameters and authentication credentials.
 
@@ -34,7 +34,7 @@ The bazel assembly aggregates the following constituents:
 
 - The runner logger implementation from runner_logger_impl, closing the runner logger interface to stream terminal progress summaries and unbuffered transcript logs.
 
-- The agent assembly from agent_asm, closing the agent runner, agent conversation history, agent loop guard, agent node cleaner, and dag node cleaner interfaces.
+- The agent assembly from agent_asm, closing the agent driver, agent conversation, agent loop guard, and dag node cleaner interfaces.
 
 - The dag assembly from dag_asm, closing the dag cleaner interface.
 

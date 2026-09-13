@@ -1,6 +1,6 @@
 # bazel_manifest_loader_impl implementation component
 
-imports: dag_storage, node_config, file_alias, bazel_node_id_utils, agent_storage, json_manifest_ext
+imports: dag_storage, node_config, file_alias, bazel_target, agent_storage, json_manifest_ext
 implements: bazel_manifest_loader
 
 ## Purpose
@@ -21,9 +21,9 @@ The bazel manifest loader:
 
 - Parses manifests from JSON files written by the build system in workspace directories or runfiles trees into json manifests.
 
-- Extracts manifest node references from a json manifest and normalizes them into canonical nodes using the bazel node identifier utility.
+- Extracts manifest node references from a json manifest and normalizes them into canonical nodes using the bazel target.
 
-- Extracts manifest file paths from a json manifest and resolves them relative to target package directories extracted by the bazel node identifier utility.
+- Extracts manifest file paths from a json manifest and resolves them relative to target package directories extracted by the bazel target.
 
 - Resolves a target node's declared source file, template, and silent source files into read-write files and startup template mappings in its node configuration.
 

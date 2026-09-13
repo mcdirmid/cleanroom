@@ -90,13 +90,13 @@ Ordered sequence of formatted messages
         ...
 
 @singleton_type('agent_session')
-class ConversationHistory(Protocol):
+class Conversation(Protocol):
     """
 PURPOSE:
 Defined as an agent session service maintaining chronological messages
 
 FRESH_REQUIREMENTS:
-- Initial messages can seed the conversation history at session start.
+- Initial messages can seed the conversation at session start.
 - Appending messages and tool responses adds them in chronological order.
 """
 
@@ -112,7 +112,7 @@ Current sequence of messages in the session
     def append_message(self, message: Message) -> None:
         """
 PURPOSE:
-Appends a message to the conversation history
+Appends a message to the conversation
 """
         ...
 
@@ -134,6 +134,6 @@ PURPOSE:
 Produces a formatted model request for transmission
 
 FRESH_REQUIREMENTS:
-- The conversation history produces a model request prepared for transmission to a language model.
+- The conversation produces a model request prepared for transmission to a language model.
 """
         ...

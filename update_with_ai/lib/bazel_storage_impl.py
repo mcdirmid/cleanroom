@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Set
 from . import agent_storage
-from . import bazel_node_id_utils
+from . import bazel_target
 from . import dag_storage
 from . import file_paths
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
@@ -15,9 +15,9 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         self._source_files: Dict[dag_storage.Node, str] = {}
 
     def _get_store_path(self, node: dag_storage.Node) -> Path:
-        # Requirement: All nodes located within the same package directory resolved by the bazel node identifier utility from bazel node id utils share a common package message file named `.update_with_ai.textproto`.
+        # Requirement: All nodes located within the same package directory resolved by the bazel target share a common package message file named `.update_with_ai.textproto`.
         # Requirement: The agent storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
-        node_util = get_singleton(bazel_node_id_utils.BazelNodeIdentifierUtility)
+        node_util = get_singleton(bazel_target.BazelTarget)
         pkg_dir = node_util.extract_directory(node)
         paths_service = get_singleton(file_paths.FilePaths)
         root = paths_service.get_workspace_root()
@@ -25,7 +25,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         return Path(resolved_dir.path) / ".update_with_ai.textproto"
 
     def _load_package_data(self, path: Path) -> Dict[str, Dict[str, Any]]:
-        # Requirement: The bazel graph storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
+        # Requirement: The agent storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
         if not path.is_file():
             return {}
         content = path.read_text(encoding="utf-8")
@@ -59,7 +59,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         return nodes
 
     def _save_package_data(self, path: Path, node_records: Mapping[str, Mapping[str, Any]]) -> bool:
-        # Requirement: The bazel graph storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files using proto package store from update with ai proto ext.
+        # Requirement: The agent storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files using proto package store from update with ai proto ext.
         lines: List[str] = []
         for node_id in sorted(node_records.keys()):
             record = node_records[node_id]
@@ -95,18 +95,18 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         return set(self._dependencies.get(node, set()))
 
     def get_dependents(self, node: dag_storage.Node) -> Set[dag_storage.Node]:
-        # Requirement: All nodes located within the same package directory resolved by the bazel node identifier utility from bazel node id utils share a common package message file named `.update_with_ai.textproto`.
+        # Requirement: All nodes located within the same package directory resolved by the bazel target share a common package message file named `.update_with_ai.textproto`.
         path = self._get_store_path(node)
         data = self._load_package_data(path)
         record = data.get(node.address, {})
         deps: Set[dag_storage.Node] = set()
-        node_util = get_singleton(bazel_node_id_utils.BazelNodeIdentifierUtility)
+        node_util = get_singleton(bazel_target.BazelTarget)
         for rev_dep in record.get("reverse_dependencies", []):
             deps.add(node_util.normalize(rev_dep))
         return deps
 
     def get_messages(self, node: dag_storage.Node) -> Set[dag_storage.Message]:
-        # Requirement: All nodes located within the same package directory resolved by the bazel node identifier utility from bazel node id utils share a common package message file named `.update_with_ai.textproto`.
+        # Requirement: All nodes located within the same package directory resolved by the bazel target share a common package message file named `.update_with_ai.textproto`.
         path = self._get_store_path(node)
         data = self._load_package_data(path)
         record = data.get(node.address, {})

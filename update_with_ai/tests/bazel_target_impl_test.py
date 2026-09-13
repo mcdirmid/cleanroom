@@ -1,16 +1,16 @@
-"""Unit tests for bazel_node_id_utils_impl aligned with grounding specifications."""
+"""Unit tests for bazel_target_impl aligned with grounding specifications."""
 
 import unittest
-from lib.bazel_node_id_utils import BazelNodeIdentifierUtility, NodeDirectory
-from lib.bazel_node_id_utils_impl import (
-    BazelNodeIdentifierUtility as BazelNodeIdentifierUtilityImpl,
+from lib.bazel_target import BazelTarget, NodeDirectory
+from lib.bazel_target_impl import (
+    BazelTarget as BazelTargetImpl,
     __initialize__,
 )
 from lib.dag_storage import Node
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 
 
-class TestBazelNodeIdUtilsImpl(unittest.TestCase):
+class TestBazelTargetImpl(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
@@ -24,9 +24,9 @@ class TestBazelNodeIdUtilsImpl(unittest.TestCase):
         - Omitted target labels (//pkg) are expanded to //pkg:pkg.
         """
         with enter_phase("system", registry=self.registry) as scope:
-            utils = scope.get_singleton(BazelNodeIdentifierUtility)
-            # Requirement: The bazel node identifier utility normalizes raw target labels by stripping repository qualifiers and expanding omitted target names.
-            # Requirement: [BazelNodeIdentifierUtility] The bazel node identifier utility normalizes an arbitrary target identifier string into a canonical node.
+            utils = scope.get_singleton(BazelTarget)
+            # Requirement: The bazel target normalizes raw target labels by stripping repository qualifiers and expanding omitted target names.
+            # Requirement: [BazelTarget] The bazel target normalizes an arbitrary Bazel target identifier string into a canonical node.
             self.assertEqual(
                 utils.normalize("//pkg/sub:target"),
                 Node(address="//pkg/sub:target"),
@@ -65,9 +65,9 @@ class TestBazelNodeIdUtilsImpl(unittest.TestCase):
             return obj
 
         with enter_phase("system", registry=self.registry) as scope:
-            utils = scope.get_singleton(BazelNodeIdentifierUtility)
-            # Requirement: The bazel node identifier utility derives node directories from normalized nodes relative to a workspace root.
-            # Requirement: [BazelNodeIdentifierUtility] The bazel node identifier utility extracts a node directory from a node.
+            utils = scope.get_singleton(BazelTarget)
+            # Requirement: The bazel target derives node directories from normalized nodes relative to a workspace root.
+            # Requirement: [BazelTarget] The bazel target extracts a node directory from a node.
             self.assertEqual(
                 utils.extract_directory(Node(address="//pkg/sub:target")),
                 _make_node_dir("pkg/sub"),

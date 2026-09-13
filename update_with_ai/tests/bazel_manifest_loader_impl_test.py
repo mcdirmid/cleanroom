@@ -14,7 +14,7 @@ from lib.bazel_manifest_loader_impl import (
     BazelManifestLoader as BazelManifestLoaderImpl,
     __initialize__,
 )
-from lib.bazel_node_id_utils import BazelNodeIdentifierUtility, NodeDirectory
+from lib.bazel_target import BazelTarget, NodeDirectory
 from lib.dag_storage import Dependency, Message, Node
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 
@@ -91,7 +91,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
         self.storage = MockGraphStorage()
 
         self.registry.register_instance(
-            self.node_utils, keys=[BazelNodeIdentifierUtility], tier="system"
+            self.node_utils, keys=[BazelTarget], tier="system"
         )
         self.registry.register_instance(self.storage, keys=[AgentStorage], tier="system")
 
@@ -178,7 +178,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             self.assertEqual(defn.task_prompt, "Clean target A")
 
             # Definitions recorded in storage
-            # Requirement: [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using a node identifier utility, populating the bazel graph storage.
+            # Requirement: [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using a node identifier utility, populating the agent storage.
             self.assertEqual(self.storage.get_node_definition(defn.node), defn)
 
             # Dependencies recorded in storage
@@ -222,7 +222,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             self.assertEqual(defn.node, Node(address="//pkg:sample_node"))
             self.assertEqual(defn.task_prompt, "Implement the requested feature")
 
-            # Requirement: [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using a node identifier utility, populating the bazel graph storage.
+            # Requirement: [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using a node identifier utility, populating the agent storage.
             self.assertEqual(self.storage.get_node_definition(defn.node), defn)
 
             # Dependencies recorded in storage
@@ -234,7 +234,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             self.assertTrue(silent_y.is_silent)
 
             # Source files recorded in storage
-            # Requirement: [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using a node identifier utility, populating the bazel graph storage.
+            # Requirement: [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using a node identifier utility, populating the agent storage.
             self.assertIn(defn.node, self.storage._source_files)
             self.assertEqual(
                 self.storage._source_files[defn.node],

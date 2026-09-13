@@ -22,7 +22,7 @@ The string representing the filesystem path.
         ...
 
 @singleton_type('system')
-class BazelNodeIdentifierUtility(Protocol):
+class BazelTarget(Protocol):
     """
 PURPOSE:
 Defined as a system service normalizing Bazel identifiers and directories
@@ -35,7 +35,7 @@ PURPOSE:
 Normalizes an arbitrary Bazel target string into a canonical node
 
 FRESH_REQUIREMENTS:
-- The bazel node identifier utility normalizes an arbitrary target identifier string into a canonical node.
+- The bazel target normalizes an arbitrary Bazel target identifier string into a canonical node.
 """
         ...
 
@@ -46,6 +46,6 @@ PURPOSE:
 Resolves the package directory of a node
 
 FRESH_REQUIREMENTS:
-- The bazel node identifier utility extracts a node directory from a node.
+- The bazel target extracts a node directory from a node.
 """
         ...

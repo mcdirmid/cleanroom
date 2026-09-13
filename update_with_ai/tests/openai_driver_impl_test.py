@@ -1,15 +1,15 @@
-"""Unit tests for agent_runner_impl aligned with grounding specifications."""
+"""Unit tests for openai_driver_impl aligned with grounding specifications."""
 
 import json
 import unittest
 from typing import Any, List, Optional, Set
 from unittest.mock import MagicMock, patch
 
-from lib.agent_conversation_history import ConversationHistory, Message, ModelRequest
+from lib.agent_conversation import Conversation, Message, ModelRequest
 from lib.agent_loop_guard import LoopFailure, LoopGuard, LoopReminder
-from lib.agent_runner import AgentOutcome, AgentRunner
-from lib.agent_runner_impl import (
-    AgentRunner as AgentRunnerImpl,
+from lib.agent_driver import AgentOutcome, AgentDriver
+from lib.openai_driver_impl import (
+    AgentDriver as AgentDriverImpl,
     OpenAIError,
     __initialize__,
     _DEFAULT_CONVERTER,
@@ -197,7 +197,7 @@ class DummyCompletion:
         self.choices = choices
 
 
-class AgentRunnerImplTest(unittest.TestCase):
+class OpenAIDriverImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
@@ -210,7 +210,7 @@ class AgentRunnerImplTest(unittest.TestCase):
         self.registry.register_instance(self.model_cfg, keys=[ModelConfig], tier="system")
         self.registry.register_instance(self.logger, keys=[RunnerLogger], tier="system")
         self.registry.register_instance(
-            self.history, keys=[ConversationHistory], tier="agent_session"
+            self.history, keys=[Conversation], tier="agent_session"
         )
         self.registry.register_instance(self.loop_guard, keys=[LoopGuard], tier="agent_session")
         self.registry.register_instance(self.tool_mgr, keys=[ToolManager], tier="agent_session")
@@ -218,12 +218,12 @@ class AgentRunnerImplTest(unittest.TestCase):
     def test_agent_outcome_dataclass(self) -> None:
         """CUJ: Instantiating AgentOutcome dataclass."""
         resp = Response(is_failed=False, is_terminated=True, content="Success")
-        outcome = AgentOutcome(is_success=True, response=resp, conversation_history=self.history)
+        outcome = AgentOutcome(is_success=True, response=resp, conversation=self.history)
         self.assertTrue(outcome.is_success)
         self.assertEqual(outcome.response, resp)
         self.assertEqual(outcome.conversation_history, self.history)
 
-    @patch("lib.agent_runner_impl.OpenAI")
+    @patch("lib.openai_driver_impl.OpenAI")
     def test_response_without_tool_calls_prompts_reminder_and_continues(self, mock_openai_cls: MagicMock) -> None:
         """CUJ: Injecting tool reminder and continuing when model returns no tool calls."""
         mock_client = MagicMock()
@@ -240,12 +240,12 @@ class AgentRunnerImplTest(unittest.TestCase):
         self.tool_mgr.responses["finish_task"] = term_resp
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentRunner)
+            runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
-            # Requirement: When a model response produces no tool executions, the agent runner appends a prompt to the conversation history reminding that progress and conclusion require invoking tools, and continues the turn loop.
-            # Requirement: [AgentRunner] When a model response contains no tool executions, the agent runner injects a tool reminder into the conversation history and continues the turn loop.
-            # Requirement: When tool execution produces a terminating response, the agent runner concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
+            # Requirement: When a model response produces no tool executions, the agent driver appends a prompt to the conversation reminding that progress and conclusion require invoking tools, and continues the turn loop.
+            # Requirement: [AgentDriver] When a model response contains no tool executions, the agent driver injects a tool reminder into the conversation and continues the turn loop.
+            # Requirement: When tool execution produces a terminating response, the agent driver concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
             self.assertTrue(outcome.is_success)
             self.assertEqual(len(self.history.messages), 4)
             self.assertEqual(self.history.messages[0].role, "assistant")
@@ -253,8 +253,8 @@ class AgentRunnerImplTest(unittest.TestCase):
             self.assertEqual(self.history.messages[1].role, "user")
             self.assertIn("No tools were executed", self.history.messages[1].content)
             self.assertEqual(self.history.messages[2].role, "assistant")
-            # Requirement: The agent runner logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
-            # Requirement: [AgentRunner] The agent runner records log events for interaction turns, tool executions, and turn outcomes to the runner logger.
+            # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+            # Requirement: [AgentDriver] The agent driver records log events for interaction turns, tool executions, and turn outcomes to the runner logger.
             comp_events = [e for e in self.logger.events if e.event_name == "model_completion"]
             self.assertTrue(len(comp_events) >= 2)
             self.assertIn("[Turn 1] Assistant (text):", comp_events[0].summary)
@@ -264,7 +264,7 @@ class AgentRunnerImplTest(unittest.TestCase):
             self.assertTrue(len(tool_events) >= 1)
             self.assertIn("[Turn 2] Tool finish_task: COMPLETED -> Done", tool_events[0].summary)
 
-    @patch("lib.agent_runner_impl.OpenAI")
+    @patch("lib.openai_driver_impl.OpenAI")
     def test_conversation_limit_exceeded_fails(self, mock_openai_cls: MagicMock) -> None:
         """CUJ: Concluding with failure when turns reach the conversation limit."""
         mock_client = MagicMock()
@@ -273,16 +273,16 @@ class AgentRunnerImplTest(unittest.TestCase):
         mock_client.chat.completions.create.return_value = comp
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentRunner)
+            runner = scope.get_singleton(AgentDriver)
 
-            # Requirement: When turns reach the conversation limit from model config, the agent runner halts with an unexpected failure.
-            # Requirement: [AgentRunner] When the conversation limit from model config is exceeded, the agent runner halts with an unexpected failure.
+            # Requirement: When turns reach the conversation limit from model config, the agent driver halts with an unexpected failure.
+            # Requirement: [AgentDriver] When the conversation limit from model config is exceeded, the agent driver halts with an unexpected failure.
             with self.assertRaises(RuntimeError) as ctx:
                 runner.run()
             self.assertIn("Conversation limit reached", str(ctx.exception))
             self.assertEqual(mock_client.chat.completions.create.call_count, 5)
 
-    @patch("lib.agent_runner_impl.OpenAI")
+    @patch("lib.openai_driver_impl.OpenAI")
     def test_tool_call_and_termination(self, mock_openai_cls: MagicMock) -> None:
         """CUJ: Dispatching tool calls to tool manager and concluding on terminal response."""
         mock_client = MagicMock()
@@ -310,7 +310,7 @@ class AgentRunnerImplTest(unittest.TestCase):
                     Parameter(
                         name="summary",
                         description="Summary",
-                        parameter_converter=None,  # type: ignore
+                        parameter_converter=MockConverter(),
                         is_required=True,
                     )
                 }
@@ -321,22 +321,22 @@ class AgentRunnerImplTest(unittest.TestCase):
         self.tool_mgr.install_tool(DummyTool())
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentRunner)
+            runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
-            # Requirement: [AgentRunner] The agent runner drives turns by sending model requests to a language model and executing requested tools.
-            # Requirement: When tool execution produces a terminating response, the agent runner concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
-            # Requirement: [AgentRunner] When tool execution produces a termination outcome, the agent runner concludes and returns an agent outcome, or halts with an unexpected failure if the termination indicates a failing outcome.
+            # Requirement: [AgentDriver] The agent driver drives turns by sending model requests to a language model and executing requested tools.
+            # Requirement: When tool execution produces a terminating response, the agent driver concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
+            # Requirement: [AgentDriver] When tool execution produces a termination outcome, the agent driver concludes and returns an agent outcome, or halts with an unexpected failure if the termination indicates a failing outcome.
             self.assertTrue(outcome.is_success)
             self.assertTrue(outcome.response.is_terminated)
             self.assertEqual(outcome.response.content, "Task completed successfully")
             self.assertEqual(len(self.tool_mgr.executions), 1)
             self.assertEqual(self.tool_mgr.executions[0][0], "finish_task")
-            # Requirement: [AgentRunner] The agent runner appends model responses and correlates tool responses with tool call identifiers in conversation history.
+            # Requirement: [AgentDriver] The agent driver appends model responses and correlates tool responses with tool call identifiers in the conversation.
             self.assertEqual(len(self.history.tool_responses), 1)
             self.assertEqual(self.history.tool_responses[0][1], "finish_task")
 
-    @patch("lib.agent_runner_impl.OpenAI")
+    @patch("lib.openai_driver_impl.OpenAI")
     def test_non_terminating_tool_failure_continues_run(self, mock_openai_cls: MagicMock) -> None:
         """CUJ: Non-terminating tool failure appends feedback and run continues."""
         mock_client = MagicMock()
@@ -352,10 +352,10 @@ class AgentRunnerImplTest(unittest.TestCase):
         self.tool_mgr.responses["finish_task"] = Response(is_failed=False, is_terminated=True, content="Recovered")
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentRunner)
+            runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
-            # Requirement: When driving a turn, the agent runner transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from model config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
+            # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from model config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
             self.assertEqual(mock_client.chat.completions.create.call_count, 2)
             turn2_messages = mock_client.chat.completions.create.call_args_list[1].kwargs["messages"]
             asst_tc_msg = next(m for m in turn2_messages if m["role"] == "assistant" and "tool_calls" in m)
@@ -364,8 +364,8 @@ class AgentRunnerImplTest(unittest.TestCase):
             tool_res_msg = next(m for m in turn2_messages if m["role"] == "tool")
             self.assertEqual(tool_res_msg["tool_call_id"], "call_fail")
 
-            # Requirement: When tool execution produces a non-terminating failure response, the failure feedback is appended to the conversation history and the run continues.
-            # Requirement: When tool execution produces a terminating response, the agent runner concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
+            # Requirement: When tool execution produces a non-terminating failure response, the failure feedback is appended to the conversation and the run continues.
+            # Requirement: When tool execution produces a terminating response, the agent driver concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
             self.assertTrue(outcome.is_success)
             self.assertEqual(len(self.history.tool_responses), 2)
             self.assertTrue(self.history.tool_responses[0][0].is_failed)
@@ -373,7 +373,7 @@ class AgentRunnerImplTest(unittest.TestCase):
             self.assertFalse(self.history.tool_responses[1][0].is_failed)
             self.assertEqual(self.history.tool_responses[1][0].content, "Recovered")
 
-    @patch("lib.agent_runner_impl.OpenAI")
+    @patch("lib.openai_driver_impl.OpenAI")
     def test_continuation_turn_on_truncated_response(self, mock_openai_cls: MagicMock) -> None:
         """CUJ: Model response truncated due to finish_reason='length' triggers continuation turn."""
         mock_client = MagicMock()
@@ -395,11 +395,11 @@ class AgentRunnerImplTest(unittest.TestCase):
         self.tool_mgr.responses["finish_task"] = Response(is_failed=False, is_terminated=True, content="Done")
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentRunner)
+            runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
-            # Requirement: When a model response is truncated at the generation limit, the agent runner resumes generation with a continuation turn.
-            # Requirement: When tool execution produces a terminating response, the agent runner concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
+            # Requirement: When a model response is truncated at the generation limit, the agent driver resumes generation with a continuation turn.
+            # Requirement: When tool execution produces a terminating response, the agent driver concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
             self.assertTrue(outcome.is_success)
             # Expect: assistant Part 1 -> user continuation prompt -> assistant Part 2 -> tool response
             self.assertEqual(len(self.history.messages), 4)
@@ -409,7 +409,7 @@ class AgentRunnerImplTest(unittest.TestCase):
             self.assertEqual(self.history.messages[2].role, "assistant")
             self.assertEqual(self.history.messages[3].role, "tool")
 
-    @patch("lib.agent_runner_impl.OpenAI")
+    @patch("lib.openai_driver_impl.OpenAI")
     def test_model_error_handling(self, mock_openai_cls: MagicMock) -> None:
         """CUJ: Handling OpenAIError by logging and returning a failed outcome."""
         mock_client = MagicMock()
@@ -417,15 +417,15 @@ class AgentRunnerImplTest(unittest.TestCase):
         mock_client.chat.completions.create.side_effect = OpenAIError("API Rate Limited")
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentRunner)
+            runner = scope.get_singleton(AgentDriver)
             with self.assertRaises(RuntimeError) as ctx:
                 runner.run()
 
             self.assertIn("Model error: API Rate Limited", str(ctx.exception))
-            # Requirement: The agent runner logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+            # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
             self.assertTrue(any(e.event_name == "model_error" and "[Turn 1] Model error:" in e.summary for e in self.logger.events))
 
-    @patch("lib.agent_runner_impl.OpenAI")
+    @patch("lib.openai_driver_impl.OpenAI")
     def test_completion_request_uses_temperature_0_2(self, mock_openai_cls: MagicMock) -> None:
         """CUJ: Transmitting completion request with temperature=0.2."""
         mock_client = MagicMock()
@@ -437,15 +437,15 @@ class AgentRunnerImplTest(unittest.TestCase):
         self.tool_mgr.responses["finish"] = Response(is_failed=False, is_terminated=True, content="Done")
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentRunner)
+            runner = scope.get_singleton(AgentDriver)
             runner.run()
-            # Requirement: When driving a turn, the agent runner transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from model config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
+            # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from model config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
             call_kwargs = mock_client.chat.completions.create.call_args.kwargs
             self.assertEqual(call_kwargs["temperature"], 0.2)
             self.assertEqual(call_kwargs["timeout"], 30.0)
             self.assertNotIn("max_tokens", call_kwargs)
 
-    @patch("lib.agent_runner_impl.OpenAI")
+    @patch("lib.openai_driver_impl.OpenAI")
     def test_model_config_parameters_forwarded_to_completion_request(self, mock_openai_cls: MagicMock) -> None:
         """CUJ: Transmitting completion request with temperature, timeout, and max_tokens from model config."""
         self.model_cfg.temperature = 0.7
@@ -461,15 +461,15 @@ class AgentRunnerImplTest(unittest.TestCase):
         self.tool_mgr.responses["finish"] = Response(is_failed=False, is_terminated=True, content="Done")
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentRunner)
+            runner = scope.get_singleton(AgentDriver)
             runner.run()
-            # Requirement: When driving a turn, the agent runner transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from model config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
+            # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from model config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
             call_kwargs = mock_client.chat.completions.create.call_args.kwargs
             self.assertEqual(call_kwargs["temperature"], 0.7)
             self.assertEqual(call_kwargs["timeout"], 100.0)
             self.assertEqual(call_kwargs["max_tokens"], 4096)
 
-    @patch("lib.agent_runner_impl.OpenAI")
+    @patch("lib.openai_driver_impl.OpenAI")
     def test_loop_guard_reminder_injected_into_conversation(self, mock_openai_cls: MagicMock) -> None:
         """CUJ: Injecting loop reminder into conversation history when loop guard warns."""
         mock_client = MagicMock()
@@ -486,17 +486,17 @@ class AgentRunnerImplTest(unittest.TestCase):
         self.loop_guard.return_values = [LoopReminder(feedback="Tool 'read_file' has repeated 3 times."), None]
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentRunner)
+            runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
-            # Requirement: Before executing each tool call, the agent runner records the tool execution in the loop guard, injecting a loop reminder into the conversation history when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
-            # Requirement: [AgentRunner] The agent runner evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
+            # Requirement: Before executing each tool call, the agent driver records the tool execution in the loop guard, injecting a loop reminder into the conversation when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
+            # Requirement: [AgentDriver] The agent driver evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
             self.assertTrue(outcome.is_success)
             self.assertTrue(any(e.event_name == "loop_reminder" for e in self.logger.events))
             reminder_msgs = [m for m in self.history.messages if m.role == "user" and "repeated 3 times" in m.content]
             self.assertEqual(len(reminder_msgs), 1)
 
-    @patch("lib.agent_runner_impl.OpenAI")
+    @patch("lib.openai_driver_impl.OpenAI")
     def test_loop_guard_failure_terminates_run(self, mock_openai_cls: MagicMock) -> None:
         """CUJ: Terminating session immediately upon fatal loop failure."""
         mock_client = MagicMock()
@@ -508,17 +508,17 @@ class AgentRunnerImplTest(unittest.TestCase):
         self.loop_guard.return_value = LoopFailure(explanation="Fatal loop detected: tool executed 5 times.")
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentRunner)
+            runner = scope.get_singleton(AgentDriver)
             with self.assertRaises(RuntimeError) as ctx:
                 runner.run()
 
-            # Requirement: Before executing each tool call, the agent runner records the tool execution in the loop guard, injecting a loop reminder into the conversation history when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
-            # Requirement: [AgentRunner] The agent runner evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
+            # Requirement: Before executing each tool call, the agent driver records the tool execution in the loop guard, injecting a loop reminder into the conversation when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
+            # Requirement: [AgentDriver] The agent driver evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
             self.assertIn("Fatal loop detected: tool executed 5 times.", str(ctx.exception))
             self.assertTrue(any(e.event_name == "loop_failure" for e in self.logger.events))
             self.assertEqual(len(self.tool_mgr.executions), 0)
 
-    @patch("lib.agent_runner_impl.OpenAI")
+    @patch("lib.openai_driver_impl.OpenAI")
     def test_productive_progress_clears_loop_guard(self, mock_openai_cls: MagicMock) -> None:
         """CUJ: Forward progress (edit / advance) clears loop guard repetition tracking."""
         mock_client = MagicMock()
@@ -535,14 +535,14 @@ class AgentRunnerImplTest(unittest.TestCase):
         self.tool_mgr.responses["advance"] = Response(is_failed=False, is_terminated=True, content="advanced")
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentRunner)
+            runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
             self.assertTrue(outcome.is_success)
             # Requirement: Productive tool executions that modify workspace files or advance the guide step clear repetition tracking in the loop guard.
             self.assertEqual(self.loop_guard.progress_count, 2)
 
-    @patch("lib.agent_runner_impl.OpenAI")
+    @patch("lib.openai_driver_impl.OpenAI")
     def test_completion_request_orders_tools_and_parameters_deterministically(self, mock_openai_cls: MagicMock) -> None:
         """CUJ: Completion requests sort tools by name and parameters by name deterministically."""
         mock_client = MagicMock()
@@ -565,11 +565,11 @@ class AgentRunnerImplTest(unittest.TestCase):
         self.tool_mgr.responses["zebra"] = Response(is_failed=False, is_terminated=True, content="done")
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentRunner)
+            runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
             self.assertTrue(outcome.is_success)
-            # Requirement: When driving a turn, the agent runner transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from model config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
+            # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from model config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
             tools_arg = mock_client.chat.completions.create.call_args.kwargs.get("tools")
             self.assertIsNotNone(tools_arg)
             tool_names = [t["function"]["name"] for t in tools_arg]
@@ -581,7 +581,7 @@ class AgentRunnerImplTest(unittest.TestCase):
             zebra_params = list(tools_arg[1]["function"]["parameters"]["properties"].keys())
             self.assertEqual(zebra_params, ["a_param", "z_param"])
 
-    @patch("lib.agent_runner_impl.OpenAI")
+    @patch("lib.openai_driver_impl.OpenAI")
     def test_tool_execution_logs_corrective_reminder_in_transcript(self, mock_openai_cls: MagicMock) -> None:
         """CUJ: Tool execution log event transcript representation includes corrective reminder when present."""
         mock_client = MagicMock()
@@ -607,17 +607,17 @@ class AgentRunnerImplTest(unittest.TestCase):
         )
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentRunner)
+            runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
             self.assertTrue(outcome.is_success)
-            # Requirement: The agent runner logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+            # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
             tool_events = [e for e in self.logger.events if e.event_name == "tool_execution"]
             self.assertEqual(len(tool_events), 2)
             self.assertIn("Ensure parameters are non-empty.", tool_events[0].transcript_representation)
             self.assertNotIn("Reminder:", tool_events[1].transcript_representation)
 
-    @patch("lib.agent_runner_impl.OpenAI")
+    @patch("lib.openai_driver_impl.OpenAI")
     def test_prefix_reuse_measured_and_logged_across_turns(self, mock_openai_cls: MagicMock) -> None:
         """CUJ: Measuring and logging prefix reuse for conversations sent to OpenAI across turns."""
         mock_client = MagicMock()
@@ -641,11 +641,11 @@ class AgentRunnerImplTest(unittest.TestCase):
         )
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentRunner)
+            runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
             self.assertTrue(outcome.is_success)
-            # Requirement: The agent runner logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+            # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
             req_events = [e for e in self.logger.events if e.event_name == "model_request"]
             self.assertEqual(len(req_events), 2)
             self.assertIn("[Turn 1] initial request", req_events[0].summary)
@@ -654,7 +654,7 @@ class AgentRunnerImplTest(unittest.TestCase):
             self.assertIn("100% of prev request retained", req_events[1].summary)
             self.assertIn("Prefix intact:", req_events[1].transcript_representation)
 
-    @patch("lib.agent_runner_impl.OpenAI")
+    @patch("lib.openai_driver_impl.OpenAI")
     def test_prefix_reuse_divergence_diagnostics_logged(self, mock_openai_cls: MagicMock) -> None:
         """CUJ: Measuring and logging prefix reuse divergence diagnostics when previous turn message diverges."""
         mock_client = MagicMock()
@@ -680,18 +680,18 @@ class AgentRunnerImplTest(unittest.TestCase):
         )
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentRunner)
+            runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
             self.assertTrue(outcome.is_success)
-            # Requirement: The agent runner logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+            # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
             req_events = [e for e in self.logger.events if e.event_name == "model_request"]
             self.assertEqual(len(req_events), 2)
             self.assertIn("diverged at msg 0", req_events[1].summary)
             self.assertIn("Divergence detected at message index 0:", req_events[1].transcript_representation)
             self.assertIn("Content changed", req_events[1].transcript_representation)
 
-    @patch("lib.agent_runner_impl.OpenAI")
+    @patch("lib.openai_driver_impl.OpenAI")
     def test_follow_up_tool_call_dispatched_when_inject_followups_enabled(self, mock_openai_cls: MagicMock) -> None:
         """CUJ: Dispatching follow-up tool call with synthetic assistant invocation when inject_followups is True."""
         self.model_cfg.inject_followups = True
@@ -719,11 +719,11 @@ class AgentRunnerImplTest(unittest.TestCase):
         )
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentRunner)
+            runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
-            # Requirement: When configured by model config to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool through the tool manager, appending a synthetic assistant invocation and the resulting follow-up response to the conversation history immediately following the originating response.
-            # Requirement: [AgentRunner] The agent runner can dispatch follow-up tool calls specified by tool responses, recording the follow-up execution in the conversation history.
+            # Requirement: When configured by model configuration to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool, appending a synthetic assistant invocation carrying the follow-up tool call's reasoning text as prior thought preceding the requested tool execution and the resulting follow-up response to the conversation immediately following the originating response.
+            # Requirement: [AgentDriver] The agent driver can dispatch follow-up tool calls specified by tool responses, recording the follow-up execution in the conversation.
             self.assertTrue(outcome.is_success)
             self.assertTrue(outcome.response.is_terminated)
             self.assertEqual(outcome.response.content, "Followup tool executed.")
@@ -745,7 +745,7 @@ class AgentRunnerImplTest(unittest.TestCase):
             self.assertEqual(self.history.messages[3].role, "tool")
             self.assertEqual(self.history.messages[3].content, "Followup tool executed.")
 
-    @patch("lib.agent_runner_impl.OpenAI")
+    @patch("lib.openai_driver_impl.OpenAI")
     def test_follow_up_tool_call_not_dispatched_when_inject_followups_disabled(self, mock_openai_cls: MagicMock) -> None:
         """CUJ: Follow-up tool call is ignored when inject_followups is False."""
         self.model_cfg.inject_followups = False
@@ -775,7 +775,7 @@ class AgentRunnerImplTest(unittest.TestCase):
         )
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentRunner)
+            runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
             self.assertTrue(outcome.is_success)
@@ -783,7 +783,7 @@ class AgentRunnerImplTest(unittest.TestCase):
             executed_names = [e[0] for e in self.tool_mgr.executions]
             self.assertEqual(executed_names, ["initial_tool", "finish_tool"])
 
-    @patch("lib.agent_runner_impl.OpenAI")
+    @patch("lib.openai_driver_impl.OpenAI")
     def test_terminating_failure_tool_raises_runtime_error(self, mock_openai_cls: MagicMock) -> None:
         """CUJ: Tool execution producing terminating failure raises RuntimeError."""
         mock_client = MagicMock()
@@ -795,17 +795,17 @@ class AgentRunnerImplTest(unittest.TestCase):
         self.tool_mgr.responses["fail"] = Response(is_failed=True, is_terminated=True, content="Cannot proceed")
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentRunner)
+            runner = scope.get_singleton(AgentDriver)
             with self.assertRaises(RuntimeError) as ctx:
                 runner.run()
 
-            # Requirement: When tool execution produces a terminating response, the agent runner concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
-            # Requirement: [AgentRunner] When tool execution produces a termination outcome, the agent runner concludes and returns an agent outcome, or halts with an unexpected failure if the termination indicates a failing outcome.
+            # Requirement: When tool execution produces a terminating response, the agent driver concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
+            # Requirement: [AgentDriver] When tool execution produces a termination outcome, the agent driver concludes and returns an agent outcome, or halts with an unexpected failure if the termination indicates a failing outcome.
             self.assertIn("Agent failed: Cannot proceed", str(ctx.exception))
 
     def test_default_converter_and_parameter_fallback(self) -> None:
         """CUJ: Default parameter converter properties and fallback parameter resolution."""
-        # Requirement: [AgentRunner] The agent runner drives turns by sending model requests to a language model and executing requested tools.
+        # Requirement: [AgentDriver] The agent driver drives turns by sending model requests to a language model and executing requested tools.
         self.assertEqual(_DEFAULT_CONVERTER.actual_type, str)
         self.assertIsNotNone(_DEFAULT_CONVERTER.wire_type)
         self.assertEqual(_DEFAULT_CONVERTER.convert("hello"), "hello")
@@ -816,31 +816,31 @@ class AgentRunnerImplTest(unittest.TestCase):
         prev1 = [{"role": "user", "content": "hello"}]
         curr1 = [{"role": "assistant", "content": "hello"}]
         _, t1 = _measure_prefix_reuse(prev1, curr1)
-        # Requirement: The agent runner logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+        # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
         self.assertIn("Role mismatch:", t1)
 
         # 2. Tool call ID mismatch
         prev2 = [{"role": "tool", "tool_call_id": "c1", "content": "ok"}]
         curr2 = [{"role": "tool", "tool_call_id": "c2", "content": "ok"}]
         _, t2 = _measure_prefix_reuse(prev2, curr2)
-        # Requirement: The agent runner logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+        # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
         self.assertIn("tool_call_id mismatch:", t2)
 
         # 3. Tool calls mismatch
         prev3 = [{"role": "assistant", "tool_calls": [{"id": "1"}]}]
         curr3 = [{"role": "assistant", "tool_calls": [{"id": "2"}]}]
         _, t3 = _measure_prefix_reuse(prev3, curr3)
-        # Requirement: The agent runner logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+        # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
         self.assertIn("tool_calls mismatch:", t3)
 
         # 4. Current payload shorter than previous payload
         prev4 = [{"role": "user", "content": "1"}, {"role": "user", "content": "2"}]
         curr4 = [{"role": "user", "content": "1"}]
         _, t4 = _measure_prefix_reuse(prev4, curr4)
-        # Requirement: The agent runner logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+        # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
         self.assertIn("Current conversation is shorter than previous conversation", t4)
 
-    @patch("lib.agent_runner_impl.OpenAI")
+    @patch("lib.openai_driver_impl.OpenAI")
     def test_completion_and_output_formatting_and_truncation(self, mock_openai_cls: MagicMock) -> None:
         """CUJ: Formatting and truncating long arguments, assistant previews, and tool outputs."""
         mock_client = MagicMock()
@@ -875,16 +875,16 @@ class AgentRunnerImplTest(unittest.TestCase):
         )
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentRunner)
+            runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
-            # Requirement: The agent runner logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+            # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
             self.assertTrue(outcome.is_success)
             comp_events = [e for e in self.logger.events if e.event_name == "model_completion"]
             self.assertTrue(any("..." in e.summary for e in comp_events))
             tool_events = [e for e in self.logger.events if e.event_name == "tool_execution"]
             self.assertTrue(any("..." in e.summary for e in tool_events))
 
-    @patch("lib.agent_runner_impl.OpenAI")
+    @patch("lib.openai_driver_impl.OpenAI")
     def test_parameter_conversion_exception_fallback(self, mock_openai_cls: MagicMock) -> None:
         """CUJ: Parameter converter exception falls back to unconverted wire value."""
         mock_client = MagicMock()
@@ -904,12 +904,12 @@ class AgentRunnerImplTest(unittest.TestCase):
         self.tool_mgr.responses["custom_tool"] = Response(is_failed=False, is_terminated=True, content="Done")
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentRunner)
+            runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
-            # Requirement: [AgentRunner] The agent runner drives turns by sending model requests to a language model and executing requested tools.
+            # Requirement: [AgentDriver] The agent driver drives turns by sending model requests to a language model and executing requested tools.
             self.assertTrue(outcome.is_success)
 
-    @patch("lib.agent_runner_impl.OpenAI")
+    @patch("lib.openai_driver_impl.OpenAI")
     def test_followup_tool_execution_branches(self, mock_openai_cls: MagicMock) -> None:
         """CUJ: Follow-up tool execution handles long summaries, failures, reminders, progress recording, and terminating errors."""
         self.model_cfg.inject_followups = True
@@ -969,11 +969,11 @@ class AgentRunnerImplTest(unittest.TestCase):
         self.tool_mgr.responses["fail_followup"] = resp_f3
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentRunner)
+            runner = scope.get_singleton(AgentDriver)
             with self.assertRaises(RuntimeError) as ctx:
                 runner.run()
 
-            # Requirement: [AgentRunner] The agent runner can dispatch follow-up tool calls specified by tool responses, recording the follow-up execution in the conversation history.
+            # Requirement: [AgentDriver] The agent driver can dispatch follow-up tool calls specified by tool responses, recording the follow-up execution in the conversation.
             self.assertIn("Agent failed: Fatal followup error", str(ctx.exception))
 
 

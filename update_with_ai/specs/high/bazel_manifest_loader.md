@@ -1,12 +1,12 @@
 # bazel_manifest_loader interface component
 
-imports: dag_storage, node_config, file_alias, bazel_node_id_utils, agent_storage
+imports: dag_storage, node_config, file_alias, bazel_target, agent_storage
 
 ## Purpose
 
 The bazel_manifest_loader interface component discovers and translates build system target manifests into runtime graph structures and node configurations.
 
-Target execution requires resolving build metadata into executable nodes and virtual workspace mappings. The build system emits declarative target manifests describing source files, silent source files, dependencies, silent dependencies, guides, templates, and verification checks. The bazel_manifest_loader interface component reads these manifests, constructs dependency graphs in dag storage using Bazel node identifier utilities, and generates isolated node configurations with minimally disambiguated file aliases, read-write source files, and read-only dependency files.
+Target execution requires resolving build metadata into executable nodes and virtual workspace mappings. The build system emits declarative target manifests describing source files, silent source files, dependencies, silent dependencies, guides, templates, and verification checks. The bazel_manifest_loader interface component reads these manifests, constructs dependency graphs in dag storage using Bazel targets, and generates isolated node configurations with minimally disambiguated file aliases, read-write source files, and read-only dependency files.
 
 **Out of scope:** The bazel_manifest_loader interface component does not orchestrate agent turns, execute build commands, or serialize protobuf text records; these are handled by other components.
 
@@ -20,7 +20,7 @@ The bazel manifest loader:
 
 - Retrieves the manifest for a node.
 
-- Resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using the bazel node identifier utility, populating the agent storage.
+- Resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using the bazel target, populating the agent storage.
 
 - Resolves declared source files and templates from manifests into read-write files and templates in a node configuration.
 

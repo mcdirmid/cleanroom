@@ -1,7 +1,6 @@
 from typing import Optional, Tuple
 from . import node_config
 from . import sandbox_change_summary_validator
-from . import sandbox_run_control
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
 
 class ChangeSummaryValidator(sandbox_change_summary_validator.ChangeSummaryValidator, Singleton):
@@ -27,7 +26,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         keys=[
             ChangeSummaryValidator,
             sandbox_change_summary_validator.ChangeSummaryValidator,
-            sandbox_run_control.VerificationCheck,
+            node_config.VerificationCheck,
         ],
         tier="agent_session",
     )

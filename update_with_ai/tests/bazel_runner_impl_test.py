@@ -4,10 +4,10 @@ import unittest
 from typing import Optional, Sequence, Set
 from lib import agent_storage
 from lib import bazel_manifest_loader
-from lib import bazel_runner
-from lib import bazel_runner_impl
+from lib.bazel_runner_impl import DagRunner as DagRunnerImpl, __initialize__
 from lib import dag_cleaner
 from lib import dag_node_cleaner
+from lib import dag_runner
 from lib import dag_storage
 from lib import runner_logger
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton
@@ -144,16 +144,16 @@ class BazelRunnerImplTest(unittest.TestCase):
             tier="system",
         )
 
-        bazel_runner_impl.__initialize__(self.registry)
+        __initialize__(self.registry)
 
     def test_build_result_dataclass(self) -> None:
         """Tests BuildResult value object instantiation and property access."""
-        # Requirement: [BazelRunner] A bazel runner produces a build result upon pass completion.
-        result = bazel_runner.BuildResult(success=True, summary="Build finished successfully")
+        # Requirement: [DagRunner] A dag runner produces a build result upon pass completion.
+        result = dag_runner.BuildResult(success=True, summary="Build finished successfully")
         self.assertTrue(result.success)
         self.assertEqual(result.summary, "Build finished successfully")
 
-        failure = bazel_runner.BuildResult(success=False, summary="Build failed")
+        failure = dag_runner.BuildResult(success=False, summary="Build failed")
         self.assertFalse(failure.success)
         self.assertEqual(failure.summary, "Build failed")
 
@@ -164,22 +164,19 @@ class BazelRunnerImplTest(unittest.TestCase):
         self.storage.dirty_nodes.add(root)
 
         with enter_phase("system", registry=self.registry):
-            runner = get_singleton(bazel_runner.BazelRunner)
+            runner = get_singleton(dag_runner.DagRunner)
             # Requirement: The bazel runner resolves target labels and loads workspace target graphs into dag storage using a manifest loader.
-            # Requirement: [BazelRunner] A bazel runner resolves target manifests and loads workspace target graphs into dag storage using a manifest loader.
-            # Requirement: [BazelRunner] A bazel runner executes a cleaning pass over an acyclic subgraph rooted at a target node in dag storage.
+            # Requirement: [DagRunner] A dag runner executes a cleaning pass over an acyclic subgraph rooted at a target node in dag storage.
             result = runner.run_cleaning_pass(root)
 
             # Requirement: The bazel runner executes cleaning passes in topological order using the dag cleaner and the node cleaner.
-            # Requirement: [BazelRunner] A bazel runner cleans dirty nodes in topological order using the dag cleaner and the node cleaner.
             self.assertIn(root, self.cleaner.cleaned_nodes)
             self.assertIn(root, self.node_cleaner.cleaned_targets)
 
-            # Requirement: [BazelRunner] A bazel runner produces a build result upon pass completion.
+            # Requirement: [DagRunner] A dag runner produces a build result upon pass completion.
             self.assertTrue(result.success)
             self.assertIn("succeeded", result.summary)
 
-            # Requirement: [BazelRunner] A bazel runner logs execution events to standard output and transcript files using the runner logger.
             start_events = [e for e in self.logger.events if e.event_name == "build_pass_start"]
             end_events = [e for e in self.logger.events if e.event_name == "build_pass_end"]
             self.assertEqual(len(start_events), 1)
@@ -211,9 +208,8 @@ class BazelRunnerImplTest(unittest.TestCase):
         self.storage.dependencies_map[dep2] = {dag_storage.Dependency(node=dep3)}
 
         with enter_phase("system", registry=self.registry):
-            runner = get_singleton(bazel_runner.BazelRunner)
+            runner = get_singleton(dag_runner.DagRunner)
             # Requirement: The bazel runner resolves target labels and loads workspace target graphs into dag storage using a manifest loader.
-            # Requirement: [BazelRunner] A bazel runner resolves target manifests and loads workspace target graphs into dag storage using a manifest loader.
             result = runner.run_cleaning_pass(root)
 
             self.assertTrue(result.success)
@@ -228,7 +224,7 @@ class BazelRunnerImplTest(unittest.TestCase):
         self.cleaner.should_fail = True
 
         with enter_phase("system", registry=self.registry):
-            runner = get_singleton(bazel_runner.BazelRunner)
+            runner = get_singleton(dag_runner.DagRunner)
             # Requirement: The bazel runner halts cleaning and reports failure if a node cleaning fails, if an unexpected failure occurs during cleaning capturing the failure reason in the build summary, or if any reachable node in the target subgraph remains dirty after cleaning.
             result = runner.run_cleaning_pass(root)
 
@@ -255,7 +251,7 @@ class BazelRunnerImplTest(unittest.TestCase):
         )
 
         with enter_phase("system", registry=self.registry):
-            runner = get_singleton(bazel_runner.BazelRunner)
+            runner = get_singleton(dag_runner.DagRunner)
             # Requirement: The bazel runner halts cleaning and reports failure if a node cleaning fails, if an unexpected failure occurs during cleaning capturing the failure reason in the build summary, or if any reachable node in the target subgraph remains dirty after cleaning.
             result = runner.run_cleaning_pass(root)
 
@@ -280,7 +276,7 @@ class BazelRunnerImplTest(unittest.TestCase):
         )
 
         with enter_phase("system", registry=self.registry):
-            runner = get_singleton(bazel_runner.BazelRunner)
+            runner = get_singleton(dag_runner.DagRunner)
             # Requirement: The bazel runner halts cleaning and reports failure if a node cleaning fails, if an unexpected failure occurs during cleaning capturing the failure reason in the build summary, or if any reachable node in the target subgraph remains dirty after cleaning.
             result = runner.run_cleaning_pass(root)
 
@@ -293,9 +289,9 @@ class BazelRunnerImplTest(unittest.TestCase):
         change = dag_storage.Change()
 
         with enter_phase("system", registry=self.registry):
-            runner = get_singleton(bazel_runner.BazelRunner)
+            runner = get_singleton(dag_runner.DagRunner)
             # Requirement: Marking a node dirty injects a change message with text set to check.
-            # Requirement: [BazelRunner] A bazel runner marks a target node dirty by injecting a change message into its pending messages in dag storage.
+            # Requirement: [DagRunner] A dag runner marks a target node dirty by injecting a change message into its pending messages in dag storage.
             runner.mark_node_dirty(target, change)
 
             self.assertTrue(self.storage.is_dirty(target))
@@ -307,9 +303,9 @@ class BazelRunnerImplTest(unittest.TestCase):
         feedback = dag_storage.Feedback()
 
         with enter_phase("system", registry=self.registry):
-            runner = get_singleton(bazel_runner.BazelRunner)
+            runner = get_singleton(dag_runner.DagRunner)
             # Requirement: Injecting feedback or broadcasting changes transmits caller-provided message content.
-            # Requirement: [BazelRunner] A bazel runner injects a caller-supplied feedback message into a target node.
+            # Requirement: [DagRunner] A dag runner injects a caller-supplied feedback message into a target node.
             runner.inject_node_feedback(target, feedback)
 
             self.assertTrue(self.storage.is_dirty(target))
@@ -324,9 +320,9 @@ class BazelRunnerImplTest(unittest.TestCase):
         change = dag_storage.Change()
 
         with enter_phase("system", registry=self.registry):
-            runner = get_singleton(bazel_runner.BazelRunner)
+            runner = get_singleton(dag_runner.DagRunner)
             # Requirement: Injecting feedback or broadcasting changes transmits caller-provided message content.
-            # Requirement: [BazelRunner] A bazel runner broadcasts a caller-supplied change message from a node to all of its reverse dependencies.
+            # Requirement: [DagRunner] A dag runner broadcasts a caller-supplied change message from a node to all of its reverse dependencies.
             runner.broadcast_node_change(origin, change)
 
             self.assertTrue(self.storage.is_dirty(dep1))

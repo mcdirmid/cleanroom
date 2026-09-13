@@ -1,26 +1,26 @@
 from typing import List, Optional
 from framework import operation, override, singleton_type
-import agent_conversation_history
+import agent_conversation
 import openai_ext
 import tool_provider
 
 @singleton_type('agent_session')
-class ConversationHistory(agent_conversation_history.ConversationHistory):
+class Conversation(agent_conversation.Conversation):
     """
 PURPOSE:
-Implements conversation history with role formatting and response stubbing
+Implements conversation with role formatting and response stubbing
 
 INHERITED_REQUIREMENTS:
-- [ConversationHistory] Initial messages can seed the conversation history at session start.
-- [ConversationHistory] Appending messages and tool responses adds them in chronological order.
+- [Conversation] Initial messages can seed the conversation at session start.
+- [Conversation] Appending messages and tool responses adds them in chronological order.
 
 GROUNDING_ARGUMENT:
-- Operates as an agent_session singleton managing the sequence of conversation messages within the active session scope, accessing data types from imported agent_conversation_history, openai_ext, and tool_provider in the same lifecycle tier.
+- Operates as an agent_session singleton managing the sequence of conversation messages within the active session scope, accessing data types from imported agent_conversation, openai_ext, and tool_provider in the same lifecycle tier.
 """
 
     @property
     @override
-    def messages(self) -> List[agent_conversation_history.Message]:
+    def messages(self) -> List[agent_conversation.Message]:
         """
 PURPOSE:
 Current sequence of messages in the session
@@ -32,7 +32,7 @@ GROUNDING_ARGUMENT:
 
     @operation
     @override
-    def append_message(self, message: agent_conversation_history.Message) -> None:
+    def append_message(self, message: agent_conversation.Message) -> None:
         """
 PURPOSE:
 Appends a message to the history
@@ -50,12 +50,12 @@ PURPOSE:
 Appends a tool response, replacing superseded results with a stub
 
 FRESH_REQUIREMENTS:
-- A tool response's suppression key identifies the latest preceding response with the same key in the conversation history for replacement with a stub, while responses with unmatched keys are preserved intact.
+- A tool response's suppression key identifies the latest preceding response with the same key in the conversation for replacement with a stub, while responses with unmatched keys are preserved intact.
 - A stub retains the reminder from the superseded tool response, which the newly appended response inherits when omitted.
-- Each unprompted tool response presented at session start is preceded in the conversation history by a synthetic assistant tool invocation message formatted according to OpenAI tool calling conventions, correlating with the response tool call identifier and ordering serialized argument parameters deterministically by parameter name, presenting the tool execution as if initiated by the model.
+- Each unprompted tool response presented at session start is preceded in the conversation by a synthetic assistant tool invocation message formatted according to OpenAI tool calling conventions, correlating with the response tool call identifier and ordering serialized argument parameters deterministically by parameter name, presenting the tool execution as if initiated by the model.
 
 INHERITED_REQUIREMENTS:
-- [ConversationHistory] Stubs previous responses identified by a suppression key.
+- [Conversation] Stubs previous responses identified by a suppression key.
 
 GROUNDING_ARGUMENT:
 - Receives the response, tool_name, tool_call_id, and optional wire_parameter_bindings as parameters, inspects response.suppression_key against prior tool responses in self.messages to replace the latest preceding response having a matching suppression key with a stub while preserving unmatched responses and superseded reminders, and prepends synthetic tool invocations conforming to openai_ext tool calling conventions correlating by tool call identifier with deterministically ordered argument parameters when unprompted at session start.
@@ -64,19 +64,19 @@ GROUNDING_ARGUMENT:
 
     @operation
     @override
-    def get_model_request(self) -> agent_conversation_history.ModelRequest:
+    def get_model_request(self) -> agent_conversation.ModelRequest:
         """
 PURPOSE:
 Formats messages into a provider model request
 
 FRESH_REQUIREMENTS:
-- The conversation history formats messages in a model request according to OpenAI chat completion conventions for system, user, assistant, and tool messages.
+- The conversation formats messages in a model request according to OpenAI chat completion conventions for system, user, assistant, and tool messages.
 - Tool execution response notes, content, and reminders from the tool provider are included in visible tool message content, formatting active reminders on messages and superseded stubs to remind the agent in the assembled model request.
 
 INHERITED_REQUIREMENTS:
-- [ConversationHistory] The conversation history produces a model request prepared for transmission to a language model.
+- [Conversation] The conversation produces a model request prepared for transmission to a language model.
 
 GROUNDING_ARGUMENT:
-- Reads self.messages stored directly on the agent_session singleton, transforms roles and tool call structures adhering to openai_ext chat completion schemas, and formats active reminders into visible tool message content, producing an agent_conversation_history.ModelRequest value record without requiring external singleton collaborators.
+- Reads self.messages stored directly on the agent_session singleton, transforms roles and tool call structures adhering to openai_ext chat completion schemas, and formats active reminders into visible tool message content, producing an agent_conversation.ModelRequest value record without requiring external singleton collaborators.
 """
         ...

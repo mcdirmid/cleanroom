@@ -2,7 +2,7 @@ from typing import Optional, Sequence
 from framework import operation, override, singleton_type
 import agent_storage
 import bazel_manifest_loader
-import bazel_node_id_utils
+import bazel_target
 import dag_storage
 import file_alias
 import json_manifest_ext
@@ -15,7 +15,7 @@ PURPOSE:
 Implements manifest loader translating JSON target manifests into graph nodes and node configurations
 
 GROUNDING_ARGUMENT:
-- As a system singleton, BazelManifestLoader translates target manifests into graph nodes and configurations and interacts with imported agent_storage, bazel_node_id_utils, and dag_storage in the same system lifecycle tier.
+- As a system singleton, BazelManifestLoader translates target manifests into graph nodes and configurations and interacts with imported agent_storage, bazel_target, and dag_storage in the same system lifecycle tier.
 """
 
     @operation
@@ -66,6 +66,6 @@ INHERITED_REQUIREMENTS:
 - [BazelManifestLoader] A manifest loader synthesizes definitions for declared dependencies lacking explicit manifests.
 
 GROUNDING_ARGUMENT:
-- Receives content and storage as arguments, uses imported bazel_node_id_utils (in the same system lifecycle tier) to normalize target labels and derive directories, and populates node definitions, dependencies, and configurations into the provided AgentStorage.
+- Receives content and storage as arguments, uses imported bazel_target (in the same system lifecycle tier) to normalize target labels and derive directories, and populates node definitions, dependencies, and configurations into the provided AgentStorage.
 """
         ...

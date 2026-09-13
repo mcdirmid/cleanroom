@@ -1,20 +1,20 @@
-"""Unit tests for agent_conversation_history_impl aligned with grounding specifications."""
+"""Unit tests for openai_conversation_impl aligned with grounding specifications."""
 
 import unittest
-from lib.agent_conversation_history import (
-    ConversationHistory,
+from lib.agent_conversation import (
+    Conversation,
     Message,
     ModelRequest,
 )
-from lib.agent_conversation_history_impl import (
-    ConversationHistory as ConversationHistoryImpl,
+from lib.openai_conversation_impl import (
+    Conversation as ConversationImpl,
     __initialize__,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from lib.tool_provider import Response, WireParameterBindings
 
 
-class AgentConversationHistoryImplTest(unittest.TestCase):
+class OpenAIConversationImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
@@ -45,9 +45,9 @@ class AgentConversationHistoryImplTest(unittest.TestCase):
     def test_append_message_chronology(self) -> None:
         """CUJ: Appending messages preserves chronological insertion order."""
         with enter_phase("agent_session", registry=self.registry) as scope:
-            history = scope.get_singleton(ConversationHistory)
-            # Requirement: [ConversationHistory] Initial messages can seed the conversation history at session start.
-            # Requirement: [ConversationHistory] Appending messages and tool responses adds them in chronological order.
+            history = scope.get_singleton(Conversation)
+            # Requirement: [Conversation] Initial messages can seed the conversation at session start.
+            # Requirement: [Conversation] Appending messages and tool responses adds them in chronological order.
             history.append_message(Message(role="system", content="System instruction"))
             history.append_message(Message(role="user", content="User prompt"))
             history.append_message(Message(role="assistant", content="Assistant reply"))
@@ -61,11 +61,11 @@ class AgentConversationHistoryImplTest(unittest.TestCase):
     def test_append_unprompted_tool_response_inserts_synthetic_assistant_call(self) -> None:
         """CUJ: Appending unprompted tool response adds synthetic assistant invocation correlating with tool_call_id and sorted arguments."""
         with enter_phase("agent_session", registry=self.registry) as scope:
-            history = scope.get_singleton(ConversationHistory)
+            history = scope.get_singleton(Conversation)
             history.append_message(Message(role="user", content="Execute tool"))
 
             resp1 = Response(is_failed=False, is_terminated=False, content="tool output 1")
-            # Requirement: Each unprompted tool response presented at session start is preceded in the conversation history by a synthetic assistant tool invocation message formatted according to OpenAI tool calling conventions, correlating with the response tool call identifier and ordering serialized argument parameters deterministically by parameter name, presenting the tool execution as if initiated by the model.
+            # Requirement: Each unprompted tool response presented at session start is preceded in the conversation by a synthetic assistant tool invocation message formatted according to OpenAI tool calling conventions, correlating with the response tool call identifier and ordering serialized argument parameters deterministically by parameter name, presenting the tool execution as if initiated by the model.
             bindings1 = WireParameterBindings(bindings={("z_param", "last"), ("a_param", "first")})
             history.append_tool_response(resp1, tool_name="read_file", tool_call_id="call_1", wire_parameter_bindings=bindings1)
 
@@ -100,7 +100,7 @@ class AgentConversationHistoryImplTest(unittest.TestCase):
     def test_append_tool_response_supersession_stubbing(self) -> None:
         """CUJ: Superseded tool results with matching suppression key are replaced with stubs, while unmatched keys are preserved."""
         with enter_phase("agent_session", registry=self.registry) as scope:
-            history = scope.get_singleton(ConversationHistory)
+            history = scope.get_singleton(Conversation)
 
             # 1. Responses without suppression key are never superseded
             ro_resp1 = Response(is_failed=False, is_terminated=False, content="spec v1", suppression_key=None)
@@ -117,8 +117,8 @@ class AgentConversationHistoryImplTest(unittest.TestCase):
             rw_widget1 = Response(is_failed=False, is_terminated=False, content="widget v1", suppression_key="widget.py")
             history.append_tool_response(rw_widget1, tool_name="read_file", tool_call_id="call_w1")
 
-            # Requirement: A tool response's suppression key identifies the latest preceding response with the same key in the conversation history for replacement with a stub, while responses with unmatched keys are preserved intact.
-            # Requirement: [ConversationHistory] Stubs previous responses identified by a suppression key.
+            # Requirement: A tool response's suppression key identifies the latest preceding response with the same key in the conversation for replacement with a stub, while responses with unmatched keys are preserved intact.
+            # Requirement: [Conversation] Stubs previous responses identified by a suppression key.
             rw_widget2 = Response(is_failed=False, is_terminated=False, content="widget v2", suppression_key="widget.py")
             history.append_tool_response(rw_widget2, tool_name="read_file", tool_call_id="call_w2")
 
@@ -158,7 +158,7 @@ class AgentConversationHistoryImplTest(unittest.TestCase):
     def test_get_model_request_formats_roles_and_reminders(self) -> None:
         """CUJ: Formatting messages into ModelRequest formats OpenAI conventions and active reminders."""
         with enter_phase("agent_session", registry=self.registry) as scope:
-            history = scope.get_singleton(ConversationHistory)
+            history = scope.get_singleton(Conversation)
             history.append_message(
                 Message(
                     role="system",
@@ -178,8 +178,8 @@ class AgentConversationHistoryImplTest(unittest.TestCase):
                 reminder="Remember to write tests.",
             )
             history.append_tool_response(resp, tool_name="advance", tool_call_id="c1")
-            # Requirement: [ConversationHistory] The conversation history produces a model request prepared for transmission to a language model.
-            # Requirement: The conversation history formats messages in a model request according to OpenAI chat completion conventions for system, user, assistant, and tool messages.
+            # Requirement: [Conversation] The conversation produces a model request prepared for transmission to a language model.
+            # Requirement: The conversation formats messages in a model request according to OpenAI chat completion conventions for system, user, assistant, and tool messages.
             # Requirement: Tool execution response notes, content, and reminders from the tool provider are included in visible tool message content, formatting active reminders on messages and superseded stubs to remind the agent in the assembled model request.
             req = history.get_model_request()
             self.assertEqual(len(req.messages), 4)  # system, user, synthetic assistant, tool

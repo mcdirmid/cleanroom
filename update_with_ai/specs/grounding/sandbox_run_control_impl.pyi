@@ -29,7 +29,7 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def verification_checks(self) -> Sequence[sandbox_run_control.VerificationCheck]:
+    def verification_checks(self) -> Sequence[node_config.VerificationCheck]:
         """
 PURPOSE:
 Sequence of verification checks evaluated during session advancement

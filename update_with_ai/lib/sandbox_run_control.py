@@ -1,11 +1,9 @@
 from typing import Protocol, Sequence, Set, Tuple
 from . import file_alias, node_config, tool_provider
 
-VerificationCheck = node_config.VerificationCheck
-
 class RunController(Protocol):
     @property
-    def verification_checks(self) -> Sequence[VerificationCheck]:
+    def verification_checks(self) -> Sequence[node_config.VerificationCheck]:
         ...
 
     @property

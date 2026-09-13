@@ -1,7 +1,7 @@
 from typing import Optional, Protocol, Sequence
 from framework import data_type, operation, singleton_type
 import agent_storage
-import bazel_node_id_utils
+import bazel_target
 import dag_storage
 import file_alias
 import node_config

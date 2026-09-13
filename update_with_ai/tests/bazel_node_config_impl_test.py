@@ -16,7 +16,7 @@ from lib.bazel_node_config_impl import (
     _parse_guide_markdown,
     __initialize__,
 )
-from lib.bazel_node_id_utils import BazelNodeIdentifierUtility, NodeDirectory
+from lib.bazel_target import BazelTarget, NodeDirectory
 from lib.dag_node_cleaner import CleanedNode
 from lib.dag_storage import DagStorage, Feedback, Message, Node
 from lib.file_alias import (
@@ -102,10 +102,10 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             # Requirement: [NodeConfig] The node config provides templates mapping read-write files to initial file content.
             self.assertIn((rw, "template"), cfg.templates)
             # Requirement: The node config exposes the declared guide target as the guide file when step mode is active.
-            # Requirement: [NodeConfig] The node config provides the session guide file when guide step mode is configured.
+            # Requirement: [NodeConfig] The node config provides the session guide file when step mode is active.
             self.assertEqual(cfg.guide_file, unbound)
             # Requirement: The node config exposes the declared guide target as the task guide when step mode is active.
-            # Requirement: [NodeConfig] The node config provides the session guide, providing structured instructional text when guide step mode is configured.
+            # Requirement: [NodeConfig] The node config provides the session guide, providing structured instructional text when step mode is active.
             self.assertEqual(cfg.guide, guide)
             cfg._feedback = ("Feedback msg 1",)
             # Requirement: Declared feedback messages retrieved from graph storage for the target node as the session feedback.
@@ -129,7 +129,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             # Requirement: The node config exposes whether the node allows step mode from the target node manifest.
             # Requirement: [NodeConfig] The node config indicates whether the node allows step mode.
             self.assertFalse(cfg.allows_step_mode)
-            # Requirement: The node config exposes whether step mode is active, enabled when the model config enables step mode and the node allows step mode.
+            # Requirement: The node config exposes whether step mode is active, enabled when the model config enables step mode, the node allows step mode, and session feedback is absent.
             # Requirement: [NodeConfig] The node config indicates whether session step mode is active.
             self.assertFalse(cfg.is_step_mode)
             cfg._allows_step_mode = True
@@ -238,7 +238,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
                 return []
 
-        class MockNodeIdentifierUtility(BazelNodeIdentifierUtility, Singleton):
+        class MockNodeIdentifierUtility(BazelTarget, Singleton):
             tier = "agent_session"
             def normalize(self, raw_label: str) -> Node:
                 return Node(address=raw_label)
@@ -255,7 +255,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         __initialize__(reg)
         reg.register(MockCleanedNode, keys=[CleanedNode])
         reg.register(MockManifestLoader, keys=[BazelManifestLoader])
-        reg.register(MockNodeIdentifierUtility, keys=[BazelNodeIdentifierUtility])
+        reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
         reg.register(MockDagStorage, keys=[DagStorage])
 
         with enter_phase("system", registry=reg) as sys_scope:
@@ -343,7 +343,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
                 return []
 
-        class MockNodeIdentifierUtility(BazelNodeIdentifierUtility, Singleton):
+        class MockNodeIdentifierUtility(BazelTarget, Singleton):
             tier = "agent_session"
             def normalize(self, raw_label: str) -> Node:
                 return Node(address=raw_label)
@@ -395,7 +395,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         __initialize__(reg)
         reg.register(MockCleanedNode, keys=[CleanedNode])
         reg.register(MockManifestLoader, keys=[BazelManifestLoader])
-        reg.register(MockNodeIdentifierUtility, keys=[BazelNodeIdentifierUtility])
+        reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
         reg.register(MockDagStorage, keys=[DagStorage])
         reg.register(MockModelConfig, keys=[ModelConfig])
 
@@ -407,7 +407,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 # Requirement: The node config exposes whether the node allows step mode from the target node manifest.
                 # Requirement: [NodeConfig] The node config indicates whether the node allows step mode.
                 self.assertFalse(cfg.allows_step_mode)
-                # Requirement: The node config exposes whether step mode is active, enabled when the model config enables step mode and the node allows step mode.
+                # Requirement: The node config exposes whether step mode is active, enabled when the model config enables step mode, the node allows step mode, and session feedback is absent.
                 # Requirement: [NodeConfig] The node config indicates whether session step mode is active.
                 self.assertFalse(cfg.is_step_mode)
                 self.assertIsNone(cfg.guide_file)
@@ -446,7 +446,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
                 return []
 
-        class MockNodeIdentifierUtility(BazelNodeIdentifierUtility, Singleton):
+        class MockNodeIdentifierUtility(BazelTarget, Singleton):
             tier = "agent_session"
             def normalize(self, raw_label: str) -> Node:
                 return Node(address=raw_label)
@@ -498,7 +498,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         __initialize__(reg)
         reg.register(MockCleanedNode, keys=[CleanedNode])
         reg.register(MockManifestLoader, keys=[BazelManifestLoader])
-        reg.register(MockNodeIdentifierUtility, keys=[BazelNodeIdentifierUtility])
+        reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
         reg.register(MockDagStorage, keys=[DagStorage])
         reg.register(MockModelConfig, keys=[ModelConfig])
 
@@ -511,8 +511,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 # Requirement: [NodeConfig] The node config indicates whether the node allows step mode.
                 self.assertTrue(cfg.allows_step_mode)
                 self.assertEqual(cfg.feedback, ("Fix failing mock test",))
-                # Requirement: Step mode is active when model config step mode is enabled, the target node allows step mode, and session feedback is absent.
-                # Requirement: The node config exposes whether step mode is active, enabled when the model config enables step mode and the node allows step mode and session feedback is absent.
+                # Requirement: The node config exposes whether step mode is active, enabled when the model config enables step mode, the node allows step mode, and session feedback is absent.
                 # Requirement: [NodeConfig] The node config indicates whether session step mode is active.
                 self.assertFalse(cfg.is_step_mode)
                 self.assertIsNone(cfg.guide_file)
@@ -525,7 +524,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 alias = alias_mgr.convert("qa.md")
                 self.assertIsInstance(alias, ReadOnlyFile)
 
-    @patch("subprocess.run")
+    @patch("lib.bazel_node_config_impl.subprocess.run")
     def test_command_verification_check_stderr_and_errors(self, mock_run: MagicMock) -> None:
         """CUJ: _CommandVerificationCheck handles stderr output, combined output, and subprocess errors."""
         check = _CommandVerificationCheck(command="test_cmd", cwd="/tmp")
@@ -579,7 +578,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
                 return []
 
-        class MockNodeIdentifierUtility(BazelNodeIdentifierUtility, Singleton):
+        class MockNodeIdentifierUtility(BazelTarget, Singleton):
             tier = "agent_session"
             def normalize(self, raw_label: str) -> Node:
                 return Node(address=raw_label)
@@ -590,7 +589,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         __initialize__(reg2)
         reg2.register(MockCleanedNode, keys=[CleanedNode])
         reg2.register(MockManifestLoaderNone, keys=[BazelManifestLoader])
-        reg2.register(MockNodeIdentifierUtility, keys=[BazelNodeIdentifierUtility])
+        reg2.register(MockNodeIdentifierUtility, keys=[BazelTarget])
 
         with enter_phase("agent_session", registry=reg2) as scope:
             cfg = scope.get_singleton(NodeConfig)
@@ -612,7 +611,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         __initialize__(reg3)
         reg3.register(MockCleanedNode, keys=[CleanedNode])
         reg3.register(MockManifestLoaderBadJson, keys=[BazelManifestLoader])
-        reg3.register(MockNodeIdentifierUtility, keys=[BazelNodeIdentifierUtility])
+        reg3.register(MockNodeIdentifierUtility, keys=[BazelTarget])
 
         with enter_phase("agent_session", registry=reg3) as scope:
             cfg = scope.get_singleton(NodeConfig)
@@ -643,7 +642,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
                     return []
 
-            class MockNodeIdentifierUtility(BazelNodeIdentifierUtility, Singleton):
+            class MockNodeIdentifierUtility(BazelTarget, Singleton):
                 tier = "agent_session"
                 def normalize(self, raw_label: str) -> Node:
                     return Node(address=raw_label)
@@ -654,7 +653,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             __initialize__(reg)
             reg.register(MockCleanedNode, keys=[CleanedNode])
             reg.register(MockManifestLoader, keys=[BazelManifestLoader])
-            reg.register(MockNodeIdentifierUtility, keys=[BazelNodeIdentifierUtility])
+            reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
 
             with enter_phase("agent_session", registry=reg) as scope:
                 cfg = scope.get_singleton(NodeConfig)
@@ -706,7 +705,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
                     return []
 
-            class MockNodeIdentifierUtility(BazelNodeIdentifierUtility, Singleton):
+            class MockNodeIdentifierUtility(BazelTarget, Singleton):
                 tier = "agent_session"
                 def normalize(self, raw_label: str) -> Node:
                     return Node(address=raw_label)
@@ -753,7 +752,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             __initialize__(reg)
             reg.register(MockCleanedNode, keys=[CleanedNode])
             reg.register(MockManifestLoader, keys=[BazelManifestLoader])
-            reg.register(MockNodeIdentifierUtility, keys=[BazelNodeIdentifierUtility])
+            reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
             reg.register(MockModelConfig, keys=[ModelConfig])
 
             original_open = open
@@ -868,7 +867,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
                     return []
 
-            class MockNodeIdentifierUtility(BazelNodeIdentifierUtility, Singleton):
+            class MockNodeIdentifierUtility(BazelTarget, Singleton):
                 tier = "agent_session"
                 def normalize(self, raw_label: str) -> Node:
                     return Node(address=raw_label)
@@ -915,7 +914,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             __initialize__(reg)
             reg.register(MockCleanedNode, keys=[CleanedNode])
             reg.register(MockManifestLoader, keys=[BazelManifestLoader])
-            reg.register(MockNodeIdentifierUtility, keys=[BazelNodeIdentifierUtility])
+            reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
             reg.register(MockModelConfig, keys=[ModelConfig])
 
             old_env = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
@@ -1009,7 +1008,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             def load_manifest(self, content: Manifest, storage: object) -> Sequence[NodeDefinition]:
                 return []
 
-        class MockNodeIdentifierUtility(BazelNodeIdentifierUtility, Singleton):
+        class MockNodeIdentifierUtility(BazelTarget, Singleton):
             tier = "agent_session"
             def normalize(self, raw_label: str) -> Node:
                 return Node(address=raw_label)
@@ -1020,7 +1019,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         __initialize__(reg)
         reg.register(MockCleanedNode, keys=[CleanedNode])
         reg.register(MockManifestLoader, keys=[BazelManifestLoader])
-        reg.register(MockNodeIdentifierUtility, keys=[BazelNodeIdentifierUtility])
+        reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
 
         with enter_phase("agent_session", registry=reg) as scope:
             cfg = scope.get_singleton(NodeConfig)

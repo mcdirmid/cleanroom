@@ -4,8 +4,8 @@ import unittest
 from typing import Optional, Set, Tuple
 from lib.file_alias import BoundFile, FileContent, UnboundFile
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
-from lib.node_config import NodeConfig
-from lib.sandbox_guide_delivery import Guide, GuideDelivery, StepSection
+from lib.node_config import Guide, NodeConfig, StepSection
+from lib.sandbox_guide_delivery import GuideDelivery
 from lib.sandbox_guide_delivery_impl import (
     GuideDelivery as GuideDeliveryImpl,
     __initialize__,
@@ -210,7 +210,6 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
         self.node_cfg._guide = None
         with enter_phase("agent_session", registry=self.registry) as scope:
             delivery = scope.get_singleton(GuideDelivery)
-            # Requirement: Steps remaining evaluates to false once all step sections have been delivered or when no guide is configured.
             # Requirement: [GuideDelivery] Steps remaining indicates whether further step sections remain to be completed.
             self.assertFalse(delivery.has_steps_remaining)
             self.assertIsNone(delivery.advance_step(verification_passed=True))

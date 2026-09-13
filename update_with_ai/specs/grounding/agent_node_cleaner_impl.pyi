@@ -1,8 +1,7 @@
 from typing import Set
 from framework import operation, override, singleton_type
-import agent_conversation_history
-import agent_node_cleaner
-import agent_runner
+import agent_conversation
+import agent_driver
 import agent_storage
 import dag_node_cleaner
 import dag_storage
@@ -11,17 +10,16 @@ import node_config
 import sandbox
 
 @singleton_type('system')
-class AgentNodeCleaner(agent_node_cleaner.AgentNodeCleaner):
+class NodeCleaner(dag_node_cleaner.NodeCleaner):
     """
 PURPOSE:
-Implements agent node cleaner orchestrating sandbox and agent runner
+Implements node cleaner orchestrating sandbox and agent driver
 
 GROUNDING_ARGUMENT:
-- Through the agent session phase boundary, As a system singleton, AgentNodeCleaner coordinates system singletons (agent_storage, dag_storage) in the same lifecycle. While system singletons cannot directly access narrower agent_session singletons under static lifecycle isolation, this service initiates and executes within an explicit agent session phase that instantiates and scopes session-level singletons (agent_runner, sandbox, agent_conversation_history, CleanedNode), with defining modules all imported.
+- Through the agent session phase boundary, As a system singleton, NodeCleaner coordinates system singletons (agent_storage, dag_storage) in the same lifecycle. While system singletons cannot directly access narrower agent_session singletons under static lifecycle isolation, this service initiates and executes within an explicit agent session phase that instantiates and scopes session-level singletons (agent_driver, sandbox, agent_conversation, CleanedNode), with defining modules all imported.
 """
 
     @operation
-    @override
     def clean_node(self, node: dag_storage.Node) -> Set[dag_storage.Message]:
         """
 PURPOSE:
@@ -29,10 +27,10 @@ Cleans a dirty node within an agent session phase and returns resulting messages
 
 FRESH_REQUIREMENTS:
 - Node cleaning executes within an agent session phase, configuring the cleaned node with the dirty node.
-- Node cleaning executes an agent runner with the sandbox and conversation history.
+- Node cleaning executes an agent driver with the sandbox and conversation.
 - Startup templates from the sandbox are materialized for missing read-write files.
-- The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox.
-- When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete, or call finish without arguments if no workspace files were modified when guide step mode is inactive.
+- The conversation is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox.
+- When seeding conversation with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete, or call finish without arguments if no workspace files were modified when guide step mode is inactive.
 - When incoming feedback messages are present, they are formatted as actionable instructions prefaced with directives to fix read-write target files based on the feedback.
 - When the agent outcome indicates change with workspace file modifications, change messages are produced for downstream dependent nodes, and no change messages or change summaries when no workspace files were modified.
 - When the agent outcome indicates blame, feedback messages containing the blame explanation are produced addressed to the blamed dependency node.
@@ -40,15 +38,8 @@ FRESH_REQUIREMENTS:
 - When a dirty node defines no task prompt, cleaning resolves the node without executing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
 - Retries execution of the agent session phase a second time before propagating the failure when an agent session phase encounters an unexpected execution failure during node cleaning.
 
-INHERITED_REQUIREMENTS:
-- [AgentNodeCleaner] An agent node cleaner cleans a dirty node within an agent session phase.
-- [AgentNodeCleaner] When workspace file modifications occur and task verification passes, the agent node cleaner produces change messages.
-- [AgentNodeCleaner] When blame is signaled, the agent node cleaner produces feedback messages containing the blame explanation and addressed to the blamed dependency node.
-- [AgentNodeCleaner] When cleaning succeeds without workspace file modifications, the node is left clean with no produced messages.
-- [AgentNodeCleaner] When cleaning fails, the node remains dirty with no produced messages and continuation halts.
-
 GROUNDING_ARGUMENT:
-- Receives node as an input argument and retrieves task prompt and node definition from imported agent_storage in the same system lifecycle tier. When a dirty node defines no task prompt, it resolves without executing an agent session phase, producing change messages if incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise. Within the orchestrated agent session phase, it configures CleanedNode, materializes startup templates from sandbox, seeds conversation history with incoming pending messages ordered deterministically by content and augmenting the task prompt with guide instructions based on imported node_config and model_config, executes agent_runner, and maps the resulting agent outcome to change or feedback messages for dag_storage, relying on the requirements of collaborator types to satisfy message generation and dirty state management.
+- Receives node as an input argument and retrieves task prompt and node definition from imported agent_storage in the same system lifecycle tier. When a dirty node defines no task prompt, it resolves without executing an agent session phase, producing change messages if incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise. Within the orchestrated agent session phase, it configures CleanedNode, materializes startup templates from sandbox, seeds conversation with incoming pending messages ordered deterministically by content and augmenting the task prompt with guide instructions based on imported node_config and model_config, executes agent_driver, and maps the resulting agent outcome to change or feedback messages for dag_storage, relying on the requirements of collaborator types to satisfy message generation and dirty state management.
 """
         ...
 
@@ -60,7 +51,7 @@ PURPOSE:
 Cleans a dirty node, communicating whether processing should continue
 
 FRESH_REQUIREMENTS:
-- After a dirty node is cleaned, the agent node cleaner registers the node as a dependent to its non-silent dependencies.
+- After a dirty node is cleaned, the node cleaner registers the node as a dependent to its non-silent dependencies.
 - When delivering messages after cleaning, feedback messages are delivered to their addressed dependency node.
 - Change messages are delivered to downstream dependents.
 

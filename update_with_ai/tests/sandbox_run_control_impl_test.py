@@ -16,9 +16,9 @@ from lib.file_alias import (
     WorkspacePath,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
-from lib.node_config import NodeConfig
+from lib.node_config import Guide, NodeConfig, VerificationCheck
 from lib.sandbox_file_editor import EditManager
-from lib.sandbox_guide_delivery import Guide, GuideDelivery
+from lib.sandbox_guide_delivery import GuideDelivery
 from lib.sandbox_run_control import (
     AdvanceTool,
     BlameTool,
@@ -26,7 +26,6 @@ from lib.sandbox_run_control import (
     FinishTool,
     RunController,
     RunTestsTool,
-    VerificationCheck,
 )
 from lib.sandbox_run_control_impl import (
     AdvanceTool as AdvanceToolImpl,
@@ -381,7 +380,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             # Subsequent execution updates verification results and fails
             # Requirement: On subsequent executions, executing the advance tool updates verification results if outdated.
-            # Requirement: Tool execution fails when verification is failing, reminding the agent that the run tests tool should be called first and specifying a follow-up execution of the run tests tool.
+            # Requirement: Tool execution fails when verification is failing, reminding the agent that the run tests tool should be called first and specifying a follow-up execution of the run tests tool with reasoning text indicating that verification results must be inspected before advancing.
             resp2 = adv.execute_tool(b)
             self.assertTrue(resp2.is_failed)
             self.assertFalse(resp2.is_terminated)
@@ -457,7 +456,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             adv.execute_tool(b)
 
             # Subsequent execution when no steps remain and no workspace files modified
-            # Requirement: Tool execution produces a response specifying a follow-up execution of the finish tool without a change summary when verification is passing, no steps remain, and no workspace files were modified.
+            # Requirement: Tool execution produces a response specifying a follow-up execution of the finish tool without a change summary and with reasoning text indicating that all guide steps are complete when verification is passing, no steps remain, and no workspace files were modified.
             resp = adv.execute_tool(b)
 
             self.assertFalse(resp.is_failed)
@@ -491,7 +490,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
             b = ActualParameterBindings(bindings=set())
             # Requirement: Executing the finish tool updates verification results if outdated.
             # Requirement: Tool execution fails when guide step mode is active and guide steps remain in guide delivery, reminding the agent that the advance tool must be called while guide steps remain and specifying the advance tool as a follow-up tool call with reasoning text indicating that remaining guide steps must be completed before finishing.
-            # Requirement: [FinishTool] Executing the finish tool while guide steps remain fails with a reminder to execute the advance tool, specifying the advance tool as a follow-up tool call.
             resp = finish.execute_tool(b)
 
             self.assertTrue(resp.is_failed)
@@ -660,7 +658,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
                 }
             )
             # Requirement: On successful blame tool execution, the response indicates termination attributing feedback to the blame target owning node.
-            # Requirement: [BlameTool] Executing the blame tool fails if the target is not one of the blame targets, and terminates the run with diagnostic feedback attributed to the owning node on success.
             resp_val = blame_tool.execute_tool(b_valid)
             self.assertFalse(resp_val.is_failed)
             self.assertTrue(resp_val.is_terminated)
@@ -732,8 +729,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIsInstance(run_tests.description, str)
 
             b = ActualParameterBindings(bindings=set())
-            # Requirement: Executing the run tests tool updates verification results if outdated.
-            # Requirement: Tool execution fails when verification fails, presenting diagnostic feedback sanitized through the alias manager alongside any configured verification failure instructions.
+            # Requirement: [RunController] The run controller installs a run tests tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
+            # Requirement: Fails when verification fails, presenting diagnostic feedback sanitized through the alias manager alongside any configured verification failure instructions.
             resp = run_tests.execute_tool(b)
 
             self.assertTrue(resp.is_failed)
@@ -752,8 +749,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
         with enter_phase("agent_session", registry=self.registry) as scope:
             run_tests = scope.get_singleton(RunTestsTool)
             b = ActualParameterBindings(bindings=set())
-            # Requirement: Executing the run tests tool updates verification results if outdated.
-            # Requirement: Tool execution produces a response presenting passing verification results alongside sanitized check output when verification passes.
+            # Requirement: [RunController] The run controller installs a run tests tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
+            # Requirement: Produces a response presenting passing verification results using the session verification success message when configured or default passing verification results alongside sanitized check output when verification passes.
             resp = run_tests.execute_tool(b)
 
             self.assertFalse(resp.is_failed)
@@ -781,7 +778,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             b = ActualParameterBindings(bindings=set())
 
             # First execution runs checks
-            # Requirement: Executing the run tests tool updates verification results if outdated.
+            # Requirement: [RunController] The run controller installs a run tests tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
             resp1 = run_tests.execute_tool(b)
             self.assertTrue(resp1.is_failed)
             self.assertEqual(vcheck.call_count, 1)

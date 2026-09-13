@@ -3,7 +3,7 @@ import os
 from typing import Any, Dict, List, Optional, Sequence, Set, cast
 from . import agent_storage
 from . import bazel_manifest_loader
-from . import bazel_node_id_utils
+from . import bazel_target
 from . import dag_storage
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
 
@@ -20,7 +20,7 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
 
         # Requirement: The bazel manifest loader retrieves target manifests from workspace directories or runfiles trees for nodes in dag storage.
         # Requirement: [BazelManifestLoader] The bazel manifest loader retrieves the manifest for a node in dag storage.
-        node_util = get_singleton(bazel_node_id_utils.BazelNodeIdentifierUtility)
+        node_util = get_singleton(bazel_target.BazelTarget)
         pkg_dir = node_util.extract_directory(node)
         target_name = node.address.split(":")[-1] if ":" in node.address else os.path.basename(node.address)
         manifest_filename = f"{target_name}_manifest.json"
@@ -57,7 +57,7 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
     ) -> Sequence[agent_storage.NodeDefinition]:
         # Requirement: A manifest loader parses JSON manifests using the filesystem into json manifest records.
         data = json.loads(str(content))
-        node_util = get_singleton(bazel_node_id_utils.BazelNodeIdentifierUtility)
+        node_util = get_singleton(bazel_target.BazelTarget)
         results: List[agent_storage.NodeDefinition] = []
 
         targets = data.get("targets", [data]) if isinstance(data, dict) else []

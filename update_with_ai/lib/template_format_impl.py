@@ -51,7 +51,7 @@ class TemplateFormatter(template_format.TemplateFormatter, Singleton):
         pass
 
     def format_template(self, text: str, parameters: Mapping[str, Any]) -> str:
-        # Requirement: The template formatter formats template text using parameters to produce formatted text.
+        # Requirement: [TemplateFormatter] The template formatter formats template text using parameters to produce formatted text.
         lines = text.splitlines()
         result_lines = self._format_lines(lines, parameters)
         return "\n".join(result_lines)

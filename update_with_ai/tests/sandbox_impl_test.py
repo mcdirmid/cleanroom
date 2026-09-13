@@ -7,11 +7,10 @@ from lib.dag_storage import Node
 from lib.file_alias import BoundFile, FileContent, ReadOnlyFile, UnboundFile, WorkspacePath
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton
 from lib.model_config import ModelConfig
-from lib.node_config import NodeConfig
+from lib.node_config import Guide, NodeConfig
 from lib.sandbox import Sandbox, StartupToolExecution
 from lib.sandbox_file_editor import EditManager
 from lib.sandbox_file_reader import ReadManager, ReadTool
-from lib.sandbox_guide_delivery import Guide
 from lib.sandbox_impl import Sandbox as SandboxImpl, __initialize__
 from lib.sandbox_run_control import AdvanceTool
 from lib.tool_provider import (

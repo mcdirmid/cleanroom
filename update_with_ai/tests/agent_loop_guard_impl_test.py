@@ -53,7 +53,6 @@ class AgentLoopGuardImplTest(unittest.TestCase):
             bindings = ActualParameterBindings(bindings={(self.param, "a.py")})
 
             # Call 1 -> None
-            # Requirement: The loop guard tracks consecutive executions of identical tools with identical arguments.
             # Requirement: [LoopGuard] A loop guard evaluates consecutive executions of identical tools and edits.
             self.assertIsNone(guard.record_tool_execution("read_file", bindings))
 
@@ -72,27 +71,25 @@ class AgentLoopGuardImplTest(unittest.TestCase):
             self.assertIsInstance(res4, LoopReminder)
 
             # Call 5 -> LoopFailure
-            # Requirement: The loop guard produces a loop failure communicating session failure when consecutive identical tool executions reach the fatal threshold.
+            # Requirement: Produces a loop failure communicating session failure when consecutive identical tool executions reach the fatal threshold.
             # Requirement: [LoopGuard] Consecutive repetitions reaching a fatal threshold produce a loop failure communicating session termination.
             res5 = guard.record_tool_execution("read_file", bindings)
             self.assertIsInstance(res5, LoopFailure)
 
     def test_consecutive_edits_threshold(self) -> None:
-        """CUJ: Tracking consecutive edits to the same file and line range."""
+        """CUJ: Tracking consecutive edits to the same target."""
         with enter_phase("agent_session", registry=self.registry) as scope:
             guard = scope.get_singleton(LoopGuard)
-            file_param = Parameter(name="target_file", description="", parameter_converter=DummyConverter(), is_required=True)
-            start_param = Parameter(name="start_line", description="", parameter_converter=DummyConverter(), is_required=True)
-            end_param = Parameter(name="end_line", description="", parameter_converter=DummyConverter(), is_required=True)
-            bindings = ActualParameterBindings(bindings={(file_param, "a.py"), (start_param, "10"), (end_param, "20")})
+            bindings = ActualParameterBindings(bindings={(self.param, "target.py")})
 
             # Call 1 -> None
             self.assertIsNone(guard.record_tool_execution("replace_file_content", bindings))
             # Call 2 -> LoopReminder at threshold of 2
-            # Requirement: The loop guard tracks consecutive edits to the same file and line range, producing a reminder at the reminder threshold of two repetitions and a loop failure at the fatal threshold.
+            # Requirement: Produces a loop reminder at the reminder threshold of two repetitions when consecutive edits target the same file and line range.
             self.assertIsInstance(guard.record_tool_execution("replace_file_content", bindings), LoopReminder)
             guard.record_tool_execution("replace_file_content", bindings)
             guard.record_tool_execution("replace_file_content", bindings)
+            # Requirement: Produces a loop failure at the fatal threshold when consecutive edits target the same file and line range.
             self.assertIsInstance(guard.record_tool_execution("replace_file_content", bindings), LoopFailure)
 
     def test_record_progress_resets_counters(self) -> None:

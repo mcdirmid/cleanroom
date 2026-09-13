@@ -1,4 +1,4 @@
-"""Agent conversation history interface and data types."""
+"""Agent conversation interface and data types."""
 
 from dataclasses import dataclass
 from typing import List, Optional, Protocol
@@ -21,7 +21,7 @@ class ModelRequest:
     messages: List[Message]
 
 
-class ConversationHistory(Protocol):
+class Conversation(Protocol):
     @property
     def messages(self) -> List[Message]: ...
 

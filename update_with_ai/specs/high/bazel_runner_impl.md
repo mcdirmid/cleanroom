@@ -1,7 +1,7 @@
 # bazel_runner_impl implementation component
 
 imports: dag_storage, dag_cleaner, dag_node_cleaner, runner_logger, bazel_manifest_loader
-implements: bazel_runner
+implements: dag_runner
 
 ## Purpose
 
@@ -13,7 +13,7 @@ Executing multi-stage agent workflows requires coordinating target loading, dirt
 
 ## Types and Behavior
 
-The bazel runner coordinates build graph execution and change propagation across workspace targets.
+The dag runner coordinates build graph execution and change propagation across workspace targets.
 
 When executing a cleaning pass:
 

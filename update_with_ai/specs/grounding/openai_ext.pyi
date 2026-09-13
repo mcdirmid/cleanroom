@@ -3,7 +3,7 @@
 
 ## External Mechanics & API Documentation
 
-The `openai_ext` external component specifies the third-party Python SDK mechanics and error taxonomy for OpenAI-compatible chat completion services. External boundary specifications define no standalone library files; rather, dependent implementation components (specifically `agent_runner_impl`) import and invoke the `openai` Python SDK directly.
+The `openai_ext` external component specifies the third-party Python SDK mechanics and error taxonomy for OpenAI-compatible chat completion services. External boundary specifications define no standalone library files; rather, dependent implementation components (specifically `openai_driver_impl`) import and invoke the `openai` Python SDK directly.
 
 **Client Construction & Initialization**
 

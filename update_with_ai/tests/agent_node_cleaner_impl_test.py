@@ -4,16 +4,15 @@ import unittest
 from pathlib import Path
 from typing import List, Optional, Set
 
-from lib.agent_conversation_history import ConversationHistory, Message, ModelRequest
-from lib.agent_node_cleaner import AgentNodeCleaner
+from lib.agent_conversation import Conversation, Message, ModelRequest
 from lib.agent_node_cleaner_impl import (
-    AgentNodeCleaner as AgentNodeCleanerImpl,
+    NodeCleaner as NodeCleanerImpl,
     CleanedNode as CleanedNodeImpl,
     __initialize__,
 )
-from lib.agent_runner import AgentOutcome, AgentRunner
+from lib.agent_driver import AgentOutcome, AgentDriver
 from lib.agent_storage import AgentStorage, NodeDefinition, TaskPrompt
-from lib.dag_node_cleaner import CleanedNode
+from lib.dag_node_cleaner import CleanedNode, NodeCleaner
 from lib.dag_storage import Change, Dependency, Feedback, Message as DagMessage, Node
 from lib.file_alias import BoundFile, FileContent, ReadOnlyFile, ReadWriteFile, UnboundFile, WorkspacePath
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton
@@ -197,8 +196,8 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
 
         self.registry.register_instance(self.storage, keys=[AgentStorage], tier="system")
         self.registry.register_instance(self.sandbox, keys=[Sandbox], tier="agent_session")
-        self.registry.register_instance(self.history, keys=[ConversationHistory], tier="agent_session")
-        self.registry.register_instance(self.runner, keys=[AgentRunner], tier="agent_session")
+        self.registry.register_instance(self.history, keys=[Conversation], tier="agent_session")
+        self.registry.register_instance(self.runner, keys=[AgentDriver], tier="agent_session")
         self.registry.register_instance(self.node_cfg, keys=[NodeConfig], tier="agent_session")
         self.registry.register_instance(self.model_cfg, keys=[ModelConfig], tier="system")
 
@@ -241,16 +240,15 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.sandbox.startup_executions.append(startup_exec)
 
         with enter_phase("system", registry=self.registry) as scope:
-            cleaner = scope.get_singleton(AgentNodeCleaner)
-            # Requirement: [AgentNodeCleaner] An agent node cleaner cleans a dirty node within an agent session phase.
+            cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: Node cleaning executes within an agent session phase, configuring the cleaned node with the dirty node.
-            # Requirement: Node cleaning executes an agent runner with the sandbox and conversation history.
+            # Requirement: Node cleaning executes an agent driver with the sandbox and conversation.
             msgs = cleaner.clean_node(node)
 
             # Requirement: Startup templates from the sandbox are materialized for missing read-write files.
             self.assertTrue(self.sandbox.templates_materialized)
             # Verify history seeded
-            # Requirement: The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox.
+            # Requirement: The conversation is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox.
             history_contents = [m.content for m in self.history.messages]
             self.assertTrue(any("Clean this node" in c for c in history_contents))
             # Verify messages are ordered deterministically by content and formatted with their content
@@ -281,7 +279,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.model_cfg.is_step_mode = True
 
         with enter_phase("system", registry=self.registry) as scope:
-            cleaner = scope.get_singleton(AgentNodeCleaner)
+            cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: When incoming feedback messages are present, they are formatted as actionable instructions prefaced with directives to fix read-write target files based on the feedback.
             _ = cleaner.clean_node(node)
 
@@ -298,13 +296,12 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.runner.outcome = AgentOutcome(
             is_success=True,
             response=Response(is_failed=False, is_terminated=True, content="Changes applied"),
-            conversation_history=self.history,
+            conversation=self.history,
         )
 
         with enter_phase("system", registry=self.registry) as scope:
-            cleaner = scope.get_singleton(AgentNodeCleaner)
+            cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: When the agent outcome indicates change with workspace file modifications, change messages are produced for downstream dependent nodes, and no change messages or change summaries when no workspace files were modified.
-            # Requirement: [AgentNodeCleaner] When workspace file modifications occur and task verification passes, the agent node cleaner produces change messages.
             msgs = cleaner.clean_node(node)
 
             self.assertEqual(len(msgs), 1)
@@ -317,13 +314,12 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.runner.outcome = AgentOutcome(
             is_success=True,
             response=Response(is_failed=False, is_terminated=True, content="Blamed //pkg:upstream: Syntax error in file"),
-            conversation_history=self.history,
+            conversation=self.history,
         )
 
         with enter_phase("system", registry=self.registry) as scope:
-            cleaner = scope.get_singleton(AgentNodeCleaner)
+            cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: When the agent outcome indicates blame, feedback messages containing the blame explanation are produced addressed to the blamed dependency node.
-            # Requirement: [AgentNodeCleaner] When blame is signaled, the agent node cleaner produces feedback messages containing the blame explanation and addressed to the blamed dependency node.
             msgs = cleaner.clean_node(node)
 
             self.assertEqual(len(msgs), 1)
@@ -337,7 +333,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             self.runner.outcome = AgentOutcome(
                 is_success=True,
                 response=Response(is_failed=False, is_terminated=True, content="Blamed //pkg:upstream_no_colon"),
-                conversation_history=self.history,
+                conversation=self.history,
             )
             msgs2 = cleaner.clean_node(node)
             # Requirement: When the agent outcome indicates blame, feedback messages containing the blame explanation are produced addressed to the blamed dependency node.
@@ -357,11 +353,10 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             self.runner.outcome = AgentOutcome(
                 is_success=True,
                 response=Response(is_failed=False, is_terminated=True, content="Blamed dep.py: Broken interface contract"),
-                conversation_history=self.history,
+                conversation=self.history,
             )
             msgs3 = cleaner.clean_node(node)
             # Requirement: When the agent outcome indicates blame, feedback messages containing the blame explanation are produced addressed to the blamed dependency node.
-            # Requirement: [AgentNodeCleaner] When blame is signaled, the agent node cleaner produces feedback messages containing the blame explanation and addressed to the blamed dependency node.
             self.assertEqual(len(msgs3), 1)
             fb3 = list(msgs3)[0]
             assert isinstance(fb3, Feedback)
@@ -372,7 +367,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             self.runner.outcome = AgentOutcome(
                 is_success=True,
                 response=Response(is_failed=False, is_terminated=True, content="Blamed //pkg:target_owning_node: Owning node address match"),
-                conversation_history=self.history,
+                conversation=self.history,
             )
             msgs4 = cleaner.clean_node(node)
             # Requirement: When the agent outcome indicates blame, feedback messages containing the blame explanation are produced addressed to the blamed dependency node.
@@ -390,15 +385,14 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.runner.outcome = AgentOutcome(
             is_success=True,
             response=Response(is_failed=False, is_terminated=True, content="Cleaned without changes"),
-            conversation_history=self.history,
+            conversation=self.history,
         )
 
         with enter_phase("system", registry=self.registry) as scope:
-            cleaner = scope.get_singleton(AgentNodeCleaner)
+            cleaner = scope.get_singleton(NodeCleanerImpl)
             msgs = cleaner.clean_node(node)
 
             # Requirement: When the agent outcome indicates change with workspace file modifications, change messages are produced for downstream dependent nodes, and no change messages or change summaries when no workspace files were modified.
-            # Requirement: [AgentNodeCleaner] When cleaning succeeds without workspace file modifications, the node is left clean with no produced messages.
             self.assertEqual(len(msgs), 0)
 
     def test_clean_node_failure_leaves_node_dirty_and_no_messages(self) -> None:
@@ -408,13 +402,12 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.runner.outcome = AgentOutcome(
             is_success=False,
             response=Response(is_failed=True, is_terminated=True, content="Failed"),
-            conversation_history=self.history,
+            conversation=self.history,
         )
 
         with enter_phase("system", registry=self.registry) as scope:
-            cleaner = scope.get_singleton(AgentNodeCleaner)
+            cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: When the agent outcome indicates failure, the node remains dirty and no propagating messages are produced.
-            # Requirement: [AgentNodeCleaner] When cleaning fails, the node remains dirty with no produced messages and continuation halts.
             msgs = cleaner.clean_node(node)
             self.assertEqual(len(msgs), 0)
 
@@ -433,8 +426,8 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.runner.error = RuntimeError("Agent failed: unrecoverable tool error")
 
         with enter_phase("system", registry=self.registry) as scope:
-            cleaner = scope.get_singleton(AgentNodeCleaner)
-            # Requirement: Node cleaning executes an agent runner with the sandbox and conversation history.
+            cleaner = scope.get_singleton(NodeCleanerImpl)
+            # Requirement: Node cleaning executes an agent driver with the sandbox and conversation.
             with self.assertRaises(RuntimeError) as ctx:
                 cleaner.clean_node(node)
             self.assertIn("Agent failed: unrecoverable tool error", str(ctx.exception))
@@ -446,7 +439,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.storage.messages[node.address] = {Change(content="Upstream library updated")}
 
         with enter_phase("system", registry=self.registry) as scope:
-            cleaner = scope.get_singleton(AgentNodeCleaner)
+            cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: When a dirty node defines no task prompt, cleaning resolves the node without executing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
             msgs = cleaner.clean_node(node)
 
@@ -461,7 +454,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.storage.messages[node.address] = {Feedback(content="Defect notice")}
 
         with enter_phase("system", registry=self.registry) as scope:
-            cleaner = scope.get_singleton(AgentNodeCleaner)
+            cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: When a dirty node defines no task prompt, cleaning resolves the node without executing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
             msgs = cleaner.clean_node(node)
 
@@ -476,7 +469,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.storage.messages[node.address] = {Change(content="lib updated")}
 
         with enter_phase("system", registry=self.registry) as scope:
-            cleaner = scope.get_singleton(AgentNodeCleaner)
+            cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: [NodeCleaner] Cleaning a dirty node communicates whether processing should continue.
             cont = cleaner.clean(node)
 
@@ -497,8 +490,8 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         }
 
         with enter_phase("system", registry=self.registry) as scope:
-            cleaner = scope.get_singleton(AgentNodeCleaner)
-            # Requirement: After a dirty node is cleaned, the agent node cleaner registers the node as a dependent to its non-silent dependencies.
+            cleaner = scope.get_singleton(NodeCleanerImpl)
+            # Requirement: After a dirty node is cleaned, the node cleaner registers the node as a dependent to its non-silent dependencies.
             cont = cleaner.clean(node)
 
             self.assertTrue(cont)
@@ -516,7 +509,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.sandbox.has_modifications = True
 
         with enter_phase("system", registry=self.registry) as scope:
-            cleaner = scope.get_singleton(AgentNodeCleaner)
+            cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: [NodeCleaner] Cleaning a dirty node communicates whether processing should continue.
             cont = cleaner.clean(node)
 
@@ -539,11 +532,11 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.runner.outcome = AgentOutcome(
             is_success=True,
             response=Response(is_failed=False, is_terminated=True, content="Session completed successfully: All tests pass"),
-            conversation_history=self.history,
+            conversation=self.history,
         )
 
         with enter_phase("system", registry=self.registry) as scope:
-            cleaner = scope.get_singleton(AgentNodeCleaner)
+            cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: When the agent outcome indicates change with workspace file modifications, change messages are produced for downstream dependent nodes, and no change messages or change summaries when no workspace files were modified.
             # Requirement: [NodeCleaner] Cleaning a dirty node communicates whether processing should continue.
             cont = cleaner.clean(node)
@@ -562,11 +555,11 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.runner.outcome = AgentOutcome(
             is_success=True,
             response=Response(is_failed=False, is_terminated=True, content="Blamed //pkg:dependency1: Defect in dep 1"),
-            conversation_history=self.history,
+            conversation=self.history,
         )
 
         with enter_phase("system", registry=self.registry) as scope:
-            cleaner = scope.get_singleton(AgentNodeCleaner)
+            cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: When delivering messages after cleaning, feedback messages are delivered to their addressed dependency node.
             cont = cleaner.clean(node)
             self.assertTrue(cont)
@@ -588,8 +581,8 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.model_cfg.is_step_mode = True
 
         with enter_phase("system", registry=self.registry) as scope:
-            cleaner = scope.get_singleton(AgentNodeCleaner)
-            # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias when guide step mode is inactive.
+            cleaner = scope.get_singleton(NodeCleanerImpl)
+            # Requirement: When seeding conversation with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete, or call finish without arguments if no workspace files were modified when guide step mode is inactive.
             _ = cleaner.clean_node(node)
 
             history_contents = [m.content for m in self.history.messages]
@@ -609,8 +602,8 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.model_cfg.is_step_mode = False
 
         with enter_phase("system", registry=self.registry) as scope:
-            cleaner = scope.get_singleton(AgentNodeCleaner)
-            # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete, or call finish without arguments if no workspace files were modified when guide step mode is inactive.
+            cleaner = scope.get_singleton(NodeCleanerImpl)
+            # Requirement: When seeding conversation with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete, or call finish without arguments if no workspace files were modified when guide step mode is inactive.
             _ = cleaner.clean_node(node)
 
             history_contents = [m.content for m in self.history.messages]
@@ -631,7 +624,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.node_cfg.guide_file = None
 
         with enter_phase("system", registry=self.registry) as scope:
-            cleaner = scope.get_singleton(AgentNodeCleaner)
+            cleaner = scope.get_singleton(NodeCleanerImpl)
             _ = cleaner.clean_node(node)
 
             history_contents = [m.content for m in self.history.messages]
@@ -656,8 +649,8 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.model_cfg.is_step_mode = False
 
         with enter_phase("system", registry=self.registry) as scope:
-            cleaner = scope.get_singleton(AgentNodeCleaner)
-            # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete, or call finish without arguments if no workspace files were modified when guide step mode is inactive.
+            cleaner = scope.get_singleton(NodeCleanerImpl)
+            # Requirement: When seeding conversation with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete, or call finish without arguments if no workspace files were modified when guide step mode is inactive.
             _ = cleaner.clean_node(node)
 
             history_contents = [m.content for m in self.history.messages]
@@ -680,9 +673,9 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         }
 
         with enter_phase("system", registry=self.registry) as scope:
-            cleaner = scope.get_singleton(AgentNodeCleaner)
+            cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: When incoming feedback messages are present, they are formatted as actionable instructions prefaced with directives to fix read-write target files based on the feedback.
-            # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete, or call finish without arguments if no workspace files were modified when guide step mode is inactive.
+            # Requirement: When seeding conversation with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete, or call finish without arguments if no workspace files were modified when guide step mode is inactive.
             _ = cleaner.clean_node(node)
 
             history_contents = [m.content for m in self.history.messages]
@@ -717,7 +710,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.runner.run = run_with_retry
 
         with enter_phase("system", registry=self.registry) as scope:
-            cleaner = scope.get_singleton(AgentNodeCleaner)
+            cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: Retries execution of the agent session phase a second time before propagating the failure when an agent session phase encounters an unexpected execution failure during node cleaning.
             msgs = cleaner.clean_node(node)
             self.assertEqual(attempts, 2)
@@ -733,7 +726,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         self.runner.error = RuntimeError("Persistent session failure")
 
         with enter_phase("system", registry=self.registry) as scope:
-            cleaner = scope.get_singleton(AgentNodeCleaner)
+            cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: Retries execution of the agent session phase a second time before propagating the failure when an agent session phase encounters an unexpected execution failure during node cleaning.
             with self.assertRaises(RuntimeError):
                 cleaner.clean_node(node)

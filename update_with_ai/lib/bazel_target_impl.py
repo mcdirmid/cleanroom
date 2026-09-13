@@ -1,17 +1,17 @@
 from typing import Optional
-from . import bazel_node_id_utils
+from . import bazel_target
 from . import dag_storage
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
 
-class BazelNodeIdentifierUtility(bazel_node_id_utils.BazelNodeIdentifierUtility, Singleton):
+class BazelTarget(bazel_target.BazelTarget, Singleton):
     tier = "system"
 
     def __init__(self) -> None:
         pass
 
     def normalize(self, raw_label: str) -> dag_storage.Node:
-        # Requirement: The bazel node identifier utility normalizes raw target labels by stripping repository qualifiers and expanding omitted target names.
-        # Requirement: [BazelNodeIdentifierUtility] The bazel node identifier utility normalizes an arbitrary target identifier string into a canonical node.
+        # Requirement: The bazel target normalizes raw target labels by stripping repository qualifiers and expanding omitted target names.
+        # Requirement: [BazelTarget] The bazel target normalizes an arbitrary Bazel target identifier string into a canonical node.
         label = raw_label.strip()
         if "//" in label:
             label = "//" + label.split("//", 1)[1]
@@ -25,18 +25,18 @@ class BazelNodeIdentifierUtility(bazel_node_id_utils.BazelNodeIdentifierUtility,
 
         return dag_storage.Node(address=label)
 
-    def extract_directory(self, node: dag_storage.Node) -> bazel_node_id_utils.NodeDirectory:
-        # Requirement: The bazel node identifier utility derives node directories from normalized nodes relative to a workspace root.
-        # Requirement: [BazelNodeIdentifierUtility] The bazel node identifier utility extracts a node directory from a node.
+    def extract_directory(self, node: dag_storage.Node) -> bazel_target.NodeDirectory:
+        # Requirement: The bazel target derives node directories from normalized nodes relative to a workspace root.
+        # Requirement: [BazelTarget] The bazel target extracts a node directory from a node.
         package_part = node.address[2:].split(":")[0]
-        obj = object.__new__(bazel_node_id_utils.NodeDirectory)
+        obj = object.__new__(bazel_target.NodeDirectory)
         object.__setattr__(obj, "path", package_part)
         return obj
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
-        BazelNodeIdentifierUtility,
-        keys=[BazelNodeIdentifierUtility, bazel_node_id_utils.BazelNodeIdentifierUtility],
+        BazelTarget,
+        keys=[BazelTarget, bazel_target.BazelTarget],
         tier="system",
     )

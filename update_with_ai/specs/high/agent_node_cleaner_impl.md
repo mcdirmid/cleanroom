@@ -1,7 +1,7 @@
 # agent_node_cleaner_impl implementation component
 
-imports: dag_storage, agent_runner, sandbox, agent_conversation_history, agent_storage, node_config, model_config
-implements: agent_node_cleaner, dag_node_cleaner
+imports: dag_storage, agent_driver, sandbox, agent_conversation, agent_storage, node_config, model_config
+implements: dag_node_cleaner
 
 ## Purpose
 
@@ -13,19 +13,19 @@ Driving node execution requires bridging abstract graph clean directives to conc
 
 ## Types and Behavior
 
-The agent node cleaner cleans a dirty node within an agent session phase, establishing the scope where session services operate and configuring the cleaned node with the target node. Session phase lifecycle management during node cleaning:
+The node cleaner cleans a dirty node within an agent session phase, establishing the scope where session services operate and configuring the cleaned node with the target node. Session phase lifecycle management during node cleaning:
 
 - Executes an agent session phase configuring the cleaned node with the target node.
 
 - Retries execution of the agent session phase a second time before propagating the failure when an agent session phase encounters an unexpected execution failure during node cleaning.
 
-Within the agent session phase, cleaning executes the agent runner, the sandbox, and the conversation history.
+Within the agent session phase, cleaning executes the agent driver, the sandbox, and the conversation.
 
 Startup templates provided by the sandbox are materialized into missing read-write files before agent interaction.
 
-The conversation history is seeded with startup context comprising the node definition and task prompt retrieved from graph storage for the dirty node, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox formatted with synthetic tool requests and captured responses. When seeding the task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete, or call finish without arguments if no workspace files were modified when guide step mode is inactive. When incoming feedback messages are present, they are formatted as actionable instructions prefaced with directives to fix read-write target files based on the feedback.
+The conversation is seeded with startup context comprising the node definition and task prompt retrieved from graph storage for the dirty node, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox formatted with synthetic tool requests and captured responses. When seeding the task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete, or call finish without arguments if no workspace files were modified when guide step mode is inactive. When incoming feedback messages are present, they are formatted as actionable instructions prefaced with directives to fix read-write target files based on the feedback.
 
-Execution of the agent runner resolves the dirty node based on the produced agent outcome.
+Execution of the agent driver resolves the dirty node based on the produced agent outcome.
 
 Resolving the dirty node produces:
 
@@ -37,4 +37,4 @@ Resolving the dirty node produces:
 
 When a dirty node defines no task prompt, cleaning resolves the node without executing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
 
-After a dirty node is cleaned, the agent node cleaner registers the node as a dependent to its non-silent dependencies, delivers change messages to downstream dependents, and delivers feedback messages to their addressed dependency node.
+After a dirty node is cleaned, the node cleaner registers the node as a dependent to its non-silent dependencies, delivers change messages to downstream dependents, and delivers feedback messages to their addressed dependency node.

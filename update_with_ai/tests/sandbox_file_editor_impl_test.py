@@ -33,7 +33,7 @@ from lib.sandbox_file_editor_impl import (
     TextReplacementTool as TextReplacementToolImpl,
     __initialize__,
 )
-from lib.sandbox_guide_delivery import Guide
+from lib.node_config import Guide
 from lib.tool_provider import (
     ActualParameterBindings,
     IntegerParameterConverter,
@@ -604,7 +604,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             with open(existing_file, "w", encoding="utf-8") as f:
                 f.write("initial data")
             # Requirement: The edit manager exposes whether workspace file modifications occurred during the session by comparing current workspace file content against initial content before editing.
-            # Requirement: [EditManager] Exposes whether file modifications occurred during the session.
+            # Requirement: [EditManager] The edit manager exposes whether workspace file modifications occurred during the session, determined by whether workspace file contents differ from their initial state prior to editing.
             edit_mgr.record_initial_content(existing_file)
             self.assertFalse(edit_mgr.has_modifications)
 

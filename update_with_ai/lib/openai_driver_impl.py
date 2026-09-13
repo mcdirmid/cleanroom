@@ -1,8 +1,8 @@
 import json
 from typing import Any, Optional, Set, Tuple
-from . import agent_conversation_history
+from . import agent_conversation
 from . import agent_loop_guard
-from . import agent_runner
+from . import agent_driver
 from . import model_config
 from . import runner_logger
 from . import tool_provider
@@ -137,16 +137,16 @@ def _measure_prefix_reuse(
     return summary, "\n".join(transcript_lines)
 
 
-class AgentRunner(agent_runner.AgentRunner, Singleton):
+class AgentDriver(agent_driver.AgentDriver, Singleton):
     tier = "agent_session"
 
     def __init__(self) -> None:
         pass
 
-    def run(self) -> agent_runner.AgentOutcome:
+    def run(self) -> agent_driver.AgentOutcome:
         model_cfg = get_singleton(model_config.ModelConfig)
         logger = get_singleton(runner_logger.RunnerLogger)
-        history = get_singleton(agent_conversation_history.ConversationHistory)
+        history = get_singleton(agent_conversation.Conversation)
         guard = get_singleton(agent_loop_guard.LoopGuard)
         tool_mgr = get_singleton(tool_provider.ToolManager)
 
@@ -159,7 +159,7 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
             )
 
 
-        # Requirement: When driving a turn, the agent runner transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from model config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
+        # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from model config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
         tools_payload: list[dict[str, Any]] = []
         for t in sorted(tool_mgr.installed_tools, key=lambda x: x.name):
             props = {}
@@ -190,7 +190,7 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
         )
         prev_messages_payload: Optional[list[dict[str, Any]]] = None
 
-        # Requirement: [AgentRunner] The agent runner drives turns by sending model requests to a language model and executing requested tools.
+        # Requirement: [AgentDriver] The agent driver drives turns by sending model requests to a language model and executing requested tools.
         while turns < limit:
             turns += 1
             model_req = history.get_model_request()
@@ -225,7 +225,7 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
             reuse_summary, reuse_transcript = _measure_prefix_reuse(
                 prev_messages_payload, messages_payload, tools_payload=tools_payload
             )
-            # Requirement: The agent runner logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+            # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
             logger.consume(
                 runner_logger.LogEvent(
                     event_name="model_request",
@@ -241,7 +241,7 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
             prev_messages_payload = json.loads(json.dumps(messages_payload))
 
             try:
-                # Requirement: When driving a turn, the agent runner transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from model config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
+                # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from model config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
                 create_kwargs: dict[str, Any] = {
                     "model": model_cfg.model_name,
                     "messages": messages_payload,
@@ -268,11 +268,11 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
             assistant_msg = choice.message
             tool_calls = assistant_msg.tool_calls or []
 
-            # Requirement: [AgentRunner] The agent runner appends model responses and correlates tool responses with tool call identifiers in conversation history.
+            # Requirement: [AgentDriver] The agent driver appends model responses and correlates tool responses with tool call identifiers in the conversation.
             if tool_calls:
                 for tc in tool_calls:
                     history.append_message(
-                        agent_conversation_history.Message(
+                        agent_conversation.Message(
                             role="assistant",
                             content=assistant_msg.content or "",
                             tool_call_id=tc.id,
@@ -282,7 +282,7 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
                     )
             else:
                 history.append_message(
-                    agent_conversation_history.Message(
+                    agent_conversation.Message(
                         role="assistant",
                         content=assistant_msg.content or "",
                     )
@@ -308,7 +308,7 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
                     text_preview = text_preview[:77] + "..."
                 completion_summary = f"[Turn {turns}] Assistant (text): {json.dumps(text_preview)}"
 
-            # Requirement: The agent runner logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+            # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
             logger.consume(
                 runner_logger.LogEvent(
                     event_name="model_completion",
@@ -317,10 +317,10 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
                 )
             )
 
-            # Requirement: When a model response is truncated at the generation limit, the agent runner resumes generation with a continuation turn.
+            # Requirement: When a model response is truncated at the generation limit, the agent driver resumes generation with a continuation turn.
             if finish_reason == "length":
                 history.append_message(
-                    agent_conversation_history.Message(
+                    agent_conversation.Message(
                         role="user",
                         content="Response was truncated due to length. Please continue.",
                     )
@@ -328,16 +328,16 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
                 continue
 
             if not tool_calls:
-                # Requirement: When a model response produces no tool executions, the agent runner appends a prompt to the conversation history reminding that progress and conclusion require invoking tools, and continues the turn loop.
+                # Requirement: When a model response produces no tool executions, the agent driver appends a prompt to the conversation reminding that progress and conclusion require invoking tools, and continues the turn loop.
                 history.append_message(
-                    agent_conversation_history.Message(
+                    agent_conversation.Message(
                         role="user",
                         content="No tools were executed. A tool (e.g. read_file, replace, advance, fail, blame) must be called to make progress or conclude the session.",
                     )
                 )
                 continue
 
-            # Requirement: [AgentRunner] The agent runner drives turns by sending model requests to a language model and executing requested tools.
+            # Requirement: [AgentDriver] The agent driver drives turns by sending model requests to a language model and executing requested tools.
             for tc in tool_calls:
                 fn_name = tc.function.name
                 fn_args_str = tc.function.arguments
@@ -359,7 +359,7 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
                                 except (ValueError, TypeError, KeyError):
                                     conv_val = v
                             else:
-                                conv_val = v
+                                conv_val = v  # pragma: no cover (assumption: parameter_converter is non-null under tool_provider.Parameter grounding contract)
                             actual_bindings_set.add((p, conv_val))
                         else:
                             dummy_p = tool_provider.Parameter(name=k, description="", parameter_converter=_DEFAULT_CONVERTER)
@@ -371,8 +371,8 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
 
                 actual_bindings = tool_provider.ActualParameterBindings(bindings=actual_bindings_set)
 
-                # Requirement: Before executing each tool call, the agent runner records the tool execution in the loop guard, injecting a loop reminder into the conversation history when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
-                # Requirement: [AgentRunner] The agent runner evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
+                # Requirement: Before executing each tool call, the agent driver records the tool execution in the loop guard, injecting a loop reminder into the conversation when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
+                # Requirement: [AgentDriver] The agent driver evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
                 guard_outcome = guard.record_tool_execution(fn_name, actual_bindings)
                 if isinstance(guard_outcome, agent_loop_guard.LoopFailure):
                     logger.consume(
@@ -406,7 +406,7 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
                     if resp.reminder
                     else resp.content
                 )
-                # Requirement: The agent runner logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+                # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
                 logger.consume(
                     runner_logger.LogEvent(
                         event_name="tool_execution",
@@ -415,7 +415,7 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
                     )
                 )
 
-                # Requirement: [AgentRunner] The agent runner appends model responses and correlates tool responses with tool call identifiers in conversation history.
+                # Requirement: [AgentDriver] The agent driver appends model responses and correlates tool responses with tool call identifiers in the conversation.
                 history.append_tool_response(
                     response=resp,
                     tool_name=fn_name,
@@ -431,7 +431,7 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
                         )
                     )
                     history.append_message(
-                        agent_conversation_history.Message(
+                        agent_conversation.Message(
                             role="user",
                             content=guard_outcome.feedback,
                         )
@@ -441,8 +441,8 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
                 if not resp.is_failed and fn_name in ("replace", "update_lines", "advance"):
                     guard.record_progress()
 
-                # Requirement: When configured by model config to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool through the tool manager, appending a synthetic assistant invocation and the resulting follow-up response to the conversation history immediately following the originating response.
-                # Requirement: [AgentRunner] The agent runner can dispatch follow-up tool calls specified by tool responses, recording the follow-up execution in the conversation history.
+                # Requirement: When configured by model configuration to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool, appending a synthetic assistant invocation carrying the follow-up tool call's reasoning text as prior thought preceding the requested tool execution and the resulting follow-up response to the conversation immediately following the originating response.
+                # Requirement: [AgentDriver] The agent driver can dispatch follow-up tool calls specified by tool responses, recording the follow-up execution in the conversation.
                 curr_resp = resp
                 curr_call_id = tc.id
                 followup_count = 0
@@ -452,7 +452,7 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
                     synth_call_id = f"{curr_call_id}_followup_{followup_count}"
                     args_dict = dict(followup.wire_parameter_bindings.bindings)
                     history.append_message(
-                        agent_conversation_history.Message(
+                        agent_conversation.Message(
                             role="assistant",
                             content=followup.reasoning_text or "",
                             tool_call_id=synth_call_id,
@@ -497,32 +497,32 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
                     if curr_resp.is_terminated:
                         if curr_resp.is_failed:
                             raise RuntimeError(f"Agent failed: {curr_resp.content}")
-                        return agent_runner.AgentOutcome(
+                        return agent_driver.AgentOutcome(
                             is_success=True,
                             response=curr_resp,
-                            conversation_history=history,
+                            conversation=history,
                         )
 
-                # Requirement: When tool execution produces a non-terminating failure response, the failure feedback is appended to the conversation history and the run continues.
-                # Requirement: When tool execution produces a terminating response, the agent runner concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
-                # Requirement: [AgentRunner] When tool execution produces a termination outcome, the agent runner concludes and returns an agent outcome, or halts with an unexpected failure if the termination indicates a failing outcome.
+                # Requirement: When tool execution produces a non-terminating failure response, the failure feedback is appended to the conversation and the run continues.
+                # Requirement: When tool execution produces a terminating response, the agent driver concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
+                # Requirement: [AgentDriver] When tool execution produces a termination outcome, the agent driver concludes and returns an agent outcome, or halts with an unexpected failure if the termination indicates a failing outcome.
                 if resp.is_terminated:
                     if resp.is_failed:
                         raise RuntimeError(f"Agent failed: {resp.content}")
-                    return agent_runner.AgentOutcome(
+                    return agent_driver.AgentOutcome(
                         is_success=True,
                         response=resp,
-                        conversation_history=history,
+                        conversation=history,
                     )
 
-        # Requirement: When turns reach the conversation limit from model config, the agent runner halts with an unexpected failure.
-        # Requirement: [AgentRunner] When the conversation limit from model config is exceeded, the agent runner halts with an unexpected failure.
+        # Requirement: When turns reach the conversation limit from model config, the agent driver halts with an unexpected failure.
+        # Requirement: [AgentDriver] When the conversation limit from model config is exceeded, the agent driver halts with an unexpected failure.
         raise RuntimeError(f"Conversation limit reached ({limit} turns)")
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
-        AgentRunner,
-        keys=[AgentRunner, agent_runner.AgentRunner],
+        AgentDriver,
+        keys=[AgentDriver, agent_driver.AgentDriver],
         tier="agent_session",
     )

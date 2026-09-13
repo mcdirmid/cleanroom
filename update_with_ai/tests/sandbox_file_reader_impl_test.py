@@ -30,7 +30,7 @@ from lib.sandbox_file_reader_impl import (
     SearchTool as SearchToolImpl,
     __initialize__,
 )
-from lib.sandbox_guide_delivery import Guide
+from lib.node_config import Guide
 from lib.tool_provider import (
     ActualParameterBindings,
     BooleanParameterConverter,
@@ -374,7 +374,6 @@ class SandboxFileReaderImplTest(unittest.TestCase):
                 }
             )
             # Requirement: When reading markdown files ending with .md, paragraphs beginning with > META: are filtered out from the returned content.
-            # Requirement: When reading markdown files, paragraphs beginning with > META: are filtered out.
             # Requirement: When reading read-only markdown files ending with .md, content is formatted using the template formatter with session template parameters after filtering out paragraphs beginning with > META:.
             resp = read_tool.execute_tool(b)
             self.assertFalse(resp.is_failed)
@@ -389,7 +388,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         """CUJ: Searching regex across files and handling invalid regex."""
         with enter_phase("agent_session", registry=self.registry) as scope:
             search_tool = scope.get_singleton(SearchTool)
-            # Requirement: [SearchTool] The search tool is named search_files.
+            # Requirement: The search tool is named `search_files`.
             self.assertEqual(search_tool.name, "search_files")
             self.assertIsInstance(search_tool.description, str)
             self.assertGreater(len(search_tool.parameters), 0)

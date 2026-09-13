@@ -18,7 +18,7 @@ from lib.file_paths import (
     WorkspacePath,
     WorkspaceRoot,
 )
-from lib.bazel_node_id_utils import BazelNodeIdentifierUtility, NodeDirectory
+from lib.bazel_target import BazelTarget, NodeDirectory
 from lib.dag_storage import Change, DagStorage, Dependency, Feedback, Node
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 
@@ -101,7 +101,7 @@ class BazelStorageImplTest(unittest.TestCase):
         __initialize__(self.registry)
         self.node_utils = MockNodeIdUtils()
         self.registry.register_instance(
-            self.node_utils, keys=[BazelNodeIdentifierUtility], tier="system"
+            self.node_utils, keys=[BazelTarget], tier="system"
         )
 
     def tearDown(self) -> None:
@@ -160,7 +160,7 @@ class BazelStorageImplTest(unittest.TestCase):
             self.assertTrue(any(isinstance(m, Feedback) for m in msgs))
 
             # Verify textproto file was written to package directory
-            # Requirement: All nodes located within the same package directory resolved by the bazel node identifier utility from bazel node id utils share a common package message file named `.update_with_ai.textproto`.
+            # Requirement: All nodes located within the same package directory resolved by the bazel target share a common package message file named `.update_with_ai.textproto`.
             proto_path = os.path.join(self.test_dir, "pkg/sub", ".update_with_ai.textproto")
             self.assertTrue(os.path.isfile(proto_path))
 

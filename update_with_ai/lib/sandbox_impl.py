@@ -43,7 +43,7 @@ class Sandbox(sandbox.Sandbox, Singleton):
             read_mgr = get_singleton(sandbox_file_reader.ReadManager)
             for ro in sorted(n_cfg.read_only_files, key=lambda x: x.short_name):
                 needs_ln = read_mgr.requires_line_numbers(ro)
-                # Requirement: Each file read execution uses the name of the read tool, specifies wire parameter bindings mapping the file alias parameter of the read tool to the read-only file alias short name, supplies line numbers as determined by the read manager for source code files, and captures the response produced by executing the read tool.
+                # Requirement: Each file read execution uses the name of the read tool, specifies wire parameter bindings mapping the file alias parameter of the read tool to the read-only file alias short name while supplying line numbers as determined by the read manager for source code files, and captures the response produced by executing the read tool.
                 wire_bindings: Set[Tuple[str, Union[str, int, bool]]]
                 if needs_ln:
                     bindings = {

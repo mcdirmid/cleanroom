@@ -15,7 +15,7 @@ class LoopGuard(agent_loop_guard.LoopGuard, Singleton):
     def record_tool_execution(
         self, tool_name: str, bindings: tool_provider.ActualParameterBindings
     ) -> Optional[Union[agent_loop_guard.LoopReminder, agent_loop_guard.LoopFailure]]:
-        # Requirement: The loop guard tracks consecutive executions of identical tools with identical arguments.
+        # Requirement: [LoopGuard] A loop guard evaluates consecutive executions of identical tools and edits.
         call_key = (tool_name, frozenset((p.name, str(v)) for p, v in bindings.bindings))
         if self._last_call == call_key:
             self._consecutive_count += 1
@@ -23,7 +23,7 @@ class LoopGuard(agent_loop_guard.LoopGuard, Singleton):
             self._last_call = call_key
             self._consecutive_count = 1
 
-        # Requirement: The loop guard produces a loop failure communicating session failure when consecutive identical tool executions reach the fatal threshold.
+        # Requirement: Produces a loop failure communicating session failure when consecutive identical tool executions reach the fatal threshold.
         if self._consecutive_count >= self._fatal_threshold:
             return agent_loop_guard.LoopFailure(
                 explanation=f"Fatal loop detected: tool '{tool_name}' executed {self._consecutive_count} times consecutively."

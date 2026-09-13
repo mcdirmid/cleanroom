@@ -7,7 +7,7 @@ class BuildResult:
     success: bool
     summary: str
 
-class BazelRunner(Protocol):
+class DagRunner(Protocol):
     def run_cleaning_pass(self, root: dag_storage.Node) -> BuildResult:
         ...
 
