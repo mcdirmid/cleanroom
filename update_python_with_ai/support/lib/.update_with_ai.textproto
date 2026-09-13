@@ -1,4 +1,0 @@
-node {
-  node_id: "//update_python_with_ai/support/lib:lifecycle_spec"
-  reverse_dependencies: "//testing/specs:dag_cleaner_impl_lib"
-}

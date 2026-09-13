@@ -4,3 +4,5 @@
 __pycache__/
 *.py[cod]
 *$py.class
+.update_with_ai.textproto
+.update_with_ai.proto
