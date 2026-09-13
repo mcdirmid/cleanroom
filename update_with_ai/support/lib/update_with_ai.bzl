@@ -101,6 +101,7 @@ def _update_with_ai_impl(ctx):
         "allows_step_mode": ctx.attr.allows_step_mode,
         "silent_srcs": [str(s) for s in ctx.attr.silent_srcs],
         "verify": ctx.attr.verify if ctx.attr.verify else None,
+        "verification_success_message": ctx.attr.verification_success_message if ctx.attr.verification_success_message else None,
         "dependency_paths": deps_data,
     }
 
@@ -206,6 +207,11 @@ _update_with_ai_rule = rule(
             default = "",
             doc = "Shell command to run when the agent calls verify()",
         ),
+        "verification_success_message": attr.string(
+            mandatory = False,
+            default = "",
+            doc = "Informative message presented when verification succeeds",
+        ),
     },
 )
 
@@ -230,6 +236,7 @@ def update_with_ai(
         step_sections = None,
         silent_srcs = [],
         verify = "",
+        verification_success_message = "",
         config = None,
         visibility = None):
     """
@@ -355,6 +362,7 @@ def update_with_ai(
         allows_step_mode = allows_step_mode,
         silent_srcs = silent_srcs,
         verify = verify,
+        verification_success_message = verification_success_message,
         **_rule_kwargs
     )
 

@@ -303,7 +303,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=self.registry) as scope:
             cleaner = scope.get_singleton(AgentNodeCleaner)
-            # Requirement: When the agent outcome indicates change with workspace file modifications, change messages are produced for downstream dependent nodes.
+            # Requirement: When the agent outcome indicates change with workspace file modifications, change messages are produced for downstream dependent nodes, and no change messages or change summaries when no workspace files were modified.
             # Requirement: [AgentNodeCleaner] When workspace file modifications occur and task verification passes, the agent node cleaner produces change messages.
             msgs = cleaner.clean_node(node)
 
@@ -348,6 +348,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             cleaner = scope.get_singleton(AgentNodeCleaner)
             msgs = cleaner.clean_node(node)
 
+            # Requirement: When the agent outcome indicates change with workspace file modifications, change messages are produced for downstream dependent nodes, and no change messages or change summaries when no workspace files were modified.
             # Requirement: [AgentNodeCleaner] When cleaning succeeds without workspace file modifications, the node is left clean with no produced messages.
             self.assertEqual(len(msgs), 0)
 
@@ -478,6 +479,30 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             self.assertEqual(len(self.storage.messages[dependent.address]), 1)
             self.assertIsInstance(list(self.storage.messages[dependent.address])[0], Change)
 
+    def test_clean_without_modifications_does_not_deliver_change_messages_to_dependents(self) -> None:
+        """CUJ: Clean operation does not deliver Change messages or summaries to dependents when no files modified."""
+        node = Node(address="//pkg:clean_op_no_mod")
+        self.storage.definitions[node.address] = NodeDefinition(node=node, task_prompt=TaskPrompt("Task prompt"))
+        dependent = Node(address="//pkg:dependent_no_mod")
+        self.storage.dependents[node.address] = {dependent}
+        self.storage.messages[node.address] = {Feedback()}
+        self.sandbox.has_modifications = False
+        self.runner.outcome = AgentOutcome(
+            is_success=True,
+            response=Response(is_failed=False, is_terminated=True, content="Session completed successfully: All tests pass"),
+            conversation_history=self.history,
+        )
+
+        with enter_phase("system", registry=self.registry) as scope:
+            cleaner = scope.get_singleton(AgentNodeCleaner)
+            # Requirement: When the agent outcome indicates change with workspace file modifications, change messages are produced for downstream dependent nodes, and no change messages or change summaries when no workspace files were modified.
+            # Requirement: [NodeCleaner] Cleaning a dirty node communicates whether processing should continue.
+            cont = cleaner.clean(node)
+
+            self.assertTrue(cont)
+            self.assertEqual(len(self.storage.messages[node.address]), 0)
+            self.assertEqual(len(self.storage.messages.get(dependent.address, set())), 0)
+
     def test_clean_delivers_feedback_to_dependencies(self) -> None:
         """CUJ: Clean operation delivers Feedback messages specifically to addressed dependency."""
         node = Node(address="//pkg:clean_op_feedback")
@@ -536,7 +561,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=self.registry) as scope:
             cleaner = scope.get_singleton(AgentNodeCleaner)
-            # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete when guide step mode is inactive.
+            # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete, or call finish without arguments if no workspace files were modified when guide step mode is inactive.
             _ = cleaner.clean_node(node)
 
             history_contents = [m.content for m in self.history.messages]
@@ -544,6 +569,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             self.assertIn("my_guide.md", prompt_content)
             self.assertIn("finish", prompt_content)
             self.assertIn("change summary", prompt_content)
+            self.assertIn("call finish without arguments if no workspace files were modified", prompt_content)
             self.assertNotIn("advance", prompt_content)
 
     def test_clean_node_seeds_history_without_guide_leaves_prompt_unaugmented(self) -> None:
@@ -580,7 +606,7 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         with enter_phase("system", registry=self.registry) as scope:
             cleaner = scope.get_singleton(AgentNodeCleaner)
             # Requirement: When incoming feedback messages are present, they are formatted as actionable instructions prefaced with directives to fix read-write target files based on the feedback.
-            # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete when guide step mode is inactive.
+            # Requirement: When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete, or call finish without arguments if no workspace files were modified when guide step mode is inactive.
             _ = cleaner.clean_node(node)
 
             history_contents = [m.content for m in self.history.messages]
@@ -588,8 +614,54 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             self.assertIn("qa.md", prompt_content)
             self.assertIn("finish", prompt_content)
             self.assertIn("change summary", prompt_content)
+            self.assertIn("call finish without arguments if no workspace files were modified", prompt_content)
             self.assertNotIn("advance", prompt_content)
             self.assertTrue(any("feedback: Fix defect 1" in c for c in history_contents))
+
+    def test_clean_node_retries_on_unexpected_execution_failure(self) -> None:
+        """CUJ: Retries execution of the agent session phase a second time on unexpected failure."""
+        node = Node(address="//pkg:retry_test")
+        self.storage.definitions[node.address] = NodeDefinition(
+            node=node,
+            task_prompt=TaskPrompt("Prompt"),
+        )
+        attempts = 0
+
+        def run_with_retry() -> AgentOutcome:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise RuntimeError("Transient session failure")
+            return AgentOutcome(
+                is_success=True,
+                response=Response(is_failed=False, is_terminated=True, content="Done"),
+                conversation_history=MockHistory(),
+            )
+
+        self.runner.run = run_with_retry
+
+        with enter_phase("system", registry=self.registry) as scope:
+            cleaner = scope.get_singleton(AgentNodeCleaner)
+            # Requirement: Retries execution of the agent session phase a second time before propagating the failure when an agent session phase encounters an unexpected execution failure during node cleaning.
+            msgs = cleaner.clean_node(node)
+            self.assertEqual(attempts, 2)
+            self.assertEqual(msgs, set())
+
+    def test_clean_node_propagates_failure_after_two_failed_attempts(self) -> None:
+        """CUJ: Propagates unexpected failure after two failed attempts."""
+        node = Node(address="//pkg:retry_fail_test")
+        self.storage.definitions[node.address] = NodeDefinition(
+            node=node,
+            task_prompt=TaskPrompt("Prompt"),
+        )
+        self.runner.error = RuntimeError("Persistent session failure")
+
+        with enter_phase("system", registry=self.registry) as scope:
+            cleaner = scope.get_singleton(AgentNodeCleaner)
+            # Requirement: Retries execution of the agent session phase a second time before propagating the failure when an agent session phase encounters an unexpected execution failure during node cleaning.
+            with self.assertRaises(RuntimeError):
+                cleaner.clean_node(node)
+            self.assertEqual(self.runner.run_count, 2)
 
 
 if __name__ == "__main__":

@@ -88,6 +88,7 @@ class WireParameterBindings:
 class FollowUpToolCall:
     tool_name: str
     wire_parameter_bindings: WireParameterBindings
+    reasoning_text: Optional[str] = None
 
 @dataclass(frozen=True)
 class Response:

@@ -204,6 +204,24 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
+    def verification_success_message(self) -> Optional[str]:
+        """
+PURPOSE:
+Session verification success message resolved from manifest metadata
+
+FRESH_REQUIREMENTS:
+- Declared verification success message from the manifest as the session verification success message.
+
+INHERITED_REQUIREMENTS:
+- [NodeConfig] The node config provides the session verification success message when configured.
+
+GROUNDING_ARGUMENT:
+- Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), extracting the declared verification_success_message string when present.
+"""
+        ...
+
+    @property
+    @override
     def feedback(self) -> Sequence[str]:
         """
 PURPOSE:

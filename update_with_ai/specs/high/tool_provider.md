@@ -28,7 +28,7 @@ A tool can be *executed* directly with a set of *actual parameter bindings*, whi
 
 - If a previous conversation response content should be superceded by this execution, a textual *suppression key* identifying that response.
 
-- If there is a known tool that the agent should always call after this tool execution, a *follow-up tool call* specifying a tool name and wire parameter bindings of that tool.
+- If there is a known tool that the agent should always call after this tool execution, a *follow-up tool call* specifying a tool name, wire parameter bindings of that tool, and *reasoning text* representing injected model thought on why the follow up tool is being called.
 
 The *tool manager* is an agent session service that maintains tools for an agent session.
 

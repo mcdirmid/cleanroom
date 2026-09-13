@@ -343,10 +343,10 @@ Set mapping parameter names to values of their wire types
 class FollowUpToolCall:
     """
 PURPOSE:
-Specifies a tool name and wire parameter bindings of a tool that the agent should call after this tool execution
+Specifies a tool name, wire parameter bindings of that tool, and reasoning text representing injected model thought on why the follow up tool is being called
 """
 
-    def __init__(self, tool_name: str, wire_parameter_bindings: WireParameterBindings) -> None:
+    def __init__(self, tool_name: str, wire_parameter_bindings: WireParameterBindings, reasoning_text: Optional[str]=None) -> None:
         ...
 
     @property
@@ -362,6 +362,14 @@ Identifies the tool to be called
         """
 PURPOSE:
 Maps parameter names to values of their wire types for the follow-up tool
+"""
+        ...
+
+    @property
+    def reasoning_text(self) -> Optional[str]:
+        """
+PURPOSE:
+Injected model thought on why the follow up tool is being called
 """
         ...
 

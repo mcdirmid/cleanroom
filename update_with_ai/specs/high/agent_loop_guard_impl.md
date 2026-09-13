@@ -13,8 +13,14 @@ Detecting loops requires maintaining state across consecutive turns to distingui
 
 ## Types and Behavior
 
-The loop guard tracks consecutive executions of identical tools with identical arguments. When consecutive identical tool executions reach the reminder threshold, the loop guard produces a loop reminder. When consecutive identical tool executions reach the fatal threshold, the loop guard produces a loop failure communicating session failure.
+The loop guard tracks consecutive executions of identical tools with identical arguments and consecutive edits to the same file and line range. Repetition tracking evaluates consecutive identical executions against configured thresholds. Tool execution evaluation:
 
-The loop guard also tracks consecutive edits to the same file and line range, producing a loop reminder at the reminder threshold and a loop failure at the fatal threshold.
+- Produces a loop reminder advising the agent that no new information will be revealed by repeated tool execution until session read-write files are updated when consecutive identical tool executions reach the reminder threshold of two repetitions.
+
+- Produces a loop failure communicating session failure when consecutive identical tool executions reach the fatal threshold.
+
+- Produces a loop reminder at the reminder threshold of two repetitions when consecutive edits target the same file and line range.
+
+- Produces a loop failure at the fatal threshold when consecutive edits target the same file and line range.
 
 Any tool execution demonstrating forward progress resets repetition counters in the loop guard.

@@ -123,6 +123,17 @@ FRESH_REQUIREMENTS:
         ...
 
     @property
+    def verification_success_message(self) -> Optional[str]:
+        """
+PURPOSE:
+Informative verification feedback when configured
+
+FRESH_REQUIREMENTS:
+- The node config provides the session verification success message when configured.
+"""
+        ...
+
+    @property
     def feedback(self) -> Sequence[str]:
         """
 PURPOSE:

@@ -454,7 +454,7 @@ class AgentRunner(agent_runner.AgentRunner, Singleton):
                     history.append_message(
                         agent_conversation_history.Message(
                             role="assistant",
-                            content="",
+                            content=followup.reasoning_text or "",
                             tool_call_id=synth_call_id,
                             tool_name=followup.tool_name,
                             tool_arguments=json.dumps(args_dict),

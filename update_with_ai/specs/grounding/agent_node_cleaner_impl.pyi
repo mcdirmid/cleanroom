@@ -32,12 +32,13 @@ FRESH_REQUIREMENTS:
 - Node cleaning executes an agent runner with the sandbox and conversation history.
 - Startup templates from the sandbox are materialized for missing read-write files.
 - The conversation history is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox.
-- When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete when guide step mode is inactive.
+- When seeding conversation history with a task prompt for a node configured with a guide, the prompt is augmented with instructions directing the agent to call advance without arguments to view each guide step and not supply a change summary until all guide steps are complete when guide step mode is active, or identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete, or call finish without arguments if no workspace files were modified when guide step mode is inactive.
 - When incoming feedback messages are present, they are formatted as actionable instructions prefaced with directives to fix read-write target files based on the feedback.
-- When the agent outcome indicates change with workspace file modifications, change messages are produced for downstream dependent nodes.
+- When the agent outcome indicates change with workspace file modifications, change messages are produced for downstream dependent nodes, and no change messages or change summaries when no workspace files were modified.
 - When the agent outcome indicates blame, feedback messages containing the blame explanation are produced addressed to the blamed dependency node.
 - When the agent outcome indicates failure, the node remains dirty and no propagating messages are produced.
 - When a dirty node defines no task prompt, cleaning resolves the node without executing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
+- Retries execution of the agent session phase a second time before propagating the failure when an agent session phase encounters an unexpected execution failure during node cleaning.
 
 INHERITED_REQUIREMENTS:
 - [AgentNodeCleaner] An agent node cleaner cleans a dirty node within an agent session phase.

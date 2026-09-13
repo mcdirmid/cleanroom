@@ -37,6 +37,8 @@ The node config provides:
 
 - Declared verification checks from the manifest's verification command as the session verification checks.
 
+- Declared verification success message from the manifest as the session verification success message.
+
 - Declared feedback messages retrieved from graph storage for the target node as the session feedback.
 
 The alias manager maintains virtual file addressing and path masking for the active session.

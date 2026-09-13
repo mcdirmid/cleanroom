@@ -54,6 +54,7 @@ class NodeConfig(node_config.NodeConfig, Singleton):
         self._guide: Optional[sandbox_guide_delivery.Guide] = None
         self._blame_targets: Set[file_alias.BoundFile] = set()
         self._verification_checks: List[sandbox_run_control.VerificationCheck] = []
+        self._verification_success_message: Optional[str] = None
         self._feedback: Tuple[str, ...] = ()
 
     def initialize(self) -> None:
@@ -255,6 +256,10 @@ class NodeConfig(node_config.NodeConfig, Singleton):
             ws_dir = os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd()
             self._verification_checks.append(_CommandVerificationCheck(command=str(verify_cmd).strip(), cwd=ws_dir))
 
+        v_msg = data.get("verification_success_message")
+        if v_msg and str(v_msg).strip():
+            self._verification_success_message = str(v_msg).strip()
+
     @property
     def read_only_files(self) -> Set[file_alias.BoundFile]:
         # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies.
@@ -304,6 +309,11 @@ class NodeConfig(node_config.NodeConfig, Singleton):
     def verification_checks(self) -> List[sandbox_run_control.VerificationCheck]:
         # Requirement: The node config exposes declared verification checks from the manifest verification command.
         return list(self._verification_checks)
+
+    @property
+    def verification_success_message(self) -> Optional[str]:
+        # Requirement: Declared verification success message from the manifest as the session verification success message.
+        return self._verification_success_message
 
     @property
     def feedback(self) -> Sequence[str]:

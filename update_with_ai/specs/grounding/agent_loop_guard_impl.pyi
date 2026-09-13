@@ -21,10 +21,10 @@ PURPOSE:
 Tracks consecutive identical tool calls and edits
 
 FRESH_REQUIREMENTS:
-- The loop guard tracks consecutive executions of identical tools with identical arguments.
-- The loop guard produces a loop reminder when consecutive identical tool executions reach the reminder threshold.
-- The loop guard produces a loop failure communicating session failure when consecutive identical tool executions reach the fatal threshold.
-- The loop guard tracks consecutive edits to the same file and line range, producing a reminder at the reminder threshold and a loop failure at the fatal threshold.
+- Produces a loop reminder advising the agent that no new information will be revealed by repeated tool execution until session read-write files are updated when consecutive identical tool executions reach the reminder threshold of two repetitions.
+- Produces a loop failure communicating session failure when consecutive identical tool executions reach the fatal threshold.
+- Produces a loop reminder at the reminder threshold of two repetitions when consecutive edits target the same file and line range.
+- Produces a loop failure at the fatal threshold when consecutive edits target the same file and line range.
 
 INHERITED_REQUIREMENTS:
 - [LoopGuard] A loop guard evaluates consecutive executions of identical tools and edits.

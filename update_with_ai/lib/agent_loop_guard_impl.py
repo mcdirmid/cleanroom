@@ -9,7 +9,7 @@ class LoopGuard(agent_loop_guard.LoopGuard, Singleton):
     def __init__(self) -> None:
         self._last_call: Optional[Tuple[str, Any]] = None
         self._consecutive_count: int = 0
-        self._reminder_threshold: int = 3
+        self._reminder_threshold: int = 2
         self._fatal_threshold: int = 5
 
     def record_tool_execution(
@@ -28,10 +28,10 @@ class LoopGuard(agent_loop_guard.LoopGuard, Singleton):
             return agent_loop_guard.LoopFailure(
                 explanation=f"Fatal loop detected: tool '{tool_name}' executed {self._consecutive_count} times consecutively."
             )
-        # Requirement: The loop guard produces a loop reminder when consecutive identical tool executions reach the reminder threshold.
+        # Requirement: Produces a loop reminder advising the agent that no new information will be revealed by repeated tool execution until session read-write files are updated when consecutive identical tool executions reach the reminder threshold of two repetitions.
         elif self._consecutive_count >= self._reminder_threshold:
             return agent_loop_guard.LoopReminder(
-                feedback=f"Warning: tool '{tool_name}' has been executed {self._consecutive_count} times consecutively without progress."
+                feedback=f"Warning: tool '{tool_name}' has been executed {self._consecutive_count} times consecutively, no new information will be revealed by this tool call until session read-write files are updated."
             )
         return None
 

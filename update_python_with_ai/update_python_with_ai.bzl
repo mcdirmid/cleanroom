@@ -242,7 +242,7 @@ _lls_lint_test = rule(
 # Macro: update_python_with_ai (specification nodes)
 # ============================================================================
 
-def _update_python_with_ai(name, prompt = "", src = "", deps = [], module_deps = [], star_deps = [], feedback_deps = [], silent_deps = [], silent_srcs = [], template = None, template_parameters = None, guide = None, allows_step_mode = True, verify = "", visibility = None):
+def _update_python_with_ai(name, prompt = "", src = "", deps = [], module_deps = [], star_deps = [], feedback_deps = [], silent_deps = [], silent_srcs = [], template = None, template_parameters = None, guide = None, allows_step_mode = True, verify = "", verification_success_message = "", visibility = None):
     """Create a spec node by delegating to update_with_ai.
 
     The single common spec-node entry: forwards the spec-specific arguments
@@ -304,6 +304,7 @@ def _update_python_with_ai(name, prompt = "", src = "", deps = [], module_deps =
         feedback_deps = feedback_deps,
         silent_srcs = silent_srcs,
         verify = verify,
+        verification_success_message = verification_success_message,
         visibility = visibility,
     )
     return ":" + name
@@ -526,6 +527,7 @@ def update_python_with_ai(name, module_deps, template_parameters = None, visibil
                 _parent_pkg,
                 name,
             ),
+            verification_success_message = "{}.py compiles correctly. Note: this agent session must accomplish its goals without running tests.".format(name),
             visibility = visibility,
         )
 
@@ -566,6 +568,7 @@ def update_python_with_ai(name, module_deps, template_parameters = None, visibil
                 _parent_pkg,
                 name,
             ),
+            verification_success_message = "{}_test.py compiles correctly. Note: this agent session must accomplish its goals without running tests.".format(name),
             visibility = visibility,
         )
 
@@ -600,6 +603,7 @@ def update_python_with_ai(name, module_deps, template_parameters = None, visibil
                 "cd $BUILD_WORKSPACE_DIRECTORY && bazel test //{}/tests:{}_test --test_output=errors --noshow_progress 2>&1 && " +
                 "if [ -s {} ]; then echo 'QA log is not empty: delete all lines (0 bytes, remove any headers).'; exit 1; fi"
             ).format(_parent_pkg, name, _qa_log_path),
+            verification_success_message = "Test {}_test.py passed.".format(name),
             visibility = visibility,
         )
 
@@ -628,6 +632,7 @@ def update_python_with_ai(name, module_deps, template_parameters = None, visibil
                 "python3 update_with_ai/support/lib/evaluate_coverage.py --impl {}/lib/{}.py --test {}/tests/{}_test.py --threshold 100.0 && " +
                 "if [ -s {} ]; then echo 'Coverage log is not empty: delete all lines (0 bytes, remove any headers).'; exit 1; fi"
             ).format(_parent_pkg, name, _parent_pkg, name, _parent_pkg, name, _coverage_log_path),
+            verification_success_message = "All lines of {}.py are covered by {}_test.py.".format(name, name),
             visibility = visibility,
         )
     elif name.endswith("_asm"):

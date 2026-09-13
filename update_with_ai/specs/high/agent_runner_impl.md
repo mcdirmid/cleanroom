@@ -23,7 +23,7 @@ Before each tool execution, the agent runner evaluates the tool invocation with 
 
 When tool execution produces a response indicating failure without terminating the run, the agent runner appends the failure feedback to the conversation history and continues the turn loop. When tool execution produces a response indicating terminating failure, the agent runner halts execution with an unexpected failure carrying the failure explanation. When tool execution produces a response indicating successful session termination, the agent runner concludes the run and returns a successful agent outcome.
 
-When configured by model configuration to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool, appending a synthetic assistant invocation and the resulting follow-up response to the conversation history immediately following the originating response.
+When configured by model configuration to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool, appending a synthetic assistant invocation carrying the follow-up tool call's reasoning text as prior thought preceding the requested tool execution and the resulting follow-up response to the conversation history immediately following the originating response.
 
 When a model response produces no tool executions, the agent runner appends a prompt to the conversation history reminding that progress and conclusion require invoking tools, and continues the turn loop.
 

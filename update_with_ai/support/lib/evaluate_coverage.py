@@ -337,7 +337,7 @@ def format_coverage_report(cov: ModuleCoverage, threshold: float, max_spans: int
         )
 
     if cov.missed == 0:
-        return f"✓ 100.0% coverage - all {cov.total_executable} executable statements executed by {cov.test_name}.\n"
+        return f"✓ 100.0% coverage - all {cov.total_executable} executable statements executed by {cov.test_name}. All code covered, you can call finish() now.\n"
 
     spans_detail = format_spans_report(cov, max_spans=max_spans)
     return (

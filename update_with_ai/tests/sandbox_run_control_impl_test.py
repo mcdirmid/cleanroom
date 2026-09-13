@@ -108,6 +108,7 @@ class MockNodeConfig:
         is_step_mode: bool = True,
         feedback: Optional[Sequence[str]] = None,
         read_write_files: Optional[Set[BoundFile]] = None,
+        verification_success_message: Optional[str] = None,
     ) -> None:
         self._blame_targets = blame_targets or set()
         self._verification_checks: Sequence[VerificationCheck] = verification_checks or []
@@ -115,6 +116,7 @@ class MockNodeConfig:
         self.is_step_mode = is_step_mode
         self._feedback: Sequence[str] = feedback or ()
         self._read_write_files: Set[BoundFile] = read_write_files or set()
+        self._verification_success_message = verification_success_message
 
     @property
     def read_only_files(self) -> Set[BoundFile]:
@@ -143,6 +145,10 @@ class MockNodeConfig:
     @property
     def verification_checks(self) -> Sequence[VerificationCheck]:
         return self._verification_checks
+
+    @property
+    def verification_success_message(self) -> Optional[str]:
+        return self._verification_success_message
 
     @property
     def feedback(self) -> Sequence[str]:
@@ -385,6 +391,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             assert resp2.follow_up_tool_call is not None
             self.assertEqual(resp2.follow_up_tool_call.tool_name, "run_tests")
             self.assertEqual(len(resp2.follow_up_tool_call.wire_parameter_bindings.bindings), 0)
+            self.assertEqual(resp2.follow_up_tool_call.reasoning_text, "Verification results must be inspected before advancing.")
             self.assertEqual(resp2.suppression_key, "advance")
 
     def test_advance_tool_subsequent_call_passing_verification_advances_guide_step(self) -> None:
@@ -459,6 +466,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             assert resp.follow_up_tool_call is not None
             self.assertEqual(resp.follow_up_tool_call.tool_name, "finish")
             self.assertEqual(len(resp.follow_up_tool_call.wire_parameter_bindings.bindings), 0)
+            self.assertEqual(resp.follow_up_tool_call.reasoning_text, "All guide steps are complete.")
             self.assertEqual(resp.suppression_key, "advance")
 
     def test_finish_tool_parameters_and_converters(self) -> None:
@@ -482,7 +490,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             finish = scope.get_singleton(FinishToolImpl)
             b = ActualParameterBindings(bindings=set())
             # Requirement: Executing the finish tool updates verification results if outdated.
-            # Requirement: Tool execution fails when guide step mode is active and guide steps remain in guide delivery, reminding the agent that the advance tool must be called while guide steps remain and specifying the advance tool as a follow-up tool call.
+            # Requirement: Tool execution fails when guide step mode is active and guide steps remain in guide delivery, reminding the agent that the advance tool must be called while guide steps remain and specifying the advance tool as a follow-up tool call with reasoning text indicating that remaining guide steps must be completed before finishing.
             # Requirement: [FinishTool] Executing the finish tool while guide steps remain fails with a reminder to execute the advance tool, specifying the advance tool as a follow-up tool call.
             resp = finish.execute_tool(b)
 
@@ -493,6 +501,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             assert resp.follow_up_tool_call is not None
             self.assertEqual(resp.follow_up_tool_call.tool_name, "advance")
             self.assertEqual(len(resp.follow_up_tool_call.wire_parameter_bindings.bindings), 0)
+            self.assertEqual(resp.follow_up_tool_call.reasoning_text, "Remaining guide steps must be completed before finishing.")
             # Requirement: The finish tool is named `finish`, accepting a text change summary parameter, and shares a constant suppression key `finish`.
             self.assertEqual(resp.suppression_key, "finish")
 
@@ -508,7 +517,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             finish = scope.get_singleton(FinishToolImpl)
             b = ActualParameterBindings(bindings=set())
             # Requirement: Executing the finish tool updates verification results if outdated.
-            # Requirement: Tool execution fails when verification is failing, reminding the agent that the run tests tool should be called first and specifying a follow-up execution of the run tests tool.
+            # Requirement: Tool execution fails when verification is failing, reminding the agent that the run tests tool should be called first and specifying a follow-up execution of the run tests tool with reasoning text indicating that verification results must be inspected before finishing.
             resp = finish.execute_tool(b)
 
             self.assertTrue(resp.is_failed)
@@ -518,6 +527,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             assert resp.follow_up_tool_call is not None
             self.assertEqual(resp.follow_up_tool_call.tool_name, "run_tests")
             self.assertEqual(len(resp.follow_up_tool_call.wire_parameter_bindings.bindings), 0)
+            self.assertEqual(resp.follow_up_tool_call.reasoning_text, "Verification results must be inspected before finishing.")
             self.assertEqual(resp.suppression_key, "finish")
 
     def test_finish_tool_fails_when_feedback_present_and_no_files_modified(self) -> None:
@@ -557,8 +567,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIsNotNone(resp.reminder)
             self.assertEqual(resp.suppression_key, "finish")
 
-    def test_finish_tool_fails_when_no_files_modified_and_summary_provided(self) -> None:
-        """CUJ: FinishTool fails when no workspace files modified but change summary provided."""
+    def test_finish_tool_succeeds_when_no_files_modified_and_summary_provided(self) -> None:
+        """CUJ: FinishTool succeeds and terminates when no workspace files modified but change summary provided."""
         self.guide_del.has_steps_remaining = False
         self.edit_mgr.has_modifications = False
         vcheck = MockVerificationCheck(passes=True)
@@ -567,12 +577,12 @@ class SandboxRunControlImplTest(unittest.TestCase):
         with enter_phase("agent_session", registry=self.registry) as scope:
             finish = scope.get_singleton(FinishToolImpl)
             b = ActualParameterBindings(bindings={(finish.change_summary, "Unneeded change summary")})
-            # Requirement: Tool execution fails if no workspace files were modified and the change summary is provided, reminding the agent that a change summary can only be provided when workspace files were modified.
+            # Requirement: Tool execution produces a terminating response indicating that the session completed successfully when verification is passing and all completion criteria are met.
             resp = finish.execute_tool(b)
 
-            self.assertTrue(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertIsNotNone(resp.reminder)
+            self.assertFalse(resp.is_failed)
+            self.assertTrue(resp.is_terminated)
+            self.assertIn("Unneeded change summary", resp.content)
             self.assertEqual(resp.suppression_key, "finish")
 
     def test_finish_tool_succeeds_and_terminates_session(self) -> None:
@@ -736,21 +746,29 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_run_tests_tool_passing_verification_presents_results(self) -> None:
         """CUJ: RunTestsTool produces a passing response when verification passes."""
-        vcheck = MockVerificationCheck(passes=True)
+        vcheck = MockVerificationCheck(passes=True, diagnostic="All tests pass in /workspace/pkg/test.py")
         self.node_cfg._verification_checks = [vcheck]
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             run_tests = scope.get_singleton(RunTestsTool)
             b = ActualParameterBindings(bindings=set())
             # Requirement: Executing the run tests tool updates verification results if outdated.
-            # Requirement: Tool execution produces a response presenting passing verification results when verification passes.
+            # Requirement: Tool execution produces a response presenting passing verification results alongside sanitized check output when verification passes.
             resp = run_tests.execute_tool(b)
 
             self.assertFalse(resp.is_failed)
             self.assertFalse(resp.is_terminated)
             self.assertIn("Verification passed", resp.content)
+            self.assertIn("All tests pass in test.py", resp.content)
             # Requirement: The run tests tool is named `run_tests`, accepts no parameters, and shares a constant suppression key `run_tests`.
             self.assertEqual(resp.suppression_key, "run_tests")
+
+            # Custom verification_success_message
+            # Requirement: Produces a response presenting passing verification results using the session verification success message when configured or default passing verification results alongside sanitized check output when verification passes.
+            self.node_cfg._verification_success_message = "Test test.py passed."
+            self.edit_mgr.file_update_revision = 99
+            resp2 = run_tests.execute_tool(b)
+            self.assertIn("Test test.py passed.", resp2.content)
 
     def test_run_tests_tool_updates_verification_results_if_outdated(self) -> None:
         """CUJ: RunTestsTool caches verification results and re-evaluates when workspace files updated."""
@@ -767,11 +785,17 @@ class SandboxRunControlImplTest(unittest.TestCase):
             resp1 = run_tests.execute_tool(b)
             self.assertTrue(resp1.is_failed)
             self.assertEqual(vcheck.call_count, 1)
+            self.assertIsNone(resp1.reminder)
+            self.assertIsNone(resp1.follow_up_tool_call)
 
             # Second execution without file updates reuses cache
+            # Requirement: Reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous run tests tool execution.
             resp2 = run_tests.execute_tool(b)
             self.assertTrue(resp2.is_failed)
             self.assertEqual(vcheck.call_count, 1)
+            self.assertIsNotNone(resp2.reminder)
+            assert resp2.reminder is not None
+            self.assertIn("Verification failed, no new information will be revealed", resp2.reminder)
 
             # Third execution after file update re-evaluates
             self.edit_mgr.file_update_revision = 2
@@ -779,6 +803,67 @@ class SandboxRunControlImplTest(unittest.TestCase):
             resp3 = run_tests.execute_tool(b)
             self.assertFalse(resp3.is_failed)
             self.assertEqual(vcheck.call_count, 2)
+            self.assertIsNone(resp3.reminder)
+            self.assertIsNone(resp3.follow_up_tool_call)
+
+    def test_run_tests_tool_repeated_with_read_write_file_specifies_read_file_followup(self) -> None:
+        """CUJ: Repeated run_tests execution specifies follow-up read of the source file with line numbers and reasoning."""
+        vcheck = MockVerificationCheck(passes=True)
+        self.node_cfg._verification_checks = [vcheck]
+        rw_file = ReadWriteFile(
+            short_name="src.py",
+            workspace_path=_make_workspace_path("/workspace/src.py"),
+            owning_node=Node(address="//pkg:target"),
+        )
+        self.node_cfg._read_write_files = {rw_file}
+        self.edit_mgr.file_update_revision = 1
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            run_tests = scope.get_singleton(RunTestsTool)
+            b = ActualParameterBindings(bindings=set())
+
+            resp1 = run_tests.execute_tool(b)
+            self.assertFalse(resp1.is_failed)
+            self.assertIsNone(resp1.reminder)
+            self.assertIsNone(resp1.follow_up_tool_call)
+
+            # Requirement: Reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous run tests tool execution.
+            # Requirement: Specifies a follow-up execution of the read tool on the session source file with line numbers requested and reasoning text noting that verification passed without permission to run more tests and to advance or finish the session if correct, or noting that verification failed without permission to run more tests until files are updated, when workspace files have not been updated since the previous run tests tool execution.
+            # When is_step_mode is False (default for coverage / non-step nodes), reasoning directs to finish
+            self.node_cfg.is_step_mode = False
+            resp2 = run_tests.execute_tool(b)
+            self.assertFalse(resp2.is_failed)
+            self.assertIsNotNone(resp2.reminder)
+            assert resp2.reminder is not None
+            self.assertIn("Verification passes, no new information will be revealed by this tool call until src.py is updated.", resp2.reminder)
+            self.assertIsNotNone(resp2.follow_up_tool_call)
+            assert resp2.follow_up_tool_call is not None
+            self.assertEqual(resp2.follow_up_tool_call.tool_name, "read_file")
+            self.assertEqual(resp2.follow_up_tool_call.wire_parameter_bindings.bindings, {("file", "src.py"), ("line_numbers", True)})
+            self.assertEqual(
+                resp2.follow_up_tool_call.reasoning_text,
+                "Oh, verification passes and I'm not allowed to run anymore tests. Let me read src.py again and see if I can figure out a different course of action. If it is already correct, I need to finish the agent session rather than run more tests.",
+            )
+
+            # In step mode, reasoning directs the agent to advance rather than finish
+            self.node_cfg.is_step_mode = True
+            resp_step = run_tests.execute_tool(b)
+            assert resp_step.follow_up_tool_call is not None
+            self.assertEqual(
+                resp_step.follow_up_tool_call.reasoning_text,
+                "Oh, verification passes and I'm not allowed to run anymore tests. Let me read src.py again and see if I can figure out a different course of action. If it is already correct, I need to advance the agent session rather than run more tests.",
+            )
+
+            # When verification fails, reasoning indicates no more tests until files are updated
+            vcheck.passes = False
+            self.edit_mgr.file_update_revision = 2
+            _ = run_tests.execute_tool(b)
+            resp_fail = run_tests.execute_tool(b)
+            assert resp_fail.follow_up_tool_call is not None
+            self.assertEqual(
+                resp_fail.follow_up_tool_call.reasoning_text,
+                "Oh, verification failed and I'm not allowed to run anymore tests until I update the files. Let me read src.py again and see if I can figure out a different course of action.",
+            )
 
 
 if __name__ == "__main__":

@@ -19,25 +19,23 @@ Evaluation of verification checks is cached alongside the edit manager file upda
 
 The advance tool is named `advance`, accepts no parameters, and shares a constant suppression key `advance`. On its first execution, the advance tool delivers the initial guide summary through guide delivery without updating verification results. On subsequent executions, executing the advance tool updates verification results if outdated. Tool execution:
 
-- Fails when verification is failing, reminding the agent that the run tests tool should be called first and specifying a follow-up execution of the run tests tool.
+- Fails when verification is failing, reminding the agent that the run tests tool should be called first and specifying a follow-up execution of the run tests tool with reasoning text indicating that verification results must be inspected before advancing.
 
 - Advances guide delivery and delivers the next step section when verification is passing and guide steps remain.
 
 - Fails with a reminder to call the finish tool with a change summary describing modifications when verification is passing, no steps remain, and workspace files were modified.
 
-- Produces a response specifying a follow-up execution of the finish tool without a change summary when verification is passing, no steps remain, and no workspace files were modified.
+- Produces a response specifying a follow-up execution of the finish tool without a change summary and with reasoning text indicating that all guide steps are complete when verification is passing, no steps remain, and no workspace files were modified.
 
 The finish tool is named `finish`, accepting a text *change summary* parameter, and shares a constant suppression key `finish`. Executing the finish tool updates verification results if outdated. Tool execution fails in the following order when:
 
-- Guide step mode is active and guide steps remain in guide delivery, reminding the agent that the advance tool must be called while guide steps remain and specifying the advance tool as a follow-up tool call.
+- Guide step mode is active and guide steps remain in guide delivery, reminding the agent that the advance tool must be called while guide steps remain and specifying the advance tool as a follow-up tool call with reasoning text indicating that remaining guide steps must be completed before finishing.
 
-- Verification is failing, reminding the agent that the run tests tool should be called first and specifying a follow-up execution of the run tests tool.
+- Verification is failing, reminding the agent that the run tests tool should be called first and specifying a follow-up execution of the run tests tool with reasoning text indicating that verification results must be inspected before finishing.
 
 - Session feedback is present and no workspace files were modified, reminding the agent that workspace files must be modified to address feedback or that the fail tool must be used.
 
 - Workspace files were modified and the change summary is omitted, reminding the agent that a change summary must be provided when completing the session after modifying workspace files.
-
-- No workspace files were modified and the change summary is provided, reminding the agent that a change summary can only be provided when workspace files were modified.
 
 Tool execution produces a terminating response indicating that the session completed successfully when verification is passing and all completion criteria are met.
 
@@ -45,8 +43,12 @@ The fail tool is named `fail`, accepting a text *explanation* parameter. Executi
 
 The run tests tool is named `run_tests`, accepts no parameters, and shares a constant suppression key `run_tests`. Executing the run tests tool updates verification results if outdated. Tool execution:
 
+- Reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous run tests tool execution.
+
+- Specifies a follow-up execution of the read tool on the session source file with line numbers requested and reasoning text noting that verification passed without permission to run more tests and to advance or finish the session if correct, or noting that verification failed without permission to run more tests until files are updated, when workspace files have not been updated since the previous run tests tool execution.
+
 - Fails when verification fails, presenting diagnostic feedback sanitized through the alias manager alongside any configured verification failure instructions.
 
-- Produces a response presenting passing verification results when verification passes.
+- Produces a response presenting passing verification results using the session verification success message when configured or default passing verification results alongside sanitized check output when verification passes.
 
 The blame tool is named `blame`, accepting a file alias *blame target* parameter and a text *explanation* parameter. Executing the blame tool fails if the target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed. On success, executing the blame tool produces a terminating response attributing defect feedback to the owning dependency node.

@@ -36,4 +36,6 @@ The node config provides:
 
 - The session verification checks evaluated during session advancement.
 
+- The session *verification success message*, exposing informative verification feedback when configured.
+
 - The session *feedback*, exposing incoming feedback delivered to the node when present.
