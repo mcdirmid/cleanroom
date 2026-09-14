@@ -43,6 +43,11 @@ The design documentation is organized across four foundational areas:
   - **Closed-World Type Verification & Problem Ledger (Section 6)**: Hermetic Bazel type checking via `bin/pyright_library.bzl` and tracking of solved vs. open challenges.
   - **Supervising LLM Verification Protocol (TODO)**: Automated questionnaire generation for evaluating natural language tool failure diagnostics and agent recovery guidance.
 
+### 4. Agent Platform Integrations
+- **[Antigravity Tiered Sub-Agent Architecture & Integration Design](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/antigravity_integration.md)** (`antigravity_integration.md`):
+  - Architecture for integrating Cleanroom with Google Antigravity under Google One Ultra subscriptions.
+  - Covers the Coordinator $\rightarrow$ Worker subagent delegation hierarchy, sandbox hardening via disabled write tools, out-of-process Python MCP service, per-node context isolation, and quota/token efficiency trade-offs.
+
 ---
 
 ## Cleanroom Specification Lifecycle
