@@ -104,22 +104,30 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         # Requirement: [AgentStorage] The agent storage maintains nodes, dependencies, reverse dependencies, and pending messages from workspace targets.
         return set(self._dependencies.get(node, set()))
 
+    def _node_to_id(self, node: dag_storage.Node) -> str:
+        if node.role_address:
+            return f"{node.unit_address}#{node.role_address}"
+        return node.unit_address
+
+    def _id_to_node(self, node_id: str) -> dag_storage.Node:
+        node_util = get_singleton(bazel_target.BazelTarget)
+        return node_util.normalize(node_id)
+
     def get_dependents(self, node: dag_storage.Node) -> Set[dag_storage.Node]:
         # Requirement: All nodes located within the same package directory resolved by the bazel target share a common package message file named `.update_with_ai.textproto`.
         path = self._get_store_path(node)
         data = self._load_package_data(path)
-        record = data.get(node.address, {})
+        record = data.get(self._node_to_id(node), {})
         deps: Set[dag_storage.Node] = set()
-        node_util = get_singleton(bazel_target.BazelTarget)
         for rev_dep in record.get("reverse_dependencies", []):
-            deps.add(node_util.normalize(rev_dep))
+            deps.add(self._id_to_node(rev_dep))
         return deps
 
     def get_messages(self, node: dag_storage.Node) -> Set[dag_storage.Message]:
         # Requirement: All nodes located within the same package directory resolved by the bazel target share a common package message file named `.update_with_ai.textproto`.
         path = self._get_store_path(node)
         data = self._load_package_data(path)
-        record = data.get(node.address, {})
+        record = data.get(self._node_to_id(node), {})
         messages: Set[dag_storage.Message] = set()
         for msg in record.get("messages", []):
             content = msg.get("content", "")
@@ -151,11 +159,12 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
             if not dep.is_silent:
                 path = self._get_store_path(dep.node)
                 data = self._load_package_data(path)
+                dep_id = self._node_to_id(dep.node)
                 record = data.setdefault(
-                    dep.node.address, {"messages": [], "reverse_dependencies": []}
+                    dep_id, {"messages": [], "reverse_dependencies": []}
                 )
                 rev_deps = set(record.get("reverse_dependencies", []))
-                rev_deps.add(node.address)
+                rev_deps.add(self._node_to_id(node))
                 record["reverse_dependencies"] = sorted(rev_deps)
                 self._save_package_data(path, data)
 
@@ -164,8 +173,9 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         # Requirement: [DagStorage] Clearing the dependents of a node empties all recorded dependents for that node.
         path = self._get_store_path(node)
         data = self._load_package_data(path)
-        if node.address in data:
-            data[node.address]["reverse_dependencies"] = []
+        node_id = self._node_to_id(node)
+        if node_id in data:
+            data[node_id]["reverse_dependencies"] = []
             self._save_package_data(path, data)
 
     def add_message(self, message: dag_storage.Message, to: dag_storage.Node) -> None:
@@ -173,9 +183,8 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         # Requirement: [DagStorage] Adding a message to a node records the message for that node.
         path = self._get_store_path(to)
         data = self._load_package_data(path)
-        record = data.setdefault(
-            to.address, {"messages": [], "reverse_dependencies": []}
-        )
+        to_id = self._node_to_id(to)
+        record = data.setdefault(to_id, {"messages": [], "reverse_dependencies": []})
         msg_list: List[Dict[str, str]] = record.setdefault("messages", [])
         kind = "feedback" if isinstance(message, dag_storage.Feedback) else "change"
         content = message.content if hasattr(message, "content") else ""
@@ -187,8 +196,9 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         # Requirement: [DagStorage] Clearing messages for a node removes all recorded messages for that node.
         path = self._get_store_path(node)
         data = self._load_package_data(path)
-        if node.address in data:
-            data[node.address]["messages"] = []
+        node_id = self._node_to_id(node)
+        if node_id in data:
+            data[node_id]["messages"] = []
             self._save_package_data(path, data)
 
 

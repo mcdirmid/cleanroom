@@ -138,13 +138,16 @@ def _collect_manifests_impl(target, ctx):
         if f.basename.endswith("_manifest.json")
     ]
     transitive = []
-    for attr_name in ("deps", "silent_deps", "feedback_deps", "star_deps", "guide"):
+    for attr_name in (
+        "deps", "silent_deps", "feedback_deps", "star_deps", "guide",
+        "unit", "role", "unit_deps",
+    ):
         val = getattr(ctx.rule.attr, attr_name, None)
         if val == None:
             continue
         dep_list = val if type(val) == "list" else [val]
         for dep in dep_list:
-            if OutputGroupInfo in dep:
+            if type(dep) != "string" and OutputGroupInfo in dep:
                 manifests = getattr(dep[OutputGroupInfo], "manifests", None)
                 if manifests != None:
                     transitive.append(manifests)
@@ -152,7 +155,10 @@ def _collect_manifests_impl(target, ctx):
 
 _collect_manifests = aspect(
     implementation = _collect_manifests_impl,
-    attr_aspects = ["deps", "silent_deps", "feedback_deps", "star_deps", "guide"],
+    attr_aspects = [
+        "deps", "silent_deps", "feedback_deps", "star_deps", "guide",
+        "unit", "role", "unit_deps",
+    ],
 )
 
 # Rule definition (private name)
@@ -494,13 +500,13 @@ def _update_ai_node_clean_impl(ctx):
         "    from update_with_ai.parts.program.lib import program_asm",
         "    from update_with_ai.parts.dag.lib.dag_runner import DagRunner",
         "    from update_with_ai.parts.bazel.lib.bazel_manifest_loader import BazelManifestLoader, Manifest",
-        "    from update_with_ai.parts.dag.lib.dag_storage import DagStorage",
+        "    from update_with_ai.parts.dag.lib.dag_storage import DagStorage, Node",
         "    from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget",
         "except ImportError:",
         "    from lib import program_asm",
         "    from lib.dag_runner import DagRunner",
         "    from lib.bazel_manifest_loader import BazelManifestLoader, Manifest",
-        "    from lib.dag_storage import DagStorage",
+        "    from lib.dag_storage import DagStorage, Node",
         "    from lib.bazel_target import BazelTarget",
         "",
         "def main():",
@@ -553,14 +559,22 @@ def _update_ai_node_clean_impl(ctx):
         "",
         "    with open(_manifest_path) as f:",
         "        manifest_raw = f.read()",
-        "        node_label = json.loads(manifest_raw).get(\"label\")",
+        "        manifest_data = json.loads(manifest_raw)",
         "",
         "    program_asm.__initialize__()",
         "    node_util = get_singleton(BazelTarget)",
-        "    root_node = node_util.normalize(node_label)",
+        "    if 'unit' in manifest_data:",
+        "        root_node = Node(unit_address=manifest_data['unit'], role_address=manifest_data.get('role', ''))",
+        "    else:",
+        "        node_label = manifest_data.get('label')",
+        "        root_node = node_util.normalize(node_label)",
         "    loader = get_singleton(BazelManifestLoader)",
         "    storage = get_singleton(DagStorage)",
-        "    loader.load_manifest(Manifest(manifest_raw), storage)",
+        "    manifest = loader.get_manifest(root_node)",
+        "    if manifest:",
+        "        loader.load_manifest(manifest, storage)",
+        "    elif 'label' in manifest_data:",
+        "        loader.load_manifest(Manifest(manifest_raw), storage)",
         "    runner = get_singleton(DagRunner)",
         "",
         '    print(f"Model config: {resolved_config}")',
@@ -590,6 +604,8 @@ def _update_ai_node_clean_impl(ctx):
     _dep_manifests = []
     for _dep in ctx.attr.deps:
         _dep_manifests.extend(_dep[DefaultInfo].files.to_list())
+    for _role in getattr(ctx.attr, "_canonical_roles", []):
+        _dep_manifests.extend(_role[DefaultInfo].files.to_list())
 
     # Include the generated config files for the bundled configs (the
     # //model_configs:all_configs bundle) plus the explicit `config`
@@ -610,6 +626,9 @@ def _update_ai_node_clean_impl(ctx):
     _manifest_depsets = [
         ctx.attr.node[OutputGroupInfo].manifests,
     ] + [dep[OutputGroupInfo].manifests for dep in ctx.attr.deps]
+    for _role in getattr(ctx.attr, "_canonical_roles", []):
+        if OutputGroupInfo in _role:
+            _manifest_depsets.append(_role[OutputGroupInfo].manifests)
     if ctx.attr.guide:
         _manifest_depsets.append(ctx.attr.guide[OutputGroupInfo].manifests)
 
@@ -656,6 +675,17 @@ _update_ai_node_clean_rule = rule(
                   "configuration for this *_clean binary (overrides " +
                   "--define=MODEL_CONFIG; may still be overridden by --config " +
                   "or MODEL_CONFIG_TARGET / AGENT_CONFIG_TARGET at run time).",
+        ),
+        "_canonical_roles": attr.label_list(
+            default = [
+                Label("//update_python_with_ai:high"),
+                Label("//update_python_with_ai:low"),
+                Label("//update_python_with_ai:lib"),
+                Label("//update_python_with_ai:test"),
+                Label("//update_python_with_ai:qa"),
+                Label("//update_python_with_ai:coverage"),
+            ],
+            aspects = [_collect_manifests],
         ),
         "_model_configs": attr.label(
             default = Label("//model_configs:all_configs"),
@@ -711,12 +741,12 @@ def _update_ai_node_feedback_impl(ctx):
         "try:",
         "    from update_with_ai.parts.program.lib import program_asm",
         "    from update_with_ai.parts.dag.lib.dag_runner import DagRunner",
-        "    from update_with_ai.parts.dag.lib.dag_storage import Feedback",
+        "    from update_with_ai.parts.dag.lib.dag_storage import Feedback, Node",
         "    from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget",
         "except ImportError:",
         "    from lib import program_asm",
         "    from lib.dag_runner import DagRunner",
-        "    from lib.dag_storage import Feedback",
+        "    from lib.dag_storage import Feedback, Node",
         "    from lib.bazel_target import BazelTarget",
         "",
         "def main():",
@@ -747,7 +777,7 @@ def _update_ai_node_feedback_impl(ctx):
         "        _manifest_path = os.path.join(_script_dir, manifest_name)",
         "",
         "    with open(_manifest_path) as f:",
-        "        node_label = json.load(f).get('label')",
+        "        manifest_data = json.load(f)",
         "",
         "    if not messages:",
         '        print("No feedback message given.", file=sys.stderr)',
@@ -756,7 +786,11 @@ def _update_ai_node_feedback_impl(ctx):
         "",
         "    program_asm.__initialize__()",
         "    node_util = get_singleton(BazelTarget)",
-        "    target_node = node_util.normalize(node_label)",
+        "    if 'unit' in manifest_data:",
+        "        target_node = Node(unit_address=manifest_data['unit'], role_address=manifest_data.get('role', ''))",
+        "    else:",
+        "        node_label = manifest_data.get('label')",
+        "        target_node = node_util.normalize(node_label)",
         "    runner = get_singleton(DagRunner)",
         "    try:",
         "        for m in messages:",
@@ -778,12 +812,19 @@ def _update_ai_node_feedback_impl(ctx):
 
     # Return the wrapper as the executable with the manifest and lib sources
     # from the dag_cleaner runner.
+    _manifest_depsets = []
+    if OutputGroupInfo in ctx.attr.node:
+        _manifest_depsets.append(ctx.attr.node[OutputGroupInfo].manifests)
     _runfiles = ctx.runfiles(
         files = [
             _wrapper_py,
             _manifest,
         ],
-        transitive_files = ctx.attr.node[DefaultInfo].transitive_sources if hasattr(ctx.attr.node[DefaultInfo], "transitive_sources") else depset([]),
+        transitive_files = depset(
+            transitive = _manifest_depsets + [
+                ctx.attr.node[DefaultInfo].transitive_sources if hasattr(ctx.attr.node[DefaultInfo], "transitive_sources") else depset([]),
+            ],
+        ),
     ).merge(ctx.runfiles(transitive_files = ctx.attr._dag_runner[PyInfo].transitive_sources))
 
     return [
@@ -800,6 +841,7 @@ _update_ai_node_feedback_rule = rule(
         "node": attr.label(
             mandatory = True,
             doc = "The node target (must produce a manifest)",
+            aspects = [_collect_manifests],
         ),
         "_dag_runner": attr.label(
             default = Label("//update_with_ai/parts/program/lib:program_asm"),
@@ -852,12 +894,12 @@ def _update_ai_node_dirty_impl(ctx):
         "try:",
         "    from update_with_ai.parts.program.lib import program_asm",
         "    from update_with_ai.parts.dag.lib.dag_runner import DagRunner",
-        "    from update_with_ai.parts.dag.lib.dag_storage import Change",
+        "    from update_with_ai.parts.dag.lib.dag_storage import Change, Node",
         "    from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget",
         "except ImportError:",
         "    from lib import program_asm",
         "    from lib.dag_runner import DagRunner",
-        "    from lib.dag_storage import Change",
+        "    from lib.dag_storage import Change, Node",
         "    from lib.bazel_target import BazelTarget",
         "",
         "def main():",
@@ -889,11 +931,15 @@ def _update_ai_node_dirty_impl(ctx):
         "        _manifest_path = os.path.join(_script_dir, manifest_name)",
         "",
         "    with open(_manifest_path) as f:",
-        "        node_label = json.load(f).get('label')",
+        "        manifest_data = json.load(f)",
         "",
         "    program_asm.__initialize__()",
         "    node_util = get_singleton(BazelTarget)",
-        "    target_node = node_util.normalize(node_label)",
+        "    if 'unit' in manifest_data:",
+        "        target_node = Node(unit_address=manifest_data['unit'], role_address=manifest_data.get('role', ''))",
+        "    else:",
+        "        node_label = manifest_data.get('label')",
+        "        target_node = node_util.normalize(node_label)",
         "    runner = get_singleton(DagRunner)",
         "    try:",
         "        runner.mark_node_dirty(target_node, Change(content=change))",
@@ -914,12 +960,19 @@ def _update_ai_node_dirty_impl(ctx):
 
     # Return the wrapper as the executable with the manifest and lib sources
     # from the dag_cleaner runner.
+    _manifest_depsets = []
+    if OutputGroupInfo in ctx.attr.node:
+        _manifest_depsets.append(ctx.attr.node[OutputGroupInfo].manifests)
     _runfiles = ctx.runfiles(
         files = [
             _wrapper_py,
             _manifest,
         ],
-        transitive_files = ctx.attr.node[DefaultInfo].transitive_sources if hasattr(ctx.attr.node[DefaultInfo], "transitive_sources") else depset([]),
+        transitive_files = depset(
+            transitive = _manifest_depsets + [
+                ctx.attr.node[DefaultInfo].transitive_sources if hasattr(ctx.attr.node[DefaultInfo], "transitive_sources") else depset([]),
+            ],
+        ),
     ).merge(ctx.runfiles(transitive_files = ctx.attr._dag_runner[PyInfo].transitive_sources))
 
     return [
@@ -936,6 +989,7 @@ _update_ai_node_dirty_rule = rule(
         "node": attr.label(
             mandatory = True,
             doc = "The node target (must produce a manifest)",
+            aspects = [_collect_manifests],
         ),
         "_dag_runner": attr.label(
             default = Label("//update_with_ai/parts/program/lib:program_asm"),
@@ -989,11 +1043,12 @@ def _update_ai_node_change_impl(ctx):
         "    from update_with_ai.parts.program.lib import program_asm",
         "    from update_with_ai.parts.dag.lib.dag_runner import DagRunner",
         "    from update_with_ai.parts.dag.lib.dag_storage import Change",
+        "    from update_with_ai.parts.dag.lib.dag_storage import Change, Node",
         "    from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget",
         "except ImportError:",
         "    from lib import program_asm",
         "    from lib.dag_runner import DagRunner",
-        "    from lib.dag_storage import Change",
+        "    from lib.dag_storage import Change, Node",
         "    from lib.bazel_target import BazelTarget",
         "",
         "def main():",
@@ -1029,11 +1084,15 @@ def _update_ai_node_change_impl(ctx):
         "        _manifest_path = os.path.join(_script_dir, manifest_name)",
         "",
         "    with open(_manifest_path) as f:",
-        "        node_label = json.load(f).get('label')",
+        "        manifest_data = json.load(f)",
         "",
         "    program_asm.__initialize__()",
         "    node_util = get_singleton(BazelTarget)",
-        "    origin_node = node_util.normalize(node_label)",
+        "    if 'unit' in manifest_data:",
+        "        origin_node = Node(unit_address=manifest_data['unit'], role_address=manifest_data.get('role', ''))",
+        "    else:",
+        "        node_label = manifest_data.get('label')",
+        "        origin_node = node_util.normalize(node_label)",
         "    runner = get_singleton(DagRunner)",
         "    try:",
         "        runner.broadcast_node_change(origin_node, Change(content=change))",
@@ -1054,12 +1113,19 @@ def _update_ai_node_change_impl(ctx):
 
     # Return the wrapper as the executable with the manifest and lib sources
     # from the dag_cleaner runner.
+    _manifest_depsets = []
+    if OutputGroupInfo in ctx.attr.node:
+        _manifest_depsets.append(ctx.attr.node[OutputGroupInfo].manifests)
     _runfiles = ctx.runfiles(
         files = [
             _wrapper_py,
             _manifest,
         ],
-        transitive_files = ctx.attr.node[DefaultInfo].transitive_sources if hasattr(ctx.attr.node[DefaultInfo], "transitive_sources") else depset([]),
+        transitive_files = depset(
+            transitive = _manifest_depsets + [
+                ctx.attr.node[DefaultInfo].transitive_sources if hasattr(ctx.attr.node[DefaultInfo], "transitive_sources") else depset([]),
+            ],
+        ),
     ).merge(ctx.runfiles(transitive_files = ctx.attr._dag_runner[PyInfo].transitive_sources))
 
     return [
@@ -1076,6 +1142,7 @@ _update_ai_node_change_rule = rule(
         "node": attr.label(
             mandatory = True,
             doc = "The node target (must produce a manifest)",
+            aspects = [_collect_manifests],
         ),
         "_dag_runner": attr.label(
             default = Label("//update_with_ai/parts/program/lib:program_asm"),
@@ -1102,6 +1169,18 @@ def _update_ai_node_prompt_impl(ctx):
         "import os",
         "import sys",
         "",
+        "# Ensure lib is importable from runfiles",
+        "_runfiles_root = None",
+        'for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
+        '    if base and os.path.isdir(base):',
+        "        _runfiles_root = base",
+        "        break",
+        "if not _runfiles_root:",
+        "    _runfiles_root = os.getcwd()",
+        "for cand in (_runfiles_root, os.path.join(_runfiles_root, '_main'), os.path.join(_runfiles_root, 'cleanroom'), os.path.join(_runfiles_root, 'update_with_ai'), os.path.join(_runfiles_root, 'update_python_with_ai'), os.path.join(_runfiles_root, '_main', 'update_with_ai'), os.path.join(_runfiles_root, '_main', 'update_python_with_ai')):",
+        "    if os.path.isdir(cand) and cand not in sys.path:",
+        "        sys.path.insert(0, cand)",
+        "",
         "def main():",
         "    # Find the manifest in runfiles",
         "    _manifest_path = None",
@@ -1119,7 +1198,35 @@ def _update_ai_node_prompt_impl(ctx):
         "        _manifest_path = os.path.join(_script_dir, manifest_name)",
         "",
         "    with open(_manifest_path) as f:",
-        "        prompt = json.load(f).get('prompt', '')",
+        "        manifest_data = json.load(f)",
+        "        prompt = manifest_data.get('prompt', '')",
+        "",
+        "    if not prompt and 'unit' in manifest_data:",
+        "        try:",
+        "            from support.lib.lifecycle import get_singleton",
+        "        except ImportError:",
+        "            try:",
+        "                from update_python_with_ai.support.lib.lifecycle import get_singleton",
+        "            except ImportError:",
+        "                from update_with_ai.support.lib.lifecycle import get_singleton",
+        "        try:",
+        "            from update_with_ai.parts.program.lib import program_asm",
+        "            from update_with_ai.parts.bazel.lib.bazel_manifest_loader import BazelManifestLoader",
+        "            from update_with_ai.parts.dag.lib.dag_storage import DagStorage, Node",
+        "        except ImportError:",
+        "            from lib import program_asm",
+        "            from lib.bazel_manifest_loader import BazelManifestLoader",
+        "            from lib.dag_storage import DagStorage, Node",
+        "        program_asm.__initialize__()",
+        "        node = Node(unit_address=manifest_data['unit'], role_address=manifest_data.get('role', ''))",
+        "        loader = get_singleton(BazelManifestLoader)",
+        "        storage = get_singleton(DagStorage)",
+        "        m = loader.get_manifest(node)",
+        "        if m:",
+        "            loader.load_manifest(m, storage)",
+        "            defn = storage.get_node_definition(node)",
+        "            if defn:",
+        "                prompt = str(defn.task_prompt)",
         "",
         "    print(prompt)",
         "",
@@ -1134,7 +1241,23 @@ def _update_ai_node_prompt_impl(ctx):
     )
 
     # Return the wrapper as the executable with the manifest in runfiles.
-    _runfiles = ctx.runfiles(files = [_wrapper_py, _manifest])
+    _manifest_depsets = []
+    if OutputGroupInfo in ctx.attr.node:
+        _manifest_depsets.append(ctx.attr.node[OutputGroupInfo].manifests)
+    _role_files = []
+    for _role in getattr(ctx.attr, "_canonical_roles", []):
+        _role_files.extend(_role[DefaultInfo].files.to_list())
+        if OutputGroupInfo in _role:
+            _manifest_depsets.append(_role[OutputGroupInfo].manifests)
+
+    _runfiles = ctx.runfiles(
+        files = [_wrapper_py, _manifest] + _role_files,
+        transitive_files = depset(
+            transitive = _manifest_depsets + [
+                ctx.attr.node[DefaultInfo].transitive_sources if hasattr(ctx.attr.node[DefaultInfo], "transitive_sources") else depset([]),
+            ],
+        ),
+    ).merge(ctx.runfiles(transitive_files = ctx.attr._dag_runner[PyInfo].transitive_sources))
 
     return [
         DefaultInfo(
@@ -1150,6 +1273,22 @@ _update_ai_node_prompt_rule = rule(
         "node": attr.label(
             mandatory = True,
             doc = "The node target (must produce a manifest)",
+            aspects = [_collect_manifests],
+        ),
+        "_dag_runner": attr.label(
+            default = Label("//update_with_ai/parts/program/lib:program_asm"),
+            providers = [PyInfo],
+        ),
+        "_canonical_roles": attr.label_list(
+            default = [
+                Label("//update_python_with_ai:high"),
+                Label("//update_python_with_ai:low"),
+                Label("//update_python_with_ai:lib"),
+                Label("//update_python_with_ai:test"),
+                Label("//update_python_with_ai:qa"),
+                Label("//update_python_with_ai:coverage"),
+            ],
+            aspects = [_collect_manifests],
         ),
     },
 )
@@ -1215,3 +1354,277 @@ _bazel_ai_graph_dag_rule = rule(
 # the rule `_update_with_ai_rule()` to produce the manifest target.
 bazel_ai_graph_dag = _bazel_ai_graph_dag_rule
 collect_node_manifests = _collect_manifests
+
+# ============================================================================
+# Rules & Macros: define_unit, define_role, define_node
+# ============================================================================
+
+def _define_unit_impl(ctx):
+    manifest = ctx.actions.declare_file("{}_unit_manifest.json".format(ctx.label.name))
+    pkg_dir = ctx.label.package
+    unit_deps = [_apparent_label(d.label) for d in ctx.attr.unit_deps]
+    content = {
+        "label": _apparent_label(ctx.label),
+        "name": ctx.attr.name,
+        "unit_name": ctx.attr.name,
+        "dir": pkg_dir,
+        "unit_dir": pkg_dir,
+        "unit_deps": unit_deps,
+        "deps": unit_deps,
+        "component_type": ctx.attr.component_type,
+    }
+    ctx.actions.write(
+        output = manifest,
+        content = json.encode(content),
+    )
+    return [
+        DefaultInfo(
+            files = depset([manifest]),
+            runfiles = ctx.runfiles(files = [manifest]),
+        ),
+    ]
+
+_define_unit_rule = rule(
+    implementation = _define_unit_impl,
+    attrs = {
+        "unit_deps": attr.label_list(
+            aspects = [_collect_manifests],
+            doc = "List of unit dependencies",
+        ),
+        "component_type": attr.string(
+            default = "implementation",
+            doc = "Component type: implementation, assembly, interface, external",
+        ),
+    },
+)
+
+def _define_role_impl(ctx):
+    manifest = ctx.actions.declare_file("{}_role_manifest.json".format(ctx.label.name))
+    content = {
+        "label": _apparent_label(ctx.label),
+        "name": ctx.attr.name,
+        "role_name": ctx.attr.name,
+        "src_pattern": ctx.attr.src_pattern,
+        "template": ctx.file.template.short_path if ctx.file.template else None,
+        "prompt_template": ctx.attr.prompt_template,
+        "guide": _apparent_label(ctx.attr.guide.label) if ctx.attr.guide else None,
+        "allows_step_mode": ctx.attr.allows_step_mode,
+        "role_deps": ctx.attr.role_deps,
+        "silent_role_deps": ctx.attr.silent_role_deps,
+        "star_role_deps": ctx.attr.star_role_deps,
+        "silent_cross_role_deps": ctx.attr.silent_cross_role_deps,
+        "feedback_role_deps": ctx.attr.feedback_role_deps,
+        "active_component_types": ctx.attr.active_component_types,
+        "verify_template": ctx.attr.verify_template,
+        "verification_success_message": ctx.attr.verification_success_message,
+    }
+    ctx.actions.write(
+        output = manifest,
+        content = json.encode(content),
+    )
+    files = [manifest]
+    if ctx.file.template:
+        files.append(ctx.file.template)
+    return [
+        DefaultInfo(
+            files = depset(files),
+            runfiles = ctx.runfiles(files = files),
+        ),
+    ]
+
+_define_role_rule = rule(
+    implementation = _define_role_impl,
+    attrs = {
+        "src_pattern": attr.string(
+            default = "",
+            doc = "Source file pattern parameterized with {unit_dir} and {unit_name}",
+        ),
+        "template": attr.label(
+            allow_single_file = True,
+            doc = "Optional template file",
+        ),
+        "prompt_template": attr.string(
+            default = "",
+            doc = "Task prompt template parameterized with unit info",
+        ),
+        "guide": attr.label(
+            aspects = [_collect_manifests],
+            doc = "Optional guide node label",
+        ),
+        "allows_step_mode": attr.bool(
+            default = True,
+            doc = "Whether step mode is permitted for this role",
+        ),
+        "role_deps": attr.string_list(
+            default = [],
+            doc = "Intra-unit role dependencies",
+        ),
+        "silent_role_deps": attr.string_list(
+            default = [],
+            doc = "Intra-unit silent role dependencies",
+        ),
+        "star_role_deps": attr.string_list(
+            default = [],
+            doc = "Cross-unit star role dependencies",
+        ),
+        "silent_cross_role_deps": attr.string_list(
+            default = [],
+            doc = "Cross-unit silent role dependencies",
+        ),
+        "feedback_role_deps": attr.string_list(
+            default = [],
+            doc = "Intra-unit feedback role dependencies",
+        ),
+        "active_component_types": attr.string_list(
+            default = ["implementation", "assembly", "interface", "external"],
+            doc = "Component types for which this role is active",
+        ),
+        "verify_template": attr.string(
+            default = "",
+            doc = "Verification shell command template",
+        ),
+        "verification_success_message": attr.string(
+            default = "",
+            doc = "Verification success message template",
+        ),
+    },
+)
+
+def _define_node_impl(ctx):
+    manifest = ctx.actions.declare_file("{}_manifest.json".format(ctx.label.name))
+    unit_label = _apparent_label(ctx.attr.unit.label)
+    role_label = _apparent_label(ctx.attr.role.label)
+    content = {
+        "label": _apparent_label(ctx.label),
+        "name": ctx.attr.name,
+        "unit": unit_label,
+        "role": role_label,
+    }
+    if ctx.attr.src:
+        content["src"] = ctx.attr.src
+    ctx.actions.write(
+        output = manifest,
+        content = json.encode(content),
+    )
+    return [
+        DefaultInfo(
+            files = depset([manifest]),
+            runfiles = ctx.runfiles(files = [manifest]),
+        ),
+    ]
+
+_define_node_rule = rule(
+    implementation = _define_node_impl,
+    attrs = {
+        "unit": attr.label(
+            mandatory = True,
+            aspects = [_collect_manifests],
+            doc = "The unit target",
+        ),
+        "role": attr.label(
+            mandatory = True,
+            aspects = [_collect_manifests],
+            doc = "The role target",
+        ),
+        "src": attr.string(
+            default = "",
+            doc = "Optional declared source file path",
+        ),
+    },
+)
+
+def define_unit(name, unit_deps = [], component_type = "implementation", visibility = None):
+    _rule_kwargs = {}
+    if visibility != None:
+        _rule_kwargs["visibility"] = visibility
+    _define_unit_rule(
+        name = name,
+        unit_deps = unit_deps,
+        component_type = component_type,
+        **_rule_kwargs
+    )
+    return ":" + name
+
+def define_role(
+        name,
+        src_pattern = "",
+        template = None,
+        prompt_template = "",
+        guide = None,
+        allows_step_mode = True,
+        role_deps = [],
+        silent_role_deps = [],
+        star_role_deps = [],
+        silent_cross_role_deps = [],
+        feedback_role_deps = [],
+        active_component_types = ["implementation", "assembly", "interface", "external"],
+        verify_template = "",
+        verification_success_message = "",
+        visibility = None):
+    _rule_kwargs = {}
+    if visibility != None:
+        _rule_kwargs["visibility"] = visibility
+    _define_role_rule(
+        name = name,
+        src_pattern = src_pattern,
+        template = template,
+        prompt_template = prompt_template,
+        guide = guide,
+        allows_step_mode = allows_step_mode,
+        role_deps = role_deps,
+        silent_role_deps = silent_role_deps,
+        star_role_deps = star_role_deps,
+        silent_cross_role_deps = silent_cross_role_deps,
+        feedback_role_deps = feedback_role_deps,
+        active_component_types = active_component_types,
+        verify_template = verify_template,
+        verification_success_message = verification_success_message,
+        **_rule_kwargs
+    )
+    return ":" + name
+
+def define_node(name, unit, role, src = "", config = None, visibility = None):
+    _rule_kwargs = {}
+    if visibility != None:
+        _rule_kwargs["visibility"] = visibility
+
+    _define_node_rule(
+        name = name,
+        unit = unit,
+        role = role,
+        src = src,
+        **_rule_kwargs
+    )
+    _clean_target = name + "_clean"
+    _update_ai_node_clean_rule(
+        name = _clean_target,
+        node = ":{}".format(name),
+        deps = [unit, role],
+        config = config,
+        **_rule_kwargs
+    )
+    _feedback_target = name + "_feedback"
+    _update_ai_node_feedback_rule(
+        name = _feedback_target,
+        node = ":{}".format(name),
+        **_rule_kwargs
+    )
+    _dirty_target = name + "_dirty"
+    _update_ai_node_dirty_rule(
+        name = _dirty_target,
+        node = ":{}".format(name),
+        **_rule_kwargs
+    )
+    _change_target = name + "_change"
+    _update_ai_node_change_rule(
+        name = _change_target,
+        node = ":{}".format(name),
+        **_rule_kwargs
+    )
+    _prompt_target = name + "_prompt"
+    _update_ai_node_prompt_rule(
+        name = _prompt_target,
+        node = ":{}".format(name),
+        **_rule_kwargs
+    )
+    return ":" + name

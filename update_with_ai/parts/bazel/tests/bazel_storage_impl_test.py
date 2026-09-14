@@ -42,11 +42,14 @@ def _make_node_dir(path: str) -> NodeDirectory:
 class MockNodeIdUtils:
     tier = "system"
 
-    def normalize(self, raw_label: str) -> Node:
-        return Node(address=raw_label)
+    def normalize(self, raw_label: str, role_label: str = "") -> Node:
+        if "#" in raw_label:
+            u, r = raw_label.split("#", 1)
+            return Node(unit_address=u, role_address=r)
+        return Node(unit_address=raw_label, role_address=role_label)
 
     def extract_directory(self, node: Node) -> NodeDirectory:
-        pkg = node.address.split(":")[0].lstrip("/")
+        pkg = node.unit_address.split(":")[0].lstrip("/")
         return _make_node_dir(pkg)
 
 
@@ -123,8 +126,8 @@ class BazelStorageImplTest(unittest.TestCase):
 
     def test_node_definition_and_dependencies(self) -> None:
         """CUJ: Storing and querying node definitions and direct graph dependencies."""
-        node = Node(address="//pkg:target")
-        dep_node = Node(address="//pkg:dep")
+        node = Node(unit_address="//pkg:target", role_address="")
+        dep_node = Node(unit_address="//pkg:dep", role_address="")
         defn = NodeDefinition(node=node, task_prompt=TaskPrompt("Clean prompt"))
 
         with enter_phase("system", registry=self.registry) as scope:
@@ -146,7 +149,7 @@ class BazelStorageImplTest(unittest.TestCase):
 
     def test_messages_persistence_and_dirty_state(self) -> None:
         """CUJ: Adding messages serializes to package textproto and controls dirty state."""
-        node = Node(address="//pkg/sub:target")
+        node = Node(unit_address="//pkg/sub:target", role_address="")
 
         with enter_phase("system", registry=self.registry) as scope:
             storage = scope.get_singleton(AgentStorage)
@@ -185,7 +188,7 @@ class BazelStorageImplTest(unittest.TestCase):
 
     def test_missing_source_file_dirty_state(self) -> None:
         """CUJ: A node is dirty when its declared source file is missing from the workspace root."""
-        node = Node(address="//pkg/src:target")
+        node = Node(unit_address="//pkg/src:target", role_address="")
         with enter_phase("system", registry=self.registry) as scope:
             storage = scope.get_singleton(AgentStorage)
             assert isinstance(storage, AgentStorageImpl)
@@ -206,9 +209,9 @@ class BazelStorageImplTest(unittest.TestCase):
 
     def test_reverse_dependencies_registration_and_clearing(self) -> None:
         """CUJ: Registering dependent writes reverse dependency to non-silent dependencies."""
-        upstream = Node(address="//pkg/lib:core")
-        downstream = Node(address="//pkg/app:main")
-        silent_upstream = Node(address="//pkg/silent:tool")
+        upstream = Node(unit_address="//pkg/lib:core", role_address="")
+        downstream = Node(unit_address="//pkg/app:main", role_address="")
+        silent_upstream = Node(unit_address="//pkg/silent:tool", role_address="")
 
         with enter_phase("system", registry=self.registry) as scope:
             storage = scope.get_singleton(AgentStorage)
@@ -246,7 +249,7 @@ class BazelStorageImplTest(unittest.TestCase):
 
     def test_save_package_data_os_error_handled(self) -> None:
         """CUJ: Handling filesystem write errors during package data persistence."""
-        node = Node(address="//pkg/err:target")
+        node = Node(unit_address="//pkg/err:target", role_address="")
         with enter_phase("system", registry=self.registry) as scope:
             storage = scope.get_singleton(AgentStorage)
             assert isinstance(storage, AgentStorageImpl)

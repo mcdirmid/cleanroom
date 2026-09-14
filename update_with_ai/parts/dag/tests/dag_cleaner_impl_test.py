@@ -85,7 +85,7 @@ class DagCleanerImplTest(unittest.TestCase):
 
     def test_single_node_clean_success(self) -> None:
         """CUJ: Cleaning an isolated dirty root node."""
-        root = Node(address="//pkg:single")
+        root = Node(unit_address="//pkg:single")
         self.storage.dirty_nodes.add(root)
         cleaner = RecordingNodeCleaner(self.storage)
 
@@ -100,9 +100,9 @@ class DagCleanerImplTest(unittest.TestCase):
 
     def test_linear_pipeline_topological_order(self) -> None:
         """CUJ: Chain A depends on B, B depends on C executes in dependency-first order [C, B, A]."""
-        a = Node(address="//pkg:a")
-        b = Node(address="//pkg:b")
-        c = Node(address="//pkg:c")
+        a = Node(unit_address="//pkg:a")
+        b = Node(unit_address="//pkg:b")
+        c = Node(unit_address="//pkg:c")
 
         self.storage.dependencies[a] = {Dependency(node=b)}
         self.storage.dependencies[b] = {Dependency(node=c)}
@@ -127,10 +127,10 @@ class DagCleanerImplTest(unittest.TestCase):
 
     def test_diamond_graph_topological_order(self) -> None:
         """CUJ: Diamond DAG: root -> (left, right) -> bottom executes bottom first, root last."""
-        root = Node(address="//pkg:root")
-        left = Node(address="//pkg:left")
-        right = Node(address="//pkg:right")
-        bottom = Node(address="//pkg:bottom")
+        root = Node(unit_address="//pkg:root")
+        left = Node(unit_address="//pkg:left")
+        right = Node(unit_address="//pkg:right")
+        bottom = Node(unit_address="//pkg:bottom")
 
         self.storage.dependencies[root] = {
             Dependency(node=left),
@@ -155,9 +155,9 @@ class DagCleanerImplTest(unittest.TestCase):
 
     def test_only_dirty_nodes_are_cleaned(self) -> None:
         """CUJ: Clean nodes in reachable subgraph are not cleaned."""
-        root = Node(address="//pkg:root")
-        dep1 = Node(address="//pkg:dep1")
-        dep2 = Node(address="//pkg:dep2")
+        root = Node(unit_address="//pkg:root")
+        dep1 = Node(unit_address="//pkg:dep1")
+        dep2 = Node(unit_address="//pkg:dep2")
 
         self.storage.dependencies[root] = {Dependency(node=dep1), Dependency(node=dep2)}
         # Only dep2 and root are dirty
@@ -176,8 +176,8 @@ class DagCleanerImplTest(unittest.TestCase):
 
     def test_halting_when_cleaner_returns_false(self) -> None:
         """CUJ: Halts execution immediately when cleaner returns False."""
-        root = Node(address="//pkg:root")
-        dep = Node(address="//pkg:dep")
+        root = Node(unit_address="//pkg:root")
+        dep = Node(unit_address="//pkg:dep")
 
         self.storage.dependencies[root] = {Dependency(node=dep)}
         self.storage.dirty_nodes.update([dep, root])
@@ -202,7 +202,7 @@ class DagCleanerImplTest(unittest.TestCase):
             # Requirement: The node visit limit is obtained from the dag config.
             self.assertEqual(dag_cleaner.node_visit_limit, 2)
 
-            root = Node(address="//pkg:infinite")
+            root = Node(unit_address="//pkg:infinite")
             self.storage.dirty_nodes.add(root)
 
             class NonResolvingCleaner(NodeCleaner):

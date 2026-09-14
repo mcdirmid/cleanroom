@@ -155,6 +155,7 @@ Implements execute_tool on the read tool to read file content with line number f
 
 FRESH_REQUIREMENTS:
 - Executing the read tool reads file content using the filesystem at the host path formed from the alias manager workspace root and bound file workspace path.
+- When the target file does not exist on disk, read tool execution treats a read-write file as having empty content, and fails with a response guiding agent recovery when inspecting a missing read-only file.
 - Executing the read tool fails if line numbers are not requested when reading a read-write file or source code file, reminding the agent that line numbers must be requested when reading read-write files and source code files and omitted when reading non-source read-only files, and specifying a follow-up execution of the read tool on the file with line numbers requested.
 - Executing the read tool fails if line numbers are requested when reading a non-source read-only file, reminding the agent that line numbers must be requested when reading read-write files and source code files and omitted when reading non-source read-only files, and specifying a follow-up execution of the read tool on the file with line numbers omitted.
 - Executing the read tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.

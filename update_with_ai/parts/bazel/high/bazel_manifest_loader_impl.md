@@ -38,3 +38,11 @@ The bazel manifest loader:
 - Derives file aliases for all accessible workspace files.
 
 - Synthesizes node definitions in bazel graph storage for referenced dependency targets lacking manifests.
+
+- Resolves target manifests by loading unit manifests and role manifests to synthesize node definitions and dependencies across unit and role dimensions.
+
+- Synthesizes target node manifests with templates, template parameters, declared dependencies, feedback dependencies, silent dependencies, and star dependencies across unit and role dimensions.
+
+- Evaluates role source patterns and task prompt templates parameterized with unit metadata to configure synthesized nodes.
+
+- Synthesizes promptless pass-through node definitions that act as graph dependencies without propagating changes when a unit's component type is not active for a role.

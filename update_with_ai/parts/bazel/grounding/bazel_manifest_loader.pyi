@@ -48,5 +48,6 @@ FRESH_REQUIREMENTS:
 - A manifest loader resolves declared feedback dependencies into blame targets mapped to their owning dependency nodes in node configurations.
 - A manifest loader generates node configurations with minimally disambiguated file aliases.
 - A manifest loader synthesizes definitions for declared dependencies lacking explicit manifests.
+- A manifest loader synthesizes promptless pass-through node definitions that act as graph dependencies without propagating changes when a unit's component type is not active for a role.
 """
         ...

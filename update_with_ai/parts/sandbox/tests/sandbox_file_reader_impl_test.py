@@ -167,7 +167,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
                 '> META: "Trailing meta note."\n'
             )
 
-        node = Node(address="//pkg:test")
+        node = Node(unit_address="//pkg:test")
         self.ro_file = ReadOnlyFile(
             short_name="readonly.txt",
             workspace_path=_make_workspace_path("readonly.txt"),
@@ -410,6 +410,48 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertEqual(
                 resp_unknown.reminder, "Only declared files can be inspected."
             )
+
+    def test_read_tool_missing_file_handling(self) -> None:
+        """CUJ: Handling missing read-write files (treated as empty) vs missing read-only files (fails)."""
+        node = Node(unit_address="//pkg:test")
+        missing_rw_file = ReadWriteFile(
+            short_name="missing_rw.txt",
+            workspace_path=_make_workspace_path("missing_rw.txt"),
+            owning_node=node,
+        )
+        missing_ro_file = ReadOnlyFile(
+            short_name="missing_ro.txt",
+            workspace_path=_make_workspace_path("missing_ro.txt"),
+            owning_node=node,
+        )
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            read_tool = scope.get_singleton(ReadTool)
+
+            # Requirement: When the target file does not exist on disk, read tool execution treats a read-write file as having empty content, and fails with a response guiding agent recovery when inspecting a missing read-only file.
+            # Reading missing read-write file succeeds with empty content
+            rw_bindings = ActualParameterBindings(
+                bindings={
+                    (read_tool.file_alias_parameter, missing_rw_file),
+                    (read_tool.line_numbers_parameter, True),
+                }
+            )
+            rw_resp = read_tool.execute_tool(rw_bindings)
+            self.assertFalse(rw_resp.is_failed)
+            self.assertEqual(rw_resp.content, "")
+            self.assertEqual(rw_resp.suppression_key, missing_rw_file.short_name)
+
+            # Reading missing read-only file fails with guidance
+            ro_bindings = ActualParameterBindings(
+                bindings={
+                    (read_tool.file_alias_parameter, missing_ro_file),
+                    (read_tool.line_numbers_parameter, False),
+                }
+            )
+            ro_resp = read_tool.execute_tool(ro_bindings)
+            self.assertTrue(ro_resp.is_failed)
+            self.assertIn("missing_ro.txt' does not exist on disk", ro_resp.content)
+            self.assertEqual(ro_resp.reminder, "Only declared files can be inspected.")
 
     def test_read_tool_filters_meta_notes_in_markdown(self) -> None:
         """CUJ: Filtering > META: paragraphs when reading markdown files."""

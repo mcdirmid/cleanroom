@@ -179,8 +179,20 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
             alias_mgr.workspace_root.path, target_file.workspace_path.path
         )
 
-        with open(host_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
+        # Requirement: When the target file does not exist on disk, read tool execution treats a read-write file as having empty content, and fails with a response guiding agent recovery when inspecting a missing read-only file.
+        if not os.path.exists(host_path):
+            if isinstance(target_file, agent_file_alias.ReadWriteFile):
+                lines = []
+            else:
+                return tool_provider.Response(
+                    is_failed=True,
+                    is_terminated=False,
+                    content=f"Error: File '{target_file.short_name}' does not exist on disk.",
+                    reminder="Only declared files can be inspected.",
+                )
+        else:
+            with open(host_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
 
         # Requirement: When reading markdown files ending with .md, paragraphs beginning with > META: are filtered out from the returned content.
         if target_file.short_name.endswith(

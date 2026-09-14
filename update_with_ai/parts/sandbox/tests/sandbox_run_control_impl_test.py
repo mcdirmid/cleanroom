@@ -239,7 +239,7 @@ class MockVerificationCheck(VerificationCheck):
 
 class SandboxRunControlImplTest(unittest.TestCase):
     def setUp(self) -> None:
-        node = Node(address="//pkg:upstream")
+        node = Node(unit_address="//pkg:upstream")
         self.blame_target_file = ReadOnlyFile(
             short_name="dep.py",
             workspace_path=_make_workspace_path("pkg/dep.py"),
@@ -714,7 +714,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             unrecognized = ReadOnlyFile(
                 short_name="unknown.py",
                 workspace_path=_make_workspace_path("unknown.py"),
-                owning_node=Node(address="//pkg:unknown"),
+                owning_node=Node(unit_address="//pkg:unknown"),
             )
             b_invalid = ActualParameterBindings(
                 bindings={
@@ -745,7 +745,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         rw_file = ReadWriteFile(
             short_name="target.py",
             workspace_path=_make_workspace_path("target.py"),
-            owning_node=Node(address="//pkg:target"),
+            owning_node=Node(unit_address="//pkg:target"),
         )
         custom_node_cfg = MockNodeConfig(
             guide=None,
@@ -908,7 +908,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         rw_file = ReadWriteFile(
             short_name="src.py",
             workspace_path=_make_workspace_path("/workspace/src.py"),
-            owning_node=Node(address="//pkg:target"),
+            owning_node=Node(unit_address="//pkg:target"),
         )
         self.node_cfg._read_write_files = {rw_file}
         self.edit_mgr.file_update_revision = 1

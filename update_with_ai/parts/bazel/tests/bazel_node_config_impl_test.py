@@ -78,7 +78,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             self.assertEqual(cfg.verification_checks, [])
 
             # Configure properties
-            node = Node(address="//pkg:target")
+            node = Node(unit_address="//pkg:target")
             ro = ReadOnlyFile(
                 short_name="ro.txt",
                 workspace_path=_make_workspace_path("pkg/ro.txt"),
@@ -159,7 +159,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             self.assertIsNotNone(alias_mgr.workspace_root)
 
             # Map an alias
-            node = Node(address="//pkg:target")
+            node = Node(unit_address="//pkg:target")
             bound = ReadWriteFile(
                 short_name="module.py",
                 workspace_path=_make_workspace_path("pkg/module.py"),
@@ -214,7 +214,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             tier = "agent_session"
 
             def __init__(self) -> None:
-                self._node = Node(address="//test/pkg:my_target")
+                self._node = Node(unit_address="//test/pkg:my_target")
 
             @property
             def node(self) -> Node:
@@ -227,7 +227,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             tier = "agent_session"
 
             def get_manifest(self, node: Node) -> Optional[Manifest]:
-                if node.address == "//test/pkg:my_target":
+                if node.unit_address == "//test/pkg:my_target":
                     return Manifest(
                         json.dumps(
                             {
@@ -245,7 +245,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                             }
                         )
                     )
-                if node.address == "//test/pkg:dep_target":
+                if node.unit_address == "//test/pkg:dep_target":
                     return Manifest(
                         json.dumps(
                             {
@@ -253,7 +253,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                             }
                         )
                     )
-                if node.address == "//test/pkg:star_parent":
+                if node.unit_address == "//test/pkg:star_parent":
                     return Manifest(
                         json.dumps(
                             {
@@ -262,7 +262,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                             }
                         )
                     )
-                if node.address == "//test/pkg:star_transitive":
+                if node.unit_address == "//test/pkg:star_transitive":
                     return Manifest(
                         json.dumps(
                             {
@@ -281,7 +281,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             tier = "agent_session"
 
             def normalize(self, raw_label: str) -> Node:
-                return Node(address=raw_label)
+                return Node(unit_address=raw_label)
 
             def extract_directory(self, node: Node) -> NodeDirectory:
                 return _make_node_directory("test/pkg")
@@ -369,7 +369,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             tier = "agent_session"
 
             def __init__(self) -> None:
-                self._node = Node(address="//test/pkg:my_target")
+                self._node = Node(unit_address="//test/pkg:my_target")
 
             @property
             def node(self) -> Node:
@@ -382,7 +382,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             tier = "agent_session"
 
             def get_manifest(self, node: Node) -> Optional[Manifest]:
-                if node.address == "//test/pkg:my_target":
+                if node.unit_address == "//test/pkg:my_target":
                     return Manifest(
                         json.dumps(
                             {
@@ -404,7 +404,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             tier = "agent_session"
 
             def normalize(self, raw_label: str) -> Node:
-                return Node(address=raw_label)
+                return Node(unit_address=raw_label)
 
             def extract_directory(self, node: Node) -> NodeDirectory:
                 return _make_node_directory("test/pkg")
@@ -472,7 +472,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             tier = "agent_session"
 
             def __init__(self) -> None:
-                self._node = Node(address="//test/pkg:my_target")
+                self._node = Node(unit_address="//test/pkg:my_target")
 
             @property
             def node(self) -> Node:
@@ -485,7 +485,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             tier = "agent_session"
 
             def get_manifest(self, node: Node) -> Optional[Manifest]:
-                if node.address == "//test/pkg:my_target":
+                if node.unit_address == "//test/pkg:my_target":
                     return Manifest(
                         json.dumps(
                             {
@@ -507,7 +507,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             tier = "agent_session"
 
             def normalize(self, raw_label: str) -> Node:
-                return Node(address=raw_label)
+                return Node(unit_address=raw_label)
 
             def extract_directory(self, node: Node) -> NodeDirectory:
                 return _make_node_directory("test/pkg")
@@ -619,7 +619,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             @property
             def node(self) -> Node:
-                return Node(address="//pkg:tgt")
+                return Node(unit_address="//pkg:tgt")
 
         class MockManifestLoaderNone(BazelManifestLoader, Singleton):
             tier = "agent_session"
@@ -636,7 +636,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             tier = "agent_session"
 
             def normalize(self, raw_label: str) -> Node:
-                return Node(address=raw_label)
+                return Node(unit_address=raw_label)
 
             def extract_directory(self, node: Node) -> NodeDirectory:
                 return _make_node_directory("pkg")
@@ -689,7 +689,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
                 @property
                 def node(self) -> Node:
-                    return Node(address="//pkg:my_target")
+                    return Node(unit_address="//pkg:my_target")
 
             class MockManifestLoader(BazelManifestLoader, Singleton):
                 tier = "agent_session"
@@ -715,7 +715,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 tier = "agent_session"
 
                 def normalize(self, raw_label: str) -> Node:
-                    return Node(address=raw_label)
+                    return Node(unit_address=raw_label)
 
                 def extract_directory(self, node: Node) -> NodeDirectory:
                     return _make_node_directory("pkg")
@@ -764,7 +764,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
                 @property
                 def node(self) -> Node:
-                    return Node(address="//pkg:my_target")
+                    return Node(unit_address="//pkg:my_target")
 
             class MockManifestLoader(BazelManifestLoader, Singleton):
                 tier = "agent_session"
@@ -791,7 +791,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 tier = "agent_session"
 
                 def normalize(self, raw_label: str) -> Node:
-                    return Node(address=raw_label)
+                    return Node(unit_address=raw_label)
 
                 def extract_directory(self, node: Node) -> NodeDirectory:
                     return _make_node_directory("pkg")
@@ -924,7 +924,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
                 @property
                 def node(self) -> Node:
-                    return Node(address="//pkg:my_target")
+                    return Node(unit_address="//pkg:my_target")
 
             class MockManifestLoader(BazelManifestLoader, Singleton):
                 tier = "agent_session"
@@ -950,7 +950,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 tier = "agent_session"
 
                 def normalize(self, raw_label: str) -> Node:
-                    return Node(address=raw_label)
+                    return Node(unit_address=raw_label)
 
                 def extract_directory(self, node: Node) -> NodeDirectory:
                     return _make_node_directory("pkg")
@@ -1037,13 +1037,13 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             @property
             def node(self) -> Node:
-                return Node(address="//pkg:root")
+                return Node(unit_address="//pkg:root")
 
         class MockManifestLoader(BazelManifestLoader, Singleton):
             tier = "agent_session"
 
             def get_manifest(self, node: Node) -> Optional[Manifest]:
-                if node.address == "//pkg:root":
+                if node.unit_address == "//pkg:root":
                     return Manifest(
                         json.dumps(
                             {
@@ -1061,7 +1061,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                             }
                         )
                     )
-                if node.address == "//pkg:star_a":
+                if node.unit_address == "//pkg:star_a":
                     return Manifest(
                         json.dumps(
                             {
@@ -1073,7 +1073,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                             }
                         )
                     )
-                if node.address == "//pkg:star_b":
+                if node.unit_address == "//pkg:star_b":
                     return Manifest(
                         json.dumps(
                             {
@@ -1082,7 +1082,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                             }
                         )
                     )
-                if node.address == "//pkg:star_diamond":
+                if node.unit_address == "//pkg:star_diamond":
                     return Manifest(
                         json.dumps(
                             {
@@ -1090,9 +1090,9 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                             }
                         )
                     )
-                if node.address == "//pkg:star_bad_json":
+                if node.unit_address == "//pkg:star_bad_json":
                     return Manifest("not valid json {")
-                if node.address == "//pkg:bad_json_dep":
+                if node.unit_address == "//pkg:bad_json_dep":
                     return Manifest("not valid json {")
                 return None
 
@@ -1105,7 +1105,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             tier = "agent_session"
 
             def normalize(self, raw_label: str) -> Node:
-                return Node(address=raw_label)
+                return Node(unit_address=raw_label)
 
             def extract_directory(self, node: Node) -> NodeDirectory:
                 return _make_node_directory("pkg")

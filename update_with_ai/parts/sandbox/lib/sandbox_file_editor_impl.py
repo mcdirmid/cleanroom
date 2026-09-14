@@ -175,10 +175,13 @@ class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
             alias_mgr.workspace_root.path, target_file.workspace_path.path
         )
 
-        # Requirement: Executing the text replacement tool reads file content using the filesystem.
+        # Requirement: Executing the text replacement tool reads file content using the filesystem, treating missing files as empty.
         # Requirement: Executing the text replacement tool fails if the target text is not found in the file content.
-        with open(host_path, "r", encoding="utf-8") as f:
-            content = f.read()
+        if not os.path.exists(host_path):
+            content = ""
+        else:
+            with open(host_path, "r", encoding="utf-8") as f:
+                content = f.read()
 
         count = content.count(target_text)
         if count == 0:
@@ -210,6 +213,7 @@ class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
                 reminder="The edit had no effect, and such edits will fail.",
             )
 
+        os.makedirs(os.path.dirname(host_path), exist_ok=True)
         with open(host_path, "w", encoding="utf-8") as f:
             f.write(new_content)
 
@@ -322,10 +326,13 @@ class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
             alias_mgr.workspace_root.path, target_file.workspace_path.path
         )
 
-        # Requirement: Executing the line update tool reads file content using the filesystem.
+        # Requirement: Executing the line update tool reads file content using the filesystem, treating missing files as empty.
         # Requirement: Executing the line update tool fails if the start line is less than one or exceeds the total line count plus one.
-        with open(host_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
+        if not os.path.exists(host_path):
+            lines = []
+        else:
+            with open(host_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
 
         total_lines = len(lines)
         if start_line < 1 or start_line > total_lines + 1:
@@ -369,6 +376,7 @@ class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
         edit_mgr = get_singleton(EditManager)
         edit_mgr.record_initial_content(host_path, "".join(lines))
 
+        os.makedirs(os.path.dirname(host_path), exist_ok=True)
         with open(host_path, "w", encoding="utf-8") as f:
             f.writelines(new_lines)
 

@@ -163,7 +163,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         with open(self.target_path, "w", encoding="utf-8") as f:
             f.write("Line 1\nLine 2\nLine 3\n")
 
-        node = Node(address="//pkg:edit_test")
+        node = Node(unit_address="//pkg:edit_test")
         self.rw_file = ReadWriteFile(
             short_name="file.txt",
             workspace_path=_make_workspace_path("file.txt"),
@@ -587,6 +587,53 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 resp3.reminder, "The edit had no effect, and such edits will fail."
             )
             self.assertFalse(edit_mgr.has_modifications)
+
+    def test_editing_tools_missing_file_handling(self) -> None:
+        """CUJ: Editing tools treat missing read-write files as empty and create parent directories on write."""
+        nested_rel = "nested/dir/missing.txt"
+        nested_host = os.path.join(self.test_dir, nested_rel)
+        node = Node(unit_address="//pkg:test")
+        missing_rw_file = ReadWriteFile(
+            short_name="missing.txt",
+            workspace_path=_make_workspace_path(nested_rel),
+            owning_node=node,
+        )
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(TextReplacementTool)
+            line_tool = scope.get_singleton(LineUpdateTool)
+            edit_mgr = scope.get_singleton(EditManager)
+
+            # 1. Text replacement tool on missing file treats content as empty -> target text not found fails cleanly
+            # Requirement: Executing the text replacement tool reads file content using the filesystem, treating missing files as empty.
+            b_rep = ActualParameterBindings(
+                bindings={
+                    (replace_tool.file_alias_parameter, missing_rw_file),
+                    (replace_tool.target_text_parameter, "some_text"),
+                    (replace_tool.replacement_text_parameter, "new_text"),
+                }
+            )
+            resp_rep = replace_tool.execute_tool(b_rep)
+            self.assertTrue(resp_rep.is_failed)
+            self.assertIn("target_text not found in file", resp_rep.content)
+
+            # 2. Line update tool inserting into missing file creates parent directories and writes content
+            # Requirement: Line update tool execution reads the file content from the filesystem, treating missing files as empty, failing if the start line is less than one or exceeds the total line count plus one.
+            # Requirement: On success, the tool writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred.
+            b_line = ActualParameterBindings(
+                bindings={
+                    (line_tool.file_alias_parameter, missing_rw_file),
+                    (line_tool.start_line_parameter, 1),
+                    (line_tool.end_line_parameter, 0),
+                    (line_tool.replacement_text_parameter, "First line\nSecond line\n"),
+                }
+            )
+            resp_line = line_tool.execute_tool(b_line)
+            self.assertFalse(resp_line.is_failed)
+            self.assertTrue(os.path.exists(nested_host))
+            with open(nested_host, "r", encoding="utf-8") as f:
+                self.assertEqual(f.read(), "First line\nSecond line\n")
+            self.assertTrue(edit_mgr.has_modifications)
 
     def test_file_update_revision(self) -> None:
         """CUJ: EditManager file_update_revision increments when editing tools modify files."""

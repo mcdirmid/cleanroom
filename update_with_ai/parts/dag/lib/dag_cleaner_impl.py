@@ -98,7 +98,7 @@ class DagCleaner(dag_cleaner.DagCleaner, Singleton):
                 # Requirement: If visiting any node exceeds the node visit limit, the dag cleaner halts with an unexpected failure.
                 if visits[curr] > self.node_visit_limit:
                     raise RuntimeError(
-                        f"Node {curr.address} exceeded node visit limit of {self.node_visit_limit}"
+                        f"Node ({curr.unit_address}, {curr.role_address}) exceeded node visit limit of {self.node_visit_limit}"
                     )
 
                 # Requirement: When cleaning a dirty node, the node cleaner is invoked to clean the node.

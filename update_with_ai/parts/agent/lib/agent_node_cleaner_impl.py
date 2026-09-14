@@ -159,13 +159,25 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
                         if (
                             hasattr(bt, "owning_node")
                             and bt.owning_node is not None
-                            and bt.owning_node.address == blame_target_str
+                            and (
+                                bt.owning_node.unit_address == blame_target_str
+                                or f"{bt.owning_node.unit_address}#{bt.owning_node.role_address}"
+                                == blame_target_str
+                            )
                         ):
                             blamed_node = bt.owning_node
                             break
 
                     if blamed_node is None:
-                        blamed_node = dag_storage.Node(address=blame_target_str)
+                        if "#" in blame_target_str:
+                            u, r = blame_target_str.split("#", 1)
+                            blamed_node = dag_storage.Node(
+                                unit_address=u, role_address=r
+                            )
+                        else:
+                            blamed_node = dag_storage.Node(
+                                unit_address=blame_target_str, role_address=""
+                            )
 
                     messages.add(
                         dag_storage.Feedback(

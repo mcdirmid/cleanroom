@@ -37,3 +37,5 @@ The bazel manifest loader:
 - Generates node configurations with minimally disambiguated file aliases for target nodes.
 
 - Synthesizes definitions for declared dependencies lacking explicit manifests.
+
+- Synthesizes promptless pass-through node definitions that act as graph dependencies without propagating changes when a unit's component type is not active for a role.

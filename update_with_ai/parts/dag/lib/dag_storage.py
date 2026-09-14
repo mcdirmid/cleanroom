@@ -4,7 +4,8 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Node:
-    address: str
+    unit_address: str
+    role_address: str = ""
 
 
 @dataclass(frozen=True)

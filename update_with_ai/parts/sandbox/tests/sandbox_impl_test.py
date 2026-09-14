@@ -200,7 +200,7 @@ def _make_workspace_path(path: str) -> WorkspacePath:
 
 class SandboxImplTest(unittest.TestCase):
     def setUp(self) -> None:
-        node = Node(address="//pkg:target")
+        node = Node(unit_address="//pkg:target")
         self.ro_file = ReadOnlyFile(
             short_name="spec.md",
             workspace_path=_make_workspace_path("pkg/spec.md"),
@@ -255,7 +255,7 @@ class SandboxImplTest(unittest.TestCase):
 
     def test_get_startup_tool_executions_step_mode_and_startup_reads(self) -> None:
         """CUJ: Assembling startup tool executions: advance first when in step mode, followed by read_file for read-only files."""
-        node = Node(address="//pkg:target")
+        node = Node(unit_address="//pkg:target")
         ro_file_z = ReadOnlyFile(
             short_name="z_spec.md",
             workspace_path=_make_workspace_path("pkg/z_spec.md"),

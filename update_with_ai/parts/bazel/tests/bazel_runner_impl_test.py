@@ -36,7 +36,7 @@ class MockManifestLoader(bazel_manifest_loader.BazelManifestLoader):
     def get_manifest(
         self, node: dag_storage.Node
     ) -> Optional[bazel_manifest_loader.Manifest]:
-        return self.manifests.get(node.address)
+        return self.manifests.get(node.unit_address)
 
     def load_manifest(
         self,
@@ -168,7 +168,7 @@ class BazelRunnerImplTest(unittest.TestCase):
 
     def test_run_cleaning_pass_success(self) -> None:
         """Tests successful cleaning pass execution and telemetry logging."""
-        root = dag_storage.Node(address="//pkg:target")
+        root = dag_storage.Node(unit_address="//pkg:target", role_address="")
         self.manifest_loader.manifests["//pkg:target"] = bazel_manifest_loader.Manifest(
             "rule()"
         )
@@ -199,10 +199,10 @@ class BazelRunnerImplTest(unittest.TestCase):
 
     def test_run_cleaning_pass_loads_dependency_graph(self) -> None:
         """Tests that run_cleaning_pass transitively loads manifests for all dependencies in the graph."""
-        root = dag_storage.Node(address="//pkg:root")
-        dep1 = dag_storage.Node(address="//pkg:dep1")
-        dep2 = dag_storage.Node(address="//pkg:dep2")
-        dep3 = dag_storage.Node(address="//pkg:dep3")
+        root = dag_storage.Node(unit_address="//pkg:root", role_address="")
+        dep1 = dag_storage.Node(unit_address="//pkg:dep1", role_address="")
+        dep2 = dag_storage.Node(unit_address="//pkg:dep2", role_address="")
+        dep3 = dag_storage.Node(unit_address="//pkg:dep3", role_address="")
 
         root_m = bazel_manifest_loader.Manifest('{"name": "root"}')
         dep1_m = bazel_manifest_loader.Manifest('{"name": "dep1"}')
@@ -235,7 +235,7 @@ class BazelRunnerImplTest(unittest.TestCase):
 
     def test_run_cleaning_pass_runtime_error(self) -> None:
         """Tests cleaning pass failure handling when cleaner raises RuntimeError."""
-        root = dag_storage.Node(address="//pkg:failing")
+        root = dag_storage.Node(unit_address="//pkg:failing", role_address="")
         self.cleaner.should_fail = True
 
         with enter_phase("system", registry=self.registry):
@@ -260,7 +260,7 @@ class BazelRunnerImplTest(unittest.TestCase):
 
     def test_run_cleaning_pass_remaining_dirty(self) -> None:
         """Tests cleaning pass reporting failure if root remains dirty after cleaning."""
-        root = dag_storage.Node(address="//pkg:dirty_root")
+        root = dag_storage.Node(unit_address="//pkg:dirty_root", role_address="")
 
         # Custom cleaner that does not clear dirty status
         class PersistentDirtyCleaner(dag_cleaner.DagCleaner):
@@ -286,8 +286,8 @@ class BazelRunnerImplTest(unittest.TestCase):
 
     def test_run_cleaning_pass_dependency_remaining_dirty(self) -> None:
         """Tests cleaning pass reporting failure if a dependency remains dirty after cleaning."""
-        root = dag_storage.Node(address="//pkg:clean_root")
-        dep = dag_storage.Node(address="//pkg:dirty_dep")
+        root = dag_storage.Node(unit_address="//pkg:clean_root", role_address="")
+        dep = dag_storage.Node(unit_address="//pkg:dirty_dep", role_address="")
         self.storage.dependencies_map[root] = {dag_storage.Dependency(node=dep)}
 
         class PersistentDirtyCleaner(dag_cleaner.DagCleaner):
@@ -313,7 +313,7 @@ class BazelRunnerImplTest(unittest.TestCase):
 
     def test_mark_node_dirty(self) -> None:
         """Tests marking a target node dirty by injecting a change message."""
-        target = dag_storage.Node(address="//pkg:lib")
+        target = dag_storage.Node(unit_address="//pkg:lib", role_address="")
         change = dag_storage.Change()
 
         with enter_phase("system", registry=self.registry):
@@ -327,7 +327,7 @@ class BazelRunnerImplTest(unittest.TestCase):
 
     def test_inject_node_feedback(self) -> None:
         """Tests injecting caller-supplied feedback message to mark a node dirty."""
-        target = dag_storage.Node(address="//pkg:dep")
+        target = dag_storage.Node(unit_address="//pkg:dep", role_address="")
         feedback = dag_storage.Feedback()
 
         with enter_phase("system", registry=self.registry):
@@ -341,9 +341,9 @@ class BazelRunnerImplTest(unittest.TestCase):
 
     def test_broadcast_node_change(self) -> None:
         """Tests broadcasting a change message to all downstream reverse dependencies."""
-        origin = dag_storage.Node(address="//pkg:origin")
-        dep1 = dag_storage.Node(address="//pkg:dep1")
-        dep2 = dag_storage.Node(address="//pkg:dep2")
+        origin = dag_storage.Node(unit_address="//pkg:origin", role_address="")
+        dep1 = dag_storage.Node(unit_address="//pkg:dep1", role_address="")
+        dep2 = dag_storage.Node(unit_address="//pkg:dep2", role_address="")
         self.storage.dependents_map[origin] = {dep1, dep2}
         change = dag_storage.Change()
 

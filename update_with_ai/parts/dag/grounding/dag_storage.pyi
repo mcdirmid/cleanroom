@@ -96,14 +96,22 @@ PURPOSE:
 Introduces a node to identify a discrete unit of work in the graph
 """
 
-    def __init__(self, address: str) -> None:
+    def __init__(self, unit_address: str, role_address: str) -> None:
         ...
 
     @property
-    def address(self) -> str:
+    def unit_address(self) -> str:
         """
 PURPOSE:
-Unique address identifying the node in graph storage
+Unit address identifying the unit of work in graph storage
+"""
+        ...
+
+    @property
+    def role_address(self) -> str:
+        """
+PURPOSE:
+Role address identifying the role of work in graph storage
 """
         ...
 

@@ -10,7 +10,7 @@ Multi-step agent workflows require coordinated incremental execution to avoid re
 
 ## Types and Behavior
 
-A *node* identifies a discrete unit of work in the graph, having an *address*.
+A *node* identifies a discrete unit of work in the graph, having a *unit address* and a *role address*.
 
 A *message* explains why a node requires cleaning, carrying text *content*. A message is either:
 

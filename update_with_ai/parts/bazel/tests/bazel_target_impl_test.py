@@ -29,27 +29,31 @@ class TestBazelTargetImpl(unittest.TestCase):
             # Requirement: [BazelTarget] The bazel target normalizes an arbitrary Bazel target identifier string into a canonical node.
             self.assertEqual(
                 utils.normalize("//pkg/sub:target"),
-                Node(address="//pkg/sub:target"),
+                Node(unit_address="//pkg/sub:target", role_address=""),
             )
             self.assertEqual(
                 utils.normalize("@@//pkg:target"),
-                Node(address="//pkg:target"),
+                Node(unit_address="//pkg:target", role_address=""),
             )
             self.assertEqual(
                 utils.normalize("@//pkg:target"),
-                Node(address="//pkg:target"),
+                Node(unit_address="//pkg:target", role_address=""),
             )
             self.assertEqual(
                 utils.normalize("//pkg"),
-                Node(address="//pkg:pkg"),
+                Node(unit_address="//pkg:pkg", role_address=""),
             )
             self.assertEqual(
                 utils.normalize("//foo/bar"),
-                Node(address="//foo/bar:bar"),
+                Node(unit_address="//foo/bar:bar", role_address=""),
             )
             self.assertEqual(
                 utils.normalize("pkg:target"),
-                Node(address="//pkg:target"),
+                Node(unit_address="//pkg:target", role_address=""),
+            )
+            self.assertEqual(
+                utils.normalize("//pkg/sub:target#//roles:lib"),
+                Node(unit_address="//pkg/sub:target", role_address="//roles:lib"),
             )
 
     def test_extract_directory(self) -> None:
@@ -70,11 +74,15 @@ class TestBazelTargetImpl(unittest.TestCase):
             # Requirement: The bazel target derives node directories from normalized nodes relative to a workspace root.
             # Requirement: [BazelTarget] The bazel target extracts a node directory from a node.
             self.assertEqual(
-                utils.extract_directory(Node(address="//pkg/sub:target")),
+                utils.extract_directory(
+                    Node(unit_address="//pkg/sub:target", role_address="")
+                ),
                 _make_node_dir("pkg/sub"),
             )
             self.assertEqual(
-                utils.extract_directory(Node(address="//:root_target")),
+                utils.extract_directory(
+                    Node(unit_address="//:root_target", role_address="")
+                ),
                 _make_node_dir(""),
             )
 

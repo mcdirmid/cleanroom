@@ -13,6 +13,12 @@ from support.lib.lifecycle import (
 )
 
 
+def _format_node(node: dag_storage.Node) -> str:
+    if node.role_address:
+        return f"{node.unit_address}#{node.role_address}"
+    return node.unit_address
+
+
 class DagRunner(dag_runner.DagRunner, Singleton):
     tier = "system"
 
@@ -21,11 +27,12 @@ class DagRunner(dag_runner.DagRunner, Singleton):
 
     def run_cleaning_pass(self, root: dag_storage.Node) -> dag_runner.BuildResult:
         logger = get_singleton(runner_logger.RunnerLogger)
+        root_str = _format_node(root)
         logger.consume(
             runner_logger.LogEvent(
                 event_name="build_pass_start",
-                summary=f"Starting cleaning pass for root {root.address}",
-                transcript_representation=f"=== Cleaning Pass Started: {root.address} ===",
+                summary=f"Starting cleaning pass for root {root_str}",
+                transcript_representation=f"=== Cleaning Pass Started: {root_str} ===",
             )
         )
 
@@ -75,10 +82,10 @@ class DagRunner(dag_runner.DagRunner, Singleton):
             failure_reason = str(e)
 
         if success:
-            summary = f"Cleaning pass succeeded for {root.address}"
+            summary = f"Cleaning pass succeeded for {root_str}"
         else:
             reason_suffix = f": {failure_reason}" if failure_reason else ""
-            summary = f"Cleaning pass failed for {root.address}{reason_suffix}"
+            summary = f"Cleaning pass failed for {root_str}{reason_suffix}"
 
         logger.consume(
             runner_logger.LogEvent(

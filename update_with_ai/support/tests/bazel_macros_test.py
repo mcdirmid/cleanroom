@@ -233,7 +233,7 @@ class TestBazelMacrosIntegration(unittest.TestCase):
         node_util = get_singleton(BazelTarget)
         self.assertIsNotNone(node_util)
         node = node_util.normalize("//update_with_ai/specs:dag_storage_lib")
-        self.assertEqual(node.address, "//update_with_ai/specs:dag_storage_lib")
+        self.assertEqual(node.unit_address, "//update_with_ai/specs:dag_storage_lib")
 
         loader = get_singleton(BazelManifestLoader)
         self.assertIsNotNone(loader)

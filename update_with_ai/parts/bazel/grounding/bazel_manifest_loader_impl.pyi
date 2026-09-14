@@ -53,6 +53,10 @@ FRESH_REQUIREMENTS:
 - A manifest loader resolves guide targets into task guides and feedback dependencies into blame targets.
 - A manifest loader derives file aliases for all accessible workspace files.
 - A manifest loader synthesizes node definitions for referenced dependency targets lacking manifests.
+- A manifest loader resolves target manifests by loading unit manifests and role manifests to synthesize node definitions and dependencies across unit and role dimensions.
+- A manifest loader synthesizes target node manifests with templates, template parameters, declared dependencies, feedback dependencies, silent dependencies, and star dependencies across unit and role dimensions.
+- A manifest loader evaluates role source patterns and task prompt templates parameterized with unit metadata to configure synthesized nodes.
+- A manifest loader synthesizes promptless pass-through node definitions that act as graph dependencies without propagating changes when a unit's component type is not active for a role.
 
 INHERITED_REQUIREMENTS:
 - [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using a node identifier utility, populating the agent storage.
@@ -64,6 +68,7 @@ INHERITED_REQUIREMENTS:
 - [BazelManifestLoader] A manifest loader resolves declared feedback dependencies into blame targets mapped to their owning dependency nodes in node configurations.
 - [BazelManifestLoader] A manifest loader generates node configurations with minimally disambiguated file aliases.
 - [BazelManifestLoader] A manifest loader synthesizes definitions for declared dependencies lacking explicit manifests.
+- [BazelManifestLoader] A manifest loader synthesizes promptless pass-through node definitions that act as graph dependencies without propagating changes when a unit's component type is not active for a role.
 
 GROUNDING_ARGUMENT:
 - Receives content and storage as arguments, uses imported bazel_target (in the same system lifecycle tier) to normalize target labels and derive directories, and populates node definitions, dependencies, and configurations into the provided AgentStorage.

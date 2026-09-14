@@ -100,7 +100,12 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
         # 1. Declared source files -> read_write_files
         src = data.get("src")
         if src:
-            norm_rel = os.path.normpath(os.path.join(pkg_path, src))
+            if src.startswith(pkg_path + "/") or (
+                pkg_path and src.startswith("/" + pkg_path + "/")
+            ):
+                norm_rel = os.path.normpath(src.lstrip("/"))
+            else:
+                norm_rel = os.path.normpath(os.path.join(pkg_path, src))
             ws_path = _make_host_path(agent_file_alias.WorkspacePath, norm_rel)
             short_name = os.path.basename(norm_rel)
             rw = agent_file_alias.ReadWriteFile(
@@ -293,7 +298,12 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
                 dep_srcs.append(f"{target_name}.py")
 
             for ds in dep_srcs:
-                norm_rel = os.path.normpath(os.path.join(dep_pkg, ds))
+                if ds.startswith(dep_pkg + "/") or (
+                    dep_pkg and ds.startswith("/" + dep_pkg + "/")
+                ):
+                    norm_rel = os.path.normpath(ds.lstrip("/"))
+                else:
+                    norm_rel = os.path.normpath(os.path.join(dep_pkg, ds))
                 ws_path = _make_host_path(agent_file_alias.WorkspacePath, norm_rel)
                 short_name = os.path.basename(norm_rel)
                 ro = agent_file_alias.ReadOnlyFile(
