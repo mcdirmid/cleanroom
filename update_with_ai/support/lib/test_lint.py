@@ -18,6 +18,7 @@ import os
 import sys
 
 from build_lint_common import (
+    build_module_resolution_map,
     check_syntax,
     check_test_dry_run,
     check_test_impl_imports,
@@ -32,6 +33,7 @@ from build_lint_common import (
     module_stem,
     package_of,
     read_text,
+    rewrite_test_imports,
     transitive_closure,
     write_text,
 )
@@ -60,6 +62,16 @@ def main() -> int:
     stem = module_stem(args.module_path)
     srcs = module_file(args.module_path)
     deps = [d for d in args.deps.split(",") if d and not d.endswith("_ext")]
+
+    # Build resolution map and rewrite test module imports if test module exists
+    import_map, label_map, _ = build_module_resolution_map(
+        args.build_path, args.lib_pkg, deps
+    )
+    if os.path.exists(args.module_path):
+        _, imported_stems = rewrite_test_imports(args.module_path, import_map)
+        for s in imported_stems:
+            if s in label_map and label_map[s] not in deps:
+                deps.append(label_map[s])
 
     if not os.path.exists(args.build_path):
         d = os.path.dirname(args.build_path)

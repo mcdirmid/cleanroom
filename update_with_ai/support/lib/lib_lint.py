@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 
 from build_lint_common import (
+    build_module_resolution_map,
     check_dataclass_stubs,
     check_dead_code,
     check_exception_eating,
@@ -42,6 +43,7 @@ from build_lint_common import (
     package_of,
     parse_spec_build_dependencies,
     read_text,
+    rewrite_lib_imports,
     transitive_closure,
     write_text,
 )
@@ -111,7 +113,7 @@ def main() -> int:
     srcs = module_file(args.module_path)
     raw_deps = [d for d in args.deps.split(",") if d]
     pyi_paths = [p for p in args.pyi_deps.split(",") if p]
-    dir_name = os.path.dirname(args.module_path)
+    dir_name = os.path.dirname(args.module_path) or package or "."
 
     if stem.endswith("_asm"):
         asm_content = generate_asm_content(dir_name, raw_deps)
@@ -122,6 +124,17 @@ def main() -> int:
             or read_text(args.module_path) != asm_content
         ):
             write_text(args.module_path, asm_content)
+
+    import_map, label_map, sibling_stems = build_module_resolution_map(
+        args.build_path, dir_name, raw_deps
+    )
+    if os.path.exists(args.module_path) and not stem.endswith("_asm"):
+        _, imported_cross_parts = rewrite_lib_imports(
+            args.module_path, dir_name, import_map, sibling_stems
+        )
+        for s in imported_cross_parts:
+            if s in label_map and label_map[s] not in raw_deps:
+                raw_deps.append(label_map[s])
 
     syntax_errors = check_syntax(args.module_path)
     if syntax_errors:

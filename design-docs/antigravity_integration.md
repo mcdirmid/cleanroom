@@ -210,7 +210,7 @@ flowchart TD
 
 * **Prefix Prompt Caching**: Modern frontier models (including Gemini) cache static prompt prefixes ($\ge 1024$ tokens). By keeping role subagents alive, their large static preambles (role instructions, framework stubs, domain guides) achieve high cache-hit ratios, reducing time-to-first-token (TTFT) and token consumption.
 * **Parallel Execution**: Because the Test Sub-Agent and Lib Sub-Agent both depend only on the `.pyi` grounding specification, the Coordinator can invoke them **concurrently in parallel**, cutting wall-clock authoring latency in half.
-* **Subsystem Lifecycles**: To prevent context rot from indefinite accumulation, role subagents are scoped to a **subsystem part** (e.g., `parts/agent`, `parts/sandbox`). They are initialized warm for that subsystem and recycled when moving to the next domain.
+* **Subsystem Lifecycles**: To prevent context rot from indefinite accumulation, role subagents are scoped to a **subsystem package** (e.g., `parts/agent`, `parts/sandbox`). They are initialized warm for that subsystem and recycled when moving to the next domain.
 
 ---
 
@@ -413,28 +413,31 @@ The agent immediately pivots to invoking `cleanroom_verify`, maintaining 100% co
 
 ---
 
-## 13. Formalizing Role vs. Part in Cleanroom & Bazel
+## 13. Formalizing Role vs. Unit in Cleanroom & Bazel
 
-To enable Antigravity to run role-based sub-agents over multiple components simultaneously, Cleanroom's macro architecture must formally decouple the concept of an **Engineering Role** from a software **Part** (component).
+To enable Antigravity to run role-based sub-agents over multiple components simultaneously, Cleanroom's macro architecture formally decouples the concept of an **Engineering Role** from a modular **Unit** (component).
 
 ### A. Core Ontological Definitions
 
-1. **Part (Component)**:
-   - A distinct functional module in the codebase (e.g., `agent_node_cleaner_impl`, `sandbox_guide_delivery_impl`).
-   - Defined by its artifacts: High-Level Spec (`high/*.md`), Grounding Spec (`grounding/*.pyi`), Implementation (`lib/*.py`), Test Suite (`tests/*_test.py`), and verification metadata.
-   - Relates to other parts via dependency edges (`module_deps`).
+1. **Unit (Component)**:
+   - A distinct functional module in the codebase (e.g., `dag_storage`, `dag_cleaner_impl`, `agent_node_cleaner_impl`).
+   - Defined by its artifacts: High-Level Spec (`high/*.md`), Grounding Spec (`grounding/*.pyi`), Implementation (`lib/*.py`), Test Suite (`tests/*_test.py`), and verification logs.
+   - **Unit Dependency Invariant**: A unit can **only** depend on other units (e.g. `unit_deps = [":dag_cleaner", ":dag_storage"]`). These unit dependencies are treated uniformly as `star_deps`.
+   - Has its own address and emits a `<unit>_unit_manifest.json`.
 
 2. **Role (Engineering Discipline)**:
-   - An independent actor in Cleanroom's verification methodology.
+   - An independent actor in Cleanroom's verification methodology (e.g., `high`, `low`, `lib`, `test`, `qa`, `coverage`).
+   - Has its own address and emits a `<role>_role_manifest.json`.
    - Defined by:
-     - **Guidance**: The authoritative guide document (e.g. `grounding_to_test.md`).
-     - **Context Boundaries**: Mechanical blindness rules (e.g. Test Author denied access to `lib/`).
-     - **Tool Capabilities**: Allowed native tools and required MCP verification tools.
-     - **Verification Invariant**: Gating criteria required to mark the task complete.
+     - **Role Dependencies**: Directed pipeline of roles ($D_{\text{roles}}$), where `low` depends on `high`, `lib` and `test` depend on `low`, `qa` depends on `test` and `lib`.
+     - **Cross-Role Channels**: Feedback channels (e.g. `qa` blames `lib` and `test`) and silent dependencies (e.g. `test` treats `lib` as silent).
+     - **Relative Source Pattern**: Specifies the source path pattern relative to the unit (e.g. `lib/{unit}.py`, `tests/{unit}_test.py`, `grounding/{unit}.pyi`, `high/{unit}.md`, `logs/{unit}_qa.log`).
+     - **Guidance & Verification**: Authoritative guide document and parameterized verification template.
+     - **Blindness Rules**: Mechanical confinement rules (e.g. Test Author denied access to `lib/`).
 
 ### B. The Canonical Role DAG
 
-Every part in Cleanroom is processed through an invariant virtual DAG of roles:
+Every unit in Cleanroom is processed through an invariant virtual DAG of roles:
 
 ```mermaid
 flowchart TD
@@ -452,16 +455,17 @@ flowchart TD
 * **Parallelism**: `_lib` and `_test` run concurrently and in mutual blindness.
 * **Refinement**: `_qa` arbitrates failures, formulating feedback targeted specifically to `_lib` or `_test`.
 
-### C. Shifting from `1:1` to `1:N`: The Multi-Part Role Execution Model
+### C. Shifting from `1:1` to `1:N`: The Multi-Unit Role Execution Model
 
-* **Current Model**: `Node = Role × Part (1:1)`
-  Each Bazel node in `update_python_with_ai.bzl` represents exactly one role applied to one part (e.g., `:agent_node_cleaner_impl_test`).
-* **Antigravity Multi-Part Model**: `Task = Role × List[Part] (1:N)`
-  A single persistent role sub-agent processes an entire batch of parts (e.g., all 10 components in `update_with_ai/parts/agent/`) under a single warm context.
+* **Cleanroom Model**: $\text{unit} \times \text{role} = \text{node}$ (`node = unit * role`)
+  Each Bazel node represents exactly one role applied to one unit (e.g., `:agent_node_cleaner_impl_test`).
+  By loading the manifests for the **unit** and the **role**, the runtime synthesizes all information previously baked into monolithic node manifests.
+* **Antigravity Multi-Unit Model**: $\text{task} = \text{role} \times \text{List}[\text{unit}] \;(1:N)$
+  A single persistent role sub-agent processes an entire batch of units (e.g., all units in `update_with_ai/parts/agent/`) under a single warm context.
 
-### D. Prompt Stratification: Node-Specific vs. Multi-Part Role Prompts
+### D. Prompt Stratification: Node-Specific vs. Multi-Unit Role Prompts
 
-To support both execution paradigms, prompts must be stratified into two layers:
+To support both execution paradigms, prompts are stratified into two layers:
 
 1. **Static Role Preamble (Cache-Friendly)**:
    - Establishes the agent's persona, methodology, guide rules, and blindness constraints.
@@ -474,56 +478,63 @@ To support both execution paradigms, prompts must be stratified into two layers:
      ```
 
 2. **Dynamic Task Payload**:
-   - **Single-Part Mode (Current CLI / Local Runner)**:
+   - **Single-Unit Mode (Current CLI / Local Runner)**:
      ```markdown
-     Target Part: agent_node_cleaner_impl
+     Target Unit: agent_node_cleaner_impl
      Grounding Spec: grounding/agent_node_cleaner_impl.pyi
      Output File: tests/agent_node_cleaner_impl_test.py
      Verify Target: //update_with_ai/parts/agent/tests:agent_node_cleaner_impl_test
      ```
-   - **Multi-Part Mode (Antigravity Role Sub-Agent)**:
+   - **Multi-Unit Mode (Antigravity Role Sub-Agent)**:
      ```markdown
      Target Package: update_with_ai/parts/agent
-     Parts in Topological Order:
+     Units in Topological Order:
        1. agent_loop_guard_impl
        2. agent_node_cleaner_impl
-     Instructions: For each part in sequence, inspect grounding/*.pyi, author tests/*_test.py, and verify via cleanroom_verify.
+     Instructions: For each unit in sequence, inspect grounding/*.pyi, author tests/*_test.py, and verify via cleanroom_verify.
      ```
 
-### E. Required Starlark & Bazel Refactoring (Pre-requisite Roadmap)
+### E. Cleaning Mechanics & Required Starlark Refactoring
 
-This work is generic Cleanroom infrastructure that can be implemented and validated in Bazel today before connecting to Antigravity:
+Cleaning requires specifying the role and node to clean up to via familiar target labels:
+```bash
+bazel run //update_with_ai/parts/dag:dag_cleaner_impl_lib_clean
+```
+Here, the unit is `dag_cleaner_impl` and the role is `lib`. The system loads the unit manifest and role manifest to ensure all prerequisites are clean.
 
-1. **Formalize Role Definitions in Starlark**:
-   Define declarative role structs in `update_python_with_ai.bzl` (`HLS_ROLE`, `LLS_ROLE`, `LIB_ROLE`, `TEST_ROLE`, `QA_ROLE`, `COVERAGE_ROLE`).
+1. **Separate Macros for Defining Roles and Units**:
+   - Role macro: defines `HLS_ROLE`, `LLS_ROLE`, `LIB_ROLE`, `TEST_ROLE`, `QA_ROLE`, `COVERAGE_ROLE` in `update_python_with_ai`.
+   - Unit macro: defines units (e.g. `dag_storage`, `dag_cleaner_impl`) and their `unit_deps` (treated as `star_deps`).
 2. **Package-Level Role Targets**:
-   In addition to generating individual `:name_test` and `:name_lib` nodes, the macro generates package-level role aggregation targets:
-   - `//update_with_ai/parts/agent:tests_clean` (Runs test role across all parts in `agent`)
-   - `//update_with_ai/parts/agent:lib_clean` (Runs lib role across all parts in `agent`)
-   - `//update_with_ai/parts/agent:qa_clean` (Runs QA arbiter across all parts in `agent`)
-3. **Role Manifests**:
-   Generate `_role_manifest.json` bundling the list of part manifests, shared guides, and blindness rules for consumption by both Cleanroom's Python runner and Antigravity's MCP server.
+   In addition to generating individual `:unit_role_clean` nodes, the macro generates package-level role aggregation targets:
+   - `//update_with_ai/parts/agent:tests_clean` (Runs test role across all units in `agent`)
+   - `//update_with_ai/parts/agent:lib_clean` (Runs lib role across all units in `agent`)
+   - `//update_with_ai/parts/agent:qa_clean` (Runs QA arbiter across all units in `agent`)
+3. **Role & Unit Manifests**:
+   Generate `_role_manifest.json` and `_unit_manifest.json` for consumption by both Cleanroom's Python runner and Antigravity's MCP server.
 
 ---
 
-## 14. The 2D Product DAG: Reconciling Part DAGs and Role DAGs
+## 14. The 2D Product DAG: Reconciling Unit DAGs and Role DAGs
 
 Cleanroom’s complete build graph is formally the **Tensor / Cartesian Product of two distinct DAGs**:
-$$D_{\text{nodes}} = D_{\text{parts}} \times D_{\text{roles}}$$
+$$D_{\text{nodes}} = D_{\text{units}} \times D_{\text{roles}}$$
 
-Where:
-* **$D_{\text{parts}}$ (Domain Architecture DAG)**: Directed dependencies between functional software modules (e.g., `agent_node_cleaner_impl` depends on `agent_loop_guard`, `agent_conversation`, and `agent_driver`).
+Where each node in the build graph is the product:
+$$\text{unit} \times \text{role} = \text{node}$$
+
+* **$D_{\text{units}}$ (Domain Architecture DAG)**: Directed dependencies between functional software modules (e.g., `agent_node_cleaner_impl` depends on `agent_loop_guard`, `agent_conversation`, and `agent_driver`).
 * **$D_{\text{roles}}$ (Verification Methodology DAG)**: Directed pipeline of engineering roles (`_high` $\rightarrow$ `_low` $\rightarrow$ `[_lib, _test]` $\rightarrow$ `_qa` $\rightarrow$ `_coverage`).
 
 ```mermaid
 flowchart TD
-    subgraph Part1 ["Part 1 (e.g., agent_loop_guard)"]
+    subgraph Unit1 ["Unit 1 (e.g., agent_loop_guard)"]
         H1["HLS_1"] --> L1["LLS_1"]
         L1 --> B1["Lib_1 / Test_1"]
         B1 --> Q1["QA_1"]
     end
 
-    subgraph Part2 ["Part 2 (e.g., agent_node_cleaner_impl)"]
+    subgraph Unit2 ["Unit 2 (e.g., agent_node_cleaner_impl)"]
         H2["HLS_2"] --> L2["LLS_2"]
         L2 --> B2["Lib_2 / Test_2"]
         B2 --> Q2["QA_2"]
@@ -536,29 +547,29 @@ flowchart TD
 
 ### A. Two Strategies for Traversing the 2D Grid
 
-#### 1. Diagonal / Part-First Traversal (Legacy Cleanroom CLI)
-- Finishes all roles for Part 1, then moves to Part 2.
+#### 1. Diagonal / Unit-First Traversal (Legacy Cleanroom CLI)
+- Finishes all roles for Unit 1, then moves to Unit 2.
 - **Flaw**: Trashes the model's attention window by continuously alternating personas (`high` $\rightarrow$ `low` $\rightarrow$ `lib` $\rightarrow$ `test` $\rightarrow$ `qa`) on every single node, causing massive cache misses and cold-start reasoning churn.
 
 #### 2. Columnar / Role-First Traversal (Antigravity Role Sub-Agents)
-- Executes across parts by **Role Column**:
+- Executes across units by **Role Column**:
   * **Stage 1 (HLS)**: Align all `high/*.md` files in the package.
   * **Stage 2 (Grounding)**: Align all `grounding/*.pyi` files in the package.
   * **Stage 3 (Concurrent Lib & Test)**:
     - **Test Sub-Agent**: Authors all `tests/*_test.py` across the package in parallel.
     - **Lib Sub-Agent**: Authors all `lib/*.py` across the package in parallel.
-  * **Stage 4 (QA Arbiter)**: Runs full test suite and coverage across all parts simultaneously.
+  * **Stage 4 (QA Arbiter)**: Runs full test suite and coverage across all units simultaneously.
 
-### B. Why Role-First Traversal Naturally Enforces Part Dependencies
+### B. Why Role-First Traversal Naturally Enforces Unit Dependencies
 
-When an agent operates in **Columnar / Role-First mode**, the orchestrator does not need to micromanage individual part transitions because **the Part DAG is already hard-encoded into the source artifacts**:
+When an agent operates in **Columnar / Role-First mode**, the orchestrator does not need to micromanage individual unit transitions because **the Unit DAG is already hard-encoded into the source artifacts**:
 
 1. **Explicit Spec Declarations**:
    - In HLS: `imports: agent_loop_guard, agent_driver`
    - In Grounding: `from . import agent_loop_guard`
    - In Bazel: `deps = ["//update_with_ai/parts/agent:agent_loop_guard"]`
 2. **Deterministic Compiler Gating**:
-   - If a Lib Author attempts to import a sibling component that is present in the workspace but *not* a declared dependency of that specific part:
+   - If a Lib Author attempts to import a sibling component that is present in the workspace but *not* a declared dependency of that specific unit:
      - The Pyright type checker and Cleanroom `lib_lint.py` immediately flag a compile/lint failure: `Import of undeclared dependency 'foo' not in target deps`.
    - The sub-agent receives the exact diagnostic via `cleanroom_verify` and corrects itself without the orchestrator needing to hold its hand.
 
@@ -572,18 +583,18 @@ When an agent operates in **Columnar / Role-First mode**, the orchestrator does 
 
 ### D. The Two-Dimensional Dependency Invariant
 
-Formally, for any part $X$ and role $Y$, node $(X, Y)$ is gated by two orthogonal dependency invariants:
+Formally, for any unit $X$ and role $Y$, node $(X, Y) = X \times Y$ is gated by two orthogonal dependency invariants:
 
-$$\text{Predecessors}((X, Y)) = \underbrace{\{(A, Y) \mid A \in \text{deps}_{\text{parts}}(X)\}}_{\text{Part-Level Invariant}} \;\cup\; \underbrace{\{(X, W) \mid W \in \text{deps}_{\text{roles}}(Y)\}}_{\text{Role-Level Invariant}}$$
+$$\text{Predecessors}((X, Y)) = \underbrace{\{(A, Y) \mid A \in \text{deps}_{\text{units}}(X)\}}_{\text{Unit-Level Invariant}} \;\cup\; \underbrace{\{(X, W) \mid W \in \text{deps}_{\text{roles}}(Y)\}}_{\text{Role-Level Invariant}}$$
 
-1. **Part-Level Dependency Invariant**:
-   $$\forall A \in \text{deps}_{\text{parts}}(X), \quad (A, Y) \prec (X, Y)$$
-   *Rule*: The upstream part dependencies $A$ of $X$ must complete role $Y$ before $X$ can complete role $Y$.
+1. **Unit-Level Dependency Invariant**:
+   $$\forall A \in \text{deps}_{\text{units}}(X), \quad (A, Y) \prec (X, Y)$$
+   *Rule*: The upstream unit dependencies $A$ of $X$ must complete role $Y$ before $X$ can complete role $Y$.
    *Example*: Before `agent_node_cleaner_impl` can finish its **Grounding** (`.pyi`), its prerequisite `agent_loop_guard` must have already finished its **Grounding** (`.pyi`), because the former imports symbols from the latter.
 
 2. **Role-Level Dependency Invariant**:
    $$\forall W \in \text{deps}_{\text{roles}}(Y), \quad (X, W) \prec (X, Y)$$
-   *Rule*: Part $X$ must complete all upstream role prerequisites $W$ of $Y$ before $X$ can complete role $Y$.
+   *Rule*: Unit $X$ must complete all upstream role prerequisites $W$ of $Y$ before $X$ can complete role $Y$.
    *Example*: Before `agent_node_cleaner_impl` can finish its **Grounding** (`.pyi`), `agent_node_cleaner_impl` must have already completed its **High-Level Spec** (`.md`).
 
 ### E. How Columnar Execution Satisfies Both Invariants
@@ -591,10 +602,10 @@ $$\text{Predecessors}((X, Y)) = \underbrace{\{(A, Y) \mid A \in \text{deps}_{\te
 Columnar (Role-First) traversal satisfies this 2D dependency invariant with mathematical perfection:
 
 1. **Role Invariant is Globally Satisfied**:
-   Because column $W$ (e.g. HLS) is completed in its entirety before column $Y$ (e.g. LLS) begins, **every single part has already satisfied its role prerequisites**.
-2. **Part Invariant is Satisfied via In-Column Topological Sorting**:
-   Within the active role column $Y$, the sub-agent does not process parts arbitrarily; it processes them in **topological order of the Part DAG**:
-   - Leaf parts (with no unresolved dependencies) are processed first.
+   Because column $W$ (e.g. HLS) is completed in its entirety before column $Y$ (e.g. LLS) begins, **every single unit has already satisfied its role prerequisites**.
+2. **Unit Invariant is Satisfied via In-Column Topological Sorting**:
+   Within the active role column $Y$, the sub-agent does not process units arbitrarily; it processes them in **topological order of the Unit DAG**:
+   - Leaf units (with no unresolved dependencies) are processed first.
    - Downstream consumers are processed only after their imported dependencies are complete.
 3. **Result**: The role sub-agent retains **100% prompt cache warmth** and persona focus throughout its entire run, while satisfying all structural build dependencies across both axes.
 
@@ -604,7 +615,7 @@ Columnar (Role-First) traversal satisfies this 2D dependency invariant with math
 
 While the initial authoring of specifications and code follows topological ordering across columns, Cleanroom's real-world execution is **fundamentally non-sequential and reactive**:
 * **Lib and Test roles run concurrently**.
-* **QA Arbiter executes reactively** as soon as any part's `(lib, test)` pair is materialized.
+* **QA Arbiter executes reactively** as soon as any unit's `(lib, test)` pair is materialized.
 * **Test failures generate asynchronous feedback**, requiring sub-agents to interrupt or interleave fixes with subsequent authoring tasks.
 
 ```mermaid
@@ -628,7 +639,7 @@ flowchart TD
     TestAgent -->|"4. Fix committed"| QA
     LibAgent -->|"4. Fix committed"| QA
     
-    QA -->|"5. Tests PASS"| Coord["Coordinator<br/>(Mark Part 1 Clean)"]
+    QA -->|"5. Tests PASS"| Coord["Coordinator<br/>(Mark Unit 1 Clean)"]
 ```
 
 ### A. Sub-Agent Communication: The Native Antigravity Message Bus
@@ -657,9 +668,9 @@ Cleanroom prevents this by enforcing a **Triangulated Communication Topology**:
 
 ### C. Quota Protection: Bounding Feedback Iterations
 Every feedback loop consumes model turns under your Google One Ultra 5-hour quota. To prevent runaway diagnostic spiral:
-1. **Feedback Iteration Ceiling**: A maximum of **2 feedback iterations** is permitted per part.
-2. **Escalation on Repeated Failure**: If a part fails verification on the second retry:
-   - The QA Arbiter halts the sub-agents for that part.
+1. **Feedback Iteration Ceiling**: A maximum of **2 feedback iterations** is permitted per unit.
+2. **Escalation on Repeated Failure**: If a unit fails verification on the second retry:
+   - The QA Arbiter halts the sub-agents for that unit.
    - The node is marked `DIRTY` in Cleanroom DAG storage.
    - The Coordinator alerts the human user in the primary IDE chat with compiler diagnostics, preserving quota and allowing manual steering.
 
@@ -667,13 +678,13 @@ Every feedback loop consumes model turns under your Google One Ultra 5-hour quot
 
 ## 16. Asset Submission Protocol (`submit`) & QA Reaction Loop
 
-To decouple continuous authoring from verification gating in multi-part role agents, the system introduces an **Asset-Level Submission Protocol**:
+To decouple continuous authoring from verification gating in multi-unit role agents, the system introduces an **Asset-Level Submission Protocol**:
 
 ### A. The Verification & Submission Contract
 Instead of a single monolithic `finish` tool, role sub-agents operate with two fine-grained primitives:
 
 1. **`run_checks(target_node)`**:
-   - Runs the local verification target for a specific part (e.g. `agent_node_cleaner_impl_lib_type_check` or spec linter).
+   - Runs the local verification target for a specific unit (e.g. `agent_node_cleaner_impl_lib_type_check` or spec linter).
    - The verification engine tracks the verification status of each asset in memory alongside file revision hashes:
      `status[target_node] = "PASS" | "FAIL"`
 2. **`submit(target_node, change_message)`**:
@@ -693,49 +704,49 @@ This ensures that files are never left in a half-written, corrupt state due to i
 
 ## 17. Multi-Model Portability: DeepSeek V4.1 Flash & Local Testing
 
-Because this Role-First, Multi-Part architecture is implemented as generic Cleanroom infrastructure, it is not coupled to Antigravity:
+Because this Role-First, Multi-Unit architecture is implemented as generic Cleanroom infrastructure, it is not coupled to Antigravity:
 
 ### A. Testing on DeepSeek V4.1 Flash & Local Models First
-Before deploying multi-part role pipelines to Antigravity (where mistakes consume Google One Ultra quota), the architecture can be staged, tested, and benchmarked on:
+Before deploying multi-unit role pipelines to Antigravity (where mistakes consume Google One Ultra quota), the architecture can be staged, tested, and benchmarked on:
 * **DeepSeek V4.1 Flash**: Fast, frontier-class code generation with extensive reasoning capabilities and low token costs.
 * **Local Models (`localhost:8000`)**: Local quantization models (e.g. `qwen-moe-q4`, `coder-next`) via Cleanroom's existing `model_config.bzl`.
 
 ### B. Validation Objectives on Local / Flash Models
-1. **Verify Role Manifest Schemas**: Validate that Starlark correctly emits `_role_manifest.json` for multi-part batches.
-2. **Benchmark Batching Efficiency**: Measure whether authoring 3–5 parts in one session preserves cache warmth and reduces overall token consumption compared to 1:1 node runs.
+1. **Verify Role Manifest Schemas**: Validate that Starlark correctly emits `_role_manifest.json` for multi-unit batches.
+2. **Benchmark Batching Efficiency**: Measure whether authoring 3–5 units in one session preserves cache warmth and reduces overall token consumption compared to 1:1 node runs.
 3. **Validate Blame Attribution**: Confirm that the QA Arbiter reliably attributes test vs. lib blame without human intervention.
 
 ---
 
-## 18. Single-Part vs. Multi-Part Duality & Stepped Guide Mode
+## 18. Single-Unit vs. Multi-Unit Duality & Stepped Guide Mode
 
-The architecture unifies single-part and multi-part executions under a single mathematical model, with one key behavioral distinction: **Guide Section Stepping**.
+The architecture unifies single-unit and multi-unit executions under a single mathematical model, with one key behavioral distinction: **Guide Section Stepping**.
 
 ```mermaid
 flowchart TD
-    Task["Cleanroom Role Task"] --> Check{"Part Batch Size"}
+    Task["Cleanroom Role Task"] --> Check{"Unit Batch Size"}
     
-    Check -->|"N = 1 (Single Part)"| SingleMode["Single-Part Mode<br/>- Guide Section Stepping (Optional)<br/>- Step 1 -> Verify -> Step 2<br/>- Fine-grained milestone guidance"]
-    Check -->|"N > 1 (Multi-Part Batch)"| MultiMode["Multi-Part Mode<br/>- Reference Guide Delivery (Whole Guide)<br/>- Part 1 -> Submit -> Part 2 -> Submit<br/>- Stepping per Part, not per Milestone"]
+    Check -->|"N = 1 (Single Unit)"| SingleMode["Single-Unit Mode<br/>- Guide Section Stepping (Optional)<br/>- Step 1 -> Verify -> Step 2<br/>- Fine-grained milestone guidance"]
+    Check -->|"N > 1 (Multi-Unit Batch)"| MultiMode["Multi-Unit Mode<br/>- Reference Guide Delivery (Whole Guide)<br/>- Unit 1 -> Submit -> Unit 2 -> Submit<br/>- Stepping per Unit, not per Milestone"]
 ```
 
 ### A. $N = 1$ is a Special Case of $1:N$
-A single-part run is simply a batch of size 1. All role preambles, `run_checks`, and `submit` protocols apply identically.
+A single-unit run is simply a batch of size 1. All role preambles, `run_checks`, and `submit` protocols apply identically.
 
 ### B. Guide Section Stepping Duality
-* **In Multi-Part Mode ($N > 1$)**:
-  - Stepping through micro-sections of a guide across multiple parts simultaneously causes cognitive fragmentation.
+* **In Multi-Unit Mode ($N > 1$)**:
+  - Stepping through micro-sections of a guide across multiple units simultaneously causes cognitive fragmentation.
   - The guide is delivered as a **whole reference specification** (e.g., the complete `grounding_to_lib.md` rules).
-  - Stepping occurs **per part** (author Part 1 $\rightarrow$ `run_checks` $\rightarrow$ `submit` $\rightarrow$ author Part 2...).
-* **In Single-Part Mode ($N = 1$)**:
+  - Stepping occurs **per unit** (author Unit 1 $\rightarrow$ `run_checks` $\rightarrow$ `submit` $\rightarrow$ author Unit 2...).
+* **In Single-Unit Mode ($N = 1$)**:
   - Fine-grained **Guide Section Stepping** (`sandbox_guide_delivery_impl.md`) remains an active option via `allows_step_mode = True`.
   - For complex, difficult refactorings or initial implementations, the agent can be guided milestone-by-milestone through the task with gated verification checkpoints.
 
 ### C. Dynamic Escalation: Fallback to Dedicated Step-Mode Sub-Agent
-If a specific part struggles or fails repeated verification during multi-part batch execution (even with a frontier model):
-* The Coordinator can dynamically carve out the problematic part from the batch.
-* It spawns a dedicated single-part sub-agent assigned exclusively to that part in **Stepped Guide Mode** (`allows_step_mode = True`).
-* This slows the agent down, forcing incremental, milestone-by-milestone verification checkpoints and concentrated reasoning on the difficult logic until tests pass, after which the part is re-integrated into the main pipeline.
+If a specific unit struggles or fails repeated verification during multi-unit batch execution (even with a frontier model):
+* The Coordinator can dynamically carve out the problematic unit from the batch.
+* It spawns a dedicated single-unit sub-agent assigned exclusively to that unit in **Stepped Guide Mode** (`allows_step_mode = True`).
+* This slows the agent down, forcing incremental, milestone-by-milestone verification checkpoints and concentrated reasoning on the difficult logic until tests pass, after which the unit is re-integrated into the main pipeline.
 
 
 

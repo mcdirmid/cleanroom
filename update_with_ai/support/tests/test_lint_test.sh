@@ -361,5 +361,62 @@ else
     fi
 fi
 
+# Case 16: test file with bare target import and cross-part import -> rewritten and added to pyright_deps.
+mkdir -p "$tmp/c16/lib" "$tmp/c16/tests"
+cat > "$tmp/c16/lib/widget_impl.py" <<'EOF'
+class Widget:
+    pass
+EOF
+cat > "$tmp/c16/tests/widget_impl_test.py" <<'EOF'
+import unittest
+from widget_impl import Widget
+from dag_storage import DagStorage
+
+class WidgetTest(unittest.TestCase):
+    def test_basic(self):
+        w = Widget()
+        self.assertIsNotNone(w)
+
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c16" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/widget_impl_test.py --lib-pkg lib --deps //update_with_ai/parts/dag/lib:dag_storage ); then
+    echo "PASS: c16 accepted and rewrote bare target and cross-part imports"
+else
+    echo "FAIL: c16 expected success with import rewriting" >&2
+    fail=1
+fi
+check "c16 rewritten target import" "$tmp/c16/tests/widget_impl_test.py" 'from lib\.widget_impl import Widget'
+check "c16 rewritten cross-part import" "$tmp/c16/tests/widget_impl_test.py" 'from update_with_ai\.parts\.dag\.lib\.dag_storage import DagStorage'
+check "c16 cross-part dep in BUILD" "$tmp/c16/tests/BUILD.bazel" '"//update_with_ai/parts/dag/lib:dag_storage"'
+
+# Case 17: lifecycle import in test -> rewritten to support.lib.lifecycle.
+mkdir -p "$tmp/c17/lib" "$tmp/c17/tests"
+cat > "$tmp/c17/lib/widget_impl.py" <<'EOF'
+class Widget:
+    pass
+EOF
+cat > "$tmp/c17/tests/widget_impl_test.py" <<'EOF'
+import unittest
+from lib.widget_impl import Widget
+from lifecycle import LifecycleRegistry
+
+class WidgetTest(unittest.TestCase):
+    def test_lifecycle(self):
+        reg = LifecycleRegistry()
+        self.assertIsNotNone(reg)
+
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c17" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/widget_impl_test.py --lib-pkg lib ); then
+    echo "PASS: c17 accepted and rewrote lifecycle import in test"
+else
+    echo "FAIL: c17 expected success with test lifecycle rewriting" >&2
+    fail=1
+fi
+check "c17 rewritten lifecycle" "$tmp/c17/tests/widget_impl_test.py" 'from support\.lib\.lifecycle import LifecycleRegistry'
+check "c17 lifecycle in BUILD" "$tmp/c17/tests/BUILD.bazel" '"//update_python_with_ai/support/lib:lifecycle"'
+
 exit "$fail"
 

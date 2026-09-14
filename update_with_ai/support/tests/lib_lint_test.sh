@@ -109,7 +109,7 @@ mkdir -p "$tmp/c5/lib"
 check "c5 target" "$tmp/c5/lib/BUILD.bazel" 'name = "module5"'
 check "c5 empty deps" "$tmp/c5/lib/BUILD.bazel" 'pyright_deps = \[\]'
 
-# Case 6: non-relative sibling import -> rejected with error.
+# Case 6: non-relative sibling import -> rewritten to relative syntax and accepted.
 mkdir -p "$tmp/c6/lib"
 cat > "$tmp/c6/lib/sibling.py" <<'EOF'
 class Sibling:
@@ -118,12 +118,14 @@ EOF
 cat > "$tmp/c6/lib/main.py" <<'EOF'
 from sibling import Sibling
 EOF
-if ( cd "$tmp/c6" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/main.py 2>/dev/null ); then
-    echo "FAIL: c6 expected failure when sibling imported without dot" >&2
-    fail=1
+if ( cd "$tmp/c6" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/main.py ); then
+    echo "PASS: c6 rewrote and accepted non-relative sibling import"
 else
-    echo "PASS: c6 rejected non-relative sibling import"
+    echo "FAIL: c6 expected success after rewriting non-relative sibling import" >&2
+    fail=1
 fi
+check "c6 rewritten to relative" "$tmp/c6/lib/main.py" 'from \.sibling import Sibling'
+
 
 # Case 7: relative sibling import -> accepted.
 mkdir -p "$tmp/c7/lib"
@@ -370,5 +372,39 @@ else
         fail=1
     fi
 fi
+
+# Case 19: cross-part import -> rewritten to full package path and added to pyright_deps.
+mkdir -p "$tmp/c19/lib"
+cat > "$tmp/c19/lib/consumer.py" <<'EOF'
+from dag_storage import DagStorage
+
+class Consumer:
+    def __init__(self, s: DagStorage) -> None:
+        self.s = s
+EOF
+if ( cd "$tmp/c19" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/consumer.py --deps //update_with_ai/parts/dag/lib:dag_storage ); then
+    echo "PASS: c19 accepted and rewrote cross-part import"
+else
+    echo "FAIL: c19 expected success with cross-part import rewriting" >&2
+    fail=1
+fi
+check "c19 rewritten import" "$tmp/c19/lib/consumer.py" 'from update_with_ai\.parts\.dag\.lib\.dag_storage import DagStorage'
+check "c19 dep in BUILD" "$tmp/c19/lib/BUILD.bazel" '"//update_with_ai/parts/dag/lib:dag_storage"'
+
+# Case 20: lifecycle import -> rewritten to support.lib.lifecycle.
+mkdir -p "$tmp/c20/lib"
+cat > "$tmp/c20/lib/init_module.py" <<'EOF'
+from lifecycle import LifecycleRegistry
+
+def __initialize__(registry: LifecycleRegistry) -> None:
+    pass
+EOF
+if ( cd "$tmp/c20" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/init_module.py ); then
+    echo "PASS: c20 accepted and rewrote lifecycle import"
+else
+    echo "FAIL: c20 expected success with lifecycle import rewriting" >&2
+    fail=1
+fi
+check "c20 rewritten lifecycle" "$tmp/c20/lib/init_module.py" 'from support\.lib\.lifecycle import LifecycleRegistry'
 
 exit "$fail"

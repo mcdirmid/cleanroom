@@ -32,7 +32,7 @@ The module defines clean Python runtime types and implementations realizing the 
 
 ## Imports
 
-- [ ] Sibling-module imports within the library package use relative form (`from .widget import Widget, WidgetConfig`)
+- [ ] Sibling-module imports within the library package use relative form (`from .widget import Widget, WidgetConfig`); non-relative sibling imports and cross-part imports are auto-normalized by the library linter
 - [ ] Every imported module and symbol is referenced in the module's AST; unused imports are prohibited
 - [ ] The types the module uses are imported from their owning interface modules, never redefined
 - [ ] Library modules must not import from `framework`
@@ -73,7 +73,7 @@ The module defines clean Python runtime types and implementations realizing the 
 
 ## Lint checks
 
-- [ ] Sibling-module imports use relative form within the package (`from .widget import ...`)
+- [ ] Sibling-module imports use relative form within the package (`from .widget import ...`; non-relative sibling imports are auto-normalized to relative form, and cross-part imports are auto-normalized to full package paths)
 - [ ] Non-assembly library modules must not import from any implementation module (`*_impl.py`) or assembly module (`*_asm.py`)
 - [ ] Library modules must not import from `framework`
 - [ ] Dataclasses in library modules must not declare `def __init__` or `@property` stubs

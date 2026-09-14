@@ -291,7 +291,10 @@ def _new_target(
     target_deps: Optional[Sequence[str]] = None,
 ) -> str:
     """A new rule block: name, srcs, deps (external deps), pyright_deps (the known deps), and public visibility."""
-    want = ["//" + package + ":" + d for d in deps]
+    want = [
+        d if d.startswith("//") else ("//" + package + ":" + d.lstrip(":"))
+        for d in deps
+    ]
     rendered_deps = _render_expr_list(target_deps or [])
     if rule == "pyright_test":
         target_str = (
@@ -999,11 +1002,18 @@ def check_test_dry_run(lib_pkg: str, module_path: str) -> list[str]:
     test_dir = os.path.dirname(module_path) or "."
     mod_stem = os.path.splitext(os.path.basename(module_path))[0]
 
+    repo_root = str(Path(__file__).resolve().parents[3])
+    py_ai_dir = os.path.join(repo_root, "update_python_with_ai")
+    ai_dir = os.path.join(repo_root, "update_with_ai")
+
     cmd = [
         sys.executable,
         "-c",
         (
             f"import sys, os, unittest; "
+            f"sys.path.insert(0, os.path.abspath('{repo_root}')); "
+            f"sys.path.insert(0, os.path.abspath('{py_ai_dir}')); "
+            f"sys.path.insert(0, os.path.abspath('{ai_dir}')); "
             f"sys.path.insert(0, os.path.abspath('.')); "
             f"sys.path.insert(0, os.path.abspath('update_python_with_ai')); "
             f"sys.path.insert(0, os.path.abspath('update_with_ai')); "
@@ -1209,3 +1219,468 @@ def check_dead_code(module_path: str) -> list[str]:
             )
 
     return errors
+
+
+def build_module_resolution_map(
+    build_path: str,
+    modules_dir: str,
+    deps: Sequence[str],
+) -> tuple[dict[str, str], dict[str, str], set[str]]:
+    """Build resolution maps for imports in lib and test modules.
+
+    Returns:
+        (import_map, label_map, sibling_stems) where:
+        - import_map maps module stem (e.g. 'dag_storage') to full Python module path
+          (e.g. 'update_with_ai.parts.dag.lib.dag_storage')
+        - label_map maps module stem to Bazel target label
+          (e.g. '//update_with_ai/parts/dag/lib:dag_storage')
+        - sibling_stems is a set of module names residing in modules_dir
+    """
+    import_map: dict[str, str] = {}
+    label_map: dict[str, str] = {}
+    sibling_stems: set[str] = set()
+
+    # 1. Standard lifecycle
+    import_map["lifecycle"] = "support.lib.lifecycle"
+    label_map["lifecycle"] = "//update_python_with_ai/support/lib:lifecycle"
+
+    # 2. Local package directory (modules_dir)
+    if os.path.isdir(modules_dir):
+        pkg_prefix = modules_dir.replace("/", ".").lstrip(".")
+        if pkg_prefix.startswith("testing.parts."):
+            pkg_prefix = "update_with_ai." + pkg_prefix[len("testing.") :]
+        pkg_label = modules_dir.lstrip("./").rstrip("/")
+        for fname in os.listdir(modules_dir):
+            if fname.endswith(".py") and fname != "__init__.py":
+                stem = fname[:-3]
+                sibling_stems.add(stem)
+                import_map[stem] = f"{pkg_prefix}.{stem}" if pkg_prefix else stem
+                label_map[stem] = f"//{pkg_label}:{stem}" if pkg_label else f":{stem}"
+
+    # 3. Explicit deps passed from caller
+    for d in deps:
+        d = d.strip()
+        if not d or d.endswith("_ext"):
+            continue
+        if d.startswith("//"):
+            raw = d[2:]
+            if ":" in raw:
+                pkg, target = raw.split(":", 1)
+            else:
+                pkg = raw
+                target = os.path.basename(raw)
+            import_map[target] = f"{pkg.replace('/', '.')}.{target}"
+            label_map[target] = d
+        else:
+            stem = d.split(":")[-1]
+            if stem not in import_map:
+                pkg_prefix = modules_dir.replace("/", ".").lstrip(".")
+                if pkg_prefix.startswith("testing.parts."):
+                    pkg_prefix = "update_with_ai." + pkg_prefix[len("testing.") :]
+                pkg_label = modules_dir.lstrip("./").rstrip("/")
+                import_map[stem] = f"{pkg_prefix}.{stem}" if pkg_prefix else stem
+                label_map[stem] = f"//{pkg_label}:{stem}" if pkg_label else f":{stem}"
+
+    # 4. Existing pyright_deps in build_path
+    if os.path.isfile(build_path):
+        try:
+            btext = read_text(build_path)
+            for m in re.finditer(r'"(//[^"]+)"', btext):
+                label = m.group(1)
+                raw = label[2:]
+                if ":" in raw:
+                    pkg, target = raw.split(":", 1)
+                else:
+                    pkg = raw
+                    target = os.path.basename(raw)
+                if target not in import_map:
+                    if target == "lifecycle":
+                        import_map[target] = "support.lib.lifecycle"
+                    else:
+                        import_map[target] = f"{pkg.replace('/', '.')}.{target}"
+                    label_map[target] = label
+        except OSError:
+            pass
+
+    # 5. Global discovery across update_with_ai/parts/*/lib/*.py
+    parts_dir = None
+    for candidate in [
+        Path("update_with_ai/parts"),
+        Path(__file__).resolve().parent.parent.parent.parent
+        / "update_with_ai"
+        / "parts",
+        Path("parts"),
+    ]:
+        if candidate.is_dir():
+            parts_dir = candidate
+            break
+
+    if parts_dir:
+        for p in parts_dir.glob("*/lib/*.py"):
+            if p.name != "__init__.py" and p.is_file():
+                stem = p.stem
+                if stem not in import_map:
+                    domain = p.parent.parent.name
+                    import_map[stem] = f"update_with_ai.parts.{domain}.lib.{stem}"
+                    label_map[stem] = f"//update_with_ai/parts/{domain}/lib:{stem}"
+
+    return import_map, label_map, sibling_stems
+
+
+def rewrite_test_imports(
+    file_path: str,
+    import_map: dict[str, str],
+) -> tuple[bool, list[str]]:
+    """Rewrite test module imports to use full package paths.
+
+    Returns:
+        (changed, imported_target_stems)
+    """
+    if not os.path.isfile(file_path):
+        return False, []
+    try:
+        content = read_text(file_path)
+        tree = ast.parse(content, filename=file_path)
+    except (OSError, SyntaxError):
+        return False, []
+
+    imported_stems: list[str] = []
+    replacements: list[tuple[int, str, str, str]] = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            dots = "." * node.level
+            if node.module:
+                target_stem: Optional[str] = None
+                if node.module in import_map:
+                    target_stem = node.module
+                elif node.module.startswith("lib.") and node.module[4:] in import_map:
+                    target_stem = node.module[4:]
+                elif node.module.startswith("testing.parts."):
+                    last = node.module.split(".")[-1]
+                    if last in import_map:
+                        target_stem = last
+                else:
+                    last = node.module.split(".")[-1]
+                    if last in import_map and node.module == import_map[last]:
+                        imported_stems.append(last)
+
+                if target_stem:
+                    imported_stems.append(target_stem)
+                    new_mod = import_map[target_stem]
+                    old_mod = f"{dots}{node.module}"
+                    if old_mod != new_mod:
+                        replacements.append((node.lineno, "from", old_mod, new_mod))
+            elif node.level > 0:
+                for alias in node.names:
+                    if alias.name in import_map:
+                        imported_stems.append(alias.name)
+                        new_mod = import_map[alias.name]
+                        replacements.append(
+                            (node.lineno, "from_rel", alias.name, new_mod)
+                        )
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                target_stem = None
+                if alias.name in import_map:
+                    target_stem = alias.name
+                elif alias.name.startswith("lib.") and alias.name[4:] in import_map:
+                    target_stem = alias.name[4:]
+                elif alias.name.startswith("testing.parts."):
+                    last = alias.name.split(".")[-1]
+                    if last in import_map:
+                        target_stem = last
+                else:
+                    last = alias.name.split(".")[-1]
+                    if last in import_map and alias.name == import_map[last]:
+                        imported_stems.append(last)
+
+                if target_stem:
+                    imported_stems.append(target_stem)
+                    new_mod = import_map[target_stem]
+                    if alias.name != new_mod:
+                        replacements.append(
+                            (node.lineno, "import", alias.name, new_mod)
+                        )
+
+    if not replacements:
+        return False, imported_stems
+
+    lines = content.splitlines(keepends=True)
+    changed = False
+
+    for lineno, kind, old_val, new_val in replacements:
+        if 1 <= lineno <= len(lines):
+            line = lines[lineno - 1]
+            if kind == "from":
+                pattern = re.compile(
+                    r"^(\s*from\s+)" + re.escape(old_val) + r"(\s+import\b)"
+                )
+                new_line = pattern.sub(r"\g<1>" + new_val + r"\2", line)
+                if new_line != line:
+                    lines[lineno - 1] = new_line
+                    changed = True
+            elif kind == "from_rel":
+                pattern = re.compile(
+                    r"^(\s*from\s+\.\s+import\s+)" + re.escape(old_val) + r"(\b)"
+                )
+                new_line = pattern.sub(f"from {new_val} import {old_val}", line)
+                if new_line != line:
+                    lines[lineno - 1] = new_line
+                    changed = True
+            elif kind == "import":
+                stem = old_val.split(".")[-1]
+                pattern_as = re.compile(
+                    r"^(\s*import\s+)" + re.escape(old_val) + r"(\s+as\s+\w+)"
+                )
+                new_line = pattern_as.sub(r"\g<1>" + new_val + r"\2", line)
+                if new_line == line:
+                    pattern_bare = re.compile(
+                        r"^(\s*import\s+)" + re.escape(old_val) + r"(\s*(?:#.*)?$)"
+                    )
+                    new_line = pattern_bare.sub(
+                        r"\g<1>" + new_val + f" as {stem}" + r"\2", line
+                    )
+                if new_line != line:
+                    lines[lineno - 1] = new_line
+                    changed = True
+
+    if changed:
+        write_text(file_path, "".join(lines))
+
+    return changed, imported_stems
+
+
+def rewrite_lib_imports(
+    file_path: str,
+    modules_dir: str,
+    import_map: dict[str, str],
+    sibling_stems: set[str],
+) -> tuple[bool, list[str]]:
+    """Rewrite library module imports to standard relative or cross-part forms.
+
+    - Sibling modules (in sibling_stems) are rewritten to relative syntax:
+      `from . import <sibling>` or `from .<sibling> import ...`
+    - Lifecycle is rewritten to `from support.lib.lifecycle import ...`
+    - Cross-part modules are rewritten to:
+      `from update_with_ai.parts.<domain>.lib import <mod>` or
+      `from update_with_ai.parts.<domain>.lib.<mod> import ...`
+
+    Returns:
+        (changed, imported_cross_part_stems)
+    """
+    if not os.path.isfile(file_path):
+        return False, []
+    try:
+        content = read_text(file_path)
+        tree = ast.parse(content, filename=file_path)
+    except (OSError, SyntaxError):
+        return False, []
+
+    imported_cross_parts: list[str] = []
+    replacements: list[tuple[int, str, str, str]] = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                m = alias.name[4:] if alias.name.startswith("lib.") else alias.name
+                last = alias.name.split(".")[-1]
+                if m in sibling_stems or last in sibling_stems:
+                    sib = m if m in sibling_stems else last
+                    replacements.append(
+                        (node.lineno, "import_sibling", alias.name, sib)
+                    )
+                elif m == "lifecycle" or last == "lifecycle":
+                    replacements.append(
+                        (
+                            node.lineno,
+                            "import_lifecycle",
+                            alias.name,
+                            "support.lib.lifecycle",
+                        )
+                    )
+                elif m in import_map:
+                    imported_cross_parts.append(m)
+                    full = import_map[m]
+                    domain_pkg = full.rsplit(".", 1)[0]
+                    replacements.append(
+                        (
+                            node.lineno,
+                            "import_cross",
+                            alias.name,
+                            f"from {domain_pkg} import {m}",
+                        )
+                    )
+                elif last in import_map:
+                    imported_cross_parts.append(last)
+                    full = import_map[last]
+                    domain_pkg = full.rsplit(".", 1)[0]
+                    replacements.append(
+                        (
+                            node.lineno,
+                            "import_cross",
+                            alias.name,
+                            f"from {domain_pkg} import {last}",
+                        )
+                    )
+                else:
+                    if last in import_map and alias.name.startswith(
+                        "update_with_ai.parts."
+                    ):
+                        imported_cross_parts.append(last)
+
+        elif isinstance(node, ast.ImportFrom):
+            dots = "." * node.level
+            if node.level == 1 and not node.module:
+                for alias in node.names:
+                    foo = alias.name
+                    if foo in sibling_stems:
+                        pass
+                    elif foo == "lifecycle":
+                        replacements.append(
+                            (
+                                node.lineno,
+                                "from_rel_lifecycle",
+                                foo,
+                                "support.lib.lifecycle",
+                            )
+                        )
+                    elif foo in import_map:
+                        imported_cross_parts.append(foo)
+                        full = import_map[foo]
+                        domain_pkg = full.rsplit(".", 1)[0]
+                        replacements.append(
+                            (
+                                node.lineno,
+                                "from_rel_cross",
+                                foo,
+                                f"from {domain_pkg} import {foo}",
+                            )
+                        )
+            elif node.level == 1 and node.module:
+                m = node.module
+                if m in sibling_stems:
+                    pass
+                elif m == "lifecycle":
+                    replacements.append(
+                        (node.lineno, "from_dot_mod", m, "support.lib.lifecycle")
+                    )
+                elif m in import_map:
+                    imported_cross_parts.append(m)
+                    full = import_map[m]
+                    replacements.append((node.lineno, "from_dot_mod", m, full))
+            elif node.level == 0 and node.module:
+                m = node.module[4:] if node.module.startswith("lib.") else node.module
+                last = node.module.split(".")[-1]
+                if m in sibling_stems or (
+                    last in sibling_stems
+                    and node.module.startswith("update_with_ai.parts.")
+                ):
+                    sib = m if m in sibling_stems else last
+                    replacements.append(
+                        (node.lineno, "from_abs_sibling", node.module, f".{sib}")
+                    )
+                elif m == "lifecycle" or last == "lifecycle":
+                    if node.module != "support.lib.lifecycle":
+                        replacements.append(
+                            (node.lineno, "from", node.module, "support.lib.lifecycle")
+                        )
+                elif m in import_map:
+                    imported_cross_parts.append(m)
+                    full = import_map[m]
+                    if node.module != full:
+                        replacements.append((node.lineno, "from", node.module, full))
+                elif last in import_map and node.module.startswith("testing.parts."):
+                    imported_cross_parts.append(last)
+                    full = import_map[last]
+                    replacements.append((node.lineno, "from", node.module, full))
+                else:
+                    if last in import_map and node.module.startswith(
+                        "update_with_ai.parts."
+                    ):
+                        imported_cross_parts.append(last)
+
+    if not replacements:
+        return False, imported_cross_parts
+
+    lines = content.splitlines(keepends=True)
+    changed = False
+
+    for lineno, kind, old_val, new_val in replacements:
+        if 1 <= lineno <= len(lines):
+            line = lines[lineno - 1]
+            if kind == "from":
+                pattern = re.compile(
+                    r"^(\s*from\s+)" + re.escape(old_val) + r"(\s+import\b)"
+                )
+                new_line = pattern.sub(r"\g<1>" + new_val + r"\2", line)
+                if new_line != line:
+                    lines[lineno - 1] = new_line
+                    changed = True
+            elif kind == "from_abs_sibling":
+                pattern = re.compile(
+                    r"^(\s*from\s+)" + re.escape(old_val) + r"(\s+import\b)"
+                )
+                new_line = pattern.sub(r"\g<1>" + new_val + r"\2", line)
+                if new_line != line:
+                    lines[lineno - 1] = new_line
+                    changed = True
+            elif kind == "from_dot_mod":
+                pattern = re.compile(
+                    r"^(\s*)from\s+\." + re.escape(old_val) + r"(\s+import\b)"
+                )
+                new_line = pattern.sub(r"\g<1>from " + new_val + r"\2", line)
+                if new_line != line:
+                    lines[lineno - 1] = new_line
+                    changed = True
+            elif kind == "from_rel_cross":
+                pattern = re.compile(
+                    r"^(\s*)from\s+\.\s+import\s+"
+                    + re.escape(old_val)
+                    + r"(\s*(?:#.*)?$)"
+                )
+                new_line = pattern.sub(r"\g<1>" + new_val + r"\2", line)
+                if new_line != line:
+                    lines[lineno - 1] = new_line
+                    changed = True
+            elif kind == "from_rel_lifecycle":
+                pattern = re.compile(
+                    r"^(\s*)from\s+\.\s+import\s+lifecycle(\s*(?:#.*)?$)"
+                )
+                new_line = pattern.sub(
+                    r"\g<1>from support.lib import lifecycle\2", line
+                )
+                if new_line != line:
+                    lines[lineno - 1] = new_line
+                    changed = True
+            elif kind == "import_sibling":
+                pattern = re.compile(
+                    r"^(\s*)import\s+" + re.escape(old_val) + r"(\s*(?:#.*)?$)"
+                )
+                new_line = pattern.sub(rf"\g<1>from . import {new_val}\2", line)
+                if new_line != line:
+                    lines[lineno - 1] = new_line
+                    changed = True
+            elif kind == "import_cross":
+                pattern = re.compile(
+                    r"^(\s*)import\s+" + re.escape(old_val) + r"(\s*(?:#.*)?$)"
+                )
+                new_line = pattern.sub(rf"\g<1>{new_val}\2", line)
+                if new_line != line:
+                    lines[lineno - 1] = new_line
+                    changed = True
+            elif kind == "import_lifecycle":
+                pattern = re.compile(
+                    r"^(\s*)import\s+" + re.escape(old_val) + r"(\s*(?:#.*)?$)"
+                )
+                new_line = pattern.sub(
+                    r"\g<1>from support.lib import lifecycle\2", line
+                )
+                if new_line != line:
+                    lines[lineno - 1] = new_line
+                    changed = True
+
+    if changed:
+        write_text(file_path, "".join(lines))
+
+    return changed, imported_cross_parts

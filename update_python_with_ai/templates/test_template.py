@@ -15,9 +15,10 @@ from unittest.mock import MagicMock, patch
 #    - Produce a minimal compiling test module that passes initial verification immediately.
 #    - Do NOT attempt comprehensive CUJ test coverage in the initial turn.
 # 2. Imports:
-#    - Target implementation: from lib.<target_impl> import <TargetClass>, __initialize__
-#    - Collaborator interfaces and concrete data types: from lib.<interface> import <Protocol>, <Data>
-#    - Lifecycle registry: from support.lib.lifecycle import LifecycleRegistry, enter_phase
+#    - Target implementation: from <target_impl> import <TargetClass>, __initialize__ (or from lib.<target_impl> ...)
+#    - Collaborator interfaces and concrete data types: from <interface> import <Protocol>, <Data> (or from lib.<interface> ...)
+#    - Lifecycle registry: from support.lib.lifecycle import LifecycleRegistry, enter_phase (or from lifecycle import ...)
+#    - Note: The test linter automatically resolves and normalizes imports to canonical package paths.
 # 3. Minimal Setup & Collaborators:
 #    - In test setUp():
 #        self.registry = LifecycleRegistry()

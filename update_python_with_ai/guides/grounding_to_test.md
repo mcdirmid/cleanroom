@@ -4,7 +4,7 @@
 
 The artifact is the test module `<target_impl>_test.py`, written from `<target_impl>.pyi` and its dependency closure alone; the library implementation Python file is never consulted and must never be present in context during test authoring. Tests written from the grounding specification catch implementation drift: when a test fails, the implementation is wrong, unless the test misread the contract. If a pre-existing test module already satisfies all contracts and passes verification, no edits are made. Specifications provided in context at session start are the complete source of truth.
 
-When starting from a template, the template's inline instructions guide creating a minimal test module that passes initial verification before calling advance; comprehensive test coverage (cohesive Customer User Journeys, edge cases, failure signals, and stateful collaborator mock transitions) is developed progressively through subsequent checklist steps. Target classes share the exact specification class name (`from lib.<target_impl> import <TargetClass>`); mocking the target class or concrete data types is prohibited, while collaborator interface protocols are mocked. Test editing is incremental and targeted, using `update_lines` (`replace` is restricted to single-line changes < 200 characters); whole-file rewrites are prohibited. The search tool is never installed.
+When starting from a template, the template's inline instructions guide creating a minimal test module that passes initial verification before calling advance; comprehensive test coverage (cohesive Customer User Journeys, edge cases, failure signals, and stateful collaborator mock transitions) is developed progressively through subsequent checklist steps. Target classes share the exact specification class name (`from <target_impl> import <TargetClass>` or `from lib.<target_impl> import <TargetClass>`; the test linter auto-normalizes module imports to full package paths); mocking the target class or concrete data types is prohibited, while collaborator interface protocols are mocked. Test editing is incremental and targeted, using `update_lines` (`replace` is restricted to single-line changes < 200 characters); whole-file rewrites are prohibited. The search tool is never installed.
 
 > META: "Unit test modules are authored strictly against the grounding specification in isolation from the library implementation; edge cases and boundary conditions must be thoroughly exercised."
 
@@ -19,7 +19,7 @@ When starting from a template, the template's inline instructions guide creating
 ## Module layout
 
 - [ ] One test module per implementation specification: `widget_impl.pyi` → `widget_impl_test.py`
-- [ ] Imports use `from lib.<module> import ...`; the test module imports only its target implementation module (`from lib.<target_impl> import <TargetClass>`, matching spec class name) and interface protocols, never importing foreign `*_impl` modules or implementation classes
+- [ ] Imports use `from <module> import ...` or `from lib.<module> import ...` (auto-normalized to full package paths by the test linter); the test module imports only its target implementation module (`from <target_impl> import <TargetClass>`, matching spec class name) and interface protocols, never importing foreign `*_impl` modules or implementation classes
 - [ ] Template instruction comments and initial authoring instructional blocks are deleted from the test module
 - [ ] The module uses `unittest`, ending with `if __name__ == "__main__": unittest.main()`
 - [ ] Tests are grouped into `unittest.TestCase` classes by concern (success routing, failure handling, invariants, configuration)
@@ -51,7 +51,7 @@ When starting from a template, the template's inline instructions guide creating
 
 - [ ] Dependency interfaces are mocked from their grounding specifications (the closure) using protocol stubs, mock classes, or mock instances, never using foreign implementation classes or the system under test
 - [ ] Concrete data types and variants from interface modules are constructed directly with real values; defining mock classes or stubs for concrete data types is prohibited
-- [ ] The class under test is imported directly from the target implementation module (`from lib.<target_impl> import <TargetClass>`) and never mocked or redefined; only collaborator interface protocols are mocked
+- [ ] The class under test is imported directly from the target implementation module (`from <target_impl> import <TargetClass>` or `from lib.<target_impl> import <TargetClass>`) and never mocked or redefined; only collaborator interface protocols are mocked
 - [ ] Foreign collaborator singletons are registered into a test `LifecycleRegistry` as mock classes or mock instances under their interface protocol keys in the appropriate lifecycle tier (`system` or `agent_session`)
 - [ ] Mocks for collaborator protocols define only the attributes and operations accessed by the component under test; subclassing collaborator Protocol classes or defining unaccessed properties and methods with dummy stubs is prohibited
 - [ ] When testing an iterative orchestrator whose loop condition queries collaborator state (e.g. `is_dirty`, pending items), collaborator or callback mocks must model the state transition across calls by mutating the collaborator state that the loop queries (e.g. a mock cleaner must take mock storage and resolve the node's dirty status) so loops terminate predictably; merely recording invocations or appending to tracking lists without mutating collaborator state is prohibited
@@ -90,7 +90,7 @@ When starting from a template, the template's inline instructions guide creating
 - [ ] The test module contains `if __name__ == "__main__": unittest.main()`
 - [ ] The test module contains an `# Untested requirements:` comment block following `if __name__ == "__main__": unittest.main()`
 - [ ] Test assertion blocks contain `# Requirement:` comments citing requirements from `FRESH_REQUIREMENTS:` or `INHERITED_REQUIREMENTS:`
-- [ ] Imports of library modules use `from lib.<module> import ...` and are resolvable
+- [ ] Imports of library modules use `from <module> import ...` or `from lib.<module> import ...` and are resolvable (auto-normalized to full package paths by the test linter)
 - [ ] Global standard library patches (e.g. `@patch('os.path.isfile')`) are prohibited; patches target `lib.<module>.<symbol>` where looked up, or `builtins.<name>`
 - [ ] Every `@patch` decorator has a corresponding mock parameter on the test method
 - [ ] The test module only imports from its target implementation module (`<target_impl>`) and never imports from foreign `*_impl` modules or imports foreign implementation classes
