@@ -6,10 +6,14 @@ T = TypeVar("T")
 LifecycleTier = Literal["system", "agent_session"]
 
 
-def singleton_type(lifecycle: LifecycleTier = "agent_session") -> Callable[[type[T]], type[T]]:
+def singleton_type(
+    lifecycle: LifecycleTier = "agent_session",
+) -> Callable[[type[T]], type[T]]:
     """Marks an active service as a singleton within its lifecycle tier ('system' or 'agent_session')."""
+
     def decorator(cls: type[T]) -> type[T]:
         return cls
+
     return decorator
 
 

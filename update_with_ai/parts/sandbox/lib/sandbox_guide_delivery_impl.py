@@ -114,10 +114,10 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
                     f"\n\n## Verification failure\n{self._guide.verification_failure}"
                 )
             if self._step_index == 0:
-                # Requirement: When advancing a step with failed verification, if no step section has been delivered yet, the guide delivery retains its index and emits a response combining the guide summary, any configured verification failure instructions, and failure diagnostics.
+                # Requirement: Advancing a step when verification fails emits a response combining the guide summary, any configured verification failure instructions, and failure diagnostics without activating a step section when no step section has been delivered yet.
                 content = f"{self._guide.summary}{vf_block}\n\nVerification failed:\n{diag_text}".strip()
             else:
-                # Requirement: When advancing a step with failed verification, if a step section is currently active, the guide delivery retains the current step index without advancement and emits a response combining the guide summary, the current step section content introduced by `Now check carefully:`, any configured verification failure instructions, and the failure diagnostics.
+                # Requirement: Advancing a step when verification fails emits a response combining the guide summary, the current step section content introduced by `Now check carefully:`, any configured verification failure instructions, and failure diagnostics without advancing to subsequent sections when a step section is currently active.
                 section = self._guide.sections[self._step_index - 1]
                 content = f"{self._guide.summary}\n\n## {section.title}\nNow check carefully:\n{section.content}{vf_block}\n\nVerification failed:\n{diag_text}".strip()
             return tool_provider.Response(
@@ -127,7 +127,7 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
             )
 
         if not self._initial_delivered:
-            # Requirement: When advancing a step with passed verification, if no steps have been delivered yet, the guide delivery emits a response containing the guide summary alone without delivering a step section.
+            # Requirement: Advancing a step when verification passes emits a response containing the guide summary alone without delivering a step section when no step section has been delivered yet.
             self._initial_delivered = True
             return tool_provider.Response(
                 is_failed=False,
@@ -135,7 +135,7 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
                 content=self._guide.summary,
             )
 
-        # Requirement: When advancing a step with passed verification, if steps have already been delivered and further step sections remain, the guide delivery emits a response presenting the guide summary above the next step section content introduced by `Now check carefully:` and advances its index to that section.
+        # Requirement: Advancing a step when verification passes emits a response presenting the guide summary above the next step section content introduced by `Now check carefully:` and transitions to that step section when previous steps have been delivered and further step sections remain.
         section = self._guide.sections[self._step_index]
         self._step_index += 1
         content = f"{self._guide.summary}\n\n## {section.title}\nNow check carefully:\n{section.content}".strip()

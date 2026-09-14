@@ -154,7 +154,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             self.assertIs(delivery.guide, guide)
 
             # Verification failure before any steps delivered emits summary and failure diagnostics
-            # Requirement: When advancing a step with failed verification, if no step section has been delivered yet, the guide delivery retains its index and emits a response combining the guide summary, any configured verification failure instructions, and failure diagnostics.
+            # Requirement: Advancing a step when verification fails emits a response combining the guide summary, any configured verification failure instructions, and failure diagnostics without activating a step section when no step section has been delivered yet.
             # Requirement: [GuideDelivery] Advancing step delivers instructional text when verification passes, or retains the current milestone and reports failure diagnostics alongside verification failure instructions when verification fails.
             res_fail0 = delivery.advance_step(
                 verification_passed=False, failure_diagnostics="Pre-flight check failed"
@@ -170,7 +170,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             self.assertTrue(delivery.has_steps_remaining)
 
             # Initial passing advance produces summary alone without step section
-            # Requirement: When advancing a step with passed verification, if no steps have been delivered yet, the guide delivery emits a response containing the guide summary alone without delivering a step section.
+            # Requirement: Advancing a step when verification passes emits a response containing the guide summary alone without delivering a step section when no step section has been delivered yet.
             # Requirement: [GuideDelivery] Advancing step delivers instructional text when verification passes, or retains the current milestone and reports failure diagnostics alongside verification failure instructions when verification fails.
             res0 = delivery.advance_step(verification_passed=True)
             self.assertIsNotNone(res0)
@@ -182,7 +182,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             self.assertTrue(delivery.has_steps_remaining)
 
             # Advance to first step section
-            # Requirement: When advancing a step with passed verification, if steps have already been delivered and further step sections remain, the guide delivery emits a response presenting the guide summary above the next step section content introduced by `Now check carefully:` and advances its index to that section.
+            # Requirement: Advancing a step when verification passes emits a response presenting the guide summary above the next step section content introduced by `Now check carefully:` and transitions to that step section when previous steps have been delivered and further step sections remain.
             # Requirement: [GuideDelivery] Advancing step delivers instructional text when verification passes, or retains the current milestone and reports failure diagnostics alongside verification failure instructions when verification fails.
             res1 = delivery.advance_step(verification_passed=True)
             self.assertIsNotNone(res1)
@@ -195,7 +195,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             self.assertTrue(delivery.has_steps_remaining)
 
             # Verification failure while Step 1 is active retains step index and emits summary, current step, and diagnostics
-            # Requirement: When advancing a step with failed verification, if a step section is currently active, the guide delivery retains the current step index without advancement and emits a response combining the guide summary, the current step section content introduced by `Now check carefully:`, any configured verification failure instructions, and the failure diagnostics.
+            # Requirement: Advancing a step when verification fails emits a response combining the guide summary, the current step section content introduced by `Now check carefully:`, any configured verification failure instructions, and failure diagnostics without advancing to subsequent sections when a step section is currently active.
             # Requirement: [GuideDelivery] Advancing step delivers instructional text when verification passes, or retains the current milestone and reports failure diagnostics alongside verification failure instructions when verification fails.
             res_fail1 = delivery.advance_step(
                 verification_passed=False, failure_diagnostics="Syntax error in step 1"
