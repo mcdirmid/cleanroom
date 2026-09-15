@@ -1,10 +1,12 @@
+from __future__ import annotations
+# --- DO NOT EDIT: Auto-generated dependencies ---
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+# --- END DO NOT EDIT ---
 """
 Implementation of <name> per its grounding specification (<name>.pyi).
 """
 
-from __future__ import annotations
 from typing import Optional
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
 
 # TODO: import the interface types this module implements and uses, e.g.
 # from .inventory import Inventory, Sku, Quantity

@@ -254,9 +254,9 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             Change(content="A spec updated"),
         }
         startup_exec = StartupToolExecution(
-            tool_name="read_file",
+            tool_name="view_file",
             wire_parameter_bindings=WireParameterBindings(
-                bindings={("file", "dag_storage.pyi")}
+                bindings={("path", "dag_storage.pyi")}
             ),
             response=Response(
                 is_failed=False, is_terminated=False, content="spec content"

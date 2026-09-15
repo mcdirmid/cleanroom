@@ -42,7 +42,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
             role="tool",
             content="[Superseded]",
             tool_call_id="c1",
-            tool_name="read_file",
+            tool_name="view_file",
             reminder="Keep this",
             tool_arguments="{}",
             is_stub=True,
@@ -50,7 +50,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
         self.assertEqual(stub_msg.role, "tool")
         self.assertEqual(stub_msg.content, "[Superseded]")
         self.assertEqual(stub_msg.tool_call_id, "c1")
-        self.assertEqual(stub_msg.tool_name, "read_file")
+        self.assertEqual(stub_msg.tool_name, "view_file")
         self.assertEqual(stub_msg.reminder, "Keep this")
         self.assertEqual(stub_msg.tool_arguments, "{}")
         self.assertTrue(stub_msg.is_stub)
@@ -91,7 +91,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
             )
             history.append_tool_response(
                 resp1,
-                tool_name="read_file",
+                tool_name="view_file",
                 tool_call_id="call_1",
                 wire_parameter_bindings=bindings1,
             )
@@ -100,10 +100,10 @@ class OpenAIConversationImplTest(unittest.TestCase):
             resp2 = Response(
                 is_failed=False, is_terminated=False, content="tool output 2"
             )
-            bindings2 = WireParameterBindings(bindings={("file", "second.py")})
+            bindings2 = WireParameterBindings(bindings={("path", "second.py")})
             history.append_tool_response(
                 resp2,
-                tool_name="read_file",
+                tool_name="view_file",
                 tool_call_id="call_2",
                 wire_parameter_bindings=bindings2,
             )
@@ -115,7 +115,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
 
             self.assertEqual(msgs[1].role, "assistant")
             self.assertEqual(msgs[1].tool_call_id, "call_1")
-            self.assertEqual(msgs[1].tool_name, "read_file")
+            self.assertEqual(msgs[1].tool_name, "view_file")
             self.assertEqual(
                 msgs[1].tool_arguments, '{"a_param": "first", "z_param": "last"}'
             )
@@ -126,8 +126,8 @@ class OpenAIConversationImplTest(unittest.TestCase):
 
             self.assertEqual(msgs[3].role, "assistant")
             self.assertEqual(msgs[3].tool_call_id, "call_2")
-            self.assertEqual(msgs[3].tool_name, "read_file")
-            self.assertEqual(msgs[3].tool_arguments, '{"file": "second.py"}')
+            self.assertEqual(msgs[3].tool_name, "view_file")
+            self.assertEqual(msgs[3].tool_arguments, '{"path": "second.py"}')
 
             self.assertEqual(msgs[4].role, "tool")
             self.assertEqual(msgs[4].tool_call_id, "call_2")
@@ -146,7 +146,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
                 suppression_key=None,
             )
             history.append_tool_response(
-                ro_resp1, tool_name="read_file", tool_call_id="call_ro1"
+                ro_resp1, tool_name="view_file", tool_call_id="call_ro1"
             )
 
             ro_resp2 = Response(
@@ -156,7 +156,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
                 suppression_key=None,
             )
             history.append_tool_response(
-                ro_resp2, tool_name="read_file", tool_call_id="call_ro2"
+                ro_resp2, tool_name="view_file", tool_call_id="call_ro2"
             )
 
             # 2. Distinct suppression keys do not supersede each other
@@ -167,7 +167,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
                 suppression_key="other.py",
             )
             history.append_tool_response(
-                rw_other, tool_name="read_file", tool_call_id="call_other"
+                rw_other, tool_name="view_file", tool_call_id="call_other"
             )
 
             # 3. Response with matching suppression key supersedes earlier response with that key
@@ -178,7 +178,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
                 suppression_key="widget.py",
             )
             history.append_tool_response(
-                rw_widget1, tool_name="read_file", tool_call_id="call_w1"
+                rw_widget1, tool_name="view_file", tool_call_id="call_w1"
             )
 
             # Requirement: A tool response's suppression key identifies the latest preceding response with the same key in the conversation for replacement with a stub, while responses with unmatched keys are preserved intact.
@@ -190,7 +190,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
                 suppression_key="widget.py",
             )
             history.append_tool_response(
-                rw_widget2, tool_name="read_file", tool_call_id="call_w2"
+                rw_widget2, tool_name="view_file", tool_call_id="call_w2"
             )
 
             # 4. Responses sharing suppression key 'advance', retaining and inheriting reminder

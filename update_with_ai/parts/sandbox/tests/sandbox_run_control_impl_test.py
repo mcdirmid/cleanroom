@@ -899,10 +899,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIsNone(resp3.reminder)
             self.assertIsNone(resp3.follow_up_tool_call)
 
-    def test_run_tests_tool_repeated_with_read_write_file_specifies_read_file_followup(
+    def test_run_tests_tool_repeated_with_read_write_file_specifies_view_file_followup(
         self,
     ) -> None:
-        """CUJ: Repeated run_tests execution specifies follow-up read of the source file with line numbers and reasoning."""
+        """CUJ: Repeated run_tests execution specifies follow-up read of the source file with view_file and reasoning."""
         vcheck = MockVerificationCheck(passes=True)
         self.node_cfg._verification_checks = [vcheck]
         rw_file = ReadWriteFile(
@@ -923,7 +923,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIsNone(resp1.follow_up_tool_call)
 
             # Requirement: Reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous run tests tool execution.
-            # Requirement: Specifies a follow-up execution of the read tool on the session source file with line numbers requested and reasoning text noting that verification passed without permission to run more tests and to advance or finish the session if correct, or noting that verification failed without permission to run more tests until files are updated, when workspace files have not been updated since the previous run tests tool execution.
+            # Requirement: Specifies a follow-up execution of the view file tool on the session source file and reasoning text noting that verification passed without permission to run more tests and to advance or finish the session if correct, or noting that verification failed without permission to run more tests until files are updated, when workspace files have not been updated since the previous run tests tool execution.
             # When is_step_mode is False (default for coverage / non-step nodes), reasoning directs to finish
             self.node_cfg.is_step_mode = False
             resp2 = run_tests.execute_tool(b)
@@ -936,10 +936,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
             self.assertIsNotNone(resp2.follow_up_tool_call)
             assert resp2.follow_up_tool_call is not None
-            self.assertEqual(resp2.follow_up_tool_call.tool_name, "read_file")
+            self.assertEqual(resp2.follow_up_tool_call.tool_name, "view_file")
             self.assertEqual(
                 resp2.follow_up_tool_call.wire_parameter_bindings.bindings,
-                {("file", "src.py"), ("line_numbers", True)},
+                {("path", "src.py")},
             )
             self.assertEqual(
                 resp2.follow_up_tool_call.reasoning_text,

@@ -17,3 +17,10 @@ class AgentConfig(Protocol):
 
     @property
     def is_startup_reads(self) -> bool: ...
+
+    @property
+    def edit_followup_read(self) -> bool: ...
+
+    @property
+    def edit_delta_output(self) -> bool: ...
+

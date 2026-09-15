@@ -13,15 +13,10 @@ class ReadManager(Protocol):
     @property
     def guide_file(self) -> Optional[agent_file_alias.UnboundFile]: ...
 
-    def requires_line_numbers(self, file: agent_file_alias.FileAlias) -> bool: ...
 
-
-class ReadTool(tool_provider.Tool, Protocol):
+class ViewFileTool(tool_provider.Tool, Protocol):
     @property
-    def file_alias_parameter(self) -> tool_provider.Parameter: ...
-
-    @property
-    def line_numbers_parameter(self) -> tool_provider.Parameter: ...
+    def path_parameter(self) -> tool_provider.Parameter: ...
 
 
 class SearchTool(tool_provider.Tool, Protocol):

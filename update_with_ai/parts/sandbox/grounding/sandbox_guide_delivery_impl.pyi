@@ -52,10 +52,10 @@ PURPOSE:
 Implements parse_guide to extract summary and step sections from file content
 
 FRESH_REQUIREMENTS:
-- Guide parsing extracts the summary from content preceding the first section heading, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Lint checks` or `Verification failure`.
+- Guide parsing extracts the summary from content preceding the first section heading and under any heading titled `Summary`, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
 
 GROUNDING_ARGUMENT:
-- Receives content directly as a parameter and parses the markdown text into summary, verification failure instructions, and step sections, excluding sections titled with Lint checks or Verification failure.
+- Receives content directly as a parameter and parses the markdown text into summary, verification failure instructions, and step sections, excluding sections titled with Summary, Lint checks, or Verification failure.
 """
         ...
 

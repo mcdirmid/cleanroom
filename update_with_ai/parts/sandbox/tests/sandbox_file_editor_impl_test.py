@@ -8,6 +8,7 @@ from unittest.mock import patch
 from typing import Any, Mapping, Optional, Set, Tuple
 
 from update_with_ai.parts.dag.lib.dag_storage import Node
+from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.agent.lib.agent_file_alias import (
     AliasManager,
     BoundFile,
@@ -24,17 +25,16 @@ from update_with_ai.parts.agent.lib.agent_node_config import Guide, NodeConfig
 from update_with_ai.parts.sandbox.lib.template_format import TemplateFormatter
 from update_with_ai.parts.sandbox.lib.sandbox_file_editor import (
     EditManager,
-    LineUpdateTool,
-    TextReplacementTool,
+    ReplaceFileContentTool,
 )
 from update_with_ai.parts.sandbox.lib.sandbox_file_editor_impl import (
     EditManager as EditManagerImpl,
-    LineUpdateTool as LineUpdateToolImpl,
-    TextReplacementTool as TextReplacementToolImpl,
+    ReplaceFileContentTool as ReplaceFileContentToolImpl,
     __initialize__,
 )
 from update_with_ai.parts.sandbox.lib.tool_provider import (
     ActualParameterBindings,
+    BooleanParameterConverter,
     IntegerParameterConverter,
     Parameter,
     Response,
@@ -77,6 +77,31 @@ class MockIntegerConverter:
 
     def convert(self, wire_value: Any) -> int:
         return int(wire_value)
+
+
+class MockBooleanConverter:
+    tier = "agent_session"
+    actual_type = bool
+    wire_type = None
+
+    def convert(self, wire_value: Any) -> bool:
+        if isinstance(wire_value, bool):
+            return wire_value
+        if isinstance(wire_value, str):
+            return wire_value.lower() in ("true", "1", "yes")
+        return bool(wire_value)
+
+
+class MockAgentConfig:
+    tier = "agent_session"
+
+    def __init__(
+        self,
+        edit_followup_read: bool = True,
+        edit_delta_output: bool = False,
+    ) -> None:
+        self.edit_followup_read = edit_followup_read
+        self.edit_delta_output = edit_delta_output
 
 
 def _make_directory_path(path: str) -> DirectoryPath:
@@ -187,6 +212,8 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         self.tool_mgr = MockToolManager()
         self.str_conv = MockStringConverter()
         self.int_conv = MockIntegerConverter()
+        self.bool_conv = MockBooleanConverter()
+        self.agent_cfg = MockAgentConfig()
         self.alias_mgr = MockAliasManager(self.test_dir)
         self.template_formatter = MockTemplateFormatter()
         self.node_cfg = MockNodeConfig(
@@ -207,6 +234,12 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.int_conv, keys=[IntegerParameterConverter], tier="agent_session"
         )
         self.registry.register_instance(
+            self.bool_conv, keys=[BooleanParameterConverter], tier="agent_session"
+        )
+        self.registry.register_instance(
+            self.agent_cfg, keys=[AgentConfig], tier="agent_session"
+        )
+        self.registry.register_instance(
             self.alias_mgr, keys=[AliasManager], tier="agent_session"
         )
         self.registry.register_instance(
@@ -223,13 +256,11 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         """CUJ: EditManager installs tools and materializes missing templates without overwriting existing files."""
         with enter_phase("agent_session", registry=self.registry) as scope:
             edit_mgr = scope.get_singleton(EditManager)
-            # Requirement: The edit manager unconditionally installs the text replacement tool and line update tool into the tool manager.
-            # Requirement: [EditManager] The edit manager installs the text replacement tool and line update tool.
+            # Requirement: The edit manager unconditionally installs the replace file content tool into the tool manager.
+            # Requirement: [EditManager] The edit manager installs the replace file content tool.
             tool_names = {t.name for t in self.tool_mgr.installed_tools}
-            # Requirement: The text replacement tool is named `replace`.
-            self.assertIn("replace", tool_names)
-            # Requirement: The line update tool is named `update_lines`.
-            self.assertIn("update_lines", tool_names)
+            # Requirement: The replace file content tool is named `replace_file_content`.
+            self.assertIn("replace_file_content", tool_names)
 
             self.assertFalse(edit_mgr.has_modifications)
 
@@ -247,10 +278,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             with open(self.target_path, "r", encoding="utf-8") as f:
                 self.assertNotIn("Existing overwrite attempt", f.read())
 
-    def test_text_replacement_tool_exact_match_and_failures(self) -> None:
-        """CUJ: TextReplacementTool replaces unique match and fails on duplicates or non-read-write files."""
+    def test_replace_file_content_tool_whole_file_and_failures(self) -> None:
+        """CUJ: ReplaceFileContentTool replaces unique match and fails on duplicates or non-read-write files."""
         with enter_phase("agent_session", registry=self.registry) as scope:
-            replace_tool = scope.get_singleton(TextReplacementTool)
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
             edit_mgr = scope.get_singleton(EditManager)
             self.assertIsInstance(replace_tool.description, str)
             self.assertGreater(len(replace_tool.parameters), 0)
@@ -259,8 +290,8 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             b_ro = ActualParameterBindings(
                 bindings={
                     (replace_tool.file_alias_parameter, self.ro_file),
-                    (replace_tool.target_text_parameter, "Line 2"),
-                    (replace_tool.replacement_text_parameter, "New Line 2"),
+                    (replace_tool.target_content_parameter, "Line 2"),
+                    (replace_tool.replacement_content_parameter, "New Line 2"),
                 }
             )
             # Requirement: Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
@@ -270,83 +301,87 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 resp_ro.reminder, "Only declared read-write files can be modified."
             )
 
-            # 2. Text not found fails
+            # 2. Content not found fails
             b_not_found = ActualParameterBindings(
                 bindings={
                     (replace_tool.file_alias_parameter, self.rw_file),
-                    (replace_tool.target_text_parameter, "Not present"),
-                    (replace_tool.replacement_text_parameter, "New"),
+                    (replace_tool.target_content_parameter, "Not present"),
+                    (replace_tool.replacement_content_parameter, "New"),
                 }
             )
-            # Requirement: Executing the text replacement tool fails if the target text is not found in the file content.
-            self.assertTrue(replace_tool.execute_tool(b_not_found).is_failed)
+            # Requirement: When allow multiple is not set or false, execution fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence.
+            resp_not_found = replace_tool.execute_tool(b_not_found)
+            self.assertTrue(resp_not_found.is_failed)
+            self.assertIn("target_content not found in file", resp_not_found.content)
 
             # 3. Successful replacement
             b_ok = ActualParameterBindings(
                 bindings={
                     (replace_tool.file_alias_parameter, self.rw_file),
-                    (replace_tool.target_text_parameter, "Line 2"),
-                    (replace_tool.replacement_text_parameter, "Updated Line 2"),
+                    (replace_tool.target_content_parameter, "Line 2"),
+                    (replace_tool.replacement_content_parameter, "Updated Line 2"),
                 }
             )
-            # Requirement: Executing the text replacement tool reads file content using the filesystem.
-            # Requirement: On successful text replacement tool execution, the unique occurrence of the target text is replaced with the replacement text, written using the filesystem, and file modifications are recorded.
+            # Requirement: Replace file content tool execution reads the file content from the filesystem, treating missing files as empty.
+            # Requirement: On success, the tool writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred.
             # Requirement: Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
             # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
-            # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
+            # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and when configured to perform follow-up reads on edits, produces a response specifying a follow-up execution of the view file tool on the modified read-write file, accompanied by a reminder justifying inspecting the updated file.
             resp = replace_tool.execute_tool(b_ok)
             self.assertFalse(resp.is_failed)
             self.assertEqual(resp.suppression_key, self.rw_file.short_name)
             self.assertIsNotNone(resp.follow_up_tool_call)
             assert resp.follow_up_tool_call is not None
-            self.assertEqual(resp.follow_up_tool_call.tool_name, "read_file")
+            self.assertEqual(resp.follow_up_tool_call.tool_name, "view_file")
             bindings_dict = dict(
                 resp.follow_up_tool_call.wire_parameter_bindings.bindings
             )
-            self.assertEqual(bindings_dict.get("file"), self.rw_file.short_name)
-            self.assertTrue(bindings_dict.get("line_numbers"))
-            self.assertIsNotNone(resp.reminder)
+            self.assertEqual(bindings_dict.get("path"), self.rw_file.short_name)
+            self.assertNotIn("line_numbers", bindings_dict)
+            self.assertEqual(
+                resp.reminder, "Inspect the updated file to verify changes."
+            )
             self.assertTrue(edit_mgr.has_modifications)
             with open(self.target_path, "r", encoding="utf-8") as f:
                 self.assertEqual(f.read(), "Line 1\nUpdated Line 2\nLine 3\n")
 
-            # 4. Multiple matches fail
+            # 4. Multiple matches fail when allow_multiple is not set or false
             with open(self.target_path, "w", encoding="utf-8") as f:
                 f.write("duplicate\nduplicate\n")
             b_dup = ActualParameterBindings(
                 bindings={
                     (replace_tool.file_alias_parameter, self.rw_file),
-                    (replace_tool.target_text_parameter, "duplicate"),
-                    (replace_tool.replacement_text_parameter, "single"),
+                    (replace_tool.target_content_parameter, "duplicate"),
+                    (replace_tool.replacement_content_parameter, "single"),
                 }
             )
-            # Requirement: Executing the text replacement tool fails if the target text matches multiple locations in the file.
-            self.assertTrue(replace_tool.execute_tool(b_dup).is_failed)
+            # Requirement: When allow multiple is not set or false, execution fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence.
+            resp_dup = replace_tool.execute_tool(b_dup)
+            self.assertTrue(resp_dup.is_failed)
+            self.assertIn("matches 2 locations", resp_dup.content)
 
-            # 5. Target text exceeding 100k fails
-            b_huge = ActualParameterBindings(
+            # 5. Multiple matches succeed when allow_multiple is true
+            b_dup_allowed = ActualParameterBindings(
                 bindings={
                     (replace_tool.file_alias_parameter, self.rw_file),
-                    (replace_tool.target_text_parameter, "x" * 100001),
-                    (replace_tool.replacement_text_parameter, "New"),
+                    (replace_tool.target_content_parameter, "duplicate"),
+                    (replace_tool.replacement_content_parameter, "single"),
+                    (replace_tool.allow_multiple_parameter, True),
                 }
             )
-            # Requirement: Executing the text replacement tool fails if the target text exceeds 100,000 characters, and reminds the agent that target text for replacement must not exceed 100,000 characters.
-            resp_huge = replace_tool.execute_tool(b_huge)
-            self.assertTrue(resp_huge.is_failed)
-            self.assertEqual(
-                resp_huge.reminder,
-                "Target text for replacement must not exceed 100,000 characters.",
-            )
+            # Requirement: When allow multiple is true, execution fails if the target content is not found within the designated line range, and replaces all occurrences of the target content within the designated line range.
+            resp_dup_allowed = replace_tool.execute_tool(b_dup_allowed)
+            self.assertFalse(resp_dup_allowed.is_failed)
+            with open(self.target_path, "r", encoding="utf-8") as f:
+                self.assertEqual(f.read(), "single\nsingle\n")
 
             # 6. Replacement producing no change to file content fails
-            with open(self.target_path, "w", encoding="utf-8") as f:
-                f.write("Line 1\nLine 2\nLine 3\n")
             b_no_change = ActualParameterBindings(
                 bindings={
                     (replace_tool.file_alias_parameter, self.rw_file),
-                    (replace_tool.target_text_parameter, "Line 2"),
-                    (replace_tool.replacement_text_parameter, "Line 2"),
+                    (replace_tool.target_content_parameter, "single"),
+                    (replace_tool.replacement_content_parameter, "single"),
+                    (replace_tool.allow_multiple_parameter, True),
                 }
             )
             # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
@@ -359,188 +394,200 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertIsNone(resp_no_change.suppression_key)
             self.assertIsNone(resp_no_change.follow_up_tool_call)
 
-    def test_line_update_tool_bounds_and_insertion(self) -> None:
-        """CUJ: LineUpdateTool updates line ranges and performs insertion when start > end."""
+    def test_replace_file_content_tool_line_ranges(self) -> None:
+        """CUJ: ReplaceFileContentTool validates start_line/end_line bounds and constrains replacements to ranges."""
+        with open(self.target_path, "w", encoding="utf-8") as f:
+            f.write("Line 1\nLine 2\nLine 3\n")
+
         with enter_phase("agent_session", registry=self.registry) as scope:
-            line_tool = scope.get_singleton(LineUpdateTool)
-            edit_mgr = scope.get_singleton(EditManager)
-            self.assertIsInstance(line_tool.description, str)
-            self.assertGreater(len(line_tool.parameters), 0)
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
 
-            # Non-read-write file fails
-            b_ro = ActualParameterBindings(
+            # 1. start_line < 1 fails
+            b_zero_start = ActualParameterBindings(
                 bindings={
-                    (line_tool.file_alias_parameter, self.ro_file),
-                    (line_tool.start_line_parameter, 1),
-                    (line_tool.end_line_parameter, 1),
-                    (line_tool.replacement_text_parameter, "New\n"),
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_content_parameter, "Line 1"),
+                    (replace_tool.replacement_content_parameter, "New"),
+                    (replace_tool.start_line_parameter, 0),
                 }
             )
-            # Requirement: Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
-            resp_line_ro = line_tool.execute_tool(b_ro)
-            self.assertTrue(resp_line_ro.is_failed)
-            self.assertEqual(
-                resp_line_ro.reminder, "Only declared read-write files can be modified."
-            )
+            # Requirement: When a start line is provided, execution fails if the start line is less than one or exceeds the total line count plus one.
+            resp_zero_start = replace_tool.execute_tool(b_zero_start)
+            self.assertTrue(resp_zero_start.is_failed)
+            self.assertIn("start_line 0 out of bounds", resp_zero_start.content)
 
-            # 1. Replace lines 1 and 2
-            b_replace = ActualParameterBindings(
-                bindings={
-                    (line_tool.file_alias_parameter, self.rw_file),
-                    (line_tool.start_line_parameter, 1),
-                    (line_tool.end_line_parameter, 2),
-                    (line_tool.replacement_text_parameter, "Replaced 1 and 2\n"),
-                }
-            )
-            # Requirement: Executing the line update tool reads file content using the filesystem.
-            # Requirement: When the start line is less than or equal to the end line, successful execution replaces lines within the range, writes using the filesystem, and records file modifications.
-            # Requirement: Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
-            # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
-            resp1 = line_tool.execute_tool(b_replace)
-            self.assertFalse(resp1.is_failed)
-            self.assertEqual(resp1.suppression_key, self.rw_file.short_name)
-            self.assertIsNotNone(resp1.follow_up_tool_call)
-            assert resp1.follow_up_tool_call is not None
-            self.assertEqual(resp1.follow_up_tool_call.tool_name, "read_file")
-            bindings_dict = dict(
-                resp1.follow_up_tool_call.wire_parameter_bindings.bindings
-            )
-            self.assertEqual(bindings_dict.get("file"), self.rw_file.short_name)
-            self.assertTrue(bindings_dict.get("line_numbers"))
-            self.assertIsNotNone(resp1.reminder)
-            self.assertTrue(edit_mgr.has_modifications)
-            with open(self.target_path, "r", encoding="utf-8") as f:
-                self.assertEqual(f.read(), "Replaced 1 and 2\nLine 3\n")
-
-            # 2. Insertion: start_line > end_line inserts before start_line
-            b_insert = ActualParameterBindings(
-                bindings={
-                    (line_tool.file_alias_parameter, self.rw_file),
-                    (line_tool.start_line_parameter, 2),
-                    (line_tool.end_line_parameter, 1),
-                    (line_tool.replacement_text_parameter, "Inserted Line\n"),
-                }
-            )
-            # Requirement: When the start line exceeds the end line, successful execution inserts the replacement lines before the start line, writes using the filesystem, and records file modifications.
-            # Requirement: Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
-            resp2 = line_tool.execute_tool(b_insert)
-            self.assertFalse(resp2.is_failed)
-            self.assertEqual(resp2.suppression_key, self.rw_file.short_name)
-            with open(self.target_path, "r", encoding="utf-8") as f:
-                self.assertEqual(f.read(), "Replaced 1 and 2\nInserted Line\nLine 3\n")
-
-            # 2b. Replacement lacking trailing newline preserves subsequent line boundaries
-            b_no_newline = ActualParameterBindings(
-                bindings={
-                    (line_tool.file_alias_parameter, self.rw_file),
-                    (line_tool.start_line_parameter, 1),
-                    (line_tool.end_line_parameter, 1),
-                    (line_tool.replacement_text_parameter, "Line 1 without newline"),
-                }
-            )
-            # Requirement: Replacing or inserting lines treats each replacement line as a complete newline-terminated line, preserving subsequent line boundaries when replacement text lacks a trailing newline.
-            resp_nn = line_tool.execute_tool(b_no_newline)
-            self.assertFalse(resp_nn.is_failed)
-            with open(self.target_path, "r", encoding="utf-8") as f:
-                self.assertEqual(
-                    f.read(), "Line 1 without newline\nInserted Line\nLine 3\n"
-                )
-
-            # 2c. Insertion lacking trailing newline preserves surrounding lines
-            b_insert_nn = ActualParameterBindings(
-                bindings={
-                    (line_tool.file_alias_parameter, self.rw_file),
-                    (line_tool.start_line_parameter, 2),
-                    (line_tool.end_line_parameter, 1),
-                    (line_tool.replacement_text_parameter, "Multi\nNo trailing"),
-                }
-            )
-            # Requirement: Replacing or inserting lines treats each replacement line as a complete newline-terminated line, preserving subsequent line boundaries when replacement text lacks a trailing newline.
-            resp_inn = line_tool.execute_tool(b_insert_nn)
-            self.assertFalse(resp_inn.is_failed)
-            with open(self.target_path, "r", encoding="utf-8") as f:
-                self.assertEqual(
-                    f.read(),
-                    "Line 1 without newline\nMulti\nNo trailing\nInserted Line\nLine 3\n",
-                )
-
-            # 3. Out-of-bounds start line fails
+            # 2. start_line > total line count + 1 fails
             b_oob_start = ActualParameterBindings(
                 bindings={
-                    (line_tool.file_alias_parameter, self.rw_file),
-                    (line_tool.start_line_parameter, 100),
-                    (line_tool.end_line_parameter, 100),
-                    (line_tool.replacement_text_parameter, "Bad\n"),
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_content_parameter, "Line 1"),
+                    (replace_tool.replacement_content_parameter, "New"),
+                    (replace_tool.start_line_parameter, 5),
                 }
             )
-            # Requirement: Executing the line update tool fails if the start line is less than one or exceeds the total line count plus one.
-            self.assertTrue(line_tool.execute_tool(b_oob_start).is_failed)
+            # Requirement: When a start line is provided, execution fails if the start line is less than one or exceeds the total line count plus one.
+            resp_oob_start = replace_tool.execute_tool(b_oob_start)
+            self.assertTrue(resp_oob_start.is_failed)
+            self.assertIn("start_line 5 out of bounds", resp_oob_start.content)
 
-            # 4. Out-of-bounds end line fails
+            # 3. end_line < 1 fails
+            b_zero_end = ActualParameterBindings(
+                bindings={
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_content_parameter, "Line 1"),
+                    (replace_tool.replacement_content_parameter, "New"),
+                    (replace_tool.end_line_parameter, 0),
+                }
+            )
+            # Requirement: When an end line is provided, execution fails if the end line is less than one or exceeds the total line count.
+            resp_zero_end = replace_tool.execute_tool(b_zero_end)
+            self.assertTrue(resp_zero_end.is_failed)
+            self.assertIn("end_line 0 out of bounds", resp_zero_end.content)
+
+            # 4. end_line > total line count fails
             b_oob_end = ActualParameterBindings(
                 bindings={
-                    (line_tool.file_alias_parameter, self.rw_file),
-                    (line_tool.start_line_parameter, 1),
-                    (line_tool.end_line_parameter, 100),
-                    (line_tool.replacement_text_parameter, "Bad\n"),
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_content_parameter, "Line 1"),
+                    (replace_tool.replacement_content_parameter, "New"),
+                    (replace_tool.end_line_parameter, 4),
                 }
             )
-            # Requirement: When the start line is less than or equal to the end line, executing the line update tool fails if the end line exceeds the total line count.
-            self.assertTrue(line_tool.execute_tool(b_oob_end).is_failed)
+            # Requirement: When an end line is provided, execution fails if the end line is less than one or exceeds the total line count.
+            resp_oob_end = replace_tool.execute_tool(b_oob_end)
+            self.assertTrue(resp_oob_end.is_failed)
+            self.assertIn("end_line 4 out of bounds", resp_oob_end.content)
 
-            # 5. Replacement text without trailing newline
-            b_no_nl = ActualParameterBindings(
+            # 5. start_line > end_line fails
+            b_start_gt_end = ActualParameterBindings(
                 bindings={
-                    (line_tool.file_alias_parameter, self.rw_file),
-                    (line_tool.start_line_parameter, 1),
-                    (line_tool.end_line_parameter, 1),
-                    (line_tool.replacement_text_parameter, "No newline"),
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_content_parameter, "Line"),
+                    (replace_tool.replacement_content_parameter, "New"),
+                    (replace_tool.start_line_parameter, 3),
+                    (replace_tool.end_line_parameter, 2),
                 }
             )
-            self.assertFalse(line_tool.execute_tool(b_no_nl).is_failed)
+            # Requirement: When both start line and end line are provided, execution fails if the start line exceeds the end line.
+            resp_start_gt_end = replace_tool.execute_tool(b_start_gt_end)
+            self.assertTrue(resp_start_gt_end.is_failed)
+            self.assertIn("cannot be greater than end_line", resp_start_gt_end.content)
 
-            # 6. Line update producing no change to file content fails
-            b_no_change_line = ActualParameterBindings(
+            # 6. Scoped replacement within range ignores occurrences outside range
+            with open(self.target_path, "w", encoding="utf-8") as f:
+                f.write("target\ntarget\ntarget\n")
+            b_scoped = ActualParameterBindings(
                 bindings={
-                    (line_tool.file_alias_parameter, self.rw_file),
-                    (line_tool.start_line_parameter, 1),
-                    (line_tool.end_line_parameter, 1),
-                    (line_tool.replacement_text_parameter, "No newline\n"),
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_content_parameter, "target"),
+                    (replace_tool.replacement_content_parameter, "replaced"),
+                    (replace_tool.start_line_parameter, 2),
+                    (replace_tool.end_line_parameter, 2),
                 }
             )
-            # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
-            resp_no_change_line = line_tool.execute_tool(b_no_change_line)
-            self.assertTrue(resp_no_change_line.is_failed)
-            self.assertEqual(
-                resp_no_change_line.reminder,
-                "The edit had no effect, and such edits will fail.",
-            )
-            self.assertIsNone(resp_no_change_line.suppression_key)
-            self.assertIsNone(resp_no_change_line.follow_up_tool_call)
+            resp_scoped = replace_tool.execute_tool(b_scoped)
+            self.assertFalse(resp_scoped.is_failed)
+            with open(self.target_path, "r", encoding="utf-8") as f:
+                self.assertEqual(f.read(), "target\nreplaced\ntarget\n")
 
-            # 7. Insertion producing no change to file content fails
-            b_no_change_insert = ActualParameterBindings(
+            # 7. Scoped replacement fails when target_content is not found in designated range
+            b_scoped_missing = ActualParameterBindings(
                 bindings={
-                    (line_tool.file_alias_parameter, self.rw_file),
-                    (line_tool.start_line_parameter, 2),
-                    (line_tool.end_line_parameter, 1),
-                    (line_tool.replacement_text_parameter, ""),
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_content_parameter, "missing"),
+                    (replace_tool.replacement_content_parameter, "replaced"),
+                    (replace_tool.start_line_parameter, 2),
+                    (replace_tool.end_line_parameter, 2),
                 }
             )
-            # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
-            resp_no_change_insert = line_tool.execute_tool(b_no_change_insert)
-            self.assertTrue(resp_no_change_insert.is_failed)
-            self.assertEqual(
-                resp_no_change_insert.reminder,
-                "The edit had no effect, and such edits will fail.",
+            resp_scoped_missing = replace_tool.execute_tool(b_scoped_missing)
+            self.assertTrue(resp_scoped_missing.is_failed)
+            self.assertIn("target_content not found in specified line range", resp_scoped_missing.content)
+
+            # 8. Scoped multiple matches within range fails when allow_multiple is false
+            with open(self.target_path, "w", encoding="utf-8") as f:
+                f.write("alpha alpha\nbeta\n")
+            b_scoped_dup = ActualParameterBindings(
+                bindings={
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_content_parameter, "alpha"),
+                    (replace_tool.replacement_content_parameter, "gamma"),
+                    (replace_tool.start_line_parameter, 1),
+                    (replace_tool.end_line_parameter, 1),
+                }
             )
-            self.assertIsNone(resp_no_change_insert.suppression_key)
-            self.assertIsNone(resp_no_change_insert.follow_up_tool_call)
+            resp_scoped_dup = replace_tool.execute_tool(b_scoped_dup)
+            self.assertTrue(resp_scoped_dup.is_failed)
+            self.assertIn("matches 2 locations in line range", resp_scoped_dup.content)
+
+            # 9. Scoped multiple matches within range succeeds when allow_multiple is true
+            b_scoped_dup_allowed = ActualParameterBindings(
+                bindings={
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_content_parameter, "alpha"),
+                    (replace_tool.replacement_content_parameter, "gamma"),
+                    (replace_tool.start_line_parameter, 1),
+                    (replace_tool.end_line_parameter, 1),
+                    (replace_tool.allow_multiple_parameter, True),
+                }
+            )
+            resp_scoped_dup_allowed = replace_tool.execute_tool(b_scoped_dup_allowed)
+            self.assertFalse(resp_scoped_dup_allowed.is_failed)
+            with open(self.target_path, "r", encoding="utf-8") as f:
+                self.assertEqual(f.read(), "gamma gamma\nbeta\n")
+
+    def test_replace_file_content_tool_diff_and_followup_configs(self) -> None:
+        """CUJ: ReplaceFileContentTool produces unified diff and respects follow-up read configuration."""
+        with open(self.target_path, "w", encoding="utf-8") as f:
+            f.write("Line 1\nLine 2\nLine 3\n")
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+
+            # 1. Delta output enabled produces diff delta in response content
+            self.agent_cfg.edit_delta_output = True
+            self.agent_cfg.edit_followup_read = True
+
+            b_diff = ActualParameterBindings(
+                bindings={
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_content_parameter, "Line 1"),
+                    (replace_tool.replacement_content_parameter, "Header"),
+                }
+            )
+            # Requirement: When configured to produce delta output, successful editing tool execution includes a diff delta representation in the response content.
+            resp_diff = replace_tool.execute_tool(b_diff)
+            self.assertFalse(resp_diff.is_failed)
+            self.assertIn("```diff", resp_diff.content)
+            self.assertIn("-Line 1", resp_diff.content)
+            self.assertIn("+Header", resp_diff.content)
+            self.assertIsNotNone(resp_diff.follow_up_tool_call)
+
+            # 2. Followup read disabled omits follow_up_tool_call and reminder
+            self.agent_cfg.edit_delta_output = False
+            self.agent_cfg.edit_followup_read = False
+
+            b_no_followup = ActualParameterBindings(
+                bindings={
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_content_parameter, "Header"),
+                    (replace_tool.replacement_content_parameter, "Line 1"),
+                }
+            )
+            resp_no_followup = replace_tool.execute_tool(b_no_followup)
+            self.assertFalse(resp_no_followup.is_failed)
+            self.assertNotIn("```diff", resp_no_followup.content)
+            self.assertIsNone(resp_no_followup.follow_up_tool_call)
+            self.assertIsNone(resp_no_followup.reminder)
+
+            # Reset config
+            self.agent_cfg.edit_delta_output = False
+            self.agent_cfg.edit_followup_read = True
 
     def test_diff_based_has_modifications(self) -> None:
         """CUJ: EditManager tracks real content differences and detects reverted modifications."""
         with enter_phase("agent_session", registry=self.registry) as scope:
-            replace_tool = scope.get_singleton(TextReplacementTool)
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
             edit_mgr = scope.get_singleton(EditManager)
 
             # Initially no modifications
@@ -551,8 +598,8 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             b_mod = ActualParameterBindings(
                 bindings={
                     (replace_tool.file_alias_parameter, self.rw_file),
-                    (replace_tool.target_text_parameter, "Line 2"),
-                    (replace_tool.replacement_text_parameter, "Modified Line 2"),
+                    (replace_tool.target_content_parameter, "Line 2"),
+                    (replace_tool.replacement_content_parameter, "Modified Line 2"),
                 }
             )
             resp1 = replace_tool.execute_tool(b_mod)
@@ -563,8 +610,8 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             b_revert = ActualParameterBindings(
                 bindings={
                     (replace_tool.file_alias_parameter, self.rw_file),
-                    (replace_tool.target_text_parameter, "Modified Line 2"),
-                    (replace_tool.replacement_text_parameter, "Line 2"),
+                    (replace_tool.target_content_parameter, "Modified Line 2"),
+                    (replace_tool.replacement_content_parameter, "Line 2"),
                 }
             )
             resp2 = replace_tool.execute_tool(b_revert)
@@ -576,8 +623,8 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             b_noop = ActualParameterBindings(
                 bindings={
                     (replace_tool.file_alias_parameter, self.rw_file),
-                    (replace_tool.target_text_parameter, "Line 2"),
-                    (replace_tool.replacement_text_parameter, "Line 2"),
+                    (replace_tool.target_content_parameter, "Line 2"),
+                    (replace_tool.replacement_content_parameter, "Line 2"),
                 }
             )
             # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
@@ -589,7 +636,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertFalse(edit_mgr.has_modifications)
 
     def test_editing_tools_missing_file_handling(self) -> None:
-        """CUJ: Editing tools treat missing read-write files as empty and create parent directories on write."""
+        """CUJ: ReplaceFileContentTool treats missing read-write files as empty and creates parent directories on write."""
         nested_rel = "nested/dir/missing.txt"
         nested_host = os.path.join(self.test_dir, nested_rel)
         node = Node(unit_address="//pkg:test")
@@ -600,36 +647,33 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         )
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            replace_tool = scope.get_singleton(TextReplacementTool)
-            line_tool = scope.get_singleton(LineUpdateTool)
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
             edit_mgr = scope.get_singleton(EditManager)
 
-            # 1. Text replacement tool on missing file treats content as empty -> target text not found fails cleanly
-            # Requirement: Executing the text replacement tool reads file content using the filesystem, treating missing files as empty.
+            # 1. Replace tool on missing file treats content as empty -> target content not found fails cleanly
+            # Requirement: Replace file content tool execution reads the file content from the filesystem, treating missing files as empty.
             b_rep = ActualParameterBindings(
                 bindings={
                     (replace_tool.file_alias_parameter, missing_rw_file),
-                    (replace_tool.target_text_parameter, "some_text"),
-                    (replace_tool.replacement_text_parameter, "new_text"),
+                    (replace_tool.target_content_parameter, "some_text"),
+                    (replace_tool.replacement_content_parameter, "new_text"),
                 }
             )
             resp_rep = replace_tool.execute_tool(b_rep)
             self.assertTrue(resp_rep.is_failed)
-            self.assertIn("target_text not found in file", resp_rep.content)
+            self.assertIn("target_content not found in file", resp_rep.content)
 
-            # 2. Line update tool inserting into missing file creates parent directories and writes content
-            # Requirement: Line update tool execution reads the file content from the filesystem, treating missing files as empty, failing if the start line is less than one or exceeds the total line count plus one.
+            # 2. Replace tool creating file treats missing file as empty and creates parent directories
             # Requirement: On success, the tool writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred.
-            b_line = ActualParameterBindings(
+            b_create = ActualParameterBindings(
                 bindings={
-                    (line_tool.file_alias_parameter, missing_rw_file),
-                    (line_tool.start_line_parameter, 1),
-                    (line_tool.end_line_parameter, 0),
-                    (line_tool.replacement_text_parameter, "First line\nSecond line\n"),
+                    (replace_tool.file_alias_parameter, missing_rw_file),
+                    (replace_tool.target_content_parameter, ""),
+                    (replace_tool.replacement_content_parameter, "First line\nSecond line\n"),
                 }
             )
-            resp_line = line_tool.execute_tool(b_line)
-            self.assertFalse(resp_line.is_failed)
+            resp_create = replace_tool.execute_tool(b_create)
+            self.assertFalse(resp_create.is_failed)
             self.assertTrue(os.path.exists(nested_host))
             with open(nested_host, "r", encoding="utf-8") as f:
                 self.assertEqual(f.read(), "First line\nSecond line\n")
@@ -639,35 +683,33 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         """CUJ: EditManager file_update_revision increments when editing tools modify files."""
         with enter_phase("agent_session", registry=self.registry) as scope:
             edit_mgr = scope.get_singleton(EditManager)
-            replace_tool = scope.get_singleton(TextReplacementTool)
-            line_tool = scope.get_singleton(LineUpdateTool)
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
 
             # Requirement: The edit manager tracks a file update revision that increments whenever workspace files are updated.
             # Requirement: [EditManager] The edit manager exposes a file update revision that tracks sequential updates made to workspace files.
             self.assertEqual(edit_mgr.file_update_revision, 0)
 
-            # Perform text replacement
-            b_replace = ActualParameterBindings(
+            # Perform first replacement
+            b1 = ActualParameterBindings(
                 bindings={
                     (replace_tool.file_alias_parameter, self.rw_file),
-                    (replace_tool.target_text_parameter, "Line 2"),
-                    (replace_tool.replacement_text_parameter, "Modified Line 2"),
+                    (replace_tool.target_content_parameter, "Line 2"),
+                    (replace_tool.replacement_content_parameter, "Modified Line 2"),
                 }
             )
-            resp1 = replace_tool.execute_tool(b_replace)
+            resp1 = replace_tool.execute_tool(b1)
             self.assertFalse(resp1.is_failed)
             self.assertEqual(edit_mgr.file_update_revision, 1)
 
-            # Perform line update
-            b_line = ActualParameterBindings(
+            # Perform second replacement
+            b2 = ActualParameterBindings(
                 bindings={
-                    (line_tool.file_alias_parameter, self.rw_file),
-                    (line_tool.start_line_parameter, 1),
-                    (line_tool.end_line_parameter, 1),
-                    (line_tool.replacement_text_parameter, "Updated Line 1\n"),
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_content_parameter, "Line 1"),
+                    (replace_tool.replacement_content_parameter, "Modified Line 1"),
                 }
             )
-            resp2 = line_tool.execute_tool(b_line)
+            resp2 = replace_tool.execute_tool(b2)
             self.assertFalse(resp2.is_failed)
             self.assertEqual(edit_mgr.file_update_revision, 2)
 
@@ -724,44 +766,116 @@ class SandboxFileEditorImplTest(unittest.TestCase):
     def test_tool_parameter_converters(self) -> None:
         """CUJ: Parameter converters associated with tool parameters."""
         with enter_phase("agent_session", registry=self.registry) as scope:
-            replace_tool = scope.get_singleton(TextReplacementTool)
-            line_tool = scope.get_singleton(LineUpdateTool)
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
 
-            # Requirement: The text replacement tool file parameter uses the alias manager to convert a file alias.
+            # Requirement: The replace file content tool path parameter uses the alias manager to convert a file alias.
             self.assertIs(
                 replace_tool.file_alias_parameter.parameter_converter, self.alias_mgr
             )
-            # Requirement: The text replacement tool target text parameter uses a string parameter converter to accept text.
+            # Requirement: The replace file content tool target content parameter uses a string parameter converter to accept text.
             self.assertIs(
-                replace_tool.target_text_parameter.parameter_converter, self.str_conv
+                replace_tool.target_content_parameter.parameter_converter, self.str_conv
             )
-            # Requirement: The text replacement tool replacement text parameter uses a string parameter converter to accept text.
+            # Requirement: The replace file content tool replacement content parameter uses a string parameter converter to accept text.
             self.assertIs(
-                replace_tool.replacement_text_parameter.parameter_converter,
+                replace_tool.replacement_content_parameter.parameter_converter,
                 self.str_conv,
             )
+            # Requirement: The replace file content tool start line parameter uses an integer parameter converter to accept an integer.
+            self.assertIs(
+                replace_tool.start_line_parameter.parameter_converter, self.int_conv
+            )
+            # Requirement: The replace file content tool end line parameter uses an integer parameter converter to accept an integer.
+            self.assertIs(
+                replace_tool.end_line_parameter.parameter_converter, self.int_conv
+            )
+            # Requirement: The replace file content tool allow multiple parameter uses a boolean parameter converter to accept a boolean.
+            self.assertIs(
+                replace_tool.allow_multiple_parameter.parameter_converter, self.bool_conv
+            )
 
-            # Requirement: The line update tool file parameter uses the alias manager to convert a file alias.
-            self.assertIs(
-                line_tool.file_alias_parameter.parameter_converter, self.alias_mgr
+    def test_replace_file_content_rejects_do_not_edit_block(self) -> None:
+        """CUJ: Edits overlapping the DO NOT EDIT block fail with a reminder."""
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+
+            initial_text = (
+                "# --- DO NOT EDIT: Auto-generated dependencies ---\n"
+                "import update_with_ai.parts.dag.lib.dag_storage as dag_storage\n"
+                "# --- END DO NOT EDIT ---\n"
+                "\n"
+                "class Foo:\n"
+                "    pass\n"
             )
-            # Requirement: The line update tool start line parameter uses an integer parameter converter to accept an integer.
-            self.assertIs(
-                line_tool.start_line_parameter.parameter_converter, self.int_conv
+            with open(self.target_path, "w", encoding="utf-8") as f:
+                f.write(initial_text)
+
+            # 1. Attempting to edit inside the DO NOT EDIT block fails
+            b_overlap = ActualParameterBindings(
+                bindings={
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (
+                        replace_tool.target_content_parameter,
+                        "import update_with_ai.parts.dag.lib.dag_storage as dag_storage",
+                    ),
+                    (
+                        replace_tool.replacement_content_parameter,
+                        "import dag_storage",
+                    ),
+                }
             )
-            # Requirement: The line update tool end line parameter uses an integer parameter converter to accept an integer.
-            self.assertIs(
-                line_tool.end_line_parameter.parameter_converter, self.int_conv
+            # Requirement: Before modifying a file, editing tool execution fails if the target edit overlaps with auto-generated dependency imports between '# --- DO NOT EDIT: Auto-generated dependencies ---' and '# --- END DO NOT EDIT ---', reminding the agent that auto-generated dependencies are managed by the build toolchain.
+            resp = replace_tool.execute_tool(b_overlap)
+            self.assertTrue(resp.is_failed)
+            self.assertIn(
+                "Cannot edit lines within '# --- DO NOT EDIT: Auto-generated dependencies ---' ... '# --- END DO NOT EDIT ---'",
+                resp.content,
             )
-            # Requirement: The line update tool replacement text parameter uses a string parameter converter to accept text.
-            self.assertIs(
-                line_tool.replacement_text_parameter.parameter_converter, self.str_conv
+            self.assertIn("managed automatically by the build toolchain", resp.content)
+            self.assertEqual(
+                resp.reminder,
+                "Do not modify the auto-generated dependencies block. Implement logic below '# --- END DO NOT EDIT ---'.",
             )
+            with open(self.target_path, "r", encoding="utf-8") as f:
+                self.assertEqual(f.read(), initial_text)
+
+            # 2. Attempting to edit with line range overlapping the block fails
+            b_range_overlap = ActualParameterBindings(
+                bindings={
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (
+                        replace_tool.target_content_parameter,
+                        "import update_with_ai.parts.dag.lib.dag_storage as dag_storage",
+                    ),
+                    (
+                        replace_tool.replacement_content_parameter,
+                        "import dag_storage",
+                    ),
+                    (replace_tool.start_line_parameter, 1),
+                    (replace_tool.end_line_parameter, 3),
+                }
+            )
+            resp_range = replace_tool.execute_tool(b_range_overlap)
+            self.assertTrue(resp_range.is_failed)
+            self.assertIn("Cannot edit lines within", resp_range.content)
+
+            # 3. Editing outside the DO NOT EDIT block succeeds
+            b_outside = ActualParameterBindings(
+                bindings={
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_content_parameter, "    pass"),
+                    (replace_tool.replacement_content_parameter, "    x: int = 1"),
+                }
+            )
+            resp_outside = replace_tool.execute_tool(b_outside)
+            self.assertFalse(resp_outside.is_failed)
+            with open(self.target_path, "r", encoding="utf-8") as f:
+                self.assertIn("    x: int = 1", f.read())
 
 
 if __name__ == "__main__":
     unittest.main()
 
 # Untested requirements:
-# - [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
+# - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 # - [Tool] When a parameter is required, an argument must be supplied for tool execution.

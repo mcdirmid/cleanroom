@@ -1,5 +1,6 @@
 from typing import Set
 from framework import operation, override, singleton_type
+import agent_config
 import agent_file_alias
 import filesystem_ext
 import agent_node_config
@@ -14,7 +15,7 @@ PURPOSE:
 Implements edit manager to install editing tools and manage template materialization
 
 INHERITED_REQUIREMENTS:
-- [EditManager] The edit manager installs the text replacement tool and line update tool.
+- [EditManager] The edit manager installs the replace file content tool.
 - [EditManager] Modifying a file records that workspace file modifications occurred during the session.
 
 GROUNDING_ARGUMENT:
@@ -43,13 +44,13 @@ GROUNDING_ARGUMENT:
     def initialize(self) -> None:
         """
 PURPOSE:
-Unconditionally installs the text replacement tool and line update tool into the tool manager
+Unconditionally installs the replace file content tool into the tool manager
 
 FRESH_REQUIREMENTS:
-- The edit manager unconditionally installs the text replacement tool and line update tool into the tool manager.
+- The edit manager unconditionally installs the replace file content tool into the tool manager.
 
 GROUNDING_ARGUMENT:
-- Installs TextReplacementTool and LineUpdateTool directly into imported tool_provider.ToolManager in the same session lifecycle tier.
+- Installs ReplaceFileContentTool directly into imported tool_provider.ToolManager in the same session lifecycle tier.
 """
         ...
 
@@ -90,22 +91,25 @@ GROUNDING_ARGUMENT:
         ...
 
 @singleton_type('agent_session')
-class TextReplacementTool(sandbox_file_editor.TextReplacementTool):
+class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool):
     """
 PURPOSE:
-Implements text replacement tool to replace unique matching text
+Implements replace file content tool to replace target content in a read-write file within an optional line range
 
 INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.
 
 FRESH_REQUIREMENTS:
-- The text replacement tool is named `replace`.
-- The text replacement tool file parameter uses the alias manager to convert a file alias.
-- The text replacement tool target text parameter uses a string parameter converter to accept text.
-- The text replacement tool replacement text parameter uses a string parameter converter to accept text.
+- The replace file content tool is named `replace_file_content`.
+- The replace file content tool path parameter uses the alias manager to convert a file alias.
+- The replace file content tool target content parameter uses a string parameter converter to accept text.
+- The replace file content tool replacement content parameter uses a string parameter converter to accept text.
+- The replace file content tool start line parameter uses an integer parameter converter to accept an integer.
+- The replace file content tool end line parameter uses an integer parameter converter to accept an integer.
+- The replace file content tool allow multiple parameter uses a boolean parameter converter to accept a boolean.
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, TextReplacementTool performs text replacements on declared read-write files, coordinating with imported agent_file_alias.AliasManager, EditManager, and tool_provider in the same session lifecycle tier.
+- As an agent_session singleton, ReplaceFileContentTool performs content replacements on declared read-write files, coordinating with imported agent_file_alias.AliasManager, EditManager, agent_config.AgentConfig, and tool_provider in the same session lifecycle tier.
 """
 
     @property
@@ -113,73 +117,10 @@ GROUNDING_ARGUMENT:
     def name(self) -> str:
         """
 PURPOSE:
-Establishes that the text replacement tool is named replace
+Establishes that the replace file content tool is named replace_file_content
 
 GROUNDING_ARGUMENT:
-- Constant tool schema identifier ('replace').
-"""
-        ...
-
-    @property
-    @override
-    def file_alias_parameter(self) -> tool_provider.Parameter:
-        """
-PURPOSE:
-Parameter identifying the target read-write file
-
-GROUNDING_ARGUMENT:
-- Constant parameter descriptor configured with alias manager converter.
-"""
-        ...
-
-    @property
-    @override
-    def target_text_parameter(self) -> tool_provider.Parameter:
-        """
-PURPOSE:
-Parameter specifying the exact text to replace
-
-GROUNDING_ARGUMENT:
-- Constant parameter descriptor configured with string parameter converter.
-"""
-        ...
-
-    @property
-    @override
-    def replacement_text_parameter(self) -> tool_provider.Parameter:
-        """
-PURPOSE:
-Parameter specifying the replacement content
-
-GROUNDING_ARGUMENT:
-- Constant parameter descriptor configured with string parameter converter.
-"""
-        ...
-
-    @operation
-    @override
-    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
-        """
-PURPOSE:
-Implements execute_tool to replace unique matching text with size validation
-
-FRESH_REQUIREMENTS:
-- Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
-- Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
-- On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
-- Executing the text replacement tool reads file content using the filesystem, treating missing files as empty.
-- Executing the text replacement tool fails if the target text exceeds 100,000 characters, and reminds the agent that target text for replacement must not exceed 100,000 characters.
-- Executing the text replacement tool fails if the target text is not found in the file content.
-- Executing the text replacement tool fails if the target text matches multiple locations in the file.
-- On successful text replacement tool execution, the unique occurrence of the target text is replaced with the replacement text, written using the filesystem, and file modifications are recorded.
-- Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
-
-INHERITED_REQUIREMENTS:
-- [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
-
-GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, resolves the target read-write file via imported agent_file_alias.AliasManager, inspects and updates file content using the filesystem, attaches the read-write file's short name as a suppression key on successful responses, and notifies EditManager in the same session lifecycle tier that workspace files were modified.
+- Constant tool schema identifier ('replace_file_content').
 """
         ...
 
@@ -197,57 +138,37 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def parameters(self) -> Set[tool_provider.Parameter]:
-        """
-PURPOSE:
-Established that each tool defines input parameters accepted for its invocation
-
-GROUNDING_ARGUMENT:
-- Set composed of self's constant parameter descriptors (file_alias_parameter, target_text_parameter, replacement_text_parameter).
-"""
-        ...
-
-@singleton_type('agent_session')
-class LineUpdateTool(sandbox_file_editor.LineUpdateTool):
-    """
-PURPOSE:
-Implements line update tool to update or insert lines
-
-INHERITED_ASSUMPTIONS:
-- [Tool] All parameters of a tool have unique names.
-
-FRESH_REQUIREMENTS:
-- The line update tool is named `update_lines`.
-- The line update tool file parameter uses the alias manager to convert a file alias.
-- The line update tool start line parameter uses an integer parameter converter to accept an integer.
-- The line update tool end line parameter uses an integer parameter converter to accept an integer.
-- The line update tool replacement text parameter uses a string parameter converter to accept text.
-
-GROUNDING_ARGUMENT:
-- As an agent_session singleton, LineUpdateTool performs line replacements and insertions on declared read-write files, coordinating with imported agent_file_alias.AliasManager, EditManager, and tool_provider in the same session lifecycle tier.
-"""
-
-    @property
-    @override
-    def name(self) -> str:
-        """
-PURPOSE:
-Establishes that the line update tool is named update_lines
-
-GROUNDING_ARGUMENT:
-- Constant tool schema identifier ('update_lines').
-"""
-        ...
-
-    @property
-    @override
     def file_alias_parameter(self) -> tool_provider.Parameter:
         """
 PURPOSE:
 Parameter identifying the target read-write file
 
 GROUNDING_ARGUMENT:
-- Constant parameter descriptor configured with alias manager converter.
+- Constant parameter descriptor configured with alias manager converter and named 'path'.
+"""
+        ...
+
+    @property
+    @override
+    def target_content_parameter(self) -> tool_provider.Parameter:
+        """
+PURPOSE:
+Parameter specifying the target content to replace
+
+GROUNDING_ARGUMENT:
+- Constant parameter descriptor configured with string parameter converter and named 'target_content'.
+"""
+        ...
+
+    @property
+    @override
+    def replacement_content_parameter(self) -> tool_provider.Parameter:
+        """
+PURPOSE:
+Parameter specifying the replacement content
+
+GROUNDING_ARGUMENT:
+- Constant parameter descriptor configured with string parameter converter and named 'replacement_content'.
 """
         ...
 
@@ -259,7 +180,7 @@ PURPOSE:
 Parameter specifying the starting line index
 
 GROUNDING_ARGUMENT:
-- Constant parameter descriptor configured with integer parameter converter.
+- Constant optional parameter descriptor configured with integer parameter converter and named 'start_line'.
 """
         ...
 
@@ -271,59 +192,19 @@ PURPOSE:
 Parameter specifying the ending line index
 
 GROUNDING_ARGUMENT:
-- Constant parameter descriptor configured with integer parameter converter.
+- Constant optional parameter descriptor configured with integer parameter converter and named 'end_line'.
 """
         ...
 
     @property
     @override
-    def replacement_text_parameter(self) -> tool_provider.Parameter:
+    def allow_multiple_parameter(self) -> tool_provider.Parameter:
         """
 PURPOSE:
-Parameter specifying the replacement content
+Parameter specifying whether to allow replacing multiple occurrences
 
 GROUNDING_ARGUMENT:
-- Constant parameter descriptor configured with string parameter converter.
-"""
-        ...
-
-    @operation
-    @override
-    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
-        """
-PURPOSE:
-Implements execute_tool to update or insert lines within valid line boundaries
-
-FRESH_REQUIREMENTS:
-- Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
-- Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
-- On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
-- Executing the line update tool reads file content using the filesystem, treating missing files as empty.
-- Executing the line update tool fails if the start line is less than one or exceeds the total line count plus one.
-- When the start line is less than or equal to the end line, executing the line update tool fails if the end line exceeds the total line count.
-- When the start line is less than or equal to the end line, successful execution replaces lines within the range, writes using the filesystem, and records file modifications.
-- When the start line exceeds the end line, successful execution inserts the replacement lines before the start line, writes using the filesystem, and records file modifications.
-- Replacing or inserting lines treats each replacement line as a complete newline-terminated line, preserving subsequent line boundaries when replacement text lacks a trailing newline.
-- Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
-
-INHERITED_REQUIREMENTS:
-- [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
-
-GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, resolves the target read-write file via imported agent_file_alias.AliasManager, reads and updates file content using the filesystem, attaches the read-write file's short name as a suppression key on successful responses, and notifies EditManager in the same session lifecycle tier that workspace files were modified.
-"""
-        ...
-
-    @property
-    @override
-    def description(self) -> str:
-        """
-PURPOSE:
-Established that each tool has a description which informs the agent why and when to use the tool
-
-GROUNDING_ARGUMENT:
-- Constant tool description string.
+- Constant optional parameter descriptor configured with boolean parameter converter and named 'allow_multiple'.
 """
         ...
 
@@ -335,6 +216,37 @@ PURPOSE:
 Established that each tool defines input parameters accepted for its invocation
 
 GROUNDING_ARGUMENT:
-- Set composed of self's constant parameter descriptors (file_alias_parameter, start_line_parameter, end_line_parameter, replacement_text_parameter).
+- Set composed of self's constant parameter descriptors (file_alias_parameter, target_content_parameter, replacement_content_parameter, start_line_parameter, end_line_parameter, allow_multiple_parameter).
+"""
+        ...
+
+    @operation
+    @override
+    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
+        """
+PURPOSE:
+Implements execute_tool to replace matching content within a read-write file
+
+FRESH_REQUIREMENTS:
+- Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+- Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
+- Before modifying a file, editing tool execution fails if the target edit overlaps with auto-generated dependency imports between '# --- DO NOT EDIT: Auto-generated dependencies ---' and '# --- END DO NOT EDIT ---', reminding the agent that auto-generated dependencies are managed by the build toolchain.
+- On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and when configured to perform follow-up reads on edits, produces a response specifying a follow-up execution of the view file tool on the modified read-write file, accompanied by a reminder justifying inspecting the updated file.
+- When configured to produce delta output, successful editing tool execution includes a diff delta representation in the response content.
+- Replace file content tool execution reads the file content from the filesystem, treating missing files as empty.
+- When a start line is provided, execution fails if the start line is less than one or exceeds the total line count plus one.
+- When an end line is provided, execution fails if the end line is less than one or exceeds the total line count.
+- When both start line and end line are provided, execution fails if the start line exceeds the end line.
+- When allow multiple is not set or false, execution fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence.
+- When allow multiple is true, execution fails if the target content is not found within the designated line range, and replaces all occurrences of the target content within the designated line range.
+- On success, the tool writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred.
+- Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
+
+INHERITED_REQUIREMENTS:
+- [Tool] When a parameter is required, an argument must be supplied for tool execution.
+- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
+
+GROUNDING_ARGUMENT:
+- Receives actual parameter bindings, resolves the target read-write file via imported agent_file_alias.AliasManager, inspects and updates file content using the filesystem, checks configuration via imported agent_config.AgentConfig, attaches the read-write file's short name as a suppression key on successful responses, and notifies EditManager in the same session lifecycle tier that workspace files were modified.
 """
         ...

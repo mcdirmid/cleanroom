@@ -4,7 +4,7 @@
 
 The artifact is the test module `<target_impl>_test.py`, written from `<target_impl>.pyi` and its dependency closure alone; the library implementation Python file is never consulted and must never be present in context during test authoring. Tests written from the grounding specification catch implementation drift: when a test fails, the implementation is wrong, unless the test misread the contract. If a pre-existing test module already satisfies all contracts and passes verification, no edits are made. Specifications provided in context at session start are the complete source of truth.
 
-When starting from a template, the template's inline instructions guide creating a minimal test module that passes initial verification before calling advance; comprehensive test coverage (cohesive Customer User Journeys, edge cases, failure signals, and stateful collaborator mock transitions) is developed progressively through subsequent checklist steps. Target classes share the exact specification class name (`from <target_impl> import <TargetClass>` or `from lib.<target_impl> import <TargetClass>`; the test linter auto-normalizes module imports to full package paths); mocking the target class or concrete data types is prohibited, while collaborator interface protocols are mocked. Test editing is incremental and targeted, using `update_lines` (`replace` is restricted to single-line changes < 200 characters); whole-file rewrites are prohibited. The search tool is never installed.
+When starting from a template, the template's inline instructions guide creating a minimal test module that passes initial verification before calling advance; comprehensive test coverage (cohesive Customer User Journeys, edge cases, failure signals, and stateful collaborator mock transitions) is developed progressively through subsequent checklist steps. Target classes share the exact specification class name (`from <target_impl> import <TargetClass>` or `from lib.<target_impl> import <TargetClass>`; the test linter auto-normalizes module imports to full package paths); mocking the target class or concrete data types is prohibited, while collaborator interface protocols are mocked. Test editing is incremental and targeted, using `replace_file_content` to replace unique contiguous code blocks (or bounded line ranges when targeting duplicate code); whole-file rewrites are prohibited. The search tool is never installed.
 
 > META: "Unit test modules are authored strictly against the grounding specification in isolation from the library implementation; edge cases and boundary conditions must be thoroughly exercised."
 
@@ -104,7 +104,7 @@ When starting from a template, the template's inline instructions guide creating
 
 - [ ] Creating separate test methods for individual requirement bullets instead of grouping related requirements into cohesive Customer User Journeys (CUJs)
 - [ ] Creating duplicate test methods for `FRESH_REQUIREMENTS:` and `INHERITED_REQUIREMENTS:` that specify the same behavioral contract
-- [ ] Whole-file rewrites or multi-line `replace` operations instead of surgical `update_lines`
+- [ ] Whole-file rewrites instead of surgical `replace_file_content` operations
 - [ ] Mocking or redefining concrete data types instead of constructing them directly
 - [ ] Defining mock classes for the system under test (`Mock<Target>`)
 - [ ] Authoring tests with library implementation code in context or transcribing observed implementation behavior instead of reading the grounding contract

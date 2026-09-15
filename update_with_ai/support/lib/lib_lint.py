@@ -18,6 +18,7 @@ Exits 0 when the BUILD entry is maintained; exits 1 on unexpected errors.
 
 import argparse
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -33,14 +34,19 @@ from build_lint_common import (
     check_sibling_imports,
     check_syntax,
     check_type_ignore,
+    check_undeclared_imports,
+    ensure_dependency_header,
     ensure_load,
     ensure_pip_load,
     ensure_target,
+    extract_target_pyright_deps,
     load_line,
     local_imports,
     module_file,
     module_stem,
     package_of,
+    parse_dependency_header,
+    parse_pyi_dependencies,
     parse_spec_build_dependencies,
     read_text,
     rewrite_lib_imports,
@@ -125,6 +131,31 @@ def main() -> int:
         ):
             write_text(args.module_path, asm_content)
 
+    allowed_deps: set[str] = set()
+    for d in raw_deps:
+        m = re.search(r'requirement\(["\']([^"\']+)["\']\)', d)
+        if m:
+            allowed_deps.add(m.group(1))
+        elif ":" in d:
+            allowed_deps.add(d.split(":")[-1])
+        elif d and not d.startswith("//"):
+            allowed_deps.add(d)
+
+    if args.pyi:
+        for d in parse_pyi_dependencies(args.pyi, pyi_paths):
+            allowed_deps.add(d)
+    elif pyi_paths:
+        for d in parse_pyi_dependencies("", pyi_paths):
+            allowed_deps.add(d)
+
+    for d in extract_target_pyright_deps(args.build_path, RULE, stem):
+        allowed_deps.add(d.split(":")[-1])
+
+    if not allowed_deps and os.path.exists(args.module_path):
+        parsed = parse_dependency_header(read_text(args.module_path))
+        if parsed is not None:
+            allowed_deps = set(parsed)
+
     import_map, label_map, sibling_stems = build_module_resolution_map(
         args.build_path, dir_name, raw_deps
     )
@@ -135,6 +166,20 @@ def main() -> int:
         for s in imported_cross_parts:
             if s in label_map and label_map[s] not in raw_deps:
                 raw_deps.append(label_map[s])
+            allowed_deps.add(s)
+
+    has_declared_deps = bool(raw_deps or args.pyi or pyi_paths or allowed_deps)
+    if (
+        has_declared_deps
+        and os.path.exists(args.module_path)
+        and not stem.endswith("_asm")
+    ):
+        ensure_dependency_header(
+            args.module_path,
+            sorted(allowed_deps),
+            import_map=import_map,
+            sibling_stems=sibling_stems,
+        )
 
     syntax_errors = check_syntax(args.module_path)
     if syntax_errors:
@@ -222,6 +267,11 @@ def main() -> int:
         build_path=args.build_path,
     )
     dead_code_errors = check_dead_code(args.module_path)
+    undeclared_errors = (
+        check_undeclared_imports(args.module_path, sorted(allowed_deps))
+        if has_declared_deps
+        else []
+    )
     all_errors = (
         structure_errors
         + import_errors
@@ -232,6 +282,7 @@ def main() -> int:
         + type_ignore_errors
         + type_errors
         + dead_code_errors
+        + undeclared_errors
     )
     if all_errors:
         for err in all_errors:

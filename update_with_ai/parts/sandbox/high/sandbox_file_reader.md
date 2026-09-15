@@ -16,10 +16,8 @@ The *read manager* is an agent session service that manages inspection of worksp
 
 The read manager provides:
 
-- A *read tool* that inspects file content, accepting a file alias *file parameter* and a boolean *line numbers parameter*.
+- A *view file tool* that inspects file content, accepting a file alias *path parameter*.
 
 - A *search tool* that searches pattern matches across the session's read-only and read-write files, accepting a regex pattern *pattern parameter*.
-
-The read manager determines whether an inspected file *requires line numbers*, accepting a file alias *file*, identifying read-write files and source code files as requiring line numbers.
 
 The read manager exposes the session *read-only files* and *read-write files*. When step mode is active, the read manager is configured with an unbound *guide file*.

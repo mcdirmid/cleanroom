@@ -465,11 +465,11 @@ class RunTestsTool(sandbox_run_control.RunTestsTool, Singleton):
                         f"Oh, verification failed and I'm not allowed to run anymore tests until I update the files. "
                         f"Let me read {rw_file.short_name} again and see if I can figure out a different course of action."
                     )
-                # Requirement: Specifies a follow-up execution of the read tool on the session source file with line numbers requested and reasoning text noting that verification passed without permission to run more tests and to advance or finish the session if correct, or noting that verification failed without permission to run more tests until files are updated, when workspace files have not been updated since the previous run tests tool execution.
+                # Requirement: Specifies a follow-up execution of the view file tool on the session source file and reasoning text noting that verification passed without permission to run more tests and to advance or finish the session if correct, or noting that verification failed without permission to run more tests until files are updated, when workspace files have not been updated since the previous run tests tool execution.
                 follow_up = tool_provider.FollowUpToolCall(
-                    tool_name="read_file",
+                    tool_name="view_file",
                     wire_parameter_bindings=tool_provider.WireParameterBindings(
-                        bindings={("file", rw_file.short_name), ("line_numbers", True)}
+                        bindings={("path", rw_file.short_name)}
                     ),
                     reasoning_text=reasoning_text,
                 )

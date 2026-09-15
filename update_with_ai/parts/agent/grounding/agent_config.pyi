@@ -59,3 +59,25 @@ FRESH_REQUIREMENTS:
 - The agent config provides whether the agent should perform startup reads to inspect declared files at session start.
 """
         ...
+
+    @property
+    def edit_followup_read(self) -> bool:
+        """
+PURPOSE:
+Indicates whether editing tools should execute a follow-up read on modified files
+
+FRESH_REQUIREMENTS:
+- The agent config provides whether editing tools should execute a follow-up read on modified files.
+"""
+        ...
+
+    @property
+    def edit_delta_output(self) -> bool:
+        """
+PURPOSE:
+Indicates whether editing tools should produce delta output
+
+FRESH_REQUIREMENTS:
+- The agent config provides whether editing tools should produce delta output.
+"""
+        ...

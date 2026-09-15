@@ -201,6 +201,14 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                                     continue
                                 silent_deps_list.append(f"{u_norm}#{scr_norm}")
 
+                        # 5. star_role_deps implies role_deps when not referencing self role
+                        for sr in role_data.get("star_role_deps", []):
+                            sr_norm = _resolve_role_label(sr)
+                            if sr_norm != node.role_address:
+                                implied_role_dep = f"{node.unit_address}#{sr_norm}"
+                                if implied_role_dep not in deps_list:
+                                    deps_list.append(implied_role_dep)
+
                         if role_data.get("guide"):
                             deps_list.append(role_data["guide"])
                     else:
@@ -214,6 +222,16 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                         for r_dep in role_data.get("role_deps", []):
                             dep_role = _resolve_role_label(r_dep)
                             deps_list.append(f"{node.unit_address}#{dep_role}")
+                        for r_dep in role_data.get("feedback_role_deps", []):
+                            dep_role = _resolve_role_label(r_dep)
+                            if f"{node.unit_address}#{dep_role}" not in deps_list:
+                                deps_list.append(f"{node.unit_address}#{dep_role}")
+                        for sr in role_data.get("star_role_deps", []):
+                            sr_norm = _resolve_role_label(sr)
+                            if sr_norm != node.role_address:
+                                implied_role_dep = f"{node.unit_address}#{sr_norm}"
+                                if implied_role_dep not in deps_list:
+                                    deps_list.append(implied_role_dep)
                         for r_dep in role_data.get("silent_role_deps", []):
                             dep_role = _resolve_role_label(r_dep)
                             silent_deps_list.append(f"{node.unit_address}#{dep_role}")
@@ -345,7 +363,16 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                             is_silent=False,
                         )
                     )
-                for r_dep in role_data.get("role_deps", []):
+                implied_role_deps: List[str] = list(role_data.get("role_deps", []))
+                for f_dep in role_data.get("feedback_role_deps", []):
+                    if f_dep not in implied_role_deps:
+                        implied_role_deps.append(f_dep)
+                for sr in role_data.get("star_role_deps", []):
+                    sr_norm = _resolve_role(sr)
+                    if sr_norm != role_addr and sr not in implied_role_deps:
+                        implied_role_deps.append(sr)
+
+                for r_dep in implied_role_deps:
                     dep_role = _resolve_role(r_dep)
                     deps.add(
                         dag_storage.Dependency(
@@ -405,8 +432,17 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
 
             deps: Set[dag_storage.Dependency] = set()
 
-            # 1. Intra-unit role dependencies
-            for r_dep in role_data.get("role_deps", []):
+            # 1. Intra-unit role dependencies (including implied from feedback_role_deps and star_role_deps)
+            implied_role_deps: List[str] = list(role_data.get("role_deps", []))
+            for f_dep in role_data.get("feedback_role_deps", []):
+                if f_dep not in implied_role_deps:
+                    implied_role_deps.append(f_dep)
+            for sr in role_data.get("star_role_deps", []):
+                sr_norm = _resolve_role(sr)
+                if sr_norm != role_addr and sr not in implied_role_deps:
+                    implied_role_deps.append(sr)
+
+            for r_dep in implied_role_deps:
                 dep_role = _resolve_role(r_dep)
                 deps.add(
                     dag_storage.Dependency(

@@ -1480,7 +1480,23 @@ def rewrite_lib_imports(
     imported_cross_parts: list[str] = []
     replacements: list[tuple[int, str, str, str]] = []
 
+    dne_range = find_do_not_edit_range(content)
+    dne_start = dne_range[0] if dne_range else -1
+    dne_end = dne_range[1] if dne_range else -1
+
     for node in ast.walk(tree):
+        node_lineno = getattr(node, "lineno", None)
+        if (
+            dne_start != -1
+            and node_lineno is not None
+            and dne_start <= node_lineno <= dne_end
+        ):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    stem = alias.name.split(".")[-1]
+                    if stem in import_map:
+                        imported_cross_parts.append(stem)
+            continue
         if isinstance(node, ast.Import):
             for alias in node.names:
                 m = alias.name[4:] if alias.name.startswith("lib.") else alias.name
@@ -1684,3 +1700,420 @@ def rewrite_lib_imports(
         write_text(file_path, "".join(lines))
 
     return changed, imported_cross_parts
+
+
+def parse_pyi_dependencies(
+    pyi_path: str, pyi_deps: Optional[Sequence[str]] = None
+) -> list[str]:
+    """Extract declared dependency stems from a .pyi grounding specification and any pyi_deps.
+
+    Collects imported module stems from the AST (excluding stdlib, framework, and typing)
+    and external build dependencies parsed from ## Build Dependencies.
+    """
+    deps: set[str] = set()
+    paths = [pyi_path] if pyi_path and os.path.isfile(pyi_path) else []
+    if pyi_deps:
+        paths.extend([p for p in pyi_deps if os.path.isfile(p)])
+
+    stdlib = getattr(sys, "stdlib_module_names", set())
+    ignored = {"framework", "typing", "typing_extensions", "support", "lifecycle"}
+
+    for p in paths:
+        try:
+            content = read_text(p)
+            tree = ast.parse(content, filename=p)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        stem = alias.name.split(".")[0]
+                        if stem not in stdlib and stem not in ignored:
+                            deps.add(stem)
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module:
+                        stem = node.module.split(".")[0]
+                        if stem not in stdlib and stem not in ignored:
+                            deps.add(stem)
+                    elif node.level > 0:
+                        for alias in node.names:
+                            stem = alias.name.split(".")[0]
+                            if stem not in stdlib and stem not in ignored:
+                                deps.add(stem)
+            for build_dep in parse_spec_build_dependencies(p):
+                m = re.search(r'requirement\(["\']([^"\']+)["\']\)', build_dep)
+                if m:
+                    deps.add(m.group(1))
+                elif ":" in build_dep:
+                    deps.add(build_dep.split(":")[-1])
+                elif build_dep and not build_dep.startswith("//"):
+                    deps.add(build_dep)
+        except (OSError, SyntaxError):
+            pass
+
+    return sorted(deps)
+
+
+def extract_target_pyright_deps(build_path: str, rule: str, name: str) -> list[str]:
+    """Extract pyright_deps from an existing target block in build_path."""
+    if not os.path.isfile(build_path):
+        return []
+    try:
+        text = read_text(build_path)
+    except OSError:
+        return []
+    span = _find_block(text, rule, name)
+    if not span:
+        return []
+    block = text[span[0] : span[1]]
+    return _attr_list(block, "pyright_deps")
+
+
+DO_NOT_EDIT_START = "# --- DO NOT EDIT: Auto-generated dependencies ---"
+DO_NOT_EDIT_END = "# --- END DO NOT EDIT ---"
+
+
+def find_do_not_edit_range(file_content: str) -> Optional[tuple[int, int]]:
+    """Return 1-based (start_line, end_line) of the DO NOT EDIT block if present."""
+    lines = file_content.splitlines()
+    start = -1
+    for i, line in enumerate(lines[:50]):
+        if line.strip() == DO_NOT_EDIT_START:
+            start = i + 1
+            break
+    if start == -1:
+        return None
+    for j in range(start, min(start + 50, len(lines) + 1)):
+        if lines[j - 1].strip() == DO_NOT_EDIT_END:
+            return (start, j)
+    return None
+
+
+def format_dependency_header(deps: Sequence[str]) -> str:
+    """Format the dependency premise comment line."""
+    clean_deps: set[str] = set()
+    for d in deps:
+        if not d or d == "(none)":
+            continue
+        m = re.search(r'requirement\(["\']([^"\']+)["\']\)', d)
+        if m:
+            clean_deps.add(m.group(1))
+        elif ":" in d:
+            clean_deps.add(d.split(":")[-1])
+        elif "/" in d:
+            clean_deps.add(d.split("/")[-1])
+        else:
+            clean_deps.add(d)
+    body = ", ".join(sorted(clean_deps)) if clean_deps else "(none)"
+    return f"# Dependencies: {body}\n"
+
+
+def format_dependency_block(
+    expected_deps: Sequence[str],
+    import_map: Optional[dict[str, str]] = None,
+    sibling_stems: Optional[set[str]] = None,
+    has_lifecycle: bool = False,
+) -> str:
+    """Format the auto-generated dependency block.
+
+    Includes DO_NOT_EDIT_START, lifecycle imports if applicable, sibling imports,
+    cross-package imports, and DO_NOT_EDIT_END.
+    """
+    clean_deps: set[str] = set()
+    for d in expected_deps:
+        if not d or d == "(none)":
+            continue
+        m = re.search(r'requirement\(["\']([^"\']+)["\']\)', d)
+        if m:
+            clean_deps.add(m.group(1))
+        elif ":" in d:
+            clean_deps.add(d.split(":")[-1])
+        elif "/" in d:
+            clean_deps.add(d.split("/")[-1])
+        else:
+            clean_deps.add(d)
+
+    lines = [
+        DO_NOT_EDIT_START,
+    ]
+
+    include_lifecycle = has_lifecycle or "lifecycle" in clean_deps
+    if include_lifecycle:
+        lines.append(
+            "from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton"
+        )
+
+    siblings = sibling_stems or set()
+    imap = import_map or {}
+
+    for dep in sorted(clean_deps):
+        if dep == "lifecycle":
+            continue
+        if dep in siblings:
+            lines.append(f"from . import {dep}")
+        elif dep in imap:
+            full_path = imap[dep]
+            if full_path == "support.lib.lifecycle":
+                continue
+            lines.append(f"import {full_path} as {dep}")
+        elif import_map is not None:
+            lines.append(f"import {dep}")
+
+    lines.append(DO_NOT_EDIT_END)
+    return "\n".join(lines) + "\n"
+
+
+def parse_dependency_header(file_content: str) -> Optional[list[str]]:
+    """Parse allowable dependency aliases from a DO NOT EDIT block or legacy # Dependencies: line."""
+    lines = file_content.splitlines()[:50]
+    in_block = False
+    deps: list[str] = []
+    found = False
+    for line in lines:
+        s = line.strip()
+        if s == DO_NOT_EDIT_START:
+            in_block = True
+            found = True
+            continue
+        if in_block:
+            if s == DO_NOT_EDIT_END:
+                break
+            m_dep = re.match(r"^#\s*Dependencies:\s*(.*)$", s)
+            if m_dep:
+                raw = m_dep.group(1).strip()
+                if raw and raw.lower() != "(none)":
+                    items = [d.strip() for d in raw.split(",") if d.strip()]
+                    deps.extend([d for d in items if not (d.startswith("<") and d.endswith(">"))])
+                continue
+            m_rel = re.match(r"^from\s+\.\s+import\s+([a-zA-Z0-9_]+)", s)
+            if m_rel:
+                deps.append(m_rel.group(1))
+                continue
+            m_as = re.match(r"^import\s+\S+\s+as\s+([a-zA-Z0-9_]+)", s)
+            if m_as:
+                deps.append(m_as.group(1))
+                continue
+            m_imp = re.match(r"^import\s+([a-zA-Z0-9_]+)", s)
+            if m_imp:
+                deps.append(m_imp.group(1))
+                continue
+        else:
+            m = re.match(r"^#\s*Dependencies:\s*(.*)$", s)
+            if m:
+                raw = m.group(1).strip()
+                if not raw or raw.lower() == "(none)":
+                    return []
+                items = [d.strip() for d in raw.split(",") if d.strip()]
+                return [d for d in items if not (d.startswith("<") and d.endswith(">"))]
+    return deps if found else None
+
+
+def strip_dependency_header(file_path: str) -> bool:
+    """Remove any legacy '# Dependencies: ...' comment line from the file."""
+    if not os.path.isfile(file_path):
+        return False
+    try:
+        content = read_text(file_path)
+    except OSError:
+        return False
+    lines = content.splitlines(keepends=True)
+    header_idx = -1
+    for i, line in enumerate(lines[:20]):
+        if re.match(r"^#\s*Dependencies:\s*", line):
+            header_idx = i
+            break
+    if header_idx != -1:
+        lines.pop(header_idx)
+        write_text(file_path, "".join(lines))
+        return True
+    return False
+
+
+def ensure_dependency_header(
+    file_path: str,
+    expected_deps: Sequence[str],
+    import_map: Optional[dict[str, str]] = None,
+    sibling_stems: Optional[set[str]] = None,
+) -> bool:
+    """Ensure that the file begins with an up-to-date auto-generated dependency block.
+
+    Replaces existing block or single-line '# Dependencies: ...' header, or inserts at line 1.
+    Preserves any leading 'from __future__ import annotations' or shebang '#!' before the block.
+    Returns True if the file content changed.
+    """
+    if not os.path.isfile(file_path):
+        return False
+    try:
+        content = read_text(file_path)
+    except OSError:
+        return False
+
+    has_lifecycle = (
+        "lifecycle" in expected_deps
+        or "support.lib.lifecycle" in content
+        or re.search(
+            r"\b(LifecycleRegistry|Singleton|get_singleton|get_default_registry)\b",
+            content,
+        )
+        is not None
+    )
+
+    new_block = format_dependency_block(
+        expected_deps,
+        import_map=import_map,
+        sibling_stems=sibling_stems,
+        has_lifecycle=has_lifecycle,
+    )
+
+    lines = content.splitlines(keepends=True)
+
+    dne_range = find_do_not_edit_range(content)
+    if dne_range is not None:
+        start_0 = dne_range[0] - 1
+        end_0 = dne_range[1] - 1
+        current_block = "".join(lines[start_0 : end_0 + 1])
+        if current_block.rstrip() == new_block.rstrip():
+            return False
+        lines[start_0 : end_0 + 1] = [new_block]
+        write_text(file_path, "".join(lines))
+        return True
+
+    header_idx = -1
+    for i, line in enumerate(lines[:20]):
+        if re.match(r"^#\s*Dependencies:\s*", line):
+            header_idx = i
+            break
+
+    if header_idx != -1:
+        future_idx = -1
+        for i, line in enumerate(lines[:20]):
+            if line.strip().startswith("from __future__ import annotations"):
+                future_idx = i
+                break
+        if future_idx != -1 and future_idx > header_idx:
+            future_line = lines.pop(future_idx)
+            lines[header_idx] = future_line + new_block
+        else:
+            lines[header_idx] = new_block
+        write_text(file_path, "".join(lines))
+        return True
+
+    insert_idx = 0
+    if lines and lines[0].startswith("#!"):
+        insert_idx = 1
+    for i in range(insert_idx, min(insert_idx + 10, len(lines))):
+        if lines[i].strip().startswith("from __future__ import annotations"):
+            insert_idx = i + 1
+            break
+    lines.insert(insert_idx, new_block)
+    write_text(file_path, "".join(lines))
+    return True
+
+
+def extract_imported_stems(file_path: str) -> list[tuple[int, str]]:
+    """Extract all (lineno, stem) of imported modules in a file."""
+    if not os.path.isfile(file_path):
+        return []
+    try:
+        content = read_text(file_path)
+        tree = ast.parse(content, filename=file_path)
+    except (OSError, SyntaxError):
+        return []
+
+    results: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                name = alias.name
+                if "support" in name.split("."):
+                    continue
+                if ".lib." in name:
+                    stem = name.split(".lib.")[1].split(".")[0]
+                elif ".tests." in name:
+                    stem = name.split(".tests.")[1].split(".")[0]
+                elif name.startswith("lib."):
+                    stem = name.split(".")[1]
+                elif name.startswith("tests."):
+                    stem = name.split(".")[1]
+                else:
+                    stem = name.split(".")[0]
+                results.append((node.lineno, stem))
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                mod = node.module
+                if "support" in mod.split("."):
+                    continue
+                if (
+                    mod in ("lib", "tests")
+                    or mod.endswith(".lib")
+                    or mod.endswith(".tests")
+                ):
+                    for alias in node.names:
+                        results.append((node.lineno, alias.name))
+                elif ".lib." in mod:
+                    stem = mod.split(".lib.")[1].split(".")[0]
+                    results.append((node.lineno, stem))
+                elif ".tests." in mod:
+                    stem = mod.split(".tests.")[1].split(".")[0]
+                    results.append((node.lineno, stem))
+                elif mod.startswith("lib."):
+                    stem = mod.split(".")[1]
+                    results.append((node.lineno, stem))
+                elif mod.startswith("tests."):
+                    stem = mod.split(".")[1]
+                    results.append((node.lineno, stem))
+                elif node.level > 0:
+                    results.append((node.lineno, mod.split(".")[0]))
+                else:
+                    results.append((node.lineno, mod.split(".")[0]))
+            elif node.level > 0:
+                for alias in node.names:
+                    results.append((node.lineno, alias.name))
+    return results
+
+
+def check_undeclared_imports(
+    file_path: str,
+    allowed_deps: Sequence[str],
+    extra_allowed: Optional[Sequence[str]] = None,
+) -> list[str]:
+    """Check that all imported modules in file_path are in allowed_deps (or stdlib/framework).
+
+    Returns error diagnostics citing undeclared dependencies and listing allowed dependencies.
+    """
+    errors: list[str] = []
+    allowed_set = set(allowed_deps) | set(extra_allowed or [])
+    # Also add base stems for any _ext entries
+    for d in list(allowed_set):
+        if d.endswith("_ext"):
+            allowed_set.add(d[:-4])
+
+    stdlib = getattr(sys, "stdlib_module_names", set()) | {
+        "support",
+        "framework",
+        "lifecycle",
+        "typing_extensions",
+        "pkg_resources",
+        "pytest",
+        "mock",
+    }
+
+    imported = extract_imported_stems(file_path)
+    seen_errors: set[str] = set()
+    allowed_display = ", ".join(sorted(allowed_set)) if allowed_set else "(none)"
+
+    for lineno, stem in imported:
+        if (
+            stem in allowed_set
+            or stem in stdlib
+            or stem.startswith("support.")
+            or stem in ("lib", "tests")
+        ):
+            continue
+        err_key = f"{lineno}:{stem}"
+        if err_key not in seen_errors:
+            seen_errors.add(err_key)
+            errors.append(
+                f"{file_path}:{lineno}: error: undeclared dependency '{stem}'. Allowed dependencies: {allowed_display}"
+            )
+
+    return errors
+

@@ -150,6 +150,16 @@ class ModelConfig(
             if "inject_followups" in data
             else os.environ.get("INJECT_FOLLOWUPS", "true").lower() in ("true", "1")
         )
+        self._edit_followup_read = (
+            bool(data["edit_followup_read"])
+            if "edit_followup_read" in data
+            else os.environ.get("EDIT_FOLLOWUP_READ", "true").lower() in ("true", "1")
+        )
+        self._edit_delta_output = (
+            bool(data["edit_delta_output"])
+            if "edit_delta_output" in data
+            else os.environ.get("EDIT_DELTA_OUTPUT", "false").lower() in ("true", "1")
+        )
         self._node_visit_limit = (
             int(data["node_visit_limit"])
             if "node_visit_limit" in data
@@ -205,6 +215,16 @@ class ModelConfig(
     def inject_followups(self) -> bool:
         # Requirement: The agent config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
         return self._inject_followups
+
+    @property
+    def edit_followup_read(self) -> bool:
+        # Requirement: Whether editing tools should execute a follow-up read on modified files.
+        return self._edit_followup_read
+
+    @property
+    def edit_delta_output(self) -> bool:
+        # Requirement: Whether editing tools should produce delta output.
+        return self._edit_delta_output
 
     @property
     def node_visit_limit(self) -> dag_config.NodeVisitLimit:

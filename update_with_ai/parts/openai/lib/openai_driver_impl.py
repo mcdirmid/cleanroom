@@ -364,7 +364,7 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                 history.append_message(
                     agent_conversation.Message(
                         role="user",
-                        content="No tools were executed. A tool (e.g. read_file, replace, advance, fail, blame) must be called to make progress or conclude the session.",
+                        content="No tools were executed. A tool (e.g. view_file, replace, advance, fail, blame) must be called to make progress or conclude the session.",
                     )
                 )
                 continue
@@ -489,6 +489,7 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                 if not resp.is_failed and fn_name in (
                     "replace",
                     "update_lines",
+                    "replace_file_content",
                     "advance",
                 ):
                     guard.record_progress()
@@ -550,6 +551,7 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                     if not follow_resp.is_failed and followup.tool_name in (
                         "replace",
                         "update_lines",
+                        "replace_file_content",
                         "advance",
                     ):
                         guard.record_progress()

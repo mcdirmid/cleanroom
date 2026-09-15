@@ -59,12 +59,12 @@ class AgentLoopGuardImplTest(unittest.TestCase):
 
             # Call 1 -> None
             # Requirement: [LoopGuard] A loop guard evaluates consecutive executions of identical tools and edits.
-            self.assertIsNone(guard.record_tool_execution("read_file", bindings))
+            self.assertIsNone(guard.record_tool_execution("view_file", bindings))
 
             # Call 2 -> LoopReminder
             # Requirement: Produces a loop reminder advising the agent that no new information will be revealed by repeated tool execution until session read-write files are updated when consecutive identical tool executions reach the reminder threshold of two repetitions.
             # Requirement: [LoopGuard] Consecutive repetitions reaching a warning threshold produce a loop reminder.
-            res2 = guard.record_tool_execution("read_file", bindings)
+            res2 = guard.record_tool_execution("view_file", bindings)
             self.assertIsInstance(res2, LoopReminder)
             assert isinstance(res2, LoopReminder)
             self.assertIn(
@@ -72,15 +72,15 @@ class AgentLoopGuardImplTest(unittest.TestCase):
             )
 
             # Call 3 & 4 -> LoopReminder
-            res3 = guard.record_tool_execution("read_file", bindings)
+            res3 = guard.record_tool_execution("view_file", bindings)
             self.assertIsInstance(res3, LoopReminder)
-            res4 = guard.record_tool_execution("read_file", bindings)
+            res4 = guard.record_tool_execution("view_file", bindings)
             self.assertIsInstance(res4, LoopReminder)
 
             # Call 5 -> LoopFailure
             # Requirement: Produces a loop failure communicating session failure when consecutive identical tool executions reach the fatal threshold.
             # Requirement: [LoopGuard] Consecutive repetitions reaching a fatal threshold produce a loop failure communicating session termination.
-            res5 = guard.record_tool_execution("read_file", bindings)
+            res5 = guard.record_tool_execution("view_file", bindings)
             self.assertIsInstance(res5, LoopFailure)
 
     def test_consecutive_edits_threshold(self) -> None:
@@ -114,9 +114,9 @@ class AgentLoopGuardImplTest(unittest.TestCase):
             bindings = ActualParameterBindings(bindings={(self.param, "a.py")})
 
             # 2 calls reaching reminder
-            self.assertIsNone(guard.record_tool_execution("read_file", bindings))
+            self.assertIsNone(guard.record_tool_execution("view_file", bindings))
             self.assertIsInstance(
-                guard.record_tool_execution("read_file", bindings), LoopReminder
+                guard.record_tool_execution("view_file", bindings), LoopReminder
             )
 
             # Reset progress
@@ -125,7 +125,7 @@ class AgentLoopGuardImplTest(unittest.TestCase):
             guard.record_progress()
 
             # Next call is treated as first call
-            self.assertIsNone(guard.record_tool_execution("read_file", bindings))
+            self.assertIsNone(guard.record_tool_execution("view_file", bindings))
 
     def test_distinct_tool_calls_reset_counter(self) -> None:
         """CUJ: Interleaving distinct calls prevents reaching reminder threshold."""
@@ -134,13 +134,13 @@ class AgentLoopGuardImplTest(unittest.TestCase):
             bindings1 = ActualParameterBindings(bindings={(self.param, "a.py")})
             bindings2 = ActualParameterBindings(bindings={(self.param, "b.py")})
 
-            self.assertIsNone(guard.record_tool_execution("read_file", bindings1))
+            self.assertIsNone(guard.record_tool_execution("view_file", bindings1))
             # Different arguments prevents reaching threshold of 2
-            self.assertIsNone(guard.record_tool_execution("read_file", bindings2))
+            self.assertIsNone(guard.record_tool_execution("view_file", bindings2))
             # Again with bindings1
-            self.assertIsNone(guard.record_tool_execution("read_file", bindings1))
+            self.assertIsNone(guard.record_tool_execution("view_file", bindings1))
             # Again with bindings2
-            self.assertIsNone(guard.record_tool_execution("read_file", bindings2))
+            self.assertIsNone(guard.record_tool_execution("view_file", bindings2))
 
 
 if __name__ == "__main__":

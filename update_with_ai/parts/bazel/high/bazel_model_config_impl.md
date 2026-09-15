@@ -41,6 +41,10 @@ The agent config provides:
 
 - Whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
 
+- Whether editing tools should execute a follow-up read on modified files.
+
+- Whether editing tools should produce delta output.
+
 The dag config provides:
 
 - The node visit limit bounding node visits during graph cleaning.

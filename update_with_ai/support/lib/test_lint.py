@@ -15,6 +15,7 @@ transitively.
 
 import argparse
 import os
+import re
 import sys
 
 from build_lint_common import (
@@ -25,13 +26,18 @@ from build_lint_common import (
     check_test_imports,
     check_test_mocks,
     check_test_structure,
+    check_undeclared_imports,
+    strip_dependency_header,
     ensure_load,
     ensure_target,
+    extract_target_pyright_deps,
     load_line,
     local_imports,
     module_file,
     module_stem,
     package_of,
+    parse_dependency_header,
+    parse_pyi_dependencies,
     read_text,
     rewrite_test_imports,
     transitive_closure,
@@ -56,12 +62,53 @@ def main() -> int:
         help="the Bazel package holding the modules' pyright_library targets "
         "(the lib package one level up; pyright_deps are written against it)",
     )
+    ap.add_argument(
+        "--pyi",
+        default="",
+        help="path to the grounding specification .pyi file",
+    )
     args = ap.parse_args()
 
     package = package_of(args.build_path)
     stem = module_stem(args.module_path)
     srcs = module_file(args.module_path)
     deps = [d for d in args.deps.split(",") if d and not d.endswith("_ext")]
+
+    impl_stem = stem[:-5] if stem.endswith("_test") else stem
+    allowed_deps: set[str] = {impl_stem}
+
+    for d in deps:
+        m = re.search(r'requirement\(["\']([^"\']+)["\']\)', d)
+        if m:
+            allowed_deps.add(m.group(1))
+        elif ":" in d:
+            allowed_deps.add(d.split(":")[-1])
+        elif d and not d.startswith("//"):
+            allowed_deps.add(d)
+
+    pyi_path = args.pyi
+    if not pyi_path or not os.path.isfile(pyi_path):
+        inferred = os.path.join(
+            os.path.dirname(args.lib_pkg.rstrip("/")), "grounding", f"{impl_stem}.pyi"
+        )
+        if os.path.isfile(inferred):
+            pyi_path = inferred
+
+    if pyi_path and os.path.isfile(pyi_path):
+        for d in parse_pyi_dependencies(pyi_path):
+            allowed_deps.add(d)
+
+    for d in extract_target_pyright_deps(args.build_path, RULE, stem):
+        allowed_deps.add(d.split(":")[-1])
+
+    if os.path.exists(args.module_path):
+        parsed = parse_dependency_header(read_text(args.module_path))
+        if parsed is not None:
+            for d in parsed:
+                allowed_deps.add(d)
+
+    if os.path.exists(args.module_path):
+        strip_dependency_header(args.module_path)
 
     # Build resolution map and rewrite test module imports if test module exists
     import_map, label_map, _ = build_module_resolution_map(
@@ -101,11 +148,17 @@ def main() -> int:
                 f"{args.module_path}: error: test module must end with 'if __name__ == \"__main__\": unittest.main()'\n"
             )
             return 1
+        undeclared_errors = check_undeclared_imports(
+            args.module_path,
+            sorted(allowed_deps),
+            extra_allowed=[impl_stem],
+        )
         all_errors = (
             check_test_imports(args.lib_pkg, args.module_path)
             + check_test_impl_imports(args.lib_pkg, args.module_path)
             + check_test_mocks(args.module_path)
             + check_test_structure(args.module_path)
+            + undeclared_errors
         )
         if all_errors:
             for err in all_errors:

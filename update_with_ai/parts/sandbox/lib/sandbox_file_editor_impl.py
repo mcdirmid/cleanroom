@@ -1,5 +1,7 @@
+import difflib
 import os
 from typing import Optional, Set
+from update_with_ai.parts.agent.lib import agent_config
 from update_with_ai.parts.agent.lib import agent_file_alias
 from update_with_ai.parts.agent.lib import agent_node_config
 from . import sandbox_file_editor
@@ -12,6 +14,25 @@ from support.lib.lifecycle import (
     get_singleton,
 )
 
+DO_NOT_EDIT_START = "# --- DO NOT EDIT: Auto-generated dependencies ---"
+DO_NOT_EDIT_END = "# --- END DO NOT EDIT ---"
+
+
+def find_do_not_edit_range(file_content: str) -> Optional[tuple[int, int]]:
+    """Return 1-based (start_line, end_line) of the DO NOT EDIT block if present."""
+    lines = file_content.splitlines()
+    start = -1
+    for i, line in enumerate(lines[:50]):
+        if line.strip() == DO_NOT_EDIT_START:
+            start = i + 1
+            break
+    if start == -1:
+        return None
+    for j in range(start, min(start + 50, len(lines) + 1)):
+        if lines[j - 1].strip() == DO_NOT_EDIT_END:
+            return (start, j)
+    return None
+
 
 class EditManager(sandbox_file_editor.EditManager, Singleton):
     tier = "agent_session"
@@ -21,11 +42,10 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
         self._file_update_revision: int = 0
 
     def initialize(self) -> None:
-        # Requirement: The edit manager unconditionally installs the text replacement tool and line update tool into the tool manager.
-        # Requirement: [EditManager] The edit manager installs the text replacement tool and line update tool.
+        # Requirement: The edit manager unconditionally installs the replace file content tool into the tool manager.
+        # Requirement: [EditManager] The edit manager installs the replace file content tool.
         tm = get_singleton(tool_provider.ToolManager)
-        tm.install_tool(get_singleton(TextReplacementTool))
-        tm.install_tool(get_singleton(LineUpdateTool))
+        tm.install_tool(get_singleton(ReplaceFileContentTool))
 
     def record_initial_content(
         self, host_path: str, content: Optional[str] = None
@@ -92,7 +112,9 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
                 self.record_initial_content(host_path, formatted_content)
 
 
-class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
+class ReplaceFileContentTool(
+    sandbox_file_editor.ReplaceFileContentTool, Singleton
+):
     tier = "agent_session"
 
     def __init__(self) -> None:
@@ -100,57 +122,112 @@ class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
 
     @property
     def name(self) -> str:
-        return "replace"
+        # Requirement: The replace file content tool is named `replace_file_content`.
+        return "replace_file_content"
 
     @property
     def description(self) -> str:
-        return "Replaces unique matching text in a read-write file."
+        return "Replaces target content in a read-write file within an optional line range."
 
     @property
     def file_alias_parameter(self) -> tool_provider.Parameter:
+        # Requirement: The replace file content tool path parameter uses the alias manager to convert a file alias.
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         return tool_provider.Parameter(
-            name="file",
+            name="path",
             description="Target file alias",
             parameter_converter=alias_mgr,
             is_required=True,
         )
 
     @property
-    def target_text_parameter(self) -> tool_provider.Parameter:
+    def target_content_parameter(self) -> tool_provider.Parameter:
+        # Requirement: The replace file content tool target content parameter uses a string parameter converter to accept text.
         str_conv = get_singleton(tool_provider.StringParameterConverter)
         return tool_provider.Parameter(
-            name="target_text",
+            name="target_content",
             description="Exact text to replace",
             parameter_converter=str_conv,
             is_required=True,
         )
 
     @property
-    def replacement_text_parameter(self) -> tool_provider.Parameter:
+    def replacement_content_parameter(self) -> tool_provider.Parameter:
+        # Requirement: The replace file content tool replacement content parameter uses a string parameter converter to accept text.
         str_conv = get_singleton(tool_provider.StringParameterConverter)
         return tool_provider.Parameter(
-            name="replacement_text",
+            name="replacement_content",
             description="Replacement text content",
             parameter_converter=str_conv,
             is_required=True,
         )
 
     @property
+    def start_line_parameter(self) -> tool_provider.Parameter:
+        # Requirement: The replace file content tool start line parameter uses an integer parameter converter to accept an integer.
+        int_conv = get_singleton(tool_provider.IntegerParameterConverter)
+        return tool_provider.Parameter(
+            name="start_line",
+            description="Optional 1-based starting line number (inclusive)",
+            parameter_converter=int_conv,
+            is_required=False,
+        )
+
+    @property
+    def end_line_parameter(self) -> tool_provider.Parameter:
+        # Requirement: The replace file content tool end line parameter uses an integer parameter converter to accept an integer.
+        int_conv = get_singleton(tool_provider.IntegerParameterConverter)
+        return tool_provider.Parameter(
+            name="end_line",
+            description="Optional 1-based ending line number (inclusive)",
+            parameter_converter=int_conv,
+            is_required=False,
+        )
+
+    @property
+    def allow_multiple_parameter(self) -> tool_provider.Parameter:
+        # Requirement: The replace file content tool allow multiple parameter uses a boolean parameter converter to accept a boolean.
+        bool_conv = get_singleton(tool_provider.BooleanParameterConverter)
+        return tool_provider.Parameter(
+            name="allow_multiple",
+            description="Whether to allow replacing multiple occurrences (defaults to false)",
+            parameter_converter=bool_conv,
+            is_required=False,
+        )
+
+    @property
     def parameters(self) -> Set[tool_provider.Parameter]:
         return {
             self.file_alias_parameter,
-            self.target_text_parameter,
-            self.replacement_text_parameter,
+            self.target_content_parameter,
+            self.replacement_content_parameter,
+            self.start_line_parameter,
+            self.end_line_parameter,
+            self.allow_multiple_parameter,
         }
 
     def execute_tool(
         self, actual_parameter_bindings: tool_provider.ActualParameterBindings
     ) -> tool_provider.Response:
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
-        target_file = bindings_map.get("file")
-        target_text = str(bindings_map.get("target_text", ""))
-        replacement_text = str(bindings_map.get("replacement_text", ""))
+        target_file = bindings_map.get("path")
+        target_content = str(bindings_map.get("target_content", ""))
+        replacement_content = str(bindings_map.get("replacement_content", ""))
+        start_line: Optional[int] = (
+            int(bindings_map["start_line"])
+            if "start_line" in bindings_map
+            else None
+        )
+        end_line: Optional[int] = (
+            int(bindings_map["end_line"])
+            if "end_line" in bindings_map
+            else None
+        )
+        allow_multiple: bool = (
+            bool(bindings_map["allow_multiple"])
+            if "allow_multiple" in bindings_map
+            else False
+        )
 
         # Requirement: Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
         if not isinstance(target_file, agent_file_alias.ReadWriteFile):
@@ -161,49 +238,121 @@ class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
                 reminder="Only declared read-write files can be modified.",
             )
 
-        # Requirement: Executing the text replacement tool fails if the target text exceeds 100,000 characters, and reminds the agent that target text for replacement must not exceed 100,000 characters.
-        if len(target_text) > 100000:
-            return tool_provider.Response(
-                is_failed=True,
-                is_terminated=False,
-                content="Error: target_text exceeds 100,000 characters limit.",
-                reminder="Target text for replacement must not exceed 100,000 characters.",
-            )
-
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         host_path = os.path.join(
             alias_mgr.workspace_root.path, target_file.workspace_path.path
         )
 
-        # Requirement: Executing the text replacement tool reads file content using the filesystem, treating missing files as empty.
-        # Requirement: Executing the text replacement tool fails if the target text is not found in the file content.
+        # Requirement: Replace file content tool execution reads the file content from the filesystem, treating missing files as empty.
         if not os.path.exists(host_path):
             content = ""
         else:
             with open(host_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
-        count = content.count(target_text)
+        lines = content.splitlines(keepends=True)
+        total_lines = len(lines)
+
+        # Requirement: When a start line is provided, execution fails if the start line is less than one or exceeds the total line count plus one.
+        if start_line is not None:
+            if start_line < 1 or start_line > total_lines + 1:
+                return tool_provider.Response(
+                    is_failed=True,
+                    is_terminated=False,
+                    content=f"Error: start_line {start_line} out of bounds (1..{total_lines + 1}).",
+                )
+
+        # Requirement: When an end line is provided, execution fails if the end line is less than one or exceeds the total line count.
+        if end_line is not None:
+            if end_line < 1 or end_line > total_lines:
+                return tool_provider.Response(
+                    is_failed=True,
+                    is_terminated=False,
+                    content=f"Error: end_line {end_line} out of bounds (1..{total_lines}).",
+                )
+
+        # Requirement: When both start line and end line are provided, execution fails if the start line exceeds the end line.
+        if start_line is not None and end_line is not None:
+            if start_line > end_line:
+                return tool_provider.Response(
+                    is_failed=True,
+                    is_terminated=False,
+                    content=f"Error: start_line ({start_line}) cannot be greater than end_line ({end_line}).",
+                )
+
+        s_idx = (start_line - 1) if start_line is not None else 0
+        e_idx = end_line if end_line is not None else total_lines
+
+        prefix = "".join(lines[:s_idx])
+        region = "".join(lines[s_idx:e_idx])
+        suffix = "".join(lines[e_idx:])
+
+        count = region.count(target_content)
+
+        # Requirement: When allow multiple is not set or false, execution fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence.
+        # Requirement: When allow multiple is true, execution fails if the target content is not found within the designated line range, and replaces all occurrences of the target content within the designated line range.
         if count == 0:
+            if start_line is not None or end_line is not None:
+                return tool_provider.Response(
+                    is_failed=True,
+                    is_terminated=False,
+                    content=f"Error: target_content not found in specified line range [{s_idx + 1}, {e_idx}].",
+                )
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
-                content="Error: target_text not found in file.",
+                content="Error: target_content not found in file.",
             )
-        # Requirement: Executing the text replacement tool fails if the target text matches multiple locations in the file.
-        if count > 1:
+
+        if not allow_multiple and count > 1:
+            if start_line is not None or end_line is not None:
+                return tool_provider.Response(
+                    is_failed=True,
+                    is_terminated=False,
+                    content=f"Error: target_content matches {count} locations in line range [{s_idx + 1}, {e_idx}]. Set allow_multiple=true or narrow the line range.",
+                )
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
-                content=f"Error: target_text matches {count} locations in file. It must be unique.",
+                content=f"Error: target_content matches {count} locations in file. Set allow_multiple=true or specify start_line and end_line.",
             )
 
-        edit_mgr = get_singleton(EditManager)
-        edit_mgr.record_initial_content(host_path, content)
+        # Requirement: Before modifying a file, editing tool execution fails if the target edit overlaps with auto-generated dependency imports between '# --- DO NOT EDIT: Auto-generated dependencies ---' and '# --- END DO NOT EDIT ---', reminding the agent that auto-generated dependencies are managed by the build toolchain.
+        dne_range = find_do_not_edit_range(content)
+        if dne_range is not None:
+            dne_start, dne_end = dne_range
+            has_overlap = False
+            offset = 0
+            while True:
+                idx = region.find(target_content, offset)
+                if idx == -1:
+                    break
+                match_start = len(prefix) + idx
+                match_end = match_start + len(target_content)
+                occ_start_line = content[:match_start].count("\n") + 1
+                occ_end_line = content[:match_end].count("\n") + 1
+                if max(occ_start_line, dne_start) <= min(occ_end_line, dne_end):
+                    has_overlap = True
+                    break
+                if not allow_multiple:
+                    break
+                offset = idx + len(target_content)
 
-        # Requirement: On successful text replacement tool execution, the unique occurrence of the target text is replaced with the replacement text, written using the filesystem, and file modifications are recorded.
-        # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
-        new_content = content.replace(target_text, replacement_text, 1)
+            if has_overlap:
+                return tool_provider.Response(
+                    is_failed=True,
+                    is_terminated=False,
+                    content="Error: Cannot edit lines within '# --- DO NOT EDIT: Auto-generated dependencies ---' ... '# --- END DO NOT EDIT ---'. Auto-generated dependencies are managed automatically by the build toolchain.",
+                    reminder="Do not modify the auto-generated dependencies block. Implement logic below '# --- END DO NOT EDIT ---'.",
+                )
+
+        if allow_multiple:
+            new_region = region.replace(target_content, replacement_content)
+        else:
+            new_region = region.replace(target_content, replacement_content, 1)
+
+        new_content = prefix + new_region + suffix
+
         # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
         if new_content == content:
             return tool_provider.Response(
@@ -213,191 +362,59 @@ class TextReplacementTool(sandbox_file_editor.TextReplacementTool, Singleton):
                 reminder="The edit had no effect, and such edits will fail.",
             )
 
+        edit_mgr = get_singleton(EditManager)
+        edit_mgr.record_initial_content(host_path, content)
+
+        # Requirement: On success, the tool writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred.
+        # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
         os.makedirs(os.path.dirname(host_path), exist_ok=True)
         with open(host_path, "w", encoding="utf-8") as f:
             f.write(new_content)
 
         edit_mgr.record_modification(host_path)
 
-        follow_up = tool_provider.FollowUpToolCall(
-            tool_name="read_file",
-            wire_parameter_bindings=tool_provider.WireParameterBindings(
-                bindings={
-                    ("file", target_file.short_name),
-                    ("line_numbers", True),
-                }
-            ),
-        )
-        # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
-        # Requirement: Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
-        return tool_provider.Response(
-            is_failed=False,
-            is_terminated=False,
-            content="Successfully replaced text.",
-            reminder="Inspect the updated file to verify changes.",
-            suppression_key=target_file.short_name,
-            follow_up_tool_call=follow_up,
-        )
+        try:
+            cfg = get_singleton(agent_config.AgentConfig)
+            followup_read = cfg.edit_followup_read
+            delta_output = cfg.edit_delta_output
+        except Exception:
+            followup_read = True
+            delta_output = False
 
-
-class LineUpdateTool(sandbox_file_editor.LineUpdateTool, Singleton):
-    tier = "agent_session"
-
-    def __init__(self) -> None:
-        pass
-
-    @property
-    def name(self) -> str:
-        return "update_lines"
-
-    @property
-    def description(self) -> str:
-        return "Updates or inserts lines in a read-write file."
-
-    @property
-    def file_alias_parameter(self) -> tool_provider.Parameter:
-        alias_mgr = get_singleton(agent_file_alias.AliasManager)
-        return tool_provider.Parameter(
-            name="file",
-            description="Target file alias",
-            parameter_converter=alias_mgr,
-            is_required=True,
-        )
-
-    @property
-    def start_line_parameter(self) -> tool_provider.Parameter:
-        int_conv = get_singleton(tool_provider.IntegerParameterConverter)
-        return tool_provider.Parameter(
-            name="start_line",
-            description="1-based starting line number",
-            parameter_converter=int_conv,
-            is_required=True,
-        )
-
-    @property
-    def end_line_parameter(self) -> tool_provider.Parameter:
-        int_conv = get_singleton(tool_provider.IntegerParameterConverter)
-        return tool_provider.Parameter(
-            name="end_line",
-            description="1-based ending line number",
-            parameter_converter=int_conv,
-            is_required=True,
-        )
-
-    @property
-    def replacement_text_parameter(self) -> tool_provider.Parameter:
-        str_conv = get_singleton(tool_provider.StringParameterConverter)
-        return tool_provider.Parameter(
-            name="replacement_text",
-            description="Replacement text lines",
-            parameter_converter=str_conv,
-            is_required=True,
-        )
-
-    @property
-    def parameters(self) -> Set[tool_provider.Parameter]:
-        return {
-            self.file_alias_parameter,
-            self.start_line_parameter,
-            self.end_line_parameter,
-            self.replacement_text_parameter,
-        }
-
-    def execute_tool(
-        self, actual_parameter_bindings: tool_provider.ActualParameterBindings
-    ) -> tool_provider.Response:
-        bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
-        target_file = bindings_map.get("file")
-        start_line = int(bindings_map.get("start_line", 1))
-        end_line = int(bindings_map.get("end_line", 1))
-        replacement_text = str(bindings_map.get("replacement_text", ""))
-
-        # Requirement: Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
-        if not isinstance(target_file, agent_file_alias.ReadWriteFile):
-            return tool_provider.Response(
-                is_failed=True,
-                is_terminated=False,
-                content=f"Error: {target_file} is not a read-write file.",
-                reminder="Only declared read-write files can be modified.",
-            )
-
-        alias_mgr = get_singleton(agent_file_alias.AliasManager)
-        host_path = os.path.join(
-            alias_mgr.workspace_root.path, target_file.workspace_path.path
-        )
-
-        # Requirement: Executing the line update tool reads file content using the filesystem, treating missing files as empty.
-        # Requirement: Executing the line update tool fails if the start line is less than one or exceeds the total line count plus one.
-        if not os.path.exists(host_path):
-            lines = []
-        else:
-            with open(host_path, "r", encoding="utf-8") as f:
-                lines = f.readlines()
-
-        total_lines = len(lines)
-        if start_line < 1 or start_line > total_lines + 1:
-            return tool_provider.Response(
-                is_failed=True,
-                is_terminated=False,
-                content=f"Error: start_line {start_line} out of bounds (1..{total_lines + 1}).",
-            )
-
-        # Requirement: Replacing or inserting lines treats each replacement line as a complete newline-terminated line, preserving subsequent line boundaries when replacement text lacks a trailing newline.
-        rep_lines = [
-            l + "\n" if not l.endswith("\n") else l
-            for l in replacement_text.splitlines()
-        ]
-
-        if start_line <= end_line:
-            # Requirement: When the start line is less than or equal to the end line, executing the line update tool fails if the end line exceeds the total line count.
-            if end_line > total_lines:
-                return tool_provider.Response(
-                    is_failed=True,
-                    is_terminated=False,
-                    content=f"Error: end_line {end_line} exceeds total lines {total_lines}.",
+        content_msg = "Successfully replaced content."
+        if delta_output:
+            # Requirement: When configured to produce delta output, successful editing tool execution includes a diff delta representation in the response content.
+            diff_lines = list(
+                difflib.unified_diff(
+                    content.splitlines(keepends=True),
+                    new_content.splitlines(keepends=True),
+                    fromfile=f"a/{target_file.short_name}",
+                    tofile=f"b/{target_file.short_name}",
                 )
-            # Requirement: When the start line is less than or equal to the end line, successful execution replaces lines within the range, writes using the filesystem, and records file modifications.
-            # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
-            new_lines = lines[: start_line - 1] + rep_lines + lines[end_line:]
-        else:
-            # Requirement: When the start line exceeds the end line, successful execution inserts the replacement lines before the start line, writes using the filesystem, and records file modifications.
-            # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
-            new_lines = lines[: start_line - 1] + rep_lines + lines[start_line - 1 :]
-
-        # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
-        if new_lines == lines:
-            return tool_provider.Response(
-                is_failed=True,
-                is_terminated=False,
-                content="Error: line update produced no change to file content.",
-                reminder="The edit had no effect, and such edits will fail.",
             )
+            diff_text = "".join(diff_lines)
+            content_msg = f"Successfully replaced content.\n\n```diff\n{diff_text}```"
 
-        edit_mgr = get_singleton(EditManager)
-        edit_mgr.record_initial_content(host_path, "".join(lines))
+        follow_up = None
+        reminder = None
+        if followup_read:
+            # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and when configured to perform follow-up reads on edits, produces a response specifying a follow-up execution of the view file tool on the modified read-write file, accompanied by a reminder justifying inspecting the updated file.
+            follow_up = tool_provider.FollowUpToolCall(
+                tool_name="view_file",
+                wire_parameter_bindings=tool_provider.WireParameterBindings(
+                    bindings={
+                        ("path", target_file.short_name),
+                    }
+                ),
+            )
+            reminder = "Inspect the updated file to verify changes."
 
-        os.makedirs(os.path.dirname(host_path), exist_ok=True)
-        with open(host_path, "w", encoding="utf-8") as f:
-            f.writelines(new_lines)
-
-        edit_mgr.record_modification(host_path)
-
-        follow_up = tool_provider.FollowUpToolCall(
-            tool_name="read_file",
-            wire_parameter_bindings=tool_provider.WireParameterBindings(
-                bindings={
-                    ("file", target_file.short_name),
-                    ("line_numbers", True),
-                }
-            ),
-        )
-        # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and produces a response specifying a follow-up execution of the read tool on the modified read-write file with line numbers requested, accompanied by a reminder justifying inspecting the updated file.
         # Requirement: Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
         return tool_provider.Response(
             is_failed=False,
             is_terminated=False,
-            content="Successfully updated lines.",
-            reminder="Inspect the updated file to verify changes.",
+            content=content_msg,
+            reminder=reminder,
             suppression_key=target_file.short_name,
             follow_up_tool_call=follow_up,
         )
@@ -411,20 +428,10 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         tier="agent_session",
     )
     reg.register_singleton(
-        TextReplacementTool,
+        ReplaceFileContentTool,
         keys=[
-            TextReplacementTool,
-            sandbox_file_editor.TextReplacementTool,
-            sandbox_file_editor.EditingTool,
-            tool_provider.Tool,
-        ],
-        tier="agent_session",
-    )
-    reg.register_singleton(
-        LineUpdateTool,
-        keys=[
-            LineUpdateTool,
-            sandbox_file_editor.LineUpdateTool,
+            ReplaceFileContentTool,
+            sandbox_file_editor.ReplaceFileContentTool,
             sandbox_file_editor.EditingTool,
             tool_provider.Tool,
         ],

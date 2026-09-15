@@ -594,14 +594,14 @@ class OpenAIDriverImplTest(unittest.TestCase):
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
         tc = DummyToolCall(
-            id="call_read", name="read_file", arguments=json.dumps({"file": "foo.py"})
+            id="call_read", name="view_file", arguments=json.dumps({"path": "foo.py"})
         )
         comp1 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc]))])
         tc_term = DummyToolCall(id="call_finish", name="finish", arguments="{}")
         comp2 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc_term]))])
         mock_client.chat.completions.create.side_effect = [comp1, comp2]
 
-        self.tool_mgr.responses["read_file"] = Response(
+        self.tool_mgr.responses["view_file"] = Response(
             is_failed=False, is_terminated=False, content="file content"
         )
         self.tool_mgr.responses["finish"] = Response(
@@ -609,7 +609,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         )
 
         self.loop_guard.return_values = [
-            LoopReminder(feedback="Tool 'read_file' has repeated 3 times."),
+            LoopReminder(feedback="Tool 'view_file' has repeated 3 times."),
             None,
         ]
 
@@ -638,7 +638,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
         tc = DummyToolCall(
-            id="call_repeat", name="read_file", arguments=json.dumps({"file": "foo.py"})
+            id="call_repeat", name="view_file", arguments=json.dumps({"path": "foo.py"})
         )
         comp = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc]))])
         mock_client.chat.completions.create.return_value = comp
@@ -671,7 +671,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         mock_openai_cls.return_value = mock_client
 
         tc_read = DummyToolCall(
-            id="c1", name="read_file", arguments=json.dumps({"file": "a.py"})
+            id="c1", name="view_file", arguments=json.dumps({"path": "a.py"})
         )
         tc_replace = DummyToolCall(
             id="c2",
@@ -688,7 +688,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         )
         mock_client.chat.completions.create.return_value = comp1
 
-        self.tool_mgr.responses["read_file"] = Response(
+        self.tool_mgr.responses["view_file"] = Response(
             is_failed=False, is_terminated=False, content="read"
         )
         self.tool_mgr.responses["replace"] = Response(

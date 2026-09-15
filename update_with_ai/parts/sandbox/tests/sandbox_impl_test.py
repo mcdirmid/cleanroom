@@ -16,7 +16,7 @@ from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.agent.lib.agent_node_config import Guide, NodeConfig
 from update_with_ai.parts.sandbox.lib.sandbox import Sandbox, StartupToolExecution
 from update_with_ai.parts.sandbox.lib.sandbox_file_editor import EditManager
-from update_with_ai.parts.sandbox.lib.sandbox_file_reader import ReadManager, ReadTool
+from update_with_ai.parts.sandbox.lib.sandbox_file_reader import ViewFileTool
 from update_with_ai.parts.sandbox.lib.sandbox_impl import (
     Sandbox as SandboxImpl,
     __initialize__,
@@ -143,53 +143,40 @@ class DummyConverter:
         return wire_value
 
 
-class MockReadTool:
+class MockViewFileTool:
     tier = "agent_session"
 
     def __init__(self) -> None:
         self.executed_files: List[BoundFile] = []
-        self.file_alias_parameter = Parameter(
-            name="file",
-            description="file",
+        self.path_parameter = Parameter(
+            name="path",
+            description="path",
             parameter_converter=DummyConverter(),
             is_required=True,
-        )
-        self.line_numbers_parameter = Parameter(
-            name="line_numbers",
-            description="line numbers",
-            parameter_converter=DummyConverter(),
-            is_required=False,
         )
 
     @property
     def name(self) -> str:
-        return "read_file"
+        return "view_file"
 
     @property
     def description(self) -> str:
-        return "Read tool"
+        return "View file tool"
 
     @property
     def parameters(self) -> Set[Parameter]:
-        return {self.file_alias_parameter, self.line_numbers_parameter}
+        return {self.path_parameter}
 
     def execute_tool(
         self, actual_parameter_bindings: ActualParameterBindings
     ) -> Response:
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
-        target = bindings_map.get("file")
+        target = bindings_map.get("path")
         if isinstance(target, BoundFile):
             self.executed_files.append(target)
         return Response(
             is_failed=False, is_terminated=False, content=f"Content of {target}"
         )
-
-
-class MockReadManager:
-    tier = "agent_session"
-
-    def requires_line_numbers(self, file: BoundFile) -> bool:
-        return file.short_name.endswith(".py")
 
 
 def _make_workspace_path(path: str) -> WorkspacePath:
@@ -214,8 +201,7 @@ class SandboxImplTest(unittest.TestCase):
         self.node_cfg = MockNodeConfig(read_only_files={self.ro_file})
         self.edit_mgr = MockEditManager()
         self.adv_tool = MockAdvanceTool()
-        self.read_tool = MockReadTool()
-        self.read_mgr = MockReadManager()
+        self.view_file_tool = MockViewFileTool()
 
         self.registry.register_instance(
             self.agent_cfg, keys=[AgentConfig], tier="system"
@@ -230,10 +216,7 @@ class SandboxImplTest(unittest.TestCase):
             self.adv_tool, keys=[AdvanceTool], tier="agent_session"
         )
         self.registry.register_instance(
-            self.read_tool, keys=[ReadTool], tier="agent_session"
-        )
-        self.registry.register_instance(
-            self.read_mgr, keys=[ReadManager], tier="agent_session"
+            self.view_file_tool, keys=[ViewFileTool], tier="agent_session"
         )
 
     def test_has_modifications_and_template_materialization_delegation(self) -> None:
@@ -254,7 +237,7 @@ class SandboxImplTest(unittest.TestCase):
             self.assertTrue(self.edit_mgr.templates_materialized)
 
     def test_get_startup_tool_executions_step_mode_and_startup_reads(self) -> None:
-        """CUJ: Assembling startup tool executions: advance first when in step mode, followed by read_file for read-only files."""
+        """CUJ: Assembling startup tool executions: advance first when in step mode, followed by view_file for read-only files."""
         node = Node(unit_address="//pkg:target")
         ro_file_z = ReadOnlyFile(
             short_name="z_spec.md",
@@ -286,27 +269,27 @@ class SandboxImplTest(unittest.TestCase):
             self.assertEqual(executions[0].wire_parameter_bindings.bindings, set())
             self.assertEqual(executions[0].response.content, "Guide step 1")
 
-            # Second is read_file for a_spec.md (ordered deterministically before m_lib.py and z_spec.md)
+            # Second is view_file for a_spec.md (ordered deterministically before m_lib.py and z_spec.md)
             # Requirement: When performing startup reads to inspect declared files at session start, startup tool executions include file read executions for all declared read-only files from node config ordered deterministically by file alias short name, positioned after any advance tool execution.
-            # Requirement: Each file read execution uses the name of the read tool, specifies wire parameter bindings mapping the file alias parameter of the read tool to the read-only file alias short name while supplying line numbers as determined by the read manager for source code files, and captures the response produced by executing the read tool.
-            self.assertEqual(executions[1].tool_name, "read_file")
+            # Requirement: Each file read execution uses the name of the view file tool, specifies wire parameter bindings mapping the path parameter of the view file tool to the read-only file alias short name, and captures the response produced by executing the view file tool.
+            self.assertEqual(executions[1].tool_name, "view_file")
             self.assertEqual(
-                executions[1].wire_parameter_bindings.bindings, {("file", "a_spec.md")}
+                executions[1].wire_parameter_bindings.bindings, {("path", "a_spec.md")}
             )
             self.assertIn("a_spec.md", executions[1].response.content)
 
-            # Third is read_file for m_lib.py (supplies line_numbers=True for source code file)
-            self.assertEqual(executions[2].tool_name, "read_file")
+            # Third is view_file for m_lib.py
+            self.assertEqual(executions[2].tool_name, "view_file")
             self.assertEqual(
                 executions[2].wire_parameter_bindings.bindings,
-                {("file", "m_lib.py"), ("line_numbers", True)},
+                {("path", "m_lib.py")},
             )
             self.assertIn("m_lib.py", executions[2].response.content)
 
-            # Fourth is read_file for z_spec.md
-            self.assertEqual(executions[3].tool_name, "read_file")
+            # Fourth is view_file for z_spec.md
+            self.assertEqual(executions[3].tool_name, "view_file")
             self.assertEqual(
-                executions[3].wire_parameter_bindings.bindings, {("file", "z_spec.md")}
+                executions[3].wire_parameter_bindings.bindings, {("path", "z_spec.md")}
             )
             self.assertIn("z_spec.md", executions[3].response.content)
 

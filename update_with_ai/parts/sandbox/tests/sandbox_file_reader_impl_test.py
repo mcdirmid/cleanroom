@@ -24,12 +24,12 @@ from update_with_ai.parts.agent.lib.agent_node_config import Guide, NodeConfig
 from update_with_ai.parts.sandbox.lib.template_format import TemplateFormatter
 from update_with_ai.parts.sandbox.lib.sandbox_file_reader import (
     ReadManager,
-    ReadTool,
+    ViewFileTool,
     SearchTool,
 )
 from update_with_ai.parts.sandbox.lib.sandbox_file_reader_impl import (
     ReadManager as ReadManagerImpl,
-    ReadTool as ReadToolImpl,
+    ViewFileTool as ViewFileToolImpl,
     RegexPatternConverter as RegexPatternConverterImpl,
     SearchTool as SearchToolImpl,
     __initialize__,
@@ -234,12 +234,11 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         """CUJ: ReadManager installs tools and exposes declared files from NodeConfig."""
         with enter_phase("agent_session", registry=self.registry) as scope:
             read_mgr = scope.get_singleton(ReadManager)
-            # Both read_file and search_files installed in tool manager
-            # Requirement: The read manager unconditionally installs the read tool into the tool manager and never installs the search tool.
-            # Requirement: [ReadManager] The read manager installs the read tool and search tool.
+            # Requirement: The read manager unconditionally installs the view file tool into the tool manager and never installs the search tool.
+            # Requirement: [ReadManager] The read manager installs the view file tool and search tool.
             tool_names = {t.name for t in self.tool_mgr.installed_tools}
-            # Requirement: The read tool is named `read_file`.
-            self.assertIn("read_file", tool_names)
+            # Requirement: The view file tool is named `view_file`.
+            self.assertIn("view_file", tool_names)
             # Requirement: The search tool is named `search_files`.
             self.assertNotIn("search_files", tool_names)
 
@@ -252,160 +251,66 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertIn(self.rw_file, read_mgr.read_write_files)
             self.assertEqual(read_mgr.guide_file, self.guide_unbound)
 
-    def test_read_manager_requires_line_numbers(self) -> None:
-        """CUJ: Identifying whether files require line numbers when read."""
+    def test_view_file_tool_execution_and_formatting(self) -> None:
+        """CUJ: Formatting with right-aligned line numbers and suppression keys."""
         with enter_phase("agent_session", registry=self.registry) as scope:
-            read_mgr = scope.get_singleton(ReadManager)
-            # Requirement: The read manager identifies that read-write files and source code files require line numbers when read.
-            self.assertTrue(read_mgr.requires_line_numbers(self.rw_file))
-            # Requirement: The read manager identifies files ending with `.py` as source code files requiring line numbers.
-            self.assertTrue(read_mgr.requires_line_numbers(self.ro_py_file))
-            self.assertFalse(read_mgr.requires_line_numbers(self.ro_file))
-
-    def test_read_tool_line_numbers_contract(self) -> None:
-        """CUJ: Enforcing line number requirements for read-only vs read-write files."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
-            read_tool = scope.get_singleton(ReadTool)
-            self.assertIsInstance(read_tool.description, str)
-            self.assertGreater(len(read_tool.parameters), 0)
-            # Requirement: The read tool file parameter uses the alias manager to convert a file alias.
+            view_tool = scope.get_singleton(ViewFileTool)
+            self.assertEqual(view_tool.name, "view_file")
+            self.assertIsInstance(view_tool.description, str)
+            self.assertEqual(view_tool.parameters, {view_tool.path_parameter})
+            # Requirement: The view file tool path parameter uses the alias manager to convert a file alias.
             self.assertIs(
-                read_tool.file_alias_parameter.parameter_converter, self.alias_mgr
-            )
-            # Requirement: The read tool line numbers parameter uses the boolean parameter converter.
-            self.assertIs(
-                read_tool.line_numbers_parameter.parameter_converter, self.bool_conv
+                view_tool.path_parameter.parameter_converter, self.alias_mgr
             )
 
-            # 1. Non-source read-only with line_numbers=False -> succeeds
+            # 1. Read-only file formatting and sanitization
             bindings1 = ActualParameterBindings(
-                bindings={
-                    (read_tool.file_alias_parameter, self.ro_file),
-                    (read_tool.line_numbers_parameter, False),
-                }
+                bindings={(view_tool.path_parameter, self.ro_file)}
             )
-            # Requirement: Executing the read tool reads file content using the filesystem at the host path formed from the alias manager workspace root and bound file workspace path.
-            # Requirement: Read tool responses for read-write files carry a suppression key matching the file's short name, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
-            resp1 = read_tool.execute_tool(bindings1)
+            # Requirement: Executing the view file tool reads file content using the filesystem at the host path formed from the alias manager workspace root and bound file workspace path, returning content formatted with one-indexed right-aligned line numbers followed by a colon and space.
+            # Requirement: View file tool responses for read-write files carry a suppression key matching the file's short name, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
+            resp1 = view_tool.execute_tool(bindings1)
             self.assertFalse(resp1.is_failed)
             self.assertIsNone(resp1.suppression_key)
-            self.assertIn("Line 1 readonly", resp1.content)
+            self.assertIn("  1: Line 1 readonly", resp1.content)
             self.assertIn("[WORKSPACE]/readonly.txt", resp1.content)
 
-            # 2. Non-source read-only with line_numbers=True -> fails
+            # 2. Read-write file formatting and suppression key
             bindings2 = ActualParameterBindings(
-                bindings={
-                    (read_tool.file_alias_parameter, self.ro_file),
-                    (read_tool.line_numbers_parameter, True),
-                }
+                bindings={(view_tool.path_parameter, self.rw_file)}
             )
-            # Requirement: Executing the read tool fails if line numbers are requested when reading a non-source read-only file, reminding the agent that line numbers must be requested when reading read-write files and source code files and omitted when reading non-source read-only files, and specifying a follow-up execution of the read tool on the file with line numbers omitted.
-            resp2 = read_tool.execute_tool(bindings2)
-            self.assertTrue(resp2.is_failed)
-            self.assertEqual(
-                resp2.reminder,
-                "Line numbers must be requested when reading read-write files and source code files (.py), and omitted when reading non-source read-only files.",
-            )
-            self.assertIsNotNone(resp2.follow_up_tool_call)
-            assert resp2.follow_up_tool_call is not None
-            self.assertEqual(resp2.follow_up_tool_call.tool_name, "read_file")
-            bindings2_dict = dict(
-                resp2.follow_up_tool_call.wire_parameter_bindings.bindings
-            )
-            self.assertEqual(bindings2_dict, {"file": self.ro_file.short_name})
+            resp2 = view_tool.execute_tool(bindings2)
+            self.assertFalse(resp2.is_failed)
+            self.assertEqual(resp2.suppression_key, self.rw_file.short_name)
+            self.assertIn("  1: Line 1 writable", resp2.content)
 
-            # 3. Read-write with line_numbers=True -> succeeds with line numbers
+            # 3. Read-only source code file (.py) formatting
             bindings3 = ActualParameterBindings(
-                bindings={
-                    (read_tool.file_alias_parameter, self.rw_file),
-                    (read_tool.line_numbers_parameter, True),
-                }
+                bindings={(view_tool.path_parameter, self.ro_py_file)}
             )
-            # Requirement: Read tool responses for read-write files carry a suppression key matching the file's short name, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
-            resp3 = read_tool.execute_tool(bindings3)
+            resp3 = view_tool.execute_tool(bindings3)
             self.assertFalse(resp3.is_failed)
-            self.assertEqual(resp3.suppression_key, self.rw_file.short_name)
-            self.assertIn("1: Line 1 writable", resp3.content)
-
-            # 4. Read-write with line_numbers=False -> fails
-            bindings4 = ActualParameterBindings(
-                bindings={
-                    (read_tool.file_alias_parameter, self.rw_file),
-                    (read_tool.line_numbers_parameter, False),
-                }
-            )
-            # Requirement: Executing the read tool fails if line numbers are not requested when reading a read-write file or source code file, reminding the agent that line numbers must be requested when reading read-write files and source code files and omitted when reading non-source read-only files, and specifying a follow-up execution of the read tool on the file with line numbers requested.
-            resp4 = read_tool.execute_tool(bindings4)
-            self.assertTrue(resp4.is_failed)
-            self.assertEqual(
-                resp4.reminder,
-                "Line numbers must be requested when reading read-write files and source code files (.py), and omitted when reading non-source read-only files.",
-            )
-            self.assertIsNotNone(resp4.follow_up_tool_call)
-            assert resp4.follow_up_tool_call is not None
-            self.assertEqual(resp4.follow_up_tool_call.tool_name, "read_file")
-            bindings4_dict = dict(
-                resp4.follow_up_tool_call.wire_parameter_bindings.bindings
-            )
-            self.assertEqual(
-                bindings4_dict, {"file": self.rw_file.short_name, "line_numbers": True}
-            )
-
-            # 5. Read-only source code file (.py) with line_numbers=True -> succeeds with line numbers
-            bindings5 = ActualParameterBindings(
-                bindings={
-                    (read_tool.file_alias_parameter, self.ro_py_file),
-                    (read_tool.line_numbers_parameter, True),
-                }
-            )
-            resp5 = read_tool.execute_tool(bindings5)
-            self.assertFalse(resp5.is_failed)
-            self.assertIsNone(resp5.suppression_key)
-            self.assertIn("1: def foo():", resp5.content)
-
-            # 6. Read-only source code file (.py) with line_numbers=False -> fails
-            bindings6 = ActualParameterBindings(
-                bindings={
-                    (read_tool.file_alias_parameter, self.ro_py_file),
-                    (read_tool.line_numbers_parameter, False),
-                }
-            )
-            # Requirement: Executing the read tool fails if line numbers are not requested when reading a read-write file or source code file, reminding the agent that line numbers must be requested when reading read-write files and source code files and omitted when reading non-source read-only files, and specifying a follow-up execution of the read tool on the file with line numbers requested.
-            resp6 = read_tool.execute_tool(bindings6)
-            self.assertTrue(resp6.is_failed)
-            self.assertEqual(
-                resp6.reminder,
-                "Line numbers must be requested when reading read-write files and source code files (.py), and omitted when reading non-source read-only files.",
-            )
-            self.assertIsNotNone(resp6.follow_up_tool_call)
-            assert resp6.follow_up_tool_call is not None
-            self.assertEqual(resp6.follow_up_tool_call.tool_name, "read_file")
-            bindings6_dict = dict(
-                resp6.follow_up_tool_call.wire_parameter_bindings.bindings
-            )
-            self.assertEqual(
-                bindings6_dict,
-                {"file": self.ro_py_file.short_name, "line_numbers": True},
-            )
+            self.assertIsNone(resp3.suppression_key)
+            self.assertIn("  1: def foo():", resp3.content)
 
     def test_read_tool_unbound_files(self) -> None:
         """CUJ: Handling unbound file requests (guide vs unknown files)."""
         with enter_phase("agent_session", registry=self.registry) as scope:
-            read_tool = scope.get_singleton(ReadTool)
+            view_tool = scope.get_singleton(ViewFileTool)
 
             # Unbound matching guide file -> fails
             bindings_guide = ActualParameterBindings(
-                bindings={(read_tool.file_alias_parameter, self.guide_unbound)}
+                bindings={(view_tool.path_parameter, self.guide_unbound)}
             )
-            resp_guide = read_tool.execute_tool(bindings_guide)
+            resp_guide = view_tool.execute_tool(bindings_guide)
             self.assertTrue(resp_guide.is_failed)
 
             # Unbound unknown file -> fails
             unknown_unbound = UnboundFile(short_name="unknown.txt")
             bindings_unknown = ActualParameterBindings(
-                bindings={(read_tool.file_alias_parameter, unknown_unbound)}
+                bindings={(view_tool.path_parameter, unknown_unbound)}
             )
-            resp_unknown = read_tool.execute_tool(bindings_unknown)
+            resp_unknown = view_tool.execute_tool(bindings_unknown)
             self.assertTrue(resp_unknown.is_failed)
             self.assertEqual(
                 resp_unknown.reminder, "Only declared files can be inspected."
@@ -426,29 +331,22 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         )
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            read_tool = scope.get_singleton(ReadTool)
+            view_tool = scope.get_singleton(ViewFileTool)
 
-            # Requirement: When the target file does not exist on disk, read tool execution treats a read-write file as having empty content, and fails with a response guiding agent recovery when inspecting a missing read-only file.
-            # Reading missing read-write file succeeds with empty content
+            # Requirement: When the target file does not exist on disk, view file tool execution treats a read-write file as having empty content, and fails with a response guiding agent recovery when inspecting a missing read-only file.
             rw_bindings = ActualParameterBindings(
-                bindings={
-                    (read_tool.file_alias_parameter, missing_rw_file),
-                    (read_tool.line_numbers_parameter, True),
-                }
+                bindings={(view_tool.path_parameter, missing_rw_file)}
             )
-            rw_resp = read_tool.execute_tool(rw_bindings)
+            rw_resp = view_tool.execute_tool(rw_bindings)
             self.assertFalse(rw_resp.is_failed)
             self.assertEqual(rw_resp.content, "")
             self.assertEqual(rw_resp.suppression_key, missing_rw_file.short_name)
 
             # Reading missing read-only file fails with guidance
             ro_bindings = ActualParameterBindings(
-                bindings={
-                    (read_tool.file_alias_parameter, missing_ro_file),
-                    (read_tool.line_numbers_parameter, False),
-                }
+                bindings={(view_tool.path_parameter, missing_ro_file)}
             )
-            ro_resp = read_tool.execute_tool(ro_bindings)
+            ro_resp = view_tool.execute_tool(ro_bindings)
             self.assertTrue(ro_resp.is_failed)
             self.assertIn("missing_ro.txt' does not exist on disk", ro_resp.content)
             self.assertEqual(ro_resp.reminder, "Only declared files can be inspected.")
@@ -456,20 +354,17 @@ class SandboxFileReaderImplTest(unittest.TestCase):
     def test_read_tool_filters_meta_notes_in_markdown(self) -> None:
         """CUJ: Filtering > META: paragraphs when reading markdown files."""
         with enter_phase("agent_session", registry=self.registry) as scope:
-            read_tool = scope.get_singleton(ReadTool)
+            view_tool = scope.get_singleton(ViewFileTool)
             b = ActualParameterBindings(
-                bindings={
-                    (read_tool.file_alias_parameter, self.ro_md_file),
-                    (read_tool.line_numbers_parameter, False),
-                }
+                bindings={(view_tool.path_parameter, self.ro_md_file)}
             )
             # Requirement: When reading markdown files ending with .md, paragraphs beginning with > META: are filtered out from the returned content.
             # Requirement: When reading read-only markdown files ending with .md, content is formatted using the template formatter with session template parameters after filtering out paragraphs beginning with > META:.
-            resp = read_tool.execute_tool(b)
+            resp = view_tool.execute_tool(b)
             self.assertFalse(resp.is_failed)
             self.assertNotIn("Meta note", resp.content)
             self.assertNotIn("> META:", resp.content)
-            self.assertIn("# Title MyDoc", resp.content)
+            self.assertIn("  1: # Title MyDoc", resp.content)
             self.assertIn("First section content.", resp.content)
             self.assertIn("> NOTE: Non-meta quote.", resp.content)
             self.assertIn("Second section content.", resp.content)
@@ -518,5 +413,5 @@ if __name__ == "__main__":
 # Untested requirements:
 # - [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
 # - [Tool] When a parameter is required, an argument must be supplied for tool execution.
-# - Executing the read tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.
-# - When an unbound file equals the guide file configured for step-mode, the read tool failure response indicates that `advance` must be called to read the guide instead.
+# - Executing the view file tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.
+# - When an unbound file equals the guide file configured for step-mode, the view file tool failure response indicates that `advance` must be called to read the guide instead.

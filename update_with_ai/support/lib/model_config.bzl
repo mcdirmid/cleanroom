@@ -82,6 +82,8 @@ def _model_config_impl(ctx):
         "do_step_mode": do_step_mode,
         "step_sections": do_step_mode,
         "inject_followups": ctx.attr.inject_followups,
+        "edit_followup_read": ctx.attr.edit_followup_read,
+        "edit_delta_output": ctx.attr.edit_delta_output,
         "node_visit_limit": ctx.attr.node_visit_limit,
     }
 
@@ -90,6 +92,7 @@ def _model_config_impl(ctx):
     for key in ("label", "name", "model", "base_url", "api_key_env",
                 "max_iterations", "temperature", "timeout", "max_tokens",
                 "session_start_reads", "do_step_mode", "step_sections", "inject_followups",
+                "edit_followup_read", "edit_delta_output",
                 "node_visit_limit"):
         entries.append('    "{}": {},'.format(key, _py_literal(config[key])))
 
@@ -161,6 +164,16 @@ _model_config = rule(
             default = True,
             doc = "Whether the agent should automatically execute follow-up tool calls "
                 + "specified by tool responses. Defaults to enabled.",
+        ),
+        "edit_followup_read": attr.bool(
+            default = True,
+            doc = "Whether editing tools automatically execute a follow-up view_file tool call "
+                + "on the modified file. Defaults to enabled.",
+        ),
+        "edit_delta_output": attr.bool(
+            default = False,
+            doc = "Whether editing tools include a diff delta representation in their response. "
+                + "Defaults to disabled.",
         ),
         "temperature": attr.string(
             default = "0.0",

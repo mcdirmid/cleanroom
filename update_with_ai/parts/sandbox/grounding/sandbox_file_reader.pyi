@@ -10,7 +10,7 @@ PURPOSE:
 Defined as an agent session service that installs tools for inspecting workspace files
 
 FRESH_REQUIREMENTS:
-- The read manager installs the read tool and search tool.
+- The read manager installs the view file tool and search tool.
 - The read manager exposes the session's set of read-only files.
 - The read manager exposes the session's set of read-write files.
 - When step-mode is active, the read manager is configured with a guide file that is an unbound file.
@@ -40,37 +40,21 @@ Configured with a guide file as an unbound file when step-mode is active
 """
         ...
 
-    @operation
-    def requires_line_numbers(self, file: agent_file_alias.FileAlias) -> bool:
-        """
-PURPOSE:
-Identifies whether an inspected file requires line numbers to be requested when read
-"""
-        ...
-
 @singleton_type('agent_session')
-class ReadTool(tool_provider.Tool, Protocol):
+class ViewFileTool(tool_provider.Tool, Protocol):
     """
 PURPOSE:
-Defined as a tool that reads file content
+Defined as a tool that inspects file content
 
 INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.
 """
 
     @property
-    def file_alias_parameter(self) -> tool_provider.Parameter:
+    def path_parameter(self) -> tool_provider.Parameter:
         """
 PURPOSE:
-Establishes that the read tool takes a file alias parameter
-"""
-        ...
-
-    @property
-    def line_numbers_parameter(self) -> tool_provider.Parameter:
-        """
-PURPOSE:
-Establishes that the read tool takes a parameter specifying if the agent wants content formatted with line numbers or not
+Establishes that the view file tool takes a path parameter
 """
         ...
 
@@ -79,7 +63,7 @@ Establishes that the read tool takes a parameter specifying if the agent wants c
     def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
         """
 PURPOSE:
-Provides that executing the read tool reads file content
+Provides that executing the view file tool inspects file content
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.

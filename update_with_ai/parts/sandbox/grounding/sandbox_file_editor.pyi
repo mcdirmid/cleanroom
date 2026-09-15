@@ -21,19 +21,6 @@ INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.
 """
 
-    @operation
-    @override
-    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
-        """
-PURPOSE:
-Executing an editing tool modifies a read-write file
-
-INHERITED_REQUIREMENTS:
-- [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
-"""
-        ...
-
     @property
     @override
     def name(self) -> str:
@@ -61,6 +48,19 @@ Established that each tool defines input parameters accepted for its invocation
 """
         ...
 
+    @operation
+    @override
+    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
+        """
+PURPOSE:
+Executed with a set of actual parameter bindings to produce a response
+
+INHERITED_REQUIREMENTS:
+- [Tool] When a parameter is required, an argument must be supplied for tool execution.
+- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
+"""
+        ...
+
 @singleton_type('agent_session')
 class EditManager(Protocol):
     """
@@ -68,7 +68,7 @@ PURPOSE:
 Defined as an agent session service that installs editing tools and tracks session modifications
 
 FRESH_REQUIREMENTS:
-- The edit manager installs the text replacement tool and line update tool.
+- The edit manager installs the replace file content tool.
 - Modifying a file records that workspace file modifications occurred during the session.
 """
 
@@ -106,10 +106,10 @@ FRESH_REQUIREMENTS:
         ...
 
 @singleton_type('agent_session')
-class TextReplacementTool(EditingTool, Protocol):
+class ReplaceFileContentTool(EditingTool, Protocol):
     """
 PURPOSE:
-Defined as an editing tool that replaces unique matching text in a read-write file
+Defined as an editing tool that replaces target content in a read-write file within an optional line range
 
 INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.
@@ -124,76 +124,18 @@ Parameter identifying the target read-write file
         ...
 
     @property
-    def target_text_parameter(self) -> tool_provider.Parameter:
+    def target_content_parameter(self) -> tool_provider.Parameter:
         """
 PURPOSE:
-Parameter specifying the exact text to replace
+Parameter specifying the target content to replace
 """
         ...
 
     @property
-    def replacement_text_parameter(self) -> tool_provider.Parameter:
+    def replacement_content_parameter(self) -> tool_provider.Parameter:
         """
 PURPOSE:
 Parameter specifying the replacement content
-"""
-        ...
-
-    @operation
-    @override
-    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
-        """
-PURPOSE:
-Executing an editing tool with a file alias that is not a read-write file fails
-
-INHERITED_REQUIREMENTS:
-- [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
-"""
-        ...
-
-    @property
-    @override
-    def name(self) -> str:
-        """
-PURPOSE:
-Established that each tool has a name which the agent uses to execute the tool
-"""
-        ...
-
-    @property
-    @override
-    def description(self) -> str:
-        """
-PURPOSE:
-Established that each tool has a description which informs the agent why and when to use the tool
-"""
-        ...
-
-    @property
-    @override
-    def parameters(self) -> Set[tool_provider.Parameter]:
-        """
-PURPOSE:
-Established that each tool defines input parameters accepted for its invocation
-"""
-        ...
-
-@singleton_type('agent_session')
-class LineUpdateTool(EditingTool, Protocol):
-    """
-PURPOSE:
-Defined as an editing tool that updates or inserts lines within a line range in a read-write file
-
-INHERITED_ASSUMPTIONS:
-- [Tool] All parameters of a tool have unique names.
-"""
-
-    @property
-    def file_alias_parameter(self) -> tool_provider.Parameter:
-        """
-PURPOSE:
-Parameter identifying the target read-write file
 """
         ...
 
@@ -214,23 +156,10 @@ Parameter specifying the ending line index
         ...
 
     @property
-    def replacement_text_parameter(self) -> tool_provider.Parameter:
+    def allow_multiple_parameter(self) -> tool_provider.Parameter:
         """
 PURPOSE:
-Parameter specifying the replacement content
-"""
-        ...
-
-    @operation
-    @override
-    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
-        """
-PURPOSE:
-Executing an editing tool with a file alias that is not a read-write file fails
-
-INHERITED_REQUIREMENTS:
-- [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
+Parameter specifying whether to allow replacing multiple occurrences
 """
         ...
 
@@ -258,5 +187,18 @@ Established that each tool has a description which informs the agent why and whe
         """
 PURPOSE:
 Established that each tool defines input parameters accepted for its invocation
+"""
+        ...
+
+    @operation
+    @override
+    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
+        """
+PURPOSE:
+Executed with a set of actual parameter bindings to produce a response
+
+INHERITED_REQUIREMENTS:
+- [Tool] When a parameter is required, an argument must be supplied for tool execution.
+- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 """
         ...

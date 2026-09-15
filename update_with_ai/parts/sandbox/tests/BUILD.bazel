@@ -42,6 +42,7 @@ pyright_test(
     srcs = ["sandbox_file_editor_impl_test.py"],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_config",
         "//update_with_ai/parts/agent/lib:agent_file_alias",
         "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/bazel/lib:file_paths",

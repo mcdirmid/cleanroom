@@ -407,4 +407,45 @@ else
 fi
 check "c20 rewritten lifecycle" "$tmp/c20/lib/init_module.py" 'from support\.lib\.lifecycle import LifecycleRegistry'
 
+# Case 21: dependency header maintained at top of lib file.
+mkdir -p "$tmp/c21/lib"
+cat > "$tmp/c21/lib/consumer.py" <<'EOF'
+from update_with_ai.parts.dag.lib.dag_storage import DagStorage
+
+class Consumer:
+    def __init__(self, s: DagStorage) -> None:
+        self.s = s
+EOF
+if ( cd "$tmp/c21" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/consumer.py --deps //update_with_ai/parts/dag/lib:dag_storage,tool_provider ); then
+    echo "PASS: c21 maintained dependency block"
+else
+    echo "FAIL: c21 expected success maintaining dependency block" >&2
+    fail=1
+fi
+check "c21 do not edit start" "$tmp/c21/lib/consumer.py" '# --- DO NOT EDIT: Auto-generated dependencies ---'
+check "c21 do not edit end" "$tmp/c21/lib/consumer.py" '# --- END DO NOT EDIT ---'
+check "c21 aliased cross-part import" "$tmp/c21/lib/consumer.py" 'import update_with_ai\.parts\.dag\.lib\.dag_storage as dag_storage'
+if grep -q '# Dependencies:' "$tmp/c21/lib/consumer.py"; then
+    echo "FAIL: c21 unexpected dependency comment line" >&2
+    fail=1
+else
+    echo "PASS: c21 no dependency comment line present"
+fi
+
+# Case 22: undeclared dependency import fails with diagnostic listing allowed dependencies.
+mkdir -p "$tmp/c22/lib"
+cat > "$tmp/c22/lib/bad_import.py" <<'EOF'
+import unauthorized_lib
+
+class Bad:
+    pass
+EOF
+if ( cd "$tmp/c22" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/bad_import.py --deps tool_provider 2>"$tmp/c22/err.log" ); then
+    echo "FAIL: c22 expected failure on undeclared import" >&2
+    fail=1
+else
+    echo "PASS: c22 rejected undeclared import"
+fi
+check "c22 undeclared error diagnostic" "$tmp/c22/err.log" "undeclared dependency 'unauthorized_lib'. Allowed dependencies: tool_provider"
+
 exit "$fail"

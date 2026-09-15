@@ -100,7 +100,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             delivery = scope.get_singleton(GuideDelivery)
             parsed = delivery.parse_guide(content)
 
-            # Requirement: Guide parsing extracts the summary from content preceding the first section heading, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Lint checks` or `Verification failure`.
+            # Requirement: Guide parsing extracts the summary from content preceding the first section heading and under any heading titled `Summary`, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
             self.assertEqual(parsed.summary, "This is the summary text.")
             self.assertEqual(parsed.verification_failure, "Check error logs carefully.")
             self.assertEqual(len(parsed.sections), 2)
@@ -121,11 +121,30 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
                 "## Verification failure\nTrailing failure instructions."
             )
             parsed_trailing = delivery.parse_guide(trailing_vf_content)
-            # Requirement: Guide parsing extracts the summary from content preceding the first section heading, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Lint checks` or `Verification failure`.
+            # Requirement: Guide parsing extracts the summary from content preceding the first section heading and under any heading titled `Summary`, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
             self.assertEqual(
                 parsed_trailing.verification_failure, "Trailing failure instructions."
             )
             self.assertEqual(len(parsed_trailing.sections), 1)
+
+            # When content contains a ## Summary heading
+            standard_guide_content = (
+                "# Guide: Standard Guide\n\n"
+                "## Summary\n"
+                "This is the standard summary text.\n\n"
+                "## Verification failure\nCheck error logs.\n\n"
+                "## Step 1\nExecute step 1.\n\n"
+                "## Lint checks\nCheck rules."
+            )
+            parsed_standard = delivery.parse_guide(standard_guide_content)
+            self.assertEqual(
+                parsed_standard.summary,
+                "# Guide: Standard Guide\n\nThis is the standard summary text.",
+            )
+            self.assertEqual(parsed_standard.verification_failure, "Check error logs.")
+            self.assertEqual(len(parsed_standard.sections), 1)
+            self.assertEqual(parsed_standard.sections[0].title, "Step 1")
+            self.assertEqual(parsed_standard.sections[0].content, "Execute step 1.")
 
     def test_advance_step_lifecycle(self) -> None:
         """CUJ: Advancing through steps with verification passing and failing."""

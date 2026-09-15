@@ -418,5 +418,61 @@ fi
 check "c17 rewritten lifecycle" "$tmp/c17/tests/widget_impl_test.py" 'from support\.lib\.lifecycle import LifecycleRegistry'
 check "c17 lifecycle in BUILD" "$tmp/c17/tests/BUILD.bazel" '"//update_python_with_ai/support/lib:lifecycle"'
 
+# Case 18: dependency header maintained at top of test file.
+mkdir -p "$tmp/c18/lib" "$tmp/c18/tests"
+cat > "$tmp/c18/lib/widget_impl.py" <<'EOF'
+class Widget:
+    pass
+EOF
+cat > "$tmp/c18/tests/widget_impl_test.py" <<'EOF'
+import unittest
+from lib.widget_impl import Widget
+
+class WidgetTest(unittest.TestCase):
+    def test_widget(self):
+        pass
+
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c18" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/widget_impl_test.py --lib-pkg lib --deps //update_with_ai/parts/dag/lib:dag_storage ); then
+    echo "PASS: c18 passed test_lint"
+else
+    echo "FAIL: c18 expected success in test_lint" >&2
+    fail=1
+fi
+if grep -q '# Dependencies:' "$tmp/c18/tests/widget_impl_test.py"; then
+    echo "FAIL: c18 unexpected dependency comment line" >&2
+    fail=1
+else
+    echo "PASS: c18 no dependency comment line present"
+fi
+
+# Case 19: undeclared dependency import in test fails with diagnostic listing allowed dependencies.
+mkdir -p "$tmp/c19/lib" "$tmp/c19/tests"
+cat > "$tmp/c19/lib/widget_impl.py" <<'EOF'
+class Widget:
+    pass
+EOF
+cat > "$tmp/c19/tests/widget_impl_test.py" <<'EOF'
+import unittest
+from lib.widget_impl import Widget
+import unauthorized_module
+
+class WidgetTest(unittest.TestCase):
+    def test_widget(self):
+        pass
+
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c19" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/widget_impl_test.py --lib-pkg lib 2>"$tmp/c19/err.log" ); then
+    echo "FAIL: c19 expected failure on undeclared import in test" >&2
+    fail=1
+else
+    echo "PASS: c19 rejected undeclared import in test"
+fi
+check "c19 undeclared error diagnostic" "$tmp/c19/err.log" "undeclared dependency 'unauthorized_module'. Allowed dependencies: widget_impl"
+
 exit "$fail"
 

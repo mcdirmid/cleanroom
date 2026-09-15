@@ -21,9 +21,9 @@ class ReadManager(sandbox_file_reader.ReadManager, Singleton):
         pass
 
     def initialize(self) -> None:
-        # Requirement: The read manager unconditionally installs the read tool into the tool manager and never installs the search tool.
+        # Requirement: The read manager unconditionally installs the view file tool into the tool manager and never installs the search tool.
         tm = get_singleton(tool_provider.ToolManager)
-        tm.install_tool(get_singleton(ReadTool))
+        tm.install_tool(get_singleton(ViewFileTool))
 
     @property
     def read_only_files(self) -> Set[agent_file_alias.ReadOnlyFile]:
@@ -51,17 +51,8 @@ class ReadManager(sandbox_file_reader.ReadManager, Singleton):
         cfg = get_singleton(agent_node_config.NodeConfig)
         return cfg.guide_file
 
-    def requires_line_numbers(self, file: agent_file_alias.FileAlias) -> bool:
-        # Requirement: The read manager identifies that read-write files and source code files require line numbers when read.
-        # Requirement: The read manager identifies files ending with `.py` as source code files requiring line numbers.
-        if isinstance(file, agent_file_alias.ReadWriteFile):
-            return True
-        if file.short_name.endswith(".py"):
-            return True
-        return False
 
-
-class ReadTool(sandbox_file_reader.ReadTool, Singleton):
+class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
     tier = "agent_session"
 
     def __init__(self) -> None:
@@ -69,45 +60,36 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
 
     @property
     def name(self) -> str:
-        return "read_file"
+        # Requirement: The view file tool is named `view_file`.
+        return "view_file"
 
     @property
     def description(self) -> str:
-        return "Reads file content from the workspace."
+        return "Views file content from the workspace with line numbers."
 
     @property
-    def file_alias_parameter(self) -> tool_provider.Parameter:
+    def path_parameter(self) -> tool_provider.Parameter:
+        # Requirement: The view file tool path parameter uses the alias manager to convert a file alias.
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         return tool_provider.Parameter(
-            name="file",
+            name="path",
             description="Target file alias",
             parameter_converter=alias_mgr,
             is_required=True,
         )
 
     @property
-    def line_numbers_parameter(self) -> tool_provider.Parameter:
-        bool_conv = get_singleton(tool_provider.BooleanParameterConverter)
-        return tool_provider.Parameter(
-            name="line_numbers",
-            description="Must be true when reading read-write files and source code files (.py); must be false or omitted when reading non-source read-only files.",
-            parameter_converter=bool_conv,
-            is_required=False,
-        )
-
-    @property
     def parameters(self) -> Set[tool_provider.Parameter]:
-        return {self.file_alias_parameter, self.line_numbers_parameter}
+        return {self.path_parameter}
 
     def execute_tool(
         self, actual_parameter_bindings: tool_provider.ActualParameterBindings
     ) -> tool_provider.Response:
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
-        target_file = cast(agent_file_alias.FileAlias, bindings_map.get("file"))
-        line_numbers = bool(bindings_map.get("line_numbers", False))
+        target_file = cast(agent_file_alias.FileAlias, bindings_map.get("path"))
 
         read_mgr = get_singleton(ReadManager)
-        # Requirement: When an unbound file equals the guide file configured for step-mode, the read tool failure response indicates that `advance` must be called to read the guide instead.
+        # Requirement: When an unbound file equals the guide file configured for step-mode, the view file tool failure response indicates that `advance` must be called to read the guide instead.
         if isinstance(target_file, agent_file_alias.UnboundFile):
             if (
                 read_mgr.guide_file
@@ -118,7 +100,7 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
                     is_terminated=False,
                     content="To read the task guide, call 'advance' instead.",
                 )
-            # Requirement: Executing the read tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.
+            # Requirement: Executing the view file tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.
             readable = [f.short_name for f in read_mgr.read_only_files] + [
                 f.short_name for f in read_mgr.read_write_files
             ]
@@ -129,57 +111,14 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
                 reminder="Only declared files can be inspected.",
             )
 
-        needs_line_numbers = read_mgr.requires_line_numbers(target_file)
-        # Requirement: Executing the read tool fails if line numbers are not requested when reading a read-write file or source code file, reminding the agent that line numbers must be requested when reading read-write files and source code files and omitted when reading non-source read-only files, and specifying a follow-up execution of the read tool on the file with line numbers requested.
-        if needs_line_numbers and not line_numbers:
-            follow_up = tool_provider.FollowUpToolCall(
-                tool_name="read_file",
-                wire_parameter_bindings=tool_provider.WireParameterBindings(
-                    bindings={
-                        ("file", target_file.short_name),
-                        ("line_numbers", True),
-                    }
-                ),
-            )
-            file_kind = (
-                "source code file"
-                if target_file.short_name.endswith(".py")
-                else "read-write file"
-            )
-            return tool_provider.Response(
-                is_failed=True,
-                is_terminated=False,
-                content=f"Error: line_numbers must be requested when reading {file_kind} '{target_file.short_name}'.",
-                reminder="Line numbers must be requested when reading read-write files and source code files (.py), and omitted when reading non-source read-only files.",
-                follow_up_tool_call=follow_up,
-            )
-
-        # Requirement: Executing the read tool fails if line numbers are requested when reading a non-source read-only file, reminding the agent that line numbers must be requested when reading read-write files and source code files and omitted when reading non-source read-only files, and specifying a follow-up execution of the read tool on the file with line numbers omitted.
-        if not needs_line_numbers and line_numbers:
-            follow_up = tool_provider.FollowUpToolCall(
-                tool_name="read_file",
-                wire_parameter_bindings=tool_provider.WireParameterBindings(
-                    bindings={
-                        ("file", target_file.short_name),
-                    }
-                ),
-            )
-            return tool_provider.Response(
-                is_failed=True,
-                is_terminated=False,
-                content=f"Error: line_numbers must not be requested when reading non-source read-only file '{target_file.short_name}'.",
-                reminder="Line numbers must be requested when reading read-write files and source code files (.py), and omitted when reading non-source read-only files.",
-                follow_up_tool_call=follow_up,
-            )
-
-        # Requirement: Executing the read tool reads file content using the filesystem at the host path formed from the alias manager workspace root and bound file workspace path.
+        # Requirement: Executing the view file tool reads file content using the filesystem at the host path formed from the alias manager workspace root and bound file workspace path, returning content formatted with one-indexed right-aligned line numbers followed by a colon and space.
         assert isinstance(target_file, agent_file_alias.BoundFile)
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         host_path = os.path.join(
             alias_mgr.workspace_root.path, target_file.workspace_path.path
         )
 
-        # Requirement: When the target file does not exist on disk, read tool execution treats a read-write file as having empty content, and fails with a response guiding agent recovery when inspecting a missing read-only file.
+        # Requirement: When the target file does not exist on disk, view file tool execution treats a read-write file as having empty content, and fails with a response guiding agent recovery when inspecting a missing read-only file.
         if not os.path.exists(host_path):
             if isinstance(target_file, agent_file_alias.ReadWriteFile):
                 lines = []
@@ -234,12 +173,15 @@ class ReadTool(sandbox_file_reader.ReadTool, Singleton):
                 )
                 lines = formatted_text.splitlines(keepends=True)
 
-        if line_numbers:
-            content = "".join(f"{i + 1}: {line}" for i, line in enumerate(lines))
+        if lines:
+            digits = max(len(str(len(lines))), 3)
+            content = "".join(
+                f"{i:>{digits}d}: {line}" for i, line in enumerate(lines, start=1)
+            )
         else:
-            content = "".join(lines)
+            content = ""
 
-        # Requirement: Read tool responses for read-write files carry a suppression key matching the file's short name, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
+        # Requirement: View file tool responses for read-write files carry a suppression key matching the file's short name, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
         if isinstance(target_file, agent_file_alias.ReadWriteFile):
             suppression_key = target_file.short_name
             final_content = content
@@ -364,8 +306,8 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         tier="agent_session",
     )
     reg.register_singleton(
-        ReadTool,
-        keys=[ReadTool, sandbox_file_reader.ReadTool, tool_provider.Tool],
+        ViewFileTool,
+        keys=[ViewFileTool, sandbox_file_reader.ViewFileTool, tool_provider.Tool],
         tier="agent_session",
     )
     reg.register_singleton(

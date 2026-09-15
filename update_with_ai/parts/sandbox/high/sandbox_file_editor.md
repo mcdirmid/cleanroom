@@ -18,8 +18,6 @@ An *editing tool* is a tool that modifies a read-write file.
 
 The *edit manager* is an agent session service that modifies workspace files and tracks session edits. The edit manager installs:
 
-- A *text replacement tool* that is an editing tool replacing unique matching text in a read-write file, accepting a *file alias parameter*, a *target text parameter*, and a *replacement text parameter*.
-
-- A *line update tool* that is an editing tool updating or inserting lines within a line range in a read-write file, accepting a *file alias parameter*, a *start line parameter*, an *end line parameter*, and a *replacement text parameter*.
+- A *replace file content tool* that is an editing tool replacing target content in a read-write file within an optional line range, accepting a *file alias parameter*, a *target content parameter*, a *replacement content parameter*, a *start line parameter*, an *end line parameter*, and an *allow multiple parameter*.
 
 The edit manager can *materialize* templates into missing read-write files at session start without overwriting existing files. The edit manager exposes whether workspace file *modifications* occurred during the session, determined by whether workspace file contents differ from their initial state prior to editing, and exposes a *file update revision* that tracks sequential updates made to workspace files.

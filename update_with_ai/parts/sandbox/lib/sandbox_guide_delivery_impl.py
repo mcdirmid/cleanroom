@@ -42,7 +42,7 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
     def parse_guide(
         self, content: agent_file_alias.FileContent
     ) -> agent_node_config.Guide:
-        # Requirement: Guide parsing extracts the summary from content preceding the first section heading, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Lint checks` or `Verification failure`.
+        # Requirement: Guide parsing extracts the summary from content preceding the first section heading and under any heading titled `Summary`, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
         raw = str(content)
         lines = raw.splitlines()
         summary_lines: List[str] = []
@@ -57,7 +57,9 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
                 if current_title is None:
                     summary_lines = list(current_section_lines)
                 else:
-                    if current_title.startswith("Verification failure"):
+                    if current_title.startswith("Summary"):
+                        summary_lines.extend(current_section_lines)
+                    elif current_title.startswith("Verification failure"):
                         verification_failure_lines = list(current_section_lines)
                     elif not current_title.startswith("Lint checks"):
                         sections.append(
@@ -73,7 +75,9 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
                 current_section_lines.append(line)
 
         if current_title is not None:
-            if current_title.startswith("Verification failure"):
+            if current_title.startswith("Summary"):
+                summary_lines.extend(current_section_lines)
+            elif current_title.startswith("Verification failure"):
                 verification_failure_lines = list(current_section_lines)
             elif not current_title.startswith("Lint checks"):
                 sections.append(

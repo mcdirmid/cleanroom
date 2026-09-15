@@ -17,7 +17,7 @@ FRESH_REQUIREMENTS:
 - The read manager exposes declared read-only files, read-write files, and optional guide file obtained from the node config.
 
 INHERITED_REQUIREMENTS:
-- [ReadManager] The read manager installs the read tool and search tool.
+- [ReadManager] The read manager installs the view file tool and search tool.
 - [ReadManager] The read manager exposes the session's set of read-only files.
 - [ReadManager] The read manager exposes the session's set of read-write files.
 - [ReadManager] When step-mode is active, the read manager is configured with a guide file that is an unbound file.
@@ -66,48 +66,31 @@ GROUNDING_ARGUMENT:
     def initialize(self) -> None:
         """
 PURPOSE:
-Provides that initialization unconditionally installs the read tool into the tool manager and never installs the search tool
+Provides that initialization unconditionally installs the view file tool into the tool manager and never installs the search tool
 
 FRESH_REQUIREMENTS:
-- The read manager unconditionally installs the read tool into the tool manager and never installs the search tool.
+- The read manager unconditionally installs the view file tool into the tool manager and never installs the search tool.
 
 GROUNDING_ARGUMENT:
-- Installs ReadTool directly into imported tool_provider.ToolManager in the same session lifecycle tier, and never installs SearchTool.
-"""
-        ...
-
-    @operation
-    @override
-    def requires_line_numbers(self, file: agent_file_alias.FileAlias) -> bool:
-        """
-PURPOSE:
-Identifies whether an inspected file requires line numbers to be requested when read, requiring line numbers for read-write files and source code files
-
-FRESH_REQUIREMENTS:
-- The read manager identifies that read-write files and source code files require line numbers when read.
-- The read manager identifies files ending with `.py` as source code files requiring line numbers.
-
-GROUNDING_ARGUMENT:
-- Checks if the file is an instance of agent_file_alias.ReadWriteFile or if the file's short name ends with '.py'.
+- Installs ViewFileTool directly into imported tool_provider.ToolManager in the same session lifecycle tier, and never installs SearchTool.
 """
         ...
 
 @singleton_type('agent_session')
-class ReadTool(sandbox_file_reader.ReadTool):
+class ViewFileTool(sandbox_file_reader.ViewFileTool):
     """
 PURPOSE:
-Implements the read tool to perform workspace file inspection
+Implements the view file tool to perform workspace file inspection
 
 INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.
 
 FRESH_REQUIREMENTS:
-- The read tool is named `read_file`.
-- The read tool file parameter uses the alias manager to convert a file alias.
-- The read tool line numbers parameter uses the boolean parameter converter.
+- The view file tool is named `view_file`.
+- The view file tool path parameter uses the alias manager to convert a file alias.
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, ReadTool executes file inspection across declared session files, interacting with imported agent_file_alias.AliasManager, agent_node_config.NodeConfig, template_format.TemplateFormatter, and tool_provider in the same session lifecycle tier.
+- As an agent_session singleton, ViewFileTool executes file inspection across declared session files, interacting with imported agent_file_alias.AliasManager, agent_node_config.NodeConfig, template_format.TemplateFormatter, and tool_provider in the same session lifecycle tier.
 """
 
     @property
@@ -115,16 +98,16 @@ GROUNDING_ARGUMENT:
     def name(self) -> str:
         """
 PURPOSE:
-Establishes that the read tool is named read_file
+Establishes that the view file tool is named view_file
 
 GROUNDING_ARGUMENT:
-- Constant tool schema identifier ('read_file').
+- Constant tool schema identifier ('view_file').
 """
         ...
 
     @property
     @override
-    def file_alias_parameter(self) -> tool_provider.Parameter:
+    def path_parameter(self) -> tool_provider.Parameter:
         """
 PURPOSE:
 Parameter accepting the target file alias
@@ -134,33 +117,19 @@ GROUNDING_ARGUMENT:
 """
         ...
 
-    @property
-    @override
-    def line_numbers_parameter(self) -> tool_provider.Parameter:
-        """
-PURPOSE:
-Parameter that must be true when reading read-write files and source code files, and false or omitted when reading non-source read-only files
-
-GROUNDING_ARGUMENT:
-- Constant parameter descriptor configured with boolean parameter converter.
-"""
-        ...
-
     @operation
     @override
     def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
         """
 PURPOSE:
-Implements execute_tool on the read tool to read file content with line number formatting and alias validation
+Implements execute_tool on the view file tool to inspect file content with line number formatting and alias validation
 
 FRESH_REQUIREMENTS:
-- Executing the read tool reads file content using the filesystem at the host path formed from the alias manager workspace root and bound file workspace path.
-- When the target file does not exist on disk, read tool execution treats a read-write file as having empty content, and fails with a response guiding agent recovery when inspecting a missing read-only file.
-- Executing the read tool fails if line numbers are not requested when reading a read-write file or source code file, reminding the agent that line numbers must be requested when reading read-write files and source code files and omitted when reading non-source read-only files, and specifying a follow-up execution of the read tool on the file with line numbers requested.
-- Executing the read tool fails if line numbers are requested when reading a non-source read-only file, reminding the agent that line numbers must be requested when reading read-write files and source code files and omitted when reading non-source read-only files, and specifying a follow-up execution of the read tool on the file with line numbers omitted.
-- Executing the read tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.
-- When an unbound file equals the guide file configured for step-mode, the read tool failure response indicates that `advance` must be called to read the guide instead.
-- Read tool responses for read-write files carry a suppression key matching the file's short name, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
+- Executing the view file tool reads file content using the filesystem at the host path formed from the alias manager workspace root and bound file workspace path, returning content formatted with one-indexed right-aligned line numbers followed by a colon and space.
+- When the target file does not exist on disk, view file tool execution treats a read-write file as having empty content, and fails with a response guiding agent recovery when inspecting a missing read-only file.
+- Executing the view file tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.
+- When an unbound file equals the guide file configured for step-mode, the view file tool failure response indicates that `advance` must be called to read the guide instead.
+- View file tool responses for read-write files carry a suppression key matching the file's short name, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
 - When reading markdown files ending with .md, paragraphs beginning with > META: are filtered out from the returned content.
 - When reading read-only markdown files ending with .md, content is formatted using the template formatter with session template parameters after filtering out paragraphs beginning with > META:.
 
@@ -169,7 +138,7 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, queries line number requirement from ReadManager in the same session lifecycle tier, resolves host paths using imported agent_file_alias.AliasManager workspace root in the same session lifecycle tier, reads file content via the filesystem, filters > META: paragraphs for markdown files, formats read-only markdown content using imported template_format.TemplateFormatter and agent_node_config.NodeConfig.template_parameters in the same session lifecycle tier, checks line number formatting rules for read-only, read-write, and source code files, specifies follow-up read tool calls with corrected line numbers on failure, attaches the file's short name as a suppression key on responses for read-write files while omitting it for read-only files, and masks host paths in read-only output.
+- Receives actual parameter bindings, resolves host paths using imported agent_file_alias.AliasManager workspace root in the same session lifecycle tier, reads file content via the filesystem, formats lines with one-indexed right-aligned line numbers followed by a colon and space, filters > META: paragraphs for markdown files, formats read-only markdown content using imported template_format.TemplateFormatter and agent_node_config.NodeConfig.template_parameters in the same session lifecycle tier, attaches the file's short name as a suppression key on responses for read-write files while omitting it for read-only files, and masks host paths in read-only output.
 """
         ...
 
@@ -193,7 +162,7 @@ PURPOSE:
 Established that each tool defines input parameters accepted for its invocation
 
 GROUNDING_ARGUMENT:
-- Set composed of self's constant parameter descriptors (file_alias_parameter, line_numbers_parameter).
+- Set composed of self's constant parameter descriptors (path_parameter).
 """
         ...
 

@@ -30,12 +30,12 @@ flowchart TD
     subgraph Antigravity ["Antigravity IDE / Desktop App (Google One Ultra)"]
         User["User / IDE Session"] -->|"clean //pkg:target"| Coord["Coordinator Sub-Agent<br/>(Persistent DAG Session)"]
         Coord -->|"1. prepare_node(target)"| MCP["Cleanroom MCP Server<br/>(Pure Python Service)"]
-        MCP -->|"2. Manifest, Prompt, Milestone 1"| Coord
-        Coord -->|"3. invoke_subagent(node_cleaner)"| Worker["Worker Sub-Agent<br/>(Ephemeral Node Cleaner)"]
+        MCP -->|"2. Manifest, Prompt, Guidance"| Coord
+        Coord -->|"3. invoke_subagent(role_cleaner)"| Worker["Worker Sub-Agent<br/>(Role or Node Cleaner)"]
         
-        Worker -->|"4. cleanroom_read / edit"| MCP
-        Worker -->|"5. cleanroom_advance_step()"| MCP
-        Worker -->|"6. cleanroom_finish(summary)"| MCP
+        Worker -->|"4. view_file / replace_file_content"| MCP
+        Worker -->|"5. run_checks()"| MCP
+        Worker -->|"6. submit(target, summary)"| MCP
         
         Worker -->|"7. Clean summary result"| Coord
         Coord -->|"8. mark_node_completed(target)"| MCP
@@ -43,8 +43,8 @@ flowchart TD
     
     subgraph Workspace ["Local Filesystem & Toolchain"]
         MCP -->|"Manifests & Deps"| Bazel["Bazel Build Graph"]
-        MCP -->|"Verification"| Tests["Bazel Test / Pyright"]
-        MCP -->|"File Edits"| Src["Workspace Files"]
+        MCP -->|"In-Process Hermetic Checks"| Tests["Bazel Test / Pyright"]
+        MCP -->|"Direct In-Process Edits"| Src["Workspace Files"]
     end
 ```
 
@@ -54,47 +54,49 @@ flowchart TD
    - Long-lived agent scoped to the overall DAG cleaning session.
    - Equipped with `cleanroom_coordinator_mcp` and Antigravity subagent management tools (`invoke_subagent`, `manage_subagents`).
    - Does *not* edit workspace files directly.
-   - Requests the next dirty node in topological order from the MCP service, launches an ephemeral Worker Sub-Agent, receives the worker's completion summary, and marks the node complete.
+   - Requests the next dirty node or column in topological order from the MCP service, launches Worker Sub-Agents, receives completion summaries, and marks nodes complete.
 
-2. **Worker Sub-Agent (`cleanroom_node_cleaner`)**:
-   - Ephemeral subagent instantiated per DAG node.
-   - Configured with `enable_write_tools=False` to block native file editing (`write_to_file`, `replace_file_content`) and terminal execution (`run_command`).
-   - Equipped exclusively with `cleanroom_node_mcp` tools.
-   - Operates in a **100% clean, freshly initialized conversation context**. When it calls `cleanroom_finish` and terminates, its entire intermediate transcript (compiler errors, retry turns, thinking tokens) is closed and discarded.
+2. **Worker Sub-Agent (`cleanroom_role_cleaner` / `cleanroom_node_cleaner`)**:
+   - Subagent instantiated per engineering role or DAG node.
+   - Configured with `enable_write_tools=False` to block native unconstrained file editing and shell execution (`run_command`).
+   - Equipped exclusively with **Native-Style Cleanroom MCP Tools** (`view_file`, `replace_file_content`, `write_to_file`, `list_dir`, `run_checks`, `submit`, `blame`).
+   - Operates in a **clean, isolated conversation context**. When it calls `submit` and terminates, its intermediate transcript (compiler errors, retry turns, thinking tokens) is closed and discarded.
 
 3. **Cleanroom MCP Server (`cleanroom_mcp_service.py`)**:
    - Standalone Python service running over Stdio or HTTP.
    - Reads Bazel target manifests (`*_manifest.json`), resolves dependency graphs, and tracks in-memory session state.
-   - Executes deterministic Cleanroom invariants: file aliasing, diff tracking, stepped guide milestone advancement, and Bazel verification gating.
+   - Executes deterministic Cleanroom invariants in-process: role blindness validation, direct in-place file editing, diff tracking, and hermetic Bazel verification gating.
 
 ---
 
 ## 3. Sub-Agent Configuration & Sandbox Hardening
 
-To enforce Cleanroom's sandbox rules within Antigravity without native code overrides, the worker subagent type is registered via Antigravity's `define_subagent` interface with restrictive capability flags:
+To enforce Cleanroom's sandbox rules within Antigravity without virtual workspaces or native code overrides, worker subagent types are registered via Antigravity's `define_subagent` interface with restrictive capability flags and native-style MCP tool exposure:
 
 ```python
 define_subagent(
-    name="cleanroom_node_cleaner",
-    description="Cleans an individual Cleanroom specification or implementation node.",
+    name="cleanroom_role_cleaner",
+    description="Cleans Cleanroom units for a specific engineering role (test, lib, etc.).",
     system_prompt="""
-You are an autonomous Cleanroom Node Cleaner. You operate strictly within the Cleanroom sandbox.
-All file inspection, editing, and verification MUST be performed using the cleanroom_* tools.
-You MUST follow stepped guides sequentially using cleanroom_advance_step.
-You MUST conclude your task by calling cleanroom_finish with a valid change summary.
-Do not attempt to modify files outside the declared node aliases.
+You are an autonomous Cleanroom Role Cleaner. You operate strictly within the Cleanroom sandbox.
+All file inspection, editing, and verification MUST be performed using your provided tools:
+- Inspect files with view_file and list directories with list_dir.
+- Modify files with replace_file_content or write_to_file.
+- Verify your code using run_checks before submission.
+- Submit completed units using submit with a concise change message.
+You are subject to in-process Cleanroom Blindness and Confinement rules.
 """,
-    enable_mcp_tools=True,  # Exposes cleanroom_node_mcp
-    enable_write_tools=False,  # Hard block: disables native edit/write/bash tools
+    enable_mcp_tools=True,  # Exposes native-style Cleanroom MCP tools
+    enable_write_tools=False,  # Hard block: disables native unconstrained write/bash tools
     enable_subagent_tools=False,  # Prevents runaway recursive subagent spawning
 )
 ```
 
 ### Sandbox Hardening Guarantees
 
-* **File Confinement**: Because native write tools are disabled, the subagent cannot write to arbitrary disk paths. All modifications must route through `cleanroom_edit`, which validates changes against the node's declared `src` file.
-* **Verification Gating**: The subagent cannot claim completion in chat text alone. It must invoke `cleanroom_finish`. The Python MCP server executes the node's verification target (`*_lint`, `type_check`, or unit tests). If verification fails, the MCP tool returns failure diagnostics and rejects completion.
-* **Stepped Milestone Delivery**: The subagent only receives Milestone 1 in its initial prompt. Subsequent milestones are delivered only through `cleanroom_advance_step` after current verification checks pass.
+* **In-Process Confinement**: Because native write tools are disabled (`enable_write_tools=False`), the subagent cannot write to arbitrary disk paths or run arbitrary shell scripts. All modifications route through the MCP server's `replace_file_content` and `write_to_file`, which validate edits against the role's declared output files in-process.
+* **Role Blindness Enforcement**: The MCP server intercepts `view_file` and `list_dir`. A Test Author requesting `lib/*.py` or a Lib Author requesting `tests/*_test.py` is immediately denied with an informative Cleanroom blindness error.
+* **Hermetic Verification Gating**: The subagent cannot claim completion in chat text alone or run loose shell commands. It must invoke `run_checks`, which executes the node's verification target (`*_lint`, `type_check`, or unit tests) via Bazel on the host. The `submit` tool fails closed if `run_checks` has not passed for the active unit since its last modification.
 
 ---
 
@@ -106,20 +108,25 @@ The MCP service exposes two distinct tool interfaces:
 
 | Tool Name | Parameters | Return Schema | Description |
 | :--- | :--- | :--- | :--- |
-| `get_dag_plan` | `root_target: string` | `List[NodePlan]` | Returns the topological sequence of dirty nodes requiring cleaning. |
-| `prepare_node` | `target: string` | `NodeContext` | Locks the node manifest and returns the prompt, file aliases, and Milestone 1. |
-| `mark_node_completed` | `target: string, outcome: string` | `Ack` | Records node cleaning status in the DAG storage ledger. |
+| `get_dag_plan` | `root_target: string` | `List[NodePlan]` | Returns the topological sequence of dirty nodes or role columns requiring cleaning. |
+| `prepare_node` | `unit: string, role: string` | `NodeContext` | Prepares node manifest, prompt, guidance, and verification commands. |
+| `prepare_column` | `package: string, role: string` | `ColumnContext` | Prepares multi-unit sequence, role preamble, and grounding specifications. |
+| `mark_node_completed` | `unit: string, role: string, outcome: string` | `Ack` | Records node cleaning status in the DAG storage ledger. |
 
-### B. Node Sandbox Toolset (`cleanroom_node_mcp`)
+### B. Role Sandbox Toolset (`cleanroom_role_mcp`) — Native Tool Parity
 
-| Tool Name | Parameters | Return Schema | Description |
+To eliminate cognitive friction and prompt-syntax hallucinations, tools exposed to worker sub-agents match the exact names, argument conventions, and behaviors of Antigravity's native tools:
+
+| Tool Name | Parameters | Return Schema | Description & Confinement Enforcement |
 | :--- | :--- | :--- | :--- |
-| `cleanroom_read` | `alias: string, start_line?: int, end_line?: int` | `FileContent` | Reads files by declared alias (`HLS`, `SRC`, `DEP1`), masking raw paths. |
-| `cleanroom_edit` | `alias: string, target_content: string, replacement_content: string` | `EditResult` | Performs exact string chunk replacement on the declared `src` file. |
-| `cleanroom_advance_step` | *none* | `MilestoneResponse` | Evaluates verification; returns next guide section if passing, or failure diagnostics if failing. |
-| `cleanroom_verify` | *none* | `VerifyResult` | Runs Bazel verification checks for the active node and caches outcomes. |
-| `cleanroom_finish` | `change_summary: string` | `FinishOutcome` | Validates change summary, runs final verification, commits edits, and marks node complete. |
-| `cleanroom_blame` | `blame_alias: string, diagnostics: string` | `BlameOutcome` | Attributes defect to an upstream dependency node and halts the worker. |
+| `view_file` | `AbsolutePath: string, StartLine?: int, EndLine?: int, ContentOffset?: int` | `FileContent` | Reads file lines with 1-indexed line numbers. Enforces Cleanroom Blindness in-process (e.g., denies `lib/` access to Test authors, denies `tests/` access to Lib authors). |
+| `replace_file_content` | `TargetFile: string, TargetContent: string, ReplacementContent: string, StartLine?: int, EndLine?: int, AllowMultiple?: bool, Instruction?: string, Description?: string` | `EditResult` | Drops replacement content into target file. Validates in-process that `TargetFile` is the declared output file for the active unit/role. |
+| `write_to_file` | `TargetFile: string, CodeContent: string, Overwrite?: bool, Description?: string` | `WriteResult` | Creates or overwrites files. Enforces write confinement in-process, preventing modification to specs or undeclared files. |
+| `list_dir` | `DirectoryPath: string` | `DirListing` | Lists directory contents. Redacts or flags blinded directories based on the subagent's role. |
+| `run_checks` | `TargetUnit?: string` | `CheckResult` | Runs hermetic verification target (`lint`, `type_check`, unit test) via Bazel on the host. Tracks pass/fail status in memory. Replaces unconstrained shell access (`run_command`). |
+| `submit` | `TargetUnit: string, ChangeMessage: string` | `SubmitResult` | Gated by `run_checks` passing. Validates change message, commits changes to DAG storage, and notifies QA Arbiter or Coordinator. |
+| `blame` | `BlameTarget: string, Diagnostics: string` | `BlameOutcome` | Attributes defect to an upstream unit or role and notifies the responsible agent or coordinator. |
+| `advance_step` | *none* *(Stepped Mode only)* | `MilestoneResponse` | Used in single-unit step mode: advances to the next guide milestone after verification passes. |
 
 ---
 
@@ -128,7 +135,7 @@ The MCP service exposes two distinct tool interfaces:
 True context isolation is achieved by exploiting Antigravity's lifecycle boundary between parent and child agents:
 
 1. **Zero History Ingestion**: When the Coordinator calls `invoke_subagent`, Antigravity provisions a fresh session ID and an empty transcript for the Worker Sub-Agent. The worker has zero access to previous node transcripts or parent conversational history.
-2. **Intermediate Token Evaporation**: During node execution, the worker may generate 10–20 turns containing large file listings, compiler error outputs, and reasoning steps. When `cleanroom_finish` succeeds, the worker returns a concise return payload (e.g. `Node //pkg:node cleaned; 1 file modified`) to the Coordinator. The worker's entire context window is closed, preventing context rot in subsequent nodes.
+2. **Intermediate Token Evaporation**: During node execution, the worker may generate 10–20 turns containing large file listings, compiler error outputs, and reasoning steps. When `submit` succeeds, the worker returns a concise return payload (e.g. `Node //pkg:node cleaned; 1 file modified`) to the Coordinator. The worker's entire context window is closed, preventing context rot in subsequent nodes.
 3. **Coordinator Token Economy**: Because the Coordinator only receives concise milestone completions from each worker, its context grows linearly at only ~50 tokens per node, easily supporting 20+ node pipelines without hitting model context limits.
 
 ---
@@ -157,16 +164,18 @@ The Tiered Sub-Agent architecture is **significantly less token-efficient** than
 
 ---
 
-## 7. Implementation Roadmap
+## 7. Implementation Roadmap & Evolution
+ 
+Initially conceived as a 1:1 node-scoped sub-agent architecture, the integration has evolved into a **2D Unit $\times$ Role Product DAG** with **Role-Based Sub-Agents** (Sections 8, 13–18).
 
-1. **Phase 1: Pure Python MCP Server (`//update_with_ai/support/mcp`)**:
-   - Implement `cleanroom_mcp_service.py` using FastMCP / Stdio transport.
-   - Wrap existing Cleanroom components: `BazelManifestLoader`, `DagStorage`, `GuideDelivery`, and `RunControl`.
-2. **Phase 2: Sub-Agent Registration**:
-   - Define `cleanroom_node_cleaner` subagent type with write tools disabled.
-   - Register `cleanroom_coordinator` subagent type with MCP and subagent tools enabled.
-3. **Phase 3: Bazel Entry Target**:
-   - Create `bazel run //update_with_ai:serve_mcp` to launch the MCP daemon for the active workspace.
+* **Foundational Phases Completed (Current State)**:
+  - Unit and Role macro separation (`define_unit`, `define_role`, `define_node`).
+  - Pass-through roles with component-type gating (`active_component_types`).
+  - Direct CLI linters in role verification templates.
+  - 2D node addressing (`unit#role`) and dynamic manifest synthesis.
+  - Hardened sandbox file reading and editing tools.
+* **Remaining Implementation Milestones**:
+  - Package-level aggregation targets, MCP service with native tool parity, subagent registrations, in-process confinement, and QA blame loops (see **Section 19** for detailed progress and **Section 20** for remaining milestones).
 
 ---
 
@@ -214,202 +223,143 @@ flowchart TD
 
 ---
 
-## 9. Sub-Agent Identification in Hooks (`hooks.json`)
+## 9. Architectural Evolution: Retiring Virtual Workspaces for Pure MCP
 
-To implement **Approach 1** (dynamic argument-level tool filtering via `PreToolUse`), the guard script must determine *which* sub-agent is issuing a `view_file` or `replace_file_content` call.
+Initially, two sandbox isolation patterns were evaluated alongside custom RPC tools:
+1. **In-Place Hook Interception (`hooks.json`)**: Intercepting native `view_file` calls via shell hooks and an active session JSON registry.
+2. **Virtual Workspaces with Reactive Watchers**: Creating ephemeral staging directories (`/tmp/...`), symlinking specs, running background file watchers (`watchdog` / `fsevents`), and mirroring edits back to the host repository.
 
-### A. The Hook Payload Metadata
-Antigravity's `PreToolUse` hook delivers system metadata on `stdin` for every tool invocation:
-
-```json
-{
-  "conversationId": "4f9d2a1b-7c3e-48a0-9e2d-6b5f8c1a9e3d",
-  "workspacePaths": ["/Users/seanmcdirmid/projects/cleanroom"],
-  "transcriptPath": ".../brain/4f9d2a1b-7c3e-48a0-9e2d-6b5f8c1a9e3d/.../transcript.jsonl",
-  "toolCall": {
-    "name": "view_file",
-    "args": {
-      "AbsolutePath": "/Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/agent/lib/agent_node_cleaner_impl.py"
-    }
-  },
-  "stepIdx": 14
-}
-```
-
-Two fields provide unambiguous sub-agent identification:
-1. **`conversationId`**: Every sub-agent is assigned a unique, immutable conversation UUID that persists for its entire lifecycle.
-2. **`workspacePaths`**: When a sub-agent is launched with a specialized or branched workspace, its active root directory is passed directly.
-
-### B. Sub-Agent Session Registry Pattern
-Because `hooks.json` is a workspace-global hook, role-specific policies are enforced by maintaining a lightweight registry file (e.g., `.cleanroom/active_subagents.json` or in-memory SQLite):
-
-1. **Registration on Launch**:
-   When the Coordinator sub-agent launches a worker (e.g. via `invoke_subagent`), it records the subagent ID and its assigned role:
-   ```json
-   {
-     "4f9d2a1b-7c3e-48a0-9e2d-6b5f8c1a9e3d": {
-       "role": "test_author",
-       "denied_patterns": ["/lib/", "_impl.py"],
-       "allowed_write_patterns": ["/tests/", "_test.py"]
-     }
-   }
-   ```
-2. **Policy Evaluation in the Hook Script**:
-   The Python hook script (`support/cleanroom_tool_guard.py`):
-   - Reads `conversationId` from the input payload.
-   - Looks up the subagent record in `active_subagents.json`.
-   - If the conversation ID belongs to `test_author` and `args.AbsolutePath` matches `/lib/`:
-     ```json
-     {
-       "decision": "deny",
-       "reason": "Cleanroom Blindness Violation: Test sub-agents are strictly barred from reading implementation files."
-     }
-     ```
-   - If the conversation ID belongs to the main user or coordinator, the hook defaults to `{"decision": "allow"}`.
-3. **De-registration on Stop**:
-   When the sub-agent terminates, the coordinator removes the conversation ID from the registry.
+### Why Virtual Workspaces and Background Watchers Were Retired
+While Virtual Workspaces promised physical isolation by omitting `lib/` from the staged directory, in practice they introduced substantial fragility and operational drag:
+1. **Filesystem Duplication & Symlink Complexity**: Hard links and symlinks across OS boundaries (e.g. macOS APFS vs. Linux) cause edge cases with file attributes and in-place editor atomic renames.
+2. **Reactive Sync Races**: File watchers operate asynchronously. When an agent rapidly edits a file and immediately requests verification, race conditions occur where the test runner evaluates stale host code before the watcher completes the copy.
+3. **Dangling Daemon Processes**: Background file watcher daemons must be spawned, health-checked, and terminated cleanly across subagent crashes or timeouts.
+4. **Monorepo Import & Bazel Disconnect**: Staged directories break relative paths, `MODULE.bazel` discovery, and Pyright configuration, requiring artificial path rewrites and symlink trees.
 
 ---
 
-## 10. Virtual Workspaces, File Discovery, and Reactive Sync Watchers
+## 10. Pure MCP Architecture: Native Tool Parity & In-Process Confinement
 
-### A. How Antigravity Discovers Workspace Files
-Antigravity agents do not possess an omniscient or pre-indexed internal list of files. File discovery occurs dynamically via three mechanisms:
-
-1. **System Prompt Seeding**: At session startup, Antigravity injects the active workspace roots from `workspacePaths` into the environment block.
-2. **Tool-Driven Discovery**: When exploring files, the model explicitly invokes:
-   - `list_dir(DirectoryPath)`: Lists children, directories, and file sizes.
-   - `find_by_name(SearchDirectory, Pattern)`: Runs `fd` across the specified root.
-   - `grep_search(SearchPath, Query)`: Runs `ripgrep` across paths.
-3. **Physical Confinement**: All three tools are bounded by directory arguments. If an agent is assigned a virtual workspace root at `/tmp/cleanroom_sandbox/test/`, queries to `find_by_name` or `list_dir` physically cannot traverse into directories that do not exist within that tree.
-
-### B. The Virtual Workspace Architecture (Approach 2)
-Rather than relying on argument filtering or negative prompts, Approach 2 achieves **physical blindness**:
+The adopted design implements a **Pure MCP Tool Architecture** with **Native Tool Parity**. Instead of staging virtual directories or forcing models to learn custom, alien RPC interfaces (`cleanroom_read(alias='SRC')`), Cleanroom exposes MCP tools that mirror the exact signatures, parameter names, and behaviors of Antigravity's native tools:
 
 ```mermaid
-flowchart LR
-    subgraph Host ["Physical Repository"]
-        MasterSrc["update_with_ai/parts/agent/lib/"]
-        MasterTest["update_with_ai/parts/agent/tests/"]
-        MasterSpec["update_with_ai/parts/agent/grounding/"]
+flowchart TD
+    subgraph Antigravity ["Antigravity Sub-Agent Context"]
+        Agent["Role Sub-Agent<br/>(enable_write_tools=False)"]
+        Agent -->|"view_file(AbsolutePath)"| MCP
+        Agent -->|"replace_file_content(TargetFile, ...)"| MCP
+        Agent -->|"write_to_file(TargetFile, ...)"| MCP
+        Agent -->|"list_dir(DirectoryPath)"| MCP
+        Agent -->|"run_checks(TargetUnit)"| MCP
+        Agent -->|"submit(TargetUnit, ChangeMessage)"| MCP
     end
 
-    subgraph TestWS ["Virtual Test Workspace (/tmp/.../test_ws/)"]
-        SpecLink["grounding/ (symlink/copy)"]
-        TestFile["tests/foo_test.py"]
+    subgraph MCPService ["Cleanroom Python MCP Server (In-Process Policy Engine)"]
+        MCP["MCP Server"]
+        Policy{"Role Policy & Blindness Check"}
+        MCP --> Policy
+        
+        Policy -->|"Test Author accessing lib/?"| Deny["Return Access Denied Error"]
+        Policy -->|"Permitted File Read/Write"| DirectIO["Direct Host Workspace I/O<br/>(update_with_ai/...)"]
+        Policy -->|"run_checks"| Bazel["Hermetic Bazel Execution<br/>(--test_output=errors)"]
+        Policy -->|"submit"| Ledger["DAG Storage Ledger & QA Trigger"]
     end
-
-    MasterSpec -->|1. Stage| SpecLink
-    TestAgent["Test Sub-Agent"] -->|2. Authoring| TestFile
-
-    subgraph Sync ["Reactive File Watcher Daemon"]
-        Watcher["Watcher (watchdog / fswatch)"]
-    end
-
-    TestFile -.->|3. File Write Event| Watcher
-    Watcher -->|4. Copy & Mark Dirty| MasterTest
-    Watcher -->|5. Notify| QAArbiter["QA Arbiter Sub-Agent"]
-    QAArbiter -->|6. Run Bazel Tests| Bazel["bazel test"]
 ```
 
-#### Step-by-Step Staging and Synchronization:
-1. **Materialization**:
-   The coordinator creates `/tmp/cleanroom_workspaces/<session_id>/test/`. It copies or hard-links `grounding/*.pyi` and `high/*.md`. It places an empty or starter `tests/foo_test.py`.
-   `lib/` is completely omitted.
-2. **Execution**:
-   The Test Sub-Agent is launched with `Workspace: "/tmp/cleanroom_workspaces/<session_id>/test/"`. Native tools (`view_file`, `find_by_name`, `replace_file_content`) operate with zero friction.
-3. **Reactive Watcher Sync**:
-   A lightweight background watcher daemon (`watchdog` / `fsevents`) monitors the virtual workspace:
-   - Upon any write event on `tests/foo_test.py`, the watcher mirrors the modified file back to the canonical repository path (`update_with_ai/parts/agent/tests/foo_test.py`).
-   - The watcher flags the test node as dirty in DAG storage.
-4. **Concurrent QA Evaluation**:
-   If the QA Arbiter is running concurrently, it detects the dirty signal, pulls the newly mirrored test, and runs `bazel test //update_with_ai/parts/agent/tests:agent_node_cleaner_impl_test`.
+### A. Native Tool Parity Eliminates Cognitive Friction
+Frontier models are extensively pre-trained and instruction-tuned on standard file viewing and editing tools. Exposing tools that conform to standard Antigravity schemas eliminates prompt overhead and hallucination:
 
-### C. Eliminating File-Alias Confusion
-In Cleanroom's legacy sandbox, files are referred to by abstract identifiers (`HLS`, `SRC`, `DEP1`). LLMs are pre-trained on millions of real code repositories with standard relative file paths (`tests/foo_test.py`, `grounding/foo.pyi`). 
+1. **`view_file`**:
+   - Signature: `view_file(AbsolutePath: str, StartLine?: int, EndLine?: int, ContentOffset?: int)`
+   - Operates on real repository paths (e.g., `/Users/.../update_with_ai/parts/agent/grounding/agent_node_cleaner_impl.pyi`).
+   - Returns 1-indexed line numbers and content slices matching Antigravity native behavior.
+2. **`replace_file_content`**:
+   - Signature: `replace_file_content(TargetFile: str, TargetContent: str, ReplacementContent: str, StartLine?: int, EndLine?: int, AllowMultiple?: bool, Instruction?: str, Description?: str)`
+   - Exact drop-in replacement for Antigravity's native editing tool.
+   - Performs exact contiguous string chunk replacements in-place on the host repository.
+3. **`write_to_file`**:
+   - Signature: `write_to_file(TargetFile: str, CodeContent: str, Overwrite?: bool, Description?: str)`
+   - Initializes new test or implementation files directly.
+4. **`list_dir`**:
+   - Signature: `list_dir(DirectoryPath: str)`
+   - Explores directory hierarchies, returning children and directory sizes.
+5. **`run_checks`**:
+   - Signature: `run_checks(TargetUnit?: str)`
+   - Replaces unconstrained terminal access (`run_command`) with deterministic verification execution.
+6. **`submit`**:
+   - Signature: `submit(TargetUnit: str, ChangeMessage: str)`
+   - Atomically records the completed unit asset in DAG storage once verification checks have passed.
 
-By using Virtual Workspaces with real paths, the agent experiences **zero cognitive overhead**:
-* Paths look completely standard to the model.
-* Native IDE completions, syntax lenses, and lint feedback function without translation.
-* Confinement is enforced by the filesystem hierarchy rather than artificial token mappings.
+### B. In-Process Confinement & Blindness Enforcement
+Because the subagent is registered with `enable_write_tools=False`, native write tools (`write_to_file`, `replace_file_content`) and terminal commands (`run_command`) are completely disabled by Antigravity. The subagent **cannot** bypass the MCP server.
+
+The Python MCP server maintains active session context (subagent conversation ID $\to$ assigned role and active unit batch):
+
+1. **Role Blindness**:
+   - When a **Test Sub-Agent** calls `view_file` on any path under `/lib/` or ending in `_impl.py`:
+     ```text
+     Access Denied: Cleanroom Blindness Violation.
+     Test authors are strictly barred from inspecting library implementation files under lib/.
+     You must author test cases exclusively from grounding specifications (.pyi), specifications (.md), and testing guides.
+     ```
+   - When a **Lib Sub-Agent** calls `view_file` on any path under `/tests/` or ending in `_test.py`:
+     ```text
+     Access Denied: Cleanroom Blindness Violation.
+     Library authors are strictly barred from inspecting test files under tests/.
+     You must implement functionality strictly to satisfy the grounding specification contract (.pyi).
+     ```
+   - When `list_dir` is called, forbidden directories are either omitted or flagged as `[blinded/restricted]`.
+2. **Write Confinement**:
+   - When `replace_file_content` or `write_to_file` is invoked, the MCP server asserts that `TargetFile` matches the role's declared output file for the active unit:
+     - Test Role: only allowed to edit `tests/{unit}_test.py` and `tests/BUILD.bazel`.
+     - Lib Role: only allowed to edit `lib/{unit}.py` and `lib/BUILD.bazel`.
+     - Spec Roles (`high`, `low`): only allowed to edit `high/{unit}.md` and `grounding/{unit}.pyi` respectively.
+   - Any attempt to edit upstream specs, dependencies, or out-of-scope units is rejected immediately.
+3. **Atomic Change Tracking**:
+   - File edits modify the host workspace directly in-place. The MCP server records a dirty bit for that unit, requiring a clean pass of `run_checks` before `submit` will succeed.
 
 ---
 
 ## 11. Comparison of Sandbox Confinement Strategies
 
-| Strategy | Blindness Guarantee | Native Tool Affinity | Implementation Complexity | Sub-Agent Overhead |
-| :--- | :--- | :--- | :--- | :--- |
-| **Approach 1: `hooks.json` Guard** | **Strong (Programmatic)**: Intercepts `view_file` at runtime via `conversationId` registry. | **100% Native**: Uses standard `view_file` and `replace_file_content`. | Moderate (Python script + registry JSON). | Zero workspace copying; operates in-place. |
-| **Approach 2: Virtual Workspace + Watcher** | **Absolute (Physical)**: `lib/` does not exist on disk in the sub-agent's root. | **100% Native**: Real paths, full IDE indexing, no model confusion. | Moderate (Staging directory setup + file watcher). | Requires symlinking/copying and background sync daemon. |
-| **Approach 3: Shadow MCP Tools** | **Strong (Custom RPC)**: Tools only accept permitted operations. | **Low / Degraded**: Model must learn custom tool schemas; risk of syntax hallucinations. | High (Full MCP tool server implementation). | High cognitive drag on the model. |
+| Strategy | Blindness Guarantee | Model Affinity | Operational Overhead | Synchronization Latency | Verdict |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Pure MCP with Native Tool Parity** | **Absolute (In-Process)**: Enforced directly inside Python tool dispatch logic based on subagent role metadata. | **100% Native**: Exact same tool names, parameter schemas, and real paths as standard Antigravity tools. | **Minimal**: Operates in-place on host repository; no staging directories or daemons. | **Zero**: In-place edits are instantly visible to verification. | **Chosen Architecture** |
+| **Virtual Workspace + Watcher** | **Physical**: Forbidden files omitted from staging directory. | **100% Native**: Real relative paths in staging root. | **High**: Staging directory materialization, symlink trees, background `watchdog`/`fsevents` daemons. | **High / Race-Prone**: File sync latency between staging and host monorepo. | Rejected (Too fragile, sync races) |
+| **`hooks.json` PreToolUse Guard** | **Strong**: Intercepts native tool calls via external shell hook script. | **100% Native**: Native tools with hook gating. | **Moderate**: Requires workspace-global hook configuration and JSON state files. | **Low**: Operates in-place. | Deprecated in favor of Pure MCP |
+| **Alien Shadow MCP Tools** | **Strong**: Custom RPC aliases (`cleanroom_read(alias=...)`). | **Degraded**: Model must learn non-standard schemas; high cognitive drag and hallucinations. | **Moderate**: Custom MCP implementation. | **Zero**: In-place. | Rejected (Model friction & hallucinations) |
 
-### Architectural Recommendation
-* **Primary Recommendation**: **Approach 2 (Virtual Workspace with Reactive Watcher)** provides the strongest isolation guarantee, complete physical blindness, and full native tool performance without risk of model leakage.
-* **Secondary / In-Place Alternative**: **Approach 1 (`hooks.json` PreToolUse)** is ideal when avoiding filesystem staging is preferred, using `conversationId` mapping to enforce role-specific read/write gates in-place.
+### Key Takeaway
+The **Pure MCP with Native Tool Parity** approach achieves the ideal sweet spot:
+* It eliminates the operational complexity, disk copying, and sync races of Virtual Workspaces.
+* It eliminates the cognitive drag, schema errors, and alias confusion of Alien MCP tools.
+* It leverages Antigravity's built-in `enable_write_tools=False` to guarantee that all file modifications and verifications route through Cleanroom's Python policy engine.
 
 ---
 
-## 12. Workspace-Scoped Hooks & Restricting Verification to MCP
+## 12. Hermetic Verification and Shell Denial in Pure MCP
 
-A critical architectural necessity in the Virtual Workspace model is cleanly separating **File I/O** (which happens inside the flat virtual workspace) from **Verification Execution** (which must run in the host Bazel workspace).
+In standard Antigravity workflows, agents frequently attempt to run tests or build tools via bash commands (`run_command("pytest ...")` or `run_command("bazel test ...")`).
 
-### A. Scoping Hooks to the Virtual Workspace
-Antigravity discovers customizations by walking upward from the agent's CWD to the workspace root. By placing a `.agents/hooks.json` directly inside the virtual workspace:
-`/tmp/cleanroom_workspaces/<session_id>/test/.agents/hooks.json`
+### A. Elimination of Shell Escape
+By registering role subagents with `enable_write_tools=False`:
+* Antigravity **does not equip the agent with `run_command`**.
+* The agent cannot run unconstrained shell commands, bypass build rules, inspect unpermitted environment variables, or run non-hermetic scripts.
+* All verification must route through the MCP tool: `run_checks(TargetUnit)`.
 
-The hook configuration is **automatically scoped** to that specific sub-agent session.
-
-#### Does the Python Guard Script Have to Live in the Virtual Workspace?
-**No.** In `hooks.json`, the `"command"` field accepts absolute paths:
-
-```json
-{
-  "deny-shell-and-leakage": {
-    "PreToolUse": [
-      {
-        "matcher": "run_command",
-        "hooks": [
-          {
-            "command": "echo '{\"decision\": \"deny\", \"reason\": \"Shell command execution is disabled in Cleanroom sandboxes. You must run tests exclusively using the cleanroom_verify MCP tool.\"}'"
-          }
-        ]
-      },
-      {
-        "matcher": "view_file|replace_file_content",
-        "hooks": [
-          {
-            "command": "python3 /Users/seanmcdirmid/projects/cleanroom/support/cleanroom_path_guard.py"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-* The virtual workspace remains pristine, containing only the staged files (`grounding/`, `high/`, `tests/`).
-* The hook script lives in the canonical host repository.
-* No `conversationId` multiplexing is required, because this hook configuration only exists within the Test Sub-Agent's workspace.
-
-### B. Why Verification Must Route Through MCP (Not Local Shell)
-If a sub-agent were permitted to invoke shell commands (`run_command`), it would attempt to run tests locally inside its virtual workspace:
-`run_command("pytest tests/foo_test.py")` or `run_command("bazel test ...")`
-
-This fails immediately:
-1. **Missing Environment**: The flat virtual staging directory does not contain `MODULE.bazel`, dependencies, `pyrightconfig.json`, or the host virtual environment.
-2. **Loss of Hermeticity**: Bypassing Bazel breaks Cleanroom's deterministic test flags (`--test_output=errors --test_timeout=100 --noshow_progress`).
-3. **Circular Feedback Blindness**: The sub-agent could accidentally run tests against uncommitted or dirty host states without coordination.
-
-### C. The Dual-Channel Confinement Pattern
-The final architecture establishes a clean, dual-channel boundary:
-
-| Channel | Mechanism | Target Domain | Confinement Enforcement |
-| :--- | :--- | :--- | :--- |
-| **File Reading & Writing** | **Native Tools** (`view_file`, `replace_file_content`) | Flat Virtual Workspace (`/tmp/.../test_ws/`) | **Physical Confinement**: `lib/` physically does not exist in the staging directory. Model uses familiar native tools without cognitive alias translation. |
-| **Verification & Testing** | **Cleanroom MCP** (`cleanroom_verify`) | Canonical Host Monorepo (`/Users/.../cleanroom/`) | **Hook Confinement**: `run_command` is hard-denied via `PreToolUse`. All verification calls route through MCP, which syncs the staged test and triggers hermetic Bazel runs. |
-
-When the sub-agent attempts to run tests via bash, the hook intercepts the call and instructs the model:
-`"Shell command execution is disabled. You must run tests exclusively using the cleanroom_verify MCP tool."`
-The agent immediately pivots to invoking `cleanroom_verify`, maintaining 100% compliance with Cleanroom build standards.
+### B. In-Process Hermetic Bazel Execution
+When `run_checks` is called:
+1. The MCP server resolves the active unit and role from its in-memory session.
+2. It fetches the parameterized `verify_template` from the synthesized role manifest (Section 19C).
+3. It executes the verification command directly via a hermetic subprocess on the host repository:
+   ```bash
+   bazel test //update_with_ai/parts/agent/tests:agent_node_cleaner_impl_test \
+       --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress
+   ```
+4. The output is filtered and sanitized:
+   - On success: Returns `{"status": "PASS", "unit": target_unit, "summary": "All 12 unit tests passed."}`.
+   - On failure: Returns `{"status": "FAIL", "diagnostics": "<compiler/test error snippet>"}`.
+5. Pass/fail status is recorded in memory. The unit cannot be submitted via `submit` until `run_checks` reports `PASS`.
 
 ---
 
@@ -491,7 +441,7 @@ To support both execution paradigms, prompts are stratified into two layers:
      Units in Topological Order:
        1. agent_loop_guard_impl
        2. agent_node_cleaner_impl
-     Instructions: For each unit in sequence, inspect grounding/*.pyi, author tests/*_test.py, and verify via cleanroom_verify.
+     Instructions: For each unit in sequence, inspect grounding/*.pyi, author tests/*_test.py, and verify via run_checks.
      ```
 
 ### E. Cleaning Mechanics & Required Starlark Refactoring
@@ -571,7 +521,7 @@ When an agent operates in **Columnar / Role-First mode**, the orchestrator does 
 2. **Deterministic Compiler Gating**:
    - If a Lib Author attempts to import a sibling component that is present in the workspace but *not* a declared dependency of that specific unit:
      - The Pyright type checker and Cleanroom `lib_lint.py` immediately flag a compile/lint failure: `Import of undeclared dependency 'foo' not in target deps`.
-   - The sub-agent receives the exact diagnostic via `cleanroom_verify` and corrects itself without the orchestrator needing to hold its hand.
+   - The sub-agent receives the exact diagnostic via `run_checks` and corrects itself without the orchestrator needing to hold its hand.
 
 ### C. Benefits of Columnar Execution
 
@@ -747,6 +697,128 @@ If a specific unit struggles or fails repeated verification during multi-unit ba
 * The Coordinator can dynamically carve out the problematic unit from the batch.
 * It spawns a dedicated single-unit sub-agent assigned exclusively to that unit in **Stepped Guide Mode** (`allows_step_mode = True`).
 * This slows the agent down, forcing incremental, milestone-by-milestone verification checkpoints and concentrated reasoning on the difficult logic until tests pass, after which the unit is re-integrated into the main pipeline.
+
+---
+
+## 19. Implementation Status & Accomplishments (Current State)
+
+The foundation for the 2D Product DAG and Role-Based Antigravity Integration is now fully implemented and verified in Cleanroom's canonical codebase (`update_with_ai` and `update_python_with_ai`), with 100% test passing and specification alignment:
+
+### A. 2D Unit $\times$ Role Product DAG Ontology
+* **Separation of Unit and Role**: Replaced legacy monolithic node macros with distinct, composable macros:
+  - `define_unit(name, unit_deps, component_type)`: Defines functional units (`implementation`, `assembly`, `interface`, `external`), declares dependencies strictly between units (treated uniformly as `star_deps`), and generates `<unit>_unit_manifest.json`.
+  - `define_role(...)`: Defines engineering disciplines (`high`, `low`, `lib`, `test`, `qa`, `coverage`), parameterized source patterns, prompts, verification commands, and 2D dependency channels (`role_deps`, `star_role_deps`, `silent_cross_role_deps`, `feedback_role_deps`), generating `<role>_role_manifest.json`.
+  - `define_node(name, unit, role)`: Generates single-node convenience targets (`<unit>_<role>_clean`, `_feedback`, `_dirty`, `_change`, `_prompt`).
+* **Flat Definition Loop**: Replaced complex conditional logic in `update_python_with_ai.bzl` with a single, uniform loop: one `define_unit` followed by six `define_node` invocations over all canonical roles.
+* **Refactored Node Addressing**: Refactored `Node` in `dag_storage.py` from a single `address: str` to `(unit_address: str, role_address: str)`, serialized as `unit#role` (e.g. `//parts/dag:dag_cleaner_impl#//update_python_with_ai:lib`). Updated `NodeConfig`, `BazelStorage`, `BazelRunner`, and `BazelTarget` across the runtime.
+
+### B. Pass-Through Roles & Component-Type Gating
+* **Component-Type Activation**: Added `active_component_types` gating to `define_role`:
+  - `high`, `low`: Active across all components (`implementation`, `assembly`, `interface`, `external`).
+  - `lib`: Active for `implementation`, `assembly`, and `interface`.
+  - `test`, `qa`, `coverage`: Active exclusively for `implementation`.
+* **Pass-Through Node Synthesis**: When a unit's component type is inactive for a role:
+  - Synthesized with empty `task_prompt`, `src`, and `verify` fields.
+  - Generates zero change messages and triggers no LLM agent session.
+  - Automatically bridges dependencies: cross-unit `(u_dep, role)` and intra-unit `(unit, r_dep)`. Cleaning a pass-through node transitively cleans its upstream dependencies while acting as a transparent dependency in the DAG.
+
+### C. Direct CLI Linters in Role Verification Templates
+* **Elimination of Utility Targets**: Removed intermediate lint test rules (`_hls_lint_test`, `_lls_lint_test`) that cluttered the package graph.
+* **Direct Shell Verification Commands**: Integrated linters and type checkers directly into role `verify_template` attributes:
+  - `high`: `cd $BUILD_WORKSPACE_DIRECTORY && python3 update_with_ai/support/lib/hls_lint.py {unit_dir}/high/{unit_name}.md`
+  - `low`: `cd $BUILD_WORKSPACE_DIRECTORY && python3 update_with_ai/support/lib/grounding_tool.py --check {unit_dir}/grounding/{unit_name}.pyi`
+  - `lib`: `cd $BUILD_WORKSPACE_DIRECTORY && python3 update_with_ai/support/lib/lib_lint.py {unit_dir}/lib/BUILD.bazel {unit_dir}/lib/{unit_name}.py --pyi {unit_dir}/grounding/{unit_name}.pyi && bazel test //{unit_dir}/lib:{unit_name}_type_check 2>&1`
+  - `test`: `cd $BUILD_WORKSPACE_DIRECTORY && python3 update_with_ai/support/lib/test_lint.py {unit_dir}/tests/BUILD.bazel {unit_dir}/tests/{unit_name}_test.py --lib-pkg {unit_dir}/lib --pyi {unit_dir}/grounding/{unit_name}.pyi && bazel test //{unit_dir}/tests:{unit_name}_test_type_check 2>&1`
+  - `qa`: `bazel test //{unit_dir}/tests:{unit_name}_test 2>&1`
+  - `coverage`: `bazel test //{unit_dir}/tests:{unit_name}_test && python3 update_with_ai/support/lib/evaluate_coverage.py --lib-file {unit_dir}/lib/{unit_name}.py --test-file {unit_dir}/tests/{unit_name}_test.py 2>&1`
+
+### D. Dynamic 2D Manifest Synthesis & Template Propagation
+* **Runtime Manifest Synthesis**: `bazel_manifest_loader_impl.py` loads `_unit_manifest.json` and `_role_manifest.json` on-the-fly, synthesizing 2D dependencies (`deps`, `feedback_deps`, `silent_deps`, `star_deps`), templates, and parameterized variables (`unit_name`, `unit_dir`).
+* **Role Templates**: Added `template` attribute to `define_role` and forwarded template files through Bazel runfiles. Wired starter templates (`empty`, `hls`, `lls`, `lib`, `test`) across all roles in `update_python_with_ai/BUILD.bazel`.
+
+### E. Sandbox Edge Case Hardening
+* **Missing File Resilience**:
+  - `sandbox_file_reader_impl.py`: `ReadTool` treats missing read-write files as empty (`lines = []`) instead of raising an unhandled `FileNotFoundError`, and returns structured error guidance for missing read-only files.
+  - `sandbox_file_editor_impl.py`: `TextReplacementTool` and `LineUpdateTool` treat missing read-write files as empty, create parent directories atomically on disk (`os.makedirs`), and track file revisions.
+
+### F. Cleanroom Alignment & Test Validation
+* **Strict Specification Alignment**: Updated High-Level Specs (`bazel_manifest_loader_impl.md`, `sandbox_file_reader_impl.md`, `sandbox_file_editor_impl.md`) and Grounding Specs (`.pyi`). Validated via `hls_lint.py` and `grounding_tool.py --check` with zero errors.
+* **Comprehensive Test Suite**:
+  - `//update_with_ai/...` and `//update_python_with_ai/...`: **106 / 106 tests passing**.
+  - `//testing/...` (ephemeral test consumer workspace synced via updated `bin/sync_testing.sh`): **104 / 104 tests passing**.
+
+---
+
+## 20. Remaining Work & Implementation Roadmap (Next Steps)
+
+With the underlying 2D Product DAG, pass-through roles, manifest loader, and sandbox tool hardening completed, the remaining work centers on deploying the Antigravity sub-agent orchestration layer and standalone MCP service:
+
+```mermaid
+flowchart TD
+    M1["Milestone 1: Package-Level Role Clean Aggregation Targets<br/>(Starlark macro support for multi-unit column cleaning)"]
+    M2["Milestone 2: Cleanroom Standalone MCP Service<br/>(support/mcp/cleanroom_mcp_service.py with Native-Style Worker Toolset)"]
+    M3["Milestone 3: Antigravity Sub-Agent Type Registrations<br/>(define_subagent with enable_write_tools=False)"]
+    M4["Milestone 4: In-Process Role Confinement & Blindness Engine<br/>(Pure Python MCP policy checks for view_file, replace_file_content)"]
+    M5["Milestone 5: Triangulated QA Arbitration & Reactive Messaging<br/>(QA Arbiter blame evaluation and send_message loop with 2-retry ceiling)"]
+    M6["Milestone 6: Local Model & DeepSeek Benchmark Validation<br/>(End-to-end multi-unit cleaning verification on local/Flash models)"]
+
+    M1 --> M2 --> M3 --> M4 --> M5 --> M6
+```
+
+### Milestone 1: Package-Level Role Clean Aggregation Targets
+* **Objective**: Enable cleaning an entire role column across all units in a package with a single target (e.g. `bazel run //update_with_ai/parts/agent:tests_clean` or `:lib_clean`).
+* **Implementation**:
+  - Update `update_python_with_ai.bzl` or package-level macros to collect all units defined in the package and emit role aggregation runner targets.
+  - Emit package-level multi-unit manifests specifying the topological sequence of units for that role column.
+
+### Milestone 2: Cleanroom Standalone MCP Service (`update_with_ai/support/mcp`)
+* **Objective**: Implement the standalone Python Model Context Protocol service that bridges Antigravity sub-agents to Cleanroom's runtime using native tool parity.
+* **Toolsets to Implement**:
+  - **Coordinator Interface**:
+    - `get_dag_plan(root_target: str) -> List[NodePlan]`: Returns topological sequence of dirty units and roles.
+    - `prepare_node(unit: str, role: str) -> NodeContext`: Returns prompt, guidance, and verification commands.
+    - `prepare_column(package: str, role: str) -> ColumnContext`: Returns multi-unit batch sequence, role preamble, and grounding specifications.
+    - `mark_node_completed(unit: str, role: str, outcome: str) -> Ack`: Updates Cleanroom DAG storage ledger.
+  - **Worker Interface (Native Tool Parity - Section 4B & 10)**:
+    - `view_file(AbsolutePath: str, StartLine?: int, EndLine?: int, ContentOffset?: int) -> FileContent`: Reads lines with 1-indexed numbers.
+    - `replace_file_content(TargetFile: str, TargetContent: str, ReplacementContent: str, ...) -> EditResult`: Drops replacement chunks into target files.
+    - `write_to_file(TargetFile: str, CodeContent: str, Overwrite?: bool, Description?: str) -> WriteResult`: Writes or creates files.
+    - `list_dir(DirectoryPath: str) -> DirListing`: Lists files and subdirectories.
+    - `run_checks(TargetUnit?: str) -> CheckResult`: Executes hermetic Bazel verification commands.
+    - `submit(TargetUnit: str, ChangeMessage: str) -> SubmitResult`: Validates `run_checks` passed, records submission, and signals QA Arbiter.
+    - `blame(BlameTarget: str, Diagnostics: str) -> BlameOutcome`: Attributes defects to upstream units or roles.
+    - `advance_step() -> MilestoneResponse`: Advances guide milestone in single-unit stepped mode.
+* **Bazel Entry Target**: Add `bazel run //update_with_ai:serve_mcp` to launch the Stdio/HTTP MCP daemon.
+
+### Milestone 3: Antigravity Sub-Agent Type Registrations
+* **Objective**: Define and register specialized subagent types in Antigravity via `define_subagent`:
+  - `cleanroom_coordinator`: Long-lived coordinator subagent with access to `cleanroom_coordinator_mcp` and subagent management tools (`invoke_subagent`, `manage_subagents`, `send_message`).
+  - `cleanroom_test_author`: Role subagent with `enable_write_tools=False`, dedicated to authoring tests from grounding specs.
+  - `cleanroom_lib_author`: Role subagent with `enable_write_tools=False`, dedicated to authoring implementations from grounding specs, blinded to tests.
+  - `cleanroom_qa_arbiter`: Role subagent that executes test suites and coverage benchmarks, arbitrating test vs. lib blame.
+  - `cleanroom_node_cleaner`: Ephemeral single-unit fallback subagent with stepped guide mode enabled.
+
+### Milestone 4: In-Process Role Confinement & Blindness Engine
+* **Objective**: Enforce Cleanroom Blindness and Write Confinement directly in Python within the MCP server without virtual staging directories or external hook daemons.
+* **Implementation Details**:
+  - **Role Blindness Interceptor**: In `view_file` and `list_dir`, check the calling subagent's role against requested file paths. Hard-deny Test authors reading `lib/` and Lib authors reading `tests/` with clear, informative Cleanroom blindness error messages.
+  - **Write Confinement Interceptor**: In `replace_file_content` and `write_to_file`, validate that `TargetFile` matches the role's declared output files for the active unit. Reject modifications to specifications, dependencies, or out-of-scope files.
+  - **Hermetic Verification Gating**: Execute verification targets via Bazel on the host repository (`--test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress`). Gate `submit` so assets cannot be submitted until `run_checks` reports a clean pass.
+
+### Milestone 5: Triangulated QA Arbitration & Reactive Messaging Loop
+* **Objective**: Enable non-sequential, parallel authoring with automated blame attribution and reactive wakeup.
+* **Implementation**:
+  - Wire QA Arbiter reaction logic: when `submit` is called for both `(unit, lib)` and `(unit, test)`, QA Arbiter runs `bazel test`.
+  - On failure, compare failure trace against `.pyi` grounding requirements to identify whether the defect is ungrounded test logic or buggy implementation code.
+  - Dispatch targeted blame messages via `send_message(Recipient=subagent_id, Message=diagnostics)` without cross-agent communication.
+  - Enforce the 2-iteration feedback ceiling; escalate unresolvable failures to the human coordinator in the main chat.
+
+### Milestone 6: Local Model & DeepSeek Benchmark Validation
+* **Objective**: Validate the entire multi-unit role pipeline on non-quota-metered local models before deploying to Google One Ultra.
+* **Implementation**:
+  - Run a 3-unit test subsystem (e.g. `parts/core` or a subset of `parts/agent`) through Columnar HLS $\to$ LLS $\to$ Parallel Lib/Test $\to$ QA Arbiter using DeepSeek V4.1 Flash or local llama.cpp / vLLM endpoints via `model_config.bzl`.
+  - Measure token efficiency, prompt cache hit ratios, and blame attribution accuracy.
+
 
 
 
