@@ -61,105 +61,136 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
         self._guide_file: Optional[agent_file_alias.UnboundFile] = None
         self._guide: Optional[agent_node_config.Guide] = None
         self._blame_targets: Set[agent_file_alias.BoundFile] = set()
+        self._blame_targets_by_node: Dict[
+            dag_storage.Node, Set[agent_file_alias.BoundFile]
+        ] = {}
         self._verification_checks: List[agent_node_config.VerificationCheck] = []
+        self._verification_checks_by_node: Dict[
+            dag_storage.Node, Sequence[agent_node_config.VerificationCheck]
+        ] = {}
+        self._src_file_alias_by_node: Dict[dag_storage.Node, str] = {}
         self._verification_success_message: Optional[str] = None
         self._feedback: Tuple[str, ...] = ()
 
     def initialize(self) -> None:
         try:
-            cleaned_node = get_singleton(dag_node_cleaner.CleanedNode)
-            node = cleaned_node.node
+            cleaned_nodes_obj = get_singleton(dag_node_cleaner.CleanedNodes)
+            nodes = tuple(cleaned_nodes_obj.nodes)
+            primary_node = cleaned_nodes_obj.primary_node
         except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+            return
+
+        if not nodes or primary_node is None:
             return
 
         try:
             storage = get_singleton(dag_storage.DagStorage)
-            msgs = storage.get_messages(node)
-            self._feedback = tuple(
-                m.content
-                for m in msgs
-                if isinstance(m, dag_storage.Feedback) and m.content
-            )
+            all_feedback: List[str] = []
+            for n in nodes:
+                msgs = storage.get_messages(n)
+                all_feedback.extend(
+                    m.content
+                    for m in msgs
+                    if isinstance(m, dag_storage.Feedback) and m.content
+                )
+            self._feedback = tuple(all_feedback)
         except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
             self._feedback = ()
 
         loader = get_singleton(bazel_manifest_loader.BazelManifestLoader)
-        manifest_raw = loader.get_manifest(node)
-        if manifest_raw is None:
-            return
-
         node_util = get_singleton(bazel_target.BazelTarget)
-        pkg_dir = node_util.extract_directory(node)
-        pkg_path = pkg_dir.path.lstrip("/")
 
-        try:
-            data = json.loads(str(manifest_raw))
-        except (json.JSONDecodeError, ValueError, TypeError):
+        manifests: Dict[dag_storage.Node, Dict[str, Any]] = {}
+        for n in nodes:
+            manifest_raw = loader.get_manifest(n)
+            if manifest_raw is not None:
+                try:
+                    manifests[n] = json.loads(str(manifest_raw))
+                except (json.JSONDecodeError, ValueError, TypeError):
+                    pass
+
+        if not manifests:
             return
 
-        # 1. Declared source files -> read_write_files
-        src = data.get("src")
-        if src:
-            if src.startswith(pkg_path + "/") or (
-                pkg_path and src.startswith("/" + pkg_path + "/")
-            ):
-                norm_rel = os.path.normpath(src.lstrip("/"))
-            else:
-                norm_rel = os.path.normpath(os.path.join(pkg_path, src))
-            ws_path = _make_host_path(agent_file_alias.WorkspacePath, norm_rel)
-            short_name = os.path.basename(norm_rel)
-            rw = agent_file_alias.ReadWriteFile(
-                short_name=short_name, workspace_path=ws_path, owning_node=node
-            )
-            self._read_write_files.add(rw)
+        # 1. Declared source files and silent source files across all session nodes
+        files_by_path: Dict[str, agent_file_alias.BoundFile] = {}
+        for n in nodes:
+            data = manifests.get(n)
+            if not data:
+                continue
+            pkg_dir = node_util.extract_directory(n)
+            pkg_path = pkg_dir.path.lstrip("/")
 
-        # Silent sources -> read_write_files
-        silent_srcs = data.get("silent_srcs", [])
-        for s_src in silent_srcs:
-            norm_rel = os.path.normpath(os.path.join(pkg_path, s_src))
-            ws_path = _make_host_path(agent_file_alias.WorkspacePath, norm_rel)
-            short_name = os.path.basename(norm_rel)
-            rw = agent_file_alias.ReadWriteFile(
-                short_name=short_name, workspace_path=ws_path, owning_node=node
-            )
-            self._read_write_files.add(rw)
+            src = data.get("src")
+            if src:
+                if src.startswith(pkg_path + "/") or (
+                    pkg_path and src.startswith("/" + pkg_path + "/")
+                ):
+                    norm_rel = os.path.normpath(src.lstrip("/"))
+                else:
+                    norm_rel = os.path.normpath(os.path.join(pkg_path, src))
+                ws_path = _make_host_path(agent_file_alias.WorkspacePath, norm_rel)
+                short_name = os.path.basename(norm_rel)
+                rw = agent_file_alias.ReadWriteFile(
+                    short_name=short_name, workspace_path=ws_path, owning_node=n
+                )
+                self._read_write_files.add(rw)
+                files_by_path[norm_rel] = rw
+                self._src_file_alias_by_node[n] = short_name
+
+            silent_srcs = data.get("silent_srcs", [])
+            for s_src in silent_srcs:
+                norm_rel = os.path.normpath(os.path.join(pkg_path, s_src))
+                ws_path = _make_host_path(agent_file_alias.WorkspacePath, norm_rel)
+                short_name = os.path.basename(norm_rel)
+                rw = agent_file_alias.ReadWriteFile(
+                    short_name=short_name, workspace_path=ws_path, owning_node=n
+                )
+                self._read_write_files.add(rw)
+                files_by_path[norm_rel] = rw
 
         # 2. Templates
-        template_rel = data.get("template")
-        if template_rel and self._read_write_files:
-            content_str: Optional[str] = None
-            cand_paths = [
-                template_rel,
-                os.path.join(
-                    os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""), template_rel
-                ),
-            ]
-            for base in (
-                os.environ.get("RUNFILES_DIR", ""),
-                os.environ.get("BAZEL_RUNFILES", ""),
-            ):
-                if base:
-                    cand_paths.extend(
-                        [
-                            os.path.join(base, template_rel),
-                            os.path.join(base, "_main", template_rel),
-                        ]
-                    )
-            for cp in cand_paths:
-                if cp and os.path.exists(cp) and os.path.isfile(cp):
-                    try:
-                        with open(cp, "r", encoding="utf-8") as f:
-                            content_str = f.read()
-                            break
-                    except (OSError, UnicodeDecodeError):
-                        pass
-            if content_str is not None:
-                content_obj = agent_file_alias.FileContent(content_str)
-                for rw in self._read_write_files:
-                    self._templates.add((rw, content_obj))
+        for n in nodes:
+            data = manifests.get(n)
+            if not data:
+                continue
+            template_rel = data.get("template")
+            if template_rel and self._read_write_files:
+                content_str: Optional[str] = None
+                cand_paths = [
+                    template_rel,
+                    os.path.join(
+                        os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""), template_rel
+                    ),
+                ]
+                for base in (
+                    os.environ.get("RUNFILES_DIR", ""),
+                    os.environ.get("BAZEL_RUNFILES", ""),
+                ):
+                    if base:
+                        cand_paths.extend(
+                            [
+                                os.path.join(base, template_rel),
+                                os.path.join(base, "_main", template_rel),
+                            ]
+                        )
+                for cp in cand_paths:
+                    if cp and os.path.exists(cp) and os.path.isfile(cp):
+                        try:
+                            with open(cp, "r", encoding="utf-8") as f:
+                                content_str = f.read()
+                                break
+                        except (OSError, UnicodeDecodeError):
+                            pass
+                if content_str is not None:
+                    content_obj = agent_file_alias.FileContent(content_str)
+                    for rw in self._read_write_files:
+                        if rw.owning_node == n:
+                            self._templates.add((rw, content_obj))
 
         # 2.5 Template parameters
-        raw_params = data.get("template_parameters")
+        primary_data = manifests.get(primary_node, {})
+        raw_params = primary_data.get("template_parameters")
         if isinstance(raw_params, dict):
             self._template_parameters = dict(raw_params)
         elif isinstance(raw_params, str):
@@ -171,19 +202,23 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
                 pass
 
         # 3. Guide
-        guide_target = data.get("guide")
+        guide_target = primary_data.get("guide")
         m_cfg: Optional[agent_config.AgentConfig] = None
         try:
             m_cfg = get_singleton(agent_config.AgentConfig)
         except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
             pass
         model_step_mode = m_cfg.is_step_mode if m_cfg is not None else False
-        allows_step = data.get(
-            "allows_step_mode", data.get("step_mode", data.get("step_sections", True))
+        allows_step = primary_data.get(
+            "allows_step_mode",
+            primary_data.get("step_mode", primary_data.get("step_sections", True)),
         )
         self._allows_step_mode = bool(allows_step)
         self._is_step_mode = (
-            model_step_mode and self._allows_step_mode and not bool(self._feedback)
+            model_step_mode
+            and (len(nodes) == 1)
+            and self._allows_step_mode
+            and not bool(self._feedback)
         )
 
         if guide_target and self._is_step_mode:
@@ -232,117 +267,150 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
                         pass
 
         # 4. Read-only files from direct deps and transitive star_deps
-        deps = data.get("deps", [])
-        star_deps = data.get("star_deps", [])
-        silent_deps = set(data.get("silent_deps", []))
-        feedback_deps = set(data.get("feedback_deps", []))
+        rw_paths = {rw.workspace_path.path for rw in self._read_write_files}
 
-        star_closure: List[str] = []
-        star_seen: Set[str] = set()
-        frontier = [sd for sd in star_deps if sd not in silent_deps]
-        while frontier:
-            curr_label = frontier.pop(0)
-            if curr_label in star_seen:
+        for n in nodes:
+            data = manifests.get(n)
+            if not data:
                 continue
-            star_seen.add(curr_label)
-            star_closure.append(curr_label)
-            curr_node = node_util.normalize(curr_label)
-            dep_manifest_raw = loader.get_manifest(curr_node)
-            if dep_manifest_raw:
-                try:
-                    dep_data = json.loads(str(dep_manifest_raw))
-                    for next_sd in dep_data.get("star_deps", []):
-                        if next_sd not in star_seen and next_sd not in silent_deps:
-                            frontier.append(next_sd)
-                except (json.JSONDecodeError, ValueError, TypeError):
-                    pass
+            deps = data.get("deps", [])
+            star_deps = data.get("star_deps", [])
+            silent_deps = set(data.get("silent_deps", []))
+            feedback_deps = set(data.get("feedback_deps", []))
 
-        all_deps = list(deps) + [sd for sd in star_closure if sd not in deps]
-        for dep_label in all_deps:
-            if dep_label in silent_deps:
-                continue
-            if self._is_step_mode and guide_target and dep_label == guide_target:
-                continue
+            star_closure: List[str] = []
+            star_seen: Set[str] = set()
+            frontier = [sd for sd in star_deps if sd not in silent_deps]
+            while frontier:
+                curr_label = frontier.pop(0)
+                if curr_label in star_seen:
+                    continue
+                star_seen.add(curr_label)
+                star_closure.append(curr_label)
+                curr_node = node_util.normalize(curr_label)
+                dep_manifest_raw = loader.get_manifest(curr_node)
+                if dep_manifest_raw:
+                    try:
+                        dep_data = json.loads(str(dep_manifest_raw))
+                        for next_sd in dep_data.get("star_deps", []):
+                            if next_sd not in star_seen and next_sd not in silent_deps:
+                                frontier.append(next_sd)
+                    except (json.JSONDecodeError, ValueError, TypeError):
+                        pass
 
-            dep_node = node_util.normalize(dep_label)
-            is_blame = dep_label in feedback_deps
-            dep_manifest_raw = loader.get_manifest(dep_node)
-            dep_srcs: List[str] = []
-            dep_pkg = node_util.extract_directory(dep_node).path.lstrip("/")
+            node_blame_targets: Set[agent_file_alias.BoundFile] = set()
+            all_deps = list(deps) + [sd for sd in star_closure if sd not in deps]
+            for dep_label in all_deps:
+                if dep_label in silent_deps:
+                    continue
+                if self._is_step_mode and guide_target and dep_label == guide_target:
+                    continue
 
-            if dep_manifest_raw:
-                try:
-                    dep_data = json.loads(str(dep_manifest_raw))
-                    if dep_data.get("src"):
-                        dep_srcs.append(dep_data["src"])
-                except (json.JSONDecodeError, ValueError, TypeError):
-                    pass
-            elif "guides" in dep_label:
-                guide_fn = dep_label.split(":")[-1]
-                if not guide_fn.endswith(".md"):
-                    guide_fn += ".md"
-                dep_srcs.append(guide_fn)
-            elif "specs" in dep_label:
-                target_base = (
-                    dep_label.split(":")[-1]
-                    .replace("_low", "")
-                    .replace("_high", "")
-                    .replace("_lib", "")
-                )
-                if dep_label.endswith("_low") or dep_label.endswith("_grounding"):
-                    dep_srcs.append(f"grounding/{target_base}.pyi")
-                elif dep_label.endswith("_high"):
-                    dep_srcs.append(f"high/{target_base}.md")
-            else:
-                target_name = dep_label.split(":")[-1]
-                dep_srcs.append(f"{target_name}.py")
+                dep_node = node_util.normalize(dep_label)
+                is_blame = dep_label in feedback_deps
+                dep_manifest_raw = loader.get_manifest(dep_node)
+                dep_srcs: List[str] = []
+                dep_pkg = node_util.extract_directory(dep_node).path.lstrip("/")
 
-            for ds in dep_srcs:
-                if ds.startswith(dep_pkg + "/") or (
-                    dep_pkg and ds.startswith("/" + dep_pkg + "/")
-                ):
-                    norm_rel = os.path.normpath(ds.lstrip("/"))
+                if dep_manifest_raw:
+                    try:
+                        dep_data = json.loads(str(dep_manifest_raw))
+                        if dep_data.get("src"):
+                            dep_srcs.append(dep_data["src"])
+                    except (json.JSONDecodeError, ValueError, TypeError):
+                        pass
+                elif "guides" in dep_label:
+                    guide_fn = dep_label.split(":")[-1]
+                    if not guide_fn.endswith(".md"):
+                        guide_fn += ".md"
+                    dep_srcs.append(guide_fn)
+                elif "specs" in dep_label:
+                    target_base = (
+                        dep_label.split(":")[-1]
+                        .replace("_low", "")
+                        .replace("_high", "")
+                        .replace("_lib", "")
+                    )
+                    if dep_label.endswith("_low") or dep_label.endswith("_grounding"):
+                        dep_srcs.append(f"grounding/{target_base}.pyi")
+                    elif dep_label.endswith("_high"):
+                        dep_srcs.append(f"high/{target_base}.md")
                 else:
-                    norm_rel = os.path.normpath(os.path.join(dep_pkg, ds))
-                ws_path = _make_host_path(agent_file_alias.WorkspacePath, norm_rel)
-                short_name = os.path.basename(norm_rel)
-                ro = agent_file_alias.ReadOnlyFile(
-                    short_name=short_name, workspace_path=ws_path, owning_node=dep_node
-                )
-                self._read_only_files.add(ro)
-                if is_blame:
-                    self._blame_targets.add(ro)
+                    target_name = dep_label.split(":")[-1]
+                    dep_srcs.append(f"{target_name}.py")
+
+                for ds in dep_srcs:
+                    if ds.startswith(dep_pkg + "/") or (
+                        dep_pkg and ds.startswith("/" + dep_pkg + "/")
+                    ):
+                        norm_rel = os.path.normpath(ds.lstrip("/"))
+                    else:
+                        norm_rel = os.path.normpath(os.path.join(dep_pkg, ds))
+
+                    if norm_rel in files_by_path:
+                        bound_file = files_by_path[norm_rel]
+                    else:
+                        ws_path = _make_host_path(
+                            agent_file_alias.WorkspacePath, norm_rel
+                        )
+                        short_name = os.path.basename(norm_rel)
+                        bound_file = agent_file_alias.ReadOnlyFile(
+                            short_name=short_name,
+                            workspace_path=ws_path,
+                            owning_node=dep_node,
+                        )
+                        files_by_path[norm_rel] = bound_file
+                        if norm_rel not in rw_paths:
+                            self._read_only_files.add(bound_file)
+
+                    if is_blame:
+                        node_blame_targets.add(bound_file)
+                        self._blame_targets.add(bound_file)
+
+            self._blame_targets_by_node[n] = node_blame_targets
 
         # 5. Verification checks
-        verify_cmd = data.get("verify")
-        if verify_cmd and str(verify_cmd).strip():
-            ws_dir = os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd()
-            self._verification_checks.append(
-                _CommandVerificationCheck(command=str(verify_cmd).strip(), cwd=ws_dir)
-            )
+        ws_dir = os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd()
+        for n in nodes:
+            data = manifests.get(n)
+            if not data:
+                continue
+            verify_cmd = data.get("verify")
+            node_checks: List[agent_node_config.VerificationCheck] = []
+            if verify_cmd and str(verify_cmd).strip():
+                check = _CommandVerificationCheck(
+                    command=str(verify_cmd).strip(), cwd=ws_dir
+                )
+                node_checks.append(check)
+                self._verification_checks.append(check)
+            self._verification_checks_by_node[n] = tuple(node_checks)
 
-        v_msg = data.get("verification_success_message")
+        v_msg = primary_data.get("verification_success_message")
         if v_msg and str(v_msg).strip():
             self._verification_success_message = str(v_msg).strip()
 
     @property
     def read_only_files(self) -> Set[agent_file_alias.BoundFile]:
-        # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies.
+        # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies and files present in read-write files.
+        # Requirement: [NodeConfig] The node config provides the session read-only files restricted to inspection.
         return self._read_only_files
 
     @property
     def read_write_files(self) -> Set[agent_file_alias.BoundFile]:
-        # Requirement: The node config exposes declared source files and silent source files as read-write files.
+        # Requirement: The node config exposes declared source files and silent source files across session nodes as read-write files.
+        # Requirement: [NodeConfig] The node config provides the session read-write files permitted for inspection and modification.
         return self._read_write_files
 
     @property
     def allows_step_mode(self) -> bool:
-        # Requirement: The node config exposes whether the node allows step mode from the target node manifest.
+        # Requirement: The node config exposes whether the node allows step mode from the primary target node manifest.
+        # Requirement: [NodeConfig] The node config indicates whether the node allows step mode.
         return self._allows_step_mode
 
     @property
     def is_step_mode(self) -> bool:
-        # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the node allows step mode, and session feedback is absent.
+        # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the primary node allows step mode, and session feedback is absent.
+        # Requirement: [NodeConfig] The node config indicates whether session step mode is active.
         return self._is_step_mode
 
     @property
@@ -350,41 +418,71 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
         self,
     ) -> Set[Tuple[agent_file_alias.BoundFile, agent_file_alias.FileContent]]:
         # Requirement: The node config exposes templates mapping read-write files to initial file content.
+        # Requirement: [NodeConfig] The node config provides templates mapping read-write files to initial file content.
         return self._templates
 
     @property
     def template_parameters(self) -> Mapping[str, Any]:
-        # Requirement: The node config exposes declared template parameters from the manifest.
+        # Requirement: The node config exposes declared template parameters from the primary target node manifest.
+        # Requirement: [NodeConfig] The node config provides the session template parameters, providing parameter bindings for template evaluation.
         return self._template_parameters
 
     @property
     def guide_file(self) -> Optional[agent_file_alias.UnboundFile]:
         # Requirement: The node config exposes the declared guide target as the guide file when step mode is active.
+        # Requirement: [NodeConfig] The node config provides the session guide file when step mode is active.
         return self._guide_file
 
     @property
     def guide(self) -> Optional[agent_node_config.Guide]:
         # Requirement: The node config exposes the declared guide target as the task guide when step mode is active.
+        # Requirement: [NodeConfig] The node config provides the session guide, providing structured instructional text when step mode is active.
         return self._guide
 
     @property
     def blame_targets(self) -> Set[agent_file_alias.BoundFile]:
         # Requirement: The node config exposes declared feedback dependencies as blame targets mapped to owning dependency nodes.
+        # Requirement: [NodeConfig] The node config provides blame targets eligible for defect attribution.
         return set(self._blame_targets)
 
     @property
-    def verification_checks(self) -> List[agent_node_config.VerificationCheck]:
-        # Requirement: The node config exposes declared verification checks from the manifest verification command.
+    def blame_targets_by_node(
+        self,
+    ) -> Mapping[dag_storage.Node, Set[agent_file_alias.BoundFile]]:
+        # Requirement: The node config exposes blame targets by node mapping each session node to its declared blame targets.
+        # Requirement: [NodeConfig] The node config provides the session blame targets mapped by session node.
+        return dict(self._blame_targets_by_node)
+
+    @property
+    def verification_checks(self) -> Sequence[agent_node_config.VerificationCheck]:
+        # Requirement: The node config exposes declared verification checks from the manifest verification commands.
+        # Requirement: [NodeConfig] The node config provides the session verification checks evaluated during session advancement.
         return list(self._verification_checks)
 
     @property
+    def verification_checks_by_node(
+        self,
+    ) -> Mapping[dag_storage.Node, Sequence[agent_node_config.VerificationCheck]]:
+        # Requirement: The node config exposes verification checks by node mapping each session node to its verification checks.
+        # Requirement: [NodeConfig] The node config provides the session verification checks mapped by session node.
+        return dict(self._verification_checks_by_node)
+
+    @property
+    def src_file_alias_by_node(self) -> Mapping[dag_storage.Node, str]:
+        # Requirement: The node config exposes declared src file alias by node mapping each session node to the short name of its declared source file alias.
+        # Requirement: [NodeConfig] The node config provides the source file alias short name mapped by session node.
+        return dict(self._src_file_alias_by_node)
+
+    @property
     def verification_success_message(self) -> Optional[str]:
-        # Requirement: Declared verification success message from the manifest as the session verification success message.
+        # Requirement: Declared verification success message from the primary target node manifest as the session verification success message.
+        # Requirement: [NodeConfig] The node config provides the session verification success message when configured.
         return self._verification_success_message
 
     @property
     def feedback(self) -> Sequence[str]:
-        # Requirement: Declared feedback messages retrieved from graph storage for the target node as the session feedback.
+        # Requirement: Declared feedback messages retrieved from graph storage for the session nodes as the session feedback.
+        # Requirement: [NodeConfig] The node config provides the session feedback, exposing incoming feedback delivered to the node when present.
         return self._feedback
 
 

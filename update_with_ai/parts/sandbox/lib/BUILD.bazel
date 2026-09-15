@@ -191,6 +191,7 @@ pyright_library(
         ":sandbox_file_editor",
         ":sandbox_guide_delivery",
         ":sandbox_run_control",
+        ":template_format",
         ":tool_provider",
     ],
     visibility = ["//visibility:public"],

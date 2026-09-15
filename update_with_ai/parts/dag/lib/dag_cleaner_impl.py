@@ -24,6 +24,12 @@ class DagCleaner(dag_cleaner.DagCleaner, Singleton):
         cfg = get_singleton(dag_config.DagConfig)
         return cfg.node_visit_limit
 
+    @property
+    def batch_size(self) -> int:
+        # Requirement: The batch size is obtained from the dag config.
+        cfg = get_singleton(dag_config.DagConfig)
+        return cfg.batch_size
+
     def _collect_subgraph(
         self, root: dag_storage.Node, storage: dag_storage.DagStorage
     ) -> Set[dag_storage.Node]:
@@ -80,7 +86,7 @@ class DagCleaner(dag_cleaner.DagCleaner, Singleton):
 
         while any(storage.is_dirty(n) for n in nodes):
             cleaned_in_pass = False
-            for curr in order:
+            for i, curr in enumerate(order):
                 # Requirement: Visiting a node checks whether the node is dirty, not whether it is cleaned.
                 if not storage.is_dirty(curr):
                     continue
@@ -94,26 +100,45 @@ class DagCleaner(dag_cleaner.DagCleaner, Singleton):
                 if not deps_clean:  # pragma: no cover (assumption: acyclic graph ensures dependencies precede dependents)
                     continue
 
-                visits[curr] += 1
-                # Requirement: If visiting any node exceeds the node visit limit, the dag cleaner halts with an unexpected failure.
-                if visits[curr] > self.node_visit_limit:
-                    raise RuntimeError(
-                        f"Node ({curr.unit_address}, {curr.role_address}) exceeded node visit limit of {self.node_visit_limit}"
-                    )
+                batch: List[dag_storage.Node] = [curr]
+                batch_set: Set[dag_storage.Node] = {curr}
+                max_b = max(1, self.batch_size)
 
-                # Requirement: When cleaning a dirty node, the node cleaner is invoked to clean the node.
+                if max_b > 1:
+                    for cand in order[i + 1 :]:
+                        if len(batch) >= max_b:
+                            break
+                        if not storage.is_dirty(cand):
+                            continue
+                        if cand.role_address != curr.role_address:
+                            continue
+                        cand_deps_clean = all(
+                            d.node in batch_set or not storage.is_dirty(d.node)
+                            for d in storage.get_dependencies(cand)
+                            if d.node in nodes
+                        )
+                        if cand_deps_clean:
+                            batch.append(cand)
+                            batch_set.add(cand)
+
+                for b_node in batch:
+                    visits[b_node] += 1
+                    # Requirement: If visiting any node exceeds the node visit limit, the dag cleaner halts with an unexpected failure.
+                    if visits[b_node] > self.node_visit_limit:
+                        raise RuntimeError(
+                            f"Node ({b_node.unit_address}, {b_node.role_address}) exceeded node visit limit of {self.node_visit_limit}"
+                        )
+
+                # Requirement: When cleaning dirty nodes, the node cleaner is invoked to clean ready dirty nodes batched by role up to the batch size, where dependencies outside the batch are clean.
                 # Requirement: [DagCleaner] When cleaning a dirty node using the node cleaner, cleaning delegates to the node cleaner.
-                should_continue = cleaner.clean(curr)
+                should_continue = cleaner.clean(batch)
                 cleaned_in_pass = True
                 # Requirement: If the node cleaner communicates that processing cannot continue, cleaning halts.
                 # Requirement: [DagCleaner] If the node cleaner communicates that processing cannot continue, cleaning halts.
                 if not should_continue:
                     return
 
-            if not cleaned_in_pass and any(
-                storage.is_dirty(n) for n in nodes
-            ):  # pragma: no cover (assumption: acyclic graph prevents deadlocks)
-                # Stalled or circular dirty dependencies
+            if not cleaned_in_pass:  # pragma: no cover (assumption: acyclic graph prevents deadlocks)
                 break
 
 

@@ -165,6 +165,11 @@ class ModelConfig(
             if "node_visit_limit" in data
             else int(os.environ.get("NODE_VISIT_LIMIT", "500"))
         )
+        self._batch_size = (
+            int(data["batch_size"])
+            if "batch_size" in data
+            else int(os.environ.get("BATCH_SIZE", "1"))
+        )
 
     @property
     def model_name(self) -> str:
@@ -230,6 +235,11 @@ class ModelConfig(
     def node_visit_limit(self) -> dag_config.NodeVisitLimit:
         # Requirement: The dag config provides the node visit limit bounding node visits during graph cleaning.
         return self._node_visit_limit
+
+    @property
+    def batch_size(self) -> dag_config.BatchSize:
+        # Requirement: The dag config provides the batch size bounding dirty nodes processed together in an agent session.
+        return self._batch_size
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:

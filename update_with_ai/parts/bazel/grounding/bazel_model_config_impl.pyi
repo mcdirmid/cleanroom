@@ -251,3 +251,21 @@ GROUNDING_ARGUMENT:
 - Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
 """
         ...
+
+    @property
+    @override
+    def batch_size(self) -> dag_config.BatchSize:
+        """
+PURPOSE:
+Bound on the maximum number of dirty nodes of the same role processed together in an agent session
+
+FRESH_REQUIREMENTS:
+- The dag config provides the batch size bounding dirty nodes processed together in an agent session.
+
+INHERITED_REQUIREMENTS:
+- [DagConfig] The dag config provides the batch size bounding dirty nodes processed together in an agent session.
+
+GROUNDING_ARGUMENT:
+- Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
+"""
+        ...

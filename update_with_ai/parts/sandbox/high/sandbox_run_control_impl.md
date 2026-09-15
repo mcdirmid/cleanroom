@@ -1,11 +1,11 @@
 # sandbox_run_control_impl implementation component
 
-imports: tool_provider, agent_file_alias, dag_storage, sandbox_file_editor, sandbox_guide_delivery, agent_node_config
+imports: tool_provider, agent_file_alias, dag_storage, sandbox_file_editor, sandbox_guide_delivery, agent_node_config, template_format
 implements: sandbox_run_control
 
 ## Purpose
 
-The sandbox_run_control_impl implementation component realizes self-contained outcome evaluation, guide step mode advancement, and verification checks for advance, finish, fail, blame, and run tests tools.
+The sandbox_run_control_impl implementation component realizes self-contained outcome evaluation, guide step mode advancement, and verification checks for advance, submit, fail, blame, and run tests tools.
 
 Autonomous agents reaching task completion require strict verification enforcement to ensure dirty files are documented, progressive milestones are completed, and broken builds are caught before terminating a turn. The sandbox_run_control_impl implementation component coordinates milestone progression with guide delivery, inspects edit manager modification state, evaluates installed verification checks, and validates blame targets, converting outcome decisions into structured tool responses.
 
@@ -13,7 +13,7 @@ Autonomous agents reaching task completion require strict verification enforceme
 
 ## Types and Behavior
 
-The run controller unconditionally installs the finish tool, fail tool, and run tests tool for the agent session, installs the advance tool when guide step mode is active, and installs the blame tool when blame targets are configured. Verification checks exposed by the run controller include the session verification checks.
+The run controller unconditionally installs the submit tool, fail tool, and run tests tool for the agent session, installs the advance tool only when guide step mode is active, and obtains configured blame targets and verification checks from the node config, installing the blame tool only when blame targets are configured. Verification checks exposed by the run controller include the session verification checks from node config.
 
 Evaluation of verification checks is cached alongside the edit manager file update revision. Verification checks are evaluated sequentially and results are cached whenever verification results are outdated, which occurs before initial evaluation and when workspace files have been updated since the previous evaluation. When workspace files have not been updated since the previous evaluation, verification check execution is omitted and the cached verification outcome is reused.
 
@@ -23,32 +23,22 @@ The advance tool is named `advance`, accepts no parameters, and shares a constan
 
 - Advances guide delivery and delivers the next step section when verification is passing and guide steps remain.
 
-- Fails with a reminder to call the finish tool with a change summary describing modifications when verification is passing, no steps remain, and workspace files were modified.
+- Fails with a reminder to call the submit tool with a change summary describing modifications when verification is passing, no steps remain, and workspace files were modified.
 
-- Produces a response specifying a follow-up execution of the finish tool without a change summary and with reasoning text indicating that all guide steps are complete when verification is passing, no steps remain, and no workspace files were modified.
+- Produces a response specifying a follow-up execution of the submit tool without a change summary and with reasoning text indicating that all guide steps are complete when verification is passing, no steps remain, and no workspace files were modified.
 
-The finish tool is named `finish`, accepting a text *change summary* parameter, and shares a constant suppression key `finish`. Executing the finish tool updates verification results if outdated. Tool execution fails in the following order when:
+The submit tool is named `submit`, accepting an optional target parameter and a text *change summary* parameter, and shares a constant suppression key `submit`. Executing the submit tool updates verification results if outdated. In multi-target sessions, tool execution fails when the target parameter is omitted or does not match an open session target, reminding the agent to specify an open target. Tool execution fails when an in-session dependency of the target has not yet been submitted, reminding the agent that in-session dependencies must be submitted before dependent targets. Tool execution fails when guide step mode is active and guide steps remain in guide delivery, reminding the agent that the advance tool must be called while guide steps remain and specifying the advance tool as a follow-up tool call with reasoning text indicating that remaining guide steps must be completed before finishing. Tool execution fails when verification is failing, reminding the agent that the run tests tool should be called first and specifying a follow-up execution of the run tests tool with reasoning text indicating that verification results must be inspected before submitting. Tool execution fails when session feedback is present and no workspace files were modified, reminding the agent that workspace files must be modified to address feedback or that the fail tool must be used. Tool execution fails if workspace files were modified and the change summary is omitted, reminding the agent that a change summary must be provided when completing the session after modifying workspace files. Tool execution marks the target as submitted, and produces a terminating response indicating that the session completed successfully when all session targets are resolved, or produces a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
 
-- Guide step mode is active and guide steps remain in guide delivery, reminding the agent that the advance tool must be called while guide steps remain and specifying the advance tool as a follow-up tool call with reasoning text indicating that remaining guide steps must be completed before finishing.
+The fail tool is named `fail`, accepting an optional target parameter and a text *explanation* parameter. Executing the fail tool marks the target as failed and in-session dependent targets as blocked, producing a terminating response carrying the explanation when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
 
-- Verification is failing, reminding the agent that the run tests tool should be called first and specifying a follow-up execution of the run tests tool with reasoning text indicating that verification results must be inspected before finishing.
-
-- Session feedback is present and no workspace files were modified, reminding the agent that workspace files must be modified to address feedback or that the fail tool must be used.
-
-- Workspace files were modified and the change summary is omitted, reminding the agent that a change summary must be provided when completing the session after modifying workspace files.
-
-Tool execution produces a terminating response indicating that the session completed successfully when verification is passing and all completion criteria are met.
-
-The fail tool is named `fail`, accepting a text *explanation* parameter. Executing the fail tool produces a terminating response carrying the provided failure explanation.
-
-The run tests tool is named `run_tests`, accepts no parameters, and shares a constant suppression key `run_tests`. Executing the run tests tool updates verification results if outdated. Tool execution:
+The run tests tool is named `run_tests`, accepting an optional target parameter, and shares a constant suppression key `run_tests`. Executing the run tests tool updates verification results if outdated. When a target is specified, executing the run tests tool evaluates verification checks for that target. Tool execution:
 
 - Reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous run tests tool execution.
 
-- Specifies a follow-up execution of the view file tool on the session source file and reasoning text noting that verification passed without permission to run more tests and to advance or finish the session if correct, or noting that verification failed without permission to run more tests until files are updated, when workspace files have not been updated since the previous run tests tool execution.
+- Specifies a follow-up execution of the view file tool on the session source file and reasoning text noting that verification passed without permission to run more tests and to advance or submit the session if correct, or noting that verification failed without permission to run more tests until files are updated, when workspace files have not been updated since the previous run tests tool execution.
 
 - Fails when verification fails, presenting diagnostic feedback sanitized through the alias manager alongside any configured verification failure instructions.
 
 - Produces a response presenting passing verification results using the session verification success message when configured or default passing verification results alongside sanitized check output when verification passes.
 
-The blame tool is named `blame`, accepting a file alias *blame target* parameter and a text *explanation* parameter. Executing the blame tool fails if the target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed. On success, executing the blame tool produces a terminating response attributing defect feedback to the owning dependency node.
+The blame tool is named `blame`, accepting an optional source target parameter, a file alias *blame target* parameter, and a text *explanation* parameter. In single-target sessions, the source target parameter defaults to the single target file, and the blame target parameter accepts the target parameter for backward compatibility. Executing the blame tool fails if the target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed. On successful blame tool execution, the response marks the target as blamed and in-session dependent targets as blocked, producing a terminating response attributing defect feedback to the blame target owning node when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.

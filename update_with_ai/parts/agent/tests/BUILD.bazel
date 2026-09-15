@@ -32,6 +32,7 @@ pyright_test(
         "//update_with_ai/parts/sandbox/lib:sandbox",
         "//update_with_ai/parts/sandbox/lib:sandbox_guide_delivery",
         "//update_with_ai/parts/sandbox/lib:sandbox_run_control",
+        "//update_with_ai/parts/sandbox/lib:template_format",
         "//update_with_ai/parts/sandbox/lib:tool_provider",
     ],
 )

@@ -12,6 +12,7 @@ Implements dag cleaner to execute iterative topological graph cleaning
 
 FRESH_REQUIREMENTS:
 - The node visit limit is obtained from the dag config.
+- The batch size is obtained from the dag config.
 
 GROUNDING_ARGUMENT:
 - As a system singleton, DagCleaner orchestrates topological traversal and node cleaning passes, interacting with imported dag_storage and dag_config in the same system lifecycle tier and the polymorphic dag_node_cleaner.NodeCleaner.
@@ -25,6 +26,17 @@ Established as the node visit limit bounding the maximum times any node can be v
 
 GROUNDING_ARGUMENT:
 - Obtained from imported dag_config.DagConfig in the same system lifecycle tier to bound node visits.
+"""
+        ...
+
+    @property
+    def batch_size(self) -> int:
+        """
+PURPOSE:
+Established as the batch size bounding the maximum dirty nodes of the same role processed together
+
+GROUNDING_ARGUMENT:
+- Obtained from imported dag_config.DagConfig in the same system lifecycle tier to bound batch sizes.
 """
         ...
 
@@ -43,7 +55,7 @@ FRESH_REQUIREMENTS:
 - In each cleaning iteration, reachable nodes are visited in topological order.
 - Visiting a node checks whether the node is dirty, not whether it is cleaned.
 - A node is cleaned only if it is dirty and all of its dependencies are clean.
-- When cleaning a dirty node, the node cleaner is invoked to clean the node.
+- When cleaning dirty nodes, the node cleaner is invoked to clean ready dirty nodes batched by role up to the batch size, where dependencies outside the batch are clean.
 - If the node cleaner communicates that processing cannot continue, cleaning halts.
 - If visiting any node exceeds the node visit limit, the dag cleaner halts with an unexpected failure.
 - Cleaning succeeds when all reachable nodes in the subgraph are clean.

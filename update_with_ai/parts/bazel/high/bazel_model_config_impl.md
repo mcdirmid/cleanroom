@@ -49,4 +49,6 @@ The dag config provides:
 
 - The node visit limit bounding node visits during graph cleaning.
 
+- The batch size bounding dirty nodes processed together in an agent session.
+
 When the target module is absent, execution parameters and authentication credentials fall back to ambient environment variables and standard defaults.

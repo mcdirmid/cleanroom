@@ -3,6 +3,7 @@ from framework import data_type, operation, poly_type, singleton_type
 from dataclasses import dataclass
 import agent_file_alias
 import agent_config
+import dag_storage
 
 @dataclass(frozen=True)
 @data_type
@@ -133,7 +134,7 @@ FRESH_REQUIREMENTS:
     def is_step_mode(self) -> bool:
         """
 PURPOSE:
-Whether session step mode is active, enabled when agent config enables step mode, the node allows step mode, and session feedback is absent
+Whether session step mode is active, enabled when agent config enables step mode, the session contains exactly one node, the node allows step mode, and session feedback is absent
 
 FRESH_REQUIREMENTS:
 - The node config indicates whether session step mode is active.
@@ -196,6 +197,19 @@ FRESH_REQUIREMENTS:
         ...
 
     @property
+    def blame_targets_by_node(
+        self,
+    ) -> Mapping[dag_storage.Node, Set[agent_file_alias.BoundFile]]:
+        """
+PURPOSE:
+Bound files owned by upstream dependency nodes eligible for defect attribution mapped by session node
+
+FRESH_REQUIREMENTS:
+- The node config provides the session blame targets mapped by session node.
+"""
+        ...
+
+    @property
     def verification_checks(self) -> Sequence[VerificationCheck]:
         """
 PURPOSE:
@@ -203,6 +217,30 @@ Session verification checks evaluated during session advancement
 
 FRESH_REQUIREMENTS:
 - The node config provides the session verification checks evaluated during session advancement.
+"""
+        ...
+
+    @property
+    def verification_checks_by_node(
+        self,
+    ) -> Mapping[dag_storage.Node, Sequence[VerificationCheck]]:
+        """
+PURPOSE:
+Session verification checks mapped by session node
+
+FRESH_REQUIREMENTS:
+- The node config provides the session verification checks mapped by session node.
+"""
+        ...
+
+    @property
+    def src_file_alias_by_node(self) -> Mapping[dag_storage.Node, str]:
+        """
+PURPOSE:
+Short name of the declared source file alias mapped by session node
+
+FRESH_REQUIREMENTS:
+- The node config provides the source file alias short name mapped by session node.
 """
         ...
 

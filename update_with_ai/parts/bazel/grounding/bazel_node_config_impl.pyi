@@ -16,7 +16,7 @@ PURPOSE:
 Implements node config from node manifest metadata
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, NodeConfig accesses the target node from dag_node_cleaner.CleanedNode.node and loads its manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(node) during session initialization, deriving session file sets, templates, and guidance configurations.
+- As an agent_session singleton, NodeConfig accesses target nodes from dag_node_cleaner.CleanedNodes.nodes and loads their manifests via bazel_manifest_loader.BazelManifestLoader.get_manifest during session initialization, deriving session file sets, templates, and guidance configurations.
 """
 
     @property
@@ -27,13 +27,13 @@ PURPOSE:
 Declared direct dependencies and transitive star dependencies
 
 FRESH_REQUIREMENTS:
-- The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies.
+- The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies and files present in read-write files.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session read-only files restricted to inspection.
 
 GROUNDING_ARGUMENT:
-- Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), extracting direct dependencies and resolving the transitive closure of star dependencies across manifests via the manifest loader, and constructing ReadOnlyFile instances.
+- Derived by loading target node manifests via bazel_manifest_loader.BazelManifestLoader.get_manifest across nodes in get_singleton(dag_node_cleaner.CleanedNodes).nodes, extracting direct dependencies and resolving the transitive closure of star dependencies across manifests, and constructing ReadOnlyFile instances excluding files present in read_write_files.
 """
         ...
 
@@ -42,16 +42,16 @@ GROUNDING_ARGUMENT:
     def read_write_files(self) -> Set[agent_file_alias.BoundFile]:
         """
 PURPOSE:
-Declared source files and silent source files
+Declared source files and silent source files across session nodes
 
 FRESH_REQUIREMENTS:
-- The node config exposes declared source files and silent source files as read-write files.
+- The node config exposes declared source files and silent source files across session nodes as read-write files.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session read-write files permitted for inspection and modification.
 
 GROUNDING_ARGUMENT:
-- Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), extracting declared source files and silent source files, and constructing ReadWriteFile instances.
+- Derived by loading target node manifests via bazel_manifest_loader.BazelManifestLoader.get_manifest across nodes in get_singleton(dag_node_cleaner.CleanedNodes).nodes, extracting declared source files and silent source files, and constructing ReadWriteFile instances.
 """
         ...
 
@@ -60,16 +60,16 @@ GROUNDING_ARGUMENT:
     def allows_step_mode(self) -> bool:
         """
 PURPOSE:
-Whether the node allows step mode from the manifest
+Whether the node allows step mode from the primary node manifest
 
 FRESH_REQUIREMENTS:
-- The node config exposes whether the node allows step mode from the target node manifest.
+- The node config exposes whether the node allows step mode from the primary target node manifest.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config indicates whether the node allows step mode.
 
 GROUNDING_ARGUMENT:
-- Derived by loading the target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node) and extracting allows_step_mode.
+- Derived by loading the primary target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNodes).primary_node) and extracting allows_step_mode.
 """
         ...
 
@@ -81,13 +81,13 @@ PURPOSE:
 Whether step mode is active for the session
 
 FRESH_REQUIREMENTS:
-- The node config exposes whether step mode is active, enabled when the agent config enables step mode, the node allows step mode, and session feedback is absent.
+- The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the primary node allows step mode, and session feedback is absent.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config indicates whether session step mode is active.
 
 GROUNDING_ARGUMENT:
-- Derived by querying agent_config.AgentConfig.is_step_mode in the system lifecycle tier, self.allows_step_mode, and verifying that self.feedback is empty, enabling step mode only when all conditions are satisfied.
+- Derived by querying agent_config.AgentConfig.is_step_mode in the system lifecycle tier, verifying that get_singleton(dag_node_cleaner.CleanedNodes).nodes contains exactly one node, checking self.allows_step_mode, and verifying that self.feedback is empty.
 """
         ...
 
@@ -105,7 +105,7 @@ INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session guide file when step mode is active.
 
 GROUNDING_ARGUMENT:
-- Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), constructing an UnboundFile for the declared guide target when step mode is active.
+- Derived by loading the primary target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNodes).primary_node), constructing an UnboundFile for the declared guide target when step mode is active.
 """
         ...
 
@@ -123,7 +123,7 @@ INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides templates mapping read-write files to initial file content.
 
 GROUNDING_ARGUMENT:
-- Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), pairing read-write files with template contents.
+- Derived by loading target node manifests via bazel_manifest_loader.BazelManifestLoader.get_manifest across nodes in get_singleton(dag_node_cleaner.CleanedNodes).nodes, pairing read-write files with template contents.
 """
         ...
 
@@ -135,13 +135,13 @@ PURPOSE:
 Declared template parameters from the manifest
 
 FRESH_REQUIREMENTS:
-- The node config exposes declared template parameters from the manifest.
+- The node config exposes declared template parameters from the primary target node manifest.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session template parameters, providing parameter bindings for template evaluation.
 
 GROUNDING_ARGUMENT:
-- Extracted from the target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node).
+- Extracted from the primary target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNodes).primary_node).
 """
         ...
 
@@ -159,7 +159,7 @@ INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session guide, providing structured instructional text when step mode is active.
 
 GROUNDING_ARGUMENT:
-- Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), reading and parsing the guide markdown when step mode is active.
+- Derived by loading the primary target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNodes).primary_node), reading and parsing the guide markdown when step mode is active.
 """
         ...
 
@@ -177,25 +177,83 @@ INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides blame targets eligible for defect attribution.
 
 GROUNDING_ARGUMENT:
-- Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), mapping declared feedback dependencies to ReadOnlyFile blame targets.
+- Derived by unioning the values of self.blame_targets_by_node.
 """
         ...
 
     @property
     @override
-    def verification_checks(self) -> List[agent_node_config.VerificationCheck]:
+    def blame_targets_by_node(
+        self,
+    ) -> Mapping[dag_storage.Node, Set[agent_file_alias.BoundFile]]:
         """
 PURPOSE:
-Session verification checks derived from the manifest verification command
+Session blame targets mapped by session node
 
 FRESH_REQUIREMENTS:
-- The node config exposes declared verification checks from the manifest verification command.
+- The node config exposes blame targets by node mapping each session node to its declared blame targets.
+
+INHERITED_REQUIREMENTS:
+- [NodeConfig] The node config provides the session blame targets mapped by session node.
+
+GROUNDING_ARGUMENT:
+- Derived by loading target node manifests via bazel_manifest_loader.BazelManifestLoader.get_manifest for each node in get_singleton(dag_node_cleaner.CleanedNodes).nodes, mapping declared feedback dependencies to BoundFile instances.
+"""
+        ...
+
+    @property
+    @override
+    def verification_checks(self) -> Sequence[agent_node_config.VerificationCheck]:
+        """
+PURPOSE:
+Session verification checks derived from manifest verification commands
+
+FRESH_REQUIREMENTS:
+- The node config exposes declared verification checks from the manifest verification commands.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session verification checks evaluated during session advancement.
 
 GROUNDING_ARGUMENT:
-- Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), constructing a CommandVerificationCheck from the declared verify command string when present.
+- Derived by concatenating verification checks from self.verification_checks_by_node across all session nodes.
+"""
+        ...
+
+    @property
+    @override
+    def verification_checks_by_node(
+        self,
+    ) -> Mapping[dag_storage.Node, Sequence[agent_node_config.VerificationCheck]]:
+        """
+PURPOSE:
+Session verification checks mapped by session node
+
+FRESH_REQUIREMENTS:
+- The node config exposes verification checks by node mapping each session node to its verification checks.
+
+INHERITED_REQUIREMENTS:
+- [NodeConfig] The node config provides the session verification checks mapped by session node.
+
+GROUNDING_ARGUMENT:
+- Derived by loading target node manifests via bazel_manifest_loader.BazelManifestLoader.get_manifest for each node in get_singleton(dag_node_cleaner.CleanedNodes).nodes, constructing CommandVerificationCheck instances from declared verify command strings.
+"""
+        ...
+
+    @property
+    @override
+    def src_file_alias_by_node(self) -> Mapping[dag_storage.Node, str]:
+        """
+PURPOSE:
+Source file alias short name mapped by session node
+
+FRESH_REQUIREMENTS:
+- The node config exposes declared src file alias by node mapping each session node to the short name of its declared source file alias.
+
+INHERITED_REQUIREMENTS:
+- [NodeConfig] The node config provides the source file alias short name mapped by session node.
+
+GROUNDING_ARGUMENT:
+- Derived by loading target node manifests via bazel_manifest_loader.BazelManifestLoader.get_manifest for each node in get_singleton(dag_node_cleaner.CleanedNodes).nodes and extracting the short name of its declared src file.
 """
         ...
 
@@ -207,13 +265,13 @@ PURPOSE:
 Session verification success message resolved from manifest metadata
 
 FRESH_REQUIREMENTS:
-- Declared verification success message from the manifest as the session verification success message.
+- Declared verification success message from the primary target node manifest as the session verification success message.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session verification success message when configured.
 
 GROUNDING_ARGUMENT:
-- Derived by loading the target node's manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNode).node), extracting the declared verification_success_message string when present.
+- Derived by loading the primary target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(dag_node_cleaner.CleanedNodes).primary_node), extracting the declared verification_success_message string when present.
 """
         ...
 
@@ -222,16 +280,16 @@ GROUNDING_ARGUMENT:
     def feedback(self) -> Sequence[str]:
         """
 PURPOSE:
-Session feedback retrieved from graph storage for the target node
+Session feedback retrieved from graph storage for session nodes
 
 FRESH_REQUIREMENTS:
-- Declared feedback messages retrieved from graph storage for the target node as the session feedback.
+- Declared feedback messages retrieved from graph storage for the session nodes as the session feedback.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session feedback, exposing incoming feedback delivered to the node when present.
 
 GROUNDING_ARGUMENT:
-- Derived by querying dag_storage.DagStorage for incoming feedback messages for get_singleton(dag_node_cleaner.CleanedNode).node.
+- Derived by querying dag_storage.DagStorage for incoming feedback messages across all nodes in get_singleton(dag_node_cleaner.CleanedNodes).nodes.
 """
         ...
 
@@ -245,7 +303,7 @@ INHERITANCE:
 - tool_provider.ParameterConverter: Implements parameter converter for file alias actual type
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, AliasManager resolves accessible workspace files for get_singleton(dag_node_cleaner.CleanedNode).node into minimal unambiguous short names and maintains host path mappings.
+- As an agent_session singleton, AliasManager resolves accessible workspace files for get_singleton(dag_node_cleaner.CleanedNodes).nodes into minimal unambiguous short names and maintains host path mappings.
 """
 
     @property

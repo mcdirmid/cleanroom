@@ -15,8 +15,12 @@ Unbounded feedback loops between dependent tasks can cause graph cleaners to run
 
 A dag cleaner obtains its *node visit limit* from the dag config bounding the maximum times any node can be visited to check whether it is dirty.
 
+A dag cleaner obtains its *batch size* from the dag config bounding the maximum dirty nodes of the same role processed together in an agent session.
+
 A dag cleaner cleans a target node by collecting all reachable dependencies from the node and executing them in dependency-first topological order.
 
 In each cleaning iteration, the dag cleaner visits reachable nodes in topological order. Visiting a node checks whether the node is dirty, not whether it is cleaned. A node is cleaned only if it is dirty and all of its dependencies are clean.
+
+When cleaning dirty nodes, the node cleaner is invoked to clean ready dirty nodes batched by role up to the batch size, where dependencies outside the batch are clean.
 
 Cleaning is bounded to prevent infinite loops. If visiting any node exceeds the node visit limit, the dag cleaner halts with an unexpected failure. Cleaning succeeds when all reachable nodes in the subgraph are clean.

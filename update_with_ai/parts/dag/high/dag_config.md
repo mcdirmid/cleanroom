@@ -12,8 +12,11 @@ Traversing dependency graphs during incremental builds risks circular evaluation
 
 A *node visit limit* is a bound on the maximum number of times any node can be visited during dag cleaning.
 
+A *batch size* is a bound on the maximum number of dirty nodes of the same role processed together in an agent session.
+
 The *dag config* is a system service that provides operational parameters for dependency graph execution.
 
 The dag config provides:
 
 - The node visit limit bounding node visits during graph cleaning.
+- The batch size bounding dirty nodes processed together in an agent session.

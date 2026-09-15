@@ -28,7 +28,7 @@ The node config provides:
 
 - Whether the node *allows step mode*, permitting guide step mode when enabled by agent config.
 
-- Whether session *step mode* is active, enabled when agent config enables step mode, the node allows step mode, and session feedback is absent.
+- Whether session *step mode* is active, enabled when agent config enables step mode, the session contains exactly one node, the node allows step mode, and session feedback is absent.
 
 - The session *guide file* when step mode is active.
 
@@ -40,7 +40,13 @@ The node config provides:
 
 - The session *blame targets*, which are bound files owned by upstream dependency nodes eligible for defect attribution.
 
+- The session *blame targets by node*, which are bound files eligible for defect attribution mapped by session node.
+
 - The session *verification checks* evaluated during session advancement.
+
+- The session *verification checks by node* evaluated for each session node.
+
+- The session *src file alias by node*, mapping each session node to the short name of its declared source file alias.
 
 - The session *verification success message*, exposing informative verification feedback when configured.
 

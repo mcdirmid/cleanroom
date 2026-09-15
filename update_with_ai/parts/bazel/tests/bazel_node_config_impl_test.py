@@ -20,7 +20,7 @@ from update_with_ai.parts.bazel.lib.bazel_node_config_impl import (
     __initialize__,
 )
 from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget, NodeDirectory
-from update_with_ai.parts.dag.lib.dag_node_cleaner import CleanedNode
+from update_with_ai.parts.dag.lib.dag_node_cleaner import CleanedNodes
 from update_with_ai.parts.dag.lib.dag_storage import DagStorage, Feedback, Message, Node
 from update_with_ai.parts.agent.lib.agent_file_alias import (
     AliasManager,
@@ -53,6 +53,30 @@ def _make_node_directory(path: str) -> NodeDirectory:
     return obj
 
 
+class MockCleanedNodes(CleanedNodes, Singleton):
+    tier = "agent_session"
+
+    def __init__(self) -> None:
+        self._primary_node = Node(unit_address="//test/pkg:my_target")
+        self._nodes: Sequence[Node] = (self._primary_node,)
+
+    @property
+    def primary_node(self) -> Node:
+        return self._primary_node
+
+    @property
+    def nodes(self) -> Sequence[Node]:
+        return self._nodes
+
+    def set_node(self, node: Node) -> None:
+        self._primary_node = node
+        self._nodes = (node,)
+
+    def set_nodes(self, primary: Node, nodes: Sequence[Node]) -> None:
+        self._primary_node = primary
+        self._nodes = tuple(nodes)
+
+
 class BazelNodeConfigImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
@@ -75,7 +99,10 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             self.assertIsNone(cfg.guide_file)
             self.assertIsNone(cfg.guide)
             self.assertEqual(cfg.blame_targets, set())
+            self.assertEqual(cfg.blame_targets_by_node, {})
             self.assertEqual(cfg.verification_checks, [])
+            self.assertEqual(cfg.verification_checks_by_node, {})
+            self.assertEqual(cfg.src_file_alias_by_node, {})
 
             # Configure properties
             node = Node(unit_address="//pkg:target")
@@ -95,19 +122,26 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             cfg._read_only_files.add(ro)
             cfg._read_write_files.add(rw)
             cfg._templates.add((rw, "template"))
+            cfg._template_parameters = {"key": "value"}
             cfg._guide_file = unbound
             cfg._guide = guide
             cfg._blame_targets.add(ro)
+            cfg._blame_targets_by_node[node] = {ro}
+            cfg._src_file_alias_by_node[node] = "rw.txt"
+            cfg._verification_success_message = "All tests passed"
 
-            # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies.
+            # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies and files present in read-write files.
             # Requirement: [NodeConfig] The node config provides the session read-only files restricted to inspection.
             self.assertIn(ro, cfg.read_only_files)
-            # Requirement: The node config exposes declared source files and silent source files as read-write files.
+            # Requirement: The node config exposes declared source files and silent source files across session nodes as read-write files.
             # Requirement: [NodeConfig] The node config provides the session read-write files permitted for inspection and modification.
             self.assertIn(rw, cfg.read_write_files)
             # Requirement: The node config exposes templates mapping read-write files to initial file content.
             # Requirement: [NodeConfig] The node config provides templates mapping read-write files to initial file content.
             self.assertIn((rw, "template"), cfg.templates)
+            # Requirement: The node config exposes declared template parameters from the primary target node manifest.
+            # Requirement: [NodeConfig] The node config provides the session template parameters, providing parameter bindings for template evaluation.
+            self.assertEqual(cfg.template_parameters, {"key": "value"})
             # Requirement: The node config exposes the declared guide target as the guide file when step mode is active.
             # Requirement: [NodeConfig] The node config provides the session guide file when step mode is active.
             self.assertEqual(cfg.guide_file, unbound)
@@ -115,12 +149,21 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             # Requirement: [NodeConfig] The node config provides the session guide, providing structured instructional text when step mode is active.
             self.assertEqual(cfg.guide, guide)
             cfg._feedback = ("Feedback msg 1",)
-            # Requirement: Declared feedback messages retrieved from graph storage for the target node as the session feedback.
+            # Requirement: Declared feedback messages retrieved from graph storage for the session nodes as the session feedback.
             # Requirement: [NodeConfig] The node config provides the session feedback, exposing incoming feedback delivered to the node when present.
             self.assertEqual(cfg.feedback, ("Feedback msg 1",))
             # Requirement: The node config exposes declared feedback dependencies as blame targets mapped to owning dependency nodes.
             # Requirement: [NodeConfig] The node config provides blame targets eligible for defect attribution.
             self.assertIn(ro, cfg.blame_targets)
+            # Requirement: The node config exposes blame targets by node mapping each session node to its declared blame targets.
+            # Requirement: [NodeConfig] The node config provides the session blame targets mapped by session node.
+            self.assertEqual(cfg.blame_targets_by_node[node], {ro})
+            # Requirement: The node config exposes declared src file alias by node mapping each session node to the short name of its declared source file alias.
+            # Requirement: [NodeConfig] The node config provides the source file alias short name mapped by session node.
+            self.assertEqual(cfg.src_file_alias_by_node[node], "rw.txt")
+            # Requirement: Declared verification success message from the primary target node manifest as the session verification success message.
+            # Requirement: [NodeConfig] The node config provides the session verification success message when configured.
+            self.assertEqual(cfg.verification_success_message, "All tests passed")
 
             class DummyCheck:
                 def verify(self):
@@ -128,16 +171,20 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             dummy_check = DummyCheck()
             cfg._verification_checks.append(dummy_check)
-            # Requirement: The node config exposes declared verification checks from the manifest verification command.
+            cfg._verification_checks_by_node[node] = [dummy_check]
+            # Requirement: The node config exposes declared verification checks from the manifest verification commands.
             # Requirement: [NodeConfig] The node config provides the session verification checks evaluated during session advancement.
             self.assertIn(dummy_check, cfg.verification_checks)
+            # Requirement: The node config exposes verification checks by node mapping each session node to its verification checks.
+            # Requirement: [NodeConfig] The node config provides the session verification checks mapped by session node.
+            self.assertEqual(cfg.verification_checks_by_node[node], [dummy_check])
 
             cfg._allows_step_mode = False
             cfg._is_step_mode = False
-            # Requirement: The node config exposes whether the node allows step mode from the target node manifest.
+            # Requirement: The node config exposes whether the node allows step mode from the primary target node manifest.
             # Requirement: [NodeConfig] The node config indicates whether the node allows step mode.
             self.assertFalse(cfg.allows_step_mode)
-            # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the node allows step mode, and session feedback is absent.
+            # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the primary node allows step mode, and session feedback is absent.
             # Requirement: [NodeConfig] The node config indicates whether session step mode is active.
             self.assertFalse(cfg.is_step_mode)
             cfg._allows_step_mode = True
@@ -208,20 +255,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             )
 
     def test_lifecycle_initialization_from_manifest(self) -> None:
-        """CUJ: NodeConfig and AliasManager initialize from CleanedNode and BazelManifestLoader."""
-
-        class MockCleanedNode(CleanedNode, Singleton):
-            tier = "agent_session"
-
-            def __init__(self) -> None:
-                self._node = Node(unit_address="//test/pkg:my_target")
-
-            @property
-            def node(self) -> Node:
-                return self._node
-
-            def set_node(self, node: Node) -> None:
-                self._node = node
+        """CUJ: NodeConfig and AliasManager initialize from CleanedNodes and BazelManifestLoader."""
 
         class MockManifestLoader(BazelManifestLoader, Singleton):
             tier = "agent_session"
@@ -295,7 +329,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
         reg = LifecycleRegistry()
         __initialize__(reg)
-        reg.register(MockCleanedNode, keys=[CleanedNode])
+        reg.register(MockCleanedNodes, keys=[CleanedNodes])
         reg.register(MockManifestLoader, keys=[BazelManifestLoader])
         reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
         reg.register(MockDagStorage, keys=[DagStorage])
@@ -305,7 +339,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 cfg = scope.get_singleton(NodeConfig)
                 alias_mgr = scope.get_singleton(AliasManager)
 
-                # Requirement: Declared feedback messages retrieved from graph storage for the target node as the session feedback.
+                # Requirement: Declared feedback messages retrieved from graph storage for the session nodes as the session feedback.
                 # Requirement: [NodeConfig] The node config provides the session feedback, exposing incoming feedback delivered to the node when present.
                 self.assertEqual(cfg.feedback, ("Fix type error",))
                 self.assertEqual(
@@ -313,13 +347,13 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                     {"module_name": "MyModule", "has_ops": True},
                 )
 
-            # Requirement: The node config exposes declared source files and silent source files as read-write files.
+            # Requirement: The node config exposes declared source files and silent source files across session nodes as read-write files.
             # Requirement: [NodeConfig] The node config provides the session read-write files permitted for inspection and modification.
             rw_names = {f.short_name for f in cfg.read_write_files}
             self.assertIn("impl.py", rw_names)
             self.assertIn("internal.py", rw_names)
 
-            # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies.
+            # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies and files present in read-write files.
             # Requirement: [NodeConfig] The node config provides the session read-only files restricted to inspection.
             ro_names = {f.short_name for f in cfg.read_only_files}
             self.assertIn("dep_target.py", ro_names)
@@ -331,7 +365,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             blame_names = {f.short_name for f in cfg.blame_targets}
             self.assertIn("dep_target.py", blame_names)
 
-            # Requirement: The node config exposes declared verification checks from the manifest verification command.
+            # Requirement: The node config exposes declared verification checks from the manifest verification commands.
             # Requirement: [NodeConfig] The node config provides the session verification checks evaluated during session advancement.
             self.assertEqual(len(cfg.verification_checks), 1)
             passed, diag = cfg.verification_checks[0].verify()
@@ -364,19 +398,6 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
     def test_lifecycle_initialization_step_mode_disabled(self) -> None:
         """CUJ: When allows_step_mode is false, step mode is disabled and guide is kept as read-only file."""
-
-        class MockCleanedNode(CleanedNode, Singleton):
-            tier = "agent_session"
-
-            def __init__(self) -> None:
-                self._node = Node(unit_address="//test/pkg:my_target")
-
-            @property
-            def node(self) -> Node:
-                return self._node
-
-            def set_node(self, node: Node) -> None:
-                self._node = node
 
         class MockManifestLoader(BazelManifestLoader, Singleton):
             tier = "agent_session"
@@ -436,7 +457,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
         reg = LifecycleRegistry()
         __initialize__(reg)
-        reg.register(MockCleanedNode, keys=[CleanedNode])
+        reg.register(MockCleanedNodes, keys=[CleanedNodes])
         reg.register(MockManifestLoader, keys=[BazelManifestLoader])
         reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
         reg.register(MockDagStorage, keys=[DagStorage])
@@ -447,10 +468,10 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 cfg = scope.get_singleton(NodeConfig)
                 alias_mgr = scope.get_singleton(AliasManager)
 
-                # Requirement: The node config exposes whether the node allows step mode from the target node manifest.
+                # Requirement: The node config exposes whether the node allows step mode from the primary target node manifest.
                 # Requirement: [NodeConfig] The node config indicates whether the node allows step mode.
                 self.assertFalse(cfg.allows_step_mode)
-                # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the node allows step mode, and session feedback is absent.
+                # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the primary node allows step mode, and session feedback is absent.
                 # Requirement: [NodeConfig] The node config indicates whether session step mode is active.
                 self.assertFalse(cfg.is_step_mode)
                 self.assertIsNone(cfg.guide_file)
@@ -467,19 +488,6 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         self,
     ) -> None:
         """CUJ: When session feedback is present, step mode is disabled even if agent_config and node allow it, and guide is kept as read-only file."""
-
-        class MockCleanedNode(CleanedNode, Singleton):
-            tier = "agent_session"
-
-            def __init__(self) -> None:
-                self._node = Node(unit_address="//test/pkg:my_target")
-
-            @property
-            def node(self) -> Node:
-                return self._node
-
-            def set_node(self, node: Node) -> None:
-                self._node = node
 
         class MockManifestLoader(BazelManifestLoader, Singleton):
             tier = "agent_session"
@@ -539,7 +547,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
         reg = LifecycleRegistry()
         __initialize__(reg)
-        reg.register(MockCleanedNode, keys=[CleanedNode])
+        reg.register(MockCleanedNodes, keys=[CleanedNodes])
         reg.register(MockManifestLoader, keys=[BazelManifestLoader])
         reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
         reg.register(MockDagStorage, keys=[DagStorage])
@@ -550,11 +558,11 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 cfg = scope.get_singleton(NodeConfig)
                 alias_mgr = scope.get_singleton(AliasManager)
 
-                # Requirement: The node config exposes whether the node allows step mode from the target node manifest.
+                # Requirement: The node config exposes whether the node allows step mode from the primary target node manifest.
                 # Requirement: [NodeConfig] The node config indicates whether the node allows step mode.
                 self.assertTrue(cfg.allows_step_mode)
                 self.assertEqual(cfg.feedback, ("Fix failing mock test",))
-                # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the node allows step mode, and session feedback is absent.
+                # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the primary node allows step mode, and session feedback is absent.
                 # Requirement: [NodeConfig] The node config indicates whether session step mode is active.
                 self.assertFalse(cfg.is_step_mode)
                 self.assertIsNone(cfg.guide_file)
@@ -605,21 +613,44 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         self.assertIn("command not found", diag)
 
     def test_node_config_initialize_exception_guards(self) -> None:
-        """CUJ: NodeConfig.initialize handles missing CleanedNode, missing/failing DagStorage, and missing/invalid manifest."""
-        # 1. CleanedNode missing -> returns early without error
+        """CUJ: NodeConfig.initialize handles missing CleanedNodes, missing/failing DagStorage, and missing/invalid manifest."""
+        # 1. CleanedNodes missing -> returns early without error
         reg1 = LifecycleRegistry()
         __initialize__(reg1)
         with enter_phase("agent_session", registry=reg1) as scope:
             cfg = scope.get_singleton(NodeConfig)
             self.assertEqual(cfg.read_write_files, set())
 
-        # 2. DagStorage missing / failing -> self._feedback = ()
-        class MockCleanedNode(CleanedNode, Singleton):
+        # 1.5 CleanedNodes empty -> returns early without error
+        class MockCleanedNodesEmpty(CleanedNodes, Singleton):
             tier = "agent_session"
 
             @property
-            def node(self) -> Node:
+            def primary_node(self) -> Node:
                 return Node(unit_address="//pkg:tgt")
+
+            @property
+            def nodes(self) -> Sequence[Node]:
+                return ()
+
+        reg1_empty = LifecycleRegistry()
+        __initialize__(reg1_empty)
+        reg1_empty.register(MockCleanedNodesEmpty, keys=[CleanedNodes])
+        with enter_phase("agent_session", registry=reg1_empty) as scope:
+            cfg = scope.get_singleton(NodeConfig)
+            self.assertEqual(cfg.read_write_files, set())
+
+        # 2. DagStorage missing / failing -> self._feedback = ()
+        class MockCleanedNodesTgt(CleanedNodes, Singleton):
+            tier = "agent_session"
+
+            @property
+            def primary_node(self) -> Node:
+                return Node(unit_address="//pkg:tgt")
+
+            @property
+            def nodes(self) -> Sequence[Node]:
+                return (Node(unit_address="//pkg:tgt"),)
 
         class MockManifestLoaderNone(BazelManifestLoader, Singleton):
             tier = "agent_session"
@@ -643,13 +674,13 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
         reg2 = LifecycleRegistry()
         __initialize__(reg2)
-        reg2.register(MockCleanedNode, keys=[CleanedNode])
+        reg2.register(MockCleanedNodesTgt, keys=[CleanedNodes])
         reg2.register(MockManifestLoaderNone, keys=[BazelManifestLoader])
         reg2.register(MockNodeIdentifierUtility, keys=[BazelTarget])
 
         with enter_phase("agent_session", registry=reg2) as scope:
             cfg = scope.get_singleton(NodeConfig)
-            # Requirement: Declared feedback messages retrieved from graph storage for the target node as the session feedback.
+            # Requirement: Declared feedback messages retrieved from graph storage for the session nodes as the session feedback.
             # Requirement: [NodeConfig] The node config provides the session feedback, exposing incoming feedback delivered to the node when present.
             self.assertEqual(cfg.feedback, ())
             # Manifest is None -> returns early
@@ -669,7 +700,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
         reg3 = LifecycleRegistry()
         __initialize__(reg3)
-        reg3.register(MockCleanedNode, keys=[CleanedNode])
+        reg3.register(MockCleanedNodesTgt, keys=[CleanedNodes])
         reg3.register(MockManifestLoaderBadJson, keys=[BazelManifestLoader])
         reg3.register(MockNodeIdentifierUtility, keys=[BazelTarget])
 
@@ -684,12 +715,16 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             with open(template_path, "w", encoding="utf-8") as f:
                 f.write("# Template code\n")
 
-            class MockCleanedNode(CleanedNode, Singleton):
+            class MockCleanedNodesPkg(CleanedNodes, Singleton):
                 tier = "agent_session"
 
                 @property
-                def node(self) -> Node:
+                def primary_node(self) -> Node:
                     return Node(unit_address="//pkg:my_target")
+
+                @property
+                def nodes(self) -> Sequence[Node]:
+                    return (Node(unit_address="//pkg:my_target"),)
 
             class MockManifestLoader(BazelManifestLoader, Singleton):
                 tier = "agent_session"
@@ -722,7 +757,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             reg = LifecycleRegistry()
             __initialize__(reg)
-            reg.register(MockCleanedNode, keys=[CleanedNode])
+            reg.register(MockCleanedNodesPkg, keys=[CleanedNodes])
             reg.register(MockManifestLoader, keys=[BazelManifestLoader])
             reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
 
@@ -736,11 +771,11 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                     self.assertEqual(bound_f.short_name, "impl.py")
                     self.assertEqual(content, "# Template code\n")
 
-                # Requirement: The node config exposes declared template parameters from the manifest.
+                # Requirement: The node config exposes declared template parameters from the primary target node manifest.
                 # Requirement: [NodeConfig] The node config provides the session template parameters, providing parameter bindings for template evaluation.
                 self.assertEqual(cfg.template_parameters, {"key": "value"})
 
-                # Requirement: Declared verification success message from the manifest as the session verification success message.
+                # Requirement: Declared verification success message from the primary target node manifest as the session verification success message.
                 # Requirement: [NodeConfig] The node config provides the session verification success message when configured.
                 self.assertEqual(
                     cfg.verification_success_message, "Build passed successfully"
@@ -759,12 +794,16 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             with open(guide_path, "w", encoding="utf-8") as f:
                 f.write("guide text")
 
-            class MockCleanedNode(CleanedNode, Singleton):
+            class MockCleanedNodesPkg(CleanedNodes, Singleton):
                 tier = "agent_session"
 
                 @property
-                def node(self) -> Node:
+                def primary_node(self) -> Node:
                     return Node(unit_address="//pkg:my_target")
+
+                @property
+                def nodes(self) -> Sequence[Node]:
+                    return (Node(unit_address="//pkg:my_target"),)
 
             class MockManifestLoader(BazelManifestLoader, Singleton):
                 tier = "agent_session"
@@ -817,7 +856,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             reg = LifecycleRegistry()
             __initialize__(reg)
-            reg.register(MockCleanedNode, keys=[CleanedNode])
+            reg.register(MockCleanedNodesPkg, keys=[CleanedNodes])
             reg.register(MockManifestLoader, keys=[BazelManifestLoader])
             reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
             reg.register(MockAgentConfig, keys=[AgentConfig])
@@ -846,7 +885,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                             # Requirement: [NodeConfig] The node config provides templates mapping read-write files to initial file content.
                             self.assertEqual(cfg.templates, set())
                             # Invalid JSON param string results in default empty dict
-                            # Requirement: The node config exposes declared template parameters from the manifest.
+                            # Requirement: The node config exposes declared template parameters from the primary target node manifest.
                             # Requirement: [NodeConfig] The node config provides the session template parameters, providing parameter bindings for template evaluation.
                             self.assertEqual(cfg.template_parameters, {})
                             # Guide read failure results in guide being None
@@ -919,12 +958,16 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             with open(guide_file_path, "w", encoding="utf-8") as f:
                 f.write(guide_content)
 
-            class MockCleanedNode(CleanedNode, Singleton):
+            class MockCleanedNodesPkg(CleanedNodes, Singleton):
                 tier = "agent_session"
 
                 @property
-                def node(self) -> Node:
+                def primary_node(self) -> Node:
                     return Node(unit_address="//pkg:my_target")
+
+                @property
+                def nodes(self) -> Sequence[Node]:
+                    return (Node(unit_address="//pkg:my_target"),)
 
             class MockManifestLoader(BazelManifestLoader, Singleton):
                 tier = "agent_session"
@@ -934,9 +977,9 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                         json.dumps(
                             {
                                 "src": "impl.py",
-                                "guide": "//update_python_with_ai/guides:my_guide",
+                                "guide": "my_guide",
                                 "allows_step_mode": True,
-                                "deps": ["//update_python_with_ai/guides:my_guide"],
+                                "deps": ["my_guide"],
                             }
                         )
                     )
@@ -976,7 +1019,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             reg = LifecycleRegistry()
             __initialize__(reg)
-            reg.register(MockCleanedNode, keys=[CleanedNode])
+            reg.register(MockCleanedNodesPkg, keys=[CleanedNodes])
             reg.register(MockManifestLoader, keys=[BazelManifestLoader])
             reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
             reg.register(MockAgentConfig, keys=[AgentConfig])
@@ -989,7 +1032,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                         cfg = scope.get_singleton(NodeConfig)
                         alias_mgr = scope.get_singleton(AliasManager)
 
-                        # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the node allows step mode, and session feedback is absent.
+                        # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the primary node allows step mode, and session feedback is absent.
                         # Requirement: [NodeConfig] The node config indicates whether session step mode is active.
                         self.assertTrue(cfg.is_step_mode)
 
@@ -1013,7 +1056,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                         )
 
                         # Guide is excluded from read_only_files when step mode is active
-                        # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies.
+                        # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies and files present in read-write files.
                         # Requirement: [NodeConfig] The node config provides the session read-only files restricted to inspection.
                         ro_names = {f.short_name for f in cfg.read_only_files}
                         self.assertNotIn("my_guide.md", ro_names)
@@ -1032,12 +1075,16 @@ class BazelNodeConfigImplTest(unittest.TestCase):
     def test_dependency_resolution_branches(self) -> None:
         """CUJ: Resolving star_deps with diamond graphs, invalid JSON, silent_deps, and manifest-less specs/other dependencies."""
 
-        class MockCleanedNode(CleanedNode, Singleton):
+        class MockCleanedNodesRoot(CleanedNodes, Singleton):
             tier = "agent_session"
 
             @property
-            def node(self) -> Node:
+            def primary_node(self) -> Node:
                 return Node(unit_address="//pkg:root")
+
+            @property
+            def nodes(self) -> Sequence[Node]:
+                return (Node(unit_address="//pkg:root"),)
 
         class MockManifestLoader(BazelManifestLoader, Singleton):
             tier = "agent_session"
@@ -1112,14 +1159,14 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
         reg = LifecycleRegistry()
         __initialize__(reg)
-        reg.register(MockCleanedNode, keys=[CleanedNode])
+        reg.register(MockCleanedNodesRoot, keys=[CleanedNodes])
         reg.register(MockManifestLoader, keys=[BazelManifestLoader])
         reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
 
         with enter_phase("agent_session", registry=reg) as scope:
             cfg = scope.get_singleton(NodeConfig)
 
-            # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies.
+            # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies and files present in read-write files.
             # Requirement: [NodeConfig] The node config provides the session read-only files restricted to inspection.
             ro_names = {f.short_name for f in cfg.read_only_files}
             self.assertNotIn("silent_dep.py", ro_names)
@@ -1130,6 +1177,144 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             self.assertIn("bar_grounding.pyi", ro_names)
             self.assertIn("baz.md", ro_names)
             self.assertIn("util.py", ro_names)
+
+    def test_lifecycle_initialization_multi_node_batch(self) -> None:
+        """CUJ: Multi-node batch initialization unifies read-write files, excludes in-batch read-write files from read-only files, per-node blame targets, disables step mode, and per-node verification checks."""
+        node_a = Node(unit_address="//pkg:node_a")
+        node_b = Node(unit_address="//pkg:node_b")
+        node_c = Node(unit_address="//pkg:node_c")
+
+        class MockMultiCleanedNodes(CleanedNodes, Singleton):
+            tier = "agent_session"
+
+            @property
+            def primary_node(self) -> Node:
+                return node_a
+
+            @property
+            def nodes(self) -> Sequence[Node]:
+                return (node_a, node_b, node_c)
+
+        class MockManifestLoader(BazelManifestLoader, Singleton):
+            tier = "agent_session"
+
+            def get_manifest(self, node: Node) -> Optional[Manifest]:
+                if node.unit_address == "//pkg:node_a":
+                    return Manifest(
+                        json.dumps(
+                            {
+                                "src": "pkg/a.py",
+                                "template": "nonexistent_template.py",
+                                "allows_step_mode": True,
+                                "verify": "echo verify_a",
+                            }
+                        )
+                    )
+                if node.unit_address == "//pkg:node_b":
+                    return Manifest(
+                        json.dumps(
+                            {
+                                "src": "b.py",
+                                "deps": ["//pkg:node_a", "//pkg:ext_dep"],
+                                "feedback_deps": ["//pkg:node_a", "//pkg:ext_dep"],
+                                "verify": "echo verify_b",
+                            }
+                        )
+                    )
+                if node.unit_address == "//pkg:ext_dep":
+                    return Manifest(
+                        json.dumps(
+                            {
+                                "src": "pkg/ext.py",
+                            }
+                        )
+                    )
+                return None
+
+            def load_manifest(
+                self, content: Manifest, storage: object
+            ) -> Sequence[NodeDefinition]:
+                return []
+
+        class MockNodeIdentifierUtility(BazelTarget, Singleton):
+            tier = "agent_session"
+
+            def normalize(self, raw_label: str) -> Node:
+                return Node(unit_address=raw_label)
+
+            def extract_directory(self, node: Node) -> NodeDirectory:
+                return _make_node_directory("pkg")
+
+        class MockAgentConfig(AgentConfig, Singleton):
+            tier = "system"
+
+            @property
+            def is_step_mode(self) -> bool:
+                return True
+
+            @property
+            def is_startup_reads(self) -> bool:
+                return True
+
+            @property
+            def inject_followups(self) -> bool:
+                return True
+
+            @property
+            def conversation_limit(self) -> int:
+                return 20
+
+        reg = LifecycleRegistry()
+        __initialize__(reg)
+        reg.register(MockMultiCleanedNodes, keys=[CleanedNodes])
+        reg.register(MockManifestLoader, keys=[BazelManifestLoader])
+        reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
+        reg.register(MockAgentConfig, keys=[AgentConfig])
+
+        with enter_phase("system", registry=reg) as sys_scope:
+            with enter_phase("agent_session", registry=reg) as scope:
+                cfg = scope.get_singleton(NodeConfig)
+                alias_mgr = scope.get_singleton(AliasManager)
+
+                # Requirement: The node config exposes declared source files and silent source files across session nodes as read-write files.
+                # Requirement: [NodeConfig] The node config provides the session read-write files permitted for inspection and modification.
+                rw_names = {f.short_name for f in cfg.read_write_files}
+                self.assertEqual(rw_names, {"a.py", "b.py"})
+
+                # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies and files present in read-write files.
+                # Requirement: [NodeConfig] The node config provides the session read-only files restricted to inspection.
+                ro_names = {f.short_name for f in cfg.read_only_files}
+                # a.py is an in-batch read-write file, so it MUST NOT be in read_only_files!
+                self.assertEqual(ro_names, {"ext.py"})
+
+                # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the primary node allows step mode, and session feedback is absent.
+                # Requirement: [NodeConfig] The node config indicates whether session step mode is active.
+                self.assertFalse(cfg.is_step_mode)
+
+                # Requirement: The node config exposes blame targets by node mapping each session node to its declared blame targets.
+                # Requirement: [NodeConfig] The node config provides the session blame targets mapped by session node.
+                blame_by_node = cfg.blame_targets_by_node
+                self.assertEqual(blame_by_node[node_a], set())
+                node_b_blames = {f.short_name for f in blame_by_node[node_b]}
+                self.assertEqual(node_b_blames, {"a.py", "ext.py"})
+
+                # Requirement: The node config exposes declared feedback dependencies as blame targets mapped to owning dependency nodes.
+                # Requirement: [NodeConfig] The node config provides blame targets eligible for defect attribution.
+                self.assertEqual({f.short_name for f in cfg.blame_targets}, {"a.py", "ext.py"})
+
+                # Requirement: The node config exposes declared src file alias by node mapping each session node to the short name of its declared source file alias.
+                # Requirement: [NodeConfig] The node config provides the source file alias short name mapped by session node.
+                self.assertEqual(cfg.src_file_alias_by_node[node_a], "a.py")
+                self.assertEqual(cfg.src_file_alias_by_node[node_b], "b.py")
+
+                # Requirement: The node config exposes verification checks by node mapping each session node to its verification checks.
+                # Requirement: [NodeConfig] The node config provides the session verification checks mapped by session node.
+                self.assertEqual(len(cfg.verification_checks_by_node[node_a]), 1)
+                self.assertEqual(len(cfg.verification_checks_by_node[node_b]), 1)
+
+                # Requirement: The node config exposes declared verification checks from the manifest verification commands.
+                # Requirement: [NodeConfig] The node config provides the session verification checks evaluated during session advancement.
+                self.assertEqual(len(cfg.verification_checks), 2)
 
     def test_make_host_path_and_alias_manager_guards_and_fallback(self) -> None:
         """CUJ: _make_host_path with str subclass, AliasManager.initialize failure guard, and sanitize_text direct path fallback."""

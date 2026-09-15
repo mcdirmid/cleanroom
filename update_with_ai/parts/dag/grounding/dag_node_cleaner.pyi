@@ -1,40 +1,51 @@
 from framework import operation, poly_type, singleton_type
-from typing import Protocol
+from typing import Protocol, Sequence
 import dag_storage
 
 @poly_type
 class NodeCleaner(Protocol):
     """
 PURPOSE:
-Polymorphic service that cleans an individual node
+Polymorphic service that cleans nodes sharing a role
 """
 
     @operation
-    def clean(self, node: dag_storage.Node) -> bool:
+    def clean(self, nodes: Sequence[dag_storage.Node]) -> bool:
         """
 PURPOSE:
-Cleans a dirty node, communicating whether processing should continue
+Cleans dirty nodes, communicating whether processing should continue
 
 FRESH_REQUIREMENTS:
-- Cleaning a dirty node communicates whether processing should continue.
-- Processing cannot continue only if a failure occurs while cleaning the node that cannot be handled by cleaning any other node.
+- Cleaning dirty nodes communicates whether processing should continue.
+- Processing cannot continue only if a failure occurs while cleaning the nodes that cannot be handled by cleaning any other node.
 """
         ...
 
 @singleton_type('agent_session')
-class CleanedNode(Protocol):
+class CleanedNodes(Protocol):
     """
 PURPOSE:
-Defined as an agent session service that presents the node currently being cleaned
+Defined as an agent session service that presents the nodes currently being cleaned in the agent session
 """
 
     @property
-    def node(self) -> dag_storage.Node:
+    def nodes(self) -> Sequence[dag_storage.Node]:
         """
 PURPOSE:
-Target node currently being cleaned in the agent session
+Sequence of nodes currently being cleaned in the agent session
 
 FRESH_REQUIREMENTS:
-- The cleaned node presents the node currently being cleaned in the agent session.
+- The cleaned nodes service presents the sequence of nodes currently being cleaned in the agent session.
+"""
+        ...
+
+    @property
+    def primary_node(self) -> dag_storage.Node:
+        """
+PURPOSE:
+Primary target node currently being cleaned in the agent session
+
+FRESH_REQUIREMENTS:
+- The cleaned nodes service presents the primary target node currently being cleaned in the agent session.
 """
         ...

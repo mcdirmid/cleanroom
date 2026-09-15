@@ -1,4 +1,19 @@
-from typing import Optional, Set
+# --- DO NOT EDIT: Auto-generated dependencies ---
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from . import agent_conversation
+from . import agent_driver
+from . import agent_node_config
+from . import agent_storage
+import update_with_ai.parts.dag.lib.dag_node_cleaner as dag_node_cleaner
+import update_with_ai.parts.dag.lib.dag_storage as dag_storage
+import update_with_ai.parts.bazel.lib.file_paths as file_paths
+import update_with_ai.parts.sandbox.lib.sandbox as sandbox
+import update_with_ai.parts.sandbox.lib.sandbox_guide_delivery as sandbox_guide_delivery
+import update_with_ai.parts.sandbox.lib.sandbox_run_control as sandbox_run_control
+import update_with_ai.parts.sandbox.lib.template_format as template_format
+import update_with_ai.parts.sandbox.lib.tool_provider as tool_provider
+# --- END DO NOT EDIT ---
+from typing import Optional, Sequence, Set
 from . import agent_conversation
 from . import agent_driver
 from . import agent_node_config
@@ -6,6 +21,7 @@ from . import agent_storage
 from update_with_ai.parts.dag.lib import dag_node_cleaner
 from update_with_ai.parts.dag.lib import dag_storage
 from update_with_ai.parts.sandbox.lib import sandbox
+from update_with_ai.parts.sandbox.lib import template_format
 from support.lib.lifecycle import (
     LifecycleRegistry,
     LifecycleScope,
@@ -16,22 +32,29 @@ from support.lib.lifecycle import (
 )
 
 
-class CleanedNode(dag_node_cleaner.CleanedNode, Singleton):
+class CleanedNodes(dag_node_cleaner.CleanedNodes, Singleton):
     tier = "agent_session"
 
     def __init__(self) -> None:
-        self._node: Optional[dag_storage.Node] = None
+        self._nodes: Sequence[dag_storage.Node] = ()
 
     @property
-    def node(self) -> dag_storage.Node:
-        # Requirement: [CleanedNode] The cleaned node presents the node currently being cleaned in the agent session.
-        if self._node is None:
-            raise RuntimeError("CleanedNode has not been configured with a node.")
-        return self._node
+    def nodes(self) -> Sequence[dag_storage.Node]:
+        # Requirement: [CleanedNodes] The cleaned nodes service presents the sequence of nodes currently being cleaned in the agent session.
+        if not self._nodes:
+            raise RuntimeError("CleanedNodes has not been configured with nodes.")
+        return self._nodes
 
-    def set_node(self, node: dag_storage.Node) -> None:
-        # Requirement: The cleaned node presents the node currently being cleaned to session services.
-        self._node = node
+    @property
+    def primary_node(self) -> dag_storage.Node:
+        # Requirement: [CleanedNodes] The cleaned nodes service presents the primary target node currently being cleaned in the agent session.
+        if not self._nodes:
+            raise RuntimeError("CleanedNodes has not been configured with nodes.")
+        return self._nodes[0]
+
+    def set_nodes(self, nodes: Sequence[dag_storage.Node]) -> None:
+        # Requirement: The cleaned nodes present the nodes currently being cleaned to session services.
+        self._nodes = tuple(nodes)
 
 
 class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
@@ -40,84 +63,153 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
     def __init__(self) -> None:
         self._last_outcome: Optional[agent_driver.AgentOutcome] = None
 
-    def clean_node(self, node: dag_storage.Node) -> Set[dag_storage.Message]:
+    def clean_nodes(
+        self, nodes: Sequence[dag_storage.Node]
+    ) -> Set[dag_storage.Message]:
+        dirty_nodes = list(nodes)
         storage = get_singleton(agent_storage.AgentStorage)
-        defn = storage.get_node_definition(node)
+        defns = [storage.get_node_definition(n) for n in dirty_nodes]
 
-        # Requirement: When a dirty node defines no task prompt, cleaning resolves the node without establishing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
-        if defn is None or not defn.task_prompt:
+        # Requirement: When dirty nodes define no task prompt, cleaning resolves the nodes without establishing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
+        has_prompt = any(d is not None and bool(d.task_prompt) for d in defns)
+        if not has_prompt:
             self._last_outcome = None
             has_changes = any(
-                isinstance(m, dag_storage.Change) for m in storage.get_messages(node)
+                any(isinstance(m, dag_storage.Change) for m in storage.get_messages(n))
+                for n in dirty_nodes
             )
             if has_changes:
                 return {dag_storage.Change()}
             return set()
 
         def setup_session(session: LifecycleScope) -> None:
-            # Requirement: The node cleaner cleans a dirty node within an agent session phase where the cleaned node presents the node currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
-            cleaned_node = session.get_singleton(CleanedNode)
-            cleaned_node.set_node(node)
+            # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the cleaned nodes present the nodes currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
+            # Requirement: The cleaned nodes designate the first node in the sequence as the primary node.
+            cleaned_nodes = session.get_singleton(CleanedNodes)
+            cleaned_nodes.set_nodes(dirty_nodes)
 
         def _execute_session() -> Set[dag_storage.Message]:
-            # Requirement: The node cleaner cleans a dirty node within an agent session phase where the cleaned node presents the node currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
+            # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the cleaned nodes present the nodes currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
             with enter_phase("agent_session", setup=setup_session) as session:
-                defn = storage.get_node_definition(node)
-
                 # Requirement: Within the agent session phase, missing read-write files materialize from sandbox startup templates.
                 sb = session.get_singleton(sandbox.Sandbox)
                 sb.materialize_startup_templates()
 
                 hist = session.get_singleton(agent_conversation.Conversation)
-                # Requirement: The conversation is initialized with startup context comprising the node definition and task prompt retrieved from graph storage for the dirty node, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox formatted with synthetic tool requests and captured responses.
-                if defn is not None and defn.task_prompt:
-                    task_prompt = str(defn.task_prompt)
-                    n_cfg = session.get_singleton(agent_node_config.NodeConfig)
-                    guide_short_name: Optional[str] = None
-                    if n_cfg.guide_file is not None:
-                        guide_short_name = n_cfg.guide_file.short_name
-                    else:
-                        for ro in n_cfg.read_only_files:
-                            if ro.short_name.endswith(".md"):
-                                guide_short_name = ro.short_name
-                                break
-                    if guide_short_name is not None:
-                        if n_cfg.is_step_mode:
-                            # Requirement: Task prompt instructions for a guided node include directing the agent to call advance without arguments to view each guide step and omit a change summary until all guide steps are complete when guide step mode is active.
-                            task_prompt += "\n\nCall advance() without arguments to view each guide step. Do not supply change_summary until all guide steps are complete."
-                        else:
-                            # Requirement: Task prompt instructions for a guided node include identifying the guide file by its file alias and directing the agent to call the finish tool with a change summary describing modifications when complete, or call finish without arguments if no workspace files were modified, when guide step mode is inactive.
-                            task_prompt += f"\n\nThe guide is in file {guide_short_name}. Call finish with a change summary describing modifications when complete, or call finish without arguments if no workspace files were modified."
-                    hist.append_message(
-                        agent_conversation.Message(role="user", content=task_prompt)
+                n_cfg = session.get_singleton(agent_node_config.NodeConfig)
+                formatter = session.get_singleton(template_format.TemplateFormatter)
+
+                # Requirement: The conversation is initialized with startup context comprising the node definition and task prompt retrieved from graph storage for dirty nodes, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox formatted with synthetic tool requests and captured responses.
+                # Requirement: The task prompt is formatted using the template formatter.
+                guide_short_name: Optional[str] = None
+                if n_cfg.guide_file is not None:
+                    guide_short_name = n_cfg.guide_file.short_name
+                else:
+                    for ro in n_cfg.read_only_files:
+                        if ro.short_name.endswith(".md"):
+                            guide_short_name = ro.short_name
+                            break
+
+                node_items: list[dict[str, str]] = []
+                for n in dirty_nodes:
+                    defn = storage.get_node_definition(n)
+                    prompt_str = (
+                        str(defn.task_prompt)
+                        if defn is not None and defn.task_prompt
+                        else ""
+                    )
+                    alias_str = n_cfg.src_file_alias_by_node.get(n, "")
+                    node_items.append(
+                        {"src_alias": alias_str, "task_prompt": prompt_str}
                     )
 
-                # Requirement: The conversation is initialized with startup context comprising the node definition and task prompt retrieved from graph storage for the dirty node, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox formatted with synthetic tool requests and captured responses.
-                # Requirement: Incoming feedback messages are formatted as actionable instructions prefaced with directives to fix read-write target files based on the feedback.
-                messages_sorted = sorted(
-                    storage.get_messages(node),
-                    key=lambda m: (m.content, type(m).__name__),
-                )
-                n_cfg = session.get_singleton(agent_node_config.NodeConfig)
-                rw_names = ", ".join(
-                    sorted(f.short_name for f in n_cfg.read_write_files)
-                )
+                is_multi_node = len(dirty_nodes) > 1
 
-                for msg in messages_sorted:
-                    if isinstance(msg, dag_storage.Feedback):
-                        body = f"Fix {rw_names} based on feedback: {msg.content}"
-                        hist.append_message(
-                            agent_conversation.Message(role="user", content=body)
-                        )
+                guide_instruction = ""
+                if guide_short_name is not None:
+                    if n_cfg.is_step_mode:
+                        # Requirement: Task prompt instructions for a guided node include directing the agent to call advance without arguments to view each guide step and omit a change summary until all guide steps are complete when guide step mode is active.
+                        guide_instruction = "Call advance() without arguments to view each guide step. Do not supply change_summary until all guide steps are complete."
                     else:
-                        prefix = f"Incoming {type(msg).__name__.lower()}"
-                        body = f"{prefix}: {msg.content}" if msg.content else prefix
+                        # Requirement: Task prompt instructions for a guided node include identifying the guide file by its file alias and directing the agent to call the submit tool with a change summary describing modifications when complete, or call submit without arguments if no workspace files were modified, when guide step mode is inactive.
+                        guide_instruction = f"The guide is in file {guide_short_name}. Call submit with a change summary describing modifications when complete, or call submit without arguments if no workspace files were modified."
+
+                # Requirement: When cleaning multiple nodes, the task prompt enumerates each target file identified by its file alias alongside its task prompt.
+                # Requirement: The task prompt is formatted using the template formatter.
+                prompt_template = (
+                    "<!-- if: is_multi_node -->\n"
+                    "Process the following files:\n"
+                    "<!-- for: node in nodes -->\n"
+                    "- `<node.src_alias>`: <node.task_prompt>\n"
+                    "<!-- endfor -->\n"
+                    "<!-- endif -->\n"
+                    "<!-- if: not_multi_node -->\n"
+                    "<primary_prompt>\n"
+                    "<!-- endif -->\n"
+                    "<!-- if: has_guide -->\n"
+                    "\n"
+                    "<guide_instruction>\n"
+                    "<!-- endif -->"
+                )
+                primary_prompt = (
+                    node_items[0]["task_prompt"] if node_items else ""
+                )
+                rendered_prompt = formatter.format_template(
+                    prompt_template,
+                    {
+                        "is_multi_node": is_multi_node,
+                        "not_multi_node": not is_multi_node,
+                        "nodes": node_items,
+                        "primary_prompt": primary_prompt,
+                        "has_guide": bool(guide_instruction),
+                        "guide_instruction": guide_instruction,
+                    },
+                ).strip()
+
+                hist.append_message(
+                    agent_conversation.Message(
+                        role="user", content=rendered_prompt
+                    )
+                )
+
+                # Requirement: The conversation is initialized with startup context comprising the node definition and task prompt retrieved from graph storage for dirty nodes, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox formatted with synthetic tool requests and captured responses.
+                # Requirement: Incoming feedback and change messages are formatted per target node identified by its file alias, prefaced with directives to fix read-write target files based on the feedback.
+                for n in dirty_nodes:
+                    target_name = n_cfg.src_file_alias_by_node.get(
+                        n
+                    ) or ", ".join(
+                        sorted(f.short_name for f in n_cfg.read_write_files)
+                    )
+                    messages_sorted = sorted(
+                        storage.get_messages(n),
+                        key=lambda m: (m.content, type(m).__name__),
+                    )
+                    for msg in messages_sorted:
+                        if isinstance(msg, dag_storage.Feedback):
+                            body = f"Fix {target_name} based on feedback: {msg.content}"
+                        else:
+                            prefix = f"Incoming {type(msg).__name__.lower()}"
+                            if is_multi_node:
+                                body = (
+                                    f"{prefix} for {target_name}: {msg.content}"
+                                    if msg.content
+                                    else f"{prefix} for {target_name}"
+                                )
+                            else:
+                                body = (
+                                    f"{prefix}: {msg.content}"
+                                    if msg.content
+                                    else prefix
+                                )
                         hist.append_message(
-                            agent_conversation.Message(role="user", content=body)
+                            agent_conversation.Message(
+                                role="user", content=body
+                            )
                         )
 
-                # Requirement: The conversation is seeded with the task prompt, node definition, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox.
-                for i, startup_exec in enumerate(sb.get_startup_tool_executions()):
+                for i, startup_exec in enumerate(
+                    sb.get_startup_tool_executions()
+                ):
                     hist.append_tool_response(
                         response=startup_exec.response,
                         tool_name=startup_exec.tool_name,
@@ -130,18 +222,22 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
                 self._last_outcome = outcome
 
                 messages: Set[dag_storage.Message] = set()
-                # Requirement: Resolving the dirty node produces no propagating messages when the outcome signals run failure, leaving the node dirty and communicating that processing cannot continue.
+                # Requirement: Resolving dirty nodes produces no propagating messages when the outcome signals run failure, leaving the nodes dirty and communicating that processing cannot continue.
                 if not outcome.is_success:
                     return messages
 
-                content = outcome.response.content if outcome.response else ""
-                # Requirement: Resolving the dirty node produces feedback messages containing the blame explanation and addressed to the blamed dependency node owning the blamed file when the outcome signals blame attributed to that dependency node.
+                content = (
+                    outcome.response.content if outcome.response else ""
+                )
+                # Requirement: Resolving dirty nodes produces feedback messages containing the blame explanation and addressed to the blamed dependency node owning the blamed file when the outcome signals blame attributed to that dependency node.
                 if content.startswith("Blamed "):
                     blame_target_str = ""
                     blame_exp = ""
                     after_blamed = content[len("Blamed ") :]
                     if ": " in after_blamed:
-                        blame_target_str, blame_exp = after_blamed.split(": ", 1)
+                        blame_target_str, blame_exp = after_blamed.split(
+                            ": ", 1
+                        )
                         blame_target_str = blame_target_str.strip()
                         blame_exp = blame_exp.strip()
                     else:
@@ -184,13 +280,13 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
                             content=blame_exp or content, target=blamed_node
                         )
                     )
-                # Requirement: Resolving the dirty node produces change messages for downstream dependent nodes when the outcome signals successful advancement with workspace file modifications, and no change messages or change summaries when no workspace files were modified.
+                # Requirement: Resolving dirty nodes produces change messages for downstream dependent nodes when the outcome signals successful advancement with workspace file modifications, and no change messages or change summaries when no workspace files were modified.
                 elif sb.has_modifications:
                     messages.add(dag_storage.Change())
 
                 return messages
 
-        # Requirement: The node cleaner cleans a dirty node within an agent session phase where the cleaned node presents the node currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
+        # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the cleaned nodes present the nodes currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
         for attempt in range(2):
             try:
                 return _execute_session()
@@ -199,36 +295,37 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
                     raise
         return set()  # pragma: no cover (assumption: unreachable statement after 2-iteration retry loop)
 
-    def clean(self, node: dag_storage.Node) -> bool:
+    def clean(self, nodes: Sequence[dag_storage.Node]) -> bool:
         storage = get_singleton(agent_storage.AgentStorage)
-        msgs = self.clean_node(node)
+        msgs = self.clean_nodes(nodes)
         if self._last_outcome is not None and not self._last_outcome.is_success:
-            # Requirement: Resolving the dirty node produces no propagating messages when the outcome signals run failure, leaving the node dirty and communicating that processing cannot continue.
-            # Requirement: [NodeCleaner] Processing cannot continue only if a failure occurs while cleaning the node that cannot be handled by cleaning any other node.
-            if not storage.is_dirty(node):
-                storage.add_message(dag_storage.Feedback(), to=node)
+            # Requirement: Resolving dirty nodes produces no propagating messages when the outcome signals run failure, leaving the nodes dirty and communicating that processing cannot continue.
+            # Requirement: [NodeCleaner] Processing cannot continue only if a failure occurs while cleaning the nodes that cannot be handled by cleaning any other node.
+            for node in nodes:
+                if not storage.is_dirty(node):
+                    storage.add_message(dag_storage.Feedback(), to=node)
             return False
 
-        # Requirement: Cleaning a dirty node registers the node as a dependent to its non-silent dependencies in graph storage, delivering resulting change messages to downstream dependents and feedback messages to their addressed dependency node.
-        storage.register_dependent(node)
+        # Requirement: Cleaning dirty nodes registers the nodes as dependents to their non-silent dependencies in graph storage, delivering resulting change messages to downstream dependents and feedback messages to their addressed dependency node.
+        for node in nodes:
+            storage.register_dependent(node)
+            storage.clear_messages(node)
 
-        storage.clear_messages(node)
-
-        # Requirement: Cleaning a dirty node registers the node as a dependent to its non-silent dependencies in graph storage, delivering resulting change messages to downstream dependents and feedback messages to their addressed dependency node.
+        # Requirement: Cleaning dirty nodes registers the nodes as dependents to their non-silent dependencies in graph storage, delivering resulting change messages to downstream dependents and feedback messages to their addressed dependency node.
         for m in msgs:
             if isinstance(m, dag_storage.Change):
-                for dependent in storage.get_dependents(node):
-                    storage.add_message(m, to=dependent)
+                for node in nodes:
+                    for dependent in storage.get_dependents(node):
+                        storage.add_message(m, to=dependent)
             elif isinstance(m, dag_storage.Feedback):
                 if m.target is not None:
                     storage.add_message(m, to=m.target)
                 else:
-                    for dependency in storage.get_dependencies(
-                        node
-                    ):  # pragma: no cover (assumption: feedback messages always specify an addressed target)
-                        storage.add_message(m, to=dependency.node)
+                    for node in nodes:
+                        for dependency in storage.get_dependencies(node):
+                            storage.add_message(m, to=dependency.node)
 
-        # Requirement: [NodeCleaner] Cleaning a dirty node communicates whether processing should continue.
+        # Requirement: [NodeCleaner] Cleaning dirty nodes communicates whether processing should continue.
         return True
 
 
@@ -240,7 +337,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         tier="system",
     )
     reg.register_singleton(
-        CleanedNode,
-        keys=[CleanedNode, dag_node_cleaner.CleanedNode],
+        CleanedNodes,
+        keys=[CleanedNodes, dag_node_cleaner.CleanedNodes],
         tier="agent_session",
     )

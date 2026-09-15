@@ -53,12 +53,12 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "agent_node_cleaner_impl",
-    module_deps = [':agent_conversation', ':agent_driver', ':agent_node_config', ':agent_storage', '//update_with_ai/parts/dag:dag_node_cleaner', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/sandbox:sandbox'],
+    module_deps = [':agent_conversation', ':agent_driver', ':agent_node_config', ':agent_storage', '//update_with_ai/parts/dag:dag_node_cleaner', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/sandbox:sandbox', '//update_with_ai/parts/sandbox:template_format'],
 )
 
 update_python_with_ai(
     name = "agent_node_config",
-    module_deps = [':agent_config', ':agent_file_alias'],
+    module_deps = [':agent_config', ':agent_file_alias', '//update_with_ai/parts/dag:dag_storage'],
 )
 
 update_python_with_ai(

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Any, List, Mapping, Optional, Protocol, Sequence, Set, Tuple
+from update_with_ai.parts.dag.lib import dag_storage
 from . import agent_file_alias
 
 
@@ -54,7 +55,20 @@ class NodeConfig(Protocol):
     def blame_targets(self) -> Set[agent_file_alias.BoundFile]: ...
 
     @property
+    def blame_targets_by_node(
+        self,
+    ) -> Mapping[dag_storage.Node, Set[agent_file_alias.BoundFile]]: ...
+
+    @property
     def verification_checks(self) -> Sequence[VerificationCheck]: ...
+
+    @property
+    def verification_checks_by_node(
+        self,
+    ) -> Mapping[dag_storage.Node, Sequence[VerificationCheck]]: ...
+
+    @property
+    def src_file_alias_by_node(self) -> Mapping[dag_storage.Node, str]: ...
 
     @property
     def verification_success_message(self) -> Optional[str]: ...

@@ -78,7 +78,7 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "sandbox_run_control_impl",
-    module_deps = ['//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', ':sandbox_file_editor', ':sandbox_guide_delivery', ':sandbox_run_control', ':tool_provider'],
+    module_deps = ['//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', ':sandbox_file_editor', ':sandbox_guide_delivery', ':sandbox_run_control', ':template_format', ':tool_provider'],
 )
 
 update_python_with_ai(

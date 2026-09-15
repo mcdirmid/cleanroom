@@ -15,18 +15,36 @@ class AdvanceTool(tool_provider.Tool, Protocol):
     pass
 
 
-class FinishTool(tool_provider.Tool, Protocol):
+class SubmitTool(tool_provider.Tool, Protocol):
+    @property
+    def target(self) -> tool_provider.Parameter: ...
+
     @property
     def change_summary(self) -> tool_provider.Parameter: ...
 
 
+FinishTool = SubmitTool
+
+
 class FailTool(tool_provider.Tool, Protocol):
-    pass
+    @property
+    def target(self) -> tool_provider.Parameter: ...
+
+    @property
+    def explanation(self) -> tool_provider.Parameter: ...
 
 
 class BlameTool(tool_provider.Tool, Protocol):
-    pass
+    @property
+    def target(self) -> tool_provider.Parameter: ...
+
+    @property
+    def blame_target(self) -> tool_provider.Parameter: ...
+
+    @property
+    def explanation(self) -> tool_provider.Parameter: ...
 
 
 class RunTestsTool(tool_provider.Tool, Protocol):
-    pass
+    @property
+    def target(self) -> tool_provider.Parameter: ...

@@ -85,6 +85,7 @@ def _model_config_impl(ctx):
         "edit_followup_read": ctx.attr.edit_followup_read,
         "edit_delta_output": ctx.attr.edit_delta_output,
         "node_visit_limit": ctx.attr.node_visit_limit,
+        "batch_size": ctx.attr.batch_size,
     }
 
     # Python module: json-encoded strings are valid Python string literals.
@@ -93,7 +94,7 @@ def _model_config_impl(ctx):
                 "max_iterations", "temperature", "timeout", "max_tokens",
                 "session_start_reads", "do_step_mode", "step_sections", "inject_followups",
                 "edit_followup_read", "edit_delta_output",
-                "node_visit_limit"):
+                "node_visit_limit", "batch_size"):
         entries.append('    "{}": {},'.format(key, _py_literal(config[key])))
 
     py_content = "\n".join(
@@ -192,6 +193,10 @@ _model_config = rule(
         "node_visit_limit": attr.int(
             default = 500,
             doc = "Bound on the maximum number of times any node can be visited during dag cleaning.",
+        ),
+        "batch_size": attr.int(
+            default = 1,
+            doc = "Maximum number of dirty nodes belonging to the same role to process together in an agent session. Defaults to 1.",
         ),
     },
 )

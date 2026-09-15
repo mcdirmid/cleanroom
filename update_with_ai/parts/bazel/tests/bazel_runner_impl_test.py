@@ -99,7 +99,7 @@ class MockDagCleaner(dag_cleaner.DagCleaner):
         if self.should_fail:
             raise RuntimeError("Simulated cleaner failure")
         self.cleaned_nodes.append(node)
-        cleaner.clean(node)
+        cleaner.clean([node])
         self.storage.dirty_nodes.discard(node)
 
 
@@ -109,8 +109,8 @@ class MockNodeCleaner(dag_node_cleaner.NodeCleaner):
     def __init__(self) -> None:
         self.cleaned_targets: list[dag_storage.Node] = []
 
-    def clean(self, node: dag_storage.Node) -> bool:
-        self.cleaned_targets.append(node)
+    def clean(self, nodes: Sequence[dag_storage.Node]) -> bool:
+        self.cleaned_targets.extend(nodes)
         return True
 
 
