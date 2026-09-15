@@ -64,7 +64,6 @@ GROUNDING_ARGUMENT:
 """
         ...
 
-
 @singleton_type('agent_session')
 class CleanedNodes(dag_node_cleaner.CleanedNodes):
     """

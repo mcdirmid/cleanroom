@@ -2,7 +2,6 @@ from typing import Set
 from framework import operation, override, singleton_type
 import agent_config
 import agent_file_alias
-import filesystem_ext
 import agent_node_config
 import sandbox_file_editor
 import template_format
@@ -37,6 +36,60 @@ INHERITED_REQUIREMENTS:
 
 GROUNDING_ARGUMENT:
 - Internal session state comparing current file content against initial content recorded before editing tools modify workspace files.
+"""
+        ...
+
+    @property
+    @override
+    def locked_files(self) -> Set[agent_file_alias.ReadWriteFile]:
+        """
+PURPOSE:
+Exposes read-write files locked against modification
+
+FRESH_REQUIREMENTS:
+- The edit manager exposes read-write files locked against modification.
+
+INHERITED_REQUIREMENTS:
+- [EditManager] The edit manager exposes read-write files locked against modification.
+
+GROUNDING_ARGUMENT:
+- Set maintained on self tracking read-write files locked against modification during the session.
+"""
+        ...
+
+    @operation
+    @override
+    def lock_file(self, file: agent_file_alias.ReadWriteFile) -> None:
+        """
+PURPOSE:
+Locks a read-write file against modification
+
+FRESH_REQUIREMENTS:
+- The edit manager supports locking individual read-write files against modification.
+
+INHERITED_REQUIREMENTS:
+- [EditManager] The edit manager supports locking individual read-write files against modification.
+
+GROUNDING_ARGUMENT:
+- Adds specified read-write file to internal set on self.
+"""
+        ...
+
+    @operation
+    @override
+    def unlock_file(self, file: agent_file_alias.ReadWriteFile) -> None:
+        """
+PURPOSE:
+Unlocks a read-write file to allow modification
+
+FRESH_REQUIREMENTS:
+- The edit manager supports unlocking individual read-write files.
+
+INHERITED_REQUIREMENTS:
+- [EditManager] The edit manager supports unlocking individual read-write files.
+
+GROUNDING_ARGUMENT:
+- Discards specified read-write file from internal set on self.
 """
         ...
 
@@ -229,6 +282,7 @@ Implements execute_tool to replace matching content within a read-write file
 
 FRESH_REQUIREMENTS:
 - Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+- Before modifying a file, editing tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
 - Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
 - Before modifying a file, editing tool execution fails if the target edit overlaps with auto-generated dependency imports between '# --- DO NOT EDIT: Auto-generated dependencies ---' and '# --- END DO NOT EDIT ---', reminding the agent that auto-generated dependencies are managed by the build toolchain.
 - On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and when configured to perform follow-up reads on edits, produces a response specifying a follow-up execution of the view file tool on the modified read-write file, accompanied by a reminder justifying inspecting the updated file.

@@ -124,6 +124,16 @@ class RunController(sandbox_run_control.RunController, Singleton):
                         self._node_states[n] = "BLOCKED"
                         to_check.append(n)
 
+    def lock_node_files(self, node: dag_storage.Node) -> None:
+        self._ensure_nodes()
+        edit_mgr = get_singleton(sandbox_file_editor.EditManager)
+        cfg = get_singleton(agent_node_config.NodeConfig)
+        target_alias = self.get_alias_for_node(node)
+        for f in cfg.read_write_files:
+            if isinstance(f, agent_file_alias.ReadWriteFile):
+                if f.short_name == target_alias or (hasattr(f, "owning_node") and f.owning_node == node):
+                    edit_mgr.lock_file(f)
+
     def initialize(self) -> None:
         # Requirement: The run controller unconditionally installs the submit tool, fail tool, and run tests tool for the agent session, installs the advance tool only when guide step mode is active, and obtains configured blame targets and verification checks from the node config, installing the blame tool only when blame targets are configured.
         # Requirement: Verification checks exposed by the run controller include the session verification checks from node config.
@@ -491,8 +501,9 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
                 suppression_key="submit",
             )
 
-        # Requirement: Tool execution marks the target as submitted, and produces a terminating response indicating that the session completed successfully when all session targets are resolved, or produces a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
+        # Requirement: Tool execution marks the target as submitted, locks the target read-write files in the edit manager against modification, and produces a terminating response indicating that the session completed successfully when all session targets are resolved, or produces a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
         rc.set_node_state(target_node, "SUBMITTED")
+        rc.lock_node_files(target_node)
         open_nodes = rc.open_nodes()
 
         if open_nodes:
@@ -582,7 +593,9 @@ class FailTool(sandbox_run_control.FailTool, Singleton):
             target_node = rc.get_node_for_alias(target_str) or rc.nodes[0]
 
         target_alias = rc.get_alias_for_node(target_node)
+        # Requirement: Executing the fail tool marks the target as failed, locks the target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response carrying the explanation when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
         rc.set_node_state(target_node, "FAILED")
+        rc.lock_node_files(target_node)
         rc.block_dependents(target_node)
 
         open_nodes = rc.open_nodes()
@@ -705,10 +718,11 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
                 reminder="Only upstream files configured as blame targets can be blamed.",
             )
 
-        # Requirement: On successful blame tool execution, the response marks the target as blamed and in-session dependent targets as blocked, producing a terminating response attributing defect feedback to the blame target owning node when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
+        # Requirement: On successful blame tool execution, the response marks the submitted target of the blame as resolved, locks the submitted target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response attributing defect feedback to the blame target owning node when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
         target_name = matched_target.short_name
         source_alias = rc.get_alias_for_node(source_node)
-        rc.set_node_state(source_node, "BLAMED")
+        rc.set_node_state(source_node, "BLAME")
+        rc.lock_node_files(source_node)
         rc.block_dependents(source_node)
 
         open_nodes = rc.open_nodes()

@@ -94,6 +94,39 @@ FRESH_REQUIREMENTS:
 """
         ...
 
+    @property
+    def locked_files(self) -> Set[agent_file_alias.ReadWriteFile]:
+        """
+PURPOSE:
+Exposes read-write files locked against modification
+
+FRESH_REQUIREMENTS:
+- The edit manager exposes read-write files locked against modification.
+"""
+        ...
+
+    @operation
+    def lock_file(self, file: agent_file_alias.ReadWriteFile) -> None:
+        """
+PURPOSE:
+Locks a read-write file against modification
+
+FRESH_REQUIREMENTS:
+- The edit manager supports locking individual read-write files against modification.
+"""
+        ...
+
+    @operation
+    def unlock_file(self, file: agent_file_alias.ReadWriteFile) -> None:
+        """
+PURPOSE:
+Unlocks a read-write file to allow modification
+
+FRESH_REQUIREMENTS:
+- The edit manager supports unlocking individual read-write files.
+"""
+        ...
+
     @operation
     def materialize_templates(self) -> None:
         """

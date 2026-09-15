@@ -13,13 +13,15 @@ Unchecked modifications to source code can introduce partial edits, exceed LLM w
 
 ## Types and Behavior
 
-The edit manager provides the replace file content tool for the agent session. Materializing templates retrieves configured templates from the node config, formats initial template content using the template formatter with session template parameters, checks whether target files exist in the filesystem at the host path formed from the alias manager workspace root and the read-write file workspace path, and writes formatted template content for missing files while preserving existing files. The edit manager exposes whether workspace file modifications occurred during the session by comparing current workspace file content against initial content before editing, and tracks a file update revision that increments whenever workspace files are updated. Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
+The edit manager provides the replace file content tool for the agent session. Materializing templates retrieves configured templates from the node config, formats initial template content using the template formatter with session template parameters, checks whether target files exist in the filesystem at the host path formed from the alias manager workspace root and the read-write file workspace path, and writes formatted template content for missing files while preserving existing files. The edit manager exposes whether workspace file modifications occurred during the session by comparing current workspace file content against initial content before editing, tracks a file update revision that increments whenever workspace files are updated, and exposes read-write files locked against modification, supporting locking and unlocking individual read-write files. Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
 
 Editing tools modify read-write files in the workspace.
 
 Before modifying a file, editing tool execution fails if:
 
 - The file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+
+- The file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
 
 - The edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
 

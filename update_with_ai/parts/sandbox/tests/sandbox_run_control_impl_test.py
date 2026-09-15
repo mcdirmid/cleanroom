@@ -228,6 +228,17 @@ class MockEditManager:
     ) -> None:
         self.has_modifications = has_modifications
         self.file_update_revision = file_update_revision
+        self._locked_files: Set[Any] = set()
+
+    @property
+    def locked_files(self) -> Set[Any]:
+        return set(self._locked_files)
+
+    def lock_file(self, file: Any) -> None:
+        self._locked_files.add(file)
+
+    def unlock_file(self, file: Any) -> None:
+        self._locked_files.discard(file)
 
     def materialize_templates(self) -> None:
         pass
@@ -763,7 +774,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (blame_tool.explanation, "Broken type signature"),
                 }
             )
-            # Requirement: On successful blame tool execution, the response marks the target as blamed and in-session dependent targets as blocked, producing a terminating response attributing defect feedback to the blame target owning node when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
+            # Requirement: On successful blame tool execution, the response marks the submitted target of the blame as resolved, locks the submitted target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response attributing defect feedback to the blame target owning node when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
             resp_val = blame_tool.execute_tool(b_valid)
             self.assertFalse(resp_val.is_failed)
             self.assertTrue(resp_val.is_terminated)
@@ -776,7 +787,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (blame_tool.explanation, "Legacy blame call"),
                 }
             )
-            # Requirement: On successful blame tool execution, the response marks the target as blamed and in-session dependent targets as blocked, producing a terminating response attributing defect feedback to the blame target owning node when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
+            # Requirement: On successful blame tool execution, the response marks the submitted target of the blame as resolved, locks the submitted target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response attributing defect feedback to the blame target owning node when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
             resp_leg = blame_tool.execute_tool(b_legacy)
             self.assertFalse(resp_leg.is_failed)
             self.assertTrue(resp_leg.is_terminated)
@@ -889,7 +900,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIn("Failed: Failed unit 3", resp2.content)
 
     def test_multi_node_blame_blocks_dependents_and_terminates(self) -> None:
-        """CUJ: Multi-node blame marks target BLAMED, dependents BLOCKED, and terminates when no open nodes remain."""
+        """CUJ: Multi-node blame marks target BLAME, dependents BLOCKED, and terminates when no open nodes remain."""
         node1 = Node(unit_address="//pkg:b_unit1", role_address="lib")
         node2 = Node(unit_address="//pkg:b_unit2", role_address="lib")
         node3 = Node(unit_address="//pkg:b_unit3", role_address="lib")
@@ -899,6 +910,17 @@ class SandboxRunControlImplTest(unittest.TestCase):
             node3: "b_unit3.py",
         }
         self.storage.dependencies[node2] = {Dependency(node=node1)}
+        b_rw1 = ReadWriteFile(
+            short_name="b_unit1.py",
+            workspace_path=_make_workspace_path("pkg/b_unit1.py"),
+            owning_node=node1,
+        )
+        b_rw3 = ReadWriteFile(
+            short_name="b_unit3.py",
+            workspace_path=_make_workspace_path("pkg/b_unit3.py"),
+            owning_node=node3,
+        )
+        self.node_cfg._read_write_files = {b_rw1, b_rw3}
         bt = ReadOnlyFile(
             short_name="upstream_spec.md",
             workspace_path=_make_workspace_path("pkg/upstream_spec.md"),
@@ -922,7 +944,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             resp_bad = blame_tool.execute_tool(b_bad)
             self.assertTrue(resp_bad.is_failed)
 
-            # Blame node1 with valid target: marks node1 BLAMED, blocks node2. node3 remains open -> non-terminating!
+            # Blame node1 with valid target: marks node1 BLAME, blocks node2. node3 remains open -> non-terminating!
             b_ok = ActualParameterBindings(
                 bindings={
                     (blame_tool.target, TargetFileObj("b_unit1.py")),
@@ -930,13 +952,16 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (blame_tool.explanation, "Spec defect"),
                 }
             )
-            # Requirement: On successful blame tool execution, the response marks the target as blamed and in-session dependent targets as blocked, producing a terminating response attributing defect feedback to the blame target owning node when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
+            # Requirement: On successful blame tool execution, the response marks the submitted target of the blame as resolved, locks the submitted target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response attributing defect feedback to the blame target owning node when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
             resp_ok = blame_tool.execute_tool(b_ok)
             self.assertFalse(resp_ok.is_failed)
             self.assertFalse(resp_ok.is_terminated)
-            self.assertEqual(rc.get_node_state(node1), "BLAMED")
+            self.assertEqual(rc.get_node_state(node1), "BLAME")
             self.assertEqual(rc.get_node_state(node2), "BLOCKED")
             self.assertEqual(rc.get_node_state(node3), "OPEN")
+            self.assertIn(b_rw1, self.edit_mgr.locked_files)
+            self.assertNotIn(b_rw3, self.edit_mgr.locked_files)
+            self.assertNotIn(bt, self.edit_mgr.locked_files)
             self.assertIn("Target `b_unit1.py` blamed `upstream_spec.md`: Spec defect", resp_ok.content)
             self.assertIn("- `b_unit3.py`", resp_ok.content)
 
@@ -948,11 +973,13 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (blame_tool.explanation, "Spec defect 3"),
                 }
             )
-            # Requirement: On successful blame tool execution, the response marks the target as blamed and in-session dependent targets as blocked, producing a terminating response attributing defect feedback to the blame target owning node when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
+            # Requirement: On successful blame tool execution, the response marks the submitted target of the blame as resolved, locks the submitted target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response attributing defect feedback to the blame target owning node when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
             resp_ok3 = blame_tool.execute_tool(b_ok3)
             self.assertFalse(resp_ok3.is_failed)
             self.assertTrue(resp_ok3.is_terminated)
-            self.assertEqual(rc.get_node_state(node3), "BLAMED")
+            self.assertEqual(rc.get_node_state(node3), "BLAME")
+            self.assertIn(b_rw3, self.edit_mgr.locked_files)
+            self.assertNotIn(bt, self.edit_mgr.locked_files)
             self.assertIn("Blamed upstream_spec.md: Spec defect 3", resp_ok3.content)
 
     def test_run_tests_with_target_parameter(self) -> None:

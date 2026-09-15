@@ -354,7 +354,11 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                 history.append_message(
                     agent_conversation.Message(
                         role="user",
-                        content="Response was truncated due to length. Please continue.",
+                        content=(
+                            "Generation limit reached: response was truncated due to length. "
+                            "Whole-file or monolithic replacements that exceed output token limits are prohibited. "
+                            "Make small, incremental edits to individual classes, methods, or sections using replace_file_content."
+                        ),
                     )
                 )
                 continue

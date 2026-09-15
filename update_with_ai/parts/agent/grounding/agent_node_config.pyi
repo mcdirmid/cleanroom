@@ -197,9 +197,7 @@ FRESH_REQUIREMENTS:
         ...
 
     @property
-    def blame_targets_by_node(
-        self,
-    ) -> Mapping[dag_storage.Node, Set[agent_file_alias.BoundFile]]:
+    def blame_targets_by_node(self) -> Mapping[dag_storage.Node, Set[agent_file_alias.BoundFile]]:
         """
 PURPOSE:
 Bound files owned by upstream dependency nodes eligible for defect attribution mapped by session node
@@ -221,9 +219,7 @@ FRESH_REQUIREMENTS:
         ...
 
     @property
-    def verification_checks_by_node(
-        self,
-    ) -> Mapping[dag_storage.Node, Sequence[VerificationCheck]]:
+    def verification_checks_by_node(self) -> Mapping[dag_storage.Node, Sequence[VerificationCheck]]:
         """
 PURPOSE:
 Session verification checks mapped by session node

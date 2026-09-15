@@ -489,6 +489,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             self.assertEqual(self.history.messages[0].role, "assistant")
             self.assertEqual(self.history.messages[1].role, "user")
             self.assertIn("truncated due to length", self.history.messages[1].content)
+            self.assertIn("replace_file_content", self.history.messages[1].content)
             self.assertEqual(self.history.messages[2].role, "assistant")
             self.assertEqual(self.history.messages[3].role, "tool")
 

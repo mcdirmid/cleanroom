@@ -1,5 +1,15 @@
+# --- DO NOT EDIT: Auto-generated dependencies ---
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+import update_with_ai.parts.agent.lib.agent_config as agent_config
+import update_with_ai.parts.agent.lib.agent_file_alias as agent_file_alias
+import update_with_ai.parts.agent.lib.agent_node_config as agent_node_config
+from . import sandbox_file_editor
+from . import template_format
+from . import tool_provider
+# --- END DO NOT EDIT ---
 import difflib
 import os
+import subprocess
 from typing import Optional, Set
 from update_with_ai.parts.agent.lib import agent_config
 from update_with_ai.parts.agent.lib import agent_file_alias
@@ -40,6 +50,23 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
     def __init__(self) -> None:
         self._initial_contents: dict[str, Optional[str]] = {}
         self._file_update_revision: int = 0
+        self._locked_files: set[agent_file_alias.ReadWriteFile] = set()
+
+    @property
+    def locked_files(self) -> Set[agent_file_alias.ReadWriteFile]:
+        # Requirement: The edit manager exposes read-write files locked against modification.
+        # Requirement: [EditManager] The edit manager exposes read-write files locked against modification.
+        return set(self._locked_files)
+
+    def lock_file(self, file: agent_file_alias.ReadWriteFile) -> None:
+        # Requirement: The edit manager supports locking individual read-write files against modification.
+        # Requirement: [EditManager] The edit manager supports locking individual read-write files against modification.
+        self._locked_files.add(file)
+
+    def unlock_file(self, file: agent_file_alias.ReadWriteFile) -> None:
+        # Requirement: The edit manager supports unlocking individual read-write files.
+        # Requirement: [EditManager] The edit manager supports unlocking individual read-write files.
+        self._locked_files.discard(file)
 
     def initialize(self) -> None:
         # Requirement: The edit manager unconditionally installs the replace file content tool into the tool manager.
@@ -98,6 +125,7 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         formatter = get_singleton(template_format.TemplateFormatter)
 
+        materialized_paths: list[str] = []
         for bound_file, content in cfg.templates:
             host_path = os.path.join(
                 alias_mgr.workspace_root.path, bound_file.workspace_path.path
@@ -109,7 +137,22 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
                 )
                 with open(host_path, "w", encoding="utf-8") as f:
                     f.write(formatted_content)
-                self.record_initial_content(host_path, formatted_content)
+                materialized_paths.append(host_path)
+
+        if materialized_paths:
+            for check in getattr(cfg, "verification_checks", []):
+                try:
+                    check.verify()
+                except (subprocess.SubprocessError, OSError, RuntimeError):
+                    pass
+
+        for host_path in materialized_paths:
+            try:
+                with open(host_path, "r", encoding="utf-8") as f:
+                    actual_content = f.read()
+            except OSError:
+                actual_content = None
+            self.record_initial_content(host_path, actual_content)
 
 
 class ReplaceFileContentTool(
@@ -127,7 +170,11 @@ class ReplaceFileContentTool(
 
     @property
     def description(self) -> str:
-        return "Replaces target content in a read-write file within an optional line range."
+        return (
+            "Replaces target content in a read-write file within an optional line range. "
+            "Edits must be small and targeted (such as a single function, method, or class at a time); "
+            "whole-file or monolithic replacements are prohibited."
+        )
 
     @property
     def file_alias_parameter(self) -> tool_provider.Parameter:
@@ -236,6 +283,17 @@ class ReplaceFileContentTool(
                 is_terminated=False,
                 content=f"Error: {target_file} is not a read-write file.",
                 reminder="Only declared read-write files can be modified.",
+            )
+
+        edit_mgr = get_singleton(EditManager)
+        # Requirement: Before modifying a file, editing tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
+        if target_file in edit_mgr.locked_files:
+            return tool_provider.Response(
+                is_failed=True,
+                is_terminated=False,
+                content=f"Error: `{target_file.short_name}` has been locked against further modification.",
+                reminder="Files that have been the target of a submit, fail, or blame cannot be modified.",
+                suppression_key=target_file.short_name,
             )
 
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
@@ -377,7 +435,7 @@ class ReplaceFileContentTool(
             cfg = get_singleton(agent_config.AgentConfig)
             followup_read = cfg.edit_followup_read
             delta_output = cfg.edit_delta_output
-        except Exception:
+        except (LookupError, KeyError, AttributeError):
             followup_read = True
             delta_output = False
 

@@ -100,20 +100,20 @@ model_config(
     temperature = "0.7",
     timeout_seconds = "100.0",
     api_key_env = "OPENAI_API_KEY",
-    # so spiraling is detected quickly.
     max_tokens = 4096,
+    batch_size = 2,
 )
 
 model_config(
-    name = "qwen-flash-next-q3",
-    model = "Qwen3.8-Flash-Next-Q3",
+    name = "qwen-flash-next-q2",
+    model = "Qwen3.8-Flash-Next-MLX-oQ2",
     base_url = "http://localhost:8000/v1",
     max_iterations = 100,
     temperature = "0.7",
     timeout_seconds = "100.0",
     api_key_env = "OPENAI_API_KEY",
-    # so spiraling is detected quickly.
     max_tokens = 4096,
+    batch_size = 2,
 )
 
 
@@ -122,6 +122,6 @@ model_config(
 # be selected at run time. Add personal configs to this list.
 filegroup(
     name = "all_configs",
-    srcs = [":qwen-moe-q6", ":qwen-moe-q4", ":coder-next-reap", ":coder-next", ":qwen-dense-q4"],
+    srcs = [":qwen-moe-q6", ":qwen-moe-q4", ":coder-next-reap", ":coder-next", ":qwen-dense-q4", ":qwen-flash-next-q2"],
     visibility = ["//visibility:public"],
 )

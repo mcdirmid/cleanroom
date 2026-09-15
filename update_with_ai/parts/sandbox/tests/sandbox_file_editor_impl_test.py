@@ -4,10 +4,9 @@ import os
 import shutil
 import tempfile
 import unittest
-from unittest.mock import patch
-from typing import Any, Mapping, Optional, Set, Tuple
+from unittest.mock import MagicMock, patch
+from typing import Any, Mapping, Optional, Sequence, Set, Tuple
 
-from update_with_ai.parts.dag.lib.dag_storage import Node
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.agent.lib.agent_file_alias import (
     AliasManager,
@@ -148,9 +147,15 @@ class MockNodeConfig:
         self,
         templates: Set[Tuple[BoundFile, FileContent]],
         template_parameters: Optional[Mapping[str, Any]] = None,
+        verification_checks: Optional[Sequence[Any]] = None,
     ) -> None:
         self._templates = templates
         self._template_parameters = template_parameters or {}
+        self._verification_checks = verification_checks or []
+
+    @property
+    def verification_checks(self) -> Sequence[Any]:
+        return self._verification_checks
 
     @property
     def template_parameters(self) -> Mapping[str, Any]:
@@ -188,7 +193,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         with open(self.target_path, "w", encoding="utf-8") as f:
             f.write("Line 1\nLine 2\nLine 3\n")
 
-        node = Node(unit_address="//pkg:edit_test")
+        node = MagicMock()
         self.rw_file = ReadWriteFile(
             short_name="file.txt",
             workspace_path=_make_workspace_path("file.txt"),
@@ -639,7 +644,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         """CUJ: ReplaceFileContentTool treats missing read-write files as empty and creates parent directories on write."""
         nested_rel = "nested/dir/missing.txt"
         nested_host = os.path.join(self.test_dir, nested_rel)
-        node = Node(unit_address="//pkg:test")
+        node = MagicMock()
         missing_rw_file = ReadWriteFile(
             short_name="missing.txt",
             workspace_path=_make_workspace_path(nested_rel),
@@ -871,6 +876,76 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertFalse(resp_outside.is_failed)
             with open(self.target_path, "r", encoding="utf-8") as f:
                 self.assertIn("    x: int = 1", f.read())
+
+    def test_materialize_templates_runs_verification_checks(self) -> None:
+        """CUJ: Running verification checks when templates are materialized."""
+        mock_check = MagicMock()
+        mock_check.verify.return_value = (True, "OK")
+        mock_failing_check = MagicMock()
+        mock_failing_check.verify.side_effect = RuntimeError("lint error")
+
+        new_rw_file = ReadWriteFile(
+            short_name="templated.txt",
+            workspace_path=_make_workspace_path("templated.txt"),
+            owning_node=MagicMock(),
+        )
+        self.node_cfg._templates.add((new_rw_file, FileContent("Initial template")))
+        self.node_cfg._verification_checks = [mock_check, mock_failing_check]
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            edit_mgr = scope.get_singleton(EditManager)
+            edit_mgr.materialize_templates()
+            mock_check.verify.assert_called_once()
+            mock_failing_check.verify.assert_called_once()
+
+            templated_host = os.path.join(self.test_dir, "templated.txt")
+            self.assertTrue(os.path.isfile(templated_host))
+            self.assertFalse(edit_mgr.has_modifications)
+
+    def test_locked_files_management(self) -> None:
+        """CUJ: Locking and unlocking read-write files in EditManager."""
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            edit_mgr = scope.get_singleton(EditManager)
+            # Requirement: The edit manager exposes read-write files locked against modification.
+            # Requirement: [EditManager] The edit manager exposes read-write files locked against modification.
+            self.assertEqual(edit_mgr.locked_files, set())
+
+            # Requirement: The edit manager supports locking individual read-write files against modification.
+            # Requirement: [EditManager] The edit manager supports locking individual read-write files against modification.
+            edit_mgr.lock_file(self.rw_file)
+            self.assertEqual(edit_mgr.locked_files, {self.rw_file})
+
+            # Requirement: The edit manager supports unlocking individual read-write files.
+            # Requirement: [EditManager] The edit manager supports unlocking individual read-write files.
+            edit_mgr.unlock_file(self.rw_file)
+            self.assertEqual(edit_mgr.locked_files, set())
+
+    def test_replace_file_content_fails_on_locked_file(self) -> None:
+        """CUJ: Replacing content fails when target file is locked against modification."""
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            edit_mgr = scope.get_singleton(EditManager)
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+
+            edit_mgr.lock_file(self.rw_file)
+
+            # Requirement: Before modifying a file, editing tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
+            bindings = ActualParameterBindings(
+                bindings={
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_content_parameter, "Line 1"),
+                    (replace_tool.replacement_content_parameter, "New Line 1"),
+                }
+            )
+            resp = replace_tool.execute_tool(bindings)
+            self.assertTrue(resp.is_failed)
+            self.assertIn("has been locked against further modification", resp.content)
+            self.assertIsNotNone(resp.reminder)
+            self.assertIn("Files that have been the target of a submit, fail, or blame cannot be modified.", resp.reminder or "")
+
+            # Unlock allows modification again
+            edit_mgr.unlock_file(self.rw_file)
+            resp_unlocked = replace_tool.execute_tool(bindings)
+            self.assertFalse(resp_unlocked.is_failed)
 
 
 if __name__ == "__main__":

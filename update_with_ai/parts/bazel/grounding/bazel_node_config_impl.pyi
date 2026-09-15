@@ -183,9 +183,7 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def blame_targets_by_node(
-        self,
-    ) -> Mapping[dag_storage.Node, Set[agent_file_alias.BoundFile]]:
+    def blame_targets_by_node(self) -> Mapping[dag_storage.Node, Set[agent_file_alias.BoundFile]]:
         """
 PURPOSE:
 Session blame targets mapped by session node
@@ -221,9 +219,7 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def verification_checks_by_node(
-        self,
-    ) -> Mapping[dag_storage.Node, Sequence[agent_node_config.VerificationCheck]]:
+    def verification_checks_by_node(self) -> Mapping[dag_storage.Node, Sequence[agent_node_config.VerificationCheck]]:
         """
 PURPOSE:
 Session verification checks mapped by session node

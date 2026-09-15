@@ -747,11 +747,50 @@ The foundation for the 2D Product DAG and Role-Based Antigravity Integration is 
   - `//update_with_ai/...` and `//update_python_with_ai/...`: **106 / 106 tests passing**.
   - `//testing/...` (ephemeral test consumer workspace synced via updated `bin/sync_testing.sh`): **104 / 104 tests passing**.
 
+### G. Multi-Node Batch Execution & Guide Harmonization
+* **Multi-Node Submission Protocol**: Harmonized all canonical Cleanroom guides (`qa.md`, `coverage.md`, `grounding_to_lib.md`, `grounding_to_test.md`, `high_to_grounding.md`, `high_level_spec.md`) to natively support multi-node batch sessions (`batch_size > 1`).
+* **Per-Target Submission & Blame**:
+  - Each target file in a batch is identified by its file alias short name.
+  - Workers and arbiters submit each completed target individually using `submit(target="<target_file>", change_summary="...")` (or `submit(target="<target_qa.log>")` for QA arbiters).
+  - In multi-target sessions, defect attribution specifies both the reporting target and the upstream target: `blame(target="...", blame_target="...", explanation="...")`.
+
+### H. QA Arbiter Scope & Separation of Concerns
+* **Strict Test-Only Responsibility**: Updated `qa.md` to establish that the QA Arbiter's sole responsibility is auditing test execution and test assertion fidelity:
+  - QA evaluates whether executed tests pass and assert declared requirements faithfully without unmandated or tautological assertions.
+  - Requirement completeness and statement coverage belong exclusively to the Coverage Arbiter. Cataloged `# Untested requirements:` comment blocks in test files are expected and are never treated as defects or blamed by QA.
+  - QA never audits or inspects library implementation code when tests pass; blame is attributed to the library module only when an executed test fails while faithfully asserting a mandated contract requirement.
+
+### I. Template Pre-Population & Clean Start State
+* **Turn 1 Dependency Injection**: Resolved the initial template dependency header gap in `sandbox_file_editor_impl.py`:
+  - When missing read-write files are instantiated from templates via `materialize_templates()`, Cleanroom executes the node's verification check once on the initial content.
+  - `ensure_dependency_header` populates all auto-generated dependency imports between `# --- DO NOT EDIT: Auto-generated dependencies ---` and `# --- END DO NOT EDIT ---` at Turn 1, ensuring the agent sees a clean, buildable module layout before making its first edit.
+
+### J. Smart Token-Truncation Recovery & Incremental Editing Mechanics
+* **Actionable Driver Recovery**: Replaced the generic `"Response was truncated due to length"` continuation prompt in `openai_driver_impl.py` with an actionable, declarative recovery directive:
+  - `"Generation limit reached: response was truncated due to length. Whole-file or monolithic replacements that exceed output token limits are prohibited. Make small, incremental edits to individual classes, methods, or sections using replace_file_content."`
+* **Incremental Editing Guidance**: Updated `ReplaceFileContentTool.description` and the `## Summary` sections of `grounding_to_lib.md` and `grounding_to_test.md` to mandate small, contiguous, modular edits, preventing runaway reasoning loops and output token limit exhaustion.
+
+### K. Empirical Multi-Target Batch Validation (`batch_size = 4`)
+* **QA Arbitration Batch Validation**: Verified end-to-end multi-target QA arbitration (`sandbox_asm_qa_clean.py`) with 4 targets (`sandbox_guide_delivery_impl_qa.log`, `sandbox_change_summary_validator_impl_qa.log`, `sandbox_run_control_impl_qa.log`, `sandbox_impl_qa.log`). All 4 targets submitted cleanly with 100% test pass, zero length truncations, and 99.8% prompt prefix reuse.
+* **Library Implementation Batch Validation**: Verified end-to-end multi-target library authoring (`sandbox_asm_lib_clean.py`) with 4 targets (`sandbox_file_editor_impl.py`, `sandbox_file_reader_impl.py`, `sandbox_guide_delivery_impl.py`, `sandbox_run_control_impl.py`). Observed smart recovery steering the agent from monolithic attempts into successful incremental edits, authoring ~60 KB of production code across 4 complex modules in a single continuous session with >95% prefix cache hit rates.
+* **Test Suite Green**: All 106 / 106 workspace Bazel tests pass with 100% statement coverage on canonical implementations.
+
+### L. Target Resolution File Locking & Reactive Feedback Unlocking
+* **Completed Target Immutability**:
+  - `EditManager` tracks locked read-write files (`locked_files: Set[str]`, `lock_file(path)`, `unlock_file(path)`).
+  - In `sandbox_run_control_impl.py`, when a target is successfully resolved via `submit`, `fail`, or `blame` (for the submitted target of the blame attributing defect feedback, explicitly preserving the blamee as external), the run controller invokes `rc.lock_node_files(target)` to lock all associated `ReadWriteFile` targets.
+  - `ReplaceFileContentTool.execute_tool` verifies target file lock status before any filesystem access or content matching. If the target file is locked, execution immediately aborts with: `"File '{target_file}' is completed and locked against further modification for this session."`
+* **Multi-Target Batch Isolation**:
+  - Prevents agents in multi-node batch sessions (`batch_size > 1`) from inadvertently modifying or clobbering previously resolved targets (files that were the target of a submit, fail, or blame) while iterating on remaining open targets.
+* **Antigravity Reactive Feedback Bridge**:
+  - In the current single-session agent loop, locked targets remain immutable for the remainder of the session.
+  - For the Antigravity integration, `EditManager.unlock_file` provides the foundation for reactive message-driven workflows: when a QA Arbiter or reviewer dispatches reactive feedback or change messages via `send_message`, the coordinator selectively unlocks the target files, allowing the assigned worker sub-agent to resume iterative refinement.
+
 ---
 
 ## 20. Remaining Work & Implementation Roadmap (Next Steps)
 
-With the underlying 2D Product DAG, pass-through roles, manifest loader, and sandbox tool hardening completed, the remaining work centers on deploying the Antigravity sub-agent orchestration layer and standalone MCP service:
+With the underlying 2D Product DAG, pass-through roles, manifest loader, sandbox tool hardening, multi-target batch execution (`batch_size = 4`), and smart truncation recovery completed and empirically validated, the remaining work centers on deploying the Antigravity sub-agent orchestration layer and standalone MCP service:
 
 ```mermaid
 flowchart TD
@@ -760,7 +799,7 @@ flowchart TD
     M3["Milestone 3: Antigravity Sub-Agent Type Registrations<br/>(define_subagent with enable_write_tools=False)"]
     M4["Milestone 4: In-Process Role Confinement & Blindness Engine<br/>(Pure Python MCP policy checks for view_file, replace_file_content)"]
     M5["Milestone 5: Triangulated QA Arbitration & Reactive Messaging<br/>(QA Arbiter blame evaluation and send_message loop with 2-retry ceiling)"]
-    M6["Milestone 6: Local Model & DeepSeek Benchmark Validation<br/>(End-to-end multi-unit cleaning verification on local/Flash models)"]
+    M6["Milestone 6: Antigravity Google One Ultra Production Rollout<br/>(End-to-end multi-unit cleaning verification inside Antigravity IDE)"]
 
     M1 --> M2 --> M3 --> M4 --> M5 --> M6
 ```
@@ -813,18 +852,9 @@ flowchart TD
   - Dispatch targeted blame messages via `send_message(Recipient=subagent_id, Message=diagnostics)` without cross-agent communication.
   - Enforce the 2-iteration feedback ceiling; escalate unresolvable failures to the human coordinator in the main chat.
 
-### Milestone 6: Local Model & DeepSeek Benchmark Validation
-* **Objective**: Validate the entire multi-unit role pipeline on non-quota-metered local models before deploying to Google One Ultra.
+### Milestone 6: Antigravity Google One Ultra Production Rollout
+* **Objective**: Deploy the full multi-unit role pipeline inside the Antigravity IDE and Desktop App.
 * **Implementation**:
-  - Run a 3-unit test subsystem (e.g. `parts/core` or a subset of `parts/agent`) through Columnar HLS $\to$ LLS $\to$ Parallel Lib/Test $\to$ QA Arbiter using DeepSeek V4.1 Flash or local llama.cpp / vLLM endpoints via `model_config.bzl`.
-  - Measure token efficiency, prompt cache hit ratios, and blame attribution accuracy.
-
-
-
-
-
-
-
-
-
-
+  - Launch Cleanroom MCP service as a registered IDE tool server.
+  - Launch `cleanroom_coordinator` in Antigravity chat to orchestrate subsystem cleaning sessions autonomously under personal Google One Ultra quota.
+  - Monitor token consumption, turn count, and subagent handoffs.
