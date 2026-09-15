@@ -16,9 +16,8 @@ pyright_library(
 pyright_library(
     name = "openai_conversation_impl",
     srcs = ["openai_conversation_impl.py"],
-deps = [],
     pyright_deps = [
-        "//update_with_ai/parts/agent/lib:agent_conversation",
+        "//update_with_ai/parts/loop/lib:loop_conversation",
         "//update_with_ai/parts/sandbox/lib:tool_provider",
     ],
     visibility = ["//visibility:public"],
@@ -27,15 +26,15 @@ deps = [],
 pyright_library(
     name = "openai_driver_impl",
     srcs = ["openai_driver_impl.py"],
-deps = [
+    deps = [
         requirement("openai"),
     ],
     pyright_deps = [
         "//update_with_ai/parts/agent/lib:agent_config",
-        "//update_with_ai/parts/agent/lib:agent_conversation",
-        "//update_with_ai/parts/agent/lib:agent_driver",
-        "//update_with_ai/parts/agent/lib:agent_loop_guard",
         "//update_with_ai/parts/core/lib:runner_logger",
+        "//update_with_ai/parts/loop/lib:loop_conversation",
+        "//update_with_ai/parts/loop/lib:loop_driver",
+        "//update_with_ai/parts/loop/lib:loop_guard",
         "//update_with_ai/parts/sandbox/lib:tool_provider",
         ":openai_config",
     ],

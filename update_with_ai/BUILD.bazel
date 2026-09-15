@@ -5,6 +5,7 @@ filegroup(
     srcs = [
         "//update_with_ai/parts/dag:high_specs",
         "//update_with_ai/parts/agent:high_specs",
+        "//update_with_ai/parts/loop:high_specs",
         "//update_with_ai/parts/sandbox:high_specs",
         "//update_with_ai/parts/bazel:high_specs",
         "//update_with_ai/parts/openai:high_specs",
@@ -19,6 +20,7 @@ filegroup(
     srcs = [
         "//update_with_ai/parts/dag:grounding_specs",
         "//update_with_ai/parts/agent:grounding_specs",
+        "//update_with_ai/parts/loop:grounding_specs",
         "//update_with_ai/parts/sandbox:grounding_specs",
         "//update_with_ai/parts/bazel:grounding_specs",
         "//update_with_ai/parts/openai:grounding_specs",

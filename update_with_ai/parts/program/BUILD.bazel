@@ -18,5 +18,5 @@ filegroup(
 
 update_python_with_ai(
     name = "program_asm",
-    module_deps = ['//update_with_ai/parts/agent:agent_asm', '//update_with_ai/parts/bazel:bazel_asm', '//update_with_ai/parts/dag:dag_asm', '//update_with_ai/parts/core:runner_logger_impl', '//update_with_ai/parts/sandbox:sandbox_asm'],
+    module_deps = ['//update_with_ai/parts/bazel:bazel_asm', '//update_with_ai/parts/core:runner_logger_impl', '//update_with_ai/parts/dag:dag_asm', '//update_with_ai/parts/loop:loop_asm', '//update_with_ai/parts/sandbox:sandbox_asm'],
 )

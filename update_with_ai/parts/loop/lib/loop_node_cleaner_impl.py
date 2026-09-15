@@ -1,23 +1,8 @@
-# --- DO NOT EDIT: Auto-generated dependencies ---
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
-from . import agent_conversation
-from . import agent_driver
-from . import agent_node_config
-from . import agent_storage
-import update_with_ai.parts.dag.lib.dag_node_cleaner as dag_node_cleaner
-import update_with_ai.parts.dag.lib.dag_storage as dag_storage
-import update_with_ai.parts.bazel.lib.file_paths as file_paths
-import update_with_ai.parts.sandbox.lib.sandbox as sandbox
-import update_with_ai.parts.sandbox.lib.sandbox_guide_delivery as sandbox_guide_delivery
-import update_with_ai.parts.sandbox.lib.sandbox_run_control as sandbox_run_control
-import update_with_ai.parts.sandbox.lib.template_format as template_format
-import update_with_ai.parts.sandbox.lib.tool_provider as tool_provider
-# --- END DO NOT EDIT ---
 from typing import Optional, Sequence, Set
-from . import agent_conversation
-from . import agent_driver
-from . import agent_node_config
-from . import agent_storage
+from . import loop_conversation
+from . import loop_driver
+from update_with_ai.parts.agent.lib import agent_node_config
+from update_with_ai.parts.agent.lib import agent_storage
 from update_with_ai.parts.dag.lib import dag_node_cleaner
 from update_with_ai.parts.dag.lib import dag_storage
 from update_with_ai.parts.sandbox.lib import sandbox
@@ -61,7 +46,7 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
     tier = "system"
 
     def __init__(self) -> None:
-        self._last_outcome: Optional[agent_driver.AgentOutcome] = None
+        self._last_outcome: Optional[loop_driver.LoopOutcome] = None
 
     def clean_nodes(
         self, nodes: Sequence[dag_storage.Node]
@@ -95,7 +80,7 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
                 sb = session.get_singleton(sandbox.Sandbox)
                 sb.materialize_startup_templates()
 
-                hist = session.get_singleton(agent_conversation.Conversation)
+                hist = session.get_singleton(loop_conversation.Conversation)
                 n_cfg = session.get_singleton(agent_node_config.NodeConfig)
                 formatter = session.get_singleton(template_format.TemplateFormatter)
 
@@ -151,9 +136,7 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
                     "<guide_instruction>\n"
                     "<!-- endif -->"
                 )
-                primary_prompt = (
-                    node_items[0]["task_prompt"] if node_items else ""
-                )
+                primary_prompt = node_items[0]["task_prompt"] if node_items else ""
                 rendered_prompt = formatter.format_template(
                     prompt_template,
                     {
@@ -167,17 +150,13 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
                 ).strip()
 
                 hist.append_message(
-                    agent_conversation.Message(
-                        role="user", content=rendered_prompt
-                    )
+                    loop_conversation.Message(role="user", content=rendered_prompt)
                 )
 
                 # Requirement: The conversation is initialized with startup context comprising the node definition and task prompt retrieved from graph storage for dirty nodes, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox formatted with synthetic tool requests and captured responses.
                 # Requirement: Incoming feedback and change messages are formatted per target node identified by its file alias, prefaced with directives to fix read-write target files based on the feedback.
                 for n in dirty_nodes:
-                    target_name = n_cfg.src_file_alias_by_node.get(
-                        n
-                    ) or ", ".join(
+                    target_name = n_cfg.src_file_alias_by_node.get(n) or ", ".join(
                         sorted(f.short_name for f in n_cfg.read_write_files)
                     )
                     messages_sorted = sorted(
@@ -202,14 +181,10 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
                                     else prefix
                                 )
                         hist.append_message(
-                            agent_conversation.Message(
-                                role="user", content=body
-                            )
+                            loop_conversation.Message(role="user", content=body)
                         )
 
-                for i, startup_exec in enumerate(
-                    sb.get_startup_tool_executions()
-                ):
+                for i, startup_exec in enumerate(sb.get_startup_tool_executions()):
                     hist.append_tool_response(
                         response=startup_exec.response,
                         tool_name=startup_exec.tool_name,
@@ -217,7 +192,7 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
                         wire_parameter_bindings=startup_exec.wire_parameter_bindings,
                     )
 
-                runner = session.get_singleton(agent_driver.AgentDriver)
+                runner = session.get_singleton(loop_driver.LoopDriver)
                 outcome = runner.run()
                 self._last_outcome = outcome
 
@@ -226,18 +201,14 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
                 if not outcome.is_success:
                     return messages
 
-                content = (
-                    outcome.response.content if outcome.response else ""
-                )
+                content = outcome.response.content if outcome.response else ""
                 # Requirement: Resolving dirty nodes produces feedback messages containing the blame explanation and addressed to the blamed dependency node owning the blamed file when the outcome signals blame attributed to that dependency node.
                 if content.startswith("Blamed "):
                     blame_target_str = ""
                     blame_exp = ""
                     after_blamed = content[len("Blamed ") :]
                     if ": " in after_blamed:
-                        blame_target_str, blame_exp = after_blamed.split(
-                            ": ", 1
-                        )
+                        blame_target_str, blame_exp = after_blamed.split(": ", 1)
                         blame_target_str = blame_target_str.strip()
                         blame_exp = blame_exp.strip()
                     else:
@@ -293,7 +264,7 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
             except Exception:
                 if attempt == 1:
                     raise
-        return set()  # pragma: no cover (assumption: unreachable statement after 2-iteration retry loop)
+        return set()
 
     def clean(self, nodes: Sequence[dag_storage.Node]) -> bool:
         storage = get_singleton(agent_storage.AgentStorage)

@@ -1,11 +1,11 @@
 from typing import List, Optional
 from framework import operation, override, singleton_type
-import agent_conversation
+import loop_conversation
 import openai_ext
 import tool_provider
 
 @singleton_type('agent_session')
-class Conversation(agent_conversation.Conversation):
+class Conversation(loop_conversation.Conversation):
     """
 PURPOSE:
 Implements conversation with role formatting and response stubbing
@@ -15,12 +15,12 @@ INHERITED_REQUIREMENTS:
 - [Conversation] Appending messages and tool responses adds them in chronological order.
 
 GROUNDING_ARGUMENT:
-- Operates as an agent_session singleton managing the sequence of conversation messages within the active session scope, accessing data types from imported agent_conversation, openai_ext, and tool_provider in the same lifecycle tier.
+- Operates as an agent_session singleton managing the sequence of conversation messages within the active session scope, accessing data types from imported loop_conversation, openai_ext, and tool_provider in the same lifecycle tier.
 """
 
     @property
     @override
-    def messages(self) -> List[agent_conversation.Message]:
+    def messages(self) -> List[loop_conversation.Message]:
         """
 PURPOSE:
 Current sequence of messages in the session
@@ -32,7 +32,7 @@ GROUNDING_ARGUMENT:
 
     @operation
     @override
-    def append_message(self, message: agent_conversation.Message) -> None:
+    def append_message(self, message: loop_conversation.Message) -> None:
         """
 PURPOSE:
 Appends a message to the history
@@ -64,7 +64,7 @@ GROUNDING_ARGUMENT:
 
     @operation
     @override
-    def get_model_request(self) -> agent_conversation.ModelRequest:
+    def get_model_request(self) -> loop_conversation.ModelRequest:
         """
 PURPOSE:
 Formats messages into a provider model request
@@ -77,6 +77,6 @@ INHERITED_REQUIREMENTS:
 - [Conversation] The conversation produces a model request prepared for transmission to a language model.
 
 GROUNDING_ARGUMENT:
-- Reads self.messages stored directly on the agent_session singleton, transforms roles and tool call structures adhering to openai_ext chat completion schemas, and formats active reminders into visible tool message content, producing an agent_conversation.ModelRequest value record without requiring external singleton collaborators.
+- Reads self.messages stored directly on the agent_session singleton, transforms roles and tool call structures adhering to openai_ext chat completion schemas, and formats active reminders into visible tool message content, producing a loop_conversation.ModelRequest value record without requiring external singleton collaborators.
 """
         ...

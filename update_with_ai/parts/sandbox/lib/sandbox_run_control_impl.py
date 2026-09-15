@@ -1,5 +1,10 @@
 # --- DO NOT EDIT: Auto-generated dependencies ---
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
 import update_with_ai.parts.agent.lib.agent_file_alias as agent_file_alias
 import update_with_ai.parts.agent.lib.agent_node_config as agent_node_config
 import update_with_ai.parts.dag.lib.dag_storage as dag_storage
@@ -8,6 +13,7 @@ from . import sandbox_guide_delivery
 from . import sandbox_run_control
 from . import template_format
 from . import tool_provider
+
 # --- END DO NOT EDIT ---
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 from update_with_ai.parts.agent.lib import agent_file_alias
@@ -63,7 +69,9 @@ class RunController(sandbox_run_control.RunController, Singleton):
                         self._node_to_alias[node] = f.short_name
                         self._node_states[node] = "OPEN"
         if not self._nodes:
-            dummy_node = dag_storage.Node(unit_address="//session:target", role_address="")
+            dummy_node = dag_storage.Node(
+                unit_address="//session:target", role_address=""
+            )
             self._nodes.append(dummy_node)
             self._alias_to_node["target"] = dummy_node
             self._node_to_alias[dummy_node] = "target"
@@ -104,7 +112,9 @@ class RunController(sandbox_run_control.RunController, Singleton):
         self._ensure_nodes()
         return [n for n in self._nodes if self._node_states.get(n) == "OPEN"]
 
-    def get_in_session_dependencies(self, node: dag_storage.Node) -> Set[dag_storage.Node]:
+    def get_in_session_dependencies(
+        self, node: dag_storage.Node
+    ) -> Set[dag_storage.Node]:
         self._ensure_nodes()
         deps: Set[dag_storage.Node] = set()
         storage = get_singleton(dag_storage.DagStorage)
@@ -131,7 +141,9 @@ class RunController(sandbox_run_control.RunController, Singleton):
         target_alias = self.get_alias_for_node(node)
         for f in cfg.read_write_files:
             if isinstance(f, agent_file_alias.ReadWriteFile):
-                if f.short_name == target_alias or (hasattr(f, "owning_node") and f.owning_node == node):
+                if f.short_name == target_alias or (
+                    hasattr(f, "owning_node") and f.owning_node == node
+                ):
                     edit_mgr.lock_file(f)
 
     def initialize(self) -> None:
@@ -158,7 +170,9 @@ class RunController(sandbox_run_control.RunController, Singleton):
         cfg = get_singleton(agent_node_config.NodeConfig)
         return cfg.blame_targets
 
-    def get_blame_targets_for_node(self, node: dag_storage.Node) -> Set[agent_file_alias.BoundFile]:
+    def get_blame_targets_for_node(
+        self, node: dag_storage.Node
+    ) -> Set[agent_file_alias.BoundFile]:
         cfg = get_singleton(agent_node_config.NodeConfig)
         if node in cfg.blame_targets_by_node:
             return cfg.blame_targets_by_node[node]
@@ -190,16 +204,27 @@ class RunController(sandbox_run_control.RunController, Singleton):
         self._cached_revision = current_rev
         return passed, diag_out
 
-    def evaluate_verification_for_node(self, node: dag_storage.Node) -> Tuple[bool, str]:
+    def evaluate_verification_for_node(
+        self, node: dag_storage.Node
+    ) -> Tuple[bool, str]:
         cfg = get_singleton(agent_node_config.NodeConfig)
-        checks = cfg.verification_checks_by_node.get(node) if cfg.verification_checks_by_node else None
+        checks = (
+            cfg.verification_checks_by_node.get(node)
+            if cfg.verification_checks_by_node
+            else None
+        )
         if not checks:
             return self.evaluate_verification()
 
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
         current_rev = edit_mgr.file_update_revision
-        if node in self._cached_node_revision and self._cached_node_revision[node] == current_rev:
-            return self._cached_node_passed.get(node, False), self._cached_node_diag.get(node, "")
+        if (
+            node in self._cached_node_revision
+            and self._cached_node_revision[node] == current_rev
+        ):
+            return self._cached_node_passed.get(
+                node, False
+            ), self._cached_node_diag.get(node, "")
 
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         passed = True
@@ -230,7 +255,9 @@ class RunController(sandbox_run_control.RunController, Singleton):
             "<!-- endfor -->"
         )
         node_items = [{"src_alias": self.get_alias_for_node(n)} for n in open_nodes]
-        return tmpl_formatter.format_template(template_str, {"nodes": node_items}).strip()
+        return tmpl_formatter.format_template(
+            template_str, {"nodes": node_items}
+        ).strip()
 
 
 class AdvanceTool(sandbox_run_control.AdvanceTool, Singleton):
@@ -424,7 +451,9 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
         if not target_str:
             if rc.is_multi_node:
                 # Requirement: In multi-target sessions, tool execution fails when the target parameter is omitted or does not match an open session target, reminding the agent to specify an open target.
-                open_targets = ", ".join(f"`{rc.get_alias_for_node(n)}`" for n in rc.open_nodes())
+                open_targets = ", ".join(
+                    f"`{rc.get_alias_for_node(n)}`" for n in rc.open_nodes()
+                )
                 return tool_provider.Response(
                     is_failed=True,
                     is_terminated=False,
@@ -437,7 +466,9 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
             target_node = rc.get_node_for_alias(target_str)
             if target_node is None or rc.get_node_state(target_node) != "OPEN":
                 # Requirement: In multi-target sessions, tool execution fails when the target parameter is omitted or does not match an open session target, reminding the agent to specify an open target.
-                open_targets = ", ".join(f"`{rc.get_alias_for_node(n)}`" for n in rc.open_nodes())
+                open_targets = ", ".join(
+                    f"`{rc.get_alias_for_node(n)}`" for n in rc.open_nodes()
+                )
                 return tool_provider.Response(
                     is_failed=True,
                     is_terminated=False,
@@ -601,7 +632,9 @@ class FailTool(sandbox_run_control.FailTool, Singleton):
         open_nodes = rc.open_nodes()
         if open_nodes:
             open_reminder = rc.format_open_targets_reminder()
-            content = f"Target `{target_alias}` failed: {exp}\n\n{open_reminder}".strip()
+            content = (
+                f"Target `{target_alias}` failed: {exp}\n\n{open_reminder}".strip()
+            )
             return tool_provider.Response(
                 is_failed=False,
                 is_terminated=False,
@@ -700,9 +733,7 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
         blamee_str = ""
         if blamee is not None:
             blamee_str = (
-                blamee.short_name
-                if hasattr(blamee, "short_name")
-                else str(blamee)
+                blamee.short_name if hasattr(blamee, "short_name") else str(blamee)
             ).strip()
         for bt in allowed_blame_targets:
             if bt == blamee or bt.short_name == blamee_str:

@@ -50,8 +50,8 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
     tier = "agent_session"
 
     def __init__(self) -> None:
-        self._read_only_files: Set[agent_file_alias.BoundFile] = set()
-        self._read_write_files: Set[agent_file_alias.BoundFile] = set()
+        self._read_only_files: Set[agent_file_alias.ReadOnlyFile] = set()
+        self._read_write_files: Set[agent_file_alias.ReadWriteFile] = set()
         self._templates: Set[
             Tuple[agent_file_alias.BoundFile, agent_file_alias.FileContent]
         ] = set()
@@ -390,13 +390,13 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
             self._verification_success_message = str(v_msg).strip()
 
     @property
-    def read_only_files(self) -> Set[agent_file_alias.BoundFile]:
+    def read_only_files(self) -> Set[agent_file_alias.ReadOnlyFile]:
         # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies and files present in read-write files.
         # Requirement: [NodeConfig] The node config provides the session read-only files restricted to inspection.
         return self._read_only_files
 
     @property
-    def read_write_files(self) -> Set[agent_file_alias.BoundFile]:
+    def read_write_files(self) -> Set[agent_file_alias.ReadWriteFile]:
         # Requirement: The node config exposes declared source files and silent source files across session nodes as read-write files.
         # Requirement: [NodeConfig] The node config provides the session read-write files permitted for inspection and modification.
         return self._read_write_files

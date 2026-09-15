@@ -46,4 +46,3 @@ class ReplaceFileContentTool(EditingTool, Protocol):
 
     @property
     def allow_multiple_parameter(self) -> tool_provider.Parameter: ...
-

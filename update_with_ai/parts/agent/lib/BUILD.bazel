@@ -5,63 +5,9 @@ load("//bin:pyright_library.bzl", "pyright_library")
 package(default_visibility = ["//visibility:public"])
 
 pyright_library(
-    name = "agent_asm",
-    srcs = ["agent_asm.py"],
-    pyright_deps = [
-        "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/bazel/lib:file_paths",
-        "//update_with_ai/parts/core/lib:runner_logger",
-        "//update_with_ai/parts/dag/lib:dag_node_cleaner",
-        "//update_with_ai/parts/dag/lib:dag_storage",
-        "//update_with_ai/parts/openai/lib:openai_config",
-        "//update_with_ai/parts/openai/lib:openai_conversation_impl",
-        "//update_with_ai/parts/openai/lib:openai_driver_impl",
-        "//update_with_ai/parts/sandbox/lib:sandbox",
-        "//update_with_ai/parts/sandbox/lib:sandbox_guide_delivery",
-        "//update_with_ai/parts/sandbox/lib:sandbox_run_control",
-        "//update_with_ai/parts/sandbox/lib:tool_provider",
-        ":agent_config",
-        ":agent_conversation",
-        ":agent_driver",
-        ":agent_file_alias",
-        ":agent_loop_guard",
-        ":agent_loop_guard_impl",
-        ":agent_node_cleaner_impl",
-        ":agent_node_config",
-        ":agent_storage",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
     name = "agent_config",
     srcs = ["agent_config.py"],
-    pyright_deps = [
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "agent_conversation",
-    srcs = ["agent_conversation.py"],
-deps = [],
-    pyright_deps = [
-        "//update_with_ai/parts/sandbox/lib:tool_provider",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "agent_driver",
-    srcs = ["agent_driver.py"],
-deps = [],
-    pyright_deps = [
-        "//update_with_ai/parts/core/lib:runner_logger",
-        "//update_with_ai/parts/sandbox/lib:tool_provider",
-        ":agent_config",
-        ":agent_conversation",
-        ":agent_loop_guard",
-    ],
+    pyright_deps = [],
     visibility = ["//visibility:public"],
 )
 
@@ -72,48 +18,6 @@ pyright_library(
         "//update_with_ai/parts/bazel/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/sandbox/lib:tool_provider",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "agent_loop_guard",
-    srcs = ["agent_loop_guard.py"],
-    pyright_deps = [
-        "//update_with_ai/parts/sandbox/lib:tool_provider",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "agent_loop_guard_impl",
-    srcs = ["agent_loop_guard_impl.py"],
-    pyright_deps = [
-        "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/sandbox/lib:tool_provider",
-        ":agent_loop_guard",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "agent_node_cleaner_impl",
-    srcs = ["agent_node_cleaner_impl.py"],
-    pyright_deps = [
-        "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/bazel/lib:file_paths",
-        "//update_with_ai/parts/dag/lib:dag_node_cleaner",
-        "//update_with_ai/parts/dag/lib:dag_storage",
-        "//update_with_ai/parts/sandbox/lib:sandbox",
-        "//update_with_ai/parts/sandbox/lib:sandbox_guide_delivery",
-        "//update_with_ai/parts/sandbox/lib:sandbox_run_control",
-        "//update_with_ai/parts/sandbox/lib:template_format",
-        "//update_with_ai/parts/sandbox/lib:tool_provider",
-        "//update_with_ai/parts/agent/lib:agent_conversation",
-        "//update_with_ai/parts/agent/lib:agent_driver",
-        "//update_with_ai/parts/agent/lib:agent_file_alias",
-        "//update_with_ai/parts/agent/lib:agent_node_config",
-        "//update_with_ai/parts/agent/lib:agent_storage",
     ],
     visibility = ["//visibility:public"],
 )

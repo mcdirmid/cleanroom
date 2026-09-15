@@ -1,15 +1,15 @@
-# agent_node_cleaner_impl implementation component
+# loop_node_cleaner_impl implementation component
 
-imports: agent_conversation, agent_driver, agent_node_config, agent_storage, dag_storage, sandbox, template_format
+imports: agent_node_config, agent_storage, dag_storage, loop_conversation, loop_driver, sandbox, template_format
 implements: dag_node_cleaner
 
 ## Purpose
 
-The agent_node_cleaner_impl implementation component realizes node clean execution, synthetic startup transcript seeding, and outcome message dispatching for agent-driven nodes.
+The loop_node_cleaner_impl implementation component realizes node clean execution, synthetic startup transcript seeding, and outcome message dispatching for agent-driven nodes.
 
-Driving node execution requires bridging abstract graph clean directives to concrete multi-turn turn loops and translating tool termination responses back into graph messages. The agent_node_cleaner_impl implementation component configures session sandboxes from stored target metadata, injects paired startup executions into conversation histories, executes the agent loop, and converts termination responses into propagating graph updates.
+Driving node execution requires bridging abstract graph clean directives to concrete multi-turn turn loops and translating tool termination responses back into graph messages. The loop_node_cleaner_impl implementation component configures session sandboxes from stored target metadata, injects paired startup executions into conversation histories, executes the agent loop, and converts termination responses into propagating graph updates.
 
-**Out of scope:** The agent_node_cleaner_impl implementation component does not parse JSON build manifests, enforce repetition thresholds, or write transcript logs to disk; these are handled by other components.
+**Out of scope:** The loop_node_cleaner_impl implementation component does not parse JSON build manifests, enforce repetition thresholds, or write transcript logs to disk; these are handled by other components.
 
 ## Types and Behavior
 
@@ -27,7 +27,7 @@ When a dirty node is configured with a guide, the task prompt incorporates guide
 
 - Identifying the guide file by its file alias and directing the agent to call the submit tool with a change summary describing modifications when complete, or call submit without arguments if no workspace files were modified, when guide step mode is inactive.
 
-Cleaning resolves dirty nodes by evaluating the agent driver outcome.
+Cleaning resolves dirty nodes by evaluating the loop driver outcome.
 
 Resolving dirty nodes produces:
 

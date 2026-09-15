@@ -88,7 +88,9 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
             # Check for unit manifest and role manifest
             unit_file = self._find_file(pkg_dir.path, f"{unit_name}_unit_manifest.json")
             if not unit_file:
-                unit_file = self._find_file(pkg_dir.path, f".{unit_name}_unit_manifest.json")
+                unit_file = self._find_file(
+                    pkg_dir.path, f".{unit_name}_unit_manifest.json"
+                )
             if not unit_file:
                 unit_file = self._find_file(pkg_dir.path, f"{unit_name}_manifest.json")
             if not unit_file:
@@ -100,7 +102,9 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
             role_pkg = node_util.extract_directory(role_node).path
             role_file = self._find_file(role_pkg, f"{role_name}_role_manifest.json")
             if not role_file:
-                role_file = self._find_file(role_pkg, f".{role_name}_role_manifest.json")
+                role_file = self._find_file(
+                    role_pkg, f".{role_name}_role_manifest.json"
+                )
             if not role_file:
                 role_file = self._find_file(role_pkg, f"{role_name}_manifest.json")
             if not role_file:
@@ -169,7 +173,9 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                     silent_deps_list: List[str] = []
                     star_deps_list: List[str] = []
 
-                    raw_unit_deps = unit_data.get("unit_deps", unit_data.get("deps", []))
+                    raw_unit_deps = unit_data.get(
+                        "unit_deps", unit_data.get("deps", [])
+                    )
 
                     if component_type in active_types:
                         # 1. Intra-unit role dependencies

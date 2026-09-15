@@ -1,23 +1,23 @@
 import json
 from typing import List, Optional
-from update_with_ai.parts.agent.lib import agent_conversation
+from update_with_ai.parts.loop.lib import loop_conversation
 from update_with_ai.parts.sandbox.lib import tool_provider
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
 
 
-class Conversation(agent_conversation.Conversation, Singleton):
+class Conversation(loop_conversation.Conversation, Singleton):
     tier = "agent_session"
 
     def __init__(self) -> None:
-        self._messages: List[agent_conversation.Message] = []
+        self._messages: List[loop_conversation.Message] = []
         self._suppression_keys: List[Optional[str]] = []
 
     @property
-    def messages(self) -> List[agent_conversation.Message]:
+    def messages(self) -> List[loop_conversation.Message]:
         # Invariant: Presents current sequence of conversation messages in session
         return list(self._messages)
 
-    def append_message(self, message: agent_conversation.Message) -> None:
+    def append_message(self, message: loop_conversation.Message) -> None:
         # Requirement: [Conversation] Appending messages and tool responses adds them in chronological order.
         self._messages.append(message)
         self._suppression_keys.append(None)
@@ -41,7 +41,7 @@ class Conversation(agent_conversation.Conversation, Singleton):
                 else {}
             )
             self._messages.append(
-                agent_conversation.Message(
+                loop_conversation.Message(
                     role="assistant",
                     content="",
                     tool_call_id=tool_call_id,
@@ -63,7 +63,7 @@ class Conversation(agent_conversation.Conversation, Singleton):
                     if effective_reminder is None:
                         # Requirement: A stub retains the reminder from the superseded tool response, which the newly appended response inherits when omitted.
                         effective_reminder = old_msg.reminder
-                    self._messages[i] = agent_conversation.Message(
+                    self._messages[i] = loop_conversation.Message(
                         role=old_msg.role,
                         content="[Superseded]",
                         tool_call_id=old_msg.tool_call_id,
@@ -74,7 +74,7 @@ class Conversation(agent_conversation.Conversation, Singleton):
                     break
 
         self._messages.append(
-            agent_conversation.Message(
+            loop_conversation.Message(
                 role="tool",
                 content=response.content,
                 tool_call_id=tool_call_id,
@@ -84,9 +84,9 @@ class Conversation(agent_conversation.Conversation, Singleton):
         )
         self._suppression_keys.append(response.suppression_key)
 
-    def get_model_request(self) -> agent_conversation.ModelRequest:
+    def get_model_request(self) -> loop_conversation.ModelRequest:
         # Requirement: The conversation formats messages in a model request according to OpenAI chat completion conventions for system, user, assistant, and tool messages.
-        formatted: List[agent_conversation.Message] = []
+        formatted: List[loop_conversation.Message] = []
         for m in self._messages:
             clean_content = m.content if m.content else ""
             # Requirement: Tool execution response notes, content, and reminders from the tool provider are included in visible tool message content, formatting active reminders on messages and superseded stubs to remind the agent in the assembled model request.
@@ -96,7 +96,7 @@ class Conversation(agent_conversation.Conversation, Singleton):
                 else:
                     clean_content = f"Reminder: {m.reminder}"
             formatted.append(
-                agent_conversation.Message(
+                loop_conversation.Message(
                     role=m.role,
                     content=clean_content,
                     tool_call_id=m.tool_call_id,
@@ -106,13 +106,13 @@ class Conversation(agent_conversation.Conversation, Singleton):
                     is_stub=m.is_stub,
                 )
             )
-        return agent_conversation.ModelRequest(messages=formatted)
+        return loop_conversation.ModelRequest(messages=formatted)
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         Conversation,
-        keys=[Conversation, agent_conversation.Conversation],
+        keys=[Conversation, loop_conversation.Conversation],
         tier="agent_session",
     )

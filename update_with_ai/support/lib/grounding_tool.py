@@ -1162,9 +1162,9 @@ class SpecRegistry:
         self.module_exports: Dict[str, Set[str]] = {}
         self.class_tiers: Dict[str, str] = {}
         self.class_bases: Dict[str, List[str]] = {}
-        self.class_dataclass_init: Dict[str, Optional[bool]] = {}
-        self.class_has_init: Dict[str, bool] = {}
-        self.class_variants: Dict[str, Set[str]] = {}
+        self.class_dataclass_init: Dict[Tuple[str, str], Optional[bool]] = {}
+        self.class_has_init: Dict[Tuple[str, str], bool] = {}
+        self.class_variants: Dict[Tuple[str, str], Set[Tuple[str, str]]] = {}
         self.module_sources: Dict[str, str] = {}
         self.assembly_constituents: Dict[str, List[str]] = {}
 
@@ -1246,15 +1246,11 @@ class SpecRegistry:
                 if has_dataclass:
                     if dataclass_init is None:
                         dataclass_init = True
-                    self.class_dataclass_init[node.name] = dataclass_init
-                    self.class_has_init[node.name] = any(
+                    self.class_dataclass_init[(mod_name, node.name)] = dataclass_init
+                    self.class_has_init[(mod_name, node.name)] = any(
                         isinstance(item, ast.FunctionDef) and item.name == "__init__"
                         for item in node.body
                     )
-
-                if is_variant:
-                    for b in bases:
-                        self.class_variants.setdefault(b, set()).add(node.name)
 
             elif isinstance(node, ast.ImportFrom):
                 origin = node.module or ""
@@ -1438,8 +1434,38 @@ class ClosedWorldLinker:
             if self.registry.class_tiers[cls_name] == "unknown":
                 self.registry.class_tiers[cls_name] = "session"
 
+    def _resolve_variants(self):
+        self.registry.class_variants.clear()
+        for mod_name, tree in self.registry.modules.items():
+            for node in tree.body:
+                if isinstance(node, ast.ClassDef):
+                    is_variant = any(
+                        (
+                            isinstance(dec, (ast.Name, ast.Attribute))
+                            and (dec.id if isinstance(dec, ast.Name) else dec.attr)
+                            == "variant"
+                        )
+                        for dec in node.decorator_list
+                    )
+                    if is_variant:
+                        for base_expr in node.bases:
+                            resolved = self.registry.resolve_base_class(
+                                mod_name, base_expr
+                            )
+                            if resolved:
+                                base_name, _, base_mod = resolved
+                                self.registry.class_variants.setdefault(
+                                    (base_mod, base_name), set()
+                                ).add((mod_name, node.name))
+                            else:
+                                b_id = base_id(base_expr)
+                                self.registry.class_variants.setdefault(
+                                    (mod_name, b_id), set()
+                                ).add((mod_name, node.name))
+
     def check_all(self) -> List[Diagnostic]:
         self._resolve_tiers()
+        self._resolve_variants()
         for mod_name, tree in self.registry.modules.items():
             path_str = str(self.registry.module_paths[mod_name])
             for node in tree.body:
@@ -1505,10 +1531,16 @@ class ClosedWorldLinker:
                                         )
                                     )
 
-                    if node.name in self.registry.class_dataclass_init:
-                        d_init = self.registry.class_dataclass_init[node.name]
-                        has_init = self.registry.class_has_init.get(node.name, False)
-                        has_variants = bool(self.registry.class_variants.get(node.name))
+                    if (mod_name, node.name) in self.registry.class_dataclass_init:
+                        d_init = self.registry.class_dataclass_init[
+                            (mod_name, node.name)
+                        ]
+                        has_init = self.registry.class_has_init.get(
+                            (mod_name, node.name), False
+                        )
+                        has_variants = bool(
+                            self.registry.class_variants.get((mod_name, node.name))
+                        )
 
                         if has_variants:
                             if d_init is not False:

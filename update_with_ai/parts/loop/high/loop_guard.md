@@ -1,14 +1,14 @@
-# agent_loop_guard interface component
+# loop_guard interface component
 
 imports: tool_provider
 
 ## Purpose
 
-The agent_loop_guard interface component detects and breaks repetitive agent loops to conserve execution cycles and prevent runaway runs.
+The loop_guard interface component detects and breaks repetitive agent loops to conserve execution cycles and prevent runaway runs.
 
-Language models occasionally get trapped repeating identical tool calls or oscillating between identical file edits without making progress. The agent_loop_guard interface component monitors consecutive repetitions during an agent session, issuing corrective reminders at early thresholds and producing fatal loop failures to terminate stuck runs.
+Language models occasionally get trapped repeating identical tool calls or oscillating between identical file edits without making progress. The loop_guard interface component monitors consecutive repetitions during an agent session, issuing corrective reminders at early thresholds and producing fatal loop failures to terminate stuck runs.
 
-**Out of scope:** The agent_loop_guard interface component does not orchestrate model turns, dispatch tool executions, or format network payloads; these are handled by other components.
+**Out of scope:** The loop_guard interface component does not orchestrate model turns, dispatch tool executions, or format network payloads; these are handled by other components.
 
 ## Types and Behavior
 

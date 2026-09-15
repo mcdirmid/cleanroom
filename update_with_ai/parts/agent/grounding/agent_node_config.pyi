@@ -98,7 +98,7 @@ Defined as an agent session service exposing configuration parameters for the se
 """
 
     @property
-    def read_only_files(self) -> Set[agent_file_alias.BoundFile]:
+    def read_only_files(self) -> Set[agent_file_alias.ReadOnlyFile]:
         """
 PURPOSE:
 Bound files restricted to inspection
@@ -109,7 +109,7 @@ FRESH_REQUIREMENTS:
         ...
 
     @property
-    def read_write_files(self) -> Set[agent_file_alias.BoundFile]:
+    def read_write_files(self) -> Set[agent_file_alias.ReadWriteFile]:
         """
 PURPOSE:
 Bound files permitted for inspection and modification

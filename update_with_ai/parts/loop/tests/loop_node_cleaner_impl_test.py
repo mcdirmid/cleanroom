@@ -4,17 +4,17 @@ import unittest
 from pathlib import Path
 from typing import List, Optional, Set
 
-from update_with_ai.parts.agent.lib.agent_conversation import (
+from update_with_ai.parts.loop.lib.loop_conversation import (
     Conversation,
     Message,
     ModelRequest,
 )
-from update_with_ai.parts.agent.lib.agent_node_cleaner_impl import (
+from update_with_ai.parts.loop.lib.loop_node_cleaner_impl import (
     NodeCleaner as NodeCleanerImpl,
     CleanedNodes as CleanedNodesImpl,
     __initialize__,
 )
-from update_with_ai.parts.agent.lib.agent_driver import AgentOutcome, AgentDriver
+from update_with_ai.parts.loop.lib.loop_driver import AgentOutcome, AgentDriver
 from update_with_ai.parts.agent.lib.agent_storage import (
     AgentStorage,
     NodeDefinition,
@@ -252,7 +252,7 @@ class MockNodeConfig:
         self._is_step_mode = val
 
 
-class AgentNodeCleanerImplTest(unittest.TestCase):
+class LoopNodeCleanerImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
@@ -530,7 +530,9 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             fb5 = list(msgs5)[0]
             assert isinstance(fb5, Feedback)
             self.assertEqual(fb5.content, "Owning node role match")
-            self.assertEqual(fb5.target, Node(unit_address="//pkg:target_role", role_address="lib"))
+            self.assertEqual(
+                fb5.target, Node(unit_address="//pkg:target_role", role_address="lib")
+            )
 
             # 6. Fallback blame parsing when target has # role separator and not in blame_targets
             self.runner.outcome = AgentOutcome(
@@ -548,7 +550,10 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             fb6 = list(msgs6)[0]
             assert isinstance(fb6, Feedback)
             self.assertEqual(fb6.content, "Unmatched role blame")
-            self.assertEqual(fb6.target, Node(unit_address="//pkg:fallback_unit", role_address="fallback_role"))
+            self.assertEqual(
+                fb6.target,
+                Node(unit_address="//pkg:fallback_unit", role_address="fallback_role"),
+            )
 
     def test_clean_node_without_modifications_produces_no_messages(self) -> None:
         """CUJ: Producing no messages when cleaning succeeds without workspace file modifications."""
@@ -971,7 +976,10 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
         }
         self.node_cfg.guide_file = UnboundFile(short_name="guide.md")
         self.node_cfg.is_step_mode = False
-        self.storage.messages[node1] = {Change(content=""), Change(content="spec 1 updated")}
+        self.storage.messages[node1] = {
+            Change(content=""),
+            Change(content="spec 1 updated"),
+        }
         self.storage.messages[node2] = {Feedback(content="defect in unit 2")}
 
         with enter_phase("system", registry=self.registry) as scope:
@@ -989,13 +997,19 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
             self.assertIn("The guide is in file guide.md. Call submit", prompt)
 
             self.assertTrue(
-                any("Incoming change for unit1.py: spec 1 updated" in c for c in history_contents)
+                any(
+                    "Incoming change for unit1.py: spec 1 updated" in c
+                    for c in history_contents
+                )
             )
             self.assertTrue(
                 any("Incoming change for unit1.py" in c for c in history_contents)
             )
             self.assertTrue(
-                any("Fix unit2.py based on feedback: defect in unit 2" in c for c in history_contents)
+                any(
+                    "Fix unit2.py based on feedback: defect in unit 2" in c
+                    for c in history_contents
+                )
             )
 
     def test_clean_multi_node_delivers_changes_to_dependents(self) -> None:
@@ -1080,7 +1094,9 @@ class AgentNodeCleanerImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
-            cleaner.clean_nodes = lambda nodes: {Feedback(content="generic feedback", target=None)}  # type: ignore
+            cleaner.clean_nodes = lambda nodes: {
+                Feedback(content="generic feedback", target=None)
+            }  # type: ignore
             # Requirement: Cleaning dirty nodes registers the nodes as dependents to their non-silent dependencies in graph storage, delivering resulting change messages to downstream dependents and feedback messages to their addressed dependency node.
             # Requirement: [NodeCleaner] Cleaning dirty nodes communicates whether processing should continue.
             cont = cleaner.clean([node])

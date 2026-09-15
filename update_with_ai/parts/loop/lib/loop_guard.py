@@ -1,4 +1,4 @@
-"""Agent loop guard interface and data types."""
+"""Loop guard interface and data types."""
 
 from dataclasses import dataclass
 from typing import Optional, Protocol, Union

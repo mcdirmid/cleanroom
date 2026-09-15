@@ -1,9 +1,9 @@
 import json
 from typing import Any, Optional, Set, Tuple
 from update_with_ai.parts.agent.lib import agent_config
-from update_with_ai.parts.agent.lib import agent_conversation
-from update_with_ai.parts.agent.lib import agent_loop_guard
-from update_with_ai.parts.agent.lib import agent_driver
+from update_with_ai.parts.loop.lib import loop_conversation
+from update_with_ai.parts.loop.lib import loop_guard
+from update_with_ai.parts.loop.lib import loop_driver
 from . import openai_config
 from update_with_ai.parts.core.lib import runner_logger
 from update_with_ai.parts.sandbox.lib import tool_provider
@@ -159,18 +159,18 @@ def _measure_prefix_reuse(
     return summary, "\n".join(transcript_lines)
 
 
-class AgentDriver(agent_driver.AgentDriver, Singleton):
+class LoopDriver(loop_driver.LoopDriver, Singleton):
     tier = "agent_session"
 
     def __init__(self) -> None:
         pass
 
-    def run(self) -> agent_driver.AgentOutcome:
+    def run(self) -> loop_driver.AgentOutcome:
         openai_cfg = get_singleton(openai_config.OpenaiConfig)
         agent_cfg = get_singleton(agent_config.AgentConfig)
         logger = get_singleton(runner_logger.RunnerLogger)
-        history = get_singleton(agent_conversation.Conversation)
-        guard = get_singleton(agent_loop_guard.LoopGuard)
+        history = get_singleton(loop_conversation.Conversation)
+        guard = get_singleton(loop_guard.LoopGuard)
         tool_mgr = get_singleton(tool_provider.ToolManager)
 
         client: Any = None
@@ -300,7 +300,7 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
             if tool_calls:
                 for tc in tool_calls:
                     history.append_message(
-                        agent_conversation.Message(
+                        loop_conversation.Message(
                             role="assistant",
                             content=assistant_msg.content or "",
                             tool_call_id=tc.id,
@@ -310,7 +310,7 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                     )
             else:
                 history.append_message(
-                    agent_conversation.Message(
+                    loop_conversation.Message(
                         role="assistant",
                         content=assistant_msg.content or "",
                     )
@@ -352,7 +352,7 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
             # Requirement: When a model response is truncated at the generation limit, the agent driver resumes generation with a continuation turn.
             if finish_reason == "length":
                 history.append_message(
-                    agent_conversation.Message(
+                    loop_conversation.Message(
                         role="user",
                         content=(
                             "Generation limit reached: response was truncated due to length. "
@@ -366,7 +366,7 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
             if not tool_calls:
                 # Requirement: When a model response produces no tool executions, the agent driver appends a prompt to the conversation reminding that progress and conclusion require invoking tools, and continues the turn loop.
                 history.append_message(
-                    agent_conversation.Message(
+                    loop_conversation.Message(
                         role="user",
                         content="No tools were executed. A tool (e.g. view_file, replace, advance, fail, blame) must be called to make progress or conclude the session.",
                     )
@@ -420,7 +420,7 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                 # Requirement: Before executing each tool call, the agent driver records the tool execution in the loop guard, injecting a loop reminder into the conversation when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
                 # Requirement: [AgentDriver] The agent driver evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
                 guard_outcome = guard.record_tool_execution(fn_name, actual_bindings)
-                if isinstance(guard_outcome, agent_loop_guard.LoopFailure):
+                if isinstance(guard_outcome, loop_guard.LoopFailure):
                     logger.consume(
                         runner_logger.LogEvent(
                             event_name="loop_failure",
@@ -474,7 +474,7 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                     tool_call_id=tc.id,
                 )
 
-                if isinstance(guard_outcome, agent_loop_guard.LoopReminder):
+                if isinstance(guard_outcome, loop_guard.LoopReminder):
                     logger.consume(
                         runner_logger.LogEvent(
                             event_name="loop_reminder",
@@ -483,7 +483,7 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                         )
                     )
                     history.append_message(
-                        agent_conversation.Message(
+                        loop_conversation.Message(
                             role="user",
                             content=guard_outcome.feedback,
                         )
@@ -513,7 +513,7 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                     synth_call_id = f"{curr_call_id}_followup_{followup_count}"
                     args_dict = dict(followup.wire_parameter_bindings.bindings)
                     history.append_message(
-                        agent_conversation.Message(
+                        loop_conversation.Message(
                             role="assistant",
                             content=followup.reasoning_text or "",
                             tool_call_id=synth_call_id,
@@ -563,7 +563,7 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                     if curr_resp.is_terminated:
                         if curr_resp.is_failed:
                             raise RuntimeError(f"Agent failed: {curr_resp.content}")
-                        return agent_driver.AgentOutcome(
+                        return loop_driver.AgentOutcome(
                             is_success=True,
                             response=curr_resp,
                             conversation=history,
@@ -575,7 +575,7 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
                 if resp.is_terminated:
                     if resp.is_failed:
                         raise RuntimeError(f"Agent failed: {resp.content}")
-                    return agent_driver.AgentOutcome(
+                    return loop_driver.AgentOutcome(
                         is_success=True,
                         response=resp,
                         conversation=history,
@@ -586,10 +586,13 @@ class AgentDriver(agent_driver.AgentDriver, Singleton):
         raise RuntimeError(f"Conversation limit reached ({limit} turns)")
 
 
+AgentDriver = LoopDriver
+
+
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
-        AgentDriver,
-        keys=[AgentDriver, agent_driver.AgentDriver],
+        LoopDriver,
+        keys=[LoopDriver, loop_driver.LoopDriver, loop_driver.AgentDriver],
         tier="agent_session",
     )

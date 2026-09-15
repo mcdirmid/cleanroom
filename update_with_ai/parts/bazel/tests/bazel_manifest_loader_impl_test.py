@@ -242,7 +242,9 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             self.assertIn("//pkg/calc:calc_spec#//rules:lib", data["silent_deps"])
 
             # Inactive component type (pass-through node)
-            asm_node = Node(unit_address="//pkg/calc:calc_asm", role_address="//rules:qa")
+            asm_node = Node(
+                unit_address="//pkg/calc:calc_asm", role_address="//rules:qa"
+            )
             with open(
                 os.path.join(calc_pkg, ".calc_asm_unit_manifest.json"),
                 "w",

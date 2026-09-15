@@ -17,43 +17,13 @@ filegroup(
 )
 
 update_python_with_ai(
-    name = "agent_asm",
-    module_deps = [':agent_loop_guard_impl', ':agent_node_cleaner_impl', '//update_with_ai/parts/openai:openai_conversation_impl', '//update_with_ai/parts/openai:openai_driver_impl'],
-)
-
-update_python_with_ai(
     name = "agent_config",
     module_deps = [],
 )
 
 update_python_with_ai(
-    name = "agent_conversation",
-    module_deps = ['//update_with_ai/parts/sandbox:tool_provider'],
-)
-
-update_python_with_ai(
-    name = "agent_driver",
-    module_deps = [':agent_config', ':agent_conversation', ':agent_loop_guard', '//update_with_ai/parts/core:runner_logger', '//update_with_ai/parts/sandbox:tool_provider'],
-)
-
-update_python_with_ai(
     name = "agent_file_alias",
     module_deps = ['//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/bazel:file_paths', '//update_with_ai/parts/sandbox:tool_provider'],
-)
-
-update_python_with_ai(
-    name = "agent_loop_guard",
-    module_deps = ['//update_with_ai/parts/sandbox:tool_provider'],
-)
-
-update_python_with_ai(
-    name = "agent_loop_guard_impl",
-    module_deps = [':agent_loop_guard', '//update_with_ai/parts/sandbox:tool_provider'],
-)
-
-update_python_with_ai(
-    name = "agent_node_cleaner_impl",
-    module_deps = [':agent_conversation', ':agent_driver', ':agent_node_config', ':agent_storage', '//update_with_ai/parts/dag:dag_node_cleaner', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/sandbox:sandbox', '//update_with_ai/parts/sandbox:template_format'],
 )
 
 update_python_with_ai(

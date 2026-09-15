@@ -23,4 +23,3 @@ class AgentConfig(Protocol):
 
     @property
     def edit_delta_output(self) -> bool: ...
-

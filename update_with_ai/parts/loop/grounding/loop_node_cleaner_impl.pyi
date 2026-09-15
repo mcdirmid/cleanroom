@@ -1,11 +1,11 @@
 from typing import Sequence, Set
 from framework import operation, override, singleton_type
-import agent_conversation
-import agent_driver
 import agent_node_config
 import agent_storage
 import dag_node_cleaner
 import dag_storage
+import loop_conversation
+import loop_driver
 import sandbox
 import template_format
 
@@ -13,10 +13,10 @@ import template_format
 class NodeCleaner(dag_node_cleaner.NodeCleaner):
     """
 PURPOSE:
-Implements node cleaner orchestrating sandbox and agent driver
+Implements node cleaner orchestrating sandbox and loop driver
 
 GROUNDING_ARGUMENT:
-- Through the agent session phase boundary, As a system singleton, NodeCleaner coordinates system singletons (agent_storage, dag_storage) in the same lifecycle. While system singletons cannot directly access narrower agent_session singletons under static lifecycle isolation, this service initiates and executes within an explicit agent session phase that instantiates and scopes session-level singletons (agent_driver, sandbox, agent_conversation, CleanedNodes), with defining modules all imported.
+- Through the agent session phase boundary, as a system singleton, NodeCleaner coordinates system singletons (agent_storage, dag_storage) in the same lifecycle. While system singletons cannot directly access narrower agent_session singletons under static lifecycle isolation, this service initiates and executes within an explicit agent session phase that instantiates and scopes session-level singletons (loop_driver, sandbox, loop_conversation, CleanedNodes), with defining modules all imported.
 """
 
     @operation
@@ -41,7 +41,7 @@ FRESH_REQUIREMENTS:
 - When dirty nodes define no task prompt, cleaning resolves the nodes without establishing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
 
 GROUNDING_ARGUMENT:
-- Receives nodes as an input argument and retrieves task prompts and node definitions from imported agent_storage in the same system lifecycle tier. When dirty nodes define no task prompt, cleaning resolves without executing an agent session phase, producing change messages if incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise. Within the orchestrated agent session phase, it configures CleanedNodes, materializes startup templates from sandbox, initializes conversation with incoming pending messages formatted per target node and augmenting the task prompt with guide instructions formatted using template_format.TemplateFormatter, executes agent_driver, and maps the resulting agent outcome to change or feedback messages for dag_storage, relying on the requirements of collaborator types to satisfy message generation and dirty state management.
+- Receives nodes as an input argument and retrieves task prompts and node definitions from imported agent_storage in the same system lifecycle tier. When dirty nodes define no task prompt, cleaning resolves without executing an agent session phase, producing change messages if incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise. Within the orchestrated agent session phase, it configures CleanedNodes, materializes startup templates from sandbox, initializes conversation with incoming pending messages formatted per target node and augmenting the task prompt with guide instructions formatted using template_format.TemplateFormatter, executes loop_driver, and maps the resulting loop outcome to change or feedback messages for dag_storage, relying on the requirements of collaborator types to satisfy message generation and dirty state management.
 """
         ...
 

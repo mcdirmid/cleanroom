@@ -1,12 +1,12 @@
-"""Unit tests for agent_loop_guard_impl aligned with grounding specifications."""
+"""Unit tests for loop_guard_impl aligned with grounding specifications."""
 
 import unittest
-from update_with_ai.parts.agent.lib.agent_loop_guard import (
+from update_with_ai.parts.loop.lib.loop_guard import (
     LoopFailure,
     LoopGuard,
     LoopReminder,
 )
-from update_with_ai.parts.agent.lib.agent_loop_guard_impl import (
+from update_with_ai.parts.loop.lib.loop_guard_impl import (
     LoopGuard as LoopGuardImpl,
     __initialize__,
 )
@@ -32,7 +32,7 @@ class DummyConverter:
         return str(wire_value)
 
 
-class AgentLoopGuardImplTest(unittest.TestCase):
+class LoopGuardImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)

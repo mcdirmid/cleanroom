@@ -138,7 +138,9 @@ class DagCleaner(dag_cleaner.DagCleaner, Singleton):
                 if not should_continue:
                     return
 
-            if not cleaned_in_pass:  # pragma: no cover (assumption: acyclic graph prevents deadlocks)
+            if (
+                not cleaned_in_pass
+            ):  # pragma: no cover (assumption: acyclic graph prevents deadlocks)
                 break
 
 

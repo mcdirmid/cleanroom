@@ -21,7 +21,7 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def read_only_files(self) -> Set[agent_file_alias.BoundFile]:
+    def read_only_files(self) -> Set[agent_file_alias.ReadOnlyFile]:
         """
 PURPOSE:
 Declared direct dependencies and transitive star dependencies
@@ -39,7 +39,7 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def read_write_files(self) -> Set[agent_file_alias.BoundFile]:
+    def read_write_files(self) -> Set[agent_file_alias.ReadWriteFile]:
         """
 PURPOSE:
 Declared source files and silent source files across session nodes

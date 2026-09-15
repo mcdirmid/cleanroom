@@ -1,7 +1,7 @@
 # openai_driver_impl implementation component
 
-imports: agent_config, agent_conversation, agent_loop_guard, openai_config, openai_ext, runner_logger, tool_provider
-implements: agent_driver
+imports: agent_config, loop_conversation, loop_guard, openai_config, openai_ext, runner_logger, tool_provider
+implements: loop_driver
 
 ## Purpose
 
@@ -13,18 +13,18 @@ Executing robust model loops requires managing protocol-level token limits, hand
 
 ## Types and Behavior
 
-The agent driver coordinates interaction turns using the session conversation, installed tools, the loop guard, the openai config, the agent config, and the runner logger.
+The loop driver coordinates interaction turns using the session conversation, installed tools, the loop guard, the openai config, the agent config, and the runner logger.
 
-When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from the openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions. When a model response is truncated at the generation limit, the agent driver resumes generation with a continuation turn.
+When driving a turn, the loop driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from the openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions. When a model response is truncated at the generation limit, the loop driver resumes generation with a continuation turn.
 
-The agent driver logs log events for turn requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool call names and arguments or text response previews, and tool execution status and diagnostic outcomes including corrective reminders in the transcript when present.
+The loop driver logs log events for turn requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool call names and arguments or text response previews, and tool execution status and diagnostic outcomes including corrective reminders in the transcript when present.
 
-Before each tool execution, the agent driver evaluates the tool invocation with the loop guard. If the loop guard produces a loop failure, the agent driver halts execution with an unexpected failure carrying the loop failure explanation. If the loop guard produces a loop reminder, the agent driver appends the reminder to the conversation and proceeds with execution. Productive tool executions that modify workspace files or advance the guide step clear repetition tracking in the loop guard.
+Before each tool execution, the loop driver evaluates the tool invocation with the loop guard. If the loop guard produces a loop failure, the loop driver halts execution with an unexpected failure carrying the loop failure explanation. If the loop guard produces a loop reminder, the loop driver appends the reminder to the conversation and proceeds with execution. Productive tool executions that modify workspace files or advance the guide step clear repetition tracking in the loop guard.
 
-When tool execution produces a response indicating failure without terminating the run, the agent driver appends the failure feedback to the conversation and continues the turn loop. When tool execution produces a response indicating terminating failure, the agent driver halts execution with an unexpected failure carrying the failure explanation. When tool execution produces a response indicating successful session termination, the agent driver concludes the run and returns a successful agent outcome.
+When tool execution produces a response indicating failure without terminating the run, the loop driver appends the failure feedback to the conversation and continues the turn loop. When tool execution produces a response indicating terminating failure, the loop driver halts execution with an unexpected failure carrying the failure explanation. When tool execution produces a response indicating successful session termination, the loop driver concludes the run and returns a successful loop outcome.
 
 When configured by agent configuration to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool, appending a synthetic assistant invocation carrying the follow-up tool call's reasoning text as prior thought preceding the requested tool execution and the resulting follow-up response to the conversation immediately following the originating response.
 
-When a model response produces no tool executions, the agent driver appends a prompt to the conversation reminding that progress and conclusion require invoking tools, and continues the turn loop.
+When a model response produces no tool executions, the loop driver appends a prompt to the conversation reminding that progress and conclusion require invoking tools, and continues the turn loop.
 
-When interaction turns reach the conversation limit from the agent configuration, the agent driver halts execution with an unexpected failure indicating that the conversation limit was reached.
+When interaction turns reach the conversation limit from the agent configuration, the loop driver halts execution with an unexpected failure indicating that the conversation limit was reached.

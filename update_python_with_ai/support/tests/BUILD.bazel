@@ -8,7 +8,7 @@ pyright_test(
     imports = ["../.."],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_asm",
+        "//update_with_ai/parts/loop/lib:loop_asm",
         "//update_with_ai/parts/bazel/lib:bazel_asm",
         "//update_with_ai/parts/bazel/lib:bazel_node_config_impl",
         "//update_with_ai/parts/bazel/lib:bazel_runner_impl",

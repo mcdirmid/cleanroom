@@ -5,17 +5,17 @@ import unittest
 from typing import Any, List, Optional, Set
 from unittest.mock import MagicMock, patch
 
-from update_with_ai.parts.agent.lib.agent_conversation import (
+from update_with_ai.parts.loop.lib.loop_conversation import (
     Conversation,
     Message,
     ModelRequest,
 )
-from update_with_ai.parts.agent.lib.agent_loop_guard import (
+from update_with_ai.parts.loop.lib.loop_guard import (
     LoopFailure,
     LoopGuard,
     LoopReminder,
 )
-from update_with_ai.parts.agent.lib.agent_driver import AgentOutcome, AgentDriver
+from update_with_ai.parts.loop.lib.loop_driver import AgentOutcome, AgentDriver
 from update_with_ai.parts.openai.lib.openai_driver_impl import (
     AgentDriver as AgentDriverImpl,
     OpenAIError,

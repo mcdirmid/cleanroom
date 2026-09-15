@@ -1,14 +1,14 @@
-# agent_conversation interface component
+# loop_conversation interface component
 
 imports: tool_provider
 
 ## Purpose
 
-The agent_conversation interface component maintains chronological conversation state for an agent session, generating model-ready request messages and stubbing superseded results.
+The loop_conversation interface component maintains chronological conversation state for an agent session, generating model-ready request messages and stubbing superseded results.
 
-Repeated tool executions cause message context to explode and degrade model performance. The agent_conversation interface component manages message accumulation across turns, formatting model-ready request sequences while replacing superseded tool results with compact stubs in place to preserve prompt caching and bound token growth.
+Repeated tool executions cause message context to explode and degrade model performance. The loop_conversation interface component manages message accumulation across turns, formatting model-ready request sequences while replacing superseded tool results with compact stubs in place to preserve prompt caching and bound token growth.
 
-**Out of scope:** The agent_conversation interface component does not transmit network requests to model providers, dispatch tool calls, or manage agent termination outcomes; these are handled by other components.
+**Out of scope:** The loop_conversation interface component does not transmit network requests to model providers, dispatch tool calls, or manage agent termination outcomes; these are handled by other components.
 
 ## Types and Behavior
 

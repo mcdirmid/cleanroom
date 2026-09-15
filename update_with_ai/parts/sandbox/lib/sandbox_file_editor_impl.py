@@ -1,11 +1,17 @@
 # --- DO NOT EDIT: Auto-generated dependencies ---
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
 import update_with_ai.parts.agent.lib.agent_config as agent_config
 import update_with_ai.parts.agent.lib.agent_file_alias as agent_file_alias
 import update_with_ai.parts.agent.lib.agent_node_config as agent_node_config
 from . import sandbox_file_editor
 from . import template_format
 from . import tool_provider
+
 # --- END DO NOT EDIT ---
 import difflib
 import os
@@ -155,9 +161,7 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
             self.record_initial_content(host_path, actual_content)
 
 
-class ReplaceFileContentTool(
-    sandbox_file_editor.ReplaceFileContentTool, Singleton
-):
+class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singleton):
     tier = "agent_session"
 
     def __init__(self) -> None:
@@ -261,14 +265,10 @@ class ReplaceFileContentTool(
         target_content = str(bindings_map.get("target_content", ""))
         replacement_content = str(bindings_map.get("replacement_content", ""))
         start_line: Optional[int] = (
-            int(bindings_map["start_line"])
-            if "start_line" in bindings_map
-            else None
+            int(bindings_map["start_line"]) if "start_line" in bindings_map else None
         )
         end_line: Optional[int] = (
-            int(bindings_map["end_line"])
-            if "end_line" in bindings_map
-            else None
+            int(bindings_map["end_line"]) if "end_line" in bindings_map else None
         )
         allow_multiple: bool = (
             bool(bindings_map["allow_multiple"])

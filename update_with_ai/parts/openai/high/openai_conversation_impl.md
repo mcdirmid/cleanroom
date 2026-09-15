@@ -1,7 +1,7 @@
 # openai_conversation_impl implementation component
 
-imports: tool_provider, openai_ext
-implements: agent_conversation
+imports: openai_ext, tool_provider
+implements: loop_conversation
 
 ## Purpose
 
@@ -17,7 +17,7 @@ The conversation formats messages in a model request according to OpenAI chat co
 
 A tool response's suppression key identifies the latest preceding response with the same key in the conversation for replacement with a stub, while responses with unmatched keys are preserved intact. A stub retains the reminder from the superseded tool response, which the newly appended response inherits when omitted.
 
-When assembling a model request from messages in the agent conversation:
+When assembling a model request from messages in the conversation:
 
 - Tool execution response notes, content, and reminders from the tool provider are included in visible tool message content, formatting active reminders on messages and superseded stubs to remind the agent in the assembled model request.
 

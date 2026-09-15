@@ -1,10 +1,10 @@
 from typing import Any, Optional, Tuple, Union
-from . import agent_loop_guard
+from . import loop_guard
 from update_with_ai.parts.sandbox.lib import tool_provider
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
 
 
-class LoopGuard(agent_loop_guard.LoopGuard, Singleton):
+class LoopGuard(loop_guard.LoopGuard, Singleton):
     tier = "agent_session"
 
     def __init__(self) -> None:
@@ -15,7 +15,7 @@ class LoopGuard(agent_loop_guard.LoopGuard, Singleton):
 
     def record_tool_execution(
         self, tool_name: str, bindings: tool_provider.ActualParameterBindings
-    ) -> Optional[Union[agent_loop_guard.LoopReminder, agent_loop_guard.LoopFailure]]:
+    ) -> Optional[Union[loop_guard.LoopReminder, loop_guard.LoopFailure]]:
         # Requirement: [LoopGuard] A loop guard evaluates consecutive executions of identical tools and edits.
         call_key = (
             tool_name,
@@ -29,12 +29,12 @@ class LoopGuard(agent_loop_guard.LoopGuard, Singleton):
 
         # Requirement: Produces a loop failure communicating session failure when consecutive identical tool executions reach the fatal threshold.
         if self._consecutive_count >= self._fatal_threshold:
-            return agent_loop_guard.LoopFailure(
+            return loop_guard.LoopFailure(
                 explanation=f"Fatal loop detected: tool '{tool_name}' executed {self._consecutive_count} times consecutively."
             )
         # Requirement: Produces a loop reminder advising the agent that no new information will be revealed by repeated tool execution until session read-write files are updated when consecutive identical tool executions reach the reminder threshold of two repetitions.
         elif self._consecutive_count >= self._reminder_threshold:
-            return agent_loop_guard.LoopReminder(
+            return loop_guard.LoopReminder(
                 feedback=f"Warning: tool '{tool_name}' has been executed {self._consecutive_count} times consecutively, no new information will be revealed by this tool call until session read-write files are updated."
             )
         return None
@@ -50,6 +50,6 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         LoopGuard,
-        keys=[LoopGuard, agent_loop_guard.LoopGuard],
+        keys=[LoopGuard, loop_guard.LoopGuard],
         tier="agent_session",
     )

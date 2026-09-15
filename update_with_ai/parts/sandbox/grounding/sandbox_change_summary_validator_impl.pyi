@@ -1,8 +1,8 @@
 from typing import Tuple
 from framework import operation, override, singleton_type
 import agent_file_alias
+import agent_node_config
 import sandbox_change_summary_validator
-import sandbox_run_control
 
 @singleton_type('agent_session')
 class ChangeSummaryValidator(sandbox_change_summary_validator.ChangeSummaryValidator):
@@ -11,7 +11,7 @@ PURPOSE:
 Implements change summary validator comparing baseline and disk contents
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, ChangeSummaryValidator inspects net file changes and validates descriptions within the active session, accessing collaborator types in the same lifecycle tier (sandbox_run_control.AdvanceTool) and external filesystem utilities.
+- As an agent_session singleton, ChangeSummaryValidator inspects net file changes within the active session, accessing collaborator types in the same lifecycle tier (agent_node_config.NodeConfig, agent_file_alias.AliasManager) and external filesystem utilities.
 """
 
     @operation
@@ -35,6 +35,6 @@ INHERITED_REQUIREMENTS:
 - [ChangeSummaryValidator] The change summary validator rejects a change summary exceeding configured length bounds with shortening guidance.
 
 GROUNDING_ARGUMENT:
-- Compares recorded initial baseline file content with current workspace file state via the filesystem, retrieves the candidate change summary from imported sandbox_run_control.AdvanceTool (in the same session lifecycle tier), validates change coverage against net modifications, and formats a bounded diff summary.
+- Compares recorded initial baseline file content with current workspace file state via the filesystem across read-write files from agent_node_config.NodeConfig, identifies net file changes, and formats a bounded diff summary.
 """
         ...

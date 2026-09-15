@@ -1,4 +1,4 @@
-"""Agent conversation interface and data types."""
+"""Loop conversation interface and data types."""
 
 from dataclasses import dataclass
 from typing import List, Optional, Protocol

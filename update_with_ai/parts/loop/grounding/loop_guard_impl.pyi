@@ -1,21 +1,21 @@
 from typing import Optional, Union
 from framework import operation, override, singleton_type
-import agent_loop_guard
+import loop_guard
 import tool_provider
 
 @singleton_type('agent_session')
-class LoopGuard(agent_loop_guard.LoopGuard):
+class LoopGuard(loop_guard.LoopGuard):
     """
 PURPOSE:
 Implements loop guard tracking identical tools and edit spans
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, LoopGuard tracks tool executions and edits within the active session scope and relies on types from imported agent_loop_guard and tool_provider in the same lifecycle tier.
+- As an agent_session singleton, LoopGuard tracks tool executions and edits within the active session scope and relies on types from imported loop_guard and tool_provider in the same lifecycle tier.
 """
 
     @operation
     @override
-    def record_tool_execution(self, tool_name: str, bindings: tool_provider.ActualParameterBindings) -> Optional[Union[agent_loop_guard.LoopReminder, agent_loop_guard.LoopFailure]]:
+    def record_tool_execution(self, tool_name: str, bindings: tool_provider.ActualParameterBindings) -> Optional[Union[loop_guard.LoopReminder, loop_guard.LoopFailure]]:
         """
 PURPOSE:
 Tracks consecutive identical tool calls and edits

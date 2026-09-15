@@ -507,7 +507,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             )
             resp_scoped_missing = replace_tool.execute_tool(b_scoped_missing)
             self.assertTrue(resp_scoped_missing.is_failed)
-            self.assertIn("target_content not found in specified line range", resp_scoped_missing.content)
+            self.assertIn(
+                "target_content not found in specified line range",
+                resp_scoped_missing.content,
+            )
 
             # 8. Scoped multiple matches within range fails when allow_multiple is false
             with open(self.target_path, "w", encoding="utf-8") as f:
@@ -674,7 +677,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 bindings={
                     (replace_tool.file_alias_parameter, missing_rw_file),
                     (replace_tool.target_content_parameter, ""),
-                    (replace_tool.replacement_content_parameter, "First line\nSecond line\n"),
+                    (
+                        replace_tool.replacement_content_parameter,
+                        "First line\nSecond line\n",
+                    ),
                 }
             )
             resp_create = replace_tool.execute_tool(b_create)
@@ -796,7 +802,8 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             )
             # Requirement: The replace file content tool allow multiple parameter uses a boolean parameter converter to accept a boolean.
             self.assertIs(
-                replace_tool.allow_multiple_parameter.parameter_converter, self.bool_conv
+                replace_tool.allow_multiple_parameter.parameter_converter,
+                self.bool_conv,
             )
 
     def test_replace_file_content_rejects_do_not_edit_block(self) -> None:
@@ -940,7 +947,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertTrue(resp.is_failed)
             self.assertIn("has been locked against further modification", resp.content)
             self.assertIsNotNone(resp.reminder)
-            self.assertIn("Files that have been the target of a submit, fail, or blame cannot be modified.", resp.reminder or "")
+            self.assertIn(
+                "Files that have been the target of a submit, fail, or blame cannot be modified.",
+                resp.reminder or "",
+            )
 
             # Unlock allows modification again
             edit_mgr.unlock_file(self.rw_file)

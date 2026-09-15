@@ -1300,7 +1300,9 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
                 # Requirement: The node config exposes declared feedback dependencies as blame targets mapped to owning dependency nodes.
                 # Requirement: [NodeConfig] The node config provides blame targets eligible for defect attribution.
-                self.assertEqual({f.short_name for f in cfg.blame_targets}, {"a.py", "ext.py"})
+                self.assertEqual(
+                    {f.short_name for f in cfg.blame_targets}, {"a.py", "ext.py"}
+                )
 
                 # Requirement: The node config exposes declared src file alias by node mapping each session node to the short name of its declared source file alias.
                 # Requirement: [NodeConfig] The node config provides the source file alias short name mapped by session node.

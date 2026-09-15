@@ -1,7 +1,7 @@
 """Unit tests for openai_conversation_impl aligned with grounding specifications."""
 
 import unittest
-from update_with_ai.parts.agent.lib.agent_conversation import (
+from update_with_ai.parts.loop.lib.loop_conversation import (
     Conversation,
     Message,
     ModelRequest,

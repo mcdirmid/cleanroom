@@ -1881,7 +1881,13 @@ def parse_dependency_header(file_content: str) -> Optional[list[str]]:
                 raw = m_dep.group(1).strip()
                 if raw and raw.lower() != "(none)":
                     items = [d.strip() for d in raw.split(",") if d.strip()]
-                    deps.extend([d for d in items if not (d.startswith("<") and d.endswith(">"))])
+                    deps.extend(
+                        [
+                            d
+                            for d in items
+                            if not (d.startswith("<") and d.endswith(">"))
+                        ]
+                    )
                 continue
             m_rel = re.match(r"^from\s+\.\s+import\s+([a-zA-Z0-9_]+)", s)
             if m_rel:
@@ -2116,4 +2122,3 @@ def check_undeclared_imports(
             )
 
     return errors
-

@@ -112,7 +112,9 @@ class MockNodeConfig:
         blame_targets: Optional[Set[BoundFile]] = None,
         blame_targets_by_node: Optional[Mapping[Node, Set[BoundFile]]] = None,
         verification_checks: Optional[Sequence[VerificationCheck]] = None,
-        verification_checks_by_node: Optional[Mapping[Node, Sequence[VerificationCheck]]] = None,
+        verification_checks_by_node: Optional[
+            Mapping[Node, Sequence[VerificationCheck]]
+        ] = None,
         guide: Optional[Guide] = None,
         is_step_mode: bool = True,
         feedback: Optional[Sequence[str]] = None,
@@ -121,7 +123,9 @@ class MockNodeConfig:
         src_file_alias_by_node: Optional[Mapping[Node, str]] = None,
     ) -> None:
         self._blame_targets = blame_targets or set()
-        self.blame_targets_by_node: Mapping[Node, Set[BoundFile]] = blame_targets_by_node or {}
+        self.blame_targets_by_node: Mapping[Node, Set[BoundFile]] = (
+            blame_targets_by_node or {}
+        )
         self._verification_checks: Sequence[VerificationCheck] = (
             verification_checks or []
         )
@@ -371,7 +375,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
         __initialize__(reg)
         tool_mgr = MockToolManager()
         cfg = MockNodeConfig(blame_targets=set(), is_step_mode=False, guide=None)
-        reg.register_instance(self.storage, keys=[dag_storage.DagStorage], tier="system")
+        reg.register_instance(
+            self.storage, keys=[dag_storage.DagStorage], tier="system"
+        )
         reg.register_instance(tool_mgr, keys=[ToolManager], tier="agent_session")
         reg.register_instance(
             self.str_conv, keys=[StringParameterConverter], tier="agent_session"
@@ -839,7 +845,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             # 4. Submitting node1 succeeds: marks node1 SUBMITTED, leaves session open with remaining open files
             b_node1 = ActualParameterBindings(
-                bindings={(submit.target, TargetFileObj("unit1.py")), (submit.change_summary, "Cleaned unit 1")}
+                bindings={
+                    (submit.target, TargetFileObj("unit1.py")),
+                    (submit.change_summary, "Cleaned unit 1"),
+                }
             )
             # Requirement: Tool execution marks the target as submitted, and produces a terminating response indicating that the session completed successfully when all session targets are resolved, or produces a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
             resp4 = submit.execute_tool(b_node1)
@@ -879,7 +888,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             # Fail node1: blocks node2, node3 remains open -> non-terminating
             b_fail = ActualParameterBindings(
-                bindings={(fail_tool.target, TargetFileObj("f_unit1.py")), (fail_tool.explanation, "Broken base")}
+                bindings={
+                    (fail_tool.target, TargetFileObj("f_unit1.py")),
+                    (fail_tool.explanation, "Broken base"),
+                }
             )
             # Requirement: Executing the fail tool marks the target as failed and in-session dependent targets as blocked, producing a terminating response carrying the explanation when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
             resp1 = fail_tool.execute_tool(b_fail)
@@ -891,7 +903,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             # Fail node3: no open nodes remain -> terminates with failure
             b_fail3 = ActualParameterBindings(
-                bindings={(fail_tool.target, "f_unit3.py"), (fail_tool.explanation, "Failed unit 3")}
+                bindings={
+                    (fail_tool.target, "f_unit3.py"),
+                    (fail_tool.explanation, "Failed unit 3"),
+                }
             )
             # Requirement: Executing the fail tool marks the target as failed and in-session dependent targets as blocked, producing a terminating response carrying the explanation when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
             resp2 = fail_tool.execute_tool(b_fail3)
@@ -962,7 +977,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIn(b_rw1, self.edit_mgr.locked_files)
             self.assertNotIn(b_rw3, self.edit_mgr.locked_files)
             self.assertNotIn(bt, self.edit_mgr.locked_files)
-            self.assertIn("Target `b_unit1.py` blamed `upstream_spec.md`: Spec defect", resp_ok.content)
+            self.assertIn(
+                "Target `b_unit1.py` blamed `upstream_spec.md`: Spec defect",
+                resp_ok.content,
+            )
             self.assertIn("- `b_unit3.py`", resp_ok.content)
 
             # Blame node3: no open nodes remain -> terminates!
@@ -1002,7 +1020,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             # Test target rt_unit1.py passes
             # Requirement: When a target is specified, executing the run tests tool evaluates verification checks for that target.
-            b1 = ActualParameterBindings(bindings={(run_tests.target, TargetFileObj("rt_unit1.py"))})
+            b1 = ActualParameterBindings(
+                bindings={(run_tests.target, TargetFileObj("rt_unit1.py"))}
+            )
             resp1 = run_tests.execute_tool(b1)
             self.assertFalse(resp1.is_failed)
             self.assertEqual(vcheck1.call_count, 1)

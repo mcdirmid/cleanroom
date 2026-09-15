@@ -259,9 +259,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertIsInstance(view_tool.description, str)
             self.assertEqual(view_tool.parameters, {view_tool.path_parameter})
             # Requirement: The view file tool path parameter uses the alias manager to convert a file alias.
-            self.assertIs(
-                view_tool.path_parameter.parameter_converter, self.alias_mgr
-            )
+            self.assertIs(view_tool.path_parameter.parameter_converter, self.alias_mgr)
 
             # 1. Read-only file formatting and sanitization
             bindings1 = ActualParameterBindings(
