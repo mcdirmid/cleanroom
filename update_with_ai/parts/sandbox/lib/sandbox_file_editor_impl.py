@@ -353,6 +353,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
             if start_line is not None or end_line is not None:
                 full_count = content.count(target_content)
                 if full_count > 0:
+                    # Requirement: When target content is not found within the designated line range but exists elsewhere in the file, failure feedback indicates the line numbers where the target content was located.
                     first_idx = content.find(target_content)
                     actual_start_line = content[:first_idx].count("\n") + 1
                     actual_end_line = actual_start_line + target_content.count("\n")

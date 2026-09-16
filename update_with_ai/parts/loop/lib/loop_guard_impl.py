@@ -32,7 +32,7 @@ class LoopGuard(loop_guard.LoopGuard, Singleton):
             return loop_guard.LoopFailure(
                 explanation=f"Fatal loop detected: tool '{tool_name}' executed {self._consecutive_count} times consecutively."
             )
-        # Requirement: Produces a loop reminder advising the agent that no new information will be revealed by repeated tool execution until session read-write files are updated when consecutive identical tool executions reach the reminder threshold of two repetitions.
+        # Requirement: Produces a loop reminder advising the agent that no new information will be revealed by repeated tool execution until session read-write files are updated and that repeating the tool call without modifying files will trigger fatal loop termination when consecutive identical tool executions reach the reminder threshold of two repetitions.
         elif self._consecutive_count >= self._reminder_threshold:
             return loop_guard.LoopReminder(
                 feedback=f"Warning: tool '{tool_name}' has been executed {self._consecutive_count} times consecutively, no new information will be revealed by this tool call until session read-write files are updated. Repeating this tool call without modifying files will trigger fatal loop termination."

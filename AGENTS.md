@@ -7,6 +7,12 @@
   - `update_with_ai/`
   - `update_python_with_ai/`
 
+## Mandatory Specification-First (HLS-First) Rule
+
+- **ALWAYS start with HLS changes when changing code in a parts directory**: Never make stealth changes to library code (`lib/*.py`), unit tests (`tests/*_test.py`), or grounding specs (`grounding/*.pyi`) without first authoring and aligning the corresponding High-Level Specification (`high/*.md`).
+- **Four-Way Strict Alignment**: Every behavior, boundary condition, error diagnostic, or parameter must follow the pipeline: `HLS` (`high/*.md`) $\\to$ `Grounding` (`grounding/*.pyi`) $\\to$ `Library` (`lib/*.py`) $\\to$ `Unit Tests` (`tests/*_test.py`).
+- **Verbatim Requirement Citations**: Implementation and test comments must cite exact requirement strings from `FRESH_REQUIREMENTS:` or `INHERITED_REQUIREMENTS:` using `# Requirement: <exact text>`. Fabricating unmandated requirement comments or implementing uncontracted behavior is prohibited.
+
 ## Guide Editing & Meta-Rules
 
 - **Editing Guides**: ALWAYS read and maintain in context `update_with_ai/guides/meta_guide.md` before creating, updating, or editing any guide.

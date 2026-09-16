@@ -19,8 +19,8 @@ Startup tool executions are determined by session configuration:
 
 - An initial advance tool execution with the name of the advance tool, empty wire parameter bindings, and the response produced by executing the advance tool is included when using step mode to communicate a guide progressively.
 
-- File read executions for all declared read-only files ordered deterministically by file alias short name are included when performing startup reads, positioned after any advance tool execution. Each file read execution uses the name of the view file tool, specifies wire parameter bindings mapping the path parameter of the view file tool to the read-only file alias short name, and captures the response produced by executing the view file tool.
+- File read executions for all declared read-only files ordered deterministically by file alias short name are included when performing startup reads and the session has at most one read-write file, positioned after any advance tool execution. Each file read execution uses the name of the view file tool, specifies wire parameter bindings mapping the path parameter of the view file tool to the read-only file alias short name, and captures the response produced by executing the view file tool.
 
-- Omitted tool executions correspond to unconfigured options: when step mode is not used, startup tool executions contain no advance tool execution; when startup reads are not performed, startup tool executions contain no file read executions.
+- Omitted tool executions correspond to unconfigured options: when step mode is not used, startup tool executions contain no advance tool execution; when startup reads are not performed or the session has multiple read-write files, startup tool executions contain no file read executions.
 
 Startup templates materialize missing read-write files with starter templates without overwriting existing files. Workspace file modifications report whether any read-write file was modified during the session.

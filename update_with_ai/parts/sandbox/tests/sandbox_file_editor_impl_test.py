@@ -524,6 +524,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.end_line_parameter, 2),
                 }
             )
+            # Requirement: When target content is not found within the designated line range but exists elsewhere in the file, failure feedback indicates the line numbers where the target content was located.
             resp_scoped_locator = replace_tool.execute_tool(b_scoped_locator)
             self.assertTrue(resp_scoped_locator.is_failed)
             self.assertIn(

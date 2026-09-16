@@ -62,7 +62,7 @@ class LoopGuardImplTest(unittest.TestCase):
             self.assertIsNone(guard.record_tool_execution("view_file", bindings))
 
             # Call 2 -> LoopReminder
-            # Requirement: Produces a loop reminder advising the agent that no new information will be revealed by repeated tool execution until session read-write files are updated when consecutive identical tool executions reach the reminder threshold of two repetitions.
+            # Requirement: Produces a loop reminder advising the agent that no new information will be revealed by repeated tool execution until session read-write files are updated and that repeating the tool call without modifying files will trigger fatal loop termination when consecutive identical tool executions reach the reminder threshold of two repetitions.
             # Requirement: [LoopGuard] Consecutive repetitions reaching a warning threshold produce a loop reminder.
             res2 = guard.record_tool_execution("view_file", bindings)
             self.assertIsInstance(res2, LoopReminder)

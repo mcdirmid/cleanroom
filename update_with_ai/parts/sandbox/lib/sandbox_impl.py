@@ -47,7 +47,7 @@ class Sandbox(sandbox.Sandbox, Singleton):
                 )
             )
 
-        # Requirement: When performing startup reads to inspect declared files at session start, startup tool executions include file read executions for all declared read-only files from node config ordered deterministically by file alias short name, positioned after any advance tool execution.
+        # Requirement: When performing startup reads to inspect declared files at session start and the session has at most one read-write file, startup tool executions include file read executions for all declared read-only files from node config ordered deterministically by file alias short name, positioned after any advance tool execution.
         rw_files = getattr(n_cfg, "read_write_files", set())
         if a_cfg.is_startup_reads and len(rw_files) <= 1:
             view_file_tool = get_singleton(sandbox_file_reader.ViewFileTool)

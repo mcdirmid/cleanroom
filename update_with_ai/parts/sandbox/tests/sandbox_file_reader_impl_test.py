@@ -323,6 +323,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
                 resp_unknown.reminder, "Only declared files can be inspected."
             )
 
+            # Requirement: Executing the view file tool with an unbound file whose short name or qualified path addresses a module name or ends with .py and matches a declared read-only grounding specification ending with .pyi resolves to that grounding specification file alias.
             # Transparent resolution: stub.py -> stub.pyi
             resp_py = view_tool.execute_tool(
                 ActualParameterBindings(
@@ -359,6 +360,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertFalse(resp_bare.is_failed)
             self.assertIn("class Stub:", resp_bare.content)
 
+            # Requirement: Executing the view file tool with an unbound file addressing a test file ending with _test.py fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract.
             # Test files are rejected with dedicated guidance
             resp_test = view_tool.execute_tool(
                 ActualParameterBindings(

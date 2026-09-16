@@ -21,7 +21,7 @@ PURPOSE:
 Tracks consecutive identical tool calls and edits
 
 FRESH_REQUIREMENTS:
-- Produces a loop reminder advising the agent that no new information will be revealed by repeated tool execution until session read-write files are updated when consecutive identical tool executions reach the reminder threshold of two repetitions.
+- Produces a loop reminder advising the agent that no new information will be revealed by repeated tool execution until session read-write files are updated and that repeating the tool call without modifying files will trigger fatal loop termination when consecutive identical tool executions reach the reminder threshold of two repetitions.
 - Produces a loop failure communicating session failure when consecutive identical tool executions reach the fatal threshold.
 - Produces a loop reminder at the reminder threshold of two repetitions when consecutive edits target the same file and line range.
 - Produces a loop failure at the fatal threshold when consecutive edits target the same file and line range.

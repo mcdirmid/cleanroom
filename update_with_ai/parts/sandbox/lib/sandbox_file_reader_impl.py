@@ -132,6 +132,7 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
             elif not base_cand.endswith(".pyi"):
                 variations.extend([f"{stem}.py", f"{stem}.pyi"])
 
+            # Requirement: Executing the view file tool with an unbound file whose short name or qualified path addresses a module name or ends with .py and matches a declared read-only grounding specification ending with .pyi resolves to that grounding specification file alias.
             for var in variations:
                 for bf in all_bound_files:
                     if bf.short_name == var:
@@ -143,7 +144,6 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
             if matched_bound is not None:
                 target_file = matched_bound
             else:
-                # Requirement: Executing the view file tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.
                 readable = [f.short_name for f in read_mgr.read_only_files] + [
                     f.short_name for f in read_mgr.read_write_files
                 ]
@@ -151,8 +151,10 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
                     target_file.short_name.endswith("_test.py")
                     or "_test" in target_file.short_name
                 ):
+                    # Requirement: Executing the view file tool with an unbound file addressing a test file ending with _test.py fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract.
                     guidance = f"Error: Unknown file '{target_file.short_name}'. Test files are not inspectable by design; only declared grounding specifications (.pyi) and target library files (.py) are accessible. Available files: {', '.join(readable)}"
                 else:
+                    # Requirement: Otherwise, executing the view file tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.
                     guidance = f"Error: Unknown file '{target_file.short_name}'. Available files: {', '.join(readable)}"
                 return tool_provider.Response(
                     is_failed=True,
