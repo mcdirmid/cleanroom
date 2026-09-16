@@ -10,7 +10,7 @@ filegroup(
         "//update_with_ai/parts/bazel:high_specs",
         "//update_with_ai/parts/openai:high_specs",
         "//update_with_ai/parts/core:high_specs",
-        "//update_with_ai/parts/program:high_specs",
+        "//update_with_ai/parts/systems:high_specs",
     ],
     visibility = ["//visibility:public"],
 )
@@ -25,7 +25,7 @@ filegroup(
         "//update_with_ai/parts/bazel:grounding_specs",
         "//update_with_ai/parts/openai:grounding_specs",
         "//update_with_ai/parts/core:grounding_specs",
-        "//update_with_ai/parts/program:grounding_specs",
+        "//update_with_ai/parts/systems:grounding_specs",
     ],
     visibility = ["//visibility:public"],
 )

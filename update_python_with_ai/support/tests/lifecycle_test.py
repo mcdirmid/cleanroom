@@ -358,7 +358,7 @@ class TestLifecycle(unittest.TestCase):
             self.assertEqual(cfg.get_mode(), "decorator-mode")
 
     def test_assembly_initialize_traversal(self) -> None:
-        from update_with_ai.parts.program.lib import program_asm
+        from update_with_ai.parts.systems.lib import bazel_with_loop_asm
         from update_with_ai.parts.bazel.lib import bazel_asm, bazel_runner_impl
         from update_with_ai.parts.loop.lib import loop_asm
         from update_with_ai.parts.dag.lib import dag_asm, dag_cleaner_impl
@@ -366,14 +366,14 @@ class TestLifecycle(unittest.TestCase):
         from update_with_ai.parts.openai.lib import openai_driver_impl
 
         test_reg = LifecycleRegistry()
-        # Verify program_asm recursively invokes constituent assemblies without error
-        program_asm.__initialize__(test_reg)
+        # Verify bazel_with_loop_asm recursively invokes constituent assemblies without error
+        bazel_with_loop_asm.__initialize__(test_reg)
 
-        # Confirm constituents are registered in program_asm and bazel_asm CONSTITUENTS
-        self.assertIn(loop_asm, program_asm.CONSTITUENTS)
-        self.assertIn(bazel_asm, program_asm.CONSTITUENTS)
-        self.assertIn(dag_asm, program_asm.CONSTITUENTS)
-        self.assertIn(sandbox_asm, program_asm.CONSTITUENTS)
+        # Confirm constituents are registered in bazel_with_loop_asm and bazel_asm CONSTITUENTS
+        self.assertIn(loop_asm, bazel_with_loop_asm.CONSTITUENTS)
+        self.assertIn(bazel_asm, bazel_with_loop_asm.CONSTITUENTS)
+        self.assertIn(dag_asm, bazel_with_loop_asm.CONSTITUENTS)
+        self.assertIn(sandbox_asm, bazel_with_loop_asm.CONSTITUENTS)
         self.assertIn(bazel_runner_impl, bazel_asm.CONSTITUENTS)
         self.assertIn(openai_driver_impl, loop_asm.CONSTITUENTS)
         self.assertIn(dag_cleaner_impl, dag_asm.CONSTITUENTS)
