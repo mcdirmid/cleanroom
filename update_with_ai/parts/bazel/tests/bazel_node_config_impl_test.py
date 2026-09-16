@@ -20,7 +20,7 @@ from update_with_ai.parts.bazel.lib.bazel_node_config_impl import (
     __initialize__,
 )
 from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget, NodeDirectory
-from update_with_ai.parts.dag.lib.dag_node_cleaner import CleanedNodes
+from update_with_ai.parts.loop.lib.loop_node_cleaner import CleanedNodes
 from update_with_ai.parts.dag.lib.dag_storage import DagStorage, Feedback, Message, Node
 from update_with_ai.parts.agent.lib.agent_file_alias import (
     AliasManager,

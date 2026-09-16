@@ -9,33 +9,8 @@ pyright_library(
     srcs = ["dag_asm.py"],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
-        ":dag_cleaner",
-        ":dag_cleaner_impl",
-        ":dag_node_cleaner",
-        ":dag_storage",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "dag_cleaner",
-    srcs = ["dag_cleaner.py"],
-    pyright_deps = [
-        ":dag_node_cleaner",
-        ":dag_storage",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "dag_cleaner_impl",
-    srcs = ["dag_cleaner_impl.py"],
-    pyright_deps = [
-        "//update_python_with_ai/support/lib:lifecycle",
-        ":dag_cleaner",
-        ":dag_config",
-        ":dag_node_cleaner",
-        ":dag_storage",
+        ":dag_subgraph",
+        ":dag_subgraph_impl",
     ],
     visibility = ["//visibility:public"],
 )
@@ -49,27 +24,30 @@ pyright_library(
 )
 
 pyright_library(
-    name = "dag_node_cleaner",
-    srcs = ["dag_node_cleaner.py"],
-    pyright_deps = [
-        ":dag_storage",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "dag_runner",
-    srcs = ["dag_runner.py"],
-    pyright_deps = [
-        ":dag_storage",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
     name = "dag_storage",
     srcs = ["dag_storage.py"],
     pyright_deps = [
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "dag_subgraph",
+    srcs = ["dag_subgraph.py"],
+    pyright_deps = [
+        ":dag_storage",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "dag_subgraph_impl",
+    srcs = ["dag_subgraph_impl.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        ":dag_config",
+        ":dag_storage",
+        ":dag_subgraph",
     ],
     visibility = ["//visibility:public"],
 )

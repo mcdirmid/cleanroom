@@ -31,7 +31,7 @@ Summary description of the build pass outcome
         ...
 
 @singleton_type('system')
-class DagRunner(Protocol):
+class Loop(Protocol):
     """
 PURPOSE:
 Defined as a system service executing topological build and cleaning passes across workspace nodes
@@ -44,19 +44,19 @@ PURPOSE:
 Executes a complete topological cleaning pass over the acyclic subgraph rooted at a target node
 
 FRESH_REQUIREMENTS:
-- A dag runner executes a cleaning pass over an acyclic subgraph rooted at a target node in dag storage.
-- A dag runner produces a build result upon pass completion.
+- The loop executes a cleaning pass over an acyclic subgraph rooted at a target node in graph storage.
+- The loop produces a build result upon pass completion.
 """
         ...
 
     @operation
-    def mark_node_dirty(self, target: dag_storage.Node, message: dag_storage.Change) -> None:
+    def mark_node_dirty(self, target: dag_storage.Node, change: dag_storage.Change) -> None:
         """
 PURPOSE:
 Marks a target node dirty by injecting a change message into its pending messages
 
 FRESH_REQUIREMENTS:
-- A dag runner marks a target node dirty by injecting a change message into its pending messages in dag storage.
+- The loop marks a target node dirty by injecting a change message into its pending messages.
 """
         ...
 
@@ -67,7 +67,7 @@ PURPOSE:
 Injects feedback into a target node message queue, marking it dirty for cleaning
 
 FRESH_REQUIREMENTS:
-- A dag runner injects a caller-supplied feedback message into a target node.
+- The loop injects a caller-supplied feedback message into a target node.
 """
         ...
 
@@ -78,6 +78,6 @@ PURPOSE:
 Broadcasts a change message from an origin node to all of its reverse dependencies
 
 FRESH_REQUIREMENTS:
-- A dag runner broadcasts a caller-supplied change message from a node to all of its reverse dependencies.
+- The loop broadcasts a caller-supplied change message from a node to all of its reverse dependencies.
 """
         ...

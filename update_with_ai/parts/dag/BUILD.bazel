@@ -18,17 +18,7 @@ filegroup(
 
 update_python_with_ai(
     name = "dag_asm",
-    module_deps = [':dag_cleaner_impl'],
-)
-
-update_python_with_ai(
-    name = "dag_cleaner",
-    module_deps = [':dag_node_cleaner', ':dag_storage'],
-)
-
-update_python_with_ai(
-    name = "dag_cleaner_impl",
-    module_deps = [':dag_cleaner', ':dag_config', ':dag_node_cleaner', ':dag_storage'],
+    module_deps = [':dag_subgraph_impl'],
 )
 
 update_python_with_ai(
@@ -37,16 +27,16 @@ update_python_with_ai(
 )
 
 update_python_with_ai(
-    name = "dag_node_cleaner",
-    module_deps = [':dag_storage'],
-)
-
-update_python_with_ai(
-    name = "dag_runner",
-    module_deps = [':dag_storage'],
-)
-
-update_python_with_ai(
     name = "dag_storage",
     module_deps = [],
+)
+
+update_python_with_ai(
+    name = "dag_subgraph",
+    module_deps = [':dag_storage'],
+)
+
+update_python_with_ai(
+    name = "dag_subgraph_impl",
+    module_deps = [':dag_config', ':dag_storage', ':dag_subgraph'],
 )

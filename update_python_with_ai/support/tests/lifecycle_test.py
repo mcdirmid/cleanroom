@@ -359,9 +359,9 @@ class TestLifecycle(unittest.TestCase):
 
     def test_assembly_initialize_traversal(self) -> None:
         from update_with_ai.parts.systems.lib import bazel_with_loop_asm
-        from update_with_ai.parts.bazel.lib import bazel_asm, bazel_runner_impl
+        from update_with_ai.parts.bazel.lib import bazel_asm, bazel_impl
         from update_with_ai.parts.loop.lib import loop_asm
-        from update_with_ai.parts.dag.lib import dag_asm, dag_cleaner_impl
+        from update_with_ai.parts.dag.lib import dag_asm, dag_subgraph_impl
         from update_with_ai.parts.sandbox.lib import sandbox_asm, sandbox_impl
         from update_with_ai.parts.openai.lib import openai_driver_impl
 
@@ -374,9 +374,9 @@ class TestLifecycle(unittest.TestCase):
         self.assertIn(bazel_asm, bazel_with_loop_asm.CONSTITUENTS)
         self.assertIn(dag_asm, bazel_with_loop_asm.CONSTITUENTS)
         self.assertIn(sandbox_asm, bazel_with_loop_asm.CONSTITUENTS)
-        self.assertIn(bazel_runner_impl, bazel_asm.CONSTITUENTS)
+        self.assertIn(bazel_impl, bazel_asm.CONSTITUENTS)
         self.assertIn(openai_driver_impl, loop_asm.CONSTITUENTS)
-        self.assertIn(dag_cleaner_impl, dag_asm.CONSTITUENTS)
+        self.assertIn(dag_subgraph_impl, dag_asm.CONSTITUENTS)
         self.assertIn(sandbox_impl, sandbox_asm.CONSTITUENTS)
 
     def test_register_instance_for_mock_injection(self) -> None:

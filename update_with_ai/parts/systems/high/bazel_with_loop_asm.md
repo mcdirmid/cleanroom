@@ -2,7 +2,7 @@
 
 assembles: bazel_asm, dag_asm, loop_asm, runner_logger_impl, sandbox_asm
 imports: bazel_target_labels_ext, commonmark_ext, filesystem_ext, json_manifest_ext, model_config_ext, openai_ext, update_with_ai_proto_ext
-implements: agent_config, agent_file_alias, agent_node_config, agent_storage, bazel_manifest_loader, bazel_target, dag_cleaner, dag_config, dag_node_cleaner, dag_runner, dag_storage, file_paths, loop_conversation, loop_driver, loop_guard, openai_config, runner_logger, sandbox, sandbox_change_summary_validator, sandbox_file_editor, sandbox_file_reader, sandbox_guide_delivery, sandbox_run_control, template_format, tool_provider
+implements: agent_config, agent_file_alias, agent_node_config, agent_storage, bazel_manifest_loader, bazel_target, dag_config, dag_storage, dag_subgraph, file_paths, loop, loop_cleaner, loop_conversation, loop_driver, loop_guard, loop_node_cleaner, openai_config, runner_logger, sandbox, sandbox_change_summary_validator, sandbox_file_editor, sandbox_file_reader, sandbox_guide_delivery, sandbox_run_control, template_format, tool_provider
 
 ## Purpose
 
@@ -18,11 +18,11 @@ The *bazel with loop assembly* unites the sub-assemblies and standalone implemen
 
 The bazel with loop assembly aggregates the following constituents:
 
-- The loop assembly from loop_asm, closing the loop driver, loop conversation, loop guard, and dag node cleaner interfaces.
+- The loop assembly from loop_asm, closing the loop cleaner, loop conversation, loop driver, loop guard, and loop node cleaner interfaces.
 
-- The bazel assembly from bazel_asm, closing the agent config, agent file alias, agent node config, agent storage, bazel manifest loader, bazel target, dag config, dag runner, dag storage, file paths, and openai config interfaces.
+- The bazel assembly from bazel_asm, closing the agent config, agent file alias, agent node config, agent storage, bazel manifest loader, bazel target, dag config, dag storage, file paths, loop, and openai config interfaces.
 
-- The dag assembly from dag_asm, closing the dag cleaner interface.
+- The dag assembly from dag_asm, closing the dag subgraph interface.
 
 - The runner logger implementation from runner_logger_impl, closing the runner logger interface to stream terminal progress summaries and unbuffered transcript logs.
 

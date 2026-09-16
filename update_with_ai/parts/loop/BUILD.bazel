@@ -17,8 +17,23 @@ filegroup(
 )
 
 update_python_with_ai(
+    name = "loop",
+    module_deps = ['//update_with_ai/parts/dag:dag_storage'],
+)
+
+update_python_with_ai(
     name = "loop_asm",
-    module_deps = [':loop_guard_impl', ':loop_node_cleaner_impl', '//update_with_ai/parts/openai:openai_conversation_impl', '//update_with_ai/parts/openai:openai_driver_impl'],
+    module_deps = [':loop_cleaner_impl', ':loop_guard_impl', ':loop_node_cleaner_impl', '//update_with_ai/parts/openai:openai_conversation_impl', '//update_with_ai/parts/openai:openai_driver_impl'],
+)
+
+update_python_with_ai(
+    name = "loop_cleaner",
+    module_deps = [':loop_node_cleaner', '//update_with_ai/parts/dag:dag_storage'],
+)
+
+update_python_with_ai(
+    name = "loop_cleaner_impl",
+    module_deps = [':loop_cleaner', ':loop_node_cleaner', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/dag:dag_subgraph'],
 )
 
 update_python_with_ai(
@@ -42,6 +57,11 @@ update_python_with_ai(
 )
 
 update_python_with_ai(
+    name = "loop_node_cleaner",
+    module_deps = ['//update_with_ai/parts/dag:dag_storage'],
+)
+
+update_python_with_ai(
     name = "loop_node_cleaner_impl",
-    module_deps = [':loop_conversation', ':loop_driver', '//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_storage', '//update_with_ai/parts/dag:dag_node_cleaner', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/sandbox:sandbox', '//update_with_ai/parts/sandbox:template_format'],
+    module_deps = [':loop_conversation', ':loop_driver', ':loop_node_cleaner', '//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_storage', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/sandbox:sandbox', '//update_with_ai/parts/sandbox:template_format'],
 )

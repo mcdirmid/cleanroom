@@ -1,19 +1,19 @@
 from __future__ import annotations
 from typing import Optional
 from support.lib.lifecycle import LifecycleRegistry
+from . import bazel_impl
 from . import bazel_manifest_loader_impl
 from . import bazel_model_config_impl
 from . import bazel_node_config_impl
-from . import bazel_runner_impl
 from . import bazel_storage_impl
 from . import bazel_target_impl
 from . import file_paths_impl
 
 CONSTITUENTS = (
+    bazel_impl,
     bazel_manifest_loader_impl,
     bazel_model_config_impl,
     bazel_node_config_impl,
-    bazel_runner_impl,
     bazel_storage_impl,
     bazel_target_impl,
     file_paths_impl,

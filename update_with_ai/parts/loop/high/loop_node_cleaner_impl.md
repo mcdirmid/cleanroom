@@ -1,7 +1,7 @@
 # loop_node_cleaner_impl implementation component
 
 imports: agent_node_config, agent_storage, dag_storage, loop_conversation, loop_driver, sandbox, template_format
-implements: dag_node_cleaner
+implements: loop_node_cleaner
 
 ## Purpose
 

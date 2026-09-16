@@ -20,7 +20,7 @@ from update_with_ai.parts.agent.lib.agent_storage import (
     NodeDefinition,
     TaskPrompt,
 )
-from update_with_ai.parts.dag.lib.dag_node_cleaner import CleanedNodes, NodeCleaner
+from update_with_ai.parts.loop.lib.loop_node_cleaner import CleanedNodes, NodeCleaner
 from update_with_ai.parts.dag.lib.dag_storage import (
     Change,
     Dependency,

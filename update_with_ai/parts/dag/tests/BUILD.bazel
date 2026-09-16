@@ -5,14 +5,13 @@ load("//bin:pyright_library.bzl", "pyright_test")
 package(default_visibility = ["//visibility:public"])
 
 pyright_test(
-    name = "dag_cleaner_impl_test",
-    srcs = ["dag_cleaner_impl_test.py"],
+    name = "dag_subgraph_impl_test",
+    srcs = ["dag_subgraph_impl_test.py"],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/dag/lib:dag_cleaner",
-        "//update_with_ai/parts/dag/lib:dag_cleaner_impl",
         "//update_with_ai/parts/dag/lib:dag_config",
-        "//update_with_ai/parts/dag/lib:dag_node_cleaner",
         "//update_with_ai/parts/dag/lib:dag_storage",
+        "//update_with_ai/parts/dag/lib:dag_subgraph",
+        "//update_with_ai/parts/dag/lib:dag_subgraph_impl",
     ],
 )

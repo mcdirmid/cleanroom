@@ -1,23 +1,23 @@
 from framework import operation, singleton_type
 from typing import Protocol
-import dag_node_cleaner
+import loop_node_cleaner
 import dag_storage
 
 @singleton_type('system')
-class DagCleaner(Protocol):
+class LoopCleaner(Protocol):
     """
 PURPOSE:
 Defined as a system service that coordinates topological graph cleaning across a dag storage using a node cleaner
 """
 
     @operation
-    def clean(self, node: dag_storage.Node, cleaner: dag_node_cleaner.NodeCleaner) -> None:
+    def clean(self, node: dag_storage.Node, cleaner: loop_node_cleaner.NodeCleaner) -> None:
         """
 PURPOSE:
-Provides that a dag cleaner can clean a target node using a node cleaner
+Provides that a loop cleaner can clean a target node using a node cleaner
 
 FRESH_ASSUMPTIONS:
-- The target node roots an acyclic subgraph in dag storage.
+- It is assumed that the node roots an acyclic subgraph.
 
 FRESH_REQUIREMENTS:
 - Cleaning a node cleans dirty nodes in dependency-first topological order, ensuring all dependencies of a node are clean before that node is cleaned.

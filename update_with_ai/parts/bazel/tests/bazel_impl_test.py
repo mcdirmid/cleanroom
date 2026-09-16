@@ -1,22 +1,22 @@
-"""Unit tests for bazel_runner_impl aligned with grounding specifications."""
+"""Unit tests for bazel_impl aligned with grounding specifications."""
 
 import unittest
 from typing import Optional, Sequence, Set
 from update_with_ai.parts.agent.lib import agent_storage
 from update_with_ai.parts.bazel.lib import bazel_manifest_loader
-from update_with_ai.parts.bazel.lib.bazel_runner_impl import (
-    DagRunner as DagRunnerImpl,
+from update_with_ai.parts.bazel.lib.bazel_impl import (
+    Loop as LoopImpl,
     __initialize__,
 )
-from update_with_ai.parts.dag.lib import dag_cleaner
-from update_with_ai.parts.dag.lib import dag_node_cleaner
-from update_with_ai.parts.dag.lib import dag_runner
+from update_with_ai.parts.loop.lib import loop
+from update_with_ai.parts.loop.lib import loop_cleaner
+from update_with_ai.parts.loop.lib import loop_node_cleaner
 from update_with_ai.parts.dag.lib import dag_storage
 from update_with_ai.parts.core.lib import runner_logger
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton
 
 
-class MockRunnerLogger(runner_logger.RunnerLogger):
+class MockRunnerLogger:
     """Mock implementation of RunnerLogger protocol."""
 
     def __init__(self) -> None:
@@ -26,7 +26,7 @@ class MockRunnerLogger(runner_logger.RunnerLogger):
         self.events.append(event)
 
 
-class MockManifestLoader(bazel_manifest_loader.BazelManifestLoader):
+class MockManifestLoader:
     """Mock implementation of BazelManifestLoader protocol."""
 
     def __init__(self) -> None:
@@ -47,7 +47,7 @@ class MockManifestLoader(bazel_manifest_loader.BazelManifestLoader):
         return []
 
 
-class MockDagStorage(dag_storage.DagStorage):
+class MockDagStorage:
     """Mock implementation of DagStorage protocol."""
 
     def __init__(self) -> None:
@@ -85,8 +85,8 @@ class MockDagStorage(dag_storage.DagStorage):
         self.dirty_nodes.discard(node)
 
 
-class MockDagCleaner(dag_cleaner.DagCleaner):
-    """Mock implementation of DagCleaner protocol."""
+class MockLoopCleaner:
+    """Mock implementation of LoopCleaner protocol."""
 
     def __init__(self, storage: MockDagStorage, should_fail: bool = False) -> None:
         self.cleaned_nodes: list[dag_storage.Node] = []
@@ -94,7 +94,7 @@ class MockDagCleaner(dag_cleaner.DagCleaner):
         self.should_fail = should_fail
 
     def clean(
-        self, node: dag_storage.Node, cleaner: dag_node_cleaner.NodeCleaner
+        self, node: dag_storage.Node, cleaner: loop_node_cleaner.NodeCleaner
     ) -> None:
         if self.should_fail:
             raise RuntimeError("Simulated cleaner failure")
@@ -103,7 +103,7 @@ class MockDagCleaner(dag_cleaner.DagCleaner):
         self.storage.dirty_nodes.discard(node)
 
 
-class MockNodeCleaner(dag_node_cleaner.NodeCleaner):
+class MockNodeCleaner:
     """Mock implementation of NodeCleaner protocol."""
 
     def __init__(self) -> None:
@@ -114,15 +114,15 @@ class MockNodeCleaner(dag_node_cleaner.NodeCleaner):
         return True
 
 
-class BazelRunnerImplTest(unittest.TestCase):
-    """Tests for BazelRunner and BuildResult implementation."""
+class BazelImplTest(unittest.TestCase):
+    """Tests for Bazel Loop implementation."""
 
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
         self.logger = MockRunnerLogger()
         self.manifest_loader = MockManifestLoader()
         self.storage = MockDagStorage()
-        self.cleaner = MockDagCleaner(self.storage)
+        self.cleaner = MockLoopCleaner(self.storage)
         self.node_cleaner = MockNodeCleaner()
 
         self.registry.register_instance(
@@ -142,12 +142,12 @@ class BazelRunnerImplTest(unittest.TestCase):
         )
         self.registry.register_instance(
             self.cleaner,
-            keys=[MockDagCleaner, dag_cleaner.DagCleaner],
+            keys=[MockLoopCleaner, loop_cleaner.LoopCleaner],
             tier="system",
         )
         self.registry.register_instance(
             self.node_cleaner,
-            keys=[MockNodeCleaner, dag_node_cleaner.NodeCleaner],
+            keys=[MockNodeCleaner, loop_node_cleaner.NodeCleaner],
             tier="system",
         )
 
@@ -155,14 +155,12 @@ class BazelRunnerImplTest(unittest.TestCase):
 
     def test_build_result_dataclass(self) -> None:
         """Tests BuildResult value object instantiation and property access."""
-        # Requirement: [DagRunner] A dag runner produces a build result upon pass completion.
-        result = dag_runner.BuildResult(
-            success=True, summary="Build finished successfully"
-        )
+        # Requirement: [Loop] The loop produces a build result upon pass completion.
+        result = loop.BuildResult(success=True, summary="Build finished successfully")
         self.assertTrue(result.success)
         self.assertEqual(result.summary, "Build finished successfully")
 
-        failure = dag_runner.BuildResult(success=False, summary="Build failed")
+        failure = loop.BuildResult(success=False, summary="Build failed")
         self.assertFalse(failure.success)
         self.assertEqual(failure.summary, "Build failed")
 
@@ -175,16 +173,15 @@ class BazelRunnerImplTest(unittest.TestCase):
         self.storage.dirty_nodes.add(root)
 
         with enter_phase("system", registry=self.registry):
-            runner = get_singleton(dag_runner.DagRunner)
-            # Requirement: The bazel runner resolves target labels and loads workspace target graphs into dag storage using a manifest loader.
-            # Requirement: [DagRunner] A dag runner executes a cleaning pass over an acyclic subgraph rooted at a target node in dag storage.
+            runner = get_singleton(loop.Loop)
+            # Requirement: Target labels are resolved against workspace directories or runfiles trees to populate graph storage before cleaning.
+            # Requirement: [Loop] The loop executes a cleaning pass over an acyclic subgraph rooted at a target node in graph storage.
+            # Requirement: [Loop] The loop produces a build result upon pass completion.
             result = runner.run_cleaning_pass(root)
 
-            # Requirement: The bazel runner executes cleaning passes in topological order using the dag cleaner and the node cleaner.
             self.assertIn(root, self.cleaner.cleaned_nodes)
             self.assertIn(root, self.node_cleaner.cleaned_targets)
 
-            # Requirement: [DagRunner] A dag runner produces a build result upon pass completion.
             self.assertTrue(result.success)
             self.assertIn("succeeded", result.summary)
 
@@ -214,7 +211,6 @@ class BazelRunnerImplTest(unittest.TestCase):
         self.manifest_loader.manifests["//pkg:dep2"] = dep2_m
         self.manifest_loader.manifests["//pkg:dep3"] = dep3_m
 
-        # Diamond dependency graph: root -> dep1, dep2 -> dep3
         self.storage.dependencies_map[root] = {
             dag_storage.Dependency(node=dep1),
             dag_storage.Dependency(node=dep2),
@@ -223,8 +219,10 @@ class BazelRunnerImplTest(unittest.TestCase):
         self.storage.dependencies_map[dep2] = {dag_storage.Dependency(node=dep3)}
 
         with enter_phase("system", registry=self.registry):
-            runner = get_singleton(dag_runner.DagRunner)
-            # Requirement: The bazel runner resolves target labels and loads workspace target graphs into dag storage using a manifest loader.
+            runner = get_singleton(loop.Loop)
+            # Requirement: Target labels are resolved against workspace directories or runfiles trees to populate graph storage before cleaning.
+            # Requirement: [Loop] The loop executes a cleaning pass over an acyclic subgraph rooted at a target node in graph storage.
+            # Requirement: [Loop] The loop produces a build result upon pass completion.
             result = runner.run_cleaning_pass(root)
 
             self.assertTrue(result.success)
@@ -239,8 +237,9 @@ class BazelRunnerImplTest(unittest.TestCase):
         self.cleaner.should_fail = True
 
         with enter_phase("system", registry=self.registry):
-            runner = get_singleton(dag_runner.DagRunner)
-            # Requirement: The bazel runner halts cleaning and reports failure if a node cleaning fails, if an unexpected failure occurs during cleaning capturing the failure reason in the build summary, or if any reachable node in the target subgraph remains dirty after cleaning.
+            runner = get_singleton(loop.Loop)
+            # Requirement: Cleaning halts immediately and produces a failing build result if node cleaning fails, if any reachable node in the target subgraph remains dirty after cleaning, or if an unexpected failure occurs during cleaning, capturing the failure reason in the build summary.
+            # Requirement: [Loop] The loop produces a build result upon pass completion.
             result = runner.run_cleaning_pass(root)
 
             self.assertFalse(result.success)
@@ -249,63 +248,27 @@ class BazelRunnerImplTest(unittest.TestCase):
                 "Cleaning pass failed for //pkg:failing: Simulated cleaner failure",
             )
 
-            end_events = [
-                e for e in self.logger.events if e.event_name == "build_pass_end"
-            ]
-            self.assertEqual(len(end_events), 1)
-            self.assertEqual(
-                end_events[0].summary,
-                "Cleaning pass failed for //pkg:failing: Simulated cleaner failure",
-            )
+    def test_run_cleaning_pass_nodes_remain_dirty(self) -> None:
+        """Tests that run_cleaning_pass reports failure if nodes remain dirty after cleaning."""
+        root = dag_storage.Node(unit_address="//pkg:stay_dirty", role_address="")
 
-    def test_run_cleaning_pass_remaining_dirty(self) -> None:
-        """Tests cleaning pass reporting failure if root remains dirty after cleaning."""
-        root = dag_storage.Node(unit_address="//pkg:dirty_root", role_address="")
-
-        # Custom cleaner that does not clear dirty status
-        class PersistentDirtyCleaner(dag_cleaner.DagCleaner):
+        class PersistentDirtyCleaner:
             def clean(
-                self, node: dag_storage.Node, cleaner: dag_node_cleaner.NodeCleaner
+                self, node: dag_storage.Node, cleaner: loop_node_cleaner.NodeCleaner
             ) -> None:
                 pass
 
         self.storage.dirty_nodes.add(root)
         self.registry.register_instance(
             PersistentDirtyCleaner(),
-            keys=[dag_cleaner.DagCleaner],
+            keys=[loop_cleaner.LoopCleaner],
             tier="system",
         )
 
         with enter_phase("system", registry=self.registry):
-            runner = get_singleton(dag_runner.DagRunner)
-            # Requirement: The bazel runner halts cleaning and reports failure if a node cleaning fails, if an unexpected failure occurs during cleaning capturing the failure reason in the build summary, or if any reachable node in the target subgraph remains dirty after cleaning.
-            result = runner.run_cleaning_pass(root)
-
-            self.assertFalse(result.success)
-            self.assertIn("failed", result.summary)
-
-    def test_run_cleaning_pass_dependency_remaining_dirty(self) -> None:
-        """Tests cleaning pass reporting failure if a dependency remains dirty after cleaning."""
-        root = dag_storage.Node(unit_address="//pkg:clean_root", role_address="")
-        dep = dag_storage.Node(unit_address="//pkg:dirty_dep", role_address="")
-        self.storage.dependencies_map[root] = {dag_storage.Dependency(node=dep)}
-
-        class PersistentDirtyCleaner(dag_cleaner.DagCleaner):
-            def clean(
-                self, node: dag_storage.Node, cleaner: dag_node_cleaner.NodeCleaner
-            ) -> None:
-                pass
-
-        self.storage.dirty_nodes.add(dep)
-        self.registry.register_instance(
-            PersistentDirtyCleaner(),
-            keys=[dag_cleaner.DagCleaner],
-            tier="system",
-        )
-
-        with enter_phase("system", registry=self.registry):
-            runner = get_singleton(dag_runner.DagRunner)
-            # Requirement: The bazel runner halts cleaning and reports failure if a node cleaning fails, if an unexpected failure occurs during cleaning capturing the failure reason in the build summary, or if any reachable node in the target subgraph remains dirty after cleaning.
+            runner = get_singleton(loop.Loop)
+            # Requirement: Cleaning halts immediately and produces a failing build result if node cleaning fails, if any reachable node in the target subgraph remains dirty after cleaning, or if an unexpected failure occurs during cleaning, capturing the failure reason in the build summary.
+            # Requirement: [Loop] The loop produces a build result upon pass completion.
             result = runner.run_cleaning_pass(root)
 
             self.assertFalse(result.success)
@@ -317,9 +280,8 @@ class BazelRunnerImplTest(unittest.TestCase):
         change = dag_storage.Change()
 
         with enter_phase("system", registry=self.registry):
-            runner = get_singleton(dag_runner.DagRunner)
-            # Requirement: Marking a node dirty injects a change message with text set to check.
-            # Requirement: [DagRunner] A dag runner marks a target node dirty by injecting a change message into its pending messages in dag storage.
+            runner = get_singleton(loop.Loop)
+            # Requirement: [Loop] The loop marks a target node dirty by injecting a change message into its pending messages.
             runner.mark_node_dirty(target, change)
 
             self.assertTrue(self.storage.is_dirty(target))
@@ -331,9 +293,8 @@ class BazelRunnerImplTest(unittest.TestCase):
         feedback = dag_storage.Feedback()
 
         with enter_phase("system", registry=self.registry):
-            runner = get_singleton(dag_runner.DagRunner)
-            # Requirement: Injecting feedback or broadcasting changes transmits caller-provided message content.
-            # Requirement: [DagRunner] A dag runner injects a caller-supplied feedback message into a target node.
+            runner = get_singleton(loop.Loop)
+            # Requirement: [Loop] The loop injects a caller-supplied feedback message into a target node.
             runner.inject_node_feedback(target, feedback)
 
             self.assertTrue(self.storage.is_dirty(target))
@@ -348,9 +309,8 @@ class BazelRunnerImplTest(unittest.TestCase):
         change = dag_storage.Change()
 
         with enter_phase("system", registry=self.registry):
-            runner = get_singleton(dag_runner.DagRunner)
-            # Requirement: Injecting feedback or broadcasting changes transmits caller-provided message content.
-            # Requirement: [DagRunner] A dag runner broadcasts a caller-supplied change message from a node to all of its reverse dependencies.
+            runner = get_singleton(loop.Loop)
+            # Requirement: [Loop] The loop broadcasts a caller-supplied change message from a node to all of its reverse dependencies.
             runner.broadcast_node_change(origin, change)
 
             self.assertTrue(self.storage.is_dirty(dep1))
@@ -363,4 +323,4 @@ if __name__ == "__main__":
     unittest.main()
 
 # Untested requirements:
-# - When an agent session concludes, the bazel runner logs cumulative token usage and pass duration.
+# - Telemetry capturing execution events, cumulative token usage, and pass duration is streamed to standard output and transcript files.

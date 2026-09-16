@@ -34,7 +34,7 @@ pyright_test(
         "//update_with_ai/parts/bazel/lib:bazel_target",
         "//update_with_ai/parts/bazel/lib:bazel_manifest_loader",
         "//update_with_ai/parts/dag/lib:dag_storage",
-        "//update_with_ai/parts/dag/lib:dag_runner",
+        "//update_with_ai/parts/loop/lib:loop",
         "//update_python_with_ai/support/lib:lifecycle",
     ],
 )

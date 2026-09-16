@@ -42,25 +42,25 @@ pyright_test(
         "//update_with_ai/parts/bazel/lib:bazel_node_config_impl",
         "//update_with_ai/parts/bazel/lib:bazel_target",
         "//update_with_ai/parts/bazel/lib:file_paths",
-        "//update_with_ai/parts/dag/lib:dag_node_cleaner",
+        "//update_with_ai/parts/loop/lib:loop_node_cleaner",
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/sandbox/lib:tool_provider",
     ],
 )
 
 pyright_test(
-    name = "bazel_runner_impl_test",
-    srcs = ["bazel_runner_impl_test.py"],
+    name = "bazel_impl_test",
+    srcs = ["bazel_impl_test.py"],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_storage",
+        "//update_with_ai/parts/bazel/lib:bazel_impl",
         "//update_with_ai/parts/bazel/lib:bazel_manifest_loader",
-        "//update_with_ai/parts/bazel/lib:bazel_runner_impl",
         "//update_with_ai/parts/core/lib:runner_logger",
-        "//update_with_ai/parts/dag/lib:dag_cleaner",
-        "//update_with_ai/parts/dag/lib:dag_node_cleaner",
-        "//update_with_ai/parts/dag/lib:dag_runner",
         "//update_with_ai/parts/dag/lib:dag_storage",
+        "//update_with_ai/parts/loop/lib:loop",
+        "//update_with_ai/parts/loop/lib:loop_cleaner",
+        "//update_with_ai/parts/loop/lib:loop_node_cleaner",
     ],
 )
 

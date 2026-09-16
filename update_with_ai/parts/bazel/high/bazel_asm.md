@@ -1,8 +1,8 @@
 # bazel_asm assembly component
 
-assembles: bazel_manifest_loader_impl, bazel_model_config_impl, bazel_node_config_impl, bazel_runner_impl, bazel_storage_impl, bazel_target_impl, file_paths_impl
-imports: bazel_target_labels_ext, dag_cleaner, dag_node_cleaner, filesystem_ext, json_manifest_ext, model_config_ext, runner_logger, tool_provider, update_with_ai_proto_ext
-implements: agent_config, agent_file_alias, agent_node_config, agent_storage, bazel_manifest_loader, bazel_target, dag_config, dag_runner, dag_storage, file_paths, openai_config
+assembles: bazel_impl, bazel_manifest_loader_impl, bazel_model_config_impl, bazel_node_config_impl, bazel_storage_impl, bazel_target_impl, file_paths_impl
+imports: bazel_target_labels_ext, filesystem_ext, json_manifest_ext, loop, loop_cleaner, loop_node_cleaner, model_config_ext, runner_logger, tool_provider, update_with_ai_proto_ext
+implements: agent_config, agent_file_alias, agent_node_config, agent_storage, bazel_manifest_loader, bazel_target, dag_config, dag_storage, file_paths, loop, openai_config
 
 ## Purpose
 
@@ -18,7 +18,7 @@ The *bazel assembly* unites the Bazel workspace implementations into a cohesive 
 
 The bazel assembly aggregates the following constituents:
 
-- The bazel runner implementation from bazel_runner_impl, closing the dag runner interface to coordinate build graph execution and change propagation across workspace targets.
+- The bazel implementation from bazel_impl, closing the loop interface to coordinate build graph execution and change propagation across workspace targets.
 
 - The bazel manifest loader implementation from bazel_manifest_loader_impl, closing the bazel manifest loader interface to parse JSON manifests, resolve node references, and compute dependency closures.
 

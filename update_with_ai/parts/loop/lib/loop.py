@@ -1,6 +1,6 @@
-from typing import Protocol
 from dataclasses import dataclass
-from . import dag_storage
+from typing import Protocol
+from update_with_ai.parts.dag.lib import dag_storage
 
 
 @dataclass(frozen=True)
@@ -9,11 +9,11 @@ class BuildResult:
     summary: str
 
 
-class DagRunner(Protocol):
+class Loop(Protocol):
     def run_cleaning_pass(self, root: dag_storage.Node) -> BuildResult: ...
 
     def mark_node_dirty(
-        self, target: dag_storage.Node, message: dag_storage.Change
+        self, target: dag_storage.Node, change: dag_storage.Change
     ) -> None: ...
 
     def inject_node_feedback(

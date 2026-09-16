@@ -1,5 +1,5 @@
 from typing import Protocol, Sequence
-from . import dag_storage
+from update_with_ai.parts.dag.lib import dag_storage
 
 
 class NodeCleaner(Protocol):

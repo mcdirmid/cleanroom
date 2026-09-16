@@ -18,7 +18,7 @@ filegroup(
 
 update_python_with_ai(
     name = "bazel_asm",
-    module_deps = [':bazel_manifest_loader_impl', ':bazel_model_config_impl', ':bazel_node_config_impl', ':bazel_runner_impl', ':bazel_storage_impl', ':bazel_target_impl', ':file_paths_impl'],
+    module_deps = [':bazel_impl', ':bazel_manifest_loader_impl', ':bazel_model_config_impl', ':bazel_node_config_impl', ':bazel_storage_impl', ':bazel_target_impl', ':file_paths_impl'],
 )
 
 update_python_with_ai(
@@ -38,12 +38,12 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "bazel_node_config_impl",
-    module_deps = ['//update_with_ai/parts/agent:agent_config', '//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', ':bazel_manifest_loader', '//update_with_ai/parts/dag:dag_node_cleaner', '//update_with_ai/parts/dag:dag_storage', ':file_paths', '//update_with_ai/parts/sandbox:tool_provider'],
+    module_deps = ['//update_with_ai/parts/agent:agent_config', '//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', ':bazel_manifest_loader', '//update_with_ai/parts/loop:loop_node_cleaner', '//update_with_ai/parts/dag:dag_storage', ':file_paths', '//update_with_ai/parts/sandbox:tool_provider'],
 )
 
 update_python_with_ai(
-    name = "bazel_runner_impl",
-    module_deps = [':bazel_manifest_loader', '//update_with_ai/parts/dag:dag_cleaner', '//update_with_ai/parts/dag:dag_node_cleaner', '//update_with_ai/parts/dag:dag_runner', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/core:runner_logger'],
+    name = "bazel_impl",
+    module_deps = [':bazel_manifest_loader', '//update_with_ai/parts/core:runner_logger', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/loop:loop', '//update_with_ai/parts/loop:loop_cleaner', '//update_with_ai/parts/loop:loop_node_cleaner'],
 )
 
 update_python_with_ai(

@@ -35,3 +35,7 @@ Always read and maintain in context the relevant guide from `update_python_with_
 ## DO NOT EDIT pyrightconfig.json to fix type problems!
 
 If a test doesn't matter, don't run the test! Do not edit pyrightconfig.json to make the test not matter anymore. If you have a type error that you can't fix, don't edit pyrightconfig.json to make the type error go away. Etc...
+
+## Git Operations
+
+- **NO Unprompted Commits or Pushes**: NEVER commit or push to git unless explicitly directed to do so by the user.

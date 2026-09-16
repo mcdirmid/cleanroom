@@ -227,7 +227,7 @@ class TestBazelMacrosIntegration(unittest.TestCase):
             BazelManifestLoader,
         )
         from update_with_ai.parts.dag.lib.dag_storage import DagStorage
-        from update_with_ai.parts.dag.lib.dag_runner import DagRunner
+        from update_with_ai.parts.loop.lib.loop import Loop
 
         bazel_with_loop_asm.__initialize__()
         node_util = get_singleton(BazelTarget)
@@ -252,7 +252,7 @@ class TestBazelMacrosIntegration(unittest.TestCase):
         storage = get_singleton(DagStorage)
         self.assertIsNotNone(storage)
 
-        runner = get_singleton(DagRunner)
+        runner = get_singleton(Loop)
         self.assertIsNotNone(runner)
 
 

@@ -5,6 +5,19 @@ load("//bin:pyright_library.bzl", "pyright_test")
 package(default_visibility = ["//visibility:public"])
 
 pyright_test(
+    name = "loop_cleaner_impl_test",
+    srcs = ["loop_cleaner_impl_test.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/dag/lib:dag_storage",
+        "//update_with_ai/parts/dag/lib:dag_subgraph",
+        "//update_with_ai/parts/loop/lib:loop_cleaner",
+        "//update_with_ai/parts/loop/lib:loop_cleaner_impl",
+        "//update_with_ai/parts/loop/lib:loop_node_cleaner",
+    ],
+)
+
+pyright_test(
     name = "loop_guard_impl_test",
     srcs = ["loop_guard_impl_test.py"],
     pyright_deps = [
@@ -24,10 +37,10 @@ pyright_test(
         "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/agent/lib:agent_storage",
         "//update_with_ai/parts/bazel/lib:file_paths",
-        "//update_with_ai/parts/dag/lib:dag_node_cleaner",
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/loop/lib:loop_conversation",
         "//update_with_ai/parts/loop/lib:loop_driver",
+        "//update_with_ai/parts/loop/lib:loop_node_cleaner",
         "//update_with_ai/parts/loop/lib:loop_node_cleaner_impl",
         "//update_with_ai/parts/sandbox/lib:sandbox",
         "//update_with_ai/parts/sandbox/lib:sandbox_guide_delivery",

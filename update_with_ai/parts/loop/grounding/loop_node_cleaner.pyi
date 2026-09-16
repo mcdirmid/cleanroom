@@ -16,8 +16,8 @@ PURPOSE:
 Cleans dirty nodes, communicating whether processing should continue
 
 FRESH_REQUIREMENTS:
-- Cleaning dirty nodes communicates whether processing should continue.
-- Processing cannot continue only if a failure occurs while cleaning the nodes that cannot be handled by cleaning any other node.
+- A node cleaner can clean dirty nodes, communicating whether processing should continue.
+- Processing cannot continue only if a failure occurs while cleaning the nodes that cannot be handled by cleaning any other node; otherwise, processing continues.
 """
         ...
 
@@ -35,7 +35,7 @@ PURPOSE:
 Sequence of nodes currently being cleaned in the agent session
 
 FRESH_REQUIREMENTS:
-- The cleaned nodes service presents the sequence of nodes currently being cleaned in the agent session.
+- The sequence of nodes currently being cleaned in the agent session.
 """
         ...
 
@@ -46,6 +46,6 @@ PURPOSE:
 Primary target node currently being cleaned in the agent session
 
 FRESH_REQUIREMENTS:
-- The cleaned nodes service presents the primary target node currently being cleaned in the agent session.
+- The primary target node currently being cleaned in the agent session.
 """
         ...

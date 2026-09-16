@@ -1,9 +1,9 @@
 from typing import Optional, Sequence, Set
 from . import loop_conversation
 from . import loop_driver
+from . import loop_node_cleaner
 from update_with_ai.parts.agent.lib import agent_node_config
 from update_with_ai.parts.agent.lib import agent_storage
-from update_with_ai.parts.dag.lib import dag_node_cleaner
 from update_with_ai.parts.dag.lib import dag_storage
 from update_with_ai.parts.sandbox.lib import sandbox
 from update_with_ai.parts.sandbox.lib import template_format
@@ -17,7 +17,7 @@ from support.lib.lifecycle import (
 )
 
 
-class CleanedNodes(dag_node_cleaner.CleanedNodes, Singleton):
+class CleanedNodes(loop_node_cleaner.CleanedNodes, Singleton):
     tier = "agent_session"
 
     def __init__(self) -> None:
@@ -42,7 +42,7 @@ class CleanedNodes(dag_node_cleaner.CleanedNodes, Singleton):
         self._nodes = tuple(nodes)
 
 
-class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
+class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
     tier = "system"
 
     def __init__(self) -> None:
@@ -306,11 +306,11 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         NodeCleaner,
-        keys=[NodeCleaner, dag_node_cleaner.NodeCleaner],
+        keys=[NodeCleaner, loop_node_cleaner.NodeCleaner],
         tier="system",
     )
     reg.register_singleton(
         CleanedNodes,
-        keys=[CleanedNodes, dag_node_cleaner.CleanedNodes],
+        keys=[CleanedNodes, loop_node_cleaner.CleanedNodes],
         tier="agent_session",
     )

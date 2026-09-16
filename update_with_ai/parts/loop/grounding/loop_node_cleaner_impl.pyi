@@ -2,7 +2,7 @@ from typing import Sequence, Set
 from framework import operation, override, singleton_type
 import agent_node_config
 import agent_storage
-import dag_node_cleaner
+import loop_node_cleaner
 import dag_storage
 import loop_conversation
 import loop_driver
@@ -10,7 +10,7 @@ import sandbox
 import template_format
 
 @singleton_type('system')
-class NodeCleaner(dag_node_cleaner.NodeCleaner):
+class NodeCleaner(loop_node_cleaner.NodeCleaner):
     """
 PURPOSE:
 Implements node cleaner orchestrating sandbox and loop driver
@@ -65,7 +65,7 @@ GROUNDING_ARGUMENT:
         ...
 
 @singleton_type('agent_session')
-class CleanedNodes(dag_node_cleaner.CleanedNodes):
+class CleanedNodes(loop_node_cleaner.CleanedNodes):
     """
 PURPOSE:
 Implements cleaned nodes presenting the active nodes and providing configuration
