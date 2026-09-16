@@ -385,7 +385,7 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         return tool_provider.Parameter(
             name="target",
-            description="Target file alias being submitted. May be omitted in single-target sessions.",
+            description="Target file alias being submitted. Required in multi-target sessions; may be omitted in single-target sessions.",
             parameter_converter=alias_mgr,
             is_required=False,
         )
@@ -581,7 +581,7 @@ class FailTool(sandbox_run_control.FailTool, Singleton):
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         return tool_provider.Parameter(
             name="target",
-            description="Target file alias being failed. May be omitted in single-target sessions.",
+            description="Target file alias being failed. Required in multi-target sessions; may be omitted in single-target sessions.",
             parameter_converter=alias_mgr,
             is_required=False,
         )
@@ -669,7 +669,7 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         return tool_provider.Parameter(
             name="target",
-            description="Session target file alias attributing the blame. May be omitted in single-target sessions.",
+            description="Session target file alias attributing the blame. Required in multi-target sessions; may be omitted in single-target sessions.",
             parameter_converter=alias_mgr,
             is_required=False,
         )

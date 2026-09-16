@@ -167,6 +167,10 @@ class SandboxFileReaderImplTest(unittest.TestCase):
                 '> META: "Trailing meta note."\n'
             )
 
+        self.ro_pyi_path = os.path.join(self.test_dir, "stub.pyi")
+        with open(self.ro_pyi_path, "w", encoding="utf-8") as f:
+            f.write("class Stub:\n    pass\n")
+
         node = Node(unit_address="//pkg:test")
         self.ro_file = ReadOnlyFile(
             short_name="readonly.txt",
@@ -176,6 +180,11 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         self.ro_py_file = ReadOnlyFile(
             short_name="readonly.py",
             workspace_path=_make_workspace_path("readonly.py"),
+            owning_node=node,
+        )
+        self.ro_pyi_file = ReadOnlyFile(
+            short_name="stub.pyi",
+            workspace_path=_make_workspace_path("stub.pyi"),
             owning_node=node,
         )
         self.ro_md_file = ReadOnlyFile(
@@ -198,7 +207,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         self.alias_mgr = MockAliasManager(self.test_dir)
         self.template_formatter = MockTemplateFormatter()
         self.node_cfg = MockNodeConfig(
-            ro_files={self.ro_file, self.ro_py_file, self.ro_md_file},
+            ro_files={self.ro_file, self.ro_py_file, self.ro_pyi_file, self.ro_md_file},
             rw_files={self.rw_file},
             guide_file=self.guide_unbound,
             template_parameters={"doc_name": "MyDoc"},
@@ -313,6 +322,56 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertEqual(
                 resp_unknown.reminder, "Only declared files can be inspected."
             )
+
+            # Transparent resolution: stub.py -> stub.pyi
+            resp_py = view_tool.execute_tool(
+                ActualParameterBindings(
+                    bindings={
+                        (view_tool.path_parameter, UnboundFile(short_name="stub.py"))
+                    }
+                )
+            )
+            self.assertFalse(resp_py.is_failed)
+            self.assertIn("class Stub:", resp_py.content)
+
+            # Transparent resolution: module path testing.parts.pkg.stub.py -> stub.pyi
+            resp_pkg = view_tool.execute_tool(
+                ActualParameterBindings(
+                    bindings={
+                        (
+                            view_tool.path_parameter,
+                            UnboundFile(short_name="testing.parts.pkg.stub.py"),
+                        )
+                    }
+                )
+            )
+            self.assertFalse(resp_pkg.is_failed)
+            self.assertIn("class Stub:", resp_pkg.content)
+
+            # Transparent resolution: bare name stub -> stub.pyi
+            resp_bare = view_tool.execute_tool(
+                ActualParameterBindings(
+                    bindings={
+                        (view_tool.path_parameter, UnboundFile(short_name="stub"))
+                    }
+                )
+            )
+            self.assertFalse(resp_bare.is_failed)
+            self.assertIn("class Stub:", resp_bare.content)
+
+            # Test files are rejected with dedicated guidance
+            resp_test = view_tool.execute_tool(
+                ActualParameterBindings(
+                    bindings={
+                        (
+                            view_tool.path_parameter,
+                            UnboundFile(short_name="my_target_test.py"),
+                        )
+                    }
+                )
+            )
+            self.assertTrue(resp_test.is_failed)
+            self.assertIn("Test files are not inspectable by design", resp_test.content)
 
     def test_read_tool_missing_file_handling(self) -> None:
         """CUJ: Handling missing read-write files (treated as empty) vs missing read-only files (fails)."""

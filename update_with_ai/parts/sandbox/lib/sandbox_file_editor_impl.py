@@ -351,6 +351,25 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         # Requirement: When allow multiple is true, execution fails if the target content is not found within the designated line range, and replaces all occurrences of the target content within the designated line range.
         if count == 0:
             if start_line is not None or end_line is not None:
+                full_count = content.count(target_content)
+                if full_count > 0:
+                    first_idx = content.find(target_content)
+                    actual_start_line = content[:first_idx].count("\n") + 1
+                    actual_end_line = actual_start_line + target_content.count("\n")
+                    line_desc = (
+                        f"lines {actual_start_line}-{actual_end_line}"
+                        if actual_end_line > actual_start_line
+                        else f"line {actual_start_line}"
+                    )
+                    return tool_provider.Response(
+                        is_failed=True,
+                        is_terminated=False,
+                        content=(
+                            f"Error: target_content not found in specified line range [{s_idx + 1}, {e_idx}]. "
+                            f"target_content exists at {line_desc} in '{target_file.short_name}'. "
+                            f"Update start_line/end_line to include {line_desc}, or omit start_line and end_line."
+                        ),
+                    )
                 return tool_provider.Response(
                     is_failed=True,
                     is_terminated=False,
@@ -400,8 +419,8 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                 return tool_provider.Response(
                     is_failed=True,
                     is_terminated=False,
-                    content="Error: Cannot edit lines within '# --- DO NOT EDIT: Auto-generated dependencies ---' ... '# --- END DO NOT EDIT ---'. Auto-generated dependencies are managed automatically by the build toolchain.",
-                    reminder="Do not modify the auto-generated dependencies block. Implement logic below '# --- END DO NOT EDIT ---'.",
+                    content=f"Error: Cannot edit lines within '# --- DO NOT EDIT: Auto-generated dependencies ---' ... '# --- END DO NOT EDIT ---' (lines {dne_start}-{dne_end}). Auto-generated dependencies are managed automatically by the build toolchain.",
+                    reminder=f"Do not modify the auto-generated dependencies block (lines {dne_start}-{dne_end}). Implement logic strictly below line {dne_end}.",
                 )
 
         if allow_multiple:

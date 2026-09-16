@@ -8,6 +8,7 @@ from update_with_ai.parts.agent.lib.agent_file_alias import (
     BoundFile,
     FileContent,
     ReadOnlyFile,
+    ReadWriteFile,
     UnboundFile,
     WorkspacePath,
 )
@@ -51,13 +52,17 @@ class MockNodeConfig:
 
     def __init__(
         self,
-        read_only_files: Set[BoundFile],
+        read_only_files: Set[ReadOnlyFile],
         is_step_mode: Optional[bool] = None,
         allows_step_mode: bool = True,
+        read_write_files: Optional[Set[ReadWriteFile]] = None,
     ) -> None:
         self.read_only_files = read_only_files
         self._is_step_mode = is_step_mode
         self.allows_step_mode = allows_step_mode
+        self._read_write_files = (
+            read_write_files if read_write_files is not None else set()
+        )
 
     @property
     def is_step_mode(self) -> bool:
@@ -74,8 +79,12 @@ class MockNodeConfig:
         self._is_step_mode = val
 
     @property
-    def read_write_files(self) -> Set[BoundFile]:
-        return set()
+    def read_write_files(self) -> Set[ReadWriteFile]:
+        return self._read_write_files
+
+    @read_write_files.setter
+    def read_write_files(self, val: Set[ReadWriteFile]) -> None:
+        self._read_write_files = val
 
     @property
     def guide_file(self) -> Optional[UnboundFile]:
@@ -254,7 +263,7 @@ class SandboxImplTest(unittest.TestCase):
             workspace_path=_make_workspace_path("pkg/m_lib.py"),
             owning_node=node,
         )
-        ro_files: Set[BoundFile] = {ro_file_z, ro_file_a, ro_file_py}
+        ro_files: Set[ReadOnlyFile] = {ro_file_z, ro_file_a, ro_file_py}
         self.node_cfg.read_only_files = ro_files
 
         with enter_phase("agent_session", registry=self.registry) as scope:
@@ -314,6 +323,34 @@ class SandboxImplTest(unittest.TestCase):
         with enter_phase("agent_session", registry=self.registry) as scope:
             sb = scope.get_singleton(Sandbox)
             # Requirement: When step mode is not used, startup tool executions contain no advance tool execution.
+            executions = sb.get_startup_tool_executions()
+
+    def test_get_startup_tool_executions_multi_target_skips_startup_reads(self) -> None:
+        """CUJ: Multi-target sessions (batch size > 1) skip startup read-only file reads."""
+        node = Node(unit_address="//pkg:target")
+        ro_file = ReadOnlyFile(
+            short_name="spec.md",
+            workspace_path=_make_workspace_path("pkg/spec.md"),
+            owning_node=node,
+        )
+        rw_file_1 = ReadWriteFile(
+            short_name="file1.py",
+            workspace_path=_make_workspace_path("pkg/file1.py"),
+            owning_node=node,
+        )
+        rw_file_2 = ReadWriteFile(
+            short_name="file2.py",
+            workspace_path=_make_workspace_path("pkg/file2.py"),
+            owning_node=node,
+        )
+        self.agent_cfg.is_step_mode = False
+        self.agent_cfg.is_startup_reads = True
+        self.node_cfg.read_only_files = {ro_file}
+        self.node_cfg.read_write_files = {rw_file_1, rw_file_2}
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            sb = scope.get_singleton(Sandbox)
+            # Requirement: When startup reads are not performed, startup tool executions contain no file read executions.
             executions = sb.get_startup_tool_executions()
             self.assertEqual(len(executions), 0)
 

@@ -117,7 +117,7 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
                         guide_instruction = "Call advance() without arguments to view each guide step. Do not supply change_summary until all guide steps are complete."
                     else:
                         # Requirement: Task prompt instructions for a guided node include identifying the guide file by its file alias and directing the agent to call the submit tool with a change summary describing modifications when complete, or call submit without arguments if no workspace files were modified, when guide step mode is inactive.
-                        guide_instruction = f"The guide is in file {guide_short_name}. Call submit with a change summary describing modifications when complete, or call submit without arguments if no workspace files were modified."
+                        guide_instruction = f"The guide is in file {guide_short_name}. Call submit with a change summary describing modifications when complete, or call submit without arguments if no workspace files were modified. Inspect {guide_short_name} using view_file for all implementation constraints, contracts, and requirements."
 
                 # Requirement: When cleaning multiple nodes, the task prompt enumerates each target file identified by its file alias alongside its task prompt.
                 # Requirement: The task prompt is formatted using the template formatter.
@@ -127,6 +127,8 @@ class NodeCleaner(dag_node_cleaner.NodeCleaner, Singleton):
                     "<!-- for: node in nodes -->\n"
                     "- `<node.src_alias>`: <node.task_prompt>\n"
                     "<!-- endfor -->\n"
+                    "\n"
+                    "Call submit(target='<file_name>') to submit each file individually.\n"
                     "<!-- endif -->\n"
                     "<!-- if: not_multi_node -->\n"
                     "<primary_prompt>\n"

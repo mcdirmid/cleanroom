@@ -65,7 +65,11 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
 
     @property
     def description(self) -> str:
-        return "Views file content from the workspace with line numbers."
+        return (
+            "Views file content from the workspace with line numbers. "
+            "Accepts only the file alias short name (e.g., 'widget.pyi' or 'widget_impl.py') "
+            "via parameter 'path'. Parameter 'path' is the only accepted parameter."
+        )
 
     @property
     def path_parameter(self) -> tool_provider.Parameter:
@@ -100,16 +104,62 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
                     is_terminated=False,
                     content="To read the task guide, call 'advance' instead.",
                 )
-            # Requirement: Executing the view file tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.
-            readable = [f.short_name for f in read_mgr.read_only_files] + [
-                f.short_name for f in read_mgr.read_write_files
-            ]
-            return tool_provider.Response(
-                is_failed=True,
-                is_terminated=False,
-                content=f"Error: Unknown file '{target_file.short_name}'. Available files: {', '.join(readable)}",
-                reminder="Only declared files can be inspected.",
+
+            # Check for transparent fallback resolution to a declared bound file:
+            # Resolves foo.py -> foo.pyi, or module paths like testing.parts.pkg.foo.py -> foo.pyi
+            raw_name = target_file.short_name
+            base_cand = os.path.basename(raw_name)
+            if "." in base_cand:
+                parts = base_cand.split(".")
+                if len(parts) > 2 and parts[-1] in ("py", "pyi"):
+                    base_cand = f"{parts[-2]}.{parts[-1]}"
+                elif len(parts) >= 2 and parts[-1] not in ("py", "pyi", "md", "txt"):
+                    base_cand = parts[-1]
+
+            all_bound_files = list(read_mgr.read_only_files) + list(
+                read_mgr.read_write_files
             )
+            matched_bound: Optional[agent_file_alias.BoundFile] = None
+
+            stem = (
+                base_cand[:-3]
+                if base_cand.endswith(".py")
+                else (base_cand[:-4] if base_cand.endswith(".pyi") else base_cand)
+            )
+            variations = [base_cand]
+            if base_cand.endswith(".py"):
+                variations.append(f"{stem}.pyi")
+            elif not base_cand.endswith(".pyi"):
+                variations.extend([f"{stem}.py", f"{stem}.pyi"])
+
+            for var in variations:
+                for bf in all_bound_files:
+                    if bf.short_name == var:
+                        matched_bound = bf
+                        break
+                if matched_bound is not None:
+                    break
+
+            if matched_bound is not None:
+                target_file = matched_bound
+            else:
+                # Requirement: Executing the view file tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.
+                readable = [f.short_name for f in read_mgr.read_only_files] + [
+                    f.short_name for f in read_mgr.read_write_files
+                ]
+                if (
+                    target_file.short_name.endswith("_test.py")
+                    or "_test" in target_file.short_name
+                ):
+                    guidance = f"Error: Unknown file '{target_file.short_name}'. Test files are not inspectable by design; only declared grounding specifications (.pyi) and target library files (.py) are accessible. Available files: {', '.join(readable)}"
+                else:
+                    guidance = f"Error: Unknown file '{target_file.short_name}'. Available files: {', '.join(readable)}"
+                return tool_provider.Response(
+                    is_failed=True,
+                    is_terminated=False,
+                    content=guidance,
+                    reminder="Only declared files can be inspected.",
+                )
 
         # Requirement: Executing the view file tool reads file content using the filesystem at the host path formed from the alias manager workspace root and bound file workspace path, returning content formatted with one-indexed right-aligned line numbers followed by a colon and space.
         assert isinstance(target_file, agent_file_alias.BoundFile)

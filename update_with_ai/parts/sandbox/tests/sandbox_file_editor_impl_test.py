@@ -512,6 +512,24 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 resp_scoped_missing.content,
             )
 
+            # 7b. Scoped target found elsewhere in file reports its actual line number
+            with open(self.target_path, "w", encoding="utf-8") as f:
+                f.write("line 1\nline 2\ntarget line\nline 4\n")
+            b_scoped_locator = ActualParameterBindings(
+                bindings={
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_content_parameter, "target line"),
+                    (replace_tool.replacement_content_parameter, "replaced"),
+                    (replace_tool.start_line_parameter, 1),
+                    (replace_tool.end_line_parameter, 2),
+                }
+            )
+            resp_scoped_locator = replace_tool.execute_tool(b_scoped_locator)
+            self.assertTrue(resp_scoped_locator.is_failed)
+            self.assertIn(
+                "target_content exists at line 3", resp_scoped_locator.content
+            )
+
             # 8. Scoped multiple matches within range fails when allow_multiple is false
             with open(self.target_path, "w", encoding="utf-8") as f:
                 f.write("alpha alpha\nbeta\n")
@@ -846,7 +864,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertIn("managed automatically by the build toolchain", resp.content)
             self.assertEqual(
                 resp.reminder,
-                "Do not modify the auto-generated dependencies block. Implement logic below '# --- END DO NOT EDIT ---'.",
+                "Do not modify the auto-generated dependencies block (lines 1-3). Implement logic strictly below line 3.",
             )
             with open(self.target_path, "r", encoding="utf-8") as f:
                 self.assertEqual(f.read(), initial_text)
