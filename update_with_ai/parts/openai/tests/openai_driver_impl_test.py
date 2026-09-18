@@ -165,7 +165,7 @@ class MockConverter:
 
 
 class DummyTool:
-    def __init__(self, name: str, parameters: Set[Parameter]) -> None:
+    def __init__(self, name: str, parameters: Any = ()) -> None:
         self._name = name
         self._parameters = parameters
 
@@ -444,7 +444,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
-            # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from model config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
+            # Requirement: When driving a turn, the loop driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter sequence, and correlates tool results with model invocations according to OpenAI tool calling conventions.
             self.assertEqual(mock_client.chat.completions.create.call_count, 2)
             turn2_messages = mock_client.chat.completions.create.call_args_list[
                 1
@@ -509,7 +509,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
-            # Requirement: When a model response is truncated at the generation limit, the agent driver resumes generation with a continuation turn.
+            # Requirement: When a model response is truncated at the generation limit, the loop driver terminates any truncated tool invocation by repairing unclosed arguments into valid JSON and appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
             # Requirement: When tool execution produces a terminating response, the agent driver concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
             self.assertTrue(outcome.is_success)
             # Expect: assistant Part 1 -> user continuation prompt -> assistant Part 2 -> tool response
@@ -520,6 +520,106 @@ class OpenAIDriverImplTest(unittest.TestCase):
             self.assertIn("replace_file_content", self.history.messages[1].content)
             self.assertEqual(self.history.messages[2].role, "assistant")
             self.assertEqual(self.history.messages[3].role, "tool")
+
+    @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
+    def test_model_truncation_with_tool_call_and_superseding(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
+        """CUJ: Truncated response with tool call gets repaired arguments, tool failure response with suppression_key, and gets superseded on retry."""
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        truncated_raw_args = '{"path": "foo.py", "replacement_content": "def hello():\\n'
+        comp1 = DummyCompletion(
+            [
+                DummyChoice(
+                    DummyMessage(
+                        "Starting edit...",
+                        tool_calls=[
+                            DummyToolCall(
+                                id="call_trunc_1",
+                                name="replace_file_content",
+                                arguments=truncated_raw_args,
+                            )
+                        ],
+                    ),
+                    finish_reason="length",
+                )
+            ]
+        )
+
+        comp2 = DummyCompletion(
+            [
+                DummyChoice(
+                    DummyMessage(
+                        "Retrying smaller edit",
+                        tool_calls=[
+                            DummyToolCall(
+                                id="call_retry_2",
+                                name="replace_file_content",
+                                arguments='{"path": "foo.py", "target_content": "a", "replacement_content": "b"}',
+                            )
+                        ],
+                    ),
+                    finish_reason="stop",
+                )
+            ]
+        )
+
+        comp3 = DummyCompletion(
+            [
+                DummyChoice(
+                    DummyMessage(
+                        "Done",
+                        tool_calls=[
+                            DummyToolCall(
+                                id="call_finish_3",
+                                name="finish_task",
+                                arguments="{}",
+                            )
+                        ],
+                    ),
+                    finish_reason="stop",
+                )
+            ]
+        )
+        mock_client.chat.completions.create.side_effect = [comp1, comp2, comp3]
+
+        self.tool_mgr.responses["replace_file_content"] = Response(
+            is_failed=False,
+            is_terminated=False,
+            content="Successfully replaced content in 'foo.py'.",
+            suppression_key="replace_file_content",
+        )
+        self.tool_mgr.responses["finish_task"] = Response(
+            is_failed=False, is_terminated=True, content="All done"
+        )
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            runner = scope.get_singleton(AgentDriver)
+            outcome = runner.run()
+
+            # Requirement: When a model response is truncated at the generation limit, the loop driver terminates any truncated tool invocation by repairing unclosed arguments into valid JSON and appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
+            # Requirement: When tool execution produces a terminating response, the agent driver concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
+            self.assertTrue(outcome.is_success)
+
+            # Turn 1 assistant message has repaired valid JSON arguments
+            t1_asst = self.history.messages[0]
+            self.assertEqual(t1_asst.role, "assistant")
+            self.assertEqual(t1_asst.tool_name, "replace_file_content")
+            self.assertEqual(
+                t1_asst.tool_arguments,
+                '{"path": "foo.py", "replacement_content": "def hello():\\n"}',
+            )
+
+            # Turn 1 tool response appended with suppression_key="replace_file_content"
+            self.assertGreaterEqual(len(self.history.tool_responses), 1)
+            trunc_resp, trunc_name, trunc_id = self.history.tool_responses[0]
+            self.assertEqual(trunc_name, "replace_file_content")
+            self.assertEqual(trunc_id, "call_trunc_1")
+            self.assertTrue(trunc_resp.is_failed)
+            self.assertEqual(trunc_resp.suppression_key, "replace_file_content")
+            self.assertIn("truncated at the generation limit", trunc_resp.content)
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
     def test_model_error_handling(self, mock_openai_cls: MagicMock) -> None:
@@ -572,7 +672,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         with enter_phase("agent_session", registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             runner.run()
-            # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from model config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
+            # Requirement: When driving a turn, the loop driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter sequence, and correlates tool results with model invocations according to OpenAI tool calling conventions.
             call_kwargs = mock_client.chat.completions.create.call_args.kwargs
             self.assertEqual(call_kwargs["temperature"], 0.2)
             self.assertEqual(call_kwargs["timeout"], 30.0)
@@ -609,7 +709,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         with enter_phase("agent_session", registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             runner.run()
-            # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
+            # Requirement: When driving a turn, the loop driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter sequence, and correlates tool results with model invocations according to OpenAI tool calling conventions.
             call_kwargs = mock_client.chat.completions.create.call_args.kwargs
             self.assertEqual(call_kwargs["temperature"], 0.7)
             self.assertEqual(call_kwargs["timeout"], 100.0)
@@ -767,8 +867,8 @@ class OpenAIDriverImplTest(unittest.TestCase):
             is_required=True,
         )
 
-        tool_zebra = DummyTool(name="zebra", parameters={param_z, param_a})
-        tool_alpha = DummyTool(name="alpha", parameters={param_b, param_a})
+        tool_zebra = DummyTool(name="zebra", parameters=(param_z, param_a))
+        tool_alpha = DummyTool(name="alpha", parameters=(param_b, param_a))
 
         self.tool_mgr.install_tool(tool_zebra)
         self.tool_mgr.install_tool(tool_alpha)
@@ -781,7 +881,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             outcome = runner.run()
 
             self.assertTrue(outcome.is_success)
-            # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from model config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
+            # Requirement: When driving a turn, the loop driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter sequence, and correlates tool results with model invocations according to OpenAI tool calling conventions.
             tools_arg = mock_client.chat.completions.create.call_args.kwargs.get(
                 "tools"
             )
@@ -792,12 +892,12 @@ class OpenAIDriverImplTest(unittest.TestCase):
             alpha_params = list(
                 tools_arg[0]["function"]["parameters"]["properties"].keys()
             )
-            self.assertEqual(alpha_params, ["a_param", "b_param"])
+            self.assertEqual(alpha_params, ["b_param", "a_param"])
 
             zebra_params = list(
                 tools_arg[1]["function"]["parameters"]["properties"].keys()
             )
-            self.assertEqual(zebra_params, ["a_param", "z_param"])
+            self.assertEqual(zebra_params, ["z_param", "a_param"])
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
     def test_tool_execution_logs_corrective_reminder_in_transcript(

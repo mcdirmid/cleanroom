@@ -17,6 +17,7 @@ Exits 0 when the BUILD entry is maintained; exits 1 on unexpected errors.
 """
 
 import argparse
+import ast
 import os
 import re
 import sys
@@ -40,6 +41,7 @@ from build_lint_common import (
     ensure_pip_load,
     ensure_target,
     extract_target_pyright_deps,
+    find_spec_pyi,
     load_line,
     local_imports,
     module_file,
@@ -94,6 +96,303 @@ def generate_asm_content(dir_name: str, raw_deps: list[str]) -> str:
     return "\n".join(lines)
 
 
+def is_uninitialized_module(content: str) -> bool:
+    stripped = content.strip()
+    if not stripped:
+        return True
+    if "<TargetClass>" in content:
+        return True
+    try:
+        tree = ast.parse(content)
+        classes = [n for n in tree.body if isinstance(n, ast.ClassDef)]
+        funcs = [
+            n
+            for n in tree.body
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and n.name != "__initialize__"
+        ]
+        if not classes and not funcs:
+            return True
+    except SyntaxError:
+        if "<" in content and ">" in content:
+            return True
+    return False
+
+
+def generate_lib_skeleton(pyi_path: str, stem: str) -> str:
+    with open(pyi_path, "r", encoding="utf-8") as f:
+        pyi_content = f.read()
+    tree = ast.parse(pyi_content, filename=pyi_path)
+
+    is_impl = stem.endswith("_impl")
+    lines: list[str] = [
+        "from __future__ import annotations",
+    ]
+
+    typing_names: set[str] = set()
+    has_dataclass = False
+
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            if node.module == "typing":
+                for alias in node.names:
+                    typing_names.add(alias.name)
+        elif isinstance(node, ast.ClassDef):
+            for dec in node.decorator_list:
+                dec_name = None
+                if isinstance(dec, ast.Name):
+                    dec_name = dec.id
+                elif isinstance(dec, ast.Attribute):
+                    dec_name = dec.attr
+                elif isinstance(dec, ast.Call):
+                    if isinstance(dec.func, ast.Name):
+                        dec_name = dec.func.id
+                    elif isinstance(dec.func, ast.Attribute):
+                        dec_name = dec.func.attr
+                if dec_name in ("data_type", "dataclass"):
+                    has_dataclass = True
+
+    if is_impl:
+        typing_names.add("Optional")
+
+    if not is_impl and any(
+        isinstance(node, ast.ClassDef)
+        and any(
+            (isinstance(b, ast.Name) and b.id == "Protocol")
+            or (isinstance(b, ast.Attribute) and b.attr == "Protocol")
+            for b in node.bases
+        )
+        for node in tree.body
+    ):
+        typing_names.add("Protocol")
+
+    if typing_names:
+        lines.append(f"from typing import {', '.join(sorted(typing_names))}")
+    if has_dataclass:
+        lines.append("from dataclasses import dataclass")
+    if is_impl:
+        lines.append(
+            "from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton"
+        )
+
+    pyi_basename = os.path.basename(pyi_path)
+    lines.append("")
+    lines.append(f"# Requirements specified in {pyi_basename}")
+    lines.append("")
+
+    singleton_classes: list[tuple[str, list[str], str]] = []
+
+    for node in tree.body:
+        if hasattr(ast, "TypeAlias") and isinstance(node, ast.TypeAlias):
+            lines.append(ast.unparse(node))
+            lines.append("")
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            lines.append(ast.unparse(node))
+            lines.append("")
+        elif isinstance(node, ast.ClassDef):
+            cls_name = node.name
+            dec_names: set[str] = set()
+            tier_val = "system"
+            has_explicit_dataclass = False
+            for dec in node.decorator_list:
+                if isinstance(dec, ast.Name):
+                    dec_names.add(dec.id)
+                    if dec.id == "dataclass":
+                        has_explicit_dataclass = True
+                elif isinstance(dec, ast.Attribute):
+                    dec_names.add(dec.attr)
+                    if dec.attr == "dataclass":
+                        has_explicit_dataclass = True
+                elif isinstance(dec, ast.Call):
+                    fn_name = (
+                        dec.func.id
+                        if isinstance(dec.func, ast.Name)
+                        else getattr(dec.func, "attr", "")
+                    )
+                    dec_names.add(fn_name)
+                    if fn_name == "dataclass":
+                        has_explicit_dataclass = True
+                    elif fn_name == "singleton_type" and dec.args:
+                        arg0 = dec.args[0]
+                        if isinstance(arg0, ast.Constant) and isinstance(
+                            arg0.value, str
+                        ):
+                            tier_val = arg0.value
+
+            is_dc = has_explicit_dataclass or "data_type" in dec_names
+            is_proto = "poly_type" in dec_names or any(
+                (isinstance(b, ast.Name) and b.id == "Protocol")
+                or (isinstance(b, ast.Attribute) and b.attr == "Protocol")
+                for b in node.bases
+            )
+            is_cls_singleton = is_impl or "singleton_type" in dec_names
+
+            base_strs = [
+                ast.unparse(b)
+                for b in node.bases
+                if ast.unparse(b) not in ("data_type",)
+            ]
+
+            if is_impl and is_cls_singleton:
+                if "Singleton" not in base_strs:
+                    base_strs.append("Singleton")
+                singleton_classes.append(
+                    (
+                        cls_name,
+                        [b for b in base_strs if b != "Singleton"],
+                        tier_val,
+                    )
+                )
+
+            bases_formatted = (
+                f"({', '.join(base_strs)})" if base_strs else ""
+            )
+
+            fields: list[str] = []
+            if is_dc:
+                for item in node.body:
+                    if isinstance(item, ast.AnnAssign):
+                        fields.append(ast.unparse(item))
+                    elif isinstance(item, ast.FunctionDef):
+                        if item.name == "__init__":
+                            num_args = len(item.args.args)
+                            num_defaults = len(item.args.defaults)
+                            defaults_offset = num_args - num_defaults
+                            for i, arg in enumerate(item.args.args):
+                                if arg.arg == "self":
+                                    continue
+                                ann = (
+                                    ast.unparse(arg.annotation)
+                                    if arg.annotation
+                                    else "Any"
+                                )
+                                if i >= defaults_offset:
+                                    def_node = item.args.defaults[
+                                        i - defaults_offset
+                                    ]
+                                    def_str = ast.unparse(def_node)
+                                    fields.append(f"{arg.arg}: {ann} = {def_str}")
+                                else:
+                                    fields.append(f"{arg.arg}: {ann}")
+                        elif any(
+                            isinstance(d, ast.Name) and d.id == "property"
+                            for d in item.decorator_list
+                        ):
+                            ann = (
+                                ast.unparse(item.returns)
+                                if item.returns
+                                else "Any"
+                            )
+                            if not any(
+                                f.startswith(f"{item.name}:") for f in fields
+                            ):
+                                fields.append(f"{item.name}: {ann}")
+
+            if is_dc and (has_explicit_dataclass or fields or not base_strs):
+                lines.append("@dataclass(frozen=True)")
+                lines.append(f"class {cls_name}{bases_formatted}:")
+                lines.append(f"    # TODO_{cls_name}_body")
+                if fields:
+                    for f_line in fields:
+                        lines.append(f"    {f_line}")
+                else:
+                    lines.append("    pass")
+                lines.append("")
+                lines.append("")
+            elif not is_impl and is_proto:
+                if "Protocol" not in base_strs:
+                    base_strs.append("Protocol")
+                    bases_formatted = f"({', '.join(base_strs)})"
+                lines.append(f"class {cls_name}{bases_formatted}:")
+                methods = [
+                    item
+                    for item in node.body
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+                ]
+                if not methods:
+                    lines.append(f"    # TODO_{cls_name}_body")
+                    lines.append("    pass")
+                else:
+                    for item in methods:
+                        is_prop = any(
+                            isinstance(d, ast.Name) and d.id == "property"
+                            for d in item.decorator_list
+                        )
+                        if is_prop:
+                            lines.append("    @property")
+                        args_str = ast.unparse(item.args)
+                        ret_str = (
+                            f" -> {ast.unparse(item.returns)}"
+                            if item.returns
+                            else ""
+                        )
+                        lines.append(f"    def {item.name}({args_str}){ret_str}:")
+                        lines.append(f"        # TODO_{item.name}_body")
+                        lines.append("        ...")
+                        lines.append("")
+                lines.append("")
+            elif is_impl:
+                lines.append(f"class {cls_name}{bases_formatted}:")
+                lines.append(f'    tier = "{tier_val}"')
+                lines.append("")
+                has_custom_init = any(
+                    isinstance(item, ast.FunctionDef) and item.name == "__init__"
+                    for item in node.body
+                )
+                if not has_custom_init:
+                    lines.append("    def __init__(self) -> None:")
+                    lines.append("        # TODO___init___body")
+                    lines.append("        pass")
+                    lines.append("")
+                for item in node.body:
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        is_prop = any(
+                            isinstance(d, ast.Name) and d.id == "property"
+                            for d in item.decorator_list
+                        )
+                        if is_prop:
+                            lines.append("    @property")
+                        args_str = ast.unparse(item.args)
+                        ret_str = (
+                            f" -> {ast.unparse(item.returns)}"
+                            if item.returns
+                            else ""
+                        )
+                        lines.append(f"    def {item.name}({args_str}){ret_str}:")
+                        lines.append(f"        # TODO_{item.name}_body")
+                        if item.name == "__init__":
+                            lines.append("        pass")
+                        else:
+                            lines.append("        raise NotImplementedError")
+                        lines.append("")
+                lines.append("")
+            else:
+                lines.append(f"class {cls_name}{bases_formatted}:")
+                lines.append(f"    # TODO_{cls_name}_body")
+                lines.append("    pass")
+                lines.append("")
+                lines.append("")
+
+    if is_impl and singleton_classes:
+        lines.append(
+            "def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:"
+        )
+        lines.append("    reg = get_default_registry() if registry is None else registry")
+        for cls_name, bases, tier_val in singleton_classes:
+            keys = [cls_name] + [b for b in bases if b != cls_name]
+            keys_formatted = ", ".join(keys)
+            lines.append("    reg.register_singleton(")
+            lines.append(f"        {cls_name},")
+            lines.append(f"        keys=[{keys_formatted}],")
+            lines.append(f'        tier="{tier_val}",')
+            lines.append("    )")
+        lines.append("")
+        lines.append("_initialize_ = __initialize__")
+        lines.append("")
+
+    return "\n".join(lines).strip() + "\n"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Maintain a pyright_library BUILD entry.")
     ap.add_argument("build_path", help="path to the package's BUILD.bazel file")
@@ -121,6 +420,24 @@ def main() -> int:
     raw_deps = [d for d in args.deps.split(",") if d]
     pyi_paths = [p for p in args.pyi_deps.split(",") if p]
     dir_name = os.path.dirname(args.module_path) or package or "."
+
+    spec_file = find_spec_pyi(
+        args.module_path,
+        pyi_path=args.pyi or None,
+        pyi_deps=pyi_paths,
+        build_path=args.build_path,
+    )
+    if spec_file and not args.pyi:
+        args.pyi = spec_file
+
+    if spec_file and not stem.endswith("_asm"):
+        mod_exists = os.path.isfile(args.module_path)
+        mod_content = read_text(args.module_path) if mod_exists else ""
+        if not mod_exists or is_uninitialized_module(mod_content):
+            skeleton = generate_lib_skeleton(spec_file, stem)
+            if dir_name:
+                os.makedirs(dir_name, exist_ok=True)
+            write_text(args.module_path, skeleton)
 
     pkg_build_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(args.build_path))),

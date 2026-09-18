@@ -161,6 +161,15 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
             self.record_initial_content(host_path, actual_content)
 
 
+class _OrderedParameterSet(set[tool_provider.Parameter]):
+    def __init__(self, items: tuple[tool_provider.Parameter, ...]) -> None:
+        super().__init__(items)
+        self._items = items
+
+    def __iter__(self):
+        return iter(self._items)
+
+
 class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singleton):
     tier = "agent_session"
 
@@ -245,17 +254,18 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
             parameter_converter=bool_conv,
             is_required=False,
         )
-
     @property
     def parameters(self) -> Set[tool_provider.Parameter]:
-        return {
-            self.file_alias_parameter,
-            self.target_content_parameter,
-            self.replacement_content_parameter,
-            self.start_line_parameter,
-            self.end_line_parameter,
-            self.allow_multiple_parameter,
-        }
+        return _OrderedParameterSet(
+            (
+                self.file_alias_parameter,
+                self.start_line_parameter,
+                self.end_line_parameter,
+                self.allow_multiple_parameter,
+                self.target_content_parameter,
+                self.replacement_content_parameter,
+            )
+        )
 
     def execute_tool(
         self, actual_parameter_bindings: tool_provider.ActualParameterBindings
@@ -277,12 +287,14 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         )
 
         # Requirement: Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+        # Requirement: Editing tool responses share a constant suppression key replace_file_content.
         if not isinstance(target_file, agent_file_alias.ReadWriteFile):
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
                 content=f"Error: {target_file} is not a read-write file.",
                 reminder="Only declared read-write files can be modified.",
+                suppression_key="replace_file_content",
             )
 
         edit_mgr = get_singleton(EditManager)
@@ -293,6 +305,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                 is_terminated=False,
                 content=f"Error: `{target_file.short_name}` has been locked against further modification.",
                 reminder="Files that have been the target of a submit, fail, or blame cannot be modified.",
+                suppression_key="replace_file_content",
             )
 
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
@@ -317,6 +330,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                     is_failed=True,
                     is_terminated=False,
                     content=f"Error: start_line {start_line} out of bounds (1..{total_lines + 1}).",
+                    suppression_key="replace_file_content",
                 )
 
         # Requirement: When an end line is provided, execution fails if the end line is less than one or exceeds the total line count.
@@ -326,6 +340,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                     is_failed=True,
                     is_terminated=False,
                     content=f"Error: end_line {end_line} out of bounds (1..{total_lines}).",
+                    suppression_key="replace_file_content",
                 )
 
         # Requirement: When both start line and end line are provided, execution fails if the start line exceeds the end line.
@@ -335,6 +350,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                     is_failed=True,
                     is_terminated=False,
                     content=f"Error: start_line ({start_line}) cannot be greater than end_line ({end_line}).",
+                    suppression_key="replace_file_content",
                 )
 
         s_idx = (start_line - 1) if start_line is not None else 0
@@ -369,16 +385,19 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                             f"target_content exists at {line_desc} in '{target_file.short_name}'. "
                             f"Update start_line/end_line to include {line_desc}, or omit start_line and end_line."
                         ),
+                        suppression_key="replace_file_content",
                     )
                 return tool_provider.Response(
                     is_failed=True,
                     is_terminated=False,
                     content=f"Error: target_content not found in specified line range [{s_idx + 1}, {e_idx}].",
+                    suppression_key="replace_file_content",
                 )
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
                 content="Error: target_content not found in file.",
+                suppression_key="replace_file_content",
             )
 
         if not allow_multiple and count > 1:
@@ -387,11 +406,13 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                     is_failed=True,
                     is_terminated=False,
                     content=f"Error: target_content matches {count} locations in line range [{s_idx + 1}, {e_idx}]. Set allow_multiple=true or narrow the line range.",
+                    suppression_key="replace_file_content",
                 )
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
                 content=f"Error: target_content matches {count} locations in file. Set allow_multiple=true or specify start_line and end_line.",
+                suppression_key="replace_file_content",
             )
 
         # Requirement: Before modifying a file, editing tool execution fails if the target edit overlaps with auto-generated dependency imports between '# --- DO NOT EDIT: Auto-generated dependencies ---' and '# --- END DO NOT EDIT ---', reminding the agent that auto-generated dependencies are managed by the build toolchain.
@@ -421,6 +442,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                     is_terminated=False,
                     content=f"Error: Cannot edit lines within '# --- DO NOT EDIT: Auto-generated dependencies ---' ... '# --- END DO NOT EDIT ---' (lines {dne_start}-{dne_end}). Auto-generated dependencies are managed automatically by the build toolchain.",
                     reminder=f"Do not modify the auto-generated dependencies block (lines {dne_start}-{dne_end}). Implement logic strictly below line {dne_end}.",
+                    suppression_key="replace_file_content",
                 )
 
         if allow_multiple:
@@ -437,6 +459,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                 is_terminated=False,
                 content="Error: replacement produced no change to file content.",
                 reminder="The edit had no effect, and such edits will fail.",
+                suppression_key="replace_file_content",
             )
 
         edit_mgr = get_singleton(EditManager)
@@ -471,13 +494,13 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
             diff_text = "".join(diff_lines)
             content_msg = f"Successfully replaced content.\n\n```diff\n{diff_text}```"
 
-        # Requirement: Editing tool responses omit suppression keys.
+        # Requirement: Editing tool responses share a constant suppression key replace_file_content.
         return tool_provider.Response(
             is_failed=False,
             is_terminated=False,
             content=content_msg,
             reminder=None,
-            suppression_key=None,
+            suppression_key="replace_file_content",
             follow_up_tool_call=None,
         )
 

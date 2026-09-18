@@ -123,7 +123,7 @@ PURPOSE:
 Appends a tool execution response, stubbing superseded results
 
 FRESH_REQUIREMENTS:
-- Stubs previous responses identified by a suppression key.
+- Stubs previous responses and correlating tool arguments identified by a suppression key.
 """
         ...
 

@@ -51,14 +51,15 @@ Appends a tool response, replacing superseded results with a stub
 
 FRESH_REQUIREMENTS:
 - A tool response's suppression key identifies the latest preceding response with the same key in the conversation for replacement with a stub, while responses with unmatched keys are preserved intact.
+- When a response is replaced with a stub, tool arguments in the correlating assistant invocation message are also replaced with an empty JSON object stub.
 - A stub retains the reminder from the superseded tool response, which the newly appended response inherits when omitted.
 - Each unprompted tool response presented at session start is preceded in the conversation by a synthetic assistant tool invocation message formatted according to OpenAI tool calling conventions, correlating with the response tool call identifier and ordering serialized argument parameters deterministically by parameter name, presenting the tool execution as if initiated by the model.
 
 INHERITED_REQUIREMENTS:
-- [Conversation] Stubs previous responses identified by a suppression key.
+- [Conversation] Stubs previous responses and correlating tool arguments identified by a suppression key.
 
 GROUNDING_ARGUMENT:
-- Receives the response, tool_name, tool_call_id, and optional wire_parameter_bindings as parameters, inspects response.suppression_key against prior tool responses in self.messages to replace the latest preceding response having a matching suppression key with a stub while preserving unmatched responses and superseded reminders, and prepends synthetic tool invocations conforming to openai_ext tool calling conventions correlating by tool call identifier with deterministically ordered argument parameters when unprompted at session start.
+- Receives the response, tool_name, tool_call_id, and optional wire_parameter_bindings as parameters, inspects response.suppression_key against prior tool responses in self.messages to replace the latest preceding response having a matching suppression key with a stub and stubbing correlating assistant tool arguments while preserving unmatched responses and superseded reminders, and prepends synthetic tool invocations conforming to openai_ext tool calling conventions correlating by tool call identifier with deterministically ordered argument parameters when unprompted at session start.
 """
         ...
 

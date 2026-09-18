@@ -329,10 +329,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: On success, the tool writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred.
             # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
             # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, and records that workspace file modifications occurred.
-            # Requirement: Editing tool responses omit suppression keys.
+            # Requirement: Editing tool responses share a constant suppression key replace_file_content.
             resp = replace_tool.execute_tool(b_ok)
             self.assertFalse(resp.is_failed)
-            self.assertIsNone(resp.suppression_key)
+            self.assertEqual(resp.suppression_key, "replace_file_content")
             self.assertIsNone(resp.follow_up_tool_call)
             self.assertIsNone(resp.reminder)
             self.assertTrue(edit_mgr.has_modifications)
@@ -385,7 +385,8 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 resp_no_change.reminder,
                 "The edit had no effect, and such edits will fail.",
             )
-            self.assertIsNone(resp_no_change.suppression_key)
+            # Requirement: Editing tool responses share a constant suppression key replace_file_content.
+            self.assertEqual(resp_no_change.suppression_key, "replace_file_content")
             self.assertIsNone(resp_no_change.follow_up_tool_call)
 
     def test_replace_file_content_tool_line_ranges(self) -> None:
@@ -571,7 +572,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 }
             )
             # Requirement: When configured to produce delta output, successful editing tool execution includes a diff delta representation in the response content.
-            # Requirement: Editing tool responses omit suppression keys.
+            # Requirement: Editing tool responses share a constant suppression key replace_file_content.
             resp_diff = replace_tool.execute_tool(b_diff)
             self.assertFalse(resp_diff.is_failed)
             self.assertIn("```diff", resp_diff.content)
@@ -579,7 +580,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertIn("+Header", resp_diff.content)
             self.assertIsNone(resp_diff.follow_up_tool_call)
             self.assertIsNone(resp_diff.reminder)
-            self.assertIsNone(resp_diff.suppression_key)
+            self.assertEqual(resp_diff.suppression_key, "replace_file_content")
 
             # 2. Delta output disabled omits diff delta
             self.agent_cfg.edit_delta_output = False
@@ -597,7 +598,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertEqual(resp_no_followup.content, "Successfully replaced content.")
             self.assertIsNone(resp_no_followup.follow_up_tool_call)
             self.assertIsNone(resp_no_followup.reminder)
-            self.assertIsNone(resp_no_followup.suppression_key)
+            self.assertEqual(resp_no_followup.suppression_key, "replace_file_content")
 
             # Reset config
             self.agent_cfg.edit_delta_output = True

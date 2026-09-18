@@ -24,6 +24,6 @@ The conversation:
 
 - Can *append* messages and tool responses produced by tool execution.
 
-- Stubs previous responses identified by a suppression key.
+- Stubs previous responses and correlating tool arguments identified by a suppression key.
 
 - Provides a model request for transmission to a language model.

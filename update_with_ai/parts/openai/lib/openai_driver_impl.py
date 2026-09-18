@@ -45,6 +45,57 @@ class _SimpleParameterConverter:
 _DEFAULT_CONVERTER = _SimpleParameterConverter()
 
 
+def _repair_json(raw: str) -> str:
+    raw = raw.strip()
+    if not raw:
+        return "{}"
+    try:
+        json.loads(raw)
+        return raw
+    except Exception:
+        pass
+
+    in_string = False
+    escape = False
+    stack = []
+    for ch in raw:
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if not in_string:
+            if ch in "{[":
+                stack.append("}" if ch == "{" else "]")
+            elif ch in "}]":
+                if stack and stack[-1] == ch:
+                    stack.pop()
+
+    candidate = raw
+    if escape:
+        candidate = candidate[:-1]
+    if in_string:
+        candidate += '"'
+
+    trimmed = candidate.rstrip()
+    while trimmed and trimmed[-1] in (",", ":"):
+        trimmed = trimmed[:-1].rstrip()
+    candidate = trimmed
+
+    for close_char in reversed(stack):
+        candidate += close_char
+
+    try:
+        json.loads(candidate)
+        return candidate
+    except Exception:
+        return "{}"
+
+
 def _format_token_usage(
     prompt_tokens: Optional[int], cached_tokens: Optional[int]
 ) -> Tuple[str, str]:
@@ -135,12 +186,12 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                 timeout=float(openai_cfg.timeout),
             )
 
-        # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
+        # Requirement: When driving a turn, the loop driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter sequence, and correlates tool results with model invocations according to OpenAI tool calling conventions.
         tools_payload: list[dict[str, Any]] = []
         for t in sorted(tool_mgr.installed_tools, key=lambda x: x.name):
             props = {}
             req_props = []
-            for p in sorted(t.parameters, key=lambda x: x.name):
+            for p in t.parameters:
                 props[p.name] = {"type": "string", "description": p.description}
                 if p.is_required:
                     req_props.append(p.name)
@@ -159,7 +210,7 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                 }
             )
         if tools_payload:
-            tools_payload = json.loads(json.dumps(tools_payload, sort_keys=True))
+            tools_payload = json.loads(json.dumps(tools_payload))
 
         limit = agent_cfg.conversation_limit
         turns = 0
@@ -203,7 +254,7 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                 else:
                     messages_payload.append({"role": m.role, "content": m.content})
 
-            messages_payload = json.loads(json.dumps(messages_payload, sort_keys=True))
+            messages_payload = json.loads(json.dumps(messages_payload))
 
             token_summary, token_transcript = _format_token_usage(
                 last_turn_prompt_tokens, last_turn_cached_tokens
@@ -222,7 +273,7 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                 break
 
             try:
-                # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
+                # Requirement: When driving a turn, the loop driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter sequence, and correlates tool results with model invocations according to OpenAI tool calling conventions.
                 create_kwargs: dict[str, Any] = {
                     "model": openai_cfg.model_name,
                     "messages": messages_payload,
@@ -267,13 +318,16 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
             # Requirement: [AgentDriver] The agent driver appends model responses and correlates tool responses with tool call identifiers in the conversation.
             if tool_calls:
                 for tc in tool_calls:
+                    raw_args = tc.function.arguments or "{}"
+                    if finish_reason == "length":
+                        raw_args = _repair_json(raw_args)
                     history.append_message(
                         loop_conversation.Message(
                             role="assistant",
                             content=assistant_msg.content or "",
                             tool_call_id=tc.id,
                             tool_name=tc.function.name,
-                            tool_arguments=tc.function.arguments or "{}",
+                            tool_arguments=raw_args,
                         )
                     )
             else:
@@ -317,18 +371,55 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                 )
             )
 
-            # Requirement: When a model response is truncated at the generation limit, the agent driver resumes generation with a continuation turn.
+            # Requirement: When a model response is truncated at the generation limit, the loop driver terminates any truncated tool invocation by repairing unclosed arguments into valid JSON and appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
             if finish_reason == "length":
-                history.append_message(
-                    loop_conversation.Message(
-                        role="user",
-                        content=(
-                            "Generation limit reached: response was truncated due to length. "
-                            "Whole-file or monolithic replacements that exceed output token limits are prohibited. "
-                            "Make small, incremental edits to individual classes, methods, or sections using replace_file_content."
-                        ),
+                if tool_calls:
+                    for tc in tool_calls:
+                        fn_name = tc.function.name
+                        supp_key: Optional[str] = None
+                        if fn_name == "replace_file_content":
+                            supp_key = "replace_file_content"
+                        elif fn_name in ("advance", "submit", "run_tests"):
+                            supp_key = fn_name
+                        else:
+                            repaired_raw = _repair_json(tc.function.arguments or "")
+                            try:
+                                parsed = json.loads(repaired_raw)
+                                if isinstance(parsed, dict) and "path" in parsed:
+                                    supp_key = str(parsed["path"]).split("/")[-1]
+                            except Exception:
+                                pass
+                            if supp_key is None:
+                                supp_key = fn_name
+
+                        history.append_tool_response(
+                            response=tool_provider.Response(
+                                is_failed=True,
+                                is_terminated=False,
+                                content=(
+                                    f"Tool execution for '{fn_name}' was truncated at the generation limit before completion. "
+                                    "The tool was not executed."
+                                ),
+                                reminder=(
+                                    "Whole-file or monolithic replacements that exceed output token limits are prohibited. "
+                                    "Make small, incremental edits using replace_file_content."
+                                ),
+                                suppression_key=supp_key,
+                            ),
+                            tool_name=fn_name,
+                            tool_call_id=tc.id or f"truncated_{turns}",
+                        )
+                else:
+                    history.append_message(
+                        loop_conversation.Message(
+                            role="user",
+                            content=(
+                                "Generation limit reached: response was truncated due to length. "
+                                "Whole-file or monolithic replacements that exceed output token limits are prohibited. "
+                                "Make small, incremental edits to individual classes, methods, or sections using replace_file_content."
+                            ),
+                        )
                     )
-                )
                 continue
 
             if not tool_calls:

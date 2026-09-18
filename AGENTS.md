@@ -14,8 +14,7 @@
 - **Well-Grounded Specifications During Alignment**: When aligning grounding specifications (`grounding/*.pyi`), ensure the specification remains strictly well-grounded:
   - All properties, operational parameters, and dependencies must have explicit derivation paths from in-scope collaborators, configurations, or inputs without floating directives or ungrounded gaps.
   - Implementation stubs (`<name>_impl.pyi`) must maintain sound `GROUNDING_ARGUMENT:` reasoning that demonstrates concrete collaborator wiring, parameter provenance, and tier-appropriate lifecycle interactions for all implemented operations and properties.
-- **Four-Way Strict Alignment**: Every behavior, boundary condition, error diagnostic, or parameter must follow the pipeline: `HLS` (`high/*.md`) $\to$ `Grounding` (`grounding/*.pyi`) $\to$ `Library` (`lib/*.py`) $\to$ `Unit Tests` (`tests/*_test.py`).
-- **Verbatim Requirement Citations**: Implementation and test comments must cite exact requirement strings from `FRESH_REQUIREMENTS:` or `INHERITED_REQUIREMENTS:` using `# Requirement: <exact text>`. Fabricating unmandated requirement comments or implementing uncontracted behavior is prohibited.
+- **Specification Links and Verbatim Requirement Citations**: In library code (`lib/*.py`), modules link to their grounding specification in the header (`# Requirements specified in <name>.pyi`) rather than duplicating inline requirement comments. In test code (`tests/*_test.py`), test comments cite exact requirement strings from `FRESH_REQUIREMENTS:` or `INHERITED_REQUIREMENTS:` using `# Requirement: <exact text>`. Fabricating unmandated requirement citations or implementing uncontracted behavior is prohibited.
 
 ## Guide Editing & Meta-Rules
 

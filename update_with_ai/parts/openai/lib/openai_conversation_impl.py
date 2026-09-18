@@ -71,6 +71,24 @@ class Conversation(loop_conversation.Conversation, Singleton):
                         reminder=old_msg.reminder,
                         is_stub=True,
                     )
+                    # Requirement: When a response is replaced with a stub, tool arguments in the correlating assistant invocation message are also replaced with an empty JSON object stub.
+                    if old_msg.tool_call_id:
+                        for j in range(i - 1, -1, -1):
+                            if (
+                                self._messages[j].role == "assistant"
+                                and self._messages[j].tool_call_id == old_msg.tool_call_id
+                            ):
+                                asst_msg = self._messages[j]
+                                self._messages[j] = loop_conversation.Message(
+                                    role=asst_msg.role,
+                                    content=asst_msg.content,
+                                    tool_call_id=asst_msg.tool_call_id,
+                                    tool_name=asst_msg.tool_name,
+                                    reminder=asst_msg.reminder,
+                                    tool_arguments="{}",
+                                    is_stub=True,
+                                )
+                                break
                     break
 
         self._messages.append(

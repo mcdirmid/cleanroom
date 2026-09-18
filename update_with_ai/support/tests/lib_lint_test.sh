@@ -448,4 +448,55 @@ else
 fi
 check "c22 undeclared error diagnostic" "$tmp/c22/err.log" "undeclared dependency 'unauthorized_lib'. Allowed dependencies: tool_provider"
 
+# Case 23: empty module with .pyi spec -> scaffolded with valid skeleton and TODO bodies.
+mkdir -p "$tmp/c23/lib" "$tmp/c23/grounding"
+cat > "$tmp/c23/grounding/worker_impl.pyi" <<'EOF'
+from framework import operation, singleton_type
+
+@singleton_type('agent_session')
+class Worker:
+    @operation
+    def process_item(self, item: str) -> bool:
+        ...
+EOF
+touch "$tmp/c23/lib/worker_impl.py"
+if ( cd "$tmp/c23" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/worker_impl.py --pyi "$tmp/c23/grounding/worker_impl.pyi" ); then
+    echo "PASS: c23 auto-generated skeleton from .pyi"
+else
+    echo "FAIL: c23 failed to generate skeleton from .pyi" >&2
+    fail=1
+fi
+check "c23 spec reference header" "$tmp/c23/lib/worker_impl.py" '# Requirements specified in worker_impl.pyi'
+check "c23 class skeleton" "$tmp/c23/lib/worker_impl.py" 'class Worker(Singleton):'
+check "c23 tier" "$tmp/c23/lib/worker_impl.py" 'tier = "agent_session"'
+check "c23 init todo" "$tmp/c23/lib/worker_impl.py" '# TODO___init___body'
+check "c23 method todo" "$tmp/c23/lib/worker_impl.py" '# TODO_process_item_body'
+check "c23 initialize" "$tmp/c23/lib/worker_impl.py" 'def __initialize__(registry: Optional\[LifecycleRegistry\] = None) -> None:'
+check "c23 register singleton" "$tmp/c23/lib/worker_impl.py" 'reg.register_singleton('
+
+# Case 24: module containing uninitialized <TargetClass> placeholder -> replaced with skeleton.
+mkdir -p "$tmp/c24/lib" "$tmp/c24/grounding"
+cat > "$tmp/c24/grounding/service.pyi" <<'EOF'
+from typing import Protocol
+from framework import poly_type
+
+@poly_type
+class Service(Protocol):
+    def serve(self) -> str:
+        ...
+EOF
+cat > "$tmp/c24/lib/service.py" <<'EOF'
+class <TargetClass>(Protocol):
+    pass
+EOF
+if ( cd "$tmp/c24" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/service.py --pyi "$tmp/c24/grounding/service.pyi" ); then
+    echo "PASS: c24 replaced <TargetClass> with valid skeleton"
+else
+    echo "FAIL: c24 failed to replace <TargetClass>" >&2
+    fail=1
+fi
+check "c24 spec reference header" "$tmp/c24/lib/service.py" '# Requirements specified in service.pyi'
+check "c24 protocol class" "$tmp/c24/lib/service.py" 'class Service(Protocol):'
+check "c24 method todo" "$tmp/c24/lib/service.py" '# TODO_serve_body'
+
 exit "$fail"

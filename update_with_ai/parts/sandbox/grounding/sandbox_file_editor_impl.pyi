@@ -269,7 +269,7 @@ PURPOSE:
 Established that each tool defines input parameters accepted for its invocation
 
 GROUNDING_ARGUMENT:
-- Set composed of self's constant parameter descriptors (file_alias_parameter, target_content_parameter, replacement_content_parameter, start_line_parameter, end_line_parameter, allow_multiple_parameter).
+- Set composed of self's constant parameter descriptors in sequence (file_alias_parameter, start_line_parameter, end_line_parameter, allow_multiple_parameter, target_content_parameter, replacement_content_parameter).
 """
         ...
 
@@ -295,13 +295,13 @@ FRESH_REQUIREMENTS:
 - When allow multiple is true, execution fails if the target content is not found within the designated line range, and replaces all occurrences of the target content within the designated line range.
 - When target content is not found within the designated line range but exists elsewhere in the file, failure feedback indicates the line numbers where the target content was located.
 - On success, the tool writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred.
-- Editing tool responses omit suppression keys.
+- Editing tool responses share a constant suppression key replace_file_content.
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, resolves the target read-write file via imported agent_file_alias.AliasManager, inspects and updates file content using the filesystem, scans file content for out-of-bounds line occurrences when target content is missing from designated line ranges, checks configuration via imported agent_config.AgentConfig, omits suppression keys and follow-up tool calls on responses, and notifies EditManager in the same session lifecycle tier that workspace files were modified.
+- Receives actual parameter bindings, resolves the target read-write file via imported agent_file_alias.AliasManager, inspects and updates file content using the filesystem, scans file content for out-of-bounds line occurrences when target content is missing from designated line ranges, checks configuration via imported agent_config.AgentConfig, attaches suppression key 'replace_file_content' and omits follow-up tool calls on responses, and notifies EditManager in the same session lifecycle tier that workspace files were modified.
 """
         ...

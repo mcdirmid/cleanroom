@@ -182,7 +182,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
             )
 
             # Requirement: A tool response's suppression key identifies the latest preceding response with the same key in the conversation for replacement with a stub, while responses with unmatched keys are preserved intact.
-            # Requirement: [Conversation] Stubs previous responses identified by a suppression key.
+            # Requirement: [Conversation] Stubs previous responses and correlating tool arguments identified by a suppression key.
             rw_widget2 = Response(
                 is_failed=False,
                 is_terminated=False,
@@ -215,6 +215,53 @@ class OpenAIConversationImplTest(unittest.TestCase):
                 adv2, tool_name="advance", tool_call_id="call_adv2"
             )
 
+            # 5. replace_file_content calls across any files supersede previous replace_file_content call pairs
+            history.append_message(
+                Message(
+                    role="assistant",
+                    content="",
+                    tool_call_id="call_edit1",
+                    tool_name="replace_file_content",
+                    tool_arguments='{"path": "file_a.py", "target_content": "old_a", "replacement_content": "new_a"}',
+                )
+            )
+            edit1_resp = Response(
+                is_failed=False,
+                is_terminated=False,
+                content="diff a",
+                suppression_key="replace_file_content",
+            )
+            history.append_tool_response(
+                edit1_resp, tool_name="replace_file_content", tool_call_id="call_edit1"
+            )
+
+            # Edit 1 is initially intact
+            edit1_asst = next(
+                m for m in history.messages if m.tool_call_id == "call_edit1" and m.role == "assistant"
+            )
+            self.assertFalse(edit1_asst.is_stub)
+            self.assertIn("file_a.py", edit1_asst.tool_arguments or "")
+
+            # Now Edit 2 on a completely different file (file_b.py) which fails
+            history.append_message(
+                Message(
+                    role="assistant",
+                    content="",
+                    tool_call_id="call_edit2",
+                    tool_name="replace_file_content",
+                    tool_arguments='{"path": "file_b.py", "target_content": "old_b", "replacement_content": "new_b"}',
+                )
+            )
+            edit2_resp = Response(
+                is_failed=True,
+                is_terminated=False,
+                content="Error: target_content not found in file_b.py.",
+                suppression_key="replace_file_content",
+            )
+            history.append_tool_response(
+                edit2_resp, tool_name="replace_file_content", tool_call_id="call_edit2"
+            )
+
             tool_msgs = [m for m in history.messages if m.role == "tool"]
 
             # Verify responses without suppression keys were NOT superseded
@@ -233,6 +280,18 @@ class OpenAIConversationImplTest(unittest.TestCase):
             self.assertFalse(tool_msgs[4].is_stub)
             self.assertEqual(tool_msgs[4].content, "widget v2")
 
+            # Requirement: When a response is replaced with a stub, tool arguments in the correlating assistant invocation message are also replaced with an empty JSON object stub.
+            w1_asst = next(
+                m for m in history.messages if m.tool_call_id == "call_w1" and m.role == "assistant"
+            )
+            self.assertTrue(w1_asst.is_stub)
+            self.assertEqual(w1_asst.tool_arguments, "{}")
+
+            w2_asst = next(
+                m for m in history.messages if m.tool_call_id == "call_w2" and m.role == "assistant"
+            )
+            self.assertFalse(w2_asst.is_stub)
+
             # Verify advance v1 WAS superseded into a stub and retained its reminder
             self.assertTrue(tool_msgs[5].is_stub)
             self.assertEqual(tool_msgs[5].content, "[Superseded]")
@@ -244,6 +303,24 @@ class OpenAIConversationImplTest(unittest.TestCase):
             self.assertEqual(
                 tool_msgs[6].reminder, "Only provide change summary when completing."
             )
+
+            # Verify Edit 1 was superseded across different files: response is stubbed AND assistant arguments are stubbed
+            edit1_asst_after = next(
+                m for m in history.messages if m.tool_call_id == "call_edit1" and m.role == "assistant"
+            )
+            self.assertTrue(edit1_asst_after.is_stub)
+            self.assertEqual(edit1_asst_after.tool_arguments, "{}")
+            self.assertTrue(tool_msgs[7].is_stub)
+            self.assertEqual(tool_msgs[7].content, "[Superseded]")
+
+            # Verify Edit 2 is intact even though it failed, preserving arguments and failure response
+            edit2_asst = next(
+                m for m in history.messages if m.tool_call_id == "call_edit2" and m.role == "assistant"
+            )
+            self.assertFalse(edit2_asst.is_stub)
+            self.assertIn("file_b.py", edit2_asst.tool_arguments or "")
+            self.assertFalse(tool_msgs[8].is_stub)
+            self.assertEqual(tool_msgs[8].content, "Error: target_content not found in file_b.py.")
 
     def test_get_model_request_formats_roles_and_reminders(self) -> None:
         """CUJ: Formatting messages into ModelRequest formats OpenAI conventions and active reminders."""
