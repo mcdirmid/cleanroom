@@ -1,13 +1,13 @@
-# --- DO NOT EDIT: Auto-generated dependencies ---
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton
-import update_with_ai.parts.agent.lib.agent_file_alias as agent_file_alias
-import update_with_ai.parts.agent.lib.agent_node_config as agent_node_config
-from . import sandbox_change_summary_validator
-# --- END DO NOT EDIT ---
 from typing import Optional, Tuple
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    get_singleton,
+)
+from update_with_ai.parts.agent.lib import agent_file_alias
 from update_with_ai.parts.agent.lib import agent_node_config
 from . import sandbox_change_summary_validator
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
 
 
 class ChangeSummaryValidator(

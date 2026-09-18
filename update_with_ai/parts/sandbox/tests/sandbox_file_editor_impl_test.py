@@ -193,18 +193,18 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
         node = MagicMock()
         self.rw_file = ReadWriteFile(
-            short_name="file.txt",
+            relative_path="file.txt",
             workspace_path=_make_workspace_path("file.txt"),
             owning_node=node,
         )
         self.ro_file = ReadOnlyFile(
-            short_name="readonly.txt",
+            relative_path="readonly.txt",
             workspace_path=_make_workspace_path("readonly.txt"),
             owning_node=node,
         )
 
         self.missing_bound = ReadWriteFile(
-            short_name="missing.txt",
+            relative_path="missing.txt",
             workspace_path=_make_workspace_path("missing.txt"),
             owning_node=node,
         )
@@ -313,9 +313,22 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 }
             )
             # Requirement: When allow multiple is not set or false, execution fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence.
+            # Requirement: When target content is not found anywhere in the file, failure feedback specifies a follow-up execution of the view file tool on the target file with reasoning text indicating that the target content was not found.
             resp_not_found = replace_tool.execute_tool(b_not_found)
             self.assertTrue(resp_not_found.is_failed)
             self.assertIn("target_content not found in file", resp_not_found.content)
+            self.assertIsNotNone(resp_not_found.follow_up_tool_call)
+            assert resp_not_found.follow_up_tool_call is not None
+            self.assertEqual(resp_not_found.follow_up_tool_call.tool_name, "view_file")
+            self.assertEqual(
+                resp_not_found.follow_up_tool_call.wire_parameter_bindings.bindings,
+                {("path", self.rw_file.relative_path)},
+            )
+            assert resp_not_found.follow_up_tool_call.reasoning_text is not None
+            self.assertIn(
+                "Target content not found",
+                resp_not_found.follow_up_tool_call.reasoning_text,
+            )
 
             # 3. Successful replacement
             b_ok = ActualParameterBindings(
@@ -660,7 +673,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         nested_host = os.path.join(self.test_dir, nested_rel)
         node = MagicMock()
         missing_rw_file = ReadWriteFile(
-            short_name="missing.txt",
+            relative_path="missing.txt",
             workspace_path=_make_workspace_path(nested_rel),
             owning_node=node,
         )
@@ -794,6 +807,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertIs(
                 replace_tool.file_alias_parameter.parameter_converter, self.alias_mgr
             )
+            self.assertFalse(replace_tool.file_alias_parameter.is_required)
             # Requirement: The replace file content tool target content parameter uses a string parameter converter to accept text.
             self.assertIs(
                 replace_tool.target_content_parameter.parameter_converter, self.str_conv
@@ -816,85 +830,6 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 replace_tool.allow_multiple_parameter.parameter_converter,
                 self.bool_conv,
             )
-
-    def test_replace_file_content_rejects_do_not_edit_block(self) -> None:
-        """CUJ: Edits overlapping the DO NOT EDIT block fail with a reminder."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
-            replace_tool = scope.get_singleton(ReplaceFileContentTool)
-
-            initial_text = (
-                "# --- DO NOT EDIT: Auto-generated dependencies ---\n"
-                "import update_with_ai.parts.dag.lib.dag_storage as dag_storage\n"
-                "# --- END DO NOT EDIT ---\n"
-                "\n"
-                "class Foo:\n"
-                "    pass\n"
-            )
-            with open(self.target_path, "w", encoding="utf-8") as f:
-                f.write(initial_text)
-
-            # 1. Attempting to edit inside the DO NOT EDIT block fails
-            b_overlap = ActualParameterBindings(
-                bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
-                    (
-                        replace_tool.target_content_parameter,
-                        "import update_with_ai.parts.dag.lib.dag_storage as dag_storage",
-                    ),
-                    (
-                        replace_tool.replacement_content_parameter,
-                        "import dag_storage",
-                    ),
-                }
-            )
-            # Requirement: Before modifying a file, editing tool execution fails if the target edit overlaps with auto-generated dependency imports between '# --- DO NOT EDIT: Auto-generated dependencies ---' and '# --- END DO NOT EDIT ---', reminding the agent that auto-generated dependencies are managed by the build toolchain.
-            resp = replace_tool.execute_tool(b_overlap)
-            self.assertTrue(resp.is_failed)
-            self.assertIn(
-                "Cannot edit lines within '# --- DO NOT EDIT: Auto-generated dependencies ---' ... '# --- END DO NOT EDIT ---'",
-                resp.content,
-            )
-            self.assertIn("managed automatically by the build toolchain", resp.content)
-            self.assertEqual(
-                resp.reminder,
-                "Do not modify the auto-generated dependencies block (lines 1-3). Implement logic strictly below line 3.",
-            )
-            with open(self.target_path, "r", encoding="utf-8") as f:
-                self.assertEqual(f.read(), initial_text)
-
-            # 2. Attempting to edit with line range overlapping the block fails
-            b_range_overlap = ActualParameterBindings(
-                bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
-                    (
-                        replace_tool.target_content_parameter,
-                        "import update_with_ai.parts.dag.lib.dag_storage as dag_storage",
-                    ),
-                    (
-                        replace_tool.replacement_content_parameter,
-                        "import dag_storage",
-                    ),
-                    (replace_tool.start_line_parameter, 1),
-                    (replace_tool.end_line_parameter, 3),
-                }
-            )
-            resp_range = replace_tool.execute_tool(b_range_overlap)
-            self.assertTrue(resp_range.is_failed)
-            self.assertIn("Cannot edit lines within", resp_range.content)
-
-            # 3. Editing outside the DO NOT EDIT block succeeds
-            b_outside = ActualParameterBindings(
-                bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
-                    (replace_tool.target_content_parameter, "    pass"),
-                    (replace_tool.replacement_content_parameter, "    x: int = 1"),
-                }
-            )
-            resp_outside = replace_tool.execute_tool(b_outside)
-            self.assertFalse(resp_outside.is_failed)
-            with open(self.target_path, "r", encoding="utf-8") as f:
-                self.assertIn("    x: int = 1", f.read())
-
     def test_materialize_templates_runs_verification_checks(self) -> None:
         """CUJ: Running verification checks when templates are materialized."""
         mock_check = MagicMock()
@@ -903,7 +838,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         mock_failing_check.verify.side_effect = RuntimeError("lint error")
 
         new_rw_file = ReadWriteFile(
-            short_name="templated.txt",
+            relative_path="templated.txt",
             workspace_path=_make_workspace_path("templated.txt"),
             owning_node=MagicMock(),
         )
@@ -967,6 +902,53 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             edit_mgr.unlock_file(self.rw_file)
             resp_unlocked = replace_tool.execute_tool(bindings)
             self.assertFalse(resp_unlocked.is_failed)
+
+    def test_edit_manager_tracks_last_read_or_edited_file(self) -> None:
+        """CUJ: EditManager tracks last read or edited file alias across session."""
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            edit_mgr = scope.get_singleton(EditManager)
+            # Requirement: The edit manager tracks the last read or edited file alias across the session, recording file reads from the file reader and file edits from editing tools.
+            self.assertIsNone(edit_mgr.last_read_or_edited_file)
+
+            edit_mgr.record_file_read(self.ro_file)
+            self.assertEqual(edit_mgr.last_read_or_edited_file, self.ro_file)
+
+            edit_mgr.record_file_edit(self.rw_file)
+            self.assertEqual(edit_mgr.last_read_or_edited_file, self.rw_file)
+
+    def test_replace_file_content_optional_path(self) -> None:
+        """CUJ: ReplaceFileContentTool implicitly binds omitted path to last read or edited file."""
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            edit_mgr = scope.get_singleton(EditManager)
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+
+            # 1. Path omitted when no file read or edited yet -> fails
+            b_no_file = ActualParameterBindings(
+                bindings={
+                    (replace_tool.target_content_parameter, "Line 1"),
+                    (replace_tool.replacement_content_parameter, "Modified Line 1"),
+                }
+            )
+            # Requirement: When the path parameter is omitted, execution implicitly binds the target file to the last file read or edited in the edit manager if that file is a read-write file, informs the agent with a warning in the response content that the path was implicitly bound while allowing the tool execution to proceed, or fails if no file has been read or edited or if the last read or edited file is not a read-write file.
+            resp_no_file = replace_tool.execute_tool(b_no_file)
+            self.assertTrue(resp_no_file.is_failed)
+            self.assertIn("no file has been read or edited yet", resp_no_file.content)
+
+            # 2. Path omitted when last accessed file is read-only -> fails
+            edit_mgr.record_file_read(self.ro_file)
+            resp_ro = replace_tool.execute_tool(b_no_file)
+            self.assertTrue(resp_ro.is_failed)
+            self.assertIn("is not a read-write file", resp_ro.content)
+
+            # 3. Path omitted when last accessed file is read-write -> succeeds with warning
+            edit_mgr.record_file_read(self.rw_file)
+            resp_rw = replace_tool.execute_tool(b_no_file)
+            self.assertFalse(resp_rw.is_failed)
+            self.assertIn(
+                "Warning: 'path' was not specified; implicitly editing last accessed file",
+                resp_rw.content,
+            )
+            self.assertEqual(edit_mgr.last_read_or_edited_file, self.rw_file)
 
 
 if __name__ == "__main__":

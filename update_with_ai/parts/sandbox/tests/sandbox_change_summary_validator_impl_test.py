@@ -31,7 +31,7 @@ class SandboxChangeSummaryValidatorImplTest(unittest.TestCase):
         """CUJ: Instantiating NetChange and DiffSummary records."""
         node = Node(unit_address="//pkg:target")
         rw_file = ReadWriteFile(
-            short_name="module.py",
+            relative_path="module.py",
             workspace_path=_make_workspace_path("pkg/module.py"),
             owning_node=node,
         )

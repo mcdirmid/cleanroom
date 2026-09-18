@@ -1,4 +1,4 @@
-from typing import Protocol, Set
+from typing import Optional, Protocol, Set
 from update_with_ai.parts.agent.lib import agent_file_alias
 from . import tool_provider
 
@@ -26,6 +26,13 @@ class EditManager(Protocol):
     def unlock_file(self, file: agent_file_alias.ReadWriteFile) -> None: ...
 
     def materialize_templates(self) -> None: ...
+
+    @property
+    def last_read_or_edited_file(self) -> Optional[agent_file_alias.FileAlias]: ...
+
+    def record_file_read(self, file: agent_file_alias.FileAlias) -> None: ...
+
+    def record_file_edit(self, file: agent_file_alias.ReadWriteFile) -> None: ...
 
 
 class ReplaceFileContentTool(EditingTool, Protocol):

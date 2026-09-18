@@ -22,10 +22,10 @@ RegexPattern = str
 
 @dataclass(frozen=True, init=False)
 class FileAlias:
-    short_name: str
+    relative_path: str
 
     def __str__(self) -> str:
-        return self.short_name
+        return self.relative_path
 
 
 @dataclass(frozen=True, init=False)
@@ -38,11 +38,11 @@ class BoundFile(FileAlias):
 class ReadOnlyFile(BoundFile):
     def __init__(
         self,
-        short_name: str,
+        relative_path: str,
         workspace_path: WorkspacePath,
         owning_node: dag_storage.Node,
     ) -> None:
-        object.__setattr__(self, "short_name", short_name)
+        object.__setattr__(self, "relative_path", relative_path)
         object.__setattr__(self, "workspace_path", workspace_path)
         object.__setattr__(self, "owning_node", owning_node)
 
@@ -51,19 +51,19 @@ class ReadOnlyFile(BoundFile):
 class ReadWriteFile(BoundFile):
     def __init__(
         self,
-        short_name: str,
+        relative_path: str,
         workspace_path: WorkspacePath,
         owning_node: dag_storage.Node,
     ) -> None:
-        object.__setattr__(self, "short_name", short_name)
+        object.__setattr__(self, "relative_path", relative_path)
         object.__setattr__(self, "workspace_path", workspace_path)
         object.__setattr__(self, "owning_node", owning_node)
 
 
 @dataclass(frozen=True)
 class UnboundFile(FileAlias):
-    def __init__(self, short_name: str) -> None:
-        object.__setattr__(self, "short_name", short_name)
+    def __init__(self, relative_path: str) -> None:
+        object.__setattr__(self, "relative_path", relative_path)
 
 
 class AliasManager(tool_provider.ParameterConverter, Protocol):

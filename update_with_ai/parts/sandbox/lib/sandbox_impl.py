@@ -47,15 +47,15 @@ class Sandbox(sandbox.Sandbox, Singleton):
                 )
             )
 
-        # Requirement: When performing startup reads to inspect declared files at session start and the session has at most one read-write file, startup tool executions include file read executions for all declared read-only files from node config ordered deterministically by file alias short name, positioned after any advance tool execution.
+        # Requirement: When performing startup reads to inspect declared files at session start and the session has at most one read-write file, startup tool executions include file read executions for all declared read-only files from node config ordered deterministically by file alias relative path, positioned after any advance tool execution.
         rw_files = getattr(n_cfg, "read_write_files", set())
         if a_cfg.is_startup_reads and len(rw_files) <= 1:
             view_file_tool = get_singleton(sandbox_file_reader.ViewFileTool)
-            for ro in sorted(n_cfg.read_only_files, key=lambda x: x.short_name):
-                # Requirement: Each file read execution uses the name of the view file tool, specifies wire parameter bindings mapping the path parameter of the view file tool to the read-only file alias short name, and captures the response produced by executing the view file tool.
+            for ro in sorted(n_cfg.read_only_files, key=lambda x: x.relative_path):
+                # Requirement: Each file read execution uses the name of the view file tool, specifies wire parameter bindings mapping the path parameter of the view file tool to the read-only file alias relative path, and captures the response produced by executing the view file tool.
                 bindings = {(view_file_tool.path_parameter, ro)}
                 wire_bindings: Set[Tuple[str, Union[str, int, bool]]] = {
-                    (view_file_tool.path_parameter.name, ro.short_name)
+                    (view_file_tool.path_parameter.name, ro.relative_path)
                 }
                 resp = view_file_tool.execute_tool(
                     tool_provider.ActualParameterBindings(bindings=bindings)

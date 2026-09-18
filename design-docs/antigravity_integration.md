@@ -763,7 +763,7 @@ The foundation for the 2D Product DAG and Role-Based Antigravity Integration is 
 ### I. Template Pre-Population & Clean Start State
 * **Turn 1 Dependency Injection**: Resolved the initial template dependency header gap in `sandbox_file_editor_impl.py`:
   - When missing read-write files are instantiated from templates via `materialize_templates()`, Cleanroom executes the node's verification check once on the initial content.
-  - `ensure_dependency_header` populates all auto-generated dependency imports between `# --- DO NOT EDIT: Auto-generated dependencies ---` and `# --- END DO NOT EDIT ---` at Turn 1, ensuring the agent sees a clean, buildable module layout before making its first edit.
+  - `generate_lib_skeleton` populates all standard dependency imports at Turn 1, ensuring the agent sees a clean, buildable module layout before making its first edit without restrictive DO NOT EDIT comment blocks.
 
 ### J. Smart Token-Truncation Recovery & Incremental Editing Mechanics
 * **Actionable Driver Recovery**: Replaced the generic `"Response was truncated due to length"` continuation prompt in `openai_driver_impl.py` with an actionable, declarative recovery directive:

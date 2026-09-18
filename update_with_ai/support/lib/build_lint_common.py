@@ -1669,27 +1669,13 @@ def rewrite_lib_imports(
     imported_cross_parts: list[str] = []
     replacements: list[tuple[int, str, str, str]] = []
 
-    dne_range = find_do_not_edit_range(content)
-    dne_start = dne_range[0] if dne_range else -1
-    dne_end = dne_range[1] if dne_range else -1
-
     for node in ast.walk(tree):
-        node_lineno = getattr(node, "lineno", None)
-        if (
-            dne_start != -1
-            and node_lineno is not None
-            and dne_start <= node_lineno <= dne_end
-        ):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    stem = alias.name.split(".")[-1]
-                    if stem in import_map:
-                        imported_cross_parts.append(stem)
-            continue
         if isinstance(node, ast.Import):
             for alias in node.names:
                 m = alias.name[4:] if alias.name.startswith("lib.") else alias.name
                 last = alias.name.split(".")[-1]
+                if last.endswith("_ext") or m.endswith("_ext"):
+                    continue
                 if m in sibling_stems or last in sibling_stems:
                     sib = m if m in sibling_stems else last
                     replacements.append(
@@ -1704,6 +1690,18 @@ def rewrite_lib_imports(
                             "support.lib.lifecycle",
                         )
                     )
+                elif ".grounding." in alias.name or alias.name.endswith(".grounding"):
+                    lib_name = alias.name.replace(".grounding.", ".lib.")
+                    domain_pkg = lib_name.rsplit(".", 1)[0]
+                    replacements.append(
+                        (
+                            node.lineno,
+                            "import_cross",
+                            alias.name,
+                            f"from {domain_pkg} import {last}",
+                        )
+                    )
+                    imported_cross_parts.append(last)
                 elif m in import_map:
                     imported_cross_parts.append(m)
                     full = import_map[m]
@@ -1736,9 +1734,49 @@ def rewrite_lib_imports(
 
         elif isinstance(node, ast.ImportFrom):
             dots = "." * node.level
-            if node.level == 1 and not node.module:
+            if node.level >= 1 and (
+                node.module == "grounding"
+                or (node.module and "grounding" in node.module)
+            ):
                 for alias in node.names:
                     foo = alias.name
+                    if foo.endswith("_ext"):
+                        continue
+                    if foo in sibling_stems:
+                        replacements.append(
+                            (
+                                node.lineno,
+                                "from_rel_grounding_sibling",
+                                dots + (node.module or ""),
+                                foo,
+                            )
+                        )
+                    elif foo in import_map:
+                        imported_cross_parts.append(foo)
+                        full = import_map[foo]
+                        domain_pkg = full.rsplit(".", 1)[0]
+                        replacements.append(
+                            (
+                                node.lineno,
+                                "from_rel_cross",
+                                foo,
+                                f"from {domain_pkg} import {foo}",
+                            )
+                        )
+                    else:
+                        replacements.append(
+                            (
+                                node.lineno,
+                                "from_rel_grounding_sibling",
+                                dots + (node.module or ""),
+                                foo,
+                            )
+                        )
+            elif node.level == 1 and not node.module:
+                for alias in node.names:
+                    foo = alias.name
+                    if foo.endswith("_ext"):
+                        continue
                     if foo in sibling_stems:
                         pass
                     elif foo == "lifecycle":
@@ -1764,6 +1802,8 @@ def rewrite_lib_imports(
                         )
             elif node.level == 1 and node.module:
                 m = node.module
+                if m.endswith("_ext"):
+                    continue
                 if m in sibling_stems:
                     pass
                 elif m == "lifecycle":
@@ -1777,7 +1817,24 @@ def rewrite_lib_imports(
             elif node.level == 0 and node.module:
                 m = node.module[4:] if node.module.startswith("lib.") else node.module
                 last = node.module.split(".")[-1]
-                if m in sibling_stems or (
+                if last.endswith("_ext") or m.endswith("_ext"):
+                    continue
+                if ".grounding" in node.module:
+                    if node.module.endswith(".grounding"):
+                        domain_pkg = node.module[:-len(".grounding")] + ".lib"
+                        replacements.append(
+                            (node.lineno, "from", node.module, domain_pkg)
+                        )
+                        for alias in node.names:
+                            if not alias.name.endswith("_ext"):
+                                imported_cross_parts.append(alias.name)
+                    else:
+                        new_mod = node.module.replace(".grounding.", ".lib.")
+                        replacements.append((node.lineno, "from", node.module, new_mod))
+                        last_stem = new_mod.split(".")[-1]
+                        if not last_stem.endswith("_ext"):
+                            imported_cross_parts.append(last_stem)
+                elif m in sibling_stems or (
                     last in sibling_stems
                     and node.module.startswith("update_with_ai.parts.")
                 ):
@@ -1838,6 +1895,18 @@ def rewrite_lib_imports(
                 if new_line != line:
                     lines[lineno - 1] = new_line
                     changed = True
+            elif kind == "from_rel_grounding_sibling":
+                pattern = re.compile(
+                    r"^(\s*)from\s+"
+                    + re.escape(old_val)
+                    + r"\s+import\s+"
+                    + re.escape(new_val)
+                    + r"(\s*(?:#.*)?$)"
+                )
+                new_line = pattern.sub(rf"\g<1>from . import {new_val}\2", line)
+                if new_line != line:
+                    lines[lineno - 1] = new_line
+                    changed = True
             elif kind == "from_rel_cross":
                 pattern = re.compile(
                     r"^(\s*)from\s+\.\s+import\s+"
@@ -1868,7 +1937,9 @@ def rewrite_lib_imports(
                     changed = True
             elif kind == "import_cross":
                 pattern = re.compile(
-                    r"^(\s*)import\s+" + re.escape(old_val) + r"(\s*(?:#.*)?$)"
+                    r"^(\s*)import\s+"
+                    + re.escape(old_val)
+                    + r"(?:\s+as\s+\w+)?(\s*(?:#.*)?$)"
                 )
                 new_line = pattern.sub(rf"\g<1>{new_val}\2", line)
                 if new_line != line:
@@ -1896,7 +1967,7 @@ def parse_pyi_dependencies(
 ) -> list[str]:
     """Extract declared dependency stems from a .pyi grounding specification and any pyi_deps.
 
-    Collects imported module stems from the AST (excluding stdlib, framework, and typing)
+    Collects imported module stems from the AST (excluding stdlib, framework, typing, and _ext)
     and external build dependencies parsed from ## Build Dependencies.
     """
     deps: set[str] = set()
@@ -1915,30 +1986,43 @@ def parse_pyi_dependencies(
                 if isinstance(node, ast.Import):
                     for alias in node.names:
                         stem = alias.name.split(".")[0]
-                        if stem not in stdlib and stem not in ignored:
+                        if stem not in stdlib and stem not in ignored and not stem.endswith("_ext"):
                             deps.add(stem)
                 elif isinstance(node, ast.ImportFrom):
                     if node.module:
-                        stem = node.module.split(".")[0]
-                        if stem not in stdlib and stem not in ignored:
+                        if ".grounding." in node.module:
+                            stem = node.module.split(".grounding.")[1].split(".")[0]
+                        elif node.module.endswith(".grounding"):
+                            for alias in node.names:
+                                stem = alias.name.split(".")[0]
+                                if stem not in stdlib and stem not in ignored and not stem.endswith("_ext"):
+                                    deps.add(stem)
+                            continue
+                        else:
+                            stem = node.module.split(".")[0]
+                        if stem not in stdlib and stem not in ignored and not stem.endswith("_ext"):
                             deps.add(stem)
                     elif node.level > 0:
                         for alias in node.names:
                             stem = alias.name.split(".")[0]
-                            if stem not in stdlib and stem not in ignored:
+                            if stem not in stdlib and stem not in ignored and not stem.endswith("_ext"):
                                 deps.add(stem)
             for build_dep in parse_spec_build_dependencies(p):
                 m = re.search(r'requirement\(["\']([^"\']+)["\']\)', build_dep)
                 if m:
-                    deps.add(m.group(1))
+                    stem = m.group(1)
                 elif ":" in build_dep:
-                    deps.add(build_dep.split(":")[-1])
+                    stem = build_dep.split(":")[-1]
                 elif build_dep and not build_dep.startswith("//"):
-                    deps.add(build_dep)
+                    stem = build_dep
+                else:
+                    stem = ""
+                if stem and not stem.endswith("_ext"):
+                    deps.add(stem)
         except (OSError, SyntaxError):
             pass
 
-    return sorted(deps)
+    return sorted(d for d in deps if not d.endswith("_ext"))
 
 
 def extract_target_pyright_deps(build_path: str, rule: str, name: str) -> list[str]:
@@ -2012,13 +2096,15 @@ def format_dependency_block(
             continue
         m = re.search(r'requirement\(["\']([^"\']+)["\']\)', d)
         if m:
-            clean_deps.add(m.group(1))
+            clean = m.group(1)
         elif ":" in d:
-            clean_deps.add(d.split(":")[-1])
+            clean = d.split(":")[-1]
         elif "/" in d:
-            clean_deps.add(d.split("/")[-1])
+            clean = d.split("/")[-1]
         else:
-            clean_deps.add(d)
+            clean = d
+        if not clean.endswith("_ext"):
+            clean_deps.add(clean)
 
     lines = [
         DO_NOT_EDIT_START,
@@ -2034,7 +2120,7 @@ def format_dependency_block(
     imap = import_map or {}
 
     for dep in sorted(clean_deps):
-        if dep == "lifecycle":
+        if dep == "lifecycle" or dep.endswith("_ext"):
             continue
         if dep in siblings:
             lines.append(f"from . import {dep}")
@@ -2118,6 +2204,67 @@ def strip_dependency_header(file_path: str) -> bool:
     if header_idx != -1:
         lines.pop(header_idx)
         write_text(file_path, "".join(lines))
+        return True
+    return False
+
+
+def _clean_ext_import_line(line: str) -> Optional[str]:
+    """If line imports an _ext module, clean it. Return None if line should be dropped completely."""
+    s = line.strip()
+    if not (s.startswith("import ") or s.startswith("from ")):
+        return line
+    if not re.search(r"\b\w+_ext\b", s):
+        return line
+    m = re.match(r"^(\s*from\s+\S+\s+import\s+)(.+?)(\s*(?:#.*)?)$", line)
+    if m:
+        prefix, imported_names, suffix = m.group(1), m.group(2), m.group(3)
+        names = [n.strip() for n in imported_names.split(",") if n.strip()]
+        valid_names = [n for n in names if not re.search(r"\b\w+_ext\b", n)]
+        if not valid_names:
+            return None
+        return f"{prefix}{', '.join(valid_names)}{suffix}\n"
+    m2 = re.match(r"^(\s*import\s+)(.+?)(\s*(?:#.*)?)$", line)
+    if m2:
+        prefix, imported_names, suffix = m2.group(1), m2.group(2), m2.group(3)
+        names = [n.strip() for n in imported_names.split(",") if n.strip()]
+        valid_names = [n for n in names if not re.search(r"\b\w+_ext\b", n)]
+        if not valid_names:
+            return None
+        return f"{prefix}{', '.join(valid_names)}{suffix}\n"
+    return None
+
+
+def strip_do_not_edit_markers(file_path: str) -> bool:
+    """Remove DO NOT EDIT block markers, legacy dependency headers, and invalid _ext imports from file_path."""
+    if not os.path.isfile(file_path):
+        return False
+    try:
+        content = read_text(file_path)
+    except OSError:
+        return False
+    lines = content.splitlines(keepends=True)
+    new_lines = []
+    changed = False
+    for line in lines:
+        s = line.strip()
+        if s == DO_NOT_EDIT_START or s == DO_NOT_EDIT_END:
+            changed = True
+            continue
+        if re.match(r"^#\s*Dependencies:\s*", s):
+            changed = True
+            continue
+        if re.search(r"\b\w+_ext\b", s) and (s.startswith("import ") or s.startswith("from ")):
+            cleaned = _clean_ext_import_line(line)
+            if cleaned is None:
+                changed = True
+                continue
+            elif cleaned != line:
+                changed = True
+                new_lines.append(cleaned)
+                continue
+        new_lines.append(line)
+    if changed:
+        write_text(file_path, "".join(new_lines))
         return True
     return False
 
@@ -2222,6 +2369,8 @@ def extract_imported_stems(file_path: str) -> list[tuple[int, str]]:
                     continue
                 if ".lib." in name:
                     stem = name.split(".lib.")[1].split(".")[0]
+                elif ".grounding." in name:
+                    stem = name.split(".grounding.")[1].split(".")[0]
                 elif ".tests." in name:
                     stem = name.split(".tests.")[1].split(".")[0]
                 elif name.startswith("lib."):
@@ -2237,14 +2386,18 @@ def extract_imported_stems(file_path: str) -> list[tuple[int, str]]:
                 if "support" in mod.split("."):
                     continue
                 if (
-                    mod in ("lib", "tests")
+                    mod in ("lib", "tests", "grounding")
                     or mod.endswith(".lib")
                     or mod.endswith(".tests")
+                    or mod.endswith(".grounding")
                 ):
                     for alias in node.names:
                         results.append((node.lineno, alias.name))
                 elif ".lib." in mod:
                     stem = mod.split(".lib.")[1].split(".")[0]
+                    results.append((node.lineno, stem))
+                elif ".grounding." in mod:
+                    stem = mod.split(".grounding.")[1].split(".")[0]
                     results.append((node.lineno, stem))
                 elif ".tests." in mod:
                     stem = mod.split(".tests.")[1].split(".")[0]
@@ -2280,6 +2433,7 @@ def check_undeclared_imports(
     for d in list(allowed_set):
         if d.endswith("_ext"):
             allowed_set.add(d[:-4])
+    allowed_set = {d for d in allowed_set if not d.endswith("_ext")}
 
     stdlib = getattr(sys, "stdlib_module_names", set()) | {
         "support",

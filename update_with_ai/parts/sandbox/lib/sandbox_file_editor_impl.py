@@ -1,18 +1,3 @@
-# --- DO NOT EDIT: Auto-generated dependencies ---
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
-import update_with_ai.parts.agent.lib.agent_config as agent_config
-import update_with_ai.parts.agent.lib.agent_file_alias as agent_file_alias
-import update_with_ai.parts.agent.lib.agent_node_config as agent_node_config
-from . import sandbox_file_editor
-from . import template_format
-from . import tool_provider
-
-# --- END DO NOT EDIT ---
 import difflib
 import os
 import subprocess
@@ -30,25 +15,6 @@ from support.lib.lifecycle import (
     get_singleton,
 )
 
-DO_NOT_EDIT_START = "# --- DO NOT EDIT: Auto-generated dependencies ---"
-DO_NOT_EDIT_END = "# --- END DO NOT EDIT ---"
-
-
-def find_do_not_edit_range(file_content: str) -> Optional[tuple[int, int]]:
-    """Return 1-based (start_line, end_line) of the DO NOT EDIT block if present."""
-    lines = file_content.splitlines()
-    start = -1
-    for i, line in enumerate(lines[:50]):
-        if line.strip() == DO_NOT_EDIT_START:
-            start = i + 1
-            break
-    if start == -1:
-        return None
-    for j in range(start, min(start + 50, len(lines) + 1)):
-        if lines[j - 1].strip() == DO_NOT_EDIT_END:
-            return (start, j)
-    return None
-
 
 class EditManager(sandbox_file_editor.EditManager, Singleton):
     tier = "agent_session"
@@ -57,6 +23,7 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
         self._initial_contents: dict[str, Optional[str]] = {}
         self._file_update_revision: int = 0
         self._locked_files: set[agent_file_alias.ReadWriteFile] = set()
+        self._last_read_or_edited_file: Optional[agent_file_alias.FileAlias] = None
 
     @property
     def locked_files(self) -> Set[agent_file_alias.ReadWriteFile]:
@@ -118,6 +85,18 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
     def file_update_revision(self) -> int:
         # Requirement: The edit manager tracks a file update revision that increments whenever workspace files are updated.
         return self._file_update_revision
+
+    @property
+    def last_read_or_edited_file(self) -> Optional[agent_file_alias.FileAlias]:
+        # Requirement: The edit manager tracks the last read or edited file alias across the session, recording file reads from the file reader and file edits from editing tools.
+        # Requirement: [EditManager] The edit manager tracks the last read or edited file across the session, recording file reads from file readers and file edits from editing tools.
+        return self._last_read_or_edited_file
+
+    def record_file_read(self, file: agent_file_alias.FileAlias) -> None:
+        self._last_read_or_edited_file = file
+
+    def record_file_edit(self, file: agent_file_alias.ReadWriteFile) -> None:
+        self._last_read_or_edited_file = file
 
     def record_modification(self, host_path: Optional[str] = None) -> None:
         self._file_update_revision += 1
@@ -195,9 +174,9 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         return tool_provider.Parameter(
             name="path",
-            description="Target file alias",
+            description="Target file alias (optional; defaults to the last file read or edited in the session)",
             parameter_converter=alias_mgr,
-            is_required=True,
+            is_required=False,
         )
 
     @property
@@ -286,9 +265,30 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
             else False
         )
 
-        # Requirement: Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
-        # Requirement: Editing tool responses share a constant suppression key replace_file_content.
-        if not isinstance(target_file, agent_file_alias.ReadWriteFile):
+        edit_mgr = get_singleton(EditManager)
+        is_implicit_path = False
+        if target_file is None:
+            last_file = edit_mgr.last_read_or_edited_file
+            if last_file is None:
+                return tool_provider.Response(
+                    is_failed=True,
+                    is_terminated=False,
+                    content="Error: 'path' was not specified and no file has been read or edited yet in this session.",
+                    suppression_key="replace_file_content",
+                )
+            if not isinstance(last_file, agent_file_alias.ReadWriteFile):
+                return tool_provider.Response(
+                    is_failed=True,
+                    is_terminated=False,
+                    content=f"Error: 'path' was not specified and the last accessed file '{last_file.relative_path}' is not a read-write file.",
+                    reminder="Only declared read-write files can be modified.",
+                    suppression_key="replace_file_content",
+                )
+            target_file = last_file
+            is_implicit_path = True
+        elif not isinstance(target_file, agent_file_alias.ReadWriteFile):
+            # Requirement: Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+            # Requirement: Editing tool responses share a constant suppression key replace_file_content.
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
@@ -297,13 +297,12 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                 suppression_key="replace_file_content",
             )
 
-        edit_mgr = get_singleton(EditManager)
         # Requirement: Before modifying a file, editing tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
         if target_file in edit_mgr.locked_files:
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
-                content=f"Error: `{target_file.short_name}` has been locked against further modification.",
+                content=f"Error: `{target_file.relative_path}` has been locked against further modification.",
                 reminder="Files that have been the target of a submit, fail, or blame cannot be modified.",
                 suppression_key="replace_file_content",
             )
@@ -382,7 +381,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                         is_terminated=False,
                         content=(
                             f"Error: target_content not found in specified line range [{s_idx + 1}, {e_idx}]. "
-                            f"target_content exists at {line_desc} in '{target_file.short_name}'. "
+                            f"target_content exists at {line_desc} in '{target_file.relative_path}'. "
                             f"Update start_line/end_line to include {line_desc}, or omit start_line and end_line."
                         ),
                         suppression_key="replace_file_content",
@@ -392,12 +391,26 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                     is_terminated=False,
                     content=f"Error: target_content not found in specified line range [{s_idx + 1}, {e_idx}].",
                     suppression_key="replace_file_content",
+                    follow_up_tool_call=tool_provider.FollowUpToolCall(
+                        tool_name="view_file",
+                        wire_parameter_bindings=tool_provider.WireParameterBindings(
+                            bindings={("path", target_file.relative_path)}
+                        ),
+                        reasoning_text=f"Target content not found in '{target_file.relative_path}'. Let me view the current file content to see the exact lines to replace.",
+                    ),
                 )
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
                 content="Error: target_content not found in file.",
                 suppression_key="replace_file_content",
+                follow_up_tool_call=tool_provider.FollowUpToolCall(
+                    tool_name="view_file",
+                    wire_parameter_bindings=tool_provider.WireParameterBindings(
+                        bindings={("path", target_file.relative_path)}
+                    ),
+                    reasoning_text=f"Target content not found in '{target_file.relative_path}'. Let me view the current file content to see the exact lines to replace.",
+                ),
             )
 
         if not allow_multiple and count > 1:
@@ -408,42 +421,22 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                     content=f"Error: target_content matches {count} locations in line range [{s_idx + 1}, {e_idx}]. Set allow_multiple=true or narrow the line range.",
                     suppression_key="replace_file_content",
                 )
+            # Requirement: When target content matches multiple locations in the file and allow multiple is false, failure feedback indicates the first two matching line numbers to assist in narrowing the replacement region.
+            first_idx = region.find(target_content)
+            second_idx = region.find(
+                target_content, first_idx + len(target_content)
+            )
+            first_line = content[:first_idx].count("\n") + 1
+            second_line = content[:second_idx].count("\n") + 1
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
-                content=f"Error: target_content matches {count} locations in file. Set allow_multiple=true or specify start_line and end_line.",
+                content=(
+                    f"Error: target_content matches {count} locations in file (first at line {first_line}, then at line {second_line}). "
+                    "Set allow_multiple=true or specify start_line and end_line."
+                ),
                 suppression_key="replace_file_content",
             )
-
-        # Requirement: Before modifying a file, editing tool execution fails if the target edit overlaps with auto-generated dependency imports between '# --- DO NOT EDIT: Auto-generated dependencies ---' and '# --- END DO NOT EDIT ---', reminding the agent that auto-generated dependencies are managed by the build toolchain.
-        dne_range = find_do_not_edit_range(content)
-        if dne_range is not None:
-            dne_start, dne_end = dne_range
-            has_overlap = False
-            offset = 0
-            while True:
-                idx = region.find(target_content, offset)
-                if idx == -1:
-                    break
-                match_start = len(prefix) + idx
-                match_end = match_start + len(target_content)
-                occ_start_line = content[:match_start].count("\n") + 1
-                occ_end_line = content[:match_end].count("\n") + 1
-                if max(occ_start_line, dne_start) <= min(occ_end_line, dne_end):
-                    has_overlap = True
-                    break
-                if not allow_multiple:
-                    break
-                offset = idx + len(target_content)
-
-            if has_overlap:
-                return tool_provider.Response(
-                    is_failed=True,
-                    is_terminated=False,
-                    content=f"Error: Cannot edit lines within '# --- DO NOT EDIT: Auto-generated dependencies ---' ... '# --- END DO NOT EDIT ---' (lines {dne_start}-{dne_end}). Auto-generated dependencies are managed automatically by the build toolchain.",
-                    reminder=f"Do not modify the auto-generated dependencies block (lines {dne_start}-{dne_end}). Implement logic strictly below line {dne_end}.",
-                    suppression_key="replace_file_content",
-                )
 
         if allow_multiple:
             new_region = region.replace(target_content, replacement_content)
@@ -473,6 +466,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
             f.write(new_content)
 
         edit_mgr.record_modification(host_path)
+        edit_mgr.record_file_edit(target_file)
 
         try:
             cfg = get_singleton(agent_config.AgentConfig)
@@ -487,12 +481,17 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                 difflib.unified_diff(
                     content.splitlines(keepends=True),
                     new_content.splitlines(keepends=True),
-                    fromfile=f"a/{target_file.short_name}",
-                    tofile=f"b/{target_file.short_name}",
+                    fromfile=f"a/{target_file.relative_path}",
+                    tofile=f"b/{target_file.relative_path}",
                 )
             )
             diff_text = "".join(diff_lines)
             content_msg = f"Successfully replaced content.\n\n```diff\n{diff_text}```"
+
+        if is_implicit_path:
+            content_msg = (
+                f"Warning: 'path' was not specified; implicitly editing last accessed file '{target_file.relative_path}'.\n\n{content_msg}"
+            )
 
         # Requirement: Editing tool responses share a constant suppression key replace_file_content.
         return tool_provider.Response(

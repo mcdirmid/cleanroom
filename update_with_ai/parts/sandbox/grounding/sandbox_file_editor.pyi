@@ -1,4 +1,4 @@
-from typing import Protocol, Set
+from typing import Optional, Protocol, Set
 from framework import data_type, operation, override, poly_type, singleton_type
 import agent_file_alias
 import tool_provider
@@ -135,6 +135,33 @@ Materializes templates into missing read-write files at session start without ov
 
 FRESH_REQUIREMENTS:
 - Materializing templates populates missing read-write files with initial template content without overwriting existing files.
+"""
+        ...
+
+    @property
+    def last_read_or_edited_file(self) -> Optional[agent_file_alias.FileAlias]:
+        """
+PURPOSE:
+Tracks the last file read or edited across the session
+
+FRESH_REQUIREMENTS:
+- The edit manager tracks the last read or edited file across the session, recording file reads from file readers and file edits from editing tools.
+"""
+        ...
+
+    @operation
+    def record_file_read(self, file: agent_file_alias.FileAlias) -> None:
+        """
+PURPOSE:
+Records that a file was read by a file reader
+"""
+        ...
+
+    @operation
+    def record_file_edit(self, file: agent_file_alias.ReadWriteFile) -> None:
+        """
+PURPOSE:
+Records that a file was edited by an editing tool
 """
         ...
 

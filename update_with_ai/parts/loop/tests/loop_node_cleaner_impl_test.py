@@ -309,7 +309,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             task_prompt=TaskPrompt("Clean this node"),
         )
         rw_file = ReadWriteFile(
-            short_name="foo.py",
+            relative_path="foo.py",
             workspace_path=_make_workspace_path("/tmp/foo.py"),
             owning_node=node,
         )
@@ -366,7 +366,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             task_prompt=TaskPrompt("Clean this node in step mode"),
         )
         rw_file = ReadWriteFile(
-            short_name="foo.py",
+            relative_path="foo.py",
             workspace_path=_make_workspace_path("/tmp/foo.py"),
             owning_node=node,
         )
@@ -466,9 +466,9 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             self.assertEqual(fb2.content, "Blamed //pkg:upstream_no_colon")
             self.assertEqual(fb2.target, Node(unit_address="//pkg:upstream_no_colon"))
 
-            # 3. Matching blame target in blame_targets by short_name
+            # 3. Matching blame target in blame_targets by relative_path
             bt = ReadOnlyFile(
-                short_name="dep.py",
+                relative_path="dep.py",
                 workspace_path=_make_workspace_path("pkg/dep.py"),
                 owning_node=Node(unit_address="//pkg:target_owning_node"),
             )
@@ -510,7 +510,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
 
             # 5. Matching blame target in blame_targets by owning_node.unit_address#owning_node.role_address
             bt_role = ReadOnlyFile(
-                short_name="role_dep.py",
+                relative_path="role_dep.py",
                 workspace_path=_make_workspace_path("pkg/role_dep.py"),
                 owning_node=Node(unit_address="//pkg:target_role", role_address="lib"),
             )
@@ -783,7 +783,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             node=node,
             task_prompt=TaskPrompt("Ensure the lib conforms to the guide"),
         )
-        self.node_cfg.guide_file = UnboundFile(short_name="guide.md")
+        self.node_cfg.guide_file = UnboundFile(relative_path="guide.md")
         self.node_cfg.is_step_mode = True
 
         with enter_phase("system", registry=self.registry) as scope:
@@ -806,7 +806,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             node=node,
             task_prompt=TaskPrompt("Ensure the lib conforms to the guide"),
         )
-        self.node_cfg.guide_file = UnboundFile(short_name="my_guide.md")
+        self.node_cfg.guide_file = UnboundFile(relative_path="my_guide.md")
         self.node_cfg.is_step_mode = False
 
         with enter_phase("system", registry=self.registry) as scope:
@@ -851,7 +851,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             self.assertEqual(prompt_content, "Ensure the lib conforms without guide")
 
     def test_clean_node_seeds_history_guide_from_read_only_files(self) -> None:
-        """CUJ: Resolving guide short name from read-only markdown files when guide_file is None."""
+        """CUJ: Resolving guide file alias from read-only markdown files when guide_file is None."""
         node = Node(unit_address="//pkg:ro_guide_test")
         self.storage.definitions[node] = NodeDefinition(
             node=node,
@@ -860,7 +860,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         self.node_cfg.guide_file = None
         self.node_cfg.read_only_files.add(
             ReadOnlyFile(
-                short_name="ro_guide.md",
+                relative_path="ro_guide.md",
                 workspace_path=_make_workspace_path("pkg/ro_guide.md"),
                 owning_node=node,
             )
@@ -886,7 +886,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             node=node,
             task_prompt=TaskPrompt("Ensure the lib conforms to the guide"),
         )
-        self.node_cfg.guide_file = UnboundFile(short_name="qa.md")
+        self.node_cfg.guide_file = UnboundFile(relative_path="qa.md")
         self.node_cfg.allows_step_mode = False
         self.node_cfg.is_step_mode = True
         self.storage.messages[node] = {
@@ -974,7 +974,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             node1: "unit1.py",
             node2: "unit2.py",
         }
-        self.node_cfg.guide_file = UnboundFile(short_name="guide.md")
+        self.node_cfg.guide_file = UnboundFile(relative_path="guide.md")
         self.node_cfg.is_step_mode = False
         self.storage.messages[node1] = {
             Change(content=""),

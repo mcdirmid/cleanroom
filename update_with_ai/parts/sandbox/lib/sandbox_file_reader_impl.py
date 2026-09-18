@@ -3,6 +3,7 @@ import re
 from typing import Any, Optional, Set, Type, cast
 from update_with_ai.parts.agent.lib import agent_file_alias
 from update_with_ai.parts.agent.lib import agent_node_config
+from . import sandbox_file_editor
 from . import sandbox_file_reader
 from . import template_format
 from . import tool_provider
@@ -97,7 +98,7 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
         if isinstance(target_file, agent_file_alias.UnboundFile):
             if (
                 read_mgr.guide_file
-                and target_file.short_name == read_mgr.guide_file.short_name
+                and target_file.relative_path == read_mgr.guide_file.relative_path
             ):
                 return tool_provider.Response(
                     is_failed=True,
@@ -107,7 +108,7 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
 
             # Check for transparent fallback resolution to a declared bound file:
             # Resolves foo.py -> foo.pyi, or module paths like testing.parts.pkg.foo.py -> foo.pyi
-            raw_name = target_file.short_name
+            raw_name = target_file.relative_path
             base_cand = os.path.basename(raw_name)
             if "." in base_cand:
                 parts = base_cand.split(".")
@@ -126,16 +127,22 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
                 if base_cand.endswith(".py")
                 else (base_cand[:-4] if base_cand.endswith(".pyi") else base_cand)
             )
-            variations = [base_cand]
+            variations = [raw_name, base_cand]
+            if raw_name.endswith(".py"):
+                variations.append(raw_name[:-3] + ".pyi")
             if base_cand.endswith(".py"):
                 variations.append(f"{stem}.pyi")
             elif not base_cand.endswith(".pyi"):
                 variations.extend([f"{stem}.py", f"{stem}.pyi"])
 
-            # Requirement: Executing the view file tool with an unbound file whose short name or qualified path addresses a module name or ends with .py and matches a declared read-only grounding specification ending with .pyi resolves to that grounding specification file alias.
+            # Requirement: Executing the view file tool with an unbound file whose relative path or qualified path addresses a module name or ends with .py and matches a declared read-only grounding specification ending with .pyi resolves to that grounding specification file alias.
             for var in variations:
                 for bf in all_bound_files:
-                    if bf.short_name == var:
+                    if (
+                        bf.relative_path == var
+                        or bf.relative_path.endswith("/" + var)
+                        or os.path.basename(bf.relative_path) == var
+                    ):
                         matched_bound = bf
                         break
                 if matched_bound is not None:
@@ -144,18 +151,18 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
             if matched_bound is not None:
                 target_file = matched_bound
             else:
-                readable = [f.short_name for f in read_mgr.read_only_files] + [
-                    f.short_name for f in read_mgr.read_write_files
+                readable = [f.relative_path for f in read_mgr.read_only_files] + [
+                    f.relative_path for f in read_mgr.read_write_files
                 ]
                 if (
-                    target_file.short_name.endswith("_test.py")
-                    or "_test" in target_file.short_name
+                    target_file.relative_path.endswith("_test.py")
+                    or "_test" in target_file.relative_path
                 ):
                     # Requirement: Executing the view file tool with an unbound file addressing a test file ending with _test.py fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract.
-                    guidance = f"Error: Unknown file '{target_file.short_name}'. Test files are not inspectable by design; only declared grounding specifications (.pyi) and target library files (.py) are accessible. Available files: {', '.join(readable)}"
+                    guidance = f"Error: Unknown file '{target_file.relative_path}'. Test files are not inspectable by design; only declared grounding specifications (.pyi) and target library files (.py) are accessible. Available files: {', '.join(readable)}"
                 else:
                     # Requirement: Otherwise, executing the view file tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.
-                    guidance = f"Error: Unknown file '{target_file.short_name}'. Available files: {', '.join(readable)}"
+                    guidance = f"Error: Unknown file '{target_file.relative_path}'. Available files: {', '.join(readable)}"
                 return tool_provider.Response(
                     is_failed=True,
                     is_terminated=False,
@@ -178,7 +185,7 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
                 return tool_provider.Response(
                     is_failed=True,
                     is_terminated=False,
-                    content=f"Error: File '{target_file.short_name}' does not exist on disk.",
+                    content=f"Error: File '{target_file.relative_path}' does not exist on disk.",
                     reminder="Only declared files can be inspected.",
                 )
         else:
@@ -186,7 +193,7 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
                 lines = f.readlines()
 
         # Requirement: When reading markdown files ending with .md, paragraphs beginning with > META: are filtered out from the returned content.
-        if target_file.short_name.endswith(
+        if target_file.relative_path.endswith(
             ".md"
         ) or target_file.workspace_path.path.endswith(".md"):
             paragraphs: list[list[str]] = []
@@ -233,13 +240,19 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
         else:
             content = ""
 
-        # Requirement: View file tool responses for read-write files carry a suppression key matching the file's short name, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
+        # Requirement: View file tool responses for read-write files carry a suppression key matching the file's relative path, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
         if isinstance(target_file, agent_file_alias.ReadWriteFile):
-            suppression_key = target_file.short_name
+            suppression_key = target_file.relative_path
             final_content = content
         else:
             suppression_key = None
             final_content = alias_mgr.sanitize_text(content)
+
+        try:
+            edit_mgr = get_singleton(sandbox_file_editor.EditManager)
+            edit_mgr.record_file_read(target_file)
+        except (LookupError, KeyError):
+            pass
 
         return tool_provider.Response(
             is_failed=False,
@@ -327,7 +340,7 @@ class SearchTool(sandbox_file_reader.SearchTool, Singleton):
                     for idx, line in enumerate(f, start=1):
                         if compiled.search(line):
                             # Requirement: On successful search tool execution, matches in read-only files provide matched line contents and line numbers sanitized by the alias manager to mask host paths.
-                            results.append(f"{ro.short_name}:{idx}: {line.rstrip()}")
+                            results.append(f"{ro.relative_path}:{idx}: {line.rstrip()}")
 
         for rw in read_mgr.read_write_files:
             host_path = os.path.join(
@@ -339,7 +352,7 @@ class SearchTool(sandbox_file_reader.SearchTool, Singleton):
                     if compiled.search(content):
                         # Requirement: On successful search tool execution, matches in read-write files state that matches were found but cannot be displayed to prevent unanchored edits.
                         results.append(
-                            f"{rw.short_name}: matches found (details hidden to prevent unanchored edits)"
+                            f"{rw.relative_path}: matches found (details hidden to prevent unanchored edits)"
                         )
 
         output = "\n".join(results) if results else "No matches found."

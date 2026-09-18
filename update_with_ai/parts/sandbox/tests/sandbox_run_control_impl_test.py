@@ -27,6 +27,7 @@ from update_with_ai.parts.sandbox.lib.sandbox_guide_delivery import GuideDeliver
 from update_with_ai.parts.sandbox.lib.sandbox_run_control import (
     AdvanceTool,
     BlameTool,
+    CheckFileTool,
     FailTool,
     RunController,
     RunTestsTool,
@@ -35,6 +36,7 @@ from update_with_ai.parts.sandbox.lib.sandbox_run_control import (
 from update_with_ai.parts.sandbox.lib.sandbox_run_control_impl import (
     AdvanceTool as AdvanceToolImpl,
     BlameTool as BlameToolImpl,
+    CheckFileTool as CheckFileToolImpl,
     FailTool as FailToolImpl,
     RunController as RunControllerImpl,
     RunTestsTool as RunTestsToolImpl,
@@ -249,8 +251,9 @@ class MockEditManager:
 
 
 class TargetFileObj:
-    def __init__(self, short_name: str) -> None:
-        self.short_name = short_name
+    def __init__(self, relative_path: str) -> None:
+        self.relative_path = relative_path
+        self.short_name = relative_path
 
 
 class MockVerificationCheck(VerificationCheck):
@@ -293,7 +296,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
     def setUp(self) -> None:
         node = Node(unit_address="//pkg:upstream", role_address="lib")
         self.blame_target_file = ReadOnlyFile(
-            short_name="dep.py",
+            relative_path="dep.py",
             workspace_path=_make_workspace_path("pkg/dep.py"),
             owning_node=node,
         )
@@ -355,7 +358,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # Requirement: [RunController] The run controller installs an advance tool when guide step mode is active, coordinating step progression through guide delivery upon passing verification.
             # Requirement: [RunController] The run controller installs a submit tool that concludes target processing upon passing verification and enforces change documentation.
             # Requirement: [RunController] The run controller installs a fail tool that terminates the run in failure.
-            # Requirement: [RunController] The run controller installs a run tests tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
+            # Requirement: [RunController] The run controller installs a check file tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
             # Requirement: [RunController] The run controller installs a blame tool when blame targets are configured, attributing task failure to an upstream dependency node.
             tool_names = {t.name for t in self.tool_mgr.installed_tools}
             # Requirement: The advance tool is named `advance`, accepts no parameters, and shares a constant suppression key `advance`.
@@ -364,8 +367,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIn("submit", tool_names)
             # Requirement: The fail tool is named `fail`.
             self.assertIn("fail", tool_names)
-            # Requirement: The run tests tool is named `run_tests`, accepting an optional target parameter, and shares a constant suppression key `run_tests`.
-            self.assertIn("run_tests", tool_names)
+            # Requirement: The check file tool is named `check_file`, accepting an optional src parameter, and shares a constant suppression key `check_file`.
+            self.assertIn("check_file", tool_names)
             # Requirement: The blame tool is named `blame`.
             self.assertIn("blame", tool_names)
 
@@ -396,11 +399,11 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
         with enter_phase("agent_session", registry=reg) as scope:
             ctrl = scope.get_singleton(RunController)
-            # Requirement: The run controller unconditionally installs the submit tool, fail tool, and run tests tool for the agent session, installs the advance tool only when guide step mode is active, and obtains configured blame targets and verification checks from the node config, installing the blame tool only when blame targets are configured.
+            # Requirement: The run controller unconditionally installs the submit tool, fail tool, and check file tool for the agent session, installs the advance tool only when guide step mode is active, and obtains configured blame targets and verification checks from the node config, installing the blame tool only when blame targets are configured.
             tool_names = {t.name for t in tool_mgr.installed_tools}
             self.assertIn("submit", tool_names)
             self.assertIn("fail", tool_names)
-            self.assertIn("run_tests", tool_names)
+            self.assertIn("check_file", tool_names)
             self.assertNotIn("advance", tool_names)
             self.assertNotIn("blame", tool_names)
 
@@ -472,7 +475,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             _ = advance.execute_tool(b)
             # Requirement: On subsequent executions, executing the advance tool updates verification results if outdated.
-            # Requirement: Tool execution fails when verification is failing, reminding the agent that the run tests tool should be called first and specifying a follow-up execution of the run tests tool with reasoning text indicating that verification results must be inspected before advancing.
+            # Requirement: Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool with reasoning text indicating that verification results must be inspected before advancing.
             resp = advance.execute_tool(b)
 
             self.assertTrue(resp.is_failed)
@@ -480,10 +483,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(vcheck.call_count, 1)
             self.assertIsNotNone(resp.reminder)
             assert resp.reminder is not None
-            self.assertIn("run tests tool should be called first", resp.reminder)
+            self.assertIn("check file tool should be called first", resp.reminder)
             self.assertIsNotNone(resp.follow_up_tool_call)
             assert resp.follow_up_tool_call is not None
-            self.assertEqual(resp.follow_up_tool_call.tool_name, "run_tests")
+            self.assertEqual(resp.follow_up_tool_call.tool_name, "check_file")
             self.assertEqual(
                 resp.follow_up_tool_call.reasoning_text,
                 "Verification results must be inspected before advancing.",
@@ -607,10 +610,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # Requirement: The submit tool is named `submit`, accepting an optional target parameter and a text change summary parameter, and shares a constant suppression key `submit`.
             self.assertEqual(resp.suppression_key, "submit")
 
-    def test_submit_tool_fails_when_verification_failing_specifies_run_tests_followup(
+    def test_submit_tool_fails_when_verification_failing_specifies_check_file_followup(
         self,
     ) -> None:
-        """CUJ: SubmitTool fails when verification fails and specifies run_tests follow-up."""
+        """CUJ: SubmitTool fails when verification fails and specifies check_file follow-up."""
         self.guide_del.has_steps_remaining = False
         self.node_cfg._feedback = ["Previous feedback"]
         self.edit_mgr.has_modifications = False
@@ -623,15 +626,17 @@ class SandboxRunControlImplTest(unittest.TestCase):
             submit = scope.get_singleton(SubmitToolImpl)
             b = ActualParameterBindings(bindings=set())
             # Requirement: Executing the submit tool updates verification results if outdated.
-            # Requirement: Tool execution fails when verification is failing, reminding the agent that the run tests tool should be called first and specifying a follow-up execution of the run tests tool with reasoning text indicating that verification results must be inspected before submitting.
+            # Requirement: Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool with reasoning text indicating that verification results must be inspected before submitting.
             resp = submit.execute_tool(b)
 
             self.assertTrue(resp.is_failed)
             self.assertFalse(resp.is_terminated)
             self.assertIsNotNone(resp.reminder)
+            assert resp.reminder is not None
+            self.assertIn("check file tool should be called first", resp.reminder)
             self.assertIsNotNone(resp.follow_up_tool_call)
             assert resp.follow_up_tool_call is not None
-            self.assertEqual(resp.follow_up_tool_call.tool_name, "run_tests")
+            self.assertEqual(resp.follow_up_tool_call.tool_name, "check_file")
             self.assertEqual(
                 len(resp.follow_up_tool_call.wire_parameter_bindings.bindings), 0
             )
@@ -758,7 +763,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             # Invalid target fails
             unrecognized = ReadOnlyFile(
-                short_name="unknown.py",
+                relative_path="unknown.py",
                 workspace_path=_make_workspace_path("unknown.py"),
                 owning_node=Node(unit_address="//pkg:unknown", role_address="lib"),
             )
@@ -926,18 +931,18 @@ class SandboxRunControlImplTest(unittest.TestCase):
         }
         self.storage.dependencies[node2] = {Dependency(node=node1)}
         b_rw1 = ReadWriteFile(
-            short_name="b_unit1.py",
+            relative_path="b_unit1.py",
             workspace_path=_make_workspace_path("pkg/b_unit1.py"),
             owning_node=node1,
         )
         b_rw3 = ReadWriteFile(
-            short_name="b_unit3.py",
+            relative_path="b_unit3.py",
             workspace_path=_make_workspace_path("pkg/b_unit3.py"),
             owning_node=node3,
         )
         self.node_cfg._read_write_files = {b_rw1, b_rw3}
         bt = ReadOnlyFile(
-            short_name="upstream_spec.md",
+            relative_path="upstream_spec.md",
             workspace_path=_make_workspace_path("pkg/upstream_spec.md"),
             owning_node=Node(unit_address="//pkg:upstream_unit", role_address="spec"),
         )
@@ -1000,8 +1005,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertNotIn(bt, self.edit_mgr.locked_files)
             self.assertIn("Blamed upstream_spec.md: Spec defect 3", resp_ok3.content)
 
-    def test_run_tests_with_target_parameter(self) -> None:
-        """CUJ: RunTestsTool evaluates specific verification checks when target is specified."""
+    def test_check_file_with_src_parameter(self) -> None:
+        """CUJ: CheckFileTool evaluates specific verification checks when src target is specified."""
         node1 = Node(unit_address="//pkg:rt_unit1", role_address="lib")
         node2 = Node(unit_address="//pkg:rt_unit2", role_address="lib")
         self.node_cfg.src_file_alias_by_node = {
@@ -1016,33 +1021,33 @@ class SandboxRunControlImplTest(unittest.TestCase):
         }
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            run_tests = scope.get_singleton(RunTestsTool)
+            check_file = scope.get_singleton(CheckFileTool)
 
             # Test target rt_unit1.py passes
-            # Requirement: When a target is specified, executing the run tests tool evaluates verification checks for that target.
+            # Requirement: When a src target is specified, executing the check file tool evaluates verification checks for that target.
             b1 = ActualParameterBindings(
-                bindings={(run_tests.target, TargetFileObj("rt_unit1.py"))}
+                bindings={(check_file.src, TargetFileObj("rt_unit1.py"))}
             )
-            resp1 = run_tests.execute_tool(b1)
+            resp1 = check_file.execute_tool(b1)
             self.assertFalse(resp1.is_failed)
             self.assertEqual(vcheck1.call_count, 1)
             self.assertEqual(vcheck2.call_count, 0)
 
             # Cached verification check evaluation for node without file revision updates
-            resp1_cached = run_tests.execute_tool(b1)
+            resp1_cached = check_file.execute_tool(b1)
             self.assertFalse(resp1_cached.is_failed)
             self.assertEqual(vcheck1.call_count, 1)
 
             # Test target rt_unit2.py fails
-            b2 = ActualParameterBindings(bindings={(run_tests.target, "rt_unit2.py")})
-            resp2 = run_tests.execute_tool(b2)
+            b2 = ActualParameterBindings(bindings={(check_file.src, "rt_unit2.py")})
+            resp2 = check_file.execute_tool(b2)
             self.assertTrue(resp2.is_failed)
             self.assertEqual(vcheck2.call_count, 1)
 
-    def test_run_tests_tool_failing_verification_presents_diagnostics_and_instructions(
+    def test_check_file_tool_failing_verification_presents_diagnostics_and_instructions(
         self,
     ) -> None:
-        """CUJ: RunTestsTool fails when verification fails, presenting sanitized diagnostics and failure instructions."""
+        """CUJ: CheckFileTool fails when verification fails, presenting sanitized diagnostics and failure instructions."""
         self.guide_del._guide = Guide(
             summary="Summary",
             sections=[],
@@ -1054,16 +1059,16 @@ class SandboxRunControlImplTest(unittest.TestCase):
         self.node_cfg._verification_checks = [vcheck]
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            run_tests = scope.get_singleton(RunTestsTool)
-            # Requirement: The run tests tool is named `run_tests`, accepting an optional target parameter, and shares a constant suppression key `run_tests`.
-            self.assertEqual(run_tests.name, "run_tests")
-            self.assertEqual(run_tests.parameters, {run_tests.target})
-            self.assertIsInstance(run_tests.description, str)
+            check_file = scope.get_singleton(CheckFileTool)
+            # Requirement: The check file tool is named `check_file`, accepting an optional src parameter, and shares a constant suppression key `check_file`.
+            self.assertEqual(check_file.name, "check_file")
+            self.assertEqual(check_file.parameters, {check_file.src})
+            self.assertIsInstance(check_file.description, str)
 
             b = ActualParameterBindings(bindings=set())
-            # Requirement: [RunController] The run controller installs a run tests tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
+            # Requirement: [RunController] The run controller installs a check file tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
             # Requirement: Fails when verification fails, presenting diagnostic feedback sanitized through the alias manager alongside any configured verification failure instructions.
-            resp = run_tests.execute_tool(b)
+            resp = check_file.execute_tool(b)
 
             self.assertTrue(resp.is_failed)
             self.assertFalse(resp.is_terminated)
@@ -1073,58 +1078,59 @@ class SandboxRunControlImplTest(unittest.TestCase):
                 "## Verification failure\nInspect diagnostics and fix workspace files.",
                 resp.content,
             )
-            # Requirement: The run tests tool is named `run_tests`, accepting an optional target parameter, and shares a constant suppression key `run_tests`.
-            self.assertEqual(resp.suppression_key, "run_tests")
+            # Requirement: The check file tool is named `check_file`, accepting an optional src parameter, and shares a constant suppression key `check_file`.
+            self.assertEqual(resp.suppression_key, "check_file")
 
-    def test_run_tests_tool_passing_verification_presents_results(self) -> None:
-        """CUJ: RunTestsTool produces a passing response when verification passes."""
+    def test_check_file_tool_passing_verification_presents_results(self) -> None:
+        """CUJ: CheckFileTool produces a passing response when verification passes."""
         vcheck = MockVerificationCheck(
             passes=True, diagnostic="All tests pass in /workspace/pkg/test.py"
         )
         self.node_cfg._verification_checks = [vcheck]
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            run_tests = scope.get_singleton(RunTestsTool)
+            check_file = scope.get_singleton(CheckFileTool)
             b = ActualParameterBindings(bindings=set())
-            # Requirement: [RunController] The run controller installs a run tests tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
+            # Requirement: [RunController] The run controller installs a check file tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
             # Requirement: Produces a response presenting passing verification results using the session verification success message when configured or default passing verification results alongside sanitized check output when verification passes.
-            resp = run_tests.execute_tool(b)
+            resp = check_file.execute_tool(b)
 
             self.assertFalse(resp.is_failed)
             self.assertFalse(resp.is_terminated)
             self.assertIn("Verification passed", resp.content)
             self.assertIn("All tests pass in test.py", resp.content)
-            # Requirement: The run tests tool is named `run_tests`, accepting an optional target parameter, and shares a constant suppression key `run_tests`.
-            self.assertEqual(resp.suppression_key, "run_tests")
+            # Requirement: The check file tool is named `check_file`, accepting an optional src parameter, and shares a constant suppression key `check_file`.
+            self.assertEqual(resp.suppression_key, "check_file")
 
             # Custom verification_success_message
             # Requirement: Produces a response presenting passing verification results using the session verification success message when configured or default passing verification results alongside sanitized check output when verification passes.
             self.node_cfg._verification_success_message = "Test test.py passed."
             self.edit_mgr.file_update_revision = 99
-            resp2 = run_tests.execute_tool(b)
+            resp2 = check_file.execute_tool(b)
             self.assertIn("Test test.py passed.", resp2.content)
 
-    def test_run_tests_tool_updates_verification_results_if_outdated(self) -> None:
-        """CUJ: RunTestsTool caches verification results and re-evaluates when workspace files updated."""
+    def test_check_file_tool_updates_verification_results_if_outdated(self) -> None:
+        """CUJ: CheckFileTool caches verification results and re-evaluates when workspace files updated."""
         vcheck = MockVerificationCheck(passes=False, diagnostic="Error 1")
         self.node_cfg._verification_checks = [vcheck]
         self.edit_mgr.file_update_revision = 1
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            run_tests = scope.get_singleton(RunTestsTool)
+            check_file = scope.get_singleton(CheckFileTool)
             b = ActualParameterBindings(bindings=set())
 
             # First execution runs checks
-            # Requirement: [RunController] The run controller installs a run tests tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
-            resp1 = run_tests.execute_tool(b)
+            # Requirement: [RunController] The run controller installs a check file tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
+            # Requirement: Executing the check file tool updates verification results if outdated.
+            resp1 = check_file.execute_tool(b)
             self.assertTrue(resp1.is_failed)
             self.assertEqual(vcheck.call_count, 1)
             self.assertIsNone(resp1.reminder)
             self.assertIsNone(resp1.follow_up_tool_call)
 
             # Second execution without file updates reuses cache
-            # Requirement: Reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous run tests tool execution.
-            resp2 = run_tests.execute_tool(b)
+            # Requirement: Reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous check file tool execution.
+            resp2 = check_file.execute_tool(b)
             self.assertTrue(resp2.is_failed)
             self.assertEqual(vcheck.call_count, 1)
             self.assertIsNotNone(resp2.reminder)
@@ -1137,20 +1143,20 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # Third execution after file update re-evaluates
             self.edit_mgr.file_update_revision = 2
             vcheck.passes = True
-            resp3 = run_tests.execute_tool(b)
+            resp3 = check_file.execute_tool(b)
             self.assertFalse(resp3.is_failed)
             self.assertEqual(vcheck.call_count, 2)
             self.assertIsNone(resp3.reminder)
             self.assertIsNone(resp3.follow_up_tool_call)
 
-    def test_run_tests_tool_repeated_with_read_write_file_specifies_view_file_followup(
+    def test_check_file_tool_repeated_with_read_write_file_specifies_view_file_followup(
         self,
     ) -> None:
-        """CUJ: Repeated run_tests execution specifies follow-up read of the source file with view_file and reasoning."""
+        """CUJ: Repeated check_file execution specifies follow-up read of the source file with view_file and reasoning."""
         vcheck = MockVerificationCheck(passes=True)
         self.node_cfg._verification_checks = [vcheck]
         rw_file = ReadWriteFile(
-            short_name="src.py",
+            relative_path="src.py",
             workspace_path=_make_workspace_path("/workspace/src.py"),
             owning_node=Node(unit_address="//pkg:target", role_address="lib"),
         )
@@ -1158,19 +1164,19 @@ class SandboxRunControlImplTest(unittest.TestCase):
         self.edit_mgr.file_update_revision = 1
 
         with enter_phase("agent_session", registry=self.registry) as scope:
-            run_tests = scope.get_singleton(RunTestsTool)
+            check_file = scope.get_singleton(CheckFileTool)
             b = ActualParameterBindings(bindings=set())
 
-            resp1 = run_tests.execute_tool(b)
+            resp1 = check_file.execute_tool(b)
             self.assertFalse(resp1.is_failed)
             self.assertIsNone(resp1.reminder)
             self.assertIsNone(resp1.follow_up_tool_call)
 
-            # Requirement: Reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous run tests tool execution.
-            # Requirement: Specifies a follow-up execution of the view file tool on the session source file and reasoning text noting that verification passed without permission to run more tests and to advance or submit the session if correct, or noting that verification failed without permission to run more tests until files are updated, when workspace files have not been updated since the previous run tests tool execution.
+            # Requirement: Reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous check file tool execution.
+            # Requirement: Specifies a follow-up execution of the view file tool on the session source file and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check file tool execution.
             # When is_step_mode is False (default for coverage / non-step nodes), reasoning directs to submit
             self.node_cfg.is_step_mode = False
-            resp2 = run_tests.execute_tool(b)
+            resp2 = check_file.execute_tool(b)
             self.assertFalse(resp2.is_failed)
             self.assertIsNotNone(resp2.reminder)
             assert resp2.reminder is not None
@@ -1187,27 +1193,27 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
             self.assertEqual(
                 resp2.follow_up_tool_call.reasoning_text,
-                "Oh, verification passes and I'm not allowed to run anymore tests. Let me read src.py again and see if I can figure out a different course of action. If it is already correct, I need to submit the agent session rather than run more tests.",
+                "Oh, verification passes and no new information will be revealed by calling check_file again until files are updated. Let me read src.py again and see if I can figure out a different course of action. If it is already correct, I need to submit the agent session rather than check files again.",
             )
 
             # In step mode, reasoning directs the agent to advance rather than submit
             self.node_cfg.is_step_mode = True
-            resp_step = run_tests.execute_tool(b)
+            resp_step = check_file.execute_tool(b)
             assert resp_step.follow_up_tool_call is not None
             self.assertEqual(
                 resp_step.follow_up_tool_call.reasoning_text,
-                "Oh, verification passes and I'm not allowed to run anymore tests. Let me read src.py again and see if I can figure out a different course of action. If it is already correct, I need to advance the agent session rather than run more tests.",
+                "Oh, verification passes and no new information will be revealed by calling check_file again until files are updated. Let me read src.py again and see if I can figure out a different course of action. If it is already correct, I need to advance the agent session rather than check files again.",
             )
 
             # When verification fails, reasoning indicates no more tests until files are updated
             vcheck.passes = False
             self.edit_mgr.file_update_revision = 2
-            _ = run_tests.execute_tool(b)
-            resp_fail = run_tests.execute_tool(b)
+            _ = check_file.execute_tool(b)
+            resp_fail = check_file.execute_tool(b)
             assert resp_fail.follow_up_tool_call is not None
             self.assertEqual(
                 resp_fail.follow_up_tool_call.reasoning_text,
-                "Oh, verification failed and I'm not allowed to run anymore tests until I update the files. Let me read src.py again and see if I can figure out a different course of action.",
+                "Oh, verification failed and no new information will be revealed by calling check_file again until files are updated. Let me read src.py again and see if I can figure out a different course of action.",
             )
 
 

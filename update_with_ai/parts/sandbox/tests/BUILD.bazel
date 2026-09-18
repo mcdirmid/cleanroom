@@ -65,6 +65,7 @@ pyright_test(
         "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/bazel/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
+        "//update_with_ai/parts/sandbox/lib:sandbox_file_editor",
         "//update_with_ai/parts/sandbox/lib:sandbox_file_reader",
         "//update_with_ai/parts/sandbox/lib:sandbox_file_reader_impl",
         "//update_with_ai/parts/sandbox/lib:sandbox_guide_delivery",

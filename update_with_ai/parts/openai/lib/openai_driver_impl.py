@@ -379,7 +379,7 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                         supp_key: Optional[str] = None
                         if fn_name == "replace_file_content":
                             supp_key = "replace_file_content"
-                        elif fn_name in ("advance", "submit", "run_tests"):
+                        elif fn_name in ("advance", "submit", "check_file", "run_tests"):
                             supp_key = fn_name
                         else:
                             repaired_raw = _repair_json(tc.function.arguments or "")

@@ -1,6 +1,6 @@
 # sandbox_file_reader_impl implementation component
 
-imports: filesystem_ext, tool_provider, agent_file_alias, agent_node_config, template_format
+imports: filesystem_ext, tool_provider, agent_file_alias, agent_node_config, template_format, sandbox_file_editor
 implements: sandbox_file_reader
 
 ## Purpose
@@ -15,11 +15,11 @@ Permissive or forgiving tool implementations allow agents to drift into ambiguou
 
 The read manager provides the view file tool for the agent session and omits the search tool, obtaining declared read-only files, read-write files, and the guide file, when configured, from the session node configuration.
 
-The view file tool is named `view_file`, accepting a file alias *path* parameter using the alias manager. The view file tool reads file content from the filesystem at the host path formed from the alias manager workspace root and the bound file workspace path, returning the content formatted with one-indexed right-aligned line numbers followed by a colon and space, and formatting read-only markdown files ending with `.md` using the template formatter with session template parameters after filtering out paragraphs beginning with `> META:`. When the target file does not exist on disk, view file tool execution treats a read-write file as having empty content, and fails with a response guiding agent recovery when inspecting a missing read-only file.
+The view file tool is named `view_file`, accepting a file alias *path* parameter using the alias manager. On successful execution, the view file tool records the read file in the edit manager. The view file tool reads file content from the filesystem at the host path formed from the alias manager workspace root and the bound file workspace path, returning the content formatted with one-indexed right-aligned line numbers followed by a colon and space, and formatting read-only markdown files ending with `.md` using the template formatter with session template parameters after filtering out paragraphs beginning with `> META:`. When the target file does not exist on disk, view file tool execution treats a read-write file as having empty content, and fails with a response guiding agent recovery when inspecting a missing read-only file.
 
-Executing the view file tool requires a bound file. If an unbound file is supplied whose short name or qualified path addresses a module name or ends with `.py` and matches a declared read-only grounding specification ending with `.pyi`, execution resolves to that grounding specification file alias. If an unbound file addresses a test file ending with `_test.py`, execution fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract. Otherwise, supplying an unbound file fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead.
+Executing the view file tool requires a bound file. If an unbound file is supplied whose relative path or qualified path addresses a module name or ends with `.py` and matches a declared read-only grounding specification ending with `.pyi`, execution resolves to that grounding specification file alias. If an unbound file addresses a test file ending with `_test.py`, execution fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract. Otherwise, supplying an unbound file fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead.
 
-View file tool responses for read-write files carry a suppression key matching the file's short name, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
+View file tool responses for read-write files carry a suppression key matching the file's relative path, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
 
 The *regex pattern converter* is a parameter converter for regex patterns that converts a wire type string into a regex pattern.
 

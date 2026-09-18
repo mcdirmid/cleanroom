@@ -46,7 +46,7 @@ The node config provides:
 
 - The session *verification checks by node* evaluated for each session node.
 
-- The session *src file alias by node*, mapping each session node to the short name of its declared source file alias.
+- The session *src file alias by node*, mapping each session node to the relative path of its declared source file alias.
 
 - The session *verification success message*, exposing informative verification feedback when configured.
 

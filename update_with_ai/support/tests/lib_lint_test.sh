@@ -407,24 +407,37 @@ else
 fi
 check "c20 rewritten lifecycle" "$tmp/c20/lib/init_module.py" 'from support\.lib\.lifecycle import LifecycleRegistry'
 
-# Case 21: dependency header maintained at top of lib file.
+# Case 21: grounding imports rewritten to lib, DO NOT EDIT markers and _ext imports stripped.
 mkdir -p "$tmp/c21/lib"
 cat > "$tmp/c21/lib/consumer.py" <<'EOF'
-from update_with_ai.parts.dag.lib.dag_storage import DagStorage
+# --- DO NOT EDIT: Auto-generated dependencies ---
+from update_with_ai.parts.dag.grounding.dag_storage import DagStorage
+import dummy_ext
+# --- END DO NOT EDIT ---
 
 class Consumer:
     def __init__(self, s: DagStorage) -> None:
         self.s = s
 EOF
 if ( cd "$tmp/c21" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/consumer.py --deps //update_with_ai/parts/dag/lib:dag_storage,tool_provider ); then
-    echo "PASS: c21 maintained dependency block"
+    echo "PASS: c21 lint succeeded"
 else
-    echo "FAIL: c21 expected success maintaining dependency block" >&2
+    echo "FAIL: c21 expected success linting consumer" >&2
     fail=1
 fi
-check "c21 do not edit start" "$tmp/c21/lib/consumer.py" '# --- DO NOT EDIT: Auto-generated dependencies ---'
-check "c21 do not edit end" "$tmp/c21/lib/consumer.py" '# --- END DO NOT EDIT ---'
-check "c21 aliased cross-part import" "$tmp/c21/lib/consumer.py" 'import update_with_ai\.parts\.dag\.lib\.dag_storage as dag_storage'
+if grep -q 'DO NOT EDIT' "$tmp/c21/lib/consumer.py"; then
+    echo "FAIL: c21 DO NOT EDIT markers not stripped" >&2
+    fail=1
+else
+    echo "PASS: c21 DO NOT EDIT markers stripped"
+fi
+if grep -q 'dummy_ext' "$tmp/c21/lib/consumer.py"; then
+    echo "FAIL: c21 _ext import not stripped" >&2
+    fail=1
+else
+    echo "PASS: c21 _ext import stripped"
+fi
+check "c21 rewritten to lib" "$tmp/c21/lib/consumer.py" 'from update_with_ai\.parts\.dag\.lib\.dag_storage import DagStorage'
 if grep -q '# Dependencies:' "$tmp/c21/lib/consumer.py"; then
     echo "FAIL: c21 unexpected dependency comment line" >&2
     fail=1

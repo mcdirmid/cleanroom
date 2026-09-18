@@ -240,16 +240,16 @@ GROUNDING_ARGUMENT:
     def src_file_alias_by_node(self) -> Mapping[dag_storage.Node, str]:
         """
 PURPOSE:
-Source file alias short name mapped by session node
+Source file alias relative path mapped by session node
 
 FRESH_REQUIREMENTS:
-- The node config exposes declared src file alias by node mapping each session node to the short name of its declared source file alias.
+- The node config exposes declared src file alias by node mapping each session node to the relative path of its declared source file alias.
 
 INHERITED_REQUIREMENTS:
-- [NodeConfig] The node config provides the source file alias short name mapped by session node.
+- [NodeConfig] The node config provides the source file alias relative path mapped by session node.
 
 GROUNDING_ARGUMENT:
-- Derived by loading target node manifests via bazel_manifest_loader.BazelManifestLoader.get_manifest for each node in get_singleton(loop_node_cleaner.CleanedNodes).nodes and extracting the short name of its declared src file.
+- Derived by loading target node manifests via bazel_manifest_loader.BazelManifestLoader.get_manifest for each node in get_singleton(loop_node_cleaner.CleanedNodes).nodes and extracting the relative path of its declared src file.
 """
         ...
 
@@ -293,13 +293,13 @@ GROUNDING_ARGUMENT:
 class AliasManager(agent_file_alias.AliasManager):
     """
 PURPOSE:
-Implements alias manager with minimal unambiguous short names
+Implements alias manager with relative paths
 
 INHERITANCE:
 - tool_provider.ParameterConverter: Implements parameter converter for file alias actual type
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, AliasManager resolves accessible workspace files for get_singleton(loop_node_cleaner.CleanedNodes).nodes into minimal unambiguous short names and maintains host path mappings.
+- As an agent_session singleton, AliasManager resolves accessible workspace files for get_singleton(loop_node_cleaner.CleanedNodes).nodes into relative paths and maintains host path mappings.
 """
 
     @property
@@ -331,13 +331,13 @@ GROUNDING_ARGUMENT:
     def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
         """
 PURPOSE:
-Converts short names to matching file aliases
+Converts relative paths to matching file aliases
 
 FRESH_REQUIREMENTS:
-- The alias manager converts short names to matching file aliases, producing unbound files when unmapped.
+- The alias manager converts relative paths to matching file aliases, producing unbound files when unmapped.
 
 INHERITED_REQUIREMENTS:
-- [AliasManager] Converting a wire type string produces the matching file alias if its short name is found, and produces an unbound file if the short name is not found.
+- [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, and produces an unbound file if the relative path is not found.
 
 GROUNDING_ARGUMENT:
 - Receives wire_value string directly as a parameter and looks up the corresponding file alias in session mappings on self, returning an unbound file if not found.
@@ -349,16 +349,16 @@ GROUNDING_ARGUMENT:
     def sanitize_text(self, text: str) -> str:
         """
 PURPOSE:
-Masks occurrences of relative workspace paths and preceding path prefixes with minimal short names
+Masks occurrences of relative workspace paths and preceding path prefixes with relative paths
 
 FRESH_REQUIREMENTS:
-- The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its minimal short name, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking.
+- The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its relative path, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking.
 
 INHERITED_REQUIREMENTS:
-- [AliasManager] Sanitizing text masks occurrences of relative workspace paths and preceding path prefixes with the corresponding file alias short names.
+- [AliasManager] Sanitizing text masks occurrences of relative workspace paths and preceding path prefixes with the corresponding file alias relative paths.
 
 GROUNDING_ARGUMENT:
-- Receives text directly as a parameter and replaces relative workspace paths and preceding path prefixes with corresponding minimal short names stored on self.
+- Receives text directly as a parameter and replaces relative workspace paths and preceding path prefixes with corresponding relative paths stored on self.
 """
         ...
 

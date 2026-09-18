@@ -130,21 +130,19 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
                 else:
                     norm_rel = os.path.normpath(os.path.join(pkg_path, src))
                 ws_path = _make_host_path(agent_file_alias.WorkspacePath, norm_rel)
-                short_name = os.path.basename(norm_rel)
                 rw = agent_file_alias.ReadWriteFile(
-                    short_name=short_name, workspace_path=ws_path, owning_node=n
+                    relative_path=norm_rel, workspace_path=ws_path, owning_node=n
                 )
                 self._read_write_files.add(rw)
                 files_by_path[norm_rel] = rw
-                self._src_file_alias_by_node[n] = short_name
+                self._src_file_alias_by_node[n] = norm_rel
 
             silent_srcs = data.get("silent_srcs", [])
             for s_src in silent_srcs:
                 norm_rel = os.path.normpath(os.path.join(pkg_path, s_src))
                 ws_path = _make_host_path(agent_file_alias.WorkspacePath, norm_rel)
-                short_name = os.path.basename(norm_rel)
                 rw = agent_file_alias.ReadWriteFile(
-                    short_name=short_name, workspace_path=ws_path, owning_node=n
+                    relative_path=norm_rel, workspace_path=ws_path, owning_node=n
                 )
                 self._read_write_files.add(rw)
                 files_by_path[norm_rel] = rw
@@ -229,7 +227,7 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
             )
             if not guide_filename.endswith(".md"):
                 guide_filename += ".md"
-            self._guide_file = agent_file_alias.UnboundFile(short_name=guide_filename)
+            self._guide_file = agent_file_alias.UnboundFile(relative_path=guide_filename)
 
             guide_cand_paths = [
                 os.path.join(
@@ -353,9 +351,8 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
                         ws_path = _make_host_path(
                             agent_file_alias.WorkspacePath, norm_rel
                         )
-                        short_name = os.path.basename(norm_rel)
                         bound_file = agent_file_alias.ReadOnlyFile(
-                            short_name=short_name,
+                            relative_path=norm_rel,
                             workspace_path=ws_path,
                             owning_node=dep_node,
                         )
@@ -573,25 +570,25 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
             key=lambda x: len(x.workspace_path.path),
             reverse=True,
         ):
-            self._aliases[f.short_name] = f
+            self._aliases[f.relative_path] = f
             norm_ws = os.path.normpath(f.workspace_path.path)
             abs_path = os.path.normpath(
                 os.path.join(self._workspace_root.path, norm_ws)
             )
-            self._paths[abs_path] = f.short_name
-            self._paths[norm_ws] = f.short_name
+            self._paths[abs_path] = f.relative_path
+            self._paths[norm_ws] = f.relative_path
             escaped = re.escape(norm_ws)
             pat = re.compile(
                 r"/?(?:[^\s:;\"\'`()<>{}\[\]/]+/)*"
                 + escaped
                 + r"(?=[:\s;\"\'`()<>{}\[\]]|$)"
             )
-            patterns.append((pat, f.short_name))
+            patterns.append((pat, f.relative_path))
 
         self._masking_patterns = patterns
 
         if n_cfg.guide_file is not None:
-            self._aliases[n_cfg.guide_file.short_name] = n_cfg.guide_file
+            self._aliases[n_cfg.guide_file.relative_path] = n_cfg.guide_file
 
     @property
     def actual_type(self) -> Type:
@@ -602,17 +599,19 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
         return tool_provider.String()
 
     def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
-        # Requirement: The alias manager converts short names to matching file aliases, producing unbound files when unmapped.
-        return self._aliases.get(wire_value, agent_file_alias.UnboundFile(wire_value))
+        # Requirement: The alias manager converts relative paths to matching file aliases, producing unbound files when unmapped.
+        return self._aliases.get(
+            wire_value, agent_file_alias.UnboundFile(relative_path=wire_value)
+        )
 
     def sanitize_text(self, text: str) -> str:
-        # Requirement: The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its minimal short name, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking.
+        # Requirement: The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its relative path, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking.
         res = text
-        for pattern, short_name in self._masking_patterns:
-            res = pattern.sub(short_name, res)
-        for host_path, short_name in self._paths.items():
+        for pattern, rel_path in self._masking_patterns:
+            res = pattern.sub(rel_path, res)
+        for host_path, rel_path in self._paths.items():
             if host_path in res:
-                res = res.replace(host_path, short_name)
+                res = res.replace(host_path, rel_path)
         return res
 
     @property

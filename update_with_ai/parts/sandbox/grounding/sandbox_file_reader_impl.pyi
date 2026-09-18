@@ -3,6 +3,7 @@ from framework import operation, override, singleton_type
 import agent_file_alias
 import filesystem_ext
 import agent_node_config
+import sandbox_file_editor
 import sandbox_file_reader
 import template_format
 import tool_provider
@@ -127,11 +128,12 @@ Implements execute_tool on the view file tool to inspect file content with line 
 FRESH_REQUIREMENTS:
 - Executing the view file tool reads file content using the filesystem at the host path formed from the alias manager workspace root and bound file workspace path, returning content formatted with one-indexed right-aligned line numbers followed by a colon and space.
 - When the target file does not exist on disk, view file tool execution treats a read-write file as having empty content, and fails with a response guiding agent recovery when inspecting a missing read-only file.
-- Executing the view file tool with an unbound file whose short name or qualified path addresses a module name or ends with .py and matches a declared read-only grounding specification ending with .pyi resolves to that grounding specification file alias.
+- Executing the view file tool with an unbound file whose relative path or qualified path addresses a module name or ends with .py and matches a declared read-only grounding specification ending with .pyi resolves to that grounding specification file alias.
 - Executing the view file tool with an unbound file addressing a test file ending with _test.py fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract.
 - Otherwise, executing the view file tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.
 - When an unbound file equals the guide file configured for step-mode, the view file tool failure response indicates that `advance` must be called to read the guide instead.
-- View file tool responses for read-write files carry a suppression key matching the file's short name, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
+- View file tool responses for read-write files carry a suppression key matching the file's relative path, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
+- On successful execution, the view file tool records the read file in the edit manager.
 - When reading markdown files ending with .md, paragraphs beginning with > META: are filtered out from the returned content.
 - When reading read-only markdown files ending with .md, content is formatted using the template formatter with session template parameters after filtering out paragraphs beginning with > META:.
 
@@ -140,7 +142,7 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, resolves host paths using imported agent_file_alias.AliasManager workspace root in the same session lifecycle tier, resolves unbound .py and module requests to matching declared .pyi grounding specifications, rejects test file requests with contract-directed guidance, reads file content via the filesystem, formats lines with one-indexed right-aligned line numbers followed by a colon and space, filters > META: paragraphs for markdown files, formats read-only markdown content using imported template_format.TemplateFormatter and agent_node_config.NodeConfig.template_parameters in the same session lifecycle tier, attaches the file's short name as a suppression key on responses for read-write files while omitting it for read-only files, and masks host paths in read-only output.
+- Receives actual parameter bindings, resolves host paths using imported agent_file_alias.AliasManager workspace root in the same session lifecycle tier, resolves unbound .py and module requests to matching declared .pyi grounding specifications, rejects test file requests with contract-directed guidance, reads file content via the filesystem, formats lines with one-indexed right-aligned line numbers followed by a colon and space, filters > META: paragraphs for markdown files, formats read-only markdown content using imported template_format.TemplateFormatter and agent_node_config.NodeConfig.template_parameters in the same session lifecycle tier, attaches the file's relative path as a suppression key on responses for read-write files while omitting it for read-only files, masks host paths in read-only output, and records the read file in imported sandbox_file_editor.EditManager in the same session lifecycle tier.
 """
         ...
 

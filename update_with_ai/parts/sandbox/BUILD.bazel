@@ -58,7 +58,7 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "sandbox_file_reader_impl",
-    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/core:filesystem_ext', '//update_with_ai/parts/agent:agent_node_config', ':sandbox_file_reader', ':template_format', ':tool_provider'],
+    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/core:filesystem_ext', '//update_with_ai/parts/agent:agent_node_config', ':sandbox_file_editor', ':sandbox_file_reader', ':template_format', ':tool_provider'],
 )
 
 update_python_with_ai(

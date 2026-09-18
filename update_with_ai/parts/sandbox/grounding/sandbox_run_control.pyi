@@ -19,7 +19,7 @@ FRESH_REQUIREMENTS:
 - The run controller installs an advance tool when guide step mode is active, coordinating step progression through guide delivery upon passing verification.
 - The run controller installs a submit tool that concludes target processing upon passing verification and enforces change documentation.
 - The run controller installs a fail tool that terminates the run in failure.
-- The run controller installs a run tests tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
+- The run controller installs a check file tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
 - The run controller installs a blame tool when blame targets are configured, attributing task failure to an upstream dependency node.
 """
 
@@ -296,7 +296,7 @@ INHERITED_REQUIREMENTS:
         ...
 
 @singleton_type('agent_session')
-class RunTestsTool(tool_provider.Tool, Protocol):
+class CheckFileTool(tool_provider.Tool, Protocol):
     """
 PURPOSE:
 Defined as a tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed
@@ -306,10 +306,10 @@ INHERITED_ASSUMPTIONS:
 """
 
     @property
-    def target(self) -> tool_provider.Parameter:
+    def src(self) -> tool_provider.Parameter:
         """
 PURPOSE:
-Parameter identifying the session target file to run tests for
+Parameter identifying the session source file to check
 """
         ...
 

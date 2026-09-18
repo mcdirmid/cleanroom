@@ -36,7 +36,6 @@ from build_lint_common import (
     check_syntax,
     check_type_ignore,
     check_undeclared_imports,
-    ensure_dependency_header,
     ensure_load,
     ensure_pip_load,
     ensure_target,
@@ -53,6 +52,7 @@ from build_lint_common import (
     parse_spec_build_dependencies,
     read_text,
     rewrite_lib_imports,
+    strip_do_not_edit_markers,
     transitive_closure,
     write_text,
 )
@@ -174,6 +174,57 @@ def generate_lib_skeleton(pyi_path: str, stem: str) -> str:
         lines.append(
             "from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton"
         )
+
+    dep_imports: list[str] = []
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                mod = alias.name
+                if (
+                    mod.endswith("_ext")
+                    or mod.split(".")[0] in ("typing", "dataclasses", "support", "framework", "lifecycle")
+                ):
+                    continue
+                if ".grounding." in mod:
+                    mod = mod.replace(".grounding.", ".lib.")
+                elif mod.endswith(".grounding"):
+                    mod = mod[:-10] + ".lib"
+                if alias.asname:
+                    dep_imports.append(f"import {mod} as {alias.asname}")
+                else:
+                    dep_imports.append(f"import {mod}")
+        elif isinstance(node, ast.ImportFrom):
+            mod = node.module or ""
+            if mod.split(".")[0] in ("typing", "dataclasses", "support", "framework", "lifecycle"):
+                continue
+            filtered_names = [alias for alias in node.names if not alias.name.endswith("_ext")]
+            if not filtered_names:
+                continue
+            if node.level > 0:
+                names_str = ", ".join(
+                    f"{a.name} as {a.asname}" if a.asname else a.name for a in filtered_names
+                )
+                dep_imports.append(f"from . import {names_str}")
+            elif mod.endswith(".grounding"):
+                lib_pkg = mod[:-10] + ".lib"
+                names_str = ", ".join(
+                    f"{a.name} as {a.asname}" if a.asname else a.name for a in filtered_names
+                )
+                dep_imports.append(f"from {lib_pkg} import {names_str}")
+            elif ".grounding." in mod:
+                lib_pkg = mod.replace(".grounding.", ".lib.")
+                names_str = ", ".join(
+                    f"{a.name} as {a.asname}" if a.asname else a.name for a in filtered_names
+                )
+                dep_imports.append(f"from {lib_pkg} import {names_str}")
+            else:
+                names_str = ", ".join(
+                    f"{a.name} as {a.asname}" if a.asname else a.name for a in filtered_names
+                )
+                dep_imports.append(f"from {mod} import {names_str}")
+
+    for imp in sorted(set(dep_imports)):
+        lines.append(imp)
 
     pyi_basename = os.path.basename(pyi_path)
     lines.append("")
@@ -562,12 +613,7 @@ def main() -> int:
             rewrite_lib_imports(
                 args.module_path, dir_name, import_map, sibling_stems
             )
-            ensure_dependency_header(
-                args.module_path,
-                sorted(allowed_deps),
-                import_map=import_map,
-                sibling_stems=sibling_stems,
-            )
+            strip_do_not_edit_markers(args.module_path)
 
         syntax_errors = check_syntax(args.module_path)
         if syntax_errors:
@@ -633,6 +679,7 @@ def main() -> int:
 
         for d in extract_target_pyright_deps(args.build_path, RULE, stem):
             allowed_deps.add(d.split(":")[-1])
+        allowed_deps = {d for d in allowed_deps if not d.endswith("_ext")}
 
         if not allowed_deps and os.path.exists(args.module_path):
             parsed = parse_dependency_header(read_text(args.module_path))
@@ -657,12 +704,7 @@ def main() -> int:
             and os.path.exists(args.module_path)
             and not stem.endswith("_asm")
         ):
-            ensure_dependency_header(
-                args.module_path,
-                sorted(allowed_deps),
-                import_map=import_map,
-                sibling_stems=sibling_stems,
-            )
+            strip_do_not_edit_markers(args.module_path)
 
         syntax_errors = check_syntax(args.module_path)
         if syntax_errors:

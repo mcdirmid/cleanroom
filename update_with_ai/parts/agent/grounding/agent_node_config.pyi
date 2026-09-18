@@ -233,10 +233,10 @@ FRESH_REQUIREMENTS:
     def src_file_alias_by_node(self) -> Mapping[dag_storage.Node, str]:
         """
 PURPOSE:
-Short name of the declared source file alias mapped by session node
+Relative path of the declared source file alias mapped by session node
 
 FRESH_REQUIREMENTS:
-- The node config provides the source file alias short name mapped by session node.
+- The node config provides the source file alias relative path mapped by session node.
 """
         ...
 

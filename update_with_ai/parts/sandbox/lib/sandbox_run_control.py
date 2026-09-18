@@ -45,6 +45,9 @@ class BlameTool(tool_provider.Tool, Protocol):
     def explanation(self) -> tool_provider.Parameter: ...
 
 
-class RunTestsTool(tool_provider.Tool, Protocol):
+class CheckFileTool(tool_provider.Tool, Protocol):
     @property
-    def target(self) -> tool_provider.Parameter: ...
+    def src(self) -> tool_provider.Parameter: ...
+
+
+RunTestsTool = CheckFileTool

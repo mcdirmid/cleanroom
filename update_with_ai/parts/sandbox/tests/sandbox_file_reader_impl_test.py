@@ -22,6 +22,7 @@ from update_with_ai.parts.agent.lib.agent_file_alias import (
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from update_with_ai.parts.agent.lib.agent_node_config import Guide, NodeConfig
 from update_with_ai.parts.sandbox.lib.template_format import TemplateFormatter
+from update_with_ai.parts.sandbox.lib.sandbox_file_editor import EditManager
 from update_with_ai.parts.sandbox.lib.sandbox_file_reader import (
     ReadManager,
     ViewFileTool,
@@ -61,6 +62,19 @@ class MockToolManager:
         self, name: str, wire_parameter_bindings: WireParameterBindings
     ) -> Response:
         return Response(is_failed=False, is_terminated=False, content="")
+
+
+class MockEditManager:
+    tier = "agent_session"
+
+    def __init__(self) -> None:
+        self.last_read_or_edited_file: Optional[FileAlias] = None
+
+    def record_file_read(self, file: FileAlias) -> None:
+        self.last_read_or_edited_file = file
+
+    def record_file_edit(self, file: ReadWriteFile) -> None:
+        self.last_read_or_edited_file = file
 
 
 class MockBooleanConverter:
@@ -173,31 +187,31 @@ class SandboxFileReaderImplTest(unittest.TestCase):
 
         node = Node(unit_address="//pkg:test")
         self.ro_file = ReadOnlyFile(
-            short_name="readonly.txt",
+            relative_path="readonly.txt",
             workspace_path=_make_workspace_path("readonly.txt"),
             owning_node=node,
         )
         self.ro_py_file = ReadOnlyFile(
-            short_name="readonly.py",
+            relative_path="readonly.py",
             workspace_path=_make_workspace_path("readonly.py"),
             owning_node=node,
         )
         self.ro_pyi_file = ReadOnlyFile(
-            short_name="stub.pyi",
+            relative_path="stub.pyi",
             workspace_path=_make_workspace_path("stub.pyi"),
             owning_node=node,
         )
         self.ro_md_file = ReadOnlyFile(
-            short_name="spec.md",
+            relative_path="spec.md",
             workspace_path=_make_workspace_path("spec.md"),
             owning_node=node,
         )
         self.rw_file = ReadWriteFile(
-            short_name="writable.txt",
+            relative_path="writable.txt",
             workspace_path=_make_workspace_path("writable.txt"),
             owning_node=node,
         )
-        self.guide_unbound = UnboundFile(short_name="guide.md")
+        self.guide_unbound = UnboundFile(relative_path="guide.md")
 
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
@@ -206,6 +220,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         self.bool_conv = MockBooleanConverter()
         self.alias_mgr = MockAliasManager(self.test_dir)
         self.template_formatter = MockTemplateFormatter()
+        self.edit_mgr = MockEditManager()
         self.node_cfg = MockNodeConfig(
             ro_files={self.ro_file, self.ro_py_file, self.ro_pyi_file, self.ro_md_file},
             rw_files={self.rw_file},
@@ -227,6 +242,9 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         )
         self.registry.register_instance(
             self.template_formatter, keys=[TemplateFormatter], tier="agent_session"
+        )
+        self.registry.register_instance(
+            self.edit_mgr, keys=[EditManager], tier="agent_session"
         )
 
     def tearDown(self) -> None:
@@ -288,7 +306,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             )
             resp2 = view_tool.execute_tool(bindings2)
             self.assertFalse(resp2.is_failed)
-            self.assertEqual(resp2.suppression_key, self.rw_file.short_name)
+            self.assertEqual(resp2.suppression_key, self.rw_file.relative_path)
             self.assertIn("  1: Line 1 writable", resp2.content)
 
             # 3. Read-only source code file (.py) formatting
@@ -313,7 +331,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertTrue(resp_guide.is_failed)
 
             # Unbound unknown file -> fails
-            unknown_unbound = UnboundFile(short_name="unknown.txt")
+            unknown_unbound = UnboundFile(relative_path="unknown.txt")
             bindings_unknown = ActualParameterBindings(
                 bindings={(view_tool.path_parameter, unknown_unbound)}
             )
@@ -323,12 +341,12 @@ class SandboxFileReaderImplTest(unittest.TestCase):
                 resp_unknown.reminder, "Only declared files can be inspected."
             )
 
-            # Requirement: Executing the view file tool with an unbound file whose short name or qualified path addresses a module name or ends with .py and matches a declared read-only grounding specification ending with .pyi resolves to that grounding specification file alias.
+            # Requirement: Executing the view file tool with an unbound file whose relative path or qualified path addresses a module name or ends with .py and matches a declared read-only grounding specification ending with .pyi resolves to that grounding specification file alias.
             # Transparent resolution: stub.py -> stub.pyi
             resp_py = view_tool.execute_tool(
                 ActualParameterBindings(
                     bindings={
-                        (view_tool.path_parameter, UnboundFile(short_name="stub.py"))
+                        (view_tool.path_parameter, UnboundFile(relative_path="stub.py"))
                     }
                 )
             )
@@ -341,7 +359,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
                     bindings={
                         (
                             view_tool.path_parameter,
-                            UnboundFile(short_name="testing.parts.pkg.stub.py"),
+                            UnboundFile(relative_path="testing.parts.pkg.stub.py"),
                         )
                     }
                 )
@@ -353,7 +371,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             resp_bare = view_tool.execute_tool(
                 ActualParameterBindings(
                     bindings={
-                        (view_tool.path_parameter, UnboundFile(short_name="stub"))
+                        (view_tool.path_parameter, UnboundFile(relative_path="stub"))
                     }
                 )
             )
@@ -367,7 +385,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
                     bindings={
                         (
                             view_tool.path_parameter,
-                            UnboundFile(short_name="my_target_test.py"),
+                            UnboundFile(relative_path="my_target_test.py"),
                         )
                     }
                 )
@@ -379,12 +397,12 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         """CUJ: Handling missing read-write files (treated as empty) vs missing read-only files (fails)."""
         node = Node(unit_address="//pkg:test")
         missing_rw_file = ReadWriteFile(
-            short_name="missing_rw.txt",
+            relative_path="missing_rw.txt",
             workspace_path=_make_workspace_path("missing_rw.txt"),
             owning_node=node,
         )
         missing_ro_file = ReadOnlyFile(
-            short_name="missing_ro.txt",
+            relative_path="missing_ro.txt",
             workspace_path=_make_workspace_path("missing_ro.txt"),
             owning_node=node,
         )
@@ -399,7 +417,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             rw_resp = view_tool.execute_tool(rw_bindings)
             self.assertFalse(rw_resp.is_failed)
             self.assertEqual(rw_resp.content, "")
-            self.assertEqual(rw_resp.suppression_key, missing_rw_file.short_name)
+            self.assertEqual(rw_resp.suppression_key, missing_rw_file.relative_path)
 
             # Reading missing read-only file fails with guidance
             ro_bindings = ActualParameterBindings(
@@ -464,6 +482,17 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             # Requirement: Executing the search tool fails when provided with an invalid regex pattern.
             resp_inv = search_tool.execute_tool(bindings_invalid)
             self.assertTrue(resp_inv.is_failed)
+
+    def test_view_file_records_read_in_edit_manager(self) -> None:
+        """CUJ: ViewFileTool records read file in EditManager upon successful execution."""
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            view_tool = scope.get_singleton(ViewFileTool)
+            b = ActualParameterBindings(
+                bindings={(view_tool.path_parameter, self.rw_file)}
+            )
+            resp = view_tool.execute_tool(b)
+            self.assertFalse(resp.is_failed)
+            self.assertEqual(self.edit_mgr.last_read_or_edited_file, self.rw_file)
 
 
 if __name__ == "__main__":

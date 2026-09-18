@@ -107,16 +107,16 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             # Configure properties
             node = Node(unit_address="//pkg:target")
             ro = ReadOnlyFile(
-                short_name="ro.txt",
+                relative_path="ro.txt",
                 workspace_path=_make_workspace_path("pkg/ro.txt"),
                 owning_node=node,
             )
             rw = ReadWriteFile(
-                short_name="rw.txt",
+                relative_path="rw.txt",
                 workspace_path=_make_workspace_path("pkg/rw.txt"),
                 owning_node=node,
             )
-            unbound = UnboundFile(short_name="guide.md")
+            unbound = UnboundFile(relative_path="guide.md")
             guide = Guide(summary="Guide", sections=[StepSection(0, "S1", "C1")])
 
             cfg._read_only_files.add(ro)
@@ -208,25 +208,25 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             # Map an alias
             node = Node(unit_address="//pkg:target")
             bound = ReadWriteFile(
-                short_name="module.py",
+                relative_path="module.py",
                 workspace_path=_make_workspace_path("pkg/module.py"),
                 owning_node=node,
             )
             alias_mgr._aliases["module.py"] = bound
             alias_mgr._paths["/workspace/pkg/module.py"] = "module.py"
 
-            # Convert mapped short name
+            # Convert mapped relative path
             converted = alias_mgr.convert("module.py")
-            # Requirement: The alias manager converts short names to matching file aliases, producing unbound files when unmapped.
-            # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its short name is found, and produces an unbound file if the short name is not found.
+            # Requirement: The alias manager converts relative paths to matching file aliases, producing unbound files when unmapped.
+            # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, and produces an unbound file if the relative path is not found.
             self.assertEqual(converted, bound)
 
-            # Convert unmapped short name produces UnboundFile
+            # Convert unmapped relative path produces UnboundFile
             unmapped = alias_mgr.convert("unknown.py")
-            # Requirement: The alias manager converts short names to matching file aliases, producing unbound files when unmapped.
-            # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its short name is found, and produces an unbound file if the short name is not found.
+            # Requirement: The alias manager converts relative paths to matching file aliases, producing unbound files when unmapped.
+            # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, and produces an unbound file if the relative path is not found.
             self.assertIsInstance(unmapped, UnboundFile)
-            self.assertEqual(unmapped.short_name, "unknown.py")
+            self.assertEqual(unmapped.relative_path, "unknown.py")
 
             # Sanitize text
             norm_ws = "pkg/module.py"
@@ -349,21 +349,21 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             # Requirement: The node config exposes declared source files and silent source files across session nodes as read-write files.
             # Requirement: [NodeConfig] The node config provides the session read-write files permitted for inspection and modification.
-            rw_names = {f.short_name for f in cfg.read_write_files}
-            self.assertIn("impl.py", rw_names)
-            self.assertIn("internal.py", rw_names)
+            rw_names = {f.relative_path for f in cfg.read_write_files}
+            self.assertIn("test/pkg/impl.py", rw_names)
+            self.assertIn("test/pkg/internal.py", rw_names)
 
             # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies and files present in read-write files.
             # Requirement: [NodeConfig] The node config provides the session read-only files restricted to inspection.
-            ro_names = {f.short_name for f in cfg.read_only_files}
-            self.assertIn("dep_target.py", ro_names)
-            self.assertIn("star_parent.py", ro_names)
-            self.assertIn("star_transitive.py", ro_names)
+            ro_names = {f.relative_path for f in cfg.read_only_files}
+            self.assertIn("test/pkg/dep_target.py", ro_names)
+            self.assertIn("test/pkg/star_parent.py", ro_names)
+            self.assertIn("test/pkg/star_transitive.py", ro_names)
 
             # Requirement: The node config exposes declared feedback dependencies as blame targets mapped to owning dependency nodes.
             # Requirement: [NodeConfig] The node config provides blame targets eligible for defect attribution.
-            blame_names = {f.short_name for f in cfg.blame_targets}
-            self.assertIn("dep_target.py", blame_names)
+            blame_names = {f.relative_path for f in cfg.blame_targets}
+            self.assertIn("test/pkg/dep_target.py", blame_names)
 
             # Requirement: The node config exposes declared verification checks from the manifest verification commands.
             # Requirement: [NodeConfig] The node config provides the session verification checks evaluated during session advancement.
@@ -372,15 +372,15 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             self.assertTrue(passed)
             self.assertEqual(diag.strip(), "verified")
 
-            # Requirement: The alias manager converts short names to matching file aliases, producing unbound files when unmapped.
-            # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its short name is found, and produces an unbound file if the short name is not found.
-            alias_impl = alias_mgr.convert("impl.py")
+            # Requirement: The alias manager converts relative paths to matching file aliases, producing unbound files when unmapped.
+            # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, and produces an unbound file if the relative path is not found.
+            alias_impl = alias_mgr.convert("test/pkg/impl.py")
             self.assertIsInstance(alias_impl, ReadWriteFile)
-            self.assertEqual(alias_impl.short_name, "impl.py")
+            self.assertEqual(alias_impl.relative_path, "test/pkg/impl.py")
 
-            alias_dep = alias_mgr.convert("dep_target.py")
+            alias_dep = alias_mgr.convert("test/pkg/dep_target.py")
             self.assertIsInstance(alias_dep, ReadOnlyFile)
-            self.assertEqual(alias_dep.short_name, "dep_target.py")
+            self.assertEqual(alias_dep.relative_path, "test/pkg/dep_target.py")
 
             # Sanitize text via lifecycle initialization
             diag_output = (
@@ -388,12 +388,12 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 "test/pkg/dep_target.py:12: error: missing import"
             )
             sanitized = alias_mgr.sanitize_text(diag_output)
-            # Requirement: The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its minimal short name, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking.
-            # Requirement: [AliasManager] Sanitizing text masks occurrences of relative workspace paths and preceding path prefixes with the corresponding file alias short names.
+            # Requirement: The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its relative path, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking.
+            # Requirement: [AliasManager] Sanitizing text masks occurrences of relative workspace paths and preceding path prefixes with the corresponding file alias relative paths.
             self.assertEqual(
                 sanitized,
-                "Verification failed: impl.py:5: error: syntax\n"
-                "dep_target.py:12: error: missing import",
+                "Verification failed: test/pkg/impl.py:5: error: syntax\n"
+                "test/pkg/dep_target.py:12: error: missing import",
             )
 
     def test_lifecycle_initialization_step_mode_disabled(self) -> None:
@@ -478,10 +478,10 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 self.assertIsNone(cfg.guide)
 
                 # Guide target is included in read_only_files
-                ro_names = {f.short_name for f in cfg.read_only_files}
-                self.assertIn("qa.md", ro_names)
+                ro_names = {f.relative_path for f in cfg.read_only_files}
+                self.assertIn("test/pkg/qa.md", ro_names)
 
-                alias = alias_mgr.convert("qa.md")
+                alias = alias_mgr.convert("test/pkg/qa.md")
                 self.assertIsInstance(alias, ReadOnlyFile)
 
     def test_lifecycle_initialization_step_mode_disabled_when_feedback_present(
@@ -569,10 +569,10 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 self.assertIsNone(cfg.guide)
 
                 # Declared guide dependencies are excluded from read-only files when step mode is active, and included as read-only files when step mode is inactive.
-                ro_names = {f.short_name for f in cfg.read_only_files}
-                self.assertIn("qa.md", ro_names)
+                ro_names = {f.relative_path for f in cfg.read_only_files}
+                self.assertIn("test/pkg/qa.md", ro_names)
 
-                alias = alias_mgr.convert("qa.md")
+                alias = alias_mgr.convert("test/pkg/qa.md")
                 self.assertIsInstance(alias, ReadOnlyFile)
 
     @patch("update_with_ai.parts.bazel.lib.bazel_node_config_impl.subprocess.run")
@@ -768,7 +768,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 # Requirement: [NodeConfig] The node config provides templates mapping read-write files to initial file content.
                 self.assertEqual(len(cfg.templates), 1)
                 for bound_f, content in cfg.templates:
-                    self.assertEqual(bound_f.short_name, "impl.py")
+                    self.assertEqual(bound_f.relative_path, "pkg/impl.py")
                     self.assertEqual(content, "# Template code\n")
 
                 # Requirement: The node config exposes declared template parameters from the primary target node manifest.
@@ -1040,7 +1040,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                         # Requirement: [NodeConfig] The node config provides the session guide file when step mode is active.
                         self.assertIsNotNone(cfg.guide_file)
                         assert cfg.guide_file is not None
-                        self.assertEqual(cfg.guide_file.short_name, "my_guide.md")
+                        self.assertEqual(cfg.guide_file.relative_path, "my_guide.md")
 
                         # Requirement: The node config exposes the declared guide target as the task guide when step mode is active.
                         # Requirement: [NodeConfig] The node config provides the session guide, providing structured instructional text when step mode is active.
@@ -1058,12 +1058,12 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                         # Guide is excluded from read_only_files when step mode is active
                         # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies and files present in read-write files.
                         # Requirement: [NodeConfig] The node config provides the session read-only files restricted to inspection.
-                        ro_names = {f.short_name for f in cfg.read_only_files}
+                        ro_names = {f.relative_path for f in cfg.read_only_files}
                         self.assertNotIn("my_guide.md", ro_names)
 
                         # Guide file is registered in AliasManager
-                        # Requirement: The alias manager converts short names to matching file aliases, producing unbound files when unmapped.
-                        # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its short name is found, and produces an unbound file if the short name is not found.
+                        # Requirement: The alias manager converts relative paths to matching file aliases, producing unbound files when unmapped.
+                        # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, and produces an unbound file if the relative path is not found.
                         converted_guide = alias_mgr.convert("my_guide.md")
                         self.assertEqual(converted_guide, cfg.guide_file)
             finally:
@@ -1168,15 +1168,15 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies and files present in read-write files.
             # Requirement: [NodeConfig] The node config provides the session read-only files restricted to inspection.
-            ro_names = {f.short_name for f in cfg.read_only_files}
-            self.assertNotIn("silent_dep.py", ro_names)
-            self.assertIn("star_a.py", ro_names)
-            self.assertIn("star_b.py", ro_names)
-            self.assertIn("star_diamond.py", ro_names)
-            self.assertIn("foo.pyi", ro_names)
-            self.assertIn("bar_grounding.pyi", ro_names)
-            self.assertIn("baz.md", ro_names)
-            self.assertIn("util.py", ro_names)
+            ro_names = {f.relative_path for f in cfg.read_only_files}
+            self.assertNotIn("pkg/silent_dep.py", ro_names)
+            self.assertIn("pkg/star_a.py", ro_names)
+            self.assertIn("pkg/star_b.py", ro_names)
+            self.assertIn("pkg/star_diamond.py", ro_names)
+            self.assertIn("pkg/grounding/foo.pyi", ro_names)
+            self.assertIn("pkg/grounding/bar_grounding.pyi", ro_names)
+            self.assertIn("pkg/high/baz.md", ro_names)
+            self.assertIn("pkg/util.py", ro_names)
 
     def test_lifecycle_initialization_multi_node_batch(self) -> None:
         """CUJ: Multi-node batch initialization unifies read-write files, excludes in-batch read-write files from read-only files, per-node blame targets, disables step mode, and per-node verification checks."""
@@ -1278,14 +1278,14 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
                 # Requirement: The node config exposes declared source files and silent source files across session nodes as read-write files.
                 # Requirement: [NodeConfig] The node config provides the session read-write files permitted for inspection and modification.
-                rw_names = {f.short_name for f in cfg.read_write_files}
-                self.assertEqual(rw_names, {"a.py", "b.py"})
+                rw_names = {f.relative_path for f in cfg.read_write_files}
+                self.assertEqual(rw_names, {"pkg/a.py", "pkg/b.py"})
 
                 # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies and files present in read-write files.
                 # Requirement: [NodeConfig] The node config provides the session read-only files restricted to inspection.
-                ro_names = {f.short_name for f in cfg.read_only_files}
+                ro_names = {f.relative_path for f in cfg.read_only_files}
                 # a.py is an in-batch read-write file, so it MUST NOT be in read_only_files!
-                self.assertEqual(ro_names, {"ext.py"})
+                self.assertEqual(ro_names, {"pkg/ext.py"})
 
                 # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the primary node allows step mode, and session feedback is absent.
                 # Requirement: [NodeConfig] The node config indicates whether session step mode is active.
@@ -1295,19 +1295,19 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 # Requirement: [NodeConfig] The node config provides the session blame targets mapped by session node.
                 blame_by_node = cfg.blame_targets_by_node
                 self.assertEqual(blame_by_node[node_a], set())
-                node_b_blames = {f.short_name for f in blame_by_node[node_b]}
-                self.assertEqual(node_b_blames, {"a.py", "ext.py"})
+                node_b_blames = {f.relative_path for f in blame_by_node[node_b]}
+                self.assertEqual(node_b_blames, {"pkg/a.py", "pkg/ext.py"})
 
                 # Requirement: The node config exposes declared feedback dependencies as blame targets mapped to owning dependency nodes.
                 # Requirement: [NodeConfig] The node config provides blame targets eligible for defect attribution.
                 self.assertEqual(
-                    {f.short_name for f in cfg.blame_targets}, {"a.py", "ext.py"}
+                    {f.relative_path for f in cfg.blame_targets}, {"pkg/a.py", "pkg/ext.py"}
                 )
 
-                # Requirement: The node config exposes declared src file alias by node mapping each session node to the short name of its declared source file alias.
-                # Requirement: [NodeConfig] The node config provides the source file alias short name mapped by session node.
-                self.assertEqual(cfg.src_file_alias_by_node[node_a], "a.py")
-                self.assertEqual(cfg.src_file_alias_by_node[node_b], "b.py")
+                # Requirement: The node config exposes declared src file alias by node mapping each session node to the relative path of its declared source file alias.
+                # Requirement: [NodeConfig] The node config provides the source file alias relative path mapped by session node.
+                self.assertEqual(cfg.src_file_alias_by_node[node_a], "pkg/a.py")
+                self.assertEqual(cfg.src_file_alias_by_node[node_b], "pkg/b.py")
 
                 # Requirement: The node config exposes verification checks by node mapping each session node to its verification checks.
                 # Requirement: [NodeConfig] The node config provides the session verification checks mapped by session node.

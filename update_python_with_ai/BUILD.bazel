@@ -47,7 +47,7 @@ define_role(
     silent_cross_role_deps = [":lib"],
     active_component_types = ["implementation", "assembly", "interface"],
     verify_template = "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_with_ai/support/lib/lib_lint.py {unit_dir}/lib/BUILD.bazel {unit_dir}/lib/{unit_name}.py --pyi {unit_dir}/grounding/{unit_name}.pyi && bazel test //{unit_dir}/lib:{unit_name}_type_check --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress 2>&1",
-    verification_success_message = "Verification passed: {unit_name}.py compiles correctly and passes all static checks. Note: this agent session must accomplish its goals without running tests.",
+    verification_success_message = "Verification passed: {unit_name}.py compiles correctly and passes all static checks. Call check_file often to verify edits. Note: Unit tests are executed separately by the QA agent in a later session.",
     visibility = ["//visibility:public"],
 )
 
@@ -63,7 +63,7 @@ define_role(
     silent_cross_role_deps = [":lib"],
     active_component_types = ["implementation"],
     verify_template = "cd $BUILD_WORKSPACE_DIRECTORY && python3 update_with_ai/support/lib/test_lint.py {unit_dir}/tests/BUILD.bazel {unit_dir}/tests/{unit_name}_test.py --lib-pkg {unit_dir}/lib --pyi {unit_dir}/grounding/{unit_name}.pyi && bazel test //{unit_dir}/tests:{unit_name}_test_type_check --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress 2>&1",
-    verification_success_message = "Verification passed: {unit_name}_test.py compiles correctly and passes all static checks. Note: this agent session must accomplish its goals without running tests.",
+    verification_success_message = "Verification passed: {unit_name}_test.py compiles correctly and passes all static checks. Call check_file often to verify edits. Note: Unit tests are executed separately by the QA agent in a later session.",
     visibility = ["//visibility:public"],
 )
 

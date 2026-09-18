@@ -37,7 +37,7 @@ The node config provides:
 
 - Declared verification checks from the manifests' verification commands as the session verification checks, and verification checks by node mapping each session node to its verification checks.
 
-- Declared src file alias by node mapping each session node to the short name of its declared source file alias.
+- Declared src file alias by node mapping each session node to the relative path of its declared source file alias.
 
 - Declared verification success message from the primary target node manifest as the session verification success message.
 
@@ -47,8 +47,8 @@ The alias manager maintains virtual file addressing and path masking for the act
 
 The alias manager:
 
-- Generates file aliases with minimal unambiguous short names for all accessible workspace files associated with the active nodes.
+- Generates file aliases with relative paths for all accessible workspace files associated with the active nodes.
 
-- Converts wire type strings to file aliases, matching short names to corresponding file aliases and producing unbound files when short names are unmapped.
+- Converts wire type strings to file aliases, matching relative paths to corresponding file aliases and producing unbound files when relative paths are unmapped.
 
-- Sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its minimal short name, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking.
+- Sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its relative path, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking.

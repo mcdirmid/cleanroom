@@ -1,20 +1,3 @@
-# --- DO NOT EDIT: Auto-generated dependencies ---
-from support.lib.lifecycle import (
-    LifecycleRegistry,
-    Singleton,
-    get_default_registry,
-    get_singleton,
-)
-import update_with_ai.parts.agent.lib.agent_file_alias as agent_file_alias
-import update_with_ai.parts.agent.lib.agent_node_config as agent_node_config
-import update_with_ai.parts.dag.lib.dag_storage as dag_storage
-from . import sandbox_file_editor
-from . import sandbox_guide_delivery
-from . import sandbox_run_control
-from . import template_format
-from . import tool_provider
-
-# --- END DO NOT EDIT ---
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 from update_with_ai.parts.agent.lib import agent_file_alias
 from update_with_ai.parts.agent.lib import agent_node_config
@@ -60,13 +43,13 @@ class RunController(sandbox_run_control.RunController, Singleton):
                 self._node_to_alias[node] = alias
                 self._node_states[node] = "OPEN"
         elif cfg.read_write_files:
-            for f in sorted(cfg.read_write_files, key=lambda x: x.short_name):
+            for f in sorted(cfg.read_write_files, key=lambda x: x.relative_path):
                 if hasattr(f, "owning_node") and f.owning_node is not None:
                     node = f.owning_node
                     if node not in self._node_states:
                         self._nodes.append(node)
-                        self._alias_to_node[f.short_name] = node
-                        self._node_to_alias[node] = f.short_name
+                        self._alias_to_node[f.relative_path] = node
+                        self._node_to_alias[node] = f.relative_path
                         self._node_states[node] = "OPEN"
         if not self._nodes:
             dummy_node = dag_storage.Node(
@@ -141,7 +124,7 @@ class RunController(sandbox_run_control.RunController, Singleton):
         target_alias = self.get_alias_for_node(node)
         for f in cfg.read_write_files:
             if isinstance(f, agent_file_alias.ReadWriteFile):
-                if f.short_name == target_alias or (
+                if f.relative_path == target_alias or (
                     hasattr(f, "owning_node") and f.owning_node == node
                 ):
                     edit_mgr.lock_file(f)
@@ -156,7 +139,7 @@ class RunController(sandbox_run_control.RunController, Singleton):
             tm.install_tool(get_singleton(AdvanceTool))
         tm.install_tool(get_singleton(SubmitTool))
         tm.install_tool(get_singleton(FailTool))
-        tm.install_tool(get_singleton(RunTestsTool))
+        tm.install_tool(get_singleton(CheckFileTool))
         if self.blame_targets or any(cfg.blame_targets_by_node.values()):
             tm.install_tool(get_singleton(BlameTool))
 
@@ -308,9 +291,9 @@ class AdvanceTool(sandbox_run_control.AdvanceTool, Singleton):
         # Requirement: On subsequent executions, executing the advance tool updates verification results if outdated.
         passed, _ = rc.evaluate_verification()
         if not passed:
-            # Requirement: Tool execution fails when verification is failing, reminding the agent that the run tests tool should be called first and specifying a follow-up execution of the run tests tool with reasoning text indicating that verification results must be inspected before advancing.
+            # Requirement: Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool with reasoning text indicating that verification results must be inspected before advancing.
             follow_up = tool_provider.FollowUpToolCall(
-                tool_name="run_tests",
+                tool_name="check_file",
                 wire_parameter_bindings=tool_provider.WireParameterBindings(
                     bindings=set()
                 ),
@@ -319,8 +302,8 @@ class AdvanceTool(sandbox_run_control.AdvanceTool, Singleton):
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
-                content="Verification is failing. The run tests tool should be called first.",
-                reminder="The run tests tool should be called first to inspect verification results.",
+                content="Verification is failing. The check file tool should be called first.",
+                reminder="The check file tool should be called first to inspect verification results.",
                 suppression_key="advance",
                 follow_up_tool_call=follow_up,
             )
@@ -443,9 +426,9 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
         target_str = ""
         if raw_target is not None:
             target_str = (
-                raw_target.short_name
-                if hasattr(raw_target, "short_name")
-                else str(raw_target)
+                getattr(raw_target, "relative_path", None)
+                or getattr(raw_target, "short_name", None)
+                or str(raw_target)
             ).strip()
 
         if not target_str:
@@ -494,10 +477,10 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
 
         # Verification check for target
         passed, _ = rc.evaluate_verification_for_node(target_node)
-        # Requirement: Tool execution fails when verification is failing, reminding the agent that the run tests tool should be called first and specifying a follow-up execution of the run tests tool with reasoning text indicating that verification results must be inspected before submitting.
+        # Requirement: Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool with reasoning text indicating that verification results must be inspected before submitting.
         if not passed:
             follow_up = tool_provider.FollowUpToolCall(
-                tool_name="run_tests",
+                tool_name="check_file",
                 wire_parameter_bindings=tool_provider.WireParameterBindings(
                     bindings=set()
                 ),
@@ -506,8 +489,8 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
-                content="Verification is failing. The run tests tool should be called first.",
-                reminder="The run tests tool should be called first to inspect verification results.",
+                content="Verification is failing. The check file tool should be called first.",
+                reminder="The check file tool should be called first to inspect verification results.",
                 suppression_key="submit",
                 follow_up_tool_call=follow_up,
             )
@@ -613,9 +596,9 @@ class FailTool(sandbox_run_control.FailTool, Singleton):
         target_str = ""
         if raw_target is not None:
             target_str = (
-                raw_target.short_name
-                if hasattr(raw_target, "short_name")
-                else str(raw_target)
+                getattr(raw_target, "relative_path", None)
+                or getattr(raw_target, "short_name", None)
+                or str(raw_target)
             ).strip()
 
         if not target_str:
@@ -719,9 +702,9 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
             blamee = raw_blame_target
             if raw_target is not None:
                 target_str = (
-                    raw_target.short_name
-                    if hasattr(raw_target, "short_name")
-                    else str(raw_target)
+                    getattr(raw_target, "relative_path", None)
+                    or getattr(raw_target, "short_name", None)
+                    or str(raw_target)
                 ).strip()
                 source_node = rc.get_node_for_alias(target_str) or rc.nodes[0]
             else:
@@ -733,15 +716,21 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
         blamee_str = ""
         if blamee is not None:
             blamee_str = (
-                blamee.short_name if hasattr(blamee, "short_name") else str(blamee)
+                getattr(blamee, "relative_path", None)
+                or getattr(blamee, "short_name", None)
+                or str(blamee)
             ).strip()
         for bt in allowed_blame_targets:
-            if bt == blamee or bt.short_name == blamee_str:
+            bt_name = getattr(bt, "relative_path", getattr(bt, "short_name", ""))
+            if bt == blamee or bt_name == blamee_str:
                 matched_target = bt
                 break
 
         if matched_target is None:
-            avail = ", ".join(t.short_name for t in allowed_blame_targets)
+            avail = ", ".join(
+                getattr(t, "relative_path", getattr(t, "short_name", ""))
+                for t in allowed_blame_targets
+            )
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
@@ -750,7 +739,9 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
             )
 
         # Requirement: On successful blame tool execution, the response marks the submitted target of the blame as resolved, locks the submitted target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response attributing defect feedback to the blame target owning node when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
-        target_name = matched_target.short_name
+        target_name = getattr(
+            matched_target, "relative_path", getattr(matched_target, "short_name", "")
+        )
         source_alias = rc.get_alias_for_node(source_node)
         rc.set_node_state(source_node, "BLAME")
         rc.lock_node_files(source_node)
@@ -774,7 +765,7 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
         )
 
 
-class RunTestsTool(sandbox_run_control.RunTestsTool, Singleton):
+class CheckFileTool(sandbox_run_control.CheckFileTool, Singleton):
     tier = "agent_session"
 
     def __init__(self) -> None:
@@ -783,47 +774,54 @@ class RunTestsTool(sandbox_run_control.RunTestsTool, Singleton):
 
     @property
     def name(self) -> str:
-        # Requirement: The run tests tool is named `run_tests`, accepting an optional target parameter, and shares a constant suppression key `run_tests`.
-        return "run_tests"
+        # Requirement: The check file tool is named `check_file`, accepting an optional src parameter, and shares a constant suppression key `check_file`.
+        return "check_file"
 
     @property
     def description(self) -> str:
-        return "Evaluates verification checks and presents results."
+        return (
+            "Checks static type correctness and syntax for the specified source file alias or open targets. "
+            "Call check_file often while developing to catch type and syntax errors early."
+        )
 
     @property
-    def target(self) -> tool_provider.Parameter:
+    def src(self) -> tool_provider.Parameter:
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         return tool_provider.Parameter(
-            name="target",
-            description="Target file alias to run tests for. May be omitted to run tests for open targets.",
+            name="src",
+            description="Source file alias to check. May be omitted to check open targets.",
             parameter_converter=alias_mgr,
             is_required=False,
         )
 
     @property
+    def target(self) -> tool_provider.Parameter:
+        return self.src
+
+    @property
     def parameters(self) -> Set[tool_provider.Parameter]:
-        # Requirement: The run tests tool is named `run_tests`, accepting an optional target parameter, and shares a constant suppression key `run_tests`.
-        return {self.target}
+        # Requirement: The check file tool is named `check_file`, accepting an optional src parameter, and shares a constant suppression key `check_file`.
+        return {self.src}
 
     def execute_tool(
         self, actual_parameter_bindings: tool_provider.ActualParameterBindings
     ) -> tool_provider.Response:
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
-        raw_target = bindings_map.get("target")
+        raw_target = bindings_map.get("src") or bindings_map.get("target")
 
         rc = get_singleton(RunController)
         guide_del = get_singleton(sandbox_guide_delivery.GuideDelivery)
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
         cfg = get_singleton(agent_node_config.NodeConfig)
 
-        # Requirement: Executing the run tests tool updates verification results if outdated.
-        # Requirement: When a target is specified, executing the run tests tool evaluates verification checks for that target.
+        # Requirement: Executing the check file tool updates verification results if outdated.
+        # Requirement: When a src target is specified, executing the check file tool evaluates verification checks for that target.
         target_str = ""
         if raw_target is not None:
             target_str = (
-                raw_target.short_name
-                if hasattr(raw_target, "short_name")
-                else str(raw_target)
+                getattr(raw_target, "relative_path", None)
+                or getattr(raw_target, "short_name", None)
+                or str(raw_target)
             ).strip()
 
         target_node: Optional[dag_storage.Node] = None
@@ -848,33 +846,48 @@ class RunTestsTool(sandbox_run_control.RunTestsTool, Singleton):
         if is_repeated:
             rw_file = (
                 next(
-                    iter(sorted(cfg.read_write_files, key=lambda f: f.short_name)), None
+                    iter(
+                        sorted(
+                            cfg.read_write_files,
+                            key=lambda f: getattr(
+                                f, "relative_path", getattr(f, "short_name", "")
+                            ),
+                        )
+                    ),
+                    None,
                 )
                 if cfg.read_write_files
                 else None
             )
-            src_name = rw_file.short_name if rw_file else "session read-write files"
+            src_name = (
+                getattr(rw_file, "relative_path", getattr(rw_file, "short_name", ""))
+                if rw_file
+                else "session read-write files"
+            )
             status_word = "passes" if passed else "failed"
             action_word = "advance" if cfg.is_step_mode else "submit"
-            # Requirement: Reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous run tests tool execution.
+            # Requirement: Reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous check file tool execution.
             reminder = f"Verification {status_word}, no new information will be revealed by this tool call until {src_name} is updated."
             if rw_file is not None:
+                rw_file_alias = getattr(
+                    rw_file, "relative_path", getattr(rw_file, "short_name", "")
+                )
                 if passed:
                     reasoning_text = (
-                        f"Oh, verification passes and I'm not allowed to run anymore tests. "
-                        f"Let me read {rw_file.short_name} again and see if I can figure out a different course of action. "
-                        f"If it is already correct, I need to {action_word} the agent session rather than run more tests."
+                        f"Oh, verification passes and no new information will be revealed by calling check_file again until files are updated. "
+                        f"Let me read {rw_file_alias} again and see if I can figure out a different course of action. "
+                        f"If it is already correct, I need to {action_word} the agent session rather than check files again."
                     )
                 else:
                     reasoning_text = (
-                        f"Oh, verification failed and I'm not allowed to run anymore tests until I update the files. "
-                        f"Let me read {rw_file.short_name} again and see if I can figure out a different course of action."
+                        f"Oh, verification failed and no new information will be revealed by calling check_file again until files are updated. "
+                        f"Let me read {rw_file_alias} again and see if I can figure out a different course of action."
                     )
-                # Requirement: Specifies a follow-up execution of the view file tool on the session source file and reasoning text noting that verification passed without permission to run more tests and to advance or submit the session if correct, or noting that verification failed without permission to run more tests until files are updated, when workspace files have not been updated since the previous run tests tool execution.
+                # Requirement: Specifies a follow-up execution of the view file tool on the session source file and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check file tool execution.
                 follow_up = tool_provider.FollowUpToolCall(
                     tool_name="view_file",
                     wire_parameter_bindings=tool_provider.WireParameterBindings(
-                        bindings={("path", rw_file.short_name)}
+                        bindings={("path", rw_file_alias)}
                     ),
                     reasoning_text=reasoning_text,
                 )
@@ -893,7 +906,7 @@ class RunTestsTool(sandbox_run_control.RunTestsTool, Singleton):
                 is_terminated=False,
                 content=content,
                 reminder=reminder,
-                suppression_key="run_tests",
+                suppression_key="check_file",
                 follow_up_tool_call=follow_up,
             )
 
@@ -910,9 +923,12 @@ class RunTestsTool(sandbox_run_control.RunTestsTool, Singleton):
             is_terminated=False,
             content=content,
             reminder=reminder,
-            suppression_key="run_tests",
+            suppression_key="check_file",
             follow_up_tool_call=follow_up,
         )
+
+
+RunTestsTool = CheckFileTool
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
@@ -948,7 +964,12 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         tier="agent_session",
     )
     reg.register_singleton(
-        RunTestsTool,
-        keys=[RunTestsTool, sandbox_run_control.RunTestsTool, tool_provider.Tool],
+        CheckFileTool,
+        keys=[
+            CheckFileTool,
+            sandbox_run_control.CheckFileTool,
+            sandbox_run_control.RunTestsTool,
+            tool_provider.Tool,
+        ],
         tier="agent_session",
     )

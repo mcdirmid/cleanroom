@@ -198,7 +198,7 @@ class SandboxImplTest(unittest.TestCase):
     def setUp(self) -> None:
         node = Node(unit_address="//pkg:target")
         self.ro_file = ReadOnlyFile(
-            short_name="spec.md",
+            relative_path="spec.md",
             workspace_path=_make_workspace_path("pkg/spec.md"),
             owning_node=node,
         )
@@ -249,17 +249,17 @@ class SandboxImplTest(unittest.TestCase):
         """CUJ: Assembling startup tool executions: advance first when in step mode, followed by view_file for read-only files."""
         node = Node(unit_address="//pkg:target")
         ro_file_z = ReadOnlyFile(
-            short_name="z_spec.md",
+            relative_path="z_spec.md",
             workspace_path=_make_workspace_path("pkg/z_spec.md"),
             owning_node=node,
         )
         ro_file_a = ReadOnlyFile(
-            short_name="a_spec.md",
+            relative_path="a_spec.md",
             workspace_path=_make_workspace_path("pkg/a_spec.md"),
             owning_node=node,
         )
         ro_file_py = ReadOnlyFile(
-            short_name="m_lib.py",
+            relative_path="m_lib.py",
             workspace_path=_make_workspace_path("pkg/m_lib.py"),
             owning_node=node,
         )
@@ -279,8 +279,8 @@ class SandboxImplTest(unittest.TestCase):
             self.assertEqual(executions[0].response.content, "Guide step 1")
 
             # Second is view_file for a_spec.md (ordered deterministically before m_lib.py and z_spec.md)
-            # Requirement: When performing startup reads to inspect declared files at session start, startup tool executions include file read executions for all declared read-only files from node config ordered deterministically by file alias short name, positioned after any advance tool execution.
-            # Requirement: Each file read execution uses the name of the view file tool, specifies wire parameter bindings mapping the path parameter of the view file tool to the read-only file alias short name, and captures the response produced by executing the view file tool.
+            # Requirement: When performing startup reads to inspect declared files at session start and the session has at most one read-write file, startup tool executions include file read executions for all declared read-only files from node config ordered deterministically by file alias relative path, positioned after any advance tool execution.
+            # Requirement: Each file read execution uses the name of the view file tool, specifies wire parameter bindings mapping the path parameter of the view file tool to the read-only file alias relative path, and captures the response produced by executing the view file tool.
             self.assertEqual(executions[1].tool_name, "view_file")
             self.assertEqual(
                 executions[1].wire_parameter_bindings.bindings, {("path", "a_spec.md")}
@@ -329,17 +329,17 @@ class SandboxImplTest(unittest.TestCase):
         """CUJ: Multi-target sessions (batch size > 1) skip startup read-only file reads."""
         node = Node(unit_address="//pkg:target")
         ro_file = ReadOnlyFile(
-            short_name="spec.md",
+            relative_path="spec.md",
             workspace_path=_make_workspace_path("pkg/spec.md"),
             owning_node=node,
         )
         rw_file_1 = ReadWriteFile(
-            short_name="file1.py",
+            relative_path="file1.py",
             workspace_path=_make_workspace_path("pkg/file1.py"),
             owning_node=node,
         )
         rw_file_2 = ReadWriteFile(
-            short_name="file2.py",
+            relative_path="file2.py",
             workspace_path=_make_workspace_path("pkg/file2.py"),
             owning_node=node,
         )

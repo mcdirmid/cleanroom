@@ -86,13 +86,13 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
 
                 # Requirement: The conversation is initialized with startup context comprising the node definition and task prompt retrieved from graph storage for dirty nodes, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox formatted with synthetic tool requests and captured responses.
                 # Requirement: The task prompt is formatted using the template formatter.
-                guide_short_name: Optional[str] = None
+                guide_file_alias: Optional[str] = None
                 if n_cfg.guide_file is not None:
-                    guide_short_name = n_cfg.guide_file.short_name
+                    guide_file_alias = n_cfg.guide_file.relative_path
                 else:
                     for ro in n_cfg.read_only_files:
-                        if ro.short_name.endswith(".md"):
-                            guide_short_name = ro.short_name
+                        if ro.relative_path.endswith(".md"):
+                            guide_file_alias = ro.relative_path
                             break
 
                 node_items: list[dict[str, str]] = []
@@ -111,13 +111,13 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
                 is_multi_node = len(dirty_nodes) > 1
 
                 guide_instruction = ""
-                if guide_short_name is not None:
+                if guide_file_alias is not None:
                     if n_cfg.is_step_mode:
                         # Requirement: Task prompt instructions for a guided node include directing the agent to call advance without arguments to view each guide step and omit a change summary until all guide steps are complete when guide step mode is active.
                         guide_instruction = "Call advance() without arguments to view each guide step. Do not supply change_summary until all guide steps are complete."
                     else:
                         # Requirement: Task prompt instructions for a guided node include identifying the guide file by its file alias and directing the agent to call the submit tool with a change summary describing modifications when complete, or call submit without arguments if no workspace files were modified, when guide step mode is inactive.
-                        guide_instruction = f"The guide is in file {guide_short_name}. Call submit with a change summary describing modifications when complete, or call submit without arguments if no workspace files were modified. Inspect {guide_short_name} using view_file for all implementation constraints, contracts, and requirements."
+                        guide_instruction = f"The guide is in file {guide_file_alias}. Call submit with a change summary describing modifications when complete, or call submit without arguments if no workspace files were modified. Inspect {guide_file_alias} using view_file for all implementation constraints, contracts, and requirements."
 
                 # Requirement: When cleaning multiple nodes, the task prompt enumerates each target file identified by its file alias alongside its task prompt.
                 # Requirement: The task prompt is formatted using the template formatter.
@@ -159,7 +159,7 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
                 # Requirement: Incoming feedback and change messages are formatted per target node identified by its file alias, prefaced with directives to fix read-write target files based on the feedback.
                 for n in dirty_nodes:
                     target_name = n_cfg.src_file_alias_by_node.get(n) or ", ".join(
-                        sorted(f.short_name for f in n_cfg.read_write_files)
+                        sorted(f.relative_path for f in n_cfg.read_write_files)
                     )
                     messages_sorted = sorted(
                         storage.get_messages(n),
@@ -219,8 +219,11 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
                     n_cfg = session.get_singleton(agent_node_config.NodeConfig)
                     blamed_node: Optional[dag_storage.Node] = None
                     for bt in n_cfg.blame_targets:
+                        bt_alias = getattr(
+                            bt, "relative_path", getattr(bt, "short_name", str(bt))
+                        )
                         if (
-                            bt.short_name == blame_target_str
+                            bt_alias == blame_target_str
                             or str(bt) == blame_target_str
                         ):
                             blamed_node = bt.owning_node

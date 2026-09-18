@@ -1,4 +1,4 @@
-from typing import Set
+from typing import Optional, Set
 from framework import operation, override, singleton_type
 import agent_config
 import agent_file_alias
@@ -143,6 +143,48 @@ GROUNDING_ARGUMENT:
 """
         ...
 
+    @property
+    @override
+    def last_read_or_edited_file(self) -> Optional[agent_file_alias.FileAlias]:
+        """
+PURPOSE:
+Exposes the last file read or edited during the session
+
+FRESH_REQUIREMENTS:
+- The edit manager tracks the last read or edited file alias across the session, recording file reads from the file reader and file edits from editing tools.
+
+INHERITED_REQUIREMENTS:
+- [EditManager] The edit manager tracks the last read or edited file across the session, recording file reads from file readers and file edits from editing tools.
+
+GROUNDING_ARGUMENT:
+- Internal session attribute tracking the latest file alias read via ViewFileTool or modified via ReplaceFileContentTool.
+"""
+        ...
+
+    @operation
+    @override
+    def record_file_read(self, file: agent_file_alias.FileAlias) -> None:
+        """
+PURPOSE:
+Records that a file was read by a file reader
+
+GROUNDING_ARGUMENT:
+- Sets internal attribute on self.
+"""
+        ...
+
+    @operation
+    @override
+    def record_file_edit(self, file: agent_file_alias.ReadWriteFile) -> None:
+        """
+PURPOSE:
+Records that a file was edited by an editing tool
+
+GROUNDING_ARGUMENT:
+- Sets internal attribute on self.
+"""
+        ...
+
 @singleton_type('agent_session')
 class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool):
     """
@@ -197,7 +239,7 @@ PURPOSE:
 Parameter identifying the target read-write file
 
 GROUNDING_ARGUMENT:
-- Constant parameter descriptor configured with alias manager converter and named 'path'.
+- Constant optional parameter descriptor configured with alias manager converter and named 'path'.
 """
         ...
 
@@ -284,9 +326,9 @@ FRESH_REQUIREMENTS:
 - Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
 - Before modifying a file, editing tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
 - Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
-- Before modifying a file, editing tool execution fails if the target edit overlaps with auto-generated dependency imports between '# --- DO NOT EDIT: Auto-generated dependencies ---' and '# --- END DO NOT EDIT ---', reminding the agent that auto-generated dependencies are managed by the build toolchain.
 - On successful execution, an editing tool writes the updated file content to the filesystem, and records that workspace file modifications occurred.
 - When configured to produce delta output, successful editing tool execution includes a diff delta representation in the response content.
+- When the path parameter is omitted, execution implicitly binds the target file to the last file read or edited in the edit manager if that file is a read-write file, informs the agent with a warning in the response content that the path was implicitly bound while allowing the tool execution to proceed, or fails if no file has been read or edited or if the last read or edited file is not a read-write file.
 - Replace file content tool execution reads the file content from the filesystem, treating missing files as empty.
 - When a start line is provided, execution fails if the start line is less than one or exceeds the total line count plus one.
 - When an end line is provided, execution fails if the end line is less than one or exceeds the total line count.
@@ -294,6 +336,7 @@ FRESH_REQUIREMENTS:
 - When allow multiple is not set or false, execution fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence.
 - When allow multiple is true, execution fails if the target content is not found within the designated line range, and replaces all occurrences of the target content within the designated line range.
 - When target content is not found within the designated line range but exists elsewhere in the file, failure feedback indicates the line numbers where the target content was located.
+- When target content is not found anywhere in the file, failure feedback specifies a follow-up execution of the view file tool on the target file with reasoning text indicating that the target content was not found.
 - On success, the tool writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred.
 - Editing tool responses share a constant suppression key replace_file_content.
 
@@ -302,6 +345,6 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, resolves the target read-write file via imported agent_file_alias.AliasManager, inspects and updates file content using the filesystem, scans file content for out-of-bounds line occurrences when target content is missing from designated line ranges, checks configuration via imported agent_config.AgentConfig, attaches suppression key 'replace_file_content' and omits follow-up tool calls on responses, and notifies EditManager in the same session lifecycle tier that workspace files were modified.
+- Receives actual parameter bindings, resolves the target read-write file via path parameter or implicitly from EditManager.last_read_or_edited_file, informs with a warning in content when implicitly bound, inspects and updates file content using the filesystem, scans file content for out-of-bounds line occurrences when target content is missing from designated line ranges, specifies a view_file follow-up when target content is not found anywhere in the file, checks configuration via imported agent_config.AgentConfig, attaches suppression key 'replace_file_content', and notifies EditManager in the same session lifecycle tier that workspace files were modified.
 """
         ...

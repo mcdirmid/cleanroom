@@ -62,10 +62,10 @@ Sets the converter wire type for the alias manager to string
     def convert(self, wire_value: str) -> 'FileAlias':
         """
 PURPOSE:
-Converts a wire type string to a file alias, producing an unbound file if the short name is not found
+Converts a wire type string to a file alias, producing an unbound file if the relative path is not found
 
 FRESH_REQUIREMENTS:
-- Converting a wire type string produces the matching file alias if its short name is found, and produces an unbound file if the short name is not found.
+- Converting a wire type string produces the matching file alias if its relative path is found, and produces an unbound file if the relative path is not found.
 """
         ...
 
@@ -73,10 +73,10 @@ FRESH_REQUIREMENTS:
     def sanitize_text(self, text: str) -> str:
         """
 PURPOSE:
-Provides that the alias manager sanitizes text by masking occurrences of relative workspace paths and preceding path prefixes with short names
+Provides that the alias manager sanitizes text by masking occurrences of relative workspace paths and preceding path prefixes with relative paths
 
 FRESH_REQUIREMENTS:
-- Sanitizing text masks occurrences of relative workspace paths and preceding path prefixes with the corresponding file alias short names.
+- Sanitizing text masks occurrences of relative workspace paths and preceding path prefixes with the corresponding file alias relative paths.
 """
         ...
 
@@ -87,18 +87,15 @@ class FileAlias:
 PURPOSE:
 Defined to represent a session file, hiding physical filesystem details and paths from the agent
 
-FRESH_ASSUMPTIONS:
-- The short name of a file alias is assumed to be a minimal unambiguous relative path identifying the file within an agent session.
-
 FRESH_REQUIREMENTS:
-- A file alias displays itself by its short name when converted to a string.
+- A file alias displays itself by its relative path when converted to a string.
 """
 
     @property
-    def short_name(self) -> str:
+    def relative_path(self) -> str:
         """
 PURPOSE:
-Established that each file alias has a short name that is a minimal unambiguous relative path identifying the file within an agent session
+Established that each file alias has a relative path that identifies the file within an agent session
 """
         ...
 
@@ -109,11 +106,8 @@ class BoundFile(FileAlias):
 PURPOSE:
 Classifies bound file as a file alias mapped to an actual workspace file
 
-INHERITED_ASSUMPTIONS:
-- [FileAlias] The short name of a file alias is assumed to be a minimal unambiguous relative path identifying the file within an agent session.
-
 INHERITED_REQUIREMENTS:
-- [FileAlias] A file alias displays itself by its short name when converted to a string.
+- [FileAlias] A file alias displays itself by its relative path when converted to a string.
 """
 
     @property
@@ -134,10 +128,10 @@ Established that each bound file has an owning node
 
     @property
     @override
-    def short_name(self) -> str:
+    def relative_path(self) -> str:
         """
 PURPOSE:
-Established that each file alias has a short name that is a minimal unambiguous relative path identifying the file within an agent session
+Established that each file alias has a relative path that identifies the file within an agent session
 """
         ...
 
@@ -148,14 +142,11 @@ class ReadOnlyFile(BoundFile):
 PURPOSE:
 Classifies read-only file as a bound file restricted to inspection
 
-INHERITED_ASSUMPTIONS:
-- [FileAlias] The short name of a file alias is assumed to be a minimal unambiguous relative path identifying the file within an agent session.
-
 INHERITED_REQUIREMENTS:
-- [FileAlias] A file alias displays itself by its short name when converted to a string.
+- [FileAlias] A file alias displays itself by its relative path when converted to a string.
 """
 
-    def __init__(self, short_name: str, workspace_path: file_paths.WorkspacePath, owning_node: dag_storage.Node) -> None:
+    def __init__(self, relative_path: str, workspace_path: file_paths.WorkspacePath, owning_node: dag_storage.Node) -> None:
         ...
 
     @property
@@ -178,10 +169,10 @@ Established that each bound file has an owning node
 
     @property
     @override
-    def short_name(self) -> str:
+    def relative_path(self) -> str:
         """
 PURPOSE:
-Established that each file alias has a short name that is a minimal unambiguous relative path identifying the file within an agent session
+Established that each file alias has a relative path that identifies the file within an agent session
 """
         ...
 
@@ -192,14 +183,11 @@ class ReadWriteFile(BoundFile):
 PURPOSE:
 Classifies read-write file as a bound file permitted for inspection and modification
 
-INHERITED_ASSUMPTIONS:
-- [FileAlias] The short name of a file alias is assumed to be a minimal unambiguous relative path identifying the file within an agent session.
-
 INHERITED_REQUIREMENTS:
-- [FileAlias] A file alias displays itself by its short name when converted to a string.
+- [FileAlias] A file alias displays itself by its relative path when converted to a string.
 """
 
-    def __init__(self, short_name: str, workspace_path: file_paths.WorkspacePath, owning_node: dag_storage.Node) -> None:
+    def __init__(self, relative_path: str, workspace_path: file_paths.WorkspacePath, owning_node: dag_storage.Node) -> None:
         ...
 
     @property
@@ -222,10 +210,10 @@ Established that each bound file has an owning node
 
     @property
     @override
-    def short_name(self) -> str:
+    def relative_path(self) -> str:
         """
 PURPOSE:
-Established that each file alias has a short name that is a minimal unambiguous relative path identifying the file within an agent session
+Established that each file alias has a relative path that identifies the file within an agent session
 """
         ...
 
@@ -236,21 +224,18 @@ class UnboundFile(FileAlias):
 PURPOSE:
 Classifies unbound file as a file alias that is not mapped to an actual file
 
-INHERITED_ASSUMPTIONS:
-- [FileAlias] The short name of a file alias is assumed to be a minimal unambiguous relative path identifying the file within an agent session.
-
 INHERITED_REQUIREMENTS:
-- [FileAlias] A file alias displays itself by its short name when converted to a string.
+- [FileAlias] A file alias displays itself by its relative path when converted to a string.
 """
 
-    def __init__(self, short_name: str) -> None:
+    def __init__(self, relative_path: str) -> None:
         ...
 
     @property
     @override
-    def short_name(self) -> str:
+    def relative_path(self) -> str:
         """
 PURPOSE:
-Established that each file alias has a short name that is a minimal unambiguous relative path identifying the file within an agent session
+Established that each file alias has a relative path that identifies the file within an agent session
 """
         ...
