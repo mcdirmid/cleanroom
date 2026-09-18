@@ -11,6 +11,7 @@ from update_with_ai.parts.loop.lib.loop_guard_impl import (
     __initialize__,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.sandbox.lib.tool_provider import (
     ActualParameterBindings,
     Parameter,
@@ -53,7 +54,7 @@ class LoopGuardImplTest(unittest.TestCase):
 
     def test_thresholds_reminder_and_fatal(self) -> None:
         """CUJ: Tracking consecutive identical tool calls to reminder and fatal thresholds."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             guard = scope.get_singleton(LoopGuard)
             bindings = ActualParameterBindings(bindings={(self.param, "a.py")})
 
@@ -85,7 +86,7 @@ class LoopGuardImplTest(unittest.TestCase):
 
     def test_consecutive_edits_threshold(self) -> None:
         """CUJ: Tracking consecutive edits to the same target."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             guard = scope.get_singleton(LoopGuard)
             bindings = ActualParameterBindings(bindings={(self.param, "target.py")})
 
@@ -109,7 +110,7 @@ class LoopGuardImplTest(unittest.TestCase):
 
     def test_record_progress_resets_counters(self) -> None:
         """CUJ: Forward progress resets consecutive repetition counters."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             guard = scope.get_singleton(LoopGuard)
             bindings = ActualParameterBindings(bindings={(self.param, "a.py")})
 
@@ -129,7 +130,7 @@ class LoopGuardImplTest(unittest.TestCase):
 
     def test_distinct_tool_calls_reset_counter(self) -> None:
         """CUJ: Interleaving distinct calls prevents reaching reminder threshold."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             guard = scope.get_singleton(LoopGuard)
             bindings1 = ActualParameterBindings(bindings={(self.param, "a.py")})
             bindings2 = ActualParameterBindings(bindings={(self.param, "b.py")})

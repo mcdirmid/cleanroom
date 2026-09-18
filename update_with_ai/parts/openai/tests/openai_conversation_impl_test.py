@@ -11,6 +11,7 @@ from update_with_ai.parts.openai.lib.openai_conversation_impl import (
     __initialize__,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.sandbox.lib.tool_provider import (
     Response,
     WireParameterBindings,
@@ -60,7 +61,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
 
     def test_append_message_chronology(self) -> None:
         """CUJ: Appending messages preserves chronological insertion order."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             history = scope.get_singleton(Conversation)
             # Requirement: [Conversation] Initial messages can seed the conversation at session start.
             # Requirement: [Conversation] Appending messages and tool responses adds them in chronological order.
@@ -78,7 +79,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
         self,
     ) -> None:
         """CUJ: Appending unprompted tool response adds synthetic assistant invocation correlating with tool_call_id and sorted arguments."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             history = scope.get_singleton(Conversation)
             history.append_message(Message(role="user", content="Execute tool"))
 
@@ -135,7 +136,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
 
     def test_append_tool_response_supersession_stubbing(self) -> None:
         """CUJ: Superseded tool results with matching suppression key are replaced with stubs, while unmatched keys are preserved."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             history = scope.get_singleton(Conversation)
 
             # 1. Responses without suppression key are never superseded
@@ -324,7 +325,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
 
     def test_get_model_request_formats_roles_and_reminders(self) -> None:
         """CUJ: Formatting messages into ModelRequest formats OpenAI conventions and active reminders."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             history = scope.get_singleton(Conversation)
             history.append_message(
                 Message(

@@ -1,11 +1,16 @@
 from typing import Optional
 from . import bazel_target
 from update_with_ai.parts.dag.lib import dag_storage
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    system,
+)
 
 
 class BazelTarget(bazel_target.BazelTarget, Singleton):
-    tier = "system"
+    tier = system
 
     def __init__(self) -> None:
         pass
@@ -51,5 +56,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         BazelTarget,
         keys=[BazelTarget, bazel_target.BazelTarget],
-        tier="system",
+        tier=system,
     )

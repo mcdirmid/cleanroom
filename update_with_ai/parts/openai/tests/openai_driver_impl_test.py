@@ -31,7 +31,8 @@ from update_with_ai.parts.openai.lib.openai_driver_impl import (
 )
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.openai.lib.openai_config import OpenaiConfig
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.core.lib.runner_logger import LogEvent, RunnerLogger
 from update_with_ai.parts.sandbox.lib.tool_provider import (
     ActualParameterBindings,
@@ -45,7 +46,7 @@ from update_with_ai.parts.sandbox.lib.tool_provider import (
 
 
 class MockModelConfig:
-    tier = "system"
+    tier = system
     model_name = "test-model"
     base_url = "https://api.test.com"
     api_key = "test-key"
@@ -59,7 +60,7 @@ class MockModelConfig:
 
 
 class MockLogger:
-    tier = "system"
+    tier = system
 
     def __init__(self) -> None:
         self.events: List[LogEvent] = []
@@ -69,7 +70,7 @@ class MockLogger:
 
 
 class MockHistory:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self._messages: List[Message] = []
@@ -104,7 +105,7 @@ class MockHistory:
 
 
 class MockLoopGuard:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self.recorded_executions: List[tuple[str, ActualParameterBindings]] = []
@@ -125,7 +126,7 @@ class MockLoopGuard:
 
 
 class MockToolManager:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self._tools: Set[Tool] = set()
@@ -135,19 +136,24 @@ class MockToolManager:
 
     @property
     def installed_tools(self) -> Set[Tool]:
-        return self._tools
+        return set(self._tools)
 
     def install_tool(self, tool: Tool) -> None:
         self._tools.add(tool)
 
     def execute_tool(
-        self, name: str, wire_parameter_bindings: WireParameterBindings
+        self, name: str, bindings: WireParameterBindings
     ) -> Response:
-        self.executions.append((name, wire_parameter_bindings))
+        self.executions.append((name, bindings))
         if name in self.handlers:
-            return self.handlers[name](wire_parameter_bindings)
+            return self.handlers[name](bindings)
         return self.responses.get(
-            name, Response(is_failed=False, is_terminated=False, content="executed")
+            name,
+            Response(
+                is_failed=False,
+                is_terminated=False,
+                content=f"Executed {name}",
+            ),
         )
 
 
@@ -251,17 +257,17 @@ class OpenAIDriverImplTest(unittest.TestCase):
         self.tool_mgr = MockToolManager()
 
         self.registry.register_instance(
-            self.model_cfg, keys=[OpenaiConfig, AgentConfig], tier="system"
+            self.model_cfg, keys=[OpenaiConfig, AgentConfig], tier=system
         )
-        self.registry.register_instance(self.logger, keys=[RunnerLogger], tier="system")
+        self.registry.register_instance(self.logger, keys=[RunnerLogger], tier=system)
         self.registry.register_instance(
-            self.history, keys=[Conversation], tier="agent_session"
-        )
-        self.registry.register_instance(
-            self.loop_guard, keys=[LoopGuard], tier="agent_session"
+            self.history, keys=[Conversation], tier=agent_session
         )
         self.registry.register_instance(
-            self.tool_mgr, keys=[ToolManager], tier="agent_session"
+            self.loop_guard, keys=[LoopGuard], tier=agent_session
+        )
+        self.registry.register_instance(
+            self.tool_mgr, keys=[ToolManager], tier=agent_session
         )
 
     def test_agent_outcome_dataclass(self) -> None:
@@ -298,7 +304,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         term_resp = Response(is_failed=False, is_terminated=True, content="Done")
         self.tool_mgr.responses["finish_task"] = term_resp
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
@@ -341,7 +347,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         comp = DummyCompletion([DummyChoice(DummyMessage("Still thinking..."))])
         mock_client.chat.completions.create.return_value = comp
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
 
             # Requirement: When turns reach the conversation limit from agent config, the agent driver halts with an unexpected failure.
@@ -397,7 +403,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
 
         self.tool_mgr.install_tool(DummyTool())
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
@@ -440,7 +446,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             is_failed=False, is_terminated=True, content="Recovered"
         )
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
@@ -505,7 +511,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             is_failed=False, is_terminated=True, content="Done"
         )
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
@@ -595,7 +601,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             is_failed=False, is_terminated=True, content="All done"
         )
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
@@ -630,7 +636,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             "API Rate Limited"
         )
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             with self.assertRaises(RuntimeError) as ctx:
                 runner.run()
@@ -669,7 +675,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             is_failed=False, is_terminated=True, content="Done"
         )
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             runner.run()
             # Requirement: When driving a turn, the loop driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter sequence, and correlates tool results with model invocations according to OpenAI tool calling conventions.
@@ -706,7 +712,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             is_failed=False, is_terminated=True, content="Done"
         )
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             runner.run()
             # Requirement: When driving a turn, the loop driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter sequence, and correlates tool results with model invocations according to OpenAI tool calling conventions.
@@ -742,7 +748,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             None,
         ]
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
@@ -776,7 +782,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             explanation="Fatal loop detected: tool executed 5 times."
         )
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             with self.assertRaises(RuntimeError) as ctx:
                 runner.run()
@@ -827,7 +833,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             is_failed=False, is_terminated=True, content="advanced"
         )
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
@@ -876,7 +882,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             is_failed=False, is_terminated=True, content="done"
         )
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
@@ -926,7 +932,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             reminder=None,
         )
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
@@ -973,7 +979,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             content="Finished.",
         )
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
@@ -1031,7 +1037,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             content="Finished work.",
         )
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
@@ -1096,7 +1102,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             content="Followup tool executed.",
         )
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
@@ -1156,7 +1162,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             content="Finished.",
         )
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
@@ -1184,7 +1190,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             is_failed=True, is_terminated=True, content="Cannot proceed"
         )
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             with self.assertRaises(RuntimeError) as ctx:
                 runner.run()
@@ -1295,7 +1301,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             content=long_output_first_line,
         )
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
             # Requirement: The loop driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool names and arguments or text previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in tool result transcripts when present.
@@ -1338,7 +1344,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             is_failed=False, is_terminated=True, content="Done"
         )
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
             # Requirement: [AgentDriver] The agent driver drives turns by sending model requests to a language model and executing requested tools.
@@ -1403,7 +1409,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         )
         self.tool_mgr.responses["fail_followup"] = resp_f3
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             with self.assertRaises(RuntimeError) as ctx:
                 runner.run()

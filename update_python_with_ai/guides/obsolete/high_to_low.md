@@ -68,7 +68,7 @@ External boundary specifications (`low/<name>_ext.md`) lack grounding stub sourc
 - [ ] Implementation specifications (`low/<name>_impl.md`) include a dedicated `## Grounding Arguments` section
 - [ ] Every singleton service, property accessor, and operation in the implementation specification has an entry under `## Grounding Arguments`
 - [ ] Property grounding arguments describe the exact runtime origin and derivation path of values (delegation from collaborator, loading from manifest, reading from disk, or configuration setting)
-- [ ] Grounding arguments document the required lifecycle tier of collaborators (`system` vs `agent_session`), confirming tier isolation invariants hold
+- [ ] Grounding arguments document the required lifecycle tier of collaborators (e.g. ancestor vs descendant), confirming tier isolation invariants hold
 - [ ] Grounding arguments identify how collaborator capabilities satisfy implementation obligations to provide actionable context for code generators
 - [ ] Grounding arguments note un-implemented collaborator requirements that are assumed to hold during runtime execution
 

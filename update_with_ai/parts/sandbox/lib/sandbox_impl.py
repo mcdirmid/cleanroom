@@ -1,6 +1,7 @@
 from typing import List, Optional, Set, Tuple, Union
 from update_with_ai.parts.agent.lib import agent_config
 from update_with_ai.parts.agent.lib import agent_node_config
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 from . import sandbox
 from . import sandbox_file_editor
 from . import sandbox_file_reader
@@ -15,7 +16,7 @@ from support.lib.lifecycle import (
 
 
 class Sandbox(sandbox.Sandbox, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         pass
@@ -83,5 +84,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         Sandbox,
         keys=[Sandbox, sandbox.Sandbox],
-        tier="agent_session",
+        tier=agent_session,
     )

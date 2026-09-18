@@ -2,6 +2,7 @@ import json
 import time
 from typing import Any, Optional, Set, Tuple
 from update_with_ai.parts.agent.lib import agent_config
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.loop.lib import loop_conversation
 from update_with_ai.parts.loop.lib import loop_guard
 from update_with_ai.parts.loop.lib import loop_driver
@@ -165,7 +166,7 @@ def _format_tool_log(
 
 
 class LoopDriver(loop_driver.LoopDriver, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         pass
@@ -627,5 +628,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         LoopDriver,
         keys=[LoopDriver, loop_driver.LoopDriver, loop_driver.AgentDriver],
-        tier="agent_session",
+        tier=agent_session,
     )

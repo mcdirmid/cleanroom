@@ -11,6 +11,7 @@ from update_with_ai.parts.agent.lib import agent_file_alias
 from . import file_paths
 from update_with_ai.parts.agent.lib import agent_config
 from update_with_ai.parts.agent.lib import agent_node_config
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.sandbox.lib import tool_provider
 from support.lib.lifecycle import (
     LifecycleRegistry,
@@ -47,7 +48,7 @@ class _CommandVerificationCheck(agent_node_config.VerificationCheck):
 
 
 class NodeConfig(agent_node_config.NodeConfig, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self._read_only_files: Set[agent_file_alias.ReadOnlyFile] = set()
@@ -561,7 +562,7 @@ _EXECROOT_PATTERN: re.Pattern[str] = re.compile(
 
 
 class AliasManager(agent_file_alias.AliasManager, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self._aliases: Dict[str, agent_file_alias.FileAlias] = {}
@@ -646,7 +647,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         NodeConfig,
         keys=[NodeConfig, agent_node_config.NodeConfig],
-        tier="agent_session",
+        tier=agent_session,
     )
     reg.register_singleton(
         AliasManager,
@@ -655,5 +656,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
             agent_file_alias.AliasManager,
             tool_provider.ParameterConverter,
         ],
-        tier="agent_session",
+        tier=agent_session,
     )

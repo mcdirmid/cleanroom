@@ -1,11 +1,11 @@
 import os
 from typing import Optional
 from . import runner_logger
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, system
 
 
 class RunnerLogger(runner_logger.RunnerLogger, Singleton):
-    tier = "system"
+    tier = system
 
     def __init__(self) -> None:
         self.transcript_file_path = os.environ.get(
@@ -33,5 +33,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         RunnerLogger,
         keys=[RunnerLogger, runner_logger.RunnerLogger],
-        tier="system",
+        tier=system,
     )

@@ -6,16 +6,21 @@ from typing import Any, List, Optional, Set, Tuple
 from update_with_ai.parts.dag.lib.dag_storage import Node
 from update_with_ai.parts.agent.lib.agent_file_alias import (
     BoundFile,
+    FileAlias,
     FileContent,
     ReadOnlyFile,
     ReadWriteFile,
     UnboundFile,
     WorkspacePath,
 )
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton
+from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton, system
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.agent.lib.agent_node_config import Guide, NodeConfig
-from update_with_ai.parts.sandbox.lib.sandbox import Sandbox, StartupToolExecution
+from update_with_ai.parts.sandbox.lib.sandbox import (
+    Sandbox,
+    StartupToolExecution,
+)
 from update_with_ai.parts.sandbox.lib.sandbox_file_editor import EditManager
 from update_with_ai.parts.sandbox.lib.sandbox_file_reader import ViewFileTool
 from update_with_ai.parts.sandbox.lib.sandbox_impl import (
@@ -36,7 +41,7 @@ from update_with_ai.parts.sandbox.lib.tool_provider import (
 
 
 class MockAgentConfig:
-    tier = "system"
+    tier = system
 
     def __init__(
         self, is_step_mode: bool = False, is_startup_reads: bool = False
@@ -48,7 +53,7 @@ class MockAgentConfig:
 
 
 class MockNodeConfig:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(
         self,
@@ -104,7 +109,7 @@ class MockNodeConfig:
 
 
 class MockEditManager:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self.has_modifications = False
@@ -115,7 +120,7 @@ class MockEditManager:
 
 
 class MockAdvanceTool:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self.executed = False
@@ -153,7 +158,7 @@ class DummyConverter:
 
 
 class MockViewFileTool:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self.executed_files: List[BoundFile] = []
@@ -213,24 +218,24 @@ class SandboxImplTest(unittest.TestCase):
         self.view_file_tool = MockViewFileTool()
 
         self.registry.register_instance(
-            self.agent_cfg, keys=[AgentConfig], tier="system"
+            self.agent_cfg, keys=[AgentConfig], tier=system
         )
         self.registry.register_instance(
-            self.node_cfg, keys=[NodeConfig], tier="agent_session"
+            self.node_cfg, keys=[NodeConfig], tier=agent_session
         )
         self.registry.register_instance(
-            self.edit_mgr, keys=[EditManager], tier="agent_session"
+            self.edit_mgr, keys=[EditManager], tier=agent_session
         )
         self.registry.register_instance(
-            self.adv_tool, keys=[AdvanceTool], tier="agent_session"
+            self.adv_tool, keys=[AdvanceTool], tier=agent_session
         )
         self.registry.register_instance(
-            self.view_file_tool, keys=[ViewFileTool], tier="agent_session"
+            self.view_file_tool, keys=[ViewFileTool], tier=agent_session
         )
 
     def test_has_modifications_and_template_materialization_delegation(self) -> None:
         """CUJ: Sandbox delegates modification checking and template materialization to EditManager."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             sb = scope.get_singleton(Sandbox)
 
             # Requirement: Querying file modifications delegates to the edit manager.
@@ -266,7 +271,7 @@ class SandboxImplTest(unittest.TestCase):
         ro_files: Set[ReadOnlyFile] = {ro_file_z, ro_file_a, ro_file_py}
         self.node_cfg.read_only_files = ro_files
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             sb = scope.get_singleton(Sandbox)
             # Requirement: [Sandbox] The sandbox exposes startup tool executions as an ordered sequence of initial tool executions based on active configuration.
             executions = sb.get_startup_tool_executions()
@@ -307,7 +312,7 @@ class SandboxImplTest(unittest.TestCase):
         self.agent_cfg.is_step_mode = False
         self.agent_cfg.is_startup_reads = False
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             sb = scope.get_singleton(Sandbox)
             # Requirement: When step mode is not used, startup tool executions contain no advance tool execution.
             # Requirement: When startup reads are not performed, startup tool executions contain no file read executions.
@@ -320,7 +325,7 @@ class SandboxImplTest(unittest.TestCase):
         self.agent_cfg.is_startup_reads = False
         self.node_cfg.allows_step_mode = False
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             sb = scope.get_singleton(Sandbox)
             # Requirement: When step mode is not used, startup tool executions contain no advance tool execution.
             executions = sb.get_startup_tool_executions()
@@ -348,7 +353,7 @@ class SandboxImplTest(unittest.TestCase):
         self.node_cfg.read_only_files = {ro_file}
         self.node_cfg.read_write_files = {rw_file_1, rw_file_2}
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             sb = scope.get_singleton(Sandbox)
             # Requirement: When startup reads are not performed or the session has multiple read-write files, startup tool executions contain no file read executions.
             executions = sb.get_startup_tool_executions()

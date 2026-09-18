@@ -5,6 +5,7 @@ from update_with_ai.parts.sandbox.lib.template_format_impl import (
     __initialize__,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 
 
 class TemplateFormatImplTest(unittest.TestCase):
@@ -14,7 +15,7 @@ class TemplateFormatImplTest(unittest.TestCase):
 
     def test_variable_interpolation(self) -> None:
         """CUJ: Variable substitution with dot lookup and preservation of unbound parameters."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             formatter = scope.get_singleton(TemplateFormatter)
             self.assertIsInstance(formatter, TemplateFormatterImpl)
 
@@ -47,7 +48,7 @@ class TemplateFormatImplTest(unittest.TestCase):
 
     def test_line_suffix_conditional(self) -> None:
         """CUJ: Single-line conditional inclusion and exclusion."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             formatter = scope.get_singleton(TemplateFormatter)
 
             template = (
@@ -70,7 +71,7 @@ class TemplateFormatImplTest(unittest.TestCase):
 
     def test_line_suffix_loop(self) -> None:
         """CUJ: Single-line loop repetition for bullet lists and table rows."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             formatter = scope.get_singleton(TemplateFormatter)
 
             template = (
@@ -104,7 +105,7 @@ class TemplateFormatImplTest(unittest.TestCase):
 
     def test_block_conditional(self) -> None:
         """CUJ: Multi-line block conditional evaluation."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             formatter = scope.get_singleton(TemplateFormatter)
 
             template = (
@@ -133,7 +134,7 @@ class TemplateFormatImplTest(unittest.TestCase):
 
     def test_block_loop(self) -> None:
         """CUJ: Multi-line block loop repetition across elements."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             formatter = scope.get_singleton(TemplateFormatter)
 
             template = (
@@ -164,7 +165,7 @@ class TemplateFormatImplTest(unittest.TestCase):
 
     def test_formatter_whitespace_normalization(self) -> None:
         """CUJ: Surviving extra blank lines injected around HTML comments by formatters."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             formatter = scope.get_singleton(TemplateFormatter)
 
             # Prettier typically formats block comments with surrounding blank lines
@@ -188,7 +189,7 @@ class TemplateFormatImplTest(unittest.TestCase):
 
     def test_nested_and_unbound_loops(self) -> None:
         """CUJ: Nested loops and unbound loop variable handling."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             formatter = scope.get_singleton(TemplateFormatter)
 
             # Unbound line-suffix loop: retains line and placeholder
@@ -226,7 +227,7 @@ class TemplateFormatImplTest(unittest.TestCase):
 
     def test_nested_and_unbound_conditionals(self) -> None:
         """CUJ: Nested conditionals and unbound condition variable handling."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             formatter = scope.get_singleton(TemplateFormatter)
 
             # Nested block if

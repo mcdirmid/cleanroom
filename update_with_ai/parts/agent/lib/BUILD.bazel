@@ -32,6 +32,15 @@ pyright_library(
 )
 
 pyright_library(
+    name = "agent_session",
+    srcs = ["agent_session.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
     name = "agent_storage",
     srcs = ["agent_storage.py"],
     pyright_deps = [

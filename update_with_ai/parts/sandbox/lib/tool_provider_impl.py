@@ -1,10 +1,11 @@
 from typing import Dict, Optional, Set, Tuple, Type
 from . import tool_provider
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 
 
 class ToolManager(tool_provider.ToolManager, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self._tools: Dict[str, tool_provider.Tool] = {}
@@ -65,7 +66,7 @@ class ToolManager(tool_provider.ToolManager, Singleton):
 
 
 class StringParameterConverter(tool_provider.StringParameterConverter, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         pass
@@ -84,7 +85,7 @@ class StringParameterConverter(tool_provider.StringParameterConverter, Singleton
 
 
 class IntegerParameterConverter(tool_provider.IntegerParameterConverter, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         pass
@@ -103,7 +104,7 @@ class IntegerParameterConverter(tool_provider.IntegerParameterConverter, Singlet
 
 
 class BooleanParameterConverter(tool_provider.BooleanParameterConverter, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         pass
@@ -126,7 +127,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         ToolManager,
         keys=[ToolManager, tool_provider.ToolManager],
-        tier="agent_session",
+        tier=agent_session,
     )
     reg.register_singleton(
         StringParameterConverter,
@@ -136,7 +137,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
             tool_provider.IdentityParameterConverter,
             tool_provider.ParameterConverter,
         ],
-        tier="agent_session",
+        tier=agent_session,
     )
     reg.register_singleton(
         IntegerParameterConverter,
@@ -146,7 +147,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
             tool_provider.IdentityParameterConverter,
             tool_provider.ParameterConverter,
         ],
-        tier="agent_session",
+        tier=agent_session,
     )
     reg.register_singleton(
         BooleanParameterConverter,
@@ -156,5 +157,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
             tool_provider.IdentityParameterConverter,
             tool_provider.ParameterConverter,
         ],
-        tier="agent_session",
+        tier=agent_session,
     )

@@ -16,7 +16,8 @@ from update_with_ai.parts.agent.lib.agent_file_alias import (
     UnboundFile,
     WorkspacePath,
 )
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.agent.lib.agent_node_config import (
     Guide,
     NodeConfig,
@@ -56,7 +57,7 @@ from update_with_ai.parts.sandbox.lib.tool_provider import (
 
 
 class MockToolManager:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self.installed_tools: Set[Tool] = set()
@@ -71,7 +72,7 @@ class MockToolManager:
 
 
 class MockStringConverter:
-    tier = "agent_session"
+    tier = agent_session
     actual_type = str
     wire_type = String()
 
@@ -92,7 +93,7 @@ def _make_workspace_path(path: str) -> WorkspacePath:
 
 
 class MockAliasManager:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self.workspace_root = _make_directory_path("/workspace")
@@ -107,7 +108,7 @@ class MockAliasManager:
 
 
 class MockNodeConfig:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(
         self,
@@ -179,7 +180,7 @@ class MockNodeConfig:
 
 
 class MockGuideDelivery:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(
         self,
@@ -227,7 +228,7 @@ class MockGuideDelivery:
 
 
 class MockEditManager:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(
         self, has_modifications: bool = False, file_update_revision: int = 0
@@ -279,7 +280,7 @@ class MockVerificationCheck(VerificationCheck):
 
 
 class MockDagStorage:
-    tier = "system"
+    tier = system
 
     def __init__(self) -> None:
         self.dependencies: dict[Node, Set[Dependency]] = {}
@@ -289,7 +290,7 @@ class MockDagStorage:
 
 
 class MockTemplateFormatter:
-    tier = "agent_session"
+    tier = agent_session
 
     def format_template(self, text: str, parameters: Any) -> str:
         nodes = parameters.get("nodes", [])
@@ -315,7 +316,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
         self.storage = MockDagStorage()
         self.registry.register_instance(
-            self.storage, keys=[dag_storage.DagStorage], tier="system"
+            self.storage, keys=[dag_storage.DagStorage], tier=system
         )
 
         self.tool_mgr = MockToolManager()
@@ -333,32 +334,32 @@ class SandboxRunControlImplTest(unittest.TestCase):
         self.edit_mgr = MockEditManager()
 
         self.registry.register_instance(
-            self.tool_mgr, keys=[ToolManager], tier="agent_session"
+            self.tool_mgr, keys=[ToolManager], tier=agent_session
         )
         self.registry.register_instance(
-            self.str_conv, keys=[StringParameterConverter], tier="agent_session"
+            self.str_conv, keys=[StringParameterConverter], tier=agent_session
         )
         self.registry.register_instance(
-            self.alias_mgr, keys=[AliasManager], tier="agent_session"
+            self.alias_mgr, keys=[AliasManager], tier=agent_session
         )
         self.registry.register_instance(
             self.tmpl_formatter,
             keys=[template_format.TemplateFormatter],
-            tier="agent_session",
+            tier=agent_session,
         )
         self.registry.register_instance(
-            self.node_cfg, keys=[NodeConfig], tier="agent_session"
+            self.node_cfg, keys=[NodeConfig], tier=agent_session
         )
         self.registry.register_instance(
-            self.guide_del, keys=[GuideDelivery], tier="agent_session"
+            self.guide_del, keys=[GuideDelivery], tier=agent_session
         )
         self.registry.register_instance(
-            self.edit_mgr, keys=[EditManager], tier="agent_session"
+            self.edit_mgr, keys=[EditManager], tier=agent_session
         )
 
     def test_run_controller_initialization_with_blame_and_step_mode(self) -> None:
         """CUJ: RunController installs advance, submit, fail, and blame tools when step mode and blame targets exist."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             ctrl = scope.get_singleton(RunController)
             # Requirement: Verification checks exposed by the run controller include the session verification checks from node config.
             # Requirement: [RunController] The run controller exposes verification checks that validate session criteria.
@@ -388,25 +389,25 @@ class SandboxRunControlImplTest(unittest.TestCase):
         tool_mgr = MockToolManager()
         cfg = MockNodeConfig(blame_targets=set(), is_step_mode=False, guide=None)
         reg.register_instance(
-            self.storage, keys=[dag_storage.DagStorage], tier="system"
+            self.storage, keys=[dag_storage.DagStorage], tier=system
         )
-        reg.register_instance(tool_mgr, keys=[ToolManager], tier="agent_session")
+        reg.register_instance(tool_mgr, keys=[ToolManager], tier=agent_session)
         reg.register_instance(
-            self.str_conv, keys=[StringParameterConverter], tier="agent_session"
+            self.str_conv, keys=[StringParameterConverter], tier=agent_session
         )
-        reg.register_instance(self.alias_mgr, keys=[AliasManager], tier="agent_session")
+        reg.register_instance(self.alias_mgr, keys=[AliasManager], tier=agent_session)
         reg.register_instance(
             self.tmpl_formatter,
             keys=[template_format.TemplateFormatter],
-            tier="agent_session",
+            tier=agent_session,
         )
-        reg.register_instance(cfg, keys=[NodeConfig], tier="agent_session")
+        reg.register_instance(cfg, keys=[NodeConfig], tier=agent_session)
         reg.register_instance(
-            self.guide_del, keys=[GuideDelivery], tier="agent_session"
+            self.guide_del, keys=[GuideDelivery], tier=agent_session
         )
-        reg.register_instance(self.edit_mgr, keys=[EditManager], tier="agent_session")
+        reg.register_instance(self.edit_mgr, keys=[EditManager], tier=agent_session)
 
-        with enter_phase("agent_session", registry=reg) as scope:
+        with enter_phase(agent_session, registry=reg) as scope:
             ctrl = scope.get_singleton(RunController)
             # Requirement: The run controller unconditionally installs the submit tool, fail tool, and check file tool for the agent session, installs the advance tool only when guide step mode is active, and obtains configured blame targets and verification checks from the node config, installing the blame tool only when blame targets are configured.
             tool_names = {t.name for t in tool_mgr.installed_tools}
@@ -424,7 +425,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         self.node_cfg._verification_checks = [check]
         self.edit_mgr.file_update_revision = 1
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             ctrl = scope.get_singleton(RunControllerImpl)
             # First evaluation executes checks and caches result
             # Requirement: Evaluation of verification checks is cached alongside the edit manager file update revision.
@@ -454,7 +455,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         vcheck = MockVerificationCheck(passes=False, diagnostic="Failing initial check")
         self.node_cfg._verification_checks = [vcheck]
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             advance = scope.get_singleton(AdvanceToolImpl)
             b = ActualParameterBindings(bindings=set())
 
@@ -478,7 +479,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         vcheck = MockVerificationCheck(passes=False, diagnostic="Syntax error")
         self.node_cfg._verification_checks = [vcheck]
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             advance = scope.get_singleton(AdvanceToolImpl)
             b = ActualParameterBindings(bindings=set())
 
@@ -508,7 +509,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         vcheck = MockVerificationCheck(passes=True)
         self.node_cfg._verification_checks = [vcheck]
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             advance = scope.get_singleton(AdvanceToolImpl)
             b = ActualParameterBindings(bindings=set())
 
@@ -530,7 +531,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         vcheck = MockVerificationCheck(passes=True)
         self.node_cfg._verification_checks = [vcheck]
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             advance = scope.get_singleton(AdvanceToolImpl)
             b = ActualParameterBindings(bindings=set())
 
@@ -554,7 +555,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         vcheck = MockVerificationCheck(passes=True)
         self.node_cfg._verification_checks = [vcheck]
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             advance = scope.get_singleton(AdvanceToolImpl)
             b = ActualParameterBindings(bindings=set())
 
@@ -578,7 +579,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_submit_tool_parameters_and_converters(self) -> None:
         """CUJ: SubmitTool declares target and change_summary parameters with converters."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             submit = scope.get_singleton(SubmitToolImpl)
             # Requirement: The submit tool is named `submit`, accepting an optional target parameter and a text change summary parameter, and shares a constant suppression key `submit`.
             self.assertEqual(submit.name, "submit")
@@ -596,7 +597,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         vcheck = MockVerificationCheck(passes=False)
         self.node_cfg._verification_checks = [vcheck]
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             submit = scope.get_singleton(SubmitToolImpl)
             b = ActualParameterBindings(bindings=set())
             # Requirement: Executing the submit tool updates verification results if outdated.
@@ -631,7 +632,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         )
         self.node_cfg._verification_checks = [vcheck]
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             submit = scope.get_singleton(SubmitToolImpl)
             b = ActualParameterBindings(bindings=set())
             # Requirement: Executing the submit tool updates verification results if outdated.
@@ -666,7 +667,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         vcheck = MockVerificationCheck(passes=True)
         self.node_cfg._verification_checks = [vcheck]
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             submit = scope.get_singleton(SubmitToolImpl)
             b = ActualParameterBindings(bindings=set())
             # Requirement: Tool execution fails when session feedback is present and no workspace files were modified, reminding the agent that workspace files must be modified to address feedback or that the fail tool must be used.
@@ -684,7 +685,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         vcheck = MockVerificationCheck(passes=True)
         self.node_cfg._verification_checks = [vcheck]
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             submit = scope.get_singleton(SubmitToolImpl)
             b = ActualParameterBindings(bindings=set())
             # Requirement: Tool execution fails if workspace files were modified and the change summary is omitted, reminding the agent that a change summary must be provided when completing the session after modifying workspace files.
@@ -704,7 +705,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         vcheck = MockVerificationCheck(passes=True)
         self.node_cfg._verification_checks = [vcheck]
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             submit = scope.get_singleton(SubmitToolImpl)
             b = ActualParameterBindings(
                 bindings={(submit.change_summary, "Unneeded change summary")}
@@ -724,7 +725,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         vcheck = MockVerificationCheck(passes=True)
         self.node_cfg._verification_checks = [vcheck]
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             submit = scope.get_singleton(SubmitToolImpl)
             b = ActualParameterBindings(
                 bindings={(submit.change_summary, "Added new feature")}
@@ -739,7 +740,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_fail_tool(self) -> None:
         """CUJ: FailTool produces terminating failure response carrying explanation."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             fail_tool = scope.get_singleton(FailToolImpl)
             self.assertIsInstance(fail_tool.description, str)
             self.assertGreater(len(fail_tool.parameters), 0)
@@ -761,7 +762,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_blame_tool(self) -> None:
         """CUJ: BlameTool validates target and produces terminating feedback attribution."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             blame_tool = scope.get_singleton(BlameToolImpl)
             self.assertIsInstance(blame_tool.description, str)
             self.assertGreater(len(blame_tool.parameters), 0)
@@ -830,7 +831,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         self.node_cfg.verification_checks_by_node = {node1: [vcheck1], node2: [vcheck2]}
         self.guide_del.has_steps_remaining = False
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             submit = scope.get_singleton(SubmitToolImpl)
             rc = scope.get_singleton(RunControllerImpl)
 
@@ -919,7 +920,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         )
         self.node_cfg._read_write_files = {f_rw1, f_rw3}
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             fail_tool = scope.get_singleton(FailToolImpl)
             rc = scope.get_singleton(RunControllerImpl)
 
@@ -1001,7 +1002,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         )
         self.node_cfg.blame_targets_by_node = {node1: {bt1}, node3: {bt3}}
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             blame_tool = scope.get_singleton(BlameToolImpl)
             rc = scope.get_singleton(RunControllerImpl)
 
@@ -1073,7 +1074,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             node2: [vcheck2],
         }
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             check_file = scope.get_singleton(CheckFileTool)
 
             # Test target rt_unit1.py passes
@@ -1172,7 +1173,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         )
         self.node_cfg._verification_checks = [vcheck]
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             check_file = scope.get_singleton(CheckFileTool)
             # Requirement: The check file tool is named `check_file`, accepting an optional path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
             self.assertEqual(check_file.name, "check_file")
@@ -1202,7 +1203,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         )
         self.node_cfg._verification_checks = [vcheck]
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             check_file = scope.get_singleton(CheckFileTool)
             b = ActualParameterBindings(bindings=set())
             # Requirement: [RunController] The run controller installs a check file tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
@@ -1229,7 +1230,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         self.node_cfg._verification_checks = [vcheck]
         self.edit_mgr.file_update_revision = 1
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             check_file = scope.get_singleton(CheckFileTool)
             b = ActualParameterBindings(bindings=set())
 
@@ -1277,7 +1278,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         self.node_cfg._read_write_files = {rw_file}
         self.edit_mgr.file_update_revision = 1
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             check_file = scope.get_singleton(CheckFileTool)
             b = ActualParameterBindings(bindings=set())
 
@@ -1387,7 +1388,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         vcheck2 = MockVerificationCheck(passes=True)
         self.node_cfg.verification_checks_by_node = {node1: [vcheck1], node2: [vcheck2]}
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             submit = scope.get_singleton(SubmitToolImpl)
             check_file = scope.get_singleton(CheckFileTool)
             rc = scope.get_singleton(RunControllerImpl)
@@ -1464,7 +1465,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         }
         self.guide_del.has_steps_remaining = False
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             submit = scope.get_singleton(SubmitToolImpl)
             check_file = scope.get_singleton(CheckFileToolImpl)
             fail = scope.get_singleton(FailToolImpl)

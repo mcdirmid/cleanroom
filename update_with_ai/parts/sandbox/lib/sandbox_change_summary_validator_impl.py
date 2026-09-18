@@ -5,6 +5,7 @@ from support.lib.lifecycle import (
     get_default_registry,
     get_singleton,
 )
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.agent.lib import agent_file_alias
 from update_with_ai.parts.agent.lib import agent_node_config
 from . import sandbox_change_summary_validator
@@ -13,7 +14,7 @@ from . import sandbox_change_summary_validator
 class ChangeSummaryValidator(
     sandbox_change_summary_validator.ChangeSummaryValidator, Singleton
 ):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self._soft_limit = 200
@@ -38,5 +39,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
             sandbox_change_summary_validator.ChangeSummaryValidator,
             agent_node_config.VerificationCheck,
         ],
-        tier="agent_session",
+        tier=agent_session,
     )

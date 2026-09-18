@@ -1,5 +1,6 @@
 import re
 from typing import Any, Mapping, Optional, Sequence
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 from . import template_format
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
 
@@ -45,7 +46,7 @@ def _interpolate_vars(text: str, context: Mapping[str, Any]) -> str:
 
 
 class TemplateFormatter(template_format.TemplateFormatter, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         pass
@@ -182,5 +183,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         TemplateFormatter,
         keys=[TemplateFormatter, template_format.TemplateFormatter],
-        tier="agent_session",
+        tier=agent_session,
     )

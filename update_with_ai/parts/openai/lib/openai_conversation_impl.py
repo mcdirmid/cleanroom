@@ -1,12 +1,13 @@
 import json
 from typing import List, Optional
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.loop.lib import loop_conversation
 from update_with_ai.parts.sandbox.lib import tool_provider
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
 
 
 class Conversation(loop_conversation.Conversation, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self._messages: List[loop_conversation.Message] = []
@@ -132,5 +133,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         Conversation,
         keys=[Conversation, loop_conversation.Conversation],
-        tier="agent_session",
+        tier=agent_session,
     )

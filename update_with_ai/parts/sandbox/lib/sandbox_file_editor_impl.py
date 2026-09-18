@@ -14,10 +14,11 @@ from support.lib.lifecycle import (
     get_default_registry,
     get_singleton,
 )
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 
 
 class EditManager(sandbox_file_editor.EditManager, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self._initial_contents: dict[str, Optional[str]] = {}
@@ -150,7 +151,7 @@ class _OrderedParameterSet(set[tool_provider.Parameter]):
 
 
 class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         pass
@@ -509,7 +510,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         EditManager,
         keys=[EditManager, sandbox_file_editor.EditManager],
-        tier="agent_session",
+        tier=agent_session,
     )
     reg.register_singleton(
         ReplaceFileContentTool,
@@ -519,5 +520,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
             sandbox_file_editor.EditingTool,
             tool_provider.Tool,
         ],
-        tier="agent_session",
+        tier=agent_session,
     )

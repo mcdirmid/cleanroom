@@ -13,10 +13,11 @@ from support.lib.lifecycle import (
     get_default_registry,
     get_singleton,
 )
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 
 
 class ReadManager(sandbox_file_reader.ReadManager, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         pass
@@ -54,7 +55,7 @@ class ReadManager(sandbox_file_reader.ReadManager, Singleton):
 
 
 class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         pass
@@ -263,7 +264,7 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
 
 
 class RegexPatternConverter(tool_provider.ParameterConverter, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         pass
@@ -282,7 +283,7 @@ class RegexPatternConverter(tool_provider.ParameterConverter, Singleton):
 
 
 class SearchTool(sandbox_file_reader.SearchTool, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         pass
@@ -368,20 +369,20 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         ReadManager,
         keys=[ReadManager, sandbox_file_reader.ReadManager],
-        tier="agent_session",
+        tier=agent_session,
     )
     reg.register_singleton(
         ViewFileTool,
         keys=[ViewFileTool, sandbox_file_reader.ViewFileTool, tool_provider.Tool],
-        tier="agent_session",
+        tier=agent_session,
     )
     reg.register_singleton(
         RegexPatternConverter,
         keys=[RegexPatternConverter, tool_provider.ParameterConverter],
-        tier="agent_session",
+        tier=agent_session,
     )
     reg.register_singleton(
         SearchTool,
         keys=[SearchTool, sandbox_file_reader.SearchTool, tool_provider.Tool],
-        tier="agent_session",
+        tier=agent_session,
     )

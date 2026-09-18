@@ -4,7 +4,7 @@
 
 The artifact is a High-Level Specification (HLS) that defines a software component declaratively through literate prose under `high/<name>.md`. In a multi-node session, multiple high-level specifications are processed together; each target is identified by its file alias relative path, and each target is submitted individually via `submit(target="<target_file>", change_summary="...")` when complete (in single-target sessions, the target parameter may be omitted). The artifact conforms to this guide and the component architecture described in the design documents. Specifications define interface (`high/<name>.md`), implementation (`high/<name>_impl.md`), external boundary (`high/<name>_ext.md`), or assembly (`high/<name>_asm.md`) components without pseudo-code, bolding, nested bullet trees, or artificial parameter flags.
 
-Component visibility and lifetimes are governed by flat lifecycle tiers (system and agent session) where services access each other directly without object type containment or factory plumbing. Specifications follow a closed two-section layout: a why-focused `## Purpose` section with an `**Out of scope:**` boundary disclaimer, and either a unified `## Types and Behavior` section expressed in literate prose with semantic italics on concept introductions (for interface, implementation, and assembly specifications), or a `## Grounding Gaps Covered` section in plain prose without semantic italics (for external boundary specifications).
+Component visibility and lifetimes are governed by hierarchical lifecycle tiers (the root system tier and child tiers defined by interface components) where services access each other directly without object type containment or factory plumbing. Specifications follow a closed two-section layout: a why-focused `## Purpose` section with an `**Out of scope:**` boundary disclaimer, and either a unified `## Types and Behavior` section expressed in literate prose with semantic italics on concept introductions (for interface, implementation, and assembly specifications), or a `## Grounding Gaps Covered` section in plain prose without semantic italics (for external boundary specifications).
 
 > META: "High-level specifications establish declarative component architectures and contracts; cycles and unmandated behaviors are avoided."
 
@@ -87,9 +87,10 @@ Component visibility and lifetimes are governed by flat lifecycle tiers (system 
 - [ ] Every singleton service declares its lifecycle tier in natural language in plain text without italics, as lifecycle tiers are built-in architectural constructs rather than terms introduced by the specification; polymorphic types do not specify a lifecycle tier
 - [ ] Services do not form containment or ownership hierarchies; services within the same tier access each other directly without nested type definitions
 - [ ] Aggregate services maintain collections via explicit operations, never as owned sub-types
-- [ ] Shorter-lived tiers may access longer-lived tiers, but long-lived services never hold references to short-lived session services
-- [ ] Container and runner frameworks instantiate session phase services directly without factory objects
-- [ ] Lifecycle phases are established as execution blocks where session services operate, without explicit start or stop operations; cleaning happens within an agent session phase
+- [ ] Lifecycle tiers form a hierarchy rooted at system with child tiers defined by interface components; descendant tiers may access ancestor tiers, but ancestor services never hold references to descendant services
+- [ ] Subordinate lifecycle tiers are defined in interface components as child tiers of system or another ancestor tier, enabling dependent components to import and participate in that lifecycle
+- [ ] Container and runner frameworks instantiate scoped phase services directly without factory objects
+- [ ] Lifecycle phases are established as execution blocks where scoped services operate, without explicit start or stop operations; cleaning happens within a scoped lifecycle phase
 - [ ] Lifecycle phase transitions are specified declaratively rather than procedurally, describing initial context provision rather than invocation sequences
 
 ## Knowledge custody and value derivation

@@ -6,7 +6,12 @@ from typing import Any, Mapping, Optional
 from update_with_ai.parts.agent.lib import agent_config
 from update_with_ai.parts.dag.lib import dag_config
 from update_with_ai.parts.openai.lib import openai_config
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    system,
+)
 
 
 def _resolve_target_label() -> str:
@@ -84,7 +89,7 @@ class OpenaiConfig(
     dag_config.DagConfig,
     Singleton,
 ):
-    tier = "system"
+    tier = system
 
     def __init__(self) -> None:
         target_label = _resolve_target_label()
@@ -247,5 +252,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
             agent_config.AgentConfig,
             dag_config.DagConfig,
         ],
-        tier="system",
+        tier=system,
     )

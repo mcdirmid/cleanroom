@@ -10,11 +10,12 @@ from support.lib.lifecycle import (
     Singleton,
     get_default_registry,
     get_singleton,
+    system,
 )
 
 
 class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
-    tier = "system"
+    tier = system
 
     def __init__(self) -> None:
         self._manifests: Dict[dag_storage.Node, bazel_manifest_loader.Manifest] = {}
@@ -552,5 +553,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         BazelManifestLoader,
         keys=[BazelManifestLoader, bazel_manifest_loader.BazelManifestLoader],
-        tier="system",
+        tier=system,
     )

@@ -12,13 +12,18 @@ from support.lib.lifecycle import (
     LifecycleRegistry,
     LifecycleResolutionError,
     LifecycleScope,
+    LifecycleTier,
     Singleton,
     enter_phase,
     get_active_scope,
     get_default_registry,
     get_singleton,
     singleton,
+    system,
 )
+
+agent_session_tier: LifecycleTier = system.create_child("agent_session")
+
 
 
 class Logger(Protocol):
@@ -446,7 +451,7 @@ class TestLifecycle(unittest.TestCase):
 
         # Testing requirement: Subclass Singleton without explicit initialize does not fail
         class MyService(Singleton):
-            tier = "system"
+            tier = system
 
             def get_val(self) -> str:
                 return "val"
@@ -455,26 +460,27 @@ class TestLifecycle(unittest.TestCase):
         # Testing requirement: register_singleton infers tier from class
         desc = test_reg.register_singleton(MyService, keys=[MyService])
         self.assertEqual(desc.phase, "system")
+        self.assertEqual(desc.tier, system)
 
         # Testing requirement: Tier mismatch raises LifecycleError
         with self.assertRaises(LifecycleError):
             test_reg.register_singleton(
-                MyService, keys=[MyService], tier="agent_session"
+                MyService, keys=[MyService], tier=agent_session_tier
             )
 
     def test_caller_tier_isolation_enforcement(self) -> None:
         """CUJ: System singleton cannot access agent_session singleton even inside active session.
 
-        Verifies that if a Singleton declaring tier='system' calls get_singleton on an
+        Verifies that if a Singleton declaring tier=system calls get_singleton on an
         agent_session singleton, LifecycleIsolationError is raised to prevent cross-tier state leaks.
         """
         test_reg = LifecycleRegistry()
 
         class DummySessionItem(Singleton):
-            tier = "agent_session"
+            tier = agent_session_tier
 
         class DummySystemCaller(Singleton):
-            tier = "system"
+            tier = system
 
             def illegal_access(self) -> None:
                 get_singleton(DummySessionItem)
@@ -482,7 +488,7 @@ class TestLifecycle(unittest.TestCase):
         test_reg.register_singleton(DummySessionItem, keys=[DummySessionItem])
         test_reg.register_singleton(DummySystemCaller, keys=[DummySystemCaller])
 
-        with enter_phase("agent_session", registry=test_reg) as session:
+        with enter_phase(agent_session_tier, registry=test_reg) as session:
             # Testing requirement: Session code can resolve session items
             item = session.get_singleton(DummySessionItem)
             self.assertIsInstance(item, DummySessionItem)
@@ -501,12 +507,12 @@ class TestLifecycle(unittest.TestCase):
         test_reg = LifecycleRegistry()
 
         class AlphaService(Singleton):
-            tier = "agent_session"
+            tier = agent_session_tier
             value = 42
 
         test_reg.register_singleton(AlphaService, keys=[AlphaService])
 
-        with enter_phase("agent_session", registry=test_reg) as session:
+        with enter_phase(agent_session_tier, registry=test_reg) as session:
             # Testing requirement: session.get_singleton resolves phase singleton
             svc1 = session.get_singleton(AlphaService)
             self.assertEqual(svc1.value, 42)
@@ -531,13 +537,43 @@ class TestLifecycle(unittest.TestCase):
 
         # Testing requirement: Registering a singleton via mod1 is resolvable via mod2
         class CrossModuleService(Singleton):
-            tier = "system"
+            tier = system
 
         mod1.get_default_registry().register_singleton(
             CrossModuleService, keys=[CrossModuleService]
         )
         resolved = mod2.get_singleton(CrossModuleService)
         self.assertIsInstance(resolved, CrossModuleService)
+
+    def test_lifecycle_tier_hierarchy_and_descendants(self) -> None:
+        """CUJ: Custom lifecycle tier hierarchy with parent-child relationships.
+
+        Verifies that LifecycleTier can form multi-level trees, correctly answers
+        is_descendant_of queries, and allows prototype propagation in LifecycleRegistry.
+        """
+        tier1 = system.create_child("tier1")
+        tier2 = tier1.create_child("tier2")
+
+        self.assertEqual(tier1.parent, system)
+        self.assertEqual(tier2.parent, tier1)
+
+        self.assertTrue(tier1.is_descendant_of(system))
+        self.assertTrue(tier2.is_descendant_of(system))
+        self.assertTrue(tier2.is_descendant_of(tier1))
+
+        self.assertFalse(system.is_descendant_of(tier1))
+        self.assertFalse(tier1.is_descendant_of(tier2))
+        self.assertFalse(system.is_descendant_of(system))
+
+        test_reg = LifecycleRegistry()
+        p2 = test_reg.get_prototype(tier2)
+        self.assertEqual(p2.phase, "tier2")
+        self.assertIsNotNone(p2.parent)
+        assert p2.parent is not None
+        self.assertEqual(p2.parent.phase, "tier1")
+        self.assertIsNotNone(p2.parent.parent)
+        assert p2.parent.parent is not None
+        self.assertEqual(p2.parent.parent.phase, "system")
 
 
 if __name__ == "__main__":

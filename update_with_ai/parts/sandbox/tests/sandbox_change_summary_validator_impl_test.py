@@ -4,6 +4,7 @@ import unittest
 from update_with_ai.parts.dag.lib.dag_storage import Node
 from update_with_ai.parts.agent.lib.agent_file_alias import ReadWriteFile, WorkspacePath
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.sandbox.lib.sandbox_change_summary_validator import (
     ChangeSummaryValidator,
     DiffSummary,
@@ -49,7 +50,7 @@ class SandboxChangeSummaryValidatorImplTest(unittest.TestCase):
 
     def test_verify_and_lifecycle_retrieval(self) -> None:
         """CUJ: Resolving validator and performing change verification."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             validator = scope.get_singleton(ChangeSummaryValidator)
             self.assertIsInstance(validator, ChangeSummaryValidatorImpl)
 

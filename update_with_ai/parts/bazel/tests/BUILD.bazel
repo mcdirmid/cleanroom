@@ -37,6 +37,7 @@ pyright_test(
         "//update_with_ai/parts/agent/lib:agent_config",
         "//update_with_ai/parts/agent/lib:agent_file_alias",
         "//update_with_ai/parts/agent/lib:agent_node_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/agent/lib:agent_storage",
         "//update_with_ai/parts/bazel/lib:bazel_manifest_loader",
         "//update_with_ai/parts/bazel/lib:bazel_node_config_impl",

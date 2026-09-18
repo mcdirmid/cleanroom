@@ -31,7 +31,8 @@ from update_with_ai.parts.agent.lib.agent_file_alias import (
     UnboundFile,
     WorkspacePath,
 )
-from support.lib.lifecycle import LifecycleRegistry, Singleton, enter_phase
+from support.lib.lifecycle import LifecycleRegistry, Singleton, enter_phase, system
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.agent.lib.agent_node_config import (
     Guide,
@@ -54,7 +55,7 @@ def _make_node_directory(path: str) -> NodeDirectory:
 
 
 class MockCleanedNodes(CleanedNodes, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self._nodes: Sequence[Node] = (Node(unit_address="//test/pkg:my_target"),)
@@ -77,7 +78,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
     def test_node_config_properties(self) -> None:
         """CUJ: Accessing NodeConfig properties for declared files, templates, and guidance."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             cfg = scope.get_singleton(NodeConfig)
             self.assertIsInstance(cfg, NodeConfigImpl)
             assert isinstance(cfg, NodeConfigImpl)
@@ -187,7 +188,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
     def test_alias_manager_converter_and_sanitization(self) -> None:
         """CUJ: AliasManager converts short names to FileAlias and sanitizes host paths."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             alias_mgr = scope.get_singleton(AliasManager)
             self.assertIsInstance(alias_mgr, AliasManagerImpl)
             assert isinstance(alias_mgr, AliasManagerImpl)
@@ -258,7 +259,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         """CUJ: NodeConfig and AliasManager initialize from CleanedNodes and BazelManifestLoader."""
 
         class MockManifestLoader(BazelManifestLoader, Singleton):
-            tier = "agent_session"
+            tier = agent_session
 
             def get_manifest(self, node: Node) -> Optional[Manifest]:
                 if node.unit_address == "//test/pkg:my_target":
@@ -312,7 +313,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 return []
 
         class MockNodeIdentifierUtility(BazelTarget, Singleton):
-            tier = "agent_session"
+            tier = agent_session
 
             def normalize(self, raw_label: str) -> Node:
                 return Node(unit_address=raw_label)
@@ -321,7 +322,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 return _make_node_directory("test/pkg")
 
         class MockDagStorage(DagStorage, Singleton):
-            tier = "system"
+            tier = system
 
             def get_messages(self, node: Node) -> Set[Message]:
                 msgs: Set[Message] = {Feedback(content="Fix type error")}
@@ -334,8 +335,8 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
         reg.register(MockDagStorage, keys=[DagStorage])
 
-        with enter_phase("system", registry=reg) as sys_scope:
-            with enter_phase("agent_session", registry=reg) as scope:
+        with enter_phase(system, registry=reg) as sys_scope:
+            with enter_phase(agent_session, registry=reg) as scope:
                 cfg = scope.get_singleton(NodeConfig)
                 alias_mgr = scope.get_singleton(AliasManager)
 
@@ -405,7 +406,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         """CUJ: When allows_step_mode is false, step mode is disabled and guide is kept as read-only file."""
 
         class MockManifestLoader(BazelManifestLoader, Singleton):
-            tier = "agent_session"
+            tier = agent_session
 
             def get_manifest(self, node: Node) -> Optional[Manifest]:
                 if node.unit_address == "//test/pkg:my_target":
@@ -427,7 +428,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 return []
 
         class MockNodeIdentifierUtility(BazelTarget, Singleton):
-            tier = "agent_session"
+            tier = agent_session
 
             def normalize(self, raw_label: str) -> Node:
                 return Node(unit_address=raw_label)
@@ -436,13 +437,13 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 return _make_node_directory("test/pkg")
 
         class MockDagStorage(DagStorage, Singleton):
-            tier = "system"
+            tier = system
 
             def get_messages(self, node: Node) -> Set[Message]:
                 return set()
 
         class MockAgentConfig(AgentConfig, Singleton):
-            tier = "system"
+            tier = system
 
             @property
             def is_step_mode(self) -> bool:
@@ -468,8 +469,8 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         reg.register(MockDagStorage, keys=[DagStorage])
         reg.register(MockAgentConfig, keys=[AgentConfig])
 
-        with enter_phase("system", registry=reg) as sys_scope:
-            with enter_phase("agent_session", registry=reg) as scope:
+        with enter_phase(system, registry=reg) as sys_scope:
+            with enter_phase(agent_session, registry=reg) as scope:
                 cfg = scope.get_singleton(NodeConfig)
                 alias_mgr = scope.get_singleton(AliasManager)
 
@@ -495,7 +496,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         """CUJ: When session feedback is present, step mode is disabled even if agent_config and node allow it, and guide is kept as read-only file."""
 
         class MockManifestLoader(BazelManifestLoader, Singleton):
-            tier = "agent_session"
+            tier = agent_session
 
             def get_manifest(self, node: Node) -> Optional[Manifest]:
                 if node.unit_address == "//test/pkg:my_target":
@@ -517,7 +518,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 return []
 
         class MockNodeIdentifierUtility(BazelTarget, Singleton):
-            tier = "agent_session"
+            tier = agent_session
 
             def normalize(self, raw_label: str) -> Node:
                 return Node(unit_address=raw_label)
@@ -526,13 +527,13 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 return _make_node_directory("test/pkg")
 
         class MockDagStorage(DagStorage, Singleton):
-            tier = "system"
+            tier = system
 
             def get_messages(self, node: Node) -> Set[Message]:
                 return {Feedback(content="Fix failing mock test")}
 
         class MockAgentConfig(AgentConfig, Singleton):
-            tier = "system"
+            tier = system
 
             @property
             def is_step_mode(self) -> bool:
@@ -558,8 +559,8 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         reg.register(MockDagStorage, keys=[DagStorage])
         reg.register(MockAgentConfig, keys=[AgentConfig])
 
-        with enter_phase("system", registry=reg) as sys_scope:
-            with enter_phase("agent_session", registry=reg) as scope:
+        with enter_phase(system, registry=reg) as sys_scope:
+            with enter_phase(agent_session, registry=reg) as scope:
                 cfg = scope.get_singleton(NodeConfig)
                 alias_mgr = scope.get_singleton(AliasManager)
 
@@ -622,13 +623,13 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         # 1. CleanedNodes missing -> returns early without error
         reg1 = LifecycleRegistry()
         __initialize__(reg1)
-        with enter_phase("agent_session", registry=reg1) as scope:
+        with enter_phase(agent_session, registry=reg1) as scope:
             cfg = scope.get_singleton(NodeConfig)
             self.assertEqual(cfg.read_write_files, set())
 
         # 1.5 CleanedNodes empty -> returns early without error
         class MockCleanedNodesEmpty(CleanedNodes, Singleton):
-            tier = "agent_session"
+            tier = agent_session
 
             @property
             def nodes(self) -> Sequence[Node]:
@@ -637,20 +638,20 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         reg1_empty = LifecycleRegistry()
         __initialize__(reg1_empty)
         reg1_empty.register(MockCleanedNodesEmpty, keys=[CleanedNodes])
-        with enter_phase("agent_session", registry=reg1_empty) as scope:
+        with enter_phase(agent_session, registry=reg1_empty) as scope:
             cfg = scope.get_singleton(NodeConfig)
             self.assertEqual(cfg.read_write_files, set())
 
         # 2. DagStorage missing / failing -> self._feedback = ()
         class MockCleanedNodesTgt(CleanedNodes, Singleton):
-            tier = "agent_session"
+            tier = agent_session
 
             @property
             def nodes(self) -> Sequence[Node]:
                 return (Node(unit_address="//pkg:tgt"),)
 
         class MockManifestLoaderNone(BazelManifestLoader, Singleton):
-            tier = "agent_session"
+            tier = agent_session
 
             def get_manifest(self, node: Node) -> Optional[Manifest]:
                 return None
@@ -661,7 +662,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 return []
 
         class MockNodeIdentifierUtility(BazelTarget, Singleton):
-            tier = "agent_session"
+            tier = agent_session
 
             def normalize(self, raw_label: str) -> Node:
                 return Node(unit_address=raw_label)
@@ -675,7 +676,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         reg2.register(MockManifestLoaderNone, keys=[BazelManifestLoader])
         reg2.register(MockNodeIdentifierUtility, keys=[BazelTarget])
 
-        with enter_phase("agent_session", registry=reg2) as scope:
+        with enter_phase(agent_session, registry=reg2) as scope:
             cfg = scope.get_singleton(NodeConfig)
             # Requirement: Declared feedback messages retrieved from graph storage for the session nodes as the session feedback.
             # Requirement: [NodeConfig] The node config provides the session feedback, exposing incoming feedback delivered to the node when present.
@@ -685,7 +686,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
         # 3. Manifest is invalid JSON -> returns early
         class MockManifestLoaderBadJson(BazelManifestLoader, Singleton):
-            tier = "agent_session"
+            tier = agent_session
 
             def get_manifest(self, node: Node) -> Optional[Manifest]:
                 return Manifest("invalid JSON {")
@@ -701,7 +702,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         reg3.register(MockManifestLoaderBadJson, keys=[BazelManifestLoader])
         reg3.register(MockNodeIdentifierUtility, keys=[BazelTarget])
 
-        with enter_phase("agent_session", registry=reg3) as scope:
+        with enter_phase(agent_session, registry=reg3) as scope:
             cfg = scope.get_singleton(NodeConfig)
             self.assertEqual(cfg.read_write_files, set())
 
@@ -713,14 +714,14 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 f.write("# Template code\n")
 
             class MockCleanedNodesPkg(CleanedNodes, Singleton):
-                tier = "agent_session"
+                tier = agent_session
 
                 @property
                 def nodes(self) -> Sequence[Node]:
                     return (Node(unit_address="//pkg:my_target"),)
 
             class MockManifestLoader(BazelManifestLoader, Singleton):
-                tier = "agent_session"
+                tier = agent_session
 
                 def get_manifest(self, node: Node) -> Optional[Manifest]:
                     return Manifest(
@@ -740,7 +741,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                     return []
 
             class MockNodeIdentifierUtility(BazelTarget, Singleton):
-                tier = "agent_session"
+                tier = agent_session
 
                 def normalize(self, raw_label: str) -> Node:
                     return Node(unit_address=raw_label)
@@ -754,7 +755,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             reg.register(MockManifestLoader, keys=[BazelManifestLoader])
             reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
 
-            with enter_phase("agent_session", registry=reg) as scope:
+            with enter_phase(agent_session, registry=reg) as scope:
                 cfg = scope.get_singleton(NodeConfig)
 
                 # Requirement: The node config exposes templates mapping read-write files to initial file content.
@@ -788,14 +789,14 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 f.write("guide text")
 
             class MockCleanedNodesPkg(CleanedNodes, Singleton):
-                tier = "agent_session"
+                tier = agent_session
 
                 @property
                 def nodes(self) -> Sequence[Node]:
                     return (Node(unit_address="//pkg:my_target"),)
 
             class MockManifestLoader(BazelManifestLoader, Singleton):
-                tier = "agent_session"
+                tier = agent_session
 
                 def get_manifest(self, node: Node) -> Optional[Manifest]:
                     return Manifest(
@@ -816,7 +817,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                     return []
 
             class MockNodeIdentifierUtility(BazelTarget, Singleton):
-                tier = "agent_session"
+                tier = agent_session
 
                 def normalize(self, raw_label: str) -> Node:
                     return Node(unit_address=raw_label)
@@ -825,7 +826,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                     return _make_node_directory("pkg")
 
             class MockAgentConfig(AgentConfig, Singleton):
-                tier = "system"
+                tier = system
 
                 @property
                 def is_step_mode(self) -> bool:
@@ -866,8 +867,8 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 os.environ["BAZEL_RUNFILES"] = tmpdir
 
                 with patch("builtins.open", side_effect=failing_open):
-                    with enter_phase("system", registry=reg) as sys_scope:
-                        with enter_phase("agent_session", registry=reg) as scope:
+                    with enter_phase(system, registry=reg) as sys_scope:
+                        with enter_phase(agent_session, registry=reg) as scope:
                             cfg = scope.get_singleton(NodeConfig)
                             # Template read failure results in empty templates
                             # Requirement: The node config exposes templates mapping read-write files to initial file content.
@@ -948,14 +949,14 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 f.write(guide_content)
 
             class MockCleanedNodesPkg(CleanedNodes, Singleton):
-                tier = "agent_session"
+                tier = agent_session
 
                 @property
                 def nodes(self) -> Sequence[Node]:
                     return (Node(unit_address="//pkg:my_target"),)
 
             class MockManifestLoader(BazelManifestLoader, Singleton):
-                tier = "agent_session"
+                tier = agent_session
 
                 def get_manifest(self, node: Node) -> Optional[Manifest]:
                     return Manifest(
@@ -975,7 +976,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                     return []
 
             class MockNodeIdentifierUtility(BazelTarget, Singleton):
-                tier = "agent_session"
+                tier = agent_session
 
                 def normalize(self, raw_label: str) -> Node:
                     return Node(unit_address=raw_label)
@@ -984,7 +985,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                     return _make_node_directory("pkg")
 
             class MockAgentConfig(AgentConfig, Singleton):
-                tier = "system"
+                tier = system
 
                 @property
                 def is_step_mode(self) -> bool:
@@ -1012,8 +1013,8 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             old_env = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
             try:
                 os.environ["BUILD_WORKSPACE_DIRECTORY"] = tmpdir
-                with enter_phase("system", registry=reg) as sys_scope:
-                    with enter_phase("agent_session", registry=reg) as scope:
+                with enter_phase(system, registry=reg) as sys_scope:
+                    with enter_phase(agent_session, registry=reg) as scope:
                         cfg = scope.get_singleton(NodeConfig)
                         alias_mgr = scope.get_singleton(AliasManager)
 
@@ -1061,14 +1062,14 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         """CUJ: Resolving star_deps with diamond graphs, invalid JSON, silent_deps, and manifest-less specs/other dependencies."""
 
         class MockCleanedNodesRoot(CleanedNodes, Singleton):
-            tier = "agent_session"
+            tier = agent_session
 
             @property
             def nodes(self) -> Sequence[Node]:
                 return (Node(unit_address="//pkg:root"),)
 
         class MockManifestLoader(BazelManifestLoader, Singleton):
-            tier = "agent_session"
+            tier = agent_session
 
             def get_manifest(self, node: Node) -> Optional[Manifest]:
                 if node.unit_address == "//pkg:root":
@@ -1130,7 +1131,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 return []
 
         class MockNodeIdentifierUtility(BazelTarget, Singleton):
-            tier = "agent_session"
+            tier = agent_session
 
             def normalize(self, raw_label: str) -> Node:
                 return Node(unit_address=raw_label)
@@ -1144,7 +1145,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         reg.register(MockManifestLoader, keys=[BazelManifestLoader])
         reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
 
-        with enter_phase("agent_session", registry=reg) as scope:
+        with enter_phase(agent_session, registry=reg) as scope:
             cfg = scope.get_singleton(NodeConfig)
 
             # Requirement: The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies and files present in read-write files.
@@ -1166,14 +1167,14 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         node_c = Node(unit_address="//pkg:node_c")
 
         class MockMultiCleanedNodes(CleanedNodes, Singleton):
-            tier = "agent_session"
+            tier = agent_session
 
             @property
             def nodes(self) -> Sequence[Node]:
                 return (node_a, node_b, node_c)
 
         class MockManifestLoader(BazelManifestLoader, Singleton):
-            tier = "agent_session"
+            tier = agent_session
 
             def get_manifest(self, node: Node) -> Optional[Manifest]:
                 if node.unit_address == "//pkg:node_a":
@@ -1214,7 +1215,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 return []
 
         class MockNodeIdentifierUtility(BazelTarget, Singleton):
-            tier = "agent_session"
+            tier = agent_session
 
             def normalize(self, raw_label: str) -> Node:
                 return Node(unit_address=raw_label)
@@ -1223,7 +1224,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 return _make_node_directory("pkg")
 
         class MockAgentConfig(AgentConfig, Singleton):
-            tier = "system"
+            tier = system
 
             @property
             def is_step_mode(self) -> bool:
@@ -1248,8 +1249,8 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
         reg.register(MockAgentConfig, keys=[AgentConfig])
 
-        with enter_phase("system", registry=reg) as sys_scope:
-            with enter_phase("agent_session", registry=reg) as scope:
+        with enter_phase(system, registry=reg) as sys_scope:
+            with enter_phase(agent_session, registry=reg) as scope:
                 cfg = scope.get_singleton(NodeConfig)
                 alias_mgr = scope.get_singleton(AliasManager)
 
@@ -1313,9 +1314,9 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         reg.register_singleton(
             AliasManagerImpl,
             keys=[AliasManager],
-            tier="agent_session",
+            tier=agent_session,
         )
-        with enter_phase("agent_session", registry=reg) as scope:
+        with enter_phase(agent_session, registry=reg) as scope:
             alias_mgr = scope.get_singleton(AliasManager)
             assert isinstance(alias_mgr, AliasManagerImpl)
             self.assertEqual(len(alias_mgr._aliases), 0)

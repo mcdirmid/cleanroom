@@ -52,7 +52,7 @@ flowchart TD
 
 1. **Coordinator Sub-Agent**:
    - Long-lived agent scoped to the overall DAG cleaning session.
-   - Equipped with `cleanroom_coordinator_mcp` and Antigravity subagent management tools (`invoke_subagent`, `manage_subagents`).
+   - Equipped with `cleanroom_coordinator_mcp` and Antigravity subagent management tools (`invoke_subagent`, `manage_subagents`, `send_message`).
    - Does *not* edit workspace files directly.
    - Requests the next dirty node or column in topological order from the MCP service, launches Worker Sub-Agents, receives completion summaries, and marks nodes complete.
 
@@ -62,10 +62,11 @@ flowchart TD
    - Equipped exclusively with **Native-Style Cleanroom MCP Tools** (`view_file`, `replace_file_content`, `write_to_file`, `list_dir`, `run_checks`, `submit`, `blame`).
    - Operates in a **clean, isolated conversation context**. When it calls `submit` and terminates, its intermediate transcript (compiler errors, retry turns, thinking tokens) is closed and discarded.
 
-3. **Cleanroom MCP Server (`cleanroom_mcp_service.py`)**:
-   - Standalone Python service running over Stdio or HTTP.
+3. **Cleanroom MCP Server (`cleanroom_mcp_service.py` / `bazel_antigravity_mcp_asm`)**:
+   - Standalone Python service running over Stdio or HTTP, backed by Cleanroom's provider-agnostic subsystem assemblies (`bazel_asm`, `dag_asm`, `sandbox_asm`).
    - Reads Bazel target manifests (`*_manifest.json`), resolves dependency graphs, and tracks in-memory session state.
-   - Executes deterministic Cleanroom invariants in-process: role blindness validation, direct in-place file editing, diff tracking, and hermetic Bazel verification gating.
+   - Executes deterministic Cleanroom invariants in-process: role blindness validation, direct in-place file editing with locking, diff tracking, and hermetic Bazel verification gating.
+   - Completely independent of OpenAI drivers (`parts/openai`), conversation history formatting (`loop_conversation`), and the unattended in-process loop runner (`bazel_loop_impl`, `bazel_openai_loop_asm`). In the Antigravity integration, Antigravity itself drives the agent reasoning and turn loops.
 
 ---
 
@@ -117,16 +118,16 @@ The MCP service exposes two distinct tool interfaces:
 
 To eliminate cognitive friction and prompt-syntax hallucinations, tools exposed to worker sub-agents match the exact names, argument conventions, and behaviors of Antigravity's native tools:
 
-| Tool Name | Parameters | Return Schema | Description & Confinement Enforcement |
-| :--- | :--- | :--- | :--- |
-| `view_file` | `AbsolutePath: string, StartLine?: int, EndLine?: int, ContentOffset?: int` | `FileContent` | Reads file lines with 1-indexed line numbers. Enforces Cleanroom Blindness in-process (e.g., denies `lib/` access to Test authors, denies `tests/` access to Lib authors). |
-| `replace_file_content` | `TargetFile: string, TargetContent: string, ReplacementContent: string, StartLine?: int, EndLine?: int, AllowMultiple?: bool, Instruction?: string, Description?: string` | `EditResult` | Drops replacement content into target file. Validates in-process that `TargetFile` is the declared output file for the active unit/role. |
-| `write_to_file` | `TargetFile: string, CodeContent: string, Overwrite?: bool, Description?: string` | `WriteResult` | Creates or overwrites files. Enforces write confinement in-process, preventing modification to specs or undeclared files. |
-| `list_dir` | `DirectoryPath: string` | `DirListing` | Lists directory contents. Redacts or flags blinded directories based on the subagent's role. |
-| `run_checks` | `TargetUnit?: string` | `CheckResult` | Runs hermetic verification target (`lint`, `type_check`, unit test) via Bazel on the host. Tracks pass/fail status in memory. Replaces unconstrained shell access (`run_command`). |
-| `submit` | `TargetUnit: string, ChangeMessage: string` | `SubmitResult` | Gated by `run_checks` passing. Validates change message, commits changes to DAG storage, and notifies QA Arbiter or Coordinator. |
-| `blame` | `BlameTarget: string, Diagnostics: string` | `BlameOutcome` | Attributes defect to an upstream unit or role and notifies the responsible agent or coordinator. |
-| `advance_step` | *none* *(Stepped Mode only)* | `MilestoneResponse` | Used in single-unit step mode: advances to the next guide milestone after verification passes. |
+| Tool Name | Parameters | Return Schema | Description & Confinement Enforcement | Cleanroom Internal Mapping |
+| :--- | :--- | :--- | :--- | :--- |
+| `view_file` | `AbsolutePath: string, StartLine?: int, EndLine?: int, ContentOffset?: int` | `FileContent` | Reads file lines with 1-indexed line numbers. Enforces Cleanroom Blindness in-process (e.g., denies `lib/` access to Test authors, denies `tests/` access to Lib authors). | `sandbox_file_reader_impl` (`ReadManager`, checks bound/unbound files and blindness). |
+| `replace_file_content` | `TargetFile: string, TargetContent: string, ReplacementContent: string, StartLine?: int, EndLine?: int, AllowMultiple?: bool, Instruction?: string, Description?: string` | `EditResult` | Drops replacement content into target file. Validates in-process that `TargetFile` is the declared output file for the active unit/role. | `sandbox_file_editor_impl` (`EditManager`, verifies `locked_files` status and replaces text). |
+| `write_to_file` | `TargetFile: string, CodeContent: string, Overwrite?: bool, Description?: string` | `WriteResult` | Creates or overwrites files. Enforces write confinement in-process, preventing modification to specs or undeclared files. | `sandbox_file_editor_impl` (`EditManager`, validates against declared `read_write_files`). |
+| `list_dir` | `DirectoryPath: string` | `DirListing` | Lists directory contents. Redacts or flags blinded directories based on the subagent's role. | `file_paths_impl` & `alias_manager` (resolves paths within workspace root). |
+| `run_checks` | `TargetUnit?: string` | `CheckResult` | Runs hermetic verification target (`lint`, `type_check`, unit test) via Bazel on the host. Tracks pass/fail status in memory. Replaces unconstrained shell access (`run_command`). | `sandbox_run_control_impl` (`RunController.check_file`, evaluates and caches verification checks). |
+| `submit` | `TargetUnit: string, ChangeMessage: string` | `SubmitResult` | Gated by `run_checks` passing. Validates change message, commits changes to DAG storage, and notifies QA Arbiter or Coordinator. | `sandbox_run_control_impl` (`RunController.submit`, locks targets via `lock_node_files`). |
+| `blame` | `BlameTarget: string, Diagnostics: string` | `BlameOutcome` | Attributes defect to an upstream unit or role and notifies the responsible agent or coordinator. | `sandbox_run_control_impl` (`RunController.blame`, routes feedback to upstream node). |
+| `advance_step` | *none* *(Stepped Mode only)* | `MilestoneResponse` | Used in single-unit step mode: advances to the next guide milestone after verification passes. | `sandbox_run_control_impl` (`RunController.advance` & `sandbox_guide_delivery_impl`). |
 
 ---
 
@@ -786,6 +787,17 @@ The foundation for the 2D Product DAG and Role-Based Antigravity Integration is 
   - In the current single-session agent loop, locked targets remain immutable for the remainder of the session.
   - For the Antigravity integration, `EditManager.unlock_file` provides the foundation for reactive message-driven workflows: when a QA Arbiter or reviewer dispatches reactive feedback or change messages via `send_message`, the coordinator selectively unlocks the target files, allowing the assigned worker sub-agent to resume iterative refinement.
 
+### M. Subsystem Assembly Decoupling & Modular Runtime Architecture
+* **Decoupling `bazel_asm` from Loop and Model Drivers**:
+  - Renamed `bazel_impl` to `bazel_loop_impl` (specialized in coordinating in-process loop passes via `loop_cleaner` and `loop_node_cleaner`).
+  - Renamed `bazel_model_config_impl` to `bazel_openai_config_impl` (specialized in binding OpenAI parameters from `model_config` targets and environment credentials).
+  - Decoupled both from `bazel_asm`: `bazel_asm` is now a pure, provider-agnostic Bazel workspace assembly comprising `bazel_manifest_loader_impl`, `bazel_node_config_impl`, `bazel_storage_impl`, `bazel_target_impl`, and `file_paths_impl`.
+* **Dedicated OpenAI System Assembly (`bazel_openai_loop_asm`)**:
+  - Renamed `bazel_with_loop_asm` to `bazel_openai_loop_asm` in `parts/systems`, isolating the standalone, unattended OpenAI loop runner and its execution targets.
+  - Updated all launcher macros in `update_with_ai.bzl`.
+* **Enabling Antigravity MCP Service Architecture**:
+  - This decoupling allows an Antigravity MCP assembly (or standalone service daemon) to directly assemble and reuse Cleanroom's core assemblies—`bazel_asm` (workspace manifests, storage, targets, paths), `dag_asm` (topological sorting, ready batch calculation), and `sandbox_asm` (guarded file I/O, diffs, locking, hermetic verification)—without linking or initializing `parts/openai`, `bazel_loop_impl`, or the unneeded in-process LLM turn loop.
+
 ---
 
 ## 20. Remaining Work & Implementation Roadmap (Next Steps)
@@ -811,22 +823,22 @@ flowchart TD
   - Emit package-level multi-unit manifests specifying the topological sequence of units for that role column.
 
 ### Milestone 2: Cleanroom Standalone MCP Service (`update_with_ai/support/mcp`)
-* **Objective**: Implement the standalone Python Model Context Protocol service that bridges Antigravity sub-agents to Cleanroom's runtime using native tool parity.
+* **Objective**: Implement the standalone Python Model Context Protocol service that bridges Antigravity sub-agents to Cleanroom's runtime using native tool parity, backed directly by `bazel_asm`, `dag_asm`, and `sandbox_asm`.
 * **Toolsets to Implement**:
   - **Coordinator Interface**:
-    - `get_dag_plan(root_target: str) -> List[NodePlan]`: Returns topological sequence of dirty units and roles.
-    - `prepare_node(unit: str, role: str) -> NodeContext`: Returns prompt, guidance, and verification commands.
+    - `get_dag_plan(root_target: str) -> List[NodePlan]`: Uses `BazelManifestLoader` and `DagSubgraph` to return the topological sequence of dirty units and roles.
+    - `prepare_node(unit: str, role: str) -> NodeContext`: Returns prompt, guidance, and verification commands from `AgentStorage`.
     - `prepare_column(package: str, role: str) -> ColumnContext`: Returns multi-unit batch sequence, role preamble, and grounding specifications.
-    - `mark_node_completed(unit: str, role: str, outcome: str) -> Ack`: Updates Cleanroom DAG storage ledger.
+    - `mark_node_completed(unit: str, role: str, outcome: str) -> Ack`: Updates Cleanroom `DagStorage` ledger and delivers change messages.
   - **Worker Interface (Native Tool Parity - Section 4B & 10)**:
-    - `view_file(AbsolutePath: str, StartLine?: int, EndLine?: int, ContentOffset?: int) -> FileContent`: Reads lines with 1-indexed numbers.
-    - `replace_file_content(TargetFile: str, TargetContent: str, ReplacementContent: str, ...) -> EditResult`: Drops replacement chunks into target files.
-    - `write_to_file(TargetFile: str, CodeContent: str, Overwrite?: bool, Description?: str) -> WriteResult`: Writes or creates files.
+    - `view_file(AbsolutePath: str, StartLine?: int, EndLine?: int, ContentOffset?: int) -> FileContent`: Reads lines with 1-indexed numbers via `sandbox_file_reader_impl`.
+    - `replace_file_content(TargetFile: str, TargetContent: str, ReplacementContent: str, ...) -> EditResult`: Drops replacement chunks into target files via `sandbox_file_editor_impl`.
+    - `write_to_file(TargetFile: str, CodeContent: str, Overwrite?: bool, Description?: str) -> WriteResult`: Writes or creates files via `sandbox_file_editor_impl`.
     - `list_dir(DirectoryPath: str) -> DirListing`: Lists files and subdirectories.
-    - `run_checks(TargetUnit?: str) -> CheckResult`: Executes hermetic Bazel verification commands.
-    - `submit(TargetUnit: str, ChangeMessage: str) -> SubmitResult`: Validates `run_checks` passed, records submission, and signals QA Arbiter.
-    - `blame(BlameTarget: str, Diagnostics: str) -> BlameOutcome`: Attributes defects to upstream units or roles.
-    - `advance_step() -> MilestoneResponse`: Advances guide milestone in single-unit stepped mode.
+    - `run_checks(TargetUnit?: str) -> CheckResult`: Executes hermetic Bazel verification commands via `sandbox_run_control_impl` (`check_file`).
+    - `submit(TargetUnit: str, ChangeMessage: str) -> SubmitResult`: Validates `run_checks` passed, records submission, locks target files, and signals QA Arbiter.
+    - `blame(BlameTarget: str, Diagnostics: str) -> BlameOutcome`: Attributes defects to upstream units or roles via `sandbox_run_control_impl`.
+    - `advance_step() -> MilestoneResponse`: Advances guide milestone in single-unit stepped mode via `sandbox_run_control_impl` (`advance`).
 * **Bazel Entry Target**: Add `bazel run //update_with_ai:serve_mcp` to launch the Stdio/HTTP MCP daemon.
 
 ### Milestone 3: Antigravity Sub-Agent Type Registrations
@@ -858,3 +870,43 @@ flowchart TD
   - Launch Cleanroom MCP service as a registered IDE tool server.
   - Launch `cleanroom_coordinator` in Antigravity chat to orchestrate subsystem cleaning sessions autonomously under personal Google One Ultra quota.
   - Monitor token consumption, turn count, and subagent handoffs.
+
+---
+
+## 21. Refactoring Assessment Prior to Antigravity Implementation
+
+A crucial question before proceeding to implementation is: **Do we need to perform any further refactoring in `update_with_ai` or `update_python_with_ai` before starting to implement the Antigravity integration?**
+
+### A. Architectural Readiness Analysis
+
+| Architectural Dimension | Current State | Requirement for Antigravity | Assessment |
+| :--- | :--- | :--- | :--- |
+| **Workspace & Storage Core** | `bazel_asm` is pure infrastructure (`bazel_manifest_loader_impl`, `bazel_node_config_impl`, `bazel_storage_impl`, `bazel_target_impl`, `file_paths_impl`). | Independent manifest parsing, graph storage, label resolution, file alias management. | **Ready**: Zero coupling to loop or model providers. |
+| **DAG Scheduling & Topological Sorting** | `dag_asm` (`dag_subgraph_impl`) resolves dependency-first subgraphs and calculates ready batches. | DAG plan generation (`get_dag_plan`) for Antigravity Coordinator. | **Ready**: Can be queried directly by the MCP coordinator service. |
+| **Sandbox & Policy Enforcement** | `sandbox_asm` provides guarded file reading (`sandbox_file_reader_impl`), contiguous string replacement (`sandbox_file_editor_impl`), file locking (`locked_files`), hermetic verification execution (`sandbox_run_control_impl`), and guide delivery. | In-process confinement, blindness enforcement, and native-parity tool execution for Antigravity Worker sub-agents. | **Ready**: All confinement, locking, and verification mechanisms are implemented and validated. |
+| **Model Driver Isolation** | `parts/openai` and `bazel_loop_impl` are isolated inside `bazel_openai_loop_asm`. | Antigravity runs externally in the IDE using Gemini via Google One Ultra; no in-process OpenAI driver needed. | **Ready**: Clean separation allows MCP daemon to run without `openai`. |
+| **2D Product DAG & Manifests** | `define_unit`, `define_role`, `define_node`, pass-through roles, and synthesized 2D manifests are in production. | Role-based subagents processing multi-unit columns topologically. | **Ready**: 100% test pass rate across all workspace tests. |
+
+### B. Examination of Non-Blocking Architectural Details
+
+1. **`loop_node_cleaner.CleanedNodes` Dependency**:
+   - `bazel_node_config_impl` imports `CleanedNodes` from `parts/loop/lib/loop_node_cleaner` to identify which nodes are being cleaned in the active `agent_session`.
+   - *Impact*: `loop_node_cleaner` is a pure interface component with no runtime dependencies outside `dag_storage`. Importing it in `bazel_node_config_impl` or the MCP daemon introduces zero operational overhead or model coupling.
+   - *Action*: Moving `CleanedNodes` into `parts/agent` (e.g. `agent_node_config`) would be a purely aesthetic cleanup and is **not required** for Antigravity.
+
+2. **Configuration Interfaces (`agent_config`, `dag_config`)**:
+   - `bazel_openai_config_impl` currently implements `agent_config`, `dag_config`, and `openai_config` for the OpenAI loop runner.
+   - *Impact*: The Antigravity MCP service does not use `openai_config`. When initializing system singletons for the MCP service, it can provide a lightweight `mcp_config` singleton (or default `AgentConfig` and `DagConfig` instances) supplying parameters like `batch_size` and `is_step_mode`.
+   - *Action*: This is a new component for the Antigravity integration, not a refactoring of existing code.
+
+3. **Tool Parameter Translation Layer**:
+   - Cleanroom's internal tools use parameters like `path`, `target_content`, `start_line`, `target`, `change_summary`.
+   - Antigravity native tools use `AbsolutePath`, `TargetFile`, `Instruction`, `Description`, `TargetContent`, `ReplacementContent`, etc.
+   - *Impact*: The MCP server acts as the translation adapter, converting Antigravity's parameter schemas to Cleanroom's internal `ReadManager`, `EditManager`, and `RunController` method calls.
+   - *Action*: Belongs in the MCP server implementation (Milestone 2), requiring no changes to internal sandbox tools.
+
+### C. Verdict
+
+**No further refactoring is required before starting the Antigravity implementation.** 
+The recent decoupling of `bazel_asm`, `bazel_loop_impl`, `bazel_openai_config_impl`, and `bazel_openai_loop_asm` has established the exact structural boundaries needed. The codebase is fully prepared for implementing Milestone 1 (package-level aggregation targets) and Milestone 2 (the standalone Cleanroom MCP service).
+

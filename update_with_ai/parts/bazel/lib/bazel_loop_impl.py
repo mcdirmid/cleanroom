@@ -11,6 +11,7 @@ from support.lib.lifecycle import (
     Singleton,
     get_default_registry,
     get_singleton,
+    system,
 )
 
 
@@ -21,7 +22,7 @@ def _format_node(node: dag_storage.Node) -> str:
 
 
 class Loop(loop.Loop, Singleton):
-    tier = "system"
+    tier = system
 
     def __init__(self) -> None:
         pass
@@ -127,5 +128,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         Loop,
         keys=[Loop, loop.Loop],
-        tier="system",
+        tier=system,
     )

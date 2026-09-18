@@ -1,11 +1,12 @@
 from typing import Any, Optional, Tuple, Union
 from . import loop_guard
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.sandbox.lib import tool_provider
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
 
 
 class LoopGuard(loop_guard.LoopGuard, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self._last_call: Optional[Tuple[str, Any]] = None
@@ -51,5 +52,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         LoopGuard,
         keys=[LoopGuard, loop_guard.LoopGuard],
-        tier="agent_session",
+        tier=agent_session,
     )

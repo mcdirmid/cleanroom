@@ -82,6 +82,7 @@ FRAMEWORK_SYMBOLS = {
     "variant",
     "operation",
     "override",
+    "LifecycleTier",
 }
 DATACLASS_SYMBOLS = {"dataclass"}
 
@@ -335,6 +336,8 @@ class SpecLintVisitor(ast.NodeVisitor):
                 and stmt.name in ("__initialize__", "_initialize_")
                 and str(self.filename).endswith("_asm.pyi")
             ):
+                continue
+            elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
                 continue
             else:
                 self.add_error(

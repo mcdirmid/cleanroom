@@ -9,11 +9,12 @@ from support.lib.lifecycle import (
     Singleton,
     get_default_registry,
     get_singleton,
+    system,
 )
 
 
 class AgentStorage(agent_storage.AgentStorage, Singleton):
-    tier = "system"
+    tier = system
 
     def __init__(self) -> None:
         self._definitions: Dict[dag_storage.Node, agent_storage.NodeDefinition] = {}
@@ -213,5 +214,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         AgentStorage,
         keys=[AgentStorage, agent_storage.AgentStorage, dag_storage.DagStorage],
-        tier="system",
+        tier=system,
     )

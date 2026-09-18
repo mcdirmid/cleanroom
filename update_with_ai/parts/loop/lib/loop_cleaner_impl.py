@@ -8,11 +8,12 @@ from support.lib.lifecycle import (
     Singleton,
     get_default_registry,
     get_singleton,
+    system,
 )
 
 
 class LoopCleaner(loop_cleaner.LoopCleaner, Singleton):
-    tier = "system"
+    tier = system
 
     def __init__(self) -> None:
         pass
@@ -46,5 +47,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         LoopCleaner,
         keys=[LoopCleaner, loop_cleaner.LoopCleaner],
-        tier="system",
+        tier=system,
     )

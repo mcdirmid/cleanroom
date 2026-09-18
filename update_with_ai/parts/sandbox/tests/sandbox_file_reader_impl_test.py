@@ -7,6 +7,8 @@ import unittest
 from typing import Any, Mapping, Optional, Set, Tuple
 
 from update_with_ai.parts.dag.lib.dag_storage import Node
+from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.agent.lib.agent_file_alias import (
     AliasManager,
     BoundFile,
@@ -19,7 +21,6 @@ from update_with_ai.parts.agent.lib.agent_file_alias import (
     UnboundFile,
     WorkspacePath,
 )
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from update_with_ai.parts.agent.lib.agent_node_config import Guide, NodeConfig
 from update_with_ai.parts.sandbox.lib.template_format import TemplateFormatter
 from update_with_ai.parts.sandbox.lib.sandbox_file_editor import EditManager
@@ -50,7 +51,7 @@ from update_with_ai.parts.sandbox.lib.tool_provider import (
 
 
 class MockToolManager:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self.installed_tools: Set[Tool] = set()
@@ -65,7 +66,7 @@ class MockToolManager:
 
 
 class MockEditManager:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self.last_read_or_edited_file: Optional[FileAlias] = None
@@ -78,7 +79,7 @@ class MockEditManager:
 
 
 class MockBooleanConverter:
-    tier = "agent_session"
+    tier = agent_session
     actual_type = bool
     wire_type = None
 
@@ -99,7 +100,7 @@ def _make_workspace_path(path: str) -> WorkspacePath:
 
 
 class MockAliasManager:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self, workspace_root: str) -> None:
         self.workspace_root = _make_directory_path(workspace_root)
@@ -114,7 +115,7 @@ class MockAliasManager:
 
 
 class MockTemplateFormatter:
-    tier = "agent_session"
+    tier = agent_session
 
     def format_template(self, content: str, parameters: Mapping[str, Any]) -> str:
         res = content
@@ -124,7 +125,7 @@ class MockTemplateFormatter:
 
 
 class MockNodeConfig:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(
         self,
@@ -229,22 +230,22 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         )
 
         self.registry.register_instance(
-            self.tool_mgr, keys=[ToolManager], tier="agent_session"
+            self.tool_mgr, keys=[ToolManager], tier=agent_session
         )
         self.registry.register_instance(
-            self.bool_conv, keys=[BooleanParameterConverter], tier="agent_session"
+            self.bool_conv, keys=[BooleanParameterConverter], tier=agent_session
         )
         self.registry.register_instance(
-            self.alias_mgr, keys=[AliasManager], tier="agent_session"
+            self.alias_mgr, keys=[AliasManager], tier=agent_session
         )
         self.registry.register_instance(
-            self.node_cfg, keys=[NodeConfig], tier="agent_session"
+            self.node_cfg, keys=[NodeConfig], tier=agent_session
         )
         self.registry.register_instance(
-            self.template_formatter, keys=[TemplateFormatter], tier="agent_session"
+            self.template_formatter, keys=[TemplateFormatter], tier=agent_session
         )
         self.registry.register_instance(
-            self.edit_mgr, keys=[EditManager], tier="agent_session"
+            self.edit_mgr, keys=[EditManager], tier=agent_session
         )
 
     def tearDown(self) -> None:
@@ -259,7 +260,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
 
     def test_read_manager_initialization_and_properties(self) -> None:
         """CUJ: ReadManager installs tools and exposes declared files from NodeConfig."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             read_mgr = scope.get_singleton(ReadManager)
             # Requirement: The read manager unconditionally installs the view file tool into the tool manager and never installs the search tool.
             # Requirement: [ReadManager] The read manager installs the view file tool and search tool.
@@ -280,7 +281,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
 
     def test_view_file_tool_execution_and_formatting(self) -> None:
         """CUJ: Formatting with right-aligned line numbers and suppression keys."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             view_tool = scope.get_singleton(ViewFileTool)
             self.assertEqual(view_tool.name, "view_file")
             self.assertIsInstance(view_tool.description, str)
@@ -320,7 +321,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
 
     def test_read_tool_unbound_files(self) -> None:
         """CUJ: Handling unbound file requests (guide vs unknown files)."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             view_tool = scope.get_singleton(ViewFileTool)
 
             # Unbound matching guide file -> fails
@@ -407,7 +408,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             owning_node=node,
         )
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             view_tool = scope.get_singleton(ViewFileTool)
 
             # Requirement: When the target file does not exist on disk, view file tool execution treats a read-write file as having empty content, and fails with a response guiding agent recovery when inspecting a missing read-only file.
@@ -430,7 +431,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
 
     def test_read_tool_filters_meta_notes_in_markdown(self) -> None:
         """CUJ: Filtering > META: paragraphs when reading markdown files."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             view_tool = scope.get_singleton(ViewFileTool)
             b = ActualParameterBindings(
                 bindings={(view_tool.path_parameter, self.ro_md_file)}
@@ -448,7 +449,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
 
     def test_search_tool_reporting_and_invalid_pattern(self) -> None:
         """CUJ: Searching regex across files and handling invalid regex."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             search_tool = scope.get_singleton(SearchTool)
             # Requirement: The search tool is named `search_files`.
             self.assertEqual(search_tool.name, "search_files")
@@ -485,7 +486,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
 
     def test_view_file_records_read_in_edit_manager(self) -> None:
         """CUJ: ViewFileTool records read file in EditManager upon successful execution."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             view_tool = scope.get_singleton(ViewFileTool)
             b = ActualParameterBindings(
                 bindings={(view_tool.path_parameter, self.rw_file)}

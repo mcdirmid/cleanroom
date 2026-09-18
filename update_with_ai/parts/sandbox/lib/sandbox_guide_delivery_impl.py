@@ -1,4 +1,5 @@
 from typing import List, Optional
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.agent.lib import agent_file_alias
 from update_with_ai.parts.agent.lib import agent_node_config
 from . import sandbox_guide_delivery
@@ -12,7 +13,7 @@ from support.lib.lifecycle import (
 
 
 class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self._guide: Optional[agent_node_config.Guide] = None
@@ -155,5 +156,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         GuideDelivery,
         keys=[GuideDelivery, sandbox_guide_delivery.GuideDelivery],
-        tier="agent_session",
+        tier=agent_session,
     )

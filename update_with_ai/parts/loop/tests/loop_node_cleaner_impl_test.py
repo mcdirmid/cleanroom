@@ -36,7 +36,13 @@ from update_with_ai.parts.agent.lib.agent_file_alias import (
     UnboundFile,
     WorkspacePath,
 )
-from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    enter_phase,
+    get_singleton,
+    system,
+)
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.agent.lib.agent_node_config import NodeConfig
 from update_with_ai.parts.sandbox.lib.sandbox import Sandbox, StartupToolExecution
 from update_with_ai.parts.sandbox.lib.template_format import TemplateFormatter
@@ -53,7 +59,7 @@ def _make_workspace_path(path: str) -> WorkspacePath:
 
 
 class MockTemplateFormatter:
-    tier = "agent_session"
+    tier = agent_session
 
     def format_template(self, content: str, parameters: dict) -> str:
         lines = content.splitlines()
@@ -105,7 +111,7 @@ class MockTemplateFormatter:
 
 
 class MockStorage:
-    tier = "system"
+    tier = system
 
     def __init__(self) -> None:
         self.definitions: dict[Node, NodeDefinition] = {}
@@ -146,7 +152,7 @@ class MockStorage:
 
 
 class MockSandbox:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self.has_modifications = False
@@ -161,7 +167,7 @@ class MockSandbox:
 
 
 class MockHistory:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self._messages: List[Message] = []
@@ -200,7 +206,7 @@ class MockHistory:
 
 
 class MockRunner:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self.outcome: AgentOutcome = AgentOutcome(
@@ -219,7 +225,7 @@ class MockRunner:
 
 
 class MockNodeConfig:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(
         self,
@@ -264,27 +270,27 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         self.formatter = MockTemplateFormatter()
 
         self.registry.register_instance(
-            self.storage, keys=[AgentStorage], tier="system"
+            self.storage, keys=[AgentStorage], tier=system
         )
         self.registry.register_instance(
-            self.sandbox, keys=[Sandbox], tier="agent_session"
+            self.sandbox, keys=[Sandbox], tier=agent_session
         )
         self.registry.register_instance(
-            self.history, keys=[Conversation], tier="agent_session"
+            self.history, keys=[Conversation], tier=agent_session
         )
         self.registry.register_instance(
-            self.runner, keys=[AgentDriver], tier="agent_session"
+            self.runner, keys=[AgentDriver], tier=agent_session
         )
         self.registry.register_instance(
-            self.node_cfg, keys=[NodeConfig], tier="agent_session"
+            self.node_cfg, keys=[NodeConfig], tier=agent_session
         )
         self.registry.register_instance(
-            self.formatter, keys=[TemplateFormatter], tier="agent_session"
+            self.formatter, keys=[TemplateFormatter], tier=agent_session
         )
 
     def test_cleaned_node_lifecycle(self) -> None:
         """CUJ: CleanedNodes holds and exposes target nodes in the session tier."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             cleaned_nodes = scope.get_singleton(CleanedNodes)
             with self.assertRaises(RuntimeError):
                 _ = cleaned_nodes.nodes
@@ -325,7 +331,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         )
         self.sandbox.startup_executions.append(startup_exec)
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the cleaned nodes present the nodes currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
             msgs = cleaner.clean_nodes([node])
@@ -374,7 +380,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         }
         self.node_cfg.is_step_mode = True
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: Incoming feedback and change messages are formatted per target node identified by its file alias, prefaced with directives to fix read-write target files based on the feedback.
             _ = cleaner.clean_nodes([node])
@@ -408,7 +414,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             conversation=self.history,
         )
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: Resolving dirty nodes produces change messages for downstream dependent nodes when the outcome signals successful advancement with workspace file modifications, and no change messages or change summaries when no workspace files were modified.
             msgs = cleaner.clean_nodes([node])
@@ -432,7 +438,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             conversation=self.history,
         )
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: Resolving dirty nodes produces feedback messages containing the blame explanation and addressed to the blamed dependency node owning the blamed file when the outcome signals blame attributed to that dependency node.
             msgs = cleaner.clean_nodes([node])
@@ -566,7 +572,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             conversation=self.history,
         )
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             msgs = cleaner.clean_nodes([node])
 
@@ -585,7 +591,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             conversation=self.history,
         )
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: Resolving dirty nodes produces no propagating messages when the outcome signals run failure, leaving the nodes dirty and communicating that processing cannot continue.
             msgs = cleaner.clean_nodes([node])
@@ -607,7 +613,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         )
         self.runner.error = RuntimeError("Agent failed: unrecoverable tool error")
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the cleaned nodes present the nodes currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
             with self.assertRaises(RuntimeError) as ctx:
@@ -622,7 +628,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         )
         self.storage.messages[node] = {Change(content="Upstream library updated")}
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: When dirty nodes define no task prompt, cleaning resolves the nodes without establishing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
             msgs = cleaner.clean_nodes([node])
@@ -638,7 +644,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         node = Node(unit_address="//pkg:promptless_no_change")
         self.storage.messages[node] = {Feedback(content="Defect notice")}
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: When dirty nodes define no task prompt, cleaning resolves the nodes without establishing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
             msgs = cleaner.clean_nodes([node])
@@ -653,7 +659,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         self.storage.dependents[node] = {dependent}
         self.storage.messages[node] = {Change(content="lib updated")}
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: [NodeCleaner] Cleaning dirty nodes communicates whether processing should continue.
             cont = cleaner.clean([node])
@@ -674,7 +680,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             Dependency(node=dep_silent, is_silent=True),
         }
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: Cleaning dirty nodes registers the nodes as dependents to their non-silent dependencies in graph storage, delivering resulting change messages to downstream dependents and feedback messages to their addressed dependency node.
             cont = cleaner.clean([node])
@@ -695,7 +701,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         self.storage.messages[node] = {Feedback()}
         self.sandbox.has_modifications = True
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: [NodeCleaner] Cleaning dirty nodes communicates whether processing should continue.
             cont = cleaner.clean([node])
@@ -728,7 +734,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             conversation=self.history,
         )
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: Resolving dirty nodes produces change messages for downstream dependent nodes when the outcome signals successful advancement with workspace file modifications, and no change messages or change summaries when no workspace files were modified.
             # Requirement: [NodeCleaner] Cleaning dirty nodes communicates whether processing should continue.
@@ -760,7 +766,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             conversation=self.history,
         )
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: Cleaning dirty nodes registers the nodes as dependents to their non-silent dependencies in graph storage, delivering resulting change messages to downstream dependents and feedback messages to their addressed dependency node.
             cont = cleaner.clean([node])
@@ -782,7 +788,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         self.node_cfg.guide_file = UnboundFile(relative_path="guide.md")
         self.node_cfg.is_step_mode = True
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: Task prompt instructions for a guided node include directing the agent to call advance without arguments to view each guide step and omit a change summary until all guide steps are complete when guide step mode is active.
             _ = cleaner.clean_nodes([node])
@@ -805,7 +811,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         self.node_cfg.guide_file = UnboundFile(relative_path="my_guide.md")
         self.node_cfg.is_step_mode = False
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: Task prompt instructions for a guided node include identifying the guide file by its file alias and directing the agent to call the submit tool with a change summary describing modifications when complete, or call submit without arguments if no workspace files were modified, when guide step mode is inactive.
             _ = cleaner.clean_nodes([node])
@@ -834,7 +840,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         )
         self.node_cfg.guide_file = None
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             _ = cleaner.clean_nodes([node])
 
@@ -863,7 +869,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         )
         self.node_cfg.is_step_mode = False
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: Task prompt instructions for a guided node include identifying the guide file by its file alias and directing the agent to call the submit tool with a change summary describing modifications when complete, or call submit without arguments if no workspace files were modified, when guide step mode is inactive.
             _ = cleaner.clean_nodes([node])
@@ -889,7 +895,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             Feedback(content="Fix defect 1"),
         }
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: Incoming feedback and change messages are formatted per target node identified by its file alias, prefaced with directives to fix read-write target files based on the feedback.
             # Requirement: Task prompt instructions for a guided node include identifying the guide file by its file alias and directing the agent to call the submit tool with a change summary describing modifications when complete, or call submit without arguments if no workspace files were modified, when guide step mode is inactive.
@@ -933,7 +939,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
 
         self.runner.run = run_with_retry
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the cleaned nodes present the nodes currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
             msgs = cleaner.clean_nodes([node])
@@ -949,7 +955,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         )
         self.runner.error = RuntimeError("Persistent session failure")
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the cleaned nodes present the nodes currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
             with self.assertRaises(RuntimeError):
@@ -978,7 +984,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         }
         self.storage.messages[node2] = {Feedback(content="defect in unit 2")}
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: When cleaning multiple nodes, the task prompt enumerates each target file identified by its file alias alongside its task prompt.
             # Requirement: The task prompt is formatted using the template formatter.
@@ -1024,7 +1030,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         self.storage.dependents[node2] = {dep2}
         self.sandbox.has_modifications = True
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: Cleaning dirty nodes registers the nodes as dependents to their non-silent dependencies in graph storage, delivering resulting change messages to downstream dependents and feedback messages to their addressed dependency node.
             # Requirement: [NodeCleaner] Cleaning dirty nodes communicates whether processing should continue.
@@ -1053,7 +1059,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             conversation=self.history,
         )
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: Resolving dirty nodes produces no propagating messages when the outcome signals run failure, leaving the nodes dirty and communicating that processing cannot continue.
             # Requirement: [NodeCleaner] Processing cannot continue only if a failure occurs while cleaning the nodes that cannot be handled by cleaning any other node.
@@ -1070,7 +1076,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         self.storage.dependents[node1] = {dep1}
         self.storage.messages[node1] = {Change(content="lib updated")}
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: When dirty nodes define no task prompt, cleaning resolves the nodes without establishing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
             # Requirement: [NodeCleaner] Cleaning dirty nodes communicates whether processing should continue.
@@ -1088,7 +1094,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             node=node, task_prompt=TaskPrompt("Prompt")
         )
 
-        with enter_phase("system", registry=self.registry) as scope:
+        with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             cleaner.clean_nodes = lambda nodes: {
                 Feedback(content="generic feedback", target=None)

@@ -172,7 +172,10 @@ def generate_lib_skeleton(pyi_path: str, stem: str) -> str:
         lines.append("from dataclasses import dataclass")
     if is_impl:
         lines.append(
-            "from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton"
+            "from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton, system"
+        )
+        lines.append(
+            "from update_with_ai.parts.agent.lib.agent_session import agent_session"
         )
 
     dep_imports: list[str] = []
@@ -384,7 +387,7 @@ def generate_lib_skeleton(pyi_path: str, stem: str) -> str:
                 lines.append("")
             elif is_impl:
                 lines.append(f"class {cls_name}{bases_formatted}:")
-                lines.append(f'    tier = "{tier_val}"')
+                lines.append(f"    tier = {tier_val}")
                 lines.append("")
                 has_custom_init = any(
                     isinstance(item, ast.FunctionDef) and item.name == "__init__"
@@ -435,7 +438,7 @@ def generate_lib_skeleton(pyi_path: str, stem: str) -> str:
             lines.append("    reg.register_singleton(")
             lines.append(f"        {cls_name},")
             lines.append(f"        keys=[{keys_formatted}],")
-            lines.append(f'        tier="{tier_val}",')
+            lines.append(f"        tier={tier_val},")
             lines.append("    )")
         lines.append("")
         lines.append("_initialize_ = __initialize__")

@@ -15,10 +15,11 @@ from support.lib.lifecycle import (
     get_default_registry,
     get_singleton,
 )
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 
 
 class RunController(sandbox_run_control.RunController, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self._cached_passed: Optional[bool] = None
@@ -341,7 +342,7 @@ class RunController(sandbox_run_control.RunController, Singleton):
 
 
 class AdvanceTool(sandbox_run_control.AdvanceTool, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self._is_first_call = True
@@ -446,7 +447,7 @@ class AdvanceTool(sandbox_run_control.AdvanceTool, Singleton):
 
 
 class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         pass
@@ -643,7 +644,7 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
 
 
 class FailTool(sandbox_run_control.FailTool, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         pass
@@ -753,7 +754,7 @@ class FailTool(sandbox_run_control.FailTool, Singleton):
 
 
 class BlameTool(sandbox_run_control.BlameTool, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         pass
@@ -994,7 +995,7 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
 
 
 class CheckFileTool(sandbox_run_control.CheckFileTool, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self._last_tested_revision: Optional[int] = None
@@ -1224,12 +1225,12 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         RunController,
         keys=[RunController, sandbox_run_control.RunController],
-        tier="agent_session",
+        tier=agent_session,
     )
     reg.register_singleton(
         AdvanceTool,
         keys=[AdvanceTool, sandbox_run_control.AdvanceTool, tool_provider.Tool],
-        tier="agent_session",
+        tier=agent_session,
     )
     reg.register_singleton(
         SubmitTool,
@@ -1239,17 +1240,17 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
             sandbox_run_control.FinishTool,
             tool_provider.Tool,
         ],
-        tier="agent_session",
+        tier=agent_session,
     )
     reg.register_singleton(
         FailTool,
         keys=[FailTool, sandbox_run_control.FailTool, tool_provider.Tool],
-        tier="agent_session",
+        tier=agent_session,
     )
     reg.register_singleton(
         BlameTool,
         keys=[BlameTool, sandbox_run_control.BlameTool, tool_provider.Tool],
-        tier="agent_session",
+        tier=agent_session,
     )
     reg.register_singleton(
         CheckFileTool,
@@ -1259,5 +1260,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
             sandbox_run_control.RunTestsTool,
             tool_provider.Tool,
         ],
-        tier="agent_session",
+        tier=agent_session,
     )

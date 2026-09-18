@@ -1,6 +1,6 @@
 """Cleanroom Lifecycle Management Architecture.
 
-Provides hierarchically scoped lifecycle management ('system' and 'agent_session'),
+Provides hierarchically scoped lifecycle management rooted at 'system',
 zero-argument singleton instantiation, topological/recursive initialization with
 mutual dependency cycle detection, multi-protocol key aliasing, and Pyright static type safety.
 """
@@ -25,6 +25,8 @@ from typing import (
     runtime_checkable,
 )
 
+from dataclasses import dataclass
+
 T = TypeVar("T")
 
 
@@ -44,14 +46,60 @@ class LifecycleInitializationError(LifecycleError):
     """Raised when a mutual or circular dependency occurs during initialize()."""
 
 
+@dataclass(frozen=True)
+class LifecycleTier:
+    """Represents a hierarchical lifecycle tier within Cleanroom's architecture."""
+
+    name: str
+    parent: Optional[LifecycleTier] = None
+
+    def create_child(self, name: str) -> LifecycleTier:
+        """Creates a child lifecycle tier under this tier."""
+        child = LifecycleTier(name=name, parent=self)
+        _known_tiers[name] = child
+        return child
+
+    def is_descendant_of(self, other: LifecycleTier) -> bool:
+        """Checks if this tier is a descendant of another tier."""
+        curr: Optional[LifecycleTier] = self.parent
+        while curr is not None:
+            if curr == other:
+                return True
+            curr = curr.parent
+        return False
+
+    def __str__(self) -> str:
+        return self.name
+
+    def __repr__(self) -> str:
+        if self.parent is not None:
+            return f"<LifecycleTier {self.name} parent={self.parent.name}>"
+        return f"<LifecycleTier {self.name}>"
+
+
+system: LifecycleTier = LifecycleTier("system")
+_known_tiers: Dict[str, LifecycleTier] = {"system": system}
+
+
+def _resolve_tier(val: LifecycleTier | str) -> LifecycleTier:
+    if isinstance(val, LifecycleTier):
+        return val
+    if isinstance(val, str):
+        if val in _known_tiers:
+            return _known_tiers[val]
+        child = system.create_child(val)
+        return child
+    raise TypeError(f"Expected LifecycleTier or str, got {type(val).__name__}")
+
+
 class Singleton:
     """Base class for all singletons, combining tier declaration and lifecycle initialization."""
 
-    tier: str = "agent_session"
+    tier: LifecycleTier
 
-    def __init__(self, tier: Optional[str] = None) -> None:
+    def __init__(self, tier: Optional[LifecycleTier | str] = None) -> None:
         if tier is not None:
-            self.tier = tier
+            self.tier = _resolve_tier(tier)
 
     def initialize(self) -> None:
         """Initializes the singleton instance after zero-argument creation. Default is empty."""
@@ -74,25 +122,29 @@ class SingletonDescriptor:
         self,
         impl: Optional[type[Any]],
         keys: Sequence[type[Any]],
-        phase: str,
+        phase: LifecycleTier | str,
         instance: Optional[Any] = None,
     ) -> None:
         self.impl = impl
         self.keys = tuple(keys)
-        self.phase = phase
+        self.tier: LifecycleTier = _resolve_tier(phase)
+        self.phase: str = self.tier.name
         self.instance = instance
 
     def __repr__(self) -> str:
         name = self.impl.__name__ if self.impl is not None else repr(self.instance)
         key_names = [getattr(k, "__name__", str(k)) for k in self.keys]
-        return f"<SingletonDescriptor {name} keys={key_names} phase='{self.phase}'>"
+        return f"<SingletonDescriptor {name} keys={key_names} tier='{self.tier}'>"
 
 
 class LifecyclePrototype:
     """Blueprint for a lifecycle phase defining registered singleton implementations."""
 
-    def __init__(self, phase: str, parent: Optional[LifecyclePrototype] = None) -> None:
-        self.phase = phase
+    def __init__(
+        self, phase: LifecycleTier | str, parent: Optional[LifecyclePrototype] = None
+    ) -> None:
+        self.tier: LifecycleTier = _resolve_tier(phase)
+        self.phase: str = self.tier.name
         self.parent = parent
         self._descriptors: List[SingletonDescriptor] = []
         self._key_to_desc: Dict[type[Any], SingletonDescriptor] = {}
@@ -104,7 +156,7 @@ class LifecyclePrototype:
         keys: Sequence[type[Any]],
     ) -> SingletonDescriptor:
         """Registers an implementation class against all its keyed protocol types."""
-        desc = SingletonDescriptor(impl=impl, keys=keys, phase=self.phase)
+        desc = SingletonDescriptor(impl=impl, keys=keys, phase=self.tier)
         self._descriptors.append(desc)
         for k in keys:
             self._key_to_desc[k] = desc
@@ -120,7 +172,7 @@ class LifecyclePrototype:
     ) -> SingletonDescriptor:
         """Registers a pre-constructed instance against all its keyed protocol types."""
         desc = SingletonDescriptor(
-            impl=type(instance), keys=keys, phase=self.phase, instance=instance
+            impl=type(instance), keys=keys, phase=self.tier, instance=instance
         )
         self._descriptors.append(desc)
         for k in keys:
@@ -136,7 +188,9 @@ class LifecyclePrototype:
         """Sequence of all descriptors registered in this phase prototype."""
         return tuple(self._descriptors)
 
-    def create_child_prototype(self, phase: str) -> LifecyclePrototype:
+    def create_child_prototype(
+        self, phase: LifecycleTier | str
+    ) -> LifecyclePrototype:
         """Creates a child phase prototype inheriting from this prototype."""
         return LifecyclePrototype(phase=phase, parent=self)
 
@@ -146,27 +200,27 @@ class LifecycleRegistry:
 
     def __init__(self) -> None:
         self._prototypes: Dict[str, LifecyclePrototype] = {}
-        # Pre-create standard phase hierarchy
-        self._system_proto = LifecyclePrototype("system")
-        self._session_proto = LifecyclePrototype(
-            "agent_session", parent=self._system_proto
-        )
-        self._prototypes["system"] = self._system_proto
-        self._prototypes["agent_session"] = self._session_proto
+        # Pre-create system prototype
+        self._system_proto = LifecyclePrototype(system)
+        self._prototypes[system.name] = self._system_proto
 
-    def get_prototype(self, phase: str) -> LifecyclePrototype:
+    def get_prototype(self, phase: LifecycleTier | str) -> LifecyclePrototype:
         """Retrieves or creates the prototype for the specified phase."""
-        if phase not in self._prototypes:
-            proto = LifecyclePrototype(phase=phase, parent=self._system_proto)
-            self._prototypes[phase] = proto
-        return self._prototypes[phase]
+        t = _resolve_tier(phase)
+        if t.name not in self._prototypes:
+            parent_proto = (
+                self.get_prototype(t.parent) if t.parent is not None else None
+            )
+            proto = LifecyclePrototype(phase=t, parent=parent_proto)
+            self._prototypes[t.name] = proto
+        return self._prototypes[t.name]
 
     def register(
         self,
         impl: type[Any],
         *,
         keys: Sequence[type[Any]],
-        phase: str = "agent_session",
+        phase: LifecycleTier | str = system,
     ) -> SingletonDescriptor:
         """Registers a singleton implementation into the specified phase prototype."""
         proto = self.get_prototype(phase)
@@ -177,15 +231,28 @@ class LifecycleRegistry:
         impl: type[Any],
         *,
         keys: Sequence[type[Any]],
-        tier: Optional[str] = None,
+        tier: Optional[LifecycleTier | str] = None,
     ) -> SingletonDescriptor:
         """Registers a singleton implementation into its declared lifecycle tier."""
         declared_tier = getattr(impl, "tier", None)
-        final_tier = tier if tier is not None else (declared_tier or "agent_session")
-        if declared_tier is not None and tier is not None and declared_tier != tier:
+        resolved_declared = (
+            _resolve_tier(declared_tier) if declared_tier is not None else None
+        )
+        resolved_tier = _resolve_tier(tier) if tier is not None else None
+
+        if (
+            resolved_declared is not None
+            and resolved_tier is not None
+            and resolved_declared != resolved_tier
+        ):
             raise LifecycleError(
-                f"Class '{impl.__name__}' tier mismatch: declares tier='{declared_tier}' but registered with tier='{tier}'"
+                f"Class '{impl.__name__}' tier mismatch: declares tier='{resolved_declared.name}' but registered with tier='{resolved_tier.name}'"
             )
+        final_tier = (
+            resolved_tier
+            if resolved_tier is not None
+            else (resolved_declared or system)
+        )
         return self.register(impl, keys=keys, phase=final_tier)
 
     def register_instance(
@@ -193,11 +260,11 @@ class LifecycleRegistry:
         instance: Any,
         *,
         keys: Sequence[type[Any]],
-        phase: str = "agent_session",
-        tier: Optional[str] = None,
+        phase: Optional[LifecycleTier | str] = None,
+        tier: Optional[LifecycleTier | str] = None,
     ) -> SingletonDescriptor:
         """Registers a pre-constructed instance into the specified phase prototype."""
-        p = tier if tier is not None else phase
+        p = tier if tier is not None else (phase if phase is not None else system)
         proto = self.get_prototype(p)
         return proto.register_instance(instance, keys=keys)
 
@@ -269,11 +336,11 @@ def get_ambient_system_scope() -> LifecycleScope:
     """Returns the ambient system-tier lifecycle scope, lazily initialized."""
     global _ambient_system_scope
     if _ambient_system_scope is None:
-        _ambient_system_scope = LifecycleScope("system", registry=_global_registry)
+        _ambient_system_scope = LifecycleScope(system, registry=_global_registry)
     return _ambient_system_scope
 
 
-def _get_caller_singleton_tier() -> Optional[Tuple[str, str]]:
+def _get_caller_singleton_tier() -> Optional[Tuple[str, LifecycleTier]]:
     """Inspects the call stack to find if the calling frame belongs to a Singleton.
     Returns (caller_class_name, tier) or None.
     """
@@ -286,7 +353,7 @@ def _get_caller_singleton_tier() -> Optional[Tuple[str, str]]:
         if isinstance(caller_self, Singleton) or hasattr(caller_self, "tier"):
             tier = getattr(caller_self, "tier", None)
             if tier is not None:
-                return (type(caller_self).__name__, str(tier))
+                return (type(caller_self).__name__, _resolve_tier(tier))
         frame = frame.f_back
     return None
 
@@ -302,20 +369,22 @@ def get_singleton(key: type[T]) -> T:
 
     if caller_info is not None:
         caller_name, caller_tier = caller_info
-        if caller_tier == "system":
-            # Caller is a system singleton; strictly enforce system-only visibility
-            desc = scope.registry.find_descriptor(key)
-            if desc is not None and desc.phase != "system":
-                key_name = getattr(key, "__name__", str(key))
-                raise LifecycleIsolationError(
-                    f"System singleton '{caller_name}' cannot access '{key_name}' scoped to phase '{desc.phase}'"
-                )
-            system_scope = (
-                scope
-                if scope.phase == "system"
-                else (scope.parent or get_ambient_system_scope())
+        # Caller tier isolation check:
+        # A caller in tier T cannot access singletons registered in any descendant tier of T.
+        desc = scope.registry.find_descriptor(key)
+        if desc is not None and desc.tier.is_descendant_of(caller_tier):
+            key_name = getattr(key, "__name__", str(key))
+            raise LifecycleIsolationError(
+                f"{caller_tier.name.capitalize()} singleton '{caller_name}' cannot access '{key_name}' scoped to phase '{desc.phase}'"
             )
-            return system_scope.get(key)
+        # Find scope corresponding to caller_tier if in an active child scope
+        target_scope: Optional[LifecycleScope] = scope
+        while target_scope is not None and target_scope.tier != caller_tier:
+            target_scope = target_scope.parent
+        if target_scope is not None:
+            return target_scope.get(key)
+        if caller_tier == system:
+            return get_ambient_system_scope().get(key)
 
     return scope.get(key)
 
@@ -325,19 +394,20 @@ class LifecycleScope:
 
     def __init__(
         self,
-        phase: str,
+        phase: LifecycleTier | str,
         registry: Optional[LifecycleRegistry] = None,
         parent: Optional[LifecycleScope] = None,
         setup: Optional[Callable[[LifecycleScope], None]] = None,
         defer_startup: bool = False,
     ) -> None:
-        self.phase = phase
+        self.tier = _resolve_tier(phase)
+        self.phase = self.tier.name
         self.registry = (
             registry
             if registry is not None
             else (parent.registry if parent else _global_registry)
         )
-        self.prototype = self.registry.get_prototype(phase)
+        self.prototype = self.registry.get_prototype(self.tier)
         self.parent = parent
         self._setup = setup
         self._defer_startup = defer_startup
@@ -430,7 +500,7 @@ class LifecycleScope:
 
     def enter_child_phase(
         self,
-        phase: str,
+        phase: LifecycleTier | str,
         *,
         setup: Optional[Callable[[LifecycleScope], None]] = None,
         defer_startup: bool = False,
@@ -474,7 +544,7 @@ class LifecycleScope:
 def singleton(
     *,
     keys: Sequence[type[Any]],
-    phase: str = "agent_session",
+    phase: LifecycleTier | str = system,
     registry: Optional[LifecycleRegistry] = None,
 ) -> Callable[[type[T]], type[T]]:
     """Decorator registering an implementation class into a lifecycle prototype."""
@@ -488,7 +558,7 @@ def singleton(
 
 
 def enter_phase(
-    phase: str,
+    phase: LifecycleTier | str,
     *,
     parent: Optional[LifecycleScope] = None,
     registry: Optional[LifecycleRegistry] = None,
@@ -496,16 +566,17 @@ def enter_phase(
     defer_startup: bool = False,
 ) -> LifecycleScope:
     """Context manager entering a lifecycle phase scope."""
+    tier = _resolve_tier(phase)
     active = get_active_scope()
     if parent is not None:
         p = parent
-    elif phase == "system":
+    elif tier == system:
         p = None
     else:
         if active is not None:
             p = active
         elif registry is not None and registry is not _global_registry:
-            p = LifecycleScope("system", registry=registry)
+            p = LifecycleScope(system, registry=registry)
         else:
             p = get_ambient_system_scope()
 
@@ -520,7 +591,7 @@ def enter_phase(
     )
 
     return LifecycleScope(
-        phase=phase,
+        phase=tier,
         registry=reg,
         parent=p,
         setup=setup,

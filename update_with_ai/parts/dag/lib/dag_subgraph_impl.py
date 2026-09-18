@@ -8,11 +8,12 @@ from support.lib.lifecycle import (
     Singleton,
     get_default_registry,
     get_singleton,
+    system,
 )
 
 
 class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
-    tier = "system"
+    tier = system
 
     def __init__(self) -> None:
         self._root: Optional[dag_storage.Node] = None
@@ -139,5 +140,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         DagSubgraph,
         keys=[DagSubgraph, dag_subgraph.DagSubgraph],
-        tier="system",
+        tier=system,
     )

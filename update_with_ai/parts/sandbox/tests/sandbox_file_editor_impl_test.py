@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 from typing import Any, Mapping, Optional, Sequence, Set, Tuple
 
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.agent.lib.agent_file_alias import (
     AliasManager,
@@ -46,7 +47,7 @@ from update_with_ai.parts.sandbox.lib.tool_provider import (
 
 
 class MockToolManager:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self.installed_tools: Set[Tool] = set()
@@ -61,7 +62,7 @@ class MockToolManager:
 
 
 class MockStringConverter:
-    tier = "agent_session"
+    tier = agent_session
     actual_type = str
     wire_type = String()
 
@@ -70,7 +71,7 @@ class MockStringConverter:
 
 
 class MockIntegerConverter:
-    tier = "agent_session"
+    tier = agent_session
     actual_type = int
     wire_type = None
 
@@ -79,7 +80,7 @@ class MockIntegerConverter:
 
 
 class MockBooleanConverter:
-    tier = "agent_session"
+    tier = agent_session
     actual_type = bool
     wire_type = None
 
@@ -92,7 +93,7 @@ class MockBooleanConverter:
 
 
 class MockAgentConfig:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(
         self,
@@ -114,7 +115,7 @@ def _make_workspace_path(path: str) -> WorkspacePath:
 
 
 class MockAliasManager:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self, workspace_root: str) -> None:
         self.workspace_root = _make_directory_path(workspace_root)
@@ -129,7 +130,7 @@ class MockAliasManager:
 
 
 class MockTemplateFormatter:
-    tier = "agent_session"
+    tier = agent_session
 
     def format_template(self, content: str, parameters: Mapping[str, Any]) -> str:
         res = content
@@ -139,7 +140,7 @@ class MockTemplateFormatter:
 
 
 class MockNodeConfig:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(
         self,
@@ -228,28 +229,28 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         )
 
         self.registry.register_instance(
-            self.tool_mgr, keys=[ToolManager], tier="agent_session"
+            self.tool_mgr, keys=[ToolManager], tier=agent_session
         )
         self.registry.register_instance(
-            self.str_conv, keys=[StringParameterConverter], tier="agent_session"
+            self.str_conv, keys=[StringParameterConverter], tier=agent_session
         )
         self.registry.register_instance(
-            self.int_conv, keys=[IntegerParameterConverter], tier="agent_session"
+            self.int_conv, keys=[IntegerParameterConverter], tier=agent_session
         )
         self.registry.register_instance(
-            self.bool_conv, keys=[BooleanParameterConverter], tier="agent_session"
+            self.bool_conv, keys=[BooleanParameterConverter], tier=agent_session
         )
         self.registry.register_instance(
-            self.agent_cfg, keys=[AgentConfig], tier="agent_session"
+            self.agent_cfg, keys=[AgentConfig], tier=agent_session
         )
         self.registry.register_instance(
-            self.alias_mgr, keys=[AliasManager], tier="agent_session"
+            self.alias_mgr, keys=[AliasManager], tier=agent_session
         )
         self.registry.register_instance(
-            self.node_cfg, keys=[NodeConfig], tier="agent_session"
+            self.node_cfg, keys=[NodeConfig], tier=agent_session
         )
         self.registry.register_instance(
-            self.template_formatter, keys=[TemplateFormatter], tier="agent_session"
+            self.template_formatter, keys=[TemplateFormatter], tier=agent_session
         )
 
     def tearDown(self) -> None:
@@ -257,7 +258,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
     def test_edit_manager_initialization_and_template_materialization(self) -> None:
         """CUJ: EditManager installs tools and materializes missing templates without overwriting existing files."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             edit_mgr = scope.get_singleton(EditManager)
             # Requirement: The edit manager unconditionally installs the replace file content tool into the tool manager.
             # Requirement: [EditManager] The edit manager installs the replace file content tool.
@@ -283,7 +284,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
     def test_replace_file_content_tool_whole_file_and_failures(self) -> None:
         """CUJ: ReplaceFileContentTool replaces unique match and fails on duplicates or non-read-write files."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             replace_tool = scope.get_singleton(ReplaceFileContentTool)
             edit_mgr = scope.get_singleton(EditManager)
             self.assertIsInstance(replace_tool.description, str)
@@ -410,7 +411,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         with open(self.target_path, "w", encoding="utf-8") as f:
             f.write("Line 1\nLine 2\nLine 3\n")
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             replace_tool = scope.get_singleton(ReplaceFileContentTool)
 
             # 1. start_line < 1 fails
@@ -574,7 +575,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         with open(self.target_path, "w", encoding="utf-8") as f:
             f.write("Line 1\nLine 2\nLine 3\n")
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             replace_tool = scope.get_singleton(ReplaceFileContentTool)
 
             # 1. Delta output enabled produces diff delta in response content
@@ -623,7 +624,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
     def test_diff_based_has_modifications(self) -> None:
         """CUJ: EditManager tracks real content differences and detects reverted modifications."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             replace_tool = scope.get_singleton(ReplaceFileContentTool)
             edit_mgr = scope.get_singleton(EditManager)
 
@@ -683,7 +684,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             owning_node=node,
         )
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             replace_tool = scope.get_singleton(ReplaceFileContentTool)
             edit_mgr = scope.get_singleton(EditManager)
 
@@ -721,7 +722,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
     def test_file_update_revision(self) -> None:
         """CUJ: EditManager file_update_revision increments when editing tools modify files."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             edit_mgr = scope.get_singleton(EditManager)
             replace_tool = scope.get_singleton(ReplaceFileContentTool)
 
@@ -757,7 +758,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         self,
     ) -> None:
         """CUJ: EditManager records initial contents from filesystem and detects creations, deletions, and errors."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             edit_mgr = scope.get_singleton(EditManager)
             assert isinstance(edit_mgr, EditManagerImpl)
 
@@ -805,7 +806,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
     def test_tool_parameter_converters(self) -> None:
         """CUJ: Parameter converters associated with tool parameters."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             replace_tool = scope.get_singleton(ReplaceFileContentTool)
 
             # Requirement: The replace file content tool path parameter uses the alias manager to convert a file alias.
@@ -850,7 +851,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         self.node_cfg._templates.add((new_rw_file, FileContent("Initial template")))
         self.node_cfg._verification_checks = [mock_check, mock_failing_check]
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             edit_mgr = scope.get_singleton(EditManager)
             edit_mgr.materialize_templates()
             mock_check.verify.assert_called_once()
@@ -862,7 +863,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
     def test_locked_files_management(self) -> None:
         """CUJ: Locking and unlocking read-write files in EditManager."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             edit_mgr = scope.get_singleton(EditManager)
             # Requirement: The edit manager exposes read-write files locked against modification.
             # Requirement: [EditManager] The edit manager exposes read-write files locked against modification.
@@ -880,7 +881,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
     def test_replace_file_content_fails_on_locked_file(self) -> None:
         """CUJ: Replacing content fails when target file is locked against modification."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             edit_mgr = scope.get_singleton(EditManager)
             replace_tool = scope.get_singleton(ReplaceFileContentTool)
 
@@ -910,7 +911,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
     def test_edit_manager_tracks_last_read_or_edited_file(self) -> None:
         """CUJ: EditManager tracks last read or edited file alias across session."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             edit_mgr = scope.get_singleton(EditManager)
             # Requirement: The edit manager tracks the last read or edited file alias across the session, recording file reads from the file reader and file edits from editing tools.
             self.assertIsNone(edit_mgr.last_read_or_edited_file)
@@ -923,7 +924,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
     def test_replace_file_content_optional_path(self) -> None:
         """CUJ: ReplaceFileContentTool implicitly binds omitted path to last read or edited file."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             edit_mgr = scope.get_singleton(EditManager)
             replace_tool = scope.get_singleton(ReplaceFileContentTool)
 

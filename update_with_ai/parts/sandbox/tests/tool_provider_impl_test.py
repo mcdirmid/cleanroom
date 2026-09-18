@@ -3,6 +3,7 @@
 import unittest
 from typing import Set
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.sandbox.lib.tool_provider import (
     ActualParameterBindings,
     Boolean,
@@ -58,7 +59,7 @@ class ToolProviderImplTest(unittest.TestCase):
 
     def test_string_parameter_converter(self) -> None:
         """CUJ: Converting string parameter values."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             converter = scope.get_singleton(StringParameterConverter)
             self.assertEqual(converter.actual_type, str)
             self.assertEqual(converter.wire_type, String())
@@ -67,7 +68,7 @@ class ToolProviderImplTest(unittest.TestCase):
 
     def test_integer_parameter_converter(self) -> None:
         """CUJ: Converting integer parameter values."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             converter = scope.get_singleton(IntegerParameterConverter)
             self.assertEqual(converter.actual_type, int)
             self.assertEqual(converter.wire_type, Integer())
@@ -76,7 +77,7 @@ class ToolProviderImplTest(unittest.TestCase):
 
     def test_boolean_parameter_converter(self) -> None:
         """CUJ: Converting boolean parameter values."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             converter = scope.get_singleton(BooleanParameterConverter)
             self.assertEqual(converter.actual_type, bool)
             self.assertEqual(converter.wire_type, Boolean())
@@ -86,7 +87,7 @@ class ToolProviderImplTest(unittest.TestCase):
 
     def test_tool_manager_install_and_execute_success(self) -> None:
         """CUJ: Installing and successfully executing a tool."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             manager = scope.get_singleton(ToolManager)
             str_conv = scope.get_singleton(StringParameterConverter)
 
@@ -115,7 +116,7 @@ class ToolProviderImplTest(unittest.TestCase):
 
     def test_tool_manager_unknown_tool(self) -> None:
         """CUJ: Executing a tool that is not installed fails."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             manager = scope.get_singleton(ToolManager)
             resp = manager.execute_tool(
                 "nonexistent", WireParameterBindings(bindings=set())
@@ -125,7 +126,7 @@ class ToolProviderImplTest(unittest.TestCase):
 
     def test_tool_manager_unknown_parameter(self) -> None:
         """CUJ: Executing a tool with an unrecognized parameter fails."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             manager = scope.get_singleton(ToolManager)
             tool = DummyTool("tool_no_params", set())
             manager.install_tool(tool)
@@ -141,7 +142,7 @@ class ToolProviderImplTest(unittest.TestCase):
 
     def test_tool_manager_missing_required_parameter(self) -> None:
         """CUJ: Executing a tool without supplying a required parameter fails."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             manager = scope.get_singleton(ToolManager)
             str_conv = scope.get_singleton(StringParameterConverter)
             param = Parameter(

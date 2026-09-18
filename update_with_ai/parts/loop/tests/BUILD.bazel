@@ -22,6 +22,7 @@ pyright_test(
     srcs = ["loop_guard_impl_test.py"],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/loop/lib:loop_guard",
         "//update_with_ai/parts/loop/lib:loop_guard_impl",
         "//update_with_ai/parts/sandbox/lib:tool_provider",
@@ -33,6 +34,7 @@ pyright_test(
     srcs = ["loop_node_cleaner_impl_test.py"],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/agent/lib:agent_file_alias",
         "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/agent/lib:agent_storage",

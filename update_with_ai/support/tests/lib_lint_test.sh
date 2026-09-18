@@ -481,7 +481,7 @@ else
 fi
 check "c23 spec reference header" "$tmp/c23/lib/worker_impl.py" '# Requirements specified in worker_impl.pyi'
 check "c23 class skeleton" "$tmp/c23/lib/worker_impl.py" 'class Worker(Singleton):'
-check "c23 tier" "$tmp/c23/lib/worker_impl.py" 'tier = "agent_session"'
+check "c23 tier" "$tmp/c23/lib/worker_impl.py" 'tier = agent_session'
 check "c23 init todo" "$tmp/c23/lib/worker_impl.py" '# TODO___init___body'
 check "c23 method todo" "$tmp/c23/lib/worker_impl.py" '# TODO_process_item_body'
 check "c23 initialize" "$tmp/c23/lib/worker_impl.py" 'def __initialize__(registry: Optional\[LifecycleRegistry\] = None) -> None:'

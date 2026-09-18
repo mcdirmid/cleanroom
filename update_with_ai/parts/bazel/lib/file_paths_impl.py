@@ -10,7 +10,12 @@ from .file_paths import (
     DirectoryPath,
     WorkspaceRoot,
 )
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
+from support.lib.lifecycle import (
+    LifecycleRegistry,
+    Singleton,
+    get_default_registry,
+    system,
+)
 
 
 def _make_host_path(cls, path: str):
@@ -20,7 +25,7 @@ def _make_host_path(cls, path: str):
 
 
 class FilePaths(FilePathsInterface, Singleton):
-    tier = "system"
+    tier = system
 
     def __init__(self) -> None:
         pass
@@ -82,5 +87,5 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         FilePaths,
         keys=[FilePaths, FilePathsInterface],
-        tier="system",
+        tier=system,
     )

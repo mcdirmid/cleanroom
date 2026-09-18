@@ -199,7 +199,7 @@ def generate_test_skeleton(
             lines.append(f"        for cls in [{classes_str}]:")
             lines.append("            self.assertIsNotNone(cls)")
             lines.append("        # Singletons are resolved within an active phase scope:")
-            lines.append('        # with enter_phase("agent_session", registry=self.registry) as scope:')
+            lines.append('        # with enter_phase(agent_session, registry=self.registry) as scope:')
             lines.append(f"        #     instance = scope.get_singleton({sorted(impl_classes)[0]})")
     else:
         lines.append("    def test_initialization(self) -> None:")

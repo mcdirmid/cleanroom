@@ -8,6 +8,7 @@ from update_with_ai.parts.agent.lib.agent_file_alias import (
     UnboundFile,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.agent.lib.agent_node_config import (
     Guide,
     NodeConfig,
@@ -22,7 +23,7 @@ from update_with_ai.parts.sandbox.lib.tool_provider import Response
 
 
 class MockNodeConfig:
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(
         self, guide: Optional[Guide] = None, feedback: Tuple[str, ...] = ()
@@ -41,6 +42,10 @@ class MockNodeConfig:
     @property
     def guide_file(self) -> Optional[UnboundFile]:
         return None
+
+    @property
+    def is_step_mode(self) -> bool:
+        return True
 
     @property
     def templates(self) -> Set[Tuple[BoundFile, FileContent]]:
@@ -73,7 +78,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
         __initialize__(self.registry)
         self.node_cfg = MockNodeConfig()
         self.registry.register_instance(
-            self.node_cfg, keys=[NodeConfig], tier="agent_session"
+            self.node_cfg, keys=[NodeConfig], tier=agent_session
         )
 
     def test_dataclasses(self) -> None:
@@ -96,7 +101,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             "## Lint checks\nRun pyright and check for warnings.\n\n"
             "## Step 2\nDo the second task."
         )
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             delivery = scope.get_singleton(GuideDelivery)
             parsed = delivery.parse_guide(content)
 
@@ -148,7 +153,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
 
     def test_advance_step_lifecycle(self) -> None:
         """CUJ: Advancing through steps with verification passing and failing."""
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             delivery = scope.get_singleton(GuideDelivery)
             self.assertFalse(delivery.has_steps_remaining)
             # Requirement: When no guide is configured or no step sections remain, the guide delivery indicates that no steps remain and advancing produces no response.
@@ -165,7 +170,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
         )
         self.node_cfg._guide = guide
 
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             delivery = scope.get_singleton(GuideDelivery)
             # Requirement: Initializing the guide delivery obtains its guide from the node config.
             # Requirement: [GuideDelivery] Steps remaining indicates whether further step sections remain to be completed.
@@ -249,7 +254,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
     def test_has_steps_remaining_when_no_guide(self) -> None:
         """CUJ: When no guide is configured, steps remaining evaluates to false."""
         self.node_cfg._guide = None
-        with enter_phase("agent_session", registry=self.registry) as scope:
+        with enter_phase(agent_session, registry=self.registry) as scope:
             delivery = scope.get_singleton(GuideDelivery)
             # Requirement: [GuideDelivery] Steps remaining indicates whether further step sections remain to be completed.
             self.assertFalse(delivery.has_steps_remaining)

@@ -3,6 +3,7 @@ from . import loop_conversation
 from . import loop_driver
 from . import loop_node_cleaner
 from update_with_ai.parts.agent.lib import agent_node_config
+from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.agent.lib import agent_storage
 from update_with_ai.parts.dag.lib import dag_storage
 from update_with_ai.parts.sandbox.lib import sandbox
@@ -14,11 +15,12 @@ from support.lib.lifecycle import (
     enter_phase,
     get_default_registry,
     get_singleton,
+    system,
 )
 
 
 class CleanedNodes(loop_node_cleaner.CleanedNodes, Singleton):
-    tier = "agent_session"
+    tier = agent_session
 
     def __init__(self) -> None:
         self._nodes: Sequence[dag_storage.Node] = ()
@@ -36,7 +38,7 @@ class CleanedNodes(loop_node_cleaner.CleanedNodes, Singleton):
 
 
 class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
-    tier = "system"
+    tier = system
 
     def __init__(self) -> None:
         self._last_outcome: Optional[loop_driver.LoopOutcome] = None
@@ -67,7 +69,7 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
 
         def _execute_session() -> Set[dag_storage.Message]:
             # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the cleaned nodes present the nodes currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
-            with enter_phase("agent_session", setup=setup_session) as session:
+            with enter_phase(agent_session, setup=setup_session) as session:
                 # Requirement: Within the agent session phase, missing read-write files materialize from sandbox startup templates.
                 sb = session.get_singleton(sandbox.Sandbox)
                 sb.materialize_startup_templates()
@@ -302,10 +304,10 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         NodeCleaner,
         keys=[NodeCleaner, loop_node_cleaner.NodeCleaner],
-        tier="system",
+        tier=system,
     )
     reg.register_singleton(
         CleanedNodes,
         keys=[CleanedNodes, loop_node_cleaner.CleanedNodes],
-        tier="agent_session",
+        tier=agent_session,
     )
