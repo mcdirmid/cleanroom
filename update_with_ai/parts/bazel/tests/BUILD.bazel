@@ -43,7 +43,6 @@ pyright_test(
         "//update_with_ai/parts/bazel/lib:bazel_node_config_impl",
         "//update_with_ai/parts/bazel/lib:bazel_target",
         "//update_with_ai/parts/bazel/lib:file_paths",
-        "//update_with_ai/parts/loop/lib:loop_node_cleaner",
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/sandbox/lib:tool_provider",
     ],

@@ -91,6 +91,24 @@ Validates session criteria, returning whether verification passed and diagnostic
         ...
 
 @singleton_type('agent_session')
+class CleanedNodes(Protocol):
+    """
+PURPOSE:
+Defined as an agent session service that presents the nodes currently being cleaned in the agent session
+"""
+
+    @property
+    def nodes(self) -> Sequence[dag_storage.Node]:
+        """
+PURPOSE:
+Nodes currently being cleaned in the agent session
+
+FRESH_REQUIREMENTS:
+- The cleaned nodes present the nodes currently being cleaned in the agent session.
+"""
+        ...
+
+@singleton_type('agent_session')
 class NodeConfig(Protocol):
     """
 PURPOSE:

@@ -16,6 +16,4 @@ Coordinating multi-node task resolution requires traversing dependency relations
 
 The *dag assembly* unites the concrete implementation components that realize dependency-first topological graph queries and execution iteration bounds. The assembly initializes its constituent implementation components and registers their singleton services with the system lifecycle prototype.
 
-The dag assembly aggregates the following implementation components:
-
-- The dag subgraph implementation from dag_subgraph_impl, closing the dag subgraph interface to query active subgraphs in dependency-first order, batch ready dirty nodes, and enforce execution iteration limits.
+The dag assembly aggregates the dag subgraph implementation from dag_subgraph_impl, closing the dag subgraph interface to query active subgraphs in dependency-first order, batch ready dirty nodes, and enforce execution iteration limits.

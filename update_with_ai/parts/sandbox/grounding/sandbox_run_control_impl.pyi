@@ -21,7 +21,7 @@ INHERITED_REQUIREMENTS:
 - [RunController] The run controller installs an advance tool when guide step mode is active, coordinating step progression through guide delivery upon passing verification.
 - [RunController] The run controller installs a submit tool that concludes target processing upon passing verification and enforces change documentation.
 - [RunController] The run controller installs a fail tool that terminates the run in failure.
-- [RunController] The run controller installs a run tests tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
+- [RunController] The run controller installs a check file tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
 - [RunController] The run controller installs a blame tool when blame targets are configured, attributing task failure to an upstream dependency node.
 
 GROUNDING_ARGUMENT:

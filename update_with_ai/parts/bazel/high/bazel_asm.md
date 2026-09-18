@@ -1,7 +1,7 @@
 # bazel_asm assembly component
 
 assembles: bazel_manifest_loader_impl, bazel_node_config_impl, bazel_storage_impl, bazel_target_impl, file_paths_impl
-imports: agent_config, bazel_target_labels_ext, filesystem_ext, json_manifest_ext, loop_node_cleaner, tool_provider, update_with_ai_proto_ext
+imports: agent_config, bazel_target_labels_ext, filesystem_ext, json_manifest_ext, tool_provider, update_with_ai_proto_ext
 implements: agent_file_alias, agent_node_config, agent_storage, bazel_manifest_loader, bazel_target, dag_storage, file_paths
 
 ## Purpose

@@ -16,9 +16,3 @@ A *node cleaner* is a polymorphic service that cleans nodes sharing a role.
 
 A node cleaner can *clean* dirty nodes, communicating whether processing should *continue*. Processing cannot continue only if a failure occurs while cleaning the nodes that cannot be handled by cleaning any other node; otherwise, processing continues.
 
-The *cleaned nodes* is an agent session service that presents the nodes currently being cleaned in the agent session.
-
-The cleaned nodes service provides:
-
-- The sequence of nodes currently being cleaned in the agent session.
-

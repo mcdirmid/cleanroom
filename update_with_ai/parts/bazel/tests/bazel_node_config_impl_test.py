@@ -20,7 +20,7 @@ from update_with_ai.parts.bazel.lib.bazel_node_config_impl import (
     __initialize__,
 )
 from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget, NodeDirectory
-from update_with_ai.parts.loop.lib.loop_node_cleaner import CleanedNodes
+from update_with_ai.parts.agent.lib.agent_node_config import CleanedNodes
 from update_with_ai.parts.dag.lib.dag_storage import DagStorage, Feedback, Message, Node
 from update_with_ai.parts.agent.lib.agent_file_alias import (
     AliasManager,
@@ -330,7 +330,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
         reg = LifecycleRegistry()
         __initialize__(reg)
-        reg.register(MockCleanedNodes, keys=[CleanedNodes])
+        reg.register(MockCleanedNodes, keys=[CleanedNodes], phase=agent_session)
         reg.register(MockManifestLoader, keys=[BazelManifestLoader])
         reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
         reg.register(MockDagStorage, keys=[DagStorage])
@@ -463,7 +463,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
         reg = LifecycleRegistry()
         __initialize__(reg)
-        reg.register(MockCleanedNodes, keys=[CleanedNodes])
+        reg.register(MockCleanedNodes, keys=[CleanedNodes], phase=agent_session)
         reg.register(MockManifestLoader, keys=[BazelManifestLoader])
         reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
         reg.register(MockDagStorage, keys=[DagStorage])
@@ -553,7 +553,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
         reg = LifecycleRegistry()
         __initialize__(reg)
-        reg.register(MockCleanedNodes, keys=[CleanedNodes])
+        reg.register(MockCleanedNodes, keys=[CleanedNodes], phase=agent_session)
         reg.register(MockManifestLoader, keys=[BazelManifestLoader])
         reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
         reg.register(MockDagStorage, keys=[DagStorage])
@@ -637,7 +637,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
         reg1_empty = LifecycleRegistry()
         __initialize__(reg1_empty)
-        reg1_empty.register(MockCleanedNodesEmpty, keys=[CleanedNodes])
+        reg1_empty.register(MockCleanedNodesEmpty, keys=[CleanedNodes], phase=agent_session)
         with enter_phase(agent_session, registry=reg1_empty) as scope:
             cfg = scope.get_singleton(NodeConfig)
             self.assertEqual(cfg.read_write_files, set())
@@ -672,7 +672,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
         reg2 = LifecycleRegistry()
         __initialize__(reg2)
-        reg2.register(MockCleanedNodesTgt, keys=[CleanedNodes])
+        reg2.register(MockCleanedNodesTgt, keys=[CleanedNodes], phase=agent_session)
         reg2.register(MockManifestLoaderNone, keys=[BazelManifestLoader])
         reg2.register(MockNodeIdentifierUtility, keys=[BazelTarget])
 
@@ -698,7 +698,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
         reg3 = LifecycleRegistry()
         __initialize__(reg3)
-        reg3.register(MockCleanedNodesTgt, keys=[CleanedNodes])
+        reg3.register(MockCleanedNodesTgt, keys=[CleanedNodes], phase=agent_session)
         reg3.register(MockManifestLoaderBadJson, keys=[BazelManifestLoader])
         reg3.register(MockNodeIdentifierUtility, keys=[BazelTarget])
 
@@ -751,7 +751,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             reg = LifecycleRegistry()
             __initialize__(reg)
-            reg.register(MockCleanedNodesPkg, keys=[CleanedNodes])
+            reg.register(MockCleanedNodesPkg, keys=[CleanedNodes], phase=agent_session)
             reg.register(MockManifestLoader, keys=[BazelManifestLoader])
             reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
 
@@ -846,7 +846,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             reg = LifecycleRegistry()
             __initialize__(reg)
-            reg.register(MockCleanedNodesPkg, keys=[CleanedNodes])
+            reg.register(MockCleanedNodesPkg, keys=[CleanedNodes], phase=agent_session)
             reg.register(MockManifestLoader, keys=[BazelManifestLoader])
             reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
             reg.register(MockAgentConfig, keys=[AgentConfig])
@@ -1005,7 +1005,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             reg = LifecycleRegistry()
             __initialize__(reg)
-            reg.register(MockCleanedNodesPkg, keys=[CleanedNodes])
+            reg.register(MockCleanedNodesPkg, keys=[CleanedNodes], phase=agent_session)
             reg.register(MockManifestLoader, keys=[BazelManifestLoader])
             reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
             reg.register(MockAgentConfig, keys=[AgentConfig])
@@ -1141,7 +1141,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
         reg = LifecycleRegistry()
         __initialize__(reg)
-        reg.register(MockCleanedNodesRoot, keys=[CleanedNodes])
+        reg.register(MockCleanedNodesRoot, keys=[CleanedNodes], phase=agent_session)
         reg.register(MockManifestLoader, keys=[BazelManifestLoader])
         reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
 
@@ -1244,7 +1244,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
         reg = LifecycleRegistry()
         __initialize__(reg)
-        reg.register(MockMultiCleanedNodes, keys=[CleanedNodes])
+        reg.register(MockMultiCleanedNodes, keys=[CleanedNodes], phase=agent_session)
         reg.register(MockManifestLoader, keys=[BazelManifestLoader])
         reg.register(MockNodeIdentifierUtility, keys=[BazelTarget])
         reg.register(MockAgentConfig, keys=[AgentConfig])

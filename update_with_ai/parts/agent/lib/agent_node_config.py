@@ -24,6 +24,11 @@ class VerificationCheck(Protocol):
     def verify(self) -> Tuple[bool, str]: ...
 
 
+class CleanedNodes(Protocol):
+    @property
+    def nodes(self) -> Sequence[dag_storage.Node]: ...
+
+
 class NodeConfig(Protocol):
     @property
     def read_only_files(self) -> Set[agent_file_alias.ReadOnlyFile]: ...

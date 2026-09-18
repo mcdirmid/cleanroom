@@ -1,6 +1,6 @@
 # agent_node_config interface component
 
-imports: agent_config, agent_file_alias
+imports: agent_config, agent_file_alias, dag_storage
 
 ## Purpose
 
@@ -17,6 +17,8 @@ A *step section* is a milestone section within a guide having an *index*, a *tit
 A *guide* provides structured instructional text containing a *summary*, sequential step sections, and *verification failure* instructions.
 
 A *verification check* is a polymorphic service that can *verify* session criteria, communicating whether verification passed and diagnostic feedback on failure.
+
+The *cleaned nodes* is an agent session service that presents the *nodes* currently being cleaned in the agent session.
 
 The *node config* is an agent session service that exposes configuration parameters for the session execution environment.
 

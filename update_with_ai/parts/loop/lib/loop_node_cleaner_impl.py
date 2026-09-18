@@ -19,7 +19,7 @@ from support.lib.lifecycle import (
 )
 
 
-class CleanedNodes(loop_node_cleaner.CleanedNodes, Singleton):
+class CleanedNodes(agent_node_config.CleanedNodes, Singleton):
     tier = agent_session
 
     def __init__(self) -> None:
@@ -27,7 +27,7 @@ class CleanedNodes(loop_node_cleaner.CleanedNodes, Singleton):
 
     @property
     def nodes(self) -> Sequence[dag_storage.Node]:
-        # Requirement: [CleanedNodes] The cleaned nodes service presents the sequence of nodes currently being cleaned in the agent session.
+        # Requirement: [CleanedNodes] The cleaned nodes present the nodes currently being cleaned in the agent session.
         if not self._nodes:
             raise RuntimeError("CleanedNodes has not been configured with nodes.")
         return self._nodes
@@ -308,6 +308,6 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     )
     reg.register_singleton(
         CleanedNodes,
-        keys=[CleanedNodes, loop_node_cleaner.CleanedNodes],
+        keys=[CleanedNodes, agent_node_config.CleanedNodes],
         tier=agent_session,
     )

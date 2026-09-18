@@ -5,7 +5,6 @@ import subprocess
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple, Type
 from . import bazel_manifest_loader
 from . import bazel_target
-from update_with_ai.parts.loop.lib import loop_node_cleaner
 from update_with_ai.parts.dag.lib import dag_storage
 from update_with_ai.parts.agent.lib import agent_file_alias
 from . import file_paths
@@ -75,7 +74,7 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
 
     def initialize(self) -> None:
         try:
-            cleaned_nodes_obj = get_singleton(loop_node_cleaner.CleanedNodes)
+            cleaned_nodes_obj = get_singleton(agent_node_config.CleanedNodes)
             nodes = tuple(cleaned_nodes_obj.nodes)
         except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
             return

@@ -1,4 +1,4 @@
-from framework import operation, poly_type, singleton_type
+from framework import operation, poly_type
 from typing import Protocol, Sequence
 import dag_storage
 
@@ -20,22 +20,3 @@ FRESH_REQUIREMENTS:
 - Processing cannot continue only if a failure occurs while cleaning the nodes that cannot be handled by cleaning any other node; otherwise, processing continues.
 """
         ...
-
-@singleton_type('agent_session')
-class CleanedNodes(Protocol):
-    """
-PURPOSE:
-Defined as an agent session service that presents the nodes currently being cleaned in the agent session
-"""
-
-    @property
-    def nodes(self) -> Sequence[dag_storage.Node]:
-        """
-PURPOSE:
-Sequence of nodes currently being cleaned in the agent session
-
-FRESH_REQUIREMENTS:
-- The sequence of nodes currently being cleaned in the agent session.
-"""
-        ...
-

@@ -20,7 +20,7 @@ A *file alias* represents a session file, hiding physical filesystem details and
 
 A bound file is mapped to an actual workspace file, having a *workspace path* and an *owning node*, and can either be a *read-only file* restricted to inspection, or a *read-write file* permitted for inspection and modification. An unbound file is not mapped to an actual file.
 
-The *alias manager* is an agent session service configured with a workspace root that sanitizes output text. The alias manager:
+The *alias manager* is an agent session service configured with a workspace root. The alias manager:
 
 - Is a parameter converter for the actual type file alias and the wire type string, allowing file aliases to be used as tool parameters. Converting a wire type string produces the matching file alias if its relative path is found, and produces an unbound file if the relative path is not found.
 

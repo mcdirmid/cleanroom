@@ -2,7 +2,7 @@
 
 import unittest
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import List, Optional, Sequence, Set
 
 from update_with_ai.parts.loop.lib.loop_conversation import (
     Conversation,
@@ -20,7 +20,8 @@ from update_with_ai.parts.agent.lib.agent_storage import (
     NodeDefinition,
     TaskPrompt,
 )
-from update_with_ai.parts.loop.lib.loop_node_cleaner import CleanedNodes, NodeCleaner
+from update_with_ai.parts.loop.lib.loop_node_cleaner import NodeCleaner
+from update_with_ai.parts.agent.lib.agent_node_config import CleanedNodes, NodeConfig
 from update_with_ai.parts.dag.lib.dag_storage import (
     Change,
     Dependency,
@@ -38,12 +39,12 @@ from update_with_ai.parts.agent.lib.agent_file_alias import (
 )
 from support.lib.lifecycle import (
     LifecycleRegistry,
+    Singleton,
     enter_phase,
     get_singleton,
     system,
 )
 from update_with_ai.parts.agent.lib.agent_session import agent_session
-from update_with_ai.parts.agent.lib.agent_node_config import NodeConfig
 from update_with_ai.parts.sandbox.lib.sandbox import Sandbox, StartupToolExecution
 from update_with_ai.parts.sandbox.lib.template_format import TemplateFormatter
 from update_with_ai.parts.sandbox.lib.tool_provider import (
@@ -300,7 +301,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             assert isinstance(cleaned_nodes, CleanedNodesImpl)
             # Requirement: The cleaned nodes present the nodes currently being cleaned to session services.
             cleaned_nodes.set_nodes([target1, target2])
-            # Requirement: [CleanedNodes] The cleaned nodes service presents the sequence of nodes currently being cleaned in the agent session.
+            # Requirement: [CleanedNodes] The cleaned nodes present the nodes currently being cleaned in the agent session.
             self.assertEqual(cleaned_nodes.nodes, (target1, target2))
 
     def test_clean_node_seeds_history_and_materializes_templates(self) -> None:

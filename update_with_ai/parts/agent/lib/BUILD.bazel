@@ -27,6 +27,7 @@ pyright_library(
     srcs = ["agent_node_config.py"],
     pyright_deps = [
         ":agent_file_alias",
+        "//update_with_ai/parts/dag/lib:dag_storage",
     ],
     visibility = ["//visibility:public"],
 )

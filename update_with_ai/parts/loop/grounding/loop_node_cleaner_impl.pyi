@@ -16,7 +16,7 @@ PURPOSE:
 Implements node cleaner orchestrating sandbox and loop driver
 
 GROUNDING_ARGUMENT:
-- Through the agent session phase boundary, as a system singleton, NodeCleaner coordinates system singletons (agent_storage, dag_storage) in the same lifecycle. While system singletons cannot directly access narrower agent_session singletons under static lifecycle isolation, this service initiates and executes within an explicit agent session phase that instantiates and scopes session-level singletons (loop_driver, sandbox, loop_conversation, CleanedNodes), with defining modules all imported.
+- Through the agent session phase boundary, as a system singleton, NodeCleaner coordinates system singletons (agent_storage, dag_storage) in the same lifecycle. While system singletons cannot directly access narrower agent_session singletons under static lifecycle isolation, this service initiates and executes within an explicit agent session phase that instantiates and scopes session-level singletons (loop_driver, sandbox, loop_conversation, agent_node_config.CleanedNodes), with defining modules all imported.
 """
 
     @operation
@@ -40,7 +40,7 @@ FRESH_REQUIREMENTS:
 - When dirty nodes define no task prompt, cleaning resolves the nodes without establishing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
 
 GROUNDING_ARGUMENT:
-- Receives nodes as an input argument and retrieves task prompts and node definitions from imported agent_storage in the same system lifecycle tier. When dirty nodes define no task prompt, cleaning resolves without executing an agent session phase, producing change messages if incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise. Within the orchestrated agent session phase, it configures CleanedNodes, materializes startup templates from sandbox, initializes conversation with incoming pending messages formatted per target node and augmenting the task prompt with guide instructions formatted using template_format.TemplateFormatter, executes loop_driver, and maps the resulting loop outcome to change or feedback messages for dag_storage, relying on the requirements of collaborator types to satisfy message generation and dirty state management.
+- Receives nodes as an input argument and retrieves task prompts and node definitions from imported agent_storage in the same system lifecycle tier. When dirty nodes define no task prompt, cleaning resolves without executing an agent session phase, producing change messages if incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise. Within the orchestrated agent session phase, it configures agent_node_config.CleanedNodes, materializes startup templates from sandbox, initializes conversation with incoming pending messages formatted per target node and augmenting the task prompt with guide instructions formatted using template_format.TemplateFormatter, executes loop_driver, and maps the resulting loop outcome to change or feedback messages for dag_storage, relying on the requirements of collaborator types to satisfy message generation and dirty state management.
 """
         ...
 
@@ -55,8 +55,8 @@ FRESH_REQUIREMENTS:
 - Cleaning dirty nodes registers the nodes as dependents to their non-silent dependencies in graph storage, delivering resulting change messages to downstream dependents and feedback messages to their addressed dependency node.
 
 INHERITED_REQUIREMENTS:
-- [NodeCleaner] Cleaning dirty nodes communicates whether processing should continue.
-- [NodeCleaner] Processing cannot continue only if a failure occurs while cleaning the nodes that cannot be handled by cleaning any other node.
+- [NodeCleaner] A node cleaner can clean dirty nodes, communicating whether processing should continue.
+- [NodeCleaner] Processing cannot continue only if a failure occurs while cleaning the nodes that cannot be handled by cleaning any other node; otherwise, processing continues.
 
 GROUNDING_ARGUMENT:
 - Receives nodes as an input argument and interacts with imported dag_storage in the same system tier to register the nodes as dependents to their non-silent dependencies, deliver change messages to dependents, and deliver feedback messages to their addressed dependency node, managing dirty state.
@@ -64,7 +64,7 @@ GROUNDING_ARGUMENT:
         ...
 
 @singleton_type('agent_session')
-class CleanedNodes(loop_node_cleaner.CleanedNodes):
+class CleanedNodes(agent_node_config.CleanedNodes):
     """
 PURPOSE:
 Implements cleaned nodes presenting the active nodes and providing configuration
@@ -81,7 +81,7 @@ PURPOSE:
 Sequence of nodes currently being cleaned in the agent session
 
 INHERITED_REQUIREMENTS:
-- [CleanedNodes] The cleaned nodes service presents the sequence of nodes currently being cleaned in the agent session.
+- [CleanedNodes] The cleaned nodes present the nodes currently being cleaned in the agent session.
 
 GROUNDING_ARGUMENT:
 - Holds the active Node sequence configured via the set_nodes configuration operation when the agent session phase is initiated.
