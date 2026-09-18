@@ -17,6 +17,14 @@ filegroup(
 )
 
 update_python_with_ai(
-    name = "bazel_with_loop_asm",
-    module_deps = ['//update_with_ai/parts/bazel:bazel_asm', '//update_with_ai/parts/core:runner_logger_impl', '//update_with_ai/parts/dag:dag_asm', '//update_with_ai/parts/loop:loop_asm', '//update_with_ai/parts/sandbox:sandbox_asm'],
+    name = "bazel_openai_loop_asm",
+    module_deps = [
+        '//update_with_ai/parts/bazel:bazel_asm',
+        '//update_with_ai/parts/bazel:bazel_loop_impl',
+        '//update_with_ai/parts/bazel:bazel_openai_config_impl',
+        '//update_with_ai/parts/core:runner_logger_impl',
+        '//update_with_ai/parts/dag:dag_asm',
+        '//update_with_ai/parts/loop:loop_asm',
+        '//update_with_ai/parts/sandbox:sandbox_asm',
+    ],
 )

@@ -358,23 +358,30 @@ class TestLifecycle(unittest.TestCase):
             self.assertEqual(cfg.get_mode(), "decorator-mode")
 
     def test_assembly_initialize_traversal(self) -> None:
-        from update_with_ai.parts.systems.lib import bazel_with_loop_asm
-        from update_with_ai.parts.bazel.lib import bazel_asm, bazel_impl
+        from update_with_ai.parts.systems.lib import bazel_openai_loop_asm
+        from update_with_ai.parts.bazel.lib import (
+            bazel_asm,
+            bazel_loop_impl,
+            bazel_openai_config_impl,
+        )
         from update_with_ai.parts.loop.lib import loop_asm
         from update_with_ai.parts.dag.lib import dag_asm, dag_subgraph_impl
         from update_with_ai.parts.sandbox.lib import sandbox_asm, sandbox_impl
         from update_with_ai.parts.openai.lib import openai_driver_impl
 
         test_reg = LifecycleRegistry()
-        # Verify bazel_with_loop_asm recursively invokes constituent assemblies without error
-        bazel_with_loop_asm.__initialize__(test_reg)
+        # Verify bazel_openai_loop_asm recursively invokes constituent assemblies without error
+        bazel_openai_loop_asm.__initialize__(test_reg)
 
-        # Confirm constituents are registered in bazel_with_loop_asm and bazel_asm CONSTITUENTS
-        self.assertIn(loop_asm, bazel_with_loop_asm.CONSTITUENTS)
-        self.assertIn(bazel_asm, bazel_with_loop_asm.CONSTITUENTS)
-        self.assertIn(dag_asm, bazel_with_loop_asm.CONSTITUENTS)
-        self.assertIn(sandbox_asm, bazel_with_loop_asm.CONSTITUENTS)
-        self.assertIn(bazel_impl, bazel_asm.CONSTITUENTS)
+        # Confirm constituents are registered in bazel_openai_loop_asm and bazel_asm CONSTITUENTS
+        self.assertIn(loop_asm, bazel_openai_loop_asm.CONSTITUENTS)
+        self.assertIn(bazel_asm, bazel_openai_loop_asm.CONSTITUENTS)
+        self.assertIn(dag_asm, bazel_openai_loop_asm.CONSTITUENTS)
+        self.assertIn(sandbox_asm, bazel_openai_loop_asm.CONSTITUENTS)
+        self.assertIn(bazel_loop_impl, bazel_openai_loop_asm.CONSTITUENTS)
+        self.assertIn(bazel_openai_config_impl, bazel_openai_loop_asm.CONSTITUENTS)
+        self.assertNotIn(bazel_loop_impl, bazel_asm.CONSTITUENTS)
+        self.assertNotIn(bazel_openai_config_impl, bazel_asm.CONSTITUENTS)
         self.assertIn(openai_driver_impl, loop_asm.CONSTITUENTS)
         self.assertIn(dag_subgraph_impl, dag_asm.CONSTITUENTS)
         self.assertIn(sandbox_impl, sandbox_asm.CONSTITUENTS)

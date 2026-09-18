@@ -5,11 +5,13 @@ load("//bin:pyright_library.bzl", "pyright_library")
 package(default_visibility = ["//visibility:public"])
 
 pyright_library(
-    name = "bazel_with_loop_asm",
-    srcs = ["bazel_with_loop_asm.py"],
+    name = "bazel_openai_loop_asm",
+    srcs = ["bazel_openai_loop_asm.py"],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/bazel/lib:bazel_asm",
+        "//update_with_ai/parts/bazel/lib:bazel_loop_impl",
+        "//update_with_ai/parts/bazel/lib:bazel_openai_config_impl",
         "//update_with_ai/parts/core/lib:runner_logger_impl",
         "//update_with_ai/parts/dag/lib:dag_asm",
         "//update_with_ai/parts/loop/lib:loop_asm",

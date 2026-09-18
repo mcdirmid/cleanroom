@@ -1,3 +1,4 @@
+# Requirements specified in bazel_openai_config_impl.pyi
 import json
 import os
 import sys
@@ -77,7 +78,7 @@ def _find_target_config_file(target_label: str) -> Optional[str]:
     return None
 
 
-class ModelConfig(
+class OpenaiConfig(
     openai_config.OpenaiConfig,
     agent_config.AgentConfig,
     dag_config.DagConfig,
@@ -232,11 +233,15 @@ class ModelConfig(
         return self._batch_size
 
 
+ModelConfig = OpenaiConfig
+
+
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
-        ModelConfig,
+        OpenaiConfig,
         keys=[
+            OpenaiConfig,
             ModelConfig,
             openai_config.OpenaiConfig,
             agent_config.AgentConfig,

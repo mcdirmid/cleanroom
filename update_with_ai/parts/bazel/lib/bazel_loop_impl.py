@@ -1,3 +1,4 @@
+# Requirements specified in bazel_loop_impl.pyi
 from typing import Any, Optional, Set, cast
 from . import bazel_manifest_loader
 from update_with_ai.parts.loop.lib import loop

@@ -217,7 +217,7 @@ Total Statements: 219   | Covered: 219   | Missed: 0     | Coverage: 100.0%
 | | `tool_provider_impl.py` | 105 | 105 | **100.0%** |
 | **Bazel Subsystem** | `bazel_graph_storage_impl.py` | 129 | 129 | **100.0%** |
 | | `bazel_manifest_loader_impl.py` | 50 | 50 | **100.0%** |
-| | `bazel_model_config_impl.py` | 101 | 101 | **100.0%** |
+| | `bazel_openai_config_impl.py` | 101 | 101 | **100.0%** |
 | | `bazel_node_config_impl.py` | 74 | 74 | **100.0%** |
 | | `bazel_node_id_utils_impl.py` | 29 | 29 | **100.0%** |
 | | `bazel_runner_impl.py` | 56 | 56 | **100.0%** |

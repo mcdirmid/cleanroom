@@ -1,10 +1,10 @@
-"""Unit tests for bazel_impl aligned with grounding specifications."""
+"""Unit tests for bazel_loop_impl aligned with grounding specifications."""
 
 import unittest
 from typing import Optional, Sequence, Set
 from update_with_ai.parts.agent.lib import agent_storage
 from update_with_ai.parts.bazel.lib import bazel_manifest_loader
-from update_with_ai.parts.bazel.lib.bazel_impl import (
+from update_with_ai.parts.bazel.lib.bazel_loop_impl import (
     Loop as LoopImpl,
     __initialize__,
 )
@@ -114,7 +114,7 @@ class MockNodeCleaner:
         return True
 
 
-class BazelImplTest(unittest.TestCase):
+class BazelLoopImplTest(unittest.TestCase):
     """Tests for Bazel Loop implementation."""
 
     def setUp(self) -> None:

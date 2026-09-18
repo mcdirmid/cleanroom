@@ -30,7 +30,7 @@ pyright_test(
     srcs = ["bazel_macros_test.py"],
     imports = ["../.."],
     pyright_deps = [
-        "//update_with_ai/parts/systems/lib:bazel_with_loop_asm",
+        "//update_with_ai/parts/systems/lib:bazel_openai_loop_asm",
         "//update_with_ai/parts/bazel/lib:bazel_target",
         "//update_with_ai/parts/bazel/lib:bazel_manifest_loader",
         "//update_with_ai/parts/dag/lib:dag_storage",

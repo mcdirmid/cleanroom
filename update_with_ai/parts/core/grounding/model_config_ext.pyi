@@ -3,7 +3,7 @@
 
 ## External Mechanics & API Documentation
 
-The `model_config_ext` external component specifies build target model configuration JSON schema deserialization, configuration discovery, and credential binding using the Python standard library. External boundary specifications define no standalone library files; dependent implementation components (specifically `bazel_model_config_impl`) import and invoke Python's standard `json`, `os`, and `sys` libraries directly. The model configuration schema is defined and emitted by the Starlark build rule `model_config` in `update_with_ai/support/lib/model_config.bzl`.
+The `model_config_ext` external component specifies build target model configuration JSON schema deserialization, configuration discovery, and credential binding using the Python standard library. External boundary specifications define no standalone library files; dependent implementation components (specifically `bazel_openai_config_impl`) import and invoke Python's standard `json`, `os`, and `sys` libraries directly. The model configuration schema is defined and emitted by the Starlark build rule `model_config` in `update_with_ai/support/lib/model_config.bzl`.
 
 **Target Model Configuration JSON Document Schema**
 

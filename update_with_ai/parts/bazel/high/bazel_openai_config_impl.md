@@ -1,15 +1,15 @@
-# bazel_model_config_impl implementation component
+# bazel_openai_config_impl implementation component
 
 imports: model_config_ext
 implements: agent_config, dag_config, openai_config
 
 ## Purpose
 
-The bazel_model_config_impl implementation component realizes model configuration loading from target modules in the Bazel runfiles tree and process environment credentials.
+The bazel_openai_config_impl implementation component realizes model configuration loading from target modules in the Bazel runfiles tree and process environment credentials.
 
-Connecting declarative build targets to concrete language model parameters requires loading configuration modules from workspace build artifacts and binding runtime environment secrets without hardcoding credentials into source code. The bazel_model_config_impl implementation component resolves execution settings from a target module in the workspace runfiles tree or build output directory and binds authentication credentials from designated process environment variables.
+Connecting declarative build targets to concrete language model parameters requires loading configuration modules from workspace build artifacts and binding runtime environment secrets without hardcoding credentials into source code. The bazel_openai_config_impl implementation component resolves execution settings from a target module in the workspace runfiles tree or build output directory and binds authentication credentials from designated process environment variables.
 
-**Out of scope:** The bazel_model_config_impl implementation component does not transmit network requests to model providers, format conversation history, or track loop repetition; these are handled by other components.
+**Out of scope:** The bazel_openai_config_impl implementation component does not transmit network requests to model providers, format conversation history, or track loop repetition; these are handled by other components.
 
 ## Types and Behavior
 

@@ -1,4 +1,4 @@
-"""Unit tests for bazel_model_config_impl aligned with grounding specifications."""
+"""Unit tests for bazel_openai_config_impl aligned with grounding specifications."""
 
 import json
 import os
@@ -9,14 +9,15 @@ from unittest.mock import patch
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.dag.lib.dag_config import DagConfig
 from update_with_ai.parts.openai.lib.openai_config import OpenaiConfig
-from update_with_ai.parts.bazel.lib.bazel_model_config_impl import (
+from update_with_ai.parts.bazel.lib.bazel_openai_config_impl import (
+    OpenaiConfig as OpenaiConfigImpl,
     ModelConfig as ModelConfigImpl,
     __initialize__,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 
 
-class BazelModelConfigImplTest(unittest.TestCase):
+class BazelOpenaiConfigImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.orig_env = dict(os.environ)
         self.orig_argv = list(sys.argv)
@@ -330,7 +331,7 @@ class BazelModelConfigImplTest(unittest.TestCase):
 
             # @@//model_configs:variant
             with patch(
-                "update_with_ai.parts.bazel.lib.bazel_model_config_impl.sys.argv",
+                "update_with_ai.parts.bazel.lib.bazel_openai_config_impl.sys.argv",
                 ["prog", "--config", "@@//model_configs:variant"],
             ):
                 reg = LifecycleRegistry()
@@ -342,7 +343,7 @@ class BazelModelConfigImplTest(unittest.TestCase):
 
             # @//model_configs:variant
             with patch(
-                "update_with_ai.parts.bazel.lib.bazel_model_config_impl.sys.argv",
+                "update_with_ai.parts.bazel.lib.bazel_openai_config_impl.sys.argv",
                 ["prog", "--config", "@//model_configs:variant"],
             ):
                 reg = LifecycleRegistry()
@@ -354,7 +355,7 @@ class BazelModelConfigImplTest(unittest.TestCase):
 
             # @model_configs:variant
             with patch(
-                "update_with_ai.parts.bazel.lib.bazel_model_config_impl.sys.argv",
+                "update_with_ai.parts.bazel.lib.bazel_openai_config_impl.sys.argv",
                 ["prog", "--config", "@model_configs:variant"],
             ):
                 reg = LifecycleRegistry()
@@ -366,7 +367,7 @@ class BazelModelConfigImplTest(unittest.TestCase):
 
             # :variant
             with patch(
-                "update_with_ai.parts.bazel.lib.bazel_model_config_impl.sys.argv",
+                "update_with_ai.parts.bazel.lib.bazel_openai_config_impl.sys.argv",
                 ["prog", "--config", ":variant"],
             ):
                 reg = LifecycleRegistry()
@@ -378,7 +379,7 @@ class BazelModelConfigImplTest(unittest.TestCase):
 
             # Shorthand //model_configs/variant
             with patch(
-                "update_with_ai.parts.bazel.lib.bazel_model_config_impl.sys.argv",
+                "update_with_ai.parts.bazel.lib.bazel_openai_config_impl.sys.argv",
                 ["prog", "--config", "//model_configs/variant"],
             ):
                 reg = LifecycleRegistry()

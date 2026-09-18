@@ -5,7 +5,7 @@ import dag_config
 import openai_config
 
 @singleton_type('system')
-class ModelConfig(agent_config.AgentConfig, dag_config.DagConfig, openai_config.OpenaiConfig):
+class OpenaiConfig(openai_config.OpenaiConfig, agent_config.AgentConfig, dag_config.DagConfig):
     """
 PURPOSE:
 Implements openai config, agent config, and dag config loaded from target module and environment credentials
@@ -15,7 +15,7 @@ FRESH_REQUIREMENTS:
 - The openai config, agent config, and dag config load execution parameters and authentication credentials for language model agent runs from the target module.
 
 GROUNDING_ARGUMENT:
-- As a system singleton, ModelConfig resolves execution parameters from static target configuration modules and environment variables using model_config_ext without requiring collaborator singleton services.
+- As a system singleton, OpenaiConfig resolves execution parameters from static target configuration modules and environment variables using model_config_ext without requiring collaborator singleton services.
 """
 
     @property

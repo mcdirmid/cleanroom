@@ -198,21 +198,21 @@ class TestBazelMacrosIntegration(unittest.TestCase):
 
         # Impl component depending on _ext: _lib and _test silent_deps filter out _ext
         impl_targets, impl_deps = compute_targets_and_deps(
-            "bazel_model_config_impl",
+            "bazel_openai_config_impl",
             ["model_config", "model_config_ext"],
         )
-        self.assertIn("bazel_model_config_impl_lib", impl_targets)
-        self.assertIn("bazel_model_config_impl_test", impl_targets)
-        self.assertEqual(impl_deps["bazel_model_config_impl_lib"], ["model_config_lib"])
+        self.assertIn("bazel_openai_config_impl_lib", impl_targets)
+        self.assertIn("bazel_openai_config_impl_test", impl_targets)
+        self.assertEqual(impl_deps["bazel_openai_config_impl_lib"], ["model_config_lib"])
         self.assertNotIn(
-            "model_config_ext_lib", impl_deps["bazel_model_config_impl_lib"]
+            "model_config_ext_lib", impl_deps["bazel_openai_config_impl_lib"]
         )
         self.assertEqual(
-            impl_deps["bazel_model_config_impl_test"],
-            [":bazel_model_config_impl_lib", "model_config_lib"],
+            impl_deps["bazel_openai_config_impl_test"],
+            [":bazel_openai_config_impl_lib", "model_config_lib"],
         )
         self.assertNotIn(
-            "model_config_ext_lib", impl_deps["bazel_model_config_impl_test"]
+            "model_config_ext_lib", impl_deps["bazel_openai_config_impl_test"]
         )
 
     def test_binary_preamble_and_lifecycle_resolution(self):
@@ -221,7 +221,7 @@ class TestBazelMacrosIntegration(unittest.TestCase):
             from support.lib.lifecycle import get_singleton
         except ImportError:
             from update_python_with_ai.support.lib.lifecycle import get_singleton
-        from update_with_ai.parts.systems.lib import bazel_with_loop_asm
+        from update_with_ai.parts.systems.lib import bazel_openai_loop_asm
         from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget
         from update_with_ai.parts.bazel.lib.bazel_manifest_loader import (
             BazelManifestLoader,
@@ -229,7 +229,7 @@ class TestBazelMacrosIntegration(unittest.TestCase):
         from update_with_ai.parts.dag.lib.dag_storage import DagStorage
         from update_with_ai.parts.loop.lib.loop import Loop
 
-        bazel_with_loop_asm.__initialize__()
+        bazel_openai_loop_asm.__initialize__()
         node_util = get_singleton(BazelTarget)
         self.assertIsNotNone(node_util)
         node = node_util.normalize("//update_with_ai/specs:dag_storage_lib")

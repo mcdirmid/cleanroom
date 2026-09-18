@@ -18,12 +18,12 @@ pyright_test(
 )
 
 pyright_test(
-    name = "bazel_model_config_impl_test",
-    srcs = ["bazel_model_config_impl_test.py"],
+    name = "bazel_openai_config_impl_test",
+    srcs = ["bazel_openai_config_impl_test.py"],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_config",
-        "//update_with_ai/parts/bazel/lib:bazel_model_config_impl",
+        "//update_with_ai/parts/bazel/lib:bazel_openai_config_impl",
         "//update_with_ai/parts/dag/lib:dag_config",
         "//update_with_ai/parts/openai/lib:openai_config",
     ],
@@ -49,12 +49,12 @@ pyright_test(
 )
 
 pyright_test(
-    name = "bazel_impl_test",
-    srcs = ["bazel_impl_test.py"],
+    name = "bazel_loop_impl_test",
+    srcs = ["bazel_loop_impl_test.py"],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_storage",
-        "//update_with_ai/parts/bazel/lib:bazel_impl",
+        "//update_with_ai/parts/bazel/lib:bazel_loop_impl",
         "//update_with_ai/parts/bazel/lib:bazel_manifest_loader",
         "//update_with_ai/parts/core/lib:runner_logger",
         "//update_with_ai/parts/dag/lib:dag_storage",

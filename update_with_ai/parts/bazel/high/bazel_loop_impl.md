@@ -1,15 +1,15 @@
-# bazel_impl implementation component
+# bazel_loop_impl implementation component
 
 imports: bazel_manifest_loader, dag_storage, loop, loop_cleaner, loop_node_cleaner, runner_logger
 implements: loop
 
 ## Purpose
 
-The bazel_impl implementation component realizes workspace target loading, topological cleaning pass execution, feedback routing, and pass telemetry.
+The bazel_loop_impl implementation component realizes workspace target loading, topological cleaning pass execution, feedback routing, and pass telemetry.
 
-Executing multi-stage agent workflows requires coordinating target loading, dirty state evaluation, and topological cleaning across the graph. The bazel_impl implementation component coordinates this end-to-end lifecycle: loading workspace targets into graph storage, dispatching topological cleaning passes using loop cleaner and node cleaner, routing feedback across node boundaries, and capturing execution progress through structured runner logging.
+Executing multi-stage agent workflows requires coordinating target loading, dirty state evaluation, and topological cleaning across the graph. The bazel_loop_impl implementation component coordinates this end-to-end lifecycle: loading workspace targets into graph storage, dispatching topological cleaning passes using loop cleaner and node cleaner, routing feedback across node boundaries, and capturing execution progress through structured runner logging.
 
-**Out of scope:** The bazel_impl implementation component does not parse manifest JSON files, execute individual agent turns, or render user interfaces; these are handled by other components.
+**Out of scope:** The bazel_loop_impl implementation component does not parse manifest JSON files, execute individual agent turns, or render user interfaces; these are handled by other components.
 
 ## Types and Behavior
 
