@@ -474,5 +474,139 @@ else
 fi
 check "c19 undeclared error diagnostic" "$tmp/c19/err.log" "undeclared dependency 'unauthorized_module'. Allowed dependencies: widget_impl"
 
+# Case 20: empty test module with .pyi grounding spec -> scaffolded with valid test skeleton.
+mkdir -p "$tmp/c20/lib" "$tmp/c20/tests" "$tmp/c20/grounding"
+cat > "$tmp/c20/grounding/worker_impl.pyi" <<'EOF'
+from framework import operation, singleton_type
+
+@singleton_type('agent_session')
+class Worker:
+    """
+PURPOSE:
+Worker component.
+
+FRESH_REQUIREMENTS:
+- The worker processes items sequentially.
+- Processing an item returns true on success.
+"""
+    @operation
+    def process_item(self, item: str) -> bool:
+        ...
+EOF
+cat > "$tmp/c20/lib/worker_impl.py" <<'EOF'
+class Worker:
+    pass
+
+def __initialize__(registry=None):
+    pass
+EOF
+touch "$tmp/c20/tests/worker_impl_test.py"
+if ( cd "$tmp/c20" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/worker_impl_test.py --lib-pkg lib --pyi "$tmp/c20/grounding/worker_impl.pyi" ); then
+    echo "PASS: c20 auto-generated test skeleton from .pyi"
+else
+    echo "FAIL: c20 failed to generate test skeleton from .pyi" >&2
+    fail=1
+fi
+check "c20 target class import" "$tmp/c20/tests/worker_impl_test.py" 'from lib\.worker_impl import'
+check "c20 worker imported" "$tmp/c20/tests/worker_impl_test.py" 'Worker,'
+check "c20 initialize imported" "$tmp/c20/tests/worker_impl_test.py" '__initialize__,'
+check "c20 test class" "$tmp/c20/tests/worker_impl_test.py" 'class WorkerImplTest(unittest\.TestCase):'
+check "c20 setup method" "$tmp/c20/tests/worker_impl_test.py" 'def setUp(self) -> None:'
+check "c20 cuj method" "$tmp/c20/tests/worker_impl_test.py" 'def test_initialization(self) -> None:'
+check "c20 unittest main" "$tmp/c20/tests/worker_impl_test.py" 'if __name__ == "__main__":'
+check "c20 untested req header" "$tmp/c20/tests/worker_impl_test.py" '# Untested requirements:'
+check "c20 untested req item" "$tmp/c20/tests/worker_impl_test.py" '# - The worker processes items sequentially\.'
+check "c20 untested req item 2" "$tmp/c20/tests/worker_impl_test.py" '# - Processing an item returns true on success\.'
+
+# Case 21: test module with <TargetClass> placeholder -> replaced with auto-generated test skeleton.
+mkdir -p "$tmp/c21/lib" "$tmp/c21/tests" "$tmp/c21/grounding"
+cat > "$tmp/c21/grounding/service_impl.pyi" <<'EOF'
+from framework import operation, singleton_type
+
+@singleton_type('system')
+class Service:
+    """
+PURPOSE:
+Service component.
+
+INHERITED_REQUIREMENTS:
+- [Service] The service initializes system state.
+"""
+    @operation
+    def serve(self) -> None:
+        ...
+EOF
+cat > "$tmp/c21/lib/service_impl.py" <<'EOF'
+class Service:
+    pass
+
+def __initialize__(registry=None):
+    pass
+EOF
+cat > "$tmp/c21/tests/service_impl_test.py" <<'EOF'
+class <TargetClass>Test(unittest.TestCase):
+    pass
+EOF
+if ( cd "$tmp/c21" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/service_impl_test.py --lib-pkg lib --pyi "$tmp/c21/grounding/service_impl.pyi" ); then
+    echo "PASS: c21 replaced <TargetClass> test placeholder with valid skeleton"
+else
+    echo "FAIL: c21 failed to replace <TargetClass> placeholder" >&2
+    fail=1
+fi
+check "c21 service class import" "$tmp/c21/tests/service_impl_test.py" 'from lib\.service_impl import'
+check "c21 service imported" "$tmp/c21/tests/service_impl_test.py" 'Service,'
+check "c21 service test class" "$tmp/c21/tests/service_impl_test.py" 'class ServiceImplTest(unittest\.TestCase):'
+check "c21 untested requirement" "$tmp/c21/tests/service_impl_test.py" '# - \[Service\] The service initializes system state\.'
+
+# Case 22: parent package BUILD.bazel contains _ext dependency -> excluded from tests/BUILD.bazel
+mkdir -p "$tmp/c22/lib" "$tmp/c22/tests" "$tmp/c22/grounding"
+cat > "$tmp/c22/BUILD.bazel" <<'EOF'
+load("@rules_python//python:defs.bzl", "py_library")
+
+py_library(
+    name = "worker_impl",
+    srcs = ["lib/worker_impl.py"],
+    deps = [
+        "//other/pkg:helper_ext",
+        ":helper_ext",
+        "//other/pkg:common",
+    ],
+)
+EOF
+cat > "$tmp/c22/grounding/worker_impl.pyi" <<'EOF'
+class Worker:
+    pass
+EOF
+cat > "$tmp/c22/lib/worker_impl.py" <<'EOF'
+class Worker:
+    pass
+def __initialize__(registry=None):
+    pass
+EOF
+cat > "$tmp/c22/tests/worker_impl_test.py" <<'EOF'
+import unittest
+from lib.worker_impl import Worker
+
+class WorkerTest(unittest.TestCase):
+    def test_ok(self):
+        pass
+if __name__ == "__main__":
+    unittest.main()
+EOF
+if ( cd "$tmp/c22" && python3 "$bin/test_lint.py" tests/BUILD.bazel tests/worker_impl_test.py --lib-pkg lib --pyi "$tmp/c22/grounding/worker_impl.pyi" ); then
+    echo "PASS: c22 ran test_lint with _ext in parent deps"
+else
+    echo "FAIL: c22 failed to run test_lint with _ext in parent deps" >&2
+    fail=1
+fi
+if grep -q "helper_ext" "$tmp/c22/tests/BUILD.bazel"; then
+    echo "FAIL: c22 included _ext dependency in tests/BUILD.bazel" >&2
+    fail=1
+else
+    echo "PASS: c22 correctly excluded _ext dependency from tests/BUILD.bazel"
+fi
+
 exit "$fail"
+
+
 

@@ -306,10 +306,18 @@ INHERITED_ASSUMPTIONS:
 """
 
     @property
+    def path(self) -> tool_provider.Parameter:
+        """
+PURPOSE:
+Parameter identifying the session file path to check
+"""
+        ...
+
+    @property
     def src(self) -> tool_provider.Parameter:
         """
 PURPOSE:
-Parameter identifying the session source file to check
+Parameter identifying the session file path to check as an alias of path
 """
         ...
 

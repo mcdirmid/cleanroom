@@ -341,13 +341,14 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Replace file content tool execution reads the file content from the filesystem, treating missing files as empty.
             # Requirement: On success, the tool writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred.
             # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
-            # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, and records that workspace file modifications occurred.
+            # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and reminds the agent to call the check file tool to verify syntax and type correctness before making further modifications.
             # Requirement: Editing tool responses share a constant suppression key replace_file_content.
             resp = replace_tool.execute_tool(b_ok)
             self.assertFalse(resp.is_failed)
             self.assertEqual(resp.suppression_key, "replace_file_content")
             self.assertIsNone(resp.follow_up_tool_call)
-            self.assertIsNone(resp.reminder)
+            self.assertIsNotNone(resp.reminder)
+            self.assertIn("check_file", resp.reminder or "")
             self.assertTrue(edit_mgr.has_modifications)
             with open(self.target_path, "r", encoding="utf-8") as f:
                 self.assertEqual(f.read(), "Line 1\nUpdated Line 2\nLine 3\n")
@@ -363,9 +364,11 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 }
             )
             # Requirement: When allow multiple is not set or false, execution fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence.
+            # Requirement: When target content matches multiple locations in the file and allow multiple is false, failure feedback indicates the first two matching line numbers to assist in narrowing the replacement region and instructs the agent to include more surrounding lines in target_content or specify start_line and end_line.
             resp_dup = replace_tool.execute_tool(b_dup)
             self.assertTrue(resp_dup.is_failed)
             self.assertIn("matches 2 locations", resp_dup.content)
+            self.assertIn("Include more surrounding lines", resp_dup.content)
 
             # 5. Multiple matches succeed when allow_multiple is true
             b_dup_allowed = ActualParameterBindings(
@@ -592,7 +595,8 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertIn("-Line 1", resp_diff.content)
             self.assertIn("+Header", resp_diff.content)
             self.assertIsNone(resp_diff.follow_up_tool_call)
-            self.assertIsNone(resp_diff.reminder)
+            self.assertIsNotNone(resp_diff.reminder)
+            self.assertIn("check_file", resp_diff.reminder or "")
             self.assertEqual(resp_diff.suppression_key, "replace_file_content")
 
             # 2. Delta output disabled omits diff delta
@@ -610,7 +614,8 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertNotIn("```diff", resp_no_followup.content)
             self.assertEqual(resp_no_followup.content, "Successfully replaced content.")
             self.assertIsNone(resp_no_followup.follow_up_tool_call)
-            self.assertIsNone(resp_no_followup.reminder)
+            self.assertIsNotNone(resp_no_followup.reminder)
+            self.assertIn("check_file", resp_no_followup.reminder or "")
             self.assertEqual(resp_no_followup.suppression_key, "replace_file_content")
 
             # Reset config

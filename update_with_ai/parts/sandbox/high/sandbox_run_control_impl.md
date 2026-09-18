@@ -31,11 +31,11 @@ The submit tool is named `submit`, accepting an optional target parameter and a 
 
 The fail tool is named `fail`, accepting an optional target parameter and a text *explanation* parameter. Executing the fail tool marks the target as failed, locks the target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response carrying the explanation when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
 
-The check file tool is named `check_file`, accepting an optional src parameter, and shares a constant suppression key `check_file`. Executing the check file tool updates verification results if outdated. When a src target is specified, executing the check file tool evaluates verification checks for that target. Tool execution:
+The check file tool is named `check_file`, accepting an optional path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`. Executing the check file tool updates verification results if outdated. When a path target is specified, executing the check file tool evaluates verification checks for that target. Tool execution:
 
 - Reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous check file tool execution.
 
-- Specifies a follow-up execution of the view file tool on the session source file and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check file tool execution.
+- Specifies a follow-up execution of the view file tool on the session source file (resolving to the specified path target if a read-write file, the last accessed read-write file, or the primary session read-write file) and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check file tool execution.
 
 - Fails when verification fails, presenting diagnostic feedback sanitized through the alias manager alongside any configured verification failure instructions.
 

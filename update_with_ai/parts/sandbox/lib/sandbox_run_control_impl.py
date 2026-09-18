@@ -774,7 +774,7 @@ class CheckFileTool(sandbox_run_control.CheckFileTool, Singleton):
 
     @property
     def name(self) -> str:
-        # Requirement: The check file tool is named `check_file`, accepting an optional src parameter, and shares a constant suppression key `check_file`.
+        # Requirement: The check file tool is named `check_file`, accepting an optional path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
         return "check_file"
 
     @property
@@ -785,29 +785,39 @@ class CheckFileTool(sandbox_run_control.CheckFileTool, Singleton):
         )
 
     @property
-    def src(self) -> tool_provider.Parameter:
+    def path(self) -> tool_provider.Parameter:
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         return tool_provider.Parameter(
-            name="src",
+            name="path",
             description="Source file alias to check. May be omitted to check open targets.",
             parameter_converter=alias_mgr,
             is_required=False,
         )
 
     @property
+    def src(self) -> tool_provider.Parameter:
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
+        return tool_provider.Parameter(
+            name="src",
+            description="Source file alias to check (alias of path). May be omitted to check open targets.",
+            parameter_converter=alias_mgr,
+            is_required=False,
+        )
+
+    @property
     def target(self) -> tool_provider.Parameter:
-        return self.src
+        return self.path
 
     @property
     def parameters(self) -> Set[tool_provider.Parameter]:
-        # Requirement: The check file tool is named `check_file`, accepting an optional src parameter, and shares a constant suppression key `check_file`.
-        return {self.src}
+        # Requirement: The check file tool is named `check_file`, accepting an optional path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
+        return {self.path, self.src}
 
     def execute_tool(
         self, actual_parameter_bindings: tool_provider.ActualParameterBindings
     ) -> tool_provider.Response:
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
-        raw_target = bindings_map.get("src") or bindings_map.get("target")
+        raw_target = bindings_map.get("path") or bindings_map.get("src") or bindings_map.get("target")
 
         rc = get_singleton(RunController)
         guide_del = get_singleton(sandbox_guide_delivery.GuideDelivery)
@@ -815,7 +825,7 @@ class CheckFileTool(sandbox_run_control.CheckFileTool, Singleton):
         cfg = get_singleton(agent_node_config.NodeConfig)
 
         # Requirement: Executing the check file tool updates verification results if outdated.
-        # Requirement: When a src target is specified, executing the check file tool evaluates verification checks for that target.
+        # Requirement: When a path target is specified, executing the check file tool evaluates verification checks for that target.
         target_str = ""
         if raw_target is not None:
             target_str = (
@@ -844,8 +854,25 @@ class CheckFileTool(sandbox_run_control.CheckFileTool, Singleton):
         follow_up: Optional[tool_provider.FollowUpToolCall] = None
 
         if is_repeated:
-            rw_file = (
-                next(
+            rw_file = None
+            if raw_target is not None:
+                for f in cfg.read_write_files:
+                    if f == raw_target or getattr(f, "relative_path", "") == getattr(
+                        raw_target, "relative_path", str(raw_target)
+                    ):
+                        rw_file = f
+                        break
+            if rw_file is None:
+                last_f = edit_mgr.last_read_or_edited_file
+                if last_f is not None:
+                    for f in cfg.read_write_files:
+                        if f == last_f or getattr(f, "relative_path", "") == getattr(
+                            last_f, "relative_path", ""
+                        ):
+                            rw_file = f
+                            break
+            if rw_file is None and cfg.read_write_files:
+                rw_file = next(
                     iter(
                         sorted(
                             cfg.read_write_files,
@@ -856,9 +883,6 @@ class CheckFileTool(sandbox_run_control.CheckFileTool, Singleton):
                     ),
                     None,
                 )
-                if cfg.read_write_files
-                else None
-            )
             src_name = (
                 getattr(rw_file, "relative_path", getattr(rw_file, "short_name", ""))
                 if rw_file
@@ -883,7 +907,7 @@ class CheckFileTool(sandbox_run_control.CheckFileTool, Singleton):
                         f"Oh, verification failed and no new information will be revealed by calling check_file again until files are updated. "
                         f"Let me read {rw_file_alias} again and see if I can figure out a different course of action."
                     )
-                # Requirement: Specifies a follow-up execution of the view file tool on the session source file and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check file tool execution.
+                # Requirement: Specifies a follow-up execution of the view file tool on the session source file (resolving to the specified path target if a read-write file, the last accessed read-write file, or the primary session read-write file) and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check file tool execution.
                 follow_up = tool_provider.FollowUpToolCall(
                     tool_name="view_file",
                     wire_parameter_bindings=tool_provider.WireParameterBindings(

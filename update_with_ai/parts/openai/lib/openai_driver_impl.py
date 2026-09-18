@@ -401,8 +401,8 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                                     "The tool was not executed."
                                 ),
                                 reminder=(
-                                    "Whole-file or monolithic replacements that exceed output token limits are prohibited. "
-                                    "Make small, incremental edits using replace_file_content."
+                                    "Whole-file, multi-class, or monolithic replacements that exceed output token limits are prohibited. "
+                                    "Make strictly small edits containing at most a single test method or fixture (at most 30–50 lines of code) using replace_file_content."
                                 ),
                                 suppression_key=supp_key,
                             ),
@@ -415,8 +415,8 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                             role="user",
                             content=(
                                 "Generation limit reached: response was truncated due to length. "
-                                "Whole-file or monolithic replacements that exceed output token limits are prohibited. "
-                                "Make small, incremental edits to individual classes, methods, or sections using replace_file_content."
+                                "Whole-file, multi-class, or monolithic replacements that exceed output token limits are prohibited. "
+                                "Make strictly small edits containing at most a single test method or fixture (at most 30–50 lines of code) using replace_file_content."
                             ),
                         )
                     )

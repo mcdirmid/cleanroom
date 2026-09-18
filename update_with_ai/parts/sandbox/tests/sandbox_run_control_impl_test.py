@@ -235,6 +235,15 @@ class MockEditManager:
         self.has_modifications = has_modifications
         self.file_update_revision = file_update_revision
         self._locked_files: Set[Any] = set()
+        self._last_read_or_edited_file: Optional[Any] = None
+
+    @property
+    def last_read_or_edited_file(self) -> Optional[Any]:
+        return self._last_read_or_edited_file
+
+    @last_read_or_edited_file.setter
+    def last_read_or_edited_file(self, value: Optional[Any]) -> None:
+        self._last_read_or_edited_file = value
 
     @property
     def locked_files(self) -> Set[Any]:
@@ -367,7 +376,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIn("submit", tool_names)
             # Requirement: The fail tool is named `fail`.
             self.assertIn("fail", tool_names)
-            # Requirement: The check file tool is named `check_file`, accepting an optional src parameter, and shares a constant suppression key `check_file`.
+            # Requirement: The check file tool is named `check_file`, accepting an optional path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
             self.assertIn("check_file", tool_names)
             # Requirement: The blame tool is named `blame`.
             self.assertIn("blame", tool_names)
@@ -1024,7 +1033,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             check_file = scope.get_singleton(CheckFileTool)
 
             # Test target rt_unit1.py passes
-            # Requirement: When a src target is specified, executing the check file tool evaluates verification checks for that target.
+            # Requirement: When a path target is specified, executing the check file tool evaluates verification checks for that target.
             b1 = ActualParameterBindings(
                 bindings={(check_file.src, TargetFileObj("rt_unit1.py"))}
             )
@@ -1044,6 +1053,11 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertTrue(resp2.is_failed)
             self.assertEqual(vcheck2.call_count, 1)
 
+            # Test target via path parameter alias
+            b_path = ActualParameterBindings(bindings={(check_file.path, "rt_unit1.py")})
+            resp_path = check_file.execute_tool(b_path)
+            self.assertFalse(resp_path.is_failed)
+
     def test_check_file_tool_failing_verification_presents_diagnostics_and_instructions(
         self,
     ) -> None:
@@ -1060,9 +1074,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             check_file = scope.get_singleton(CheckFileTool)
-            # Requirement: The check file tool is named `check_file`, accepting an optional src parameter, and shares a constant suppression key `check_file`.
+            # Requirement: The check file tool is named `check_file`, accepting an optional path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
             self.assertEqual(check_file.name, "check_file")
-            self.assertEqual(check_file.parameters, {check_file.src})
+            self.assertEqual(check_file.parameters, {check_file.path, check_file.src})
             self.assertIsInstance(check_file.description, str)
 
             b = ActualParameterBindings(bindings=set())
@@ -1078,7 +1092,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
                 "## Verification failure\nInspect diagnostics and fix workspace files.",
                 resp.content,
             )
-            # Requirement: The check file tool is named `check_file`, accepting an optional src parameter, and shares a constant suppression key `check_file`.
+            # Requirement: The check file tool is named `check_file`, accepting an optional path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
             self.assertEqual(resp.suppression_key, "check_file")
 
     def test_check_file_tool_passing_verification_presents_results(self) -> None:
@@ -1099,7 +1113,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertFalse(resp.is_terminated)
             self.assertIn("Verification passed", resp.content)
             self.assertIn("All tests pass in test.py", resp.content)
-            # Requirement: The check file tool is named `check_file`, accepting an optional src parameter, and shares a constant suppression key `check_file`.
+            # Requirement: The check file tool is named `check_file`, accepting an optional path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
             self.assertEqual(resp.suppression_key, "check_file")
 
             # Custom verification_success_message
@@ -1173,7 +1187,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIsNone(resp1.follow_up_tool_call)
 
             # Requirement: Reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous check file tool execution.
-            # Requirement: Specifies a follow-up execution of the view file tool on the session source file and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check file tool execution.
+            # Requirement: Specifies a follow-up execution of the view file tool on the session source file (resolving to the specified path target if a read-write file, the last accessed read-write file, or the primary session read-write file) and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check file tool execution.
             # When is_step_mode is False (default for coverage / non-step nodes), reasoning directs to submit
             self.node_cfg.is_step_mode = False
             resp2 = check_file.execute_tool(b)
@@ -1215,6 +1229,39 @@ class SandboxRunControlImplTest(unittest.TestCase):
                 resp_fail.follow_up_tool_call.reasoning_text,
                 "Oh, verification failed and no new information will be revealed by calling check_file again until files are updated. Let me read src.py again and see if I can figure out a different course of action.",
             )
+
+            # Multi-target session source file resolution:
+            # 1. Resolves to specified path target when provided and matching read-write files
+            rw2 = ReadWriteFile(
+                relative_path="src2.py",
+                workspace_path=_make_workspace_path("/workspace/src2.py"),
+                owning_node=Node(unit_address="//pkg:target2", role_address="lib"),
+            )
+            self.node_cfg._read_write_files = {rw_file, rw2}
+            self.edit_mgr.file_update_revision = 3
+            b_target = ActualParameterBindings(bindings={(check_file.path, rw2)})
+            _ = check_file.execute_tool(b_target)
+            resp_target = check_file.execute_tool(b_target)
+            assert resp_target.follow_up_tool_call is not None
+            self.assertEqual(
+                resp_target.follow_up_tool_call.wire_parameter_bindings.bindings,
+                {("path", "src2.py")},
+            )
+            assert resp_target.reminder is not None
+            self.assertIn("until src2.py is updated.", resp_target.reminder)
+
+            # 2. Resolves to last accessed read-write file when target not specified
+            self.edit_mgr.last_read_or_edited_file = rw2
+            self.edit_mgr.file_update_revision = 4
+            _ = check_file.execute_tool(b)
+            resp_last = check_file.execute_tool(b)
+            assert resp_last.follow_up_tool_call is not None
+            self.assertEqual(
+                resp_last.follow_up_tool_call.wire_parameter_bindings.bindings,
+                {("path", "src2.py")},
+            )
+            assert resp_last.reminder is not None
+            self.assertIn("until src2.py is updated.", resp_last.reminder)
 
 
 if __name__ == "__main__":

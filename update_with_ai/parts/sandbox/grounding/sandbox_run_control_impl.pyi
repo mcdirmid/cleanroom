@@ -478,7 +478,7 @@ INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.
 
 FRESH_REQUIREMENTS:
-- The check file tool is named `check_file`, accepting an optional src parameter, and shares a constant suppression key `check_file`.
+- The check file tool is named `check_file`, accepting an optional path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
 
 GROUNDING_ARGUMENT:
 - As an agent_session singleton, CheckFileTool evaluates verification checks via RunController, presenting results with suppression key 'check_file' in the same session lifecycle tier.
@@ -498,13 +498,25 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def src(self) -> tool_provider.Parameter:
+    def path(self) -> tool_provider.Parameter:
         """
 PURPOSE:
-Parameter identifying the session source file to check
+Parameter identifying the session file path to check
 
 GROUNDING_ARGUMENT:
 - Constant parameter descriptor configured with alias manager converter.
+"""
+        ...
+
+    @property
+    @override
+    def src(self) -> tool_provider.Parameter:
+        """
+PURPOSE:
+Parameter identifying the session file path to check as an alias of path
+
+GROUNDING_ARGUMENT:
+- Constant parameter descriptor configured with alias manager converter matching path.
 """
         ...
 
@@ -528,7 +540,7 @@ PURPOSE:
 Parameters accepted by the tool
 
 GROUNDING_ARGUMENT:
-- Returns a set containing the optional src parameter.
+- Returns a set containing the optional path and src parameters.
 """
         ...
 
@@ -541,9 +553,9 @@ Executes the check file tool, updating verification results and presenting them
 
 FRESH_REQUIREMENTS:
 - Executing the check file tool updates verification results if outdated.
-- When a src target is specified, executing the check file tool evaluates verification checks for that target.
+- When a path target is specified, executing the check file tool evaluates verification checks for that target.
 - Reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous check file tool execution.
-- Specifies a follow-up execution of the view file tool on the session source file and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check file tool execution.
+- Specifies a follow-up execution of the view file tool on the session source file (resolving to the specified path target if a read-write file, the last accessed read-write file, or the primary session read-write file) and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check file tool execution.
 - Fails when verification fails, presenting diagnostic feedback sanitized through the alias manager alongside any configured verification failure instructions.
 - Produces a response presenting passing verification results using the session verification success message when configured or default passing verification results alongside sanitized check output when verification passes.
 
@@ -552,6 +564,6 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Evaluates verification via RunController.evaluate_verification in the same session lifecycle tier, sanitizes diagnostics through imported agent_file_alias.AliasManager, formats failure instructions from imported sandbox_guide_delivery.GuideDelivery, attaches suppression key 'check_file', and constructs a tool_provider.Response presenting verification outcome alongside check output.
+- Evaluates verification via RunController.evaluate_verification in the same session lifecycle tier, resolves the session source file against actual parameter bindings, the last accessed file from imported sandbox_file_editor.EditManager, or session read-write files from NodeConfig, sanitizes diagnostics through imported agent_file_alias.AliasManager, formats failure instructions from imported sandbox_guide_delivery.GuideDelivery, attaches suppression key 'check_file', and constructs a tool_provider.Response presenting verification outcome alongside check output.
 """
         ...

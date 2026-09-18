@@ -47,7 +47,11 @@ class BlameTool(tool_provider.Tool, Protocol):
 
 class CheckFileTool(tool_provider.Tool, Protocol):
     @property
+    def path(self) -> tool_provider.Parameter: ...
+
+    @property
     def src(self) -> tool_provider.Parameter: ...
 
 
 RunTestsTool = CheckFileTool
+

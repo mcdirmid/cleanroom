@@ -421,7 +421,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                     content=f"Error: target_content matches {count} locations in line range [{s_idx + 1}, {e_idx}]. Set allow_multiple=true or narrow the line range.",
                     suppression_key="replace_file_content",
                 )
-            # Requirement: When target content matches multiple locations in the file and allow multiple is false, failure feedback indicates the first two matching line numbers to assist in narrowing the replacement region.
+            # Requirement: When target content matches multiple locations in the file and allow multiple is false, failure feedback indicates the first two matching line numbers to assist in narrowing the replacement region and instructs the agent to include more surrounding lines in target_content or specify start_line and end_line.
             first_idx = region.find(target_content)
             second_idx = region.find(
                 target_content, first_idx + len(target_content)
@@ -433,7 +433,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                 is_terminated=False,
                 content=(
                     f"Error: target_content matches {count} locations in file (first at line {first_line}, then at line {second_line}). "
-                    "Set allow_multiple=true or specify start_line and end_line."
+                    "Include more surrounding lines in target_content to make it unique, or specify start_line and end_line."
                 ),
                 suppression_key="replace_file_content",
             )
@@ -458,7 +458,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         edit_mgr = get_singleton(EditManager)
         edit_mgr.record_initial_content(host_path, content)
 
-        # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, and records that workspace file modifications occurred.
+        # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and reminds the agent to call the check file tool to verify syntax and type correctness before making further modifications.
         # Requirement: On success, the tool writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred.
         # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
         os.makedirs(os.path.dirname(host_path), exist_ok=True)
@@ -498,7 +498,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
             is_failed=False,
             is_terminated=False,
             content=content_msg,
-            reminder=None,
+            reminder=f"Call check_file(path='{target_file.relative_path}') to verify syntax and type correctness before making further modifications.",
             suppression_key="replace_file_content",
             follow_up_tool_call=None,
         )

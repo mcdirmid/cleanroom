@@ -545,6 +545,11 @@ def _parse_guide_markdown(content: str) -> agent_node_config.Guide:
     )
 
 
+_EXECROOT_PATTERN: re.Pattern[str] = re.compile(
+    r"/(?:[^\s:;\"\'`()<>{}\[\]/]+/)*execroot/[^\s:;\"\'`()<>{}\[\]/]+/"
+)
+
+
 class AliasManager(agent_file_alias.AliasManager, Singleton):
     tier = "agent_session"
 
@@ -605,13 +610,20 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
         )
 
     def sanitize_text(self, text: str) -> str:
-        # Requirement: The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its relative path, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking.
+        # Requirement: The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its relative path, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking, stripping workspace root path prefixes, and stripping execution root path prefixes.
         res = text
         for pattern, rel_path in self._masking_patterns:
             res = pattern.sub(rel_path, res)
         for host_path, rel_path in self._paths.items():
             if host_path in res:
                 res = res.replace(host_path, rel_path)
+        if self._workspace_root and self._workspace_root.path:
+            ws_root_slash = self._workspace_root.path.rstrip("/") + "/"
+            if ws_root_slash in res:
+                res = res.replace(ws_root_slash, "")
+            if self._workspace_root.path in res:
+                res = res.replace(self._workspace_root.path, "")
+        res = _EXECROOT_PATTERN.sub("", res)
         return res
 
     @property

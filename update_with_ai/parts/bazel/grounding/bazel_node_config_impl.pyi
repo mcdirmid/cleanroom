@@ -352,13 +352,13 @@ PURPOSE:
 Masks occurrences of relative workspace paths and preceding path prefixes with relative paths
 
 FRESH_REQUIREMENTS:
-- The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its relative path, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking.
+- The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its relative path, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking, stripping workspace root path prefixes, and stripping execution root path prefixes.
 
 INHERITED_REQUIREMENTS:
 - [AliasManager] Sanitizing text masks occurrences of relative workspace paths and preceding path prefixes with the corresponding file alias relative paths.
 
 GROUNDING_ARGUMENT:
-- Receives text directly as a parameter and replaces relative workspace paths and preceding path prefixes with corresponding relative paths stored on self.
+- Receives text directly as a parameter and replaces relative workspace paths and preceding path prefixes with corresponding relative paths stored on self, stripping workspace root and execution root path prefixes.
 """
         ...
 

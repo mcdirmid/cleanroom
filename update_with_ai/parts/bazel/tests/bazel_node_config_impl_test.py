@@ -239,7 +239,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             text = "Error in /workspace/pkg/module.py at line 10"
             sanitized = alias_mgr.sanitize_text(text)
-            # Requirement: The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its minimal short name, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking.
+            # Requirement: The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its relative path, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking, stripping workspace root path prefixes, and stripping execution root path prefixes.
             # Requirement: [AliasManager] Sanitizing text masks occurrences of relative workspace paths and preceding path prefixes with the corresponding file alias short names.
             self.assertNotIn("/workspace/pkg/module.py", sanitized)
             self.assertIn("module.py", sanitized)
@@ -252,6 +252,13 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             rel_sanitized = alias_mgr.sanitize_text(rel_text)
             self.assertEqual(
                 rel_sanitized, "Verification failed: module.py:2: error: msg"
+            )
+
+            execroot_text = "FAIL: //target (Exit 1) (see /private/var/tmp/_bazel_user/1234abcd/execroot/_main/bazel-out/darwin_arm64-fastbuild/testlogs/target/test.log)"
+            execroot_sanitized = alias_mgr.sanitize_text(execroot_text)
+            self.assertEqual(
+                execroot_sanitized,
+                "FAIL: //target (Exit 1) (see bazel-out/darwin_arm64-fastbuild/testlogs/target/test.log)",
             )
 
     def test_lifecycle_initialization_from_manifest(self) -> None:
@@ -388,12 +395,17 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 "test/pkg/dep_target.py:12: error: missing import"
             )
             sanitized = alias_mgr.sanitize_text(diag_output)
-            # Requirement: The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its relative path, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking.
+            # Requirement: The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its relative path, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking, stripping workspace root path prefixes, and stripping execution root path prefixes.
             # Requirement: [AliasManager] Sanitizing text masks occurrences of relative workspace paths and preceding path prefixes with the corresponding file alias relative paths.
             self.assertEqual(
                 sanitized,
                 "Verification failed: test/pkg/impl.py:5: error: syntax\n"
                 "test/pkg/dep_target.py:12: error: missing import",
+            )
+            ws_diag = f"ERROR: {alias_mgr.workspace_root.path}/testing/parts/core/lib/BUILD.bazel: no such target"
+            self.assertEqual(
+                alias_mgr.sanitize_text(ws_diag),
+                "ERROR: testing/parts/core/lib/BUILD.bazel: no such target",
             )
 
     def test_lifecycle_initialization_step_mode_disabled(self) -> None:
@@ -1346,7 +1358,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         alias_mgr._paths["/non_regex_matched/custom_path.py"] = "custom_path.py"
         text = "Path without word boundary: [/non_regex_matched/custom_path.py]"
         sanitized = alias_mgr.sanitize_text(text)
-        # Requirement: The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its minimal short name, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking.
+        # Requirement: The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its relative path, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking, stripping workspace root path prefixes, and stripping execution root path prefixes.
         # Requirement: [AliasManager] Sanitizing text masks occurrences of relative workspace paths and preceding path prefixes with the corresponding file alias short names.
         self.assertEqual(sanitized, "Path without word boundary: [custom_path.py]")
 
