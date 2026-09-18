@@ -164,7 +164,7 @@ class BazelStorageImplTest(unittest.TestCase):
             storage.add_message(Change(), to=node)
             storage.add_message(Feedback(), to=node)
 
-            # Requirement: A node in dag storage is dirty if it has messages explaining why it requires cleaning, or if its declared source file is missing from the workspace root.
+            # Requirement: A node in dag storage is dirty if it has messages explaining why it requires cleaning, or if its declared source file is missing from the workspace root, recording a change message to implement the source file for the node.
             # Requirement: [DagStorage] A node is dirty if, but not only if, it has messages.
             self.assertTrue(storage.is_dirty(node))
             msgs = storage.get_messages(node)
@@ -196,15 +196,28 @@ class BazelStorageImplTest(unittest.TestCase):
             # Node with declared source file that does not exist yet
             rel_path = "pkg/src/target.py"
             storage._source_files[node] = rel_path
-            # Requirement: A node in dag storage is dirty if it has messages explaining why it requires cleaning, or if its declared source file is missing from the workspace root.
+            # Requirement: A node in dag storage is dirty if it has messages explaining why it requires cleaning, or if its declared source file is missing from the workspace root, recording a change message to implement the source file for the node.
             # Requirement: [DagStorage] A node is dirty if, but not only if, it has messages.
             self.assertTrue(storage.is_dirty(node))
 
-            # Creating the declared source file on disk clears the dirty state when no messages exist
+            # Calling is_dirty recorded a change message to implement the source file
+            msgs = storage.get_messages(node)
+            self.assertEqual(len(msgs), 1)
+            msg = next(iter(msgs))
+            self.assertIsInstance(msg, Change)
+            self.assertEqual(msg.content, f"implement {rel_path}")
+
+            # Even after creating the declared source file on disk, the node remains dirty because the recorded change message persists
             abs_src = os.path.join(self.test_dir, rel_path)
             os.makedirs(os.path.dirname(abs_src), exist_ok=True)
             with open(abs_src, "w", encoding="utf-8") as f:
                 f.write("# source file\n")
+            self.assertTrue(storage.is_dirty(node))
+
+            # Clearing messages once the source file exists clears the dirty state
+            # Requirement: Clearing messages for a node removes all recorded messages explaining why it requires cleaning.
+            # Requirement: [DagStorage] Clearing messages for a node removes all recorded messages for that node.
+            storage.clear_messages(node)
             self.assertFalse(storage.is_dirty(node))
 
     def test_reverse_dependencies_registration_and_clearing(self) -> None:

@@ -1,3 +1,5 @@
+# Requirements specified in sandbox_run_control_impl.pyi
+import os
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 from update_with_ai.parts.agent.lib import agent_file_alias
 from update_with_ai.parts.agent.lib import agent_node_config
@@ -32,17 +34,25 @@ class RunController(sandbox_run_control.RunController, Singleton):
         self._initialized_nodes = False
 
     def _ensure_nodes(self) -> None:
-        if self._initialized_nodes:
-            return
-        self._initialized_nodes = True
         cfg = get_singleton(agent_node_config.NodeConfig)
         if cfg.src_file_alias_by_node:
+            if len(self._nodes) == 1 and self._nodes[0].unit_address == "//session:target":
+                self._nodes.clear()
+                self._alias_to_node.clear()
+                self._node_to_alias.clear()
+                self._node_states.clear()
             for node, alias in cfg.src_file_alias_by_node.items():
-                self._nodes.append(node)
-                self._alias_to_node[alias] = node
-                self._node_to_alias[node] = alias
-                self._node_states[node] = "OPEN"
+                if node not in self._node_states:
+                    self._nodes.append(node)
+                    self._alias_to_node[alias] = node
+                    self._node_to_alias[node] = alias
+                    self._node_states[node] = "OPEN"
         elif cfg.read_write_files:
+            if len(self._nodes) == 1 and self._nodes[0].unit_address == "//session:target":
+                self._nodes.clear()
+                self._alias_to_node.clear()
+                self._node_to_alias.clear()
+                self._node_states.clear()
             for f in sorted(cfg.read_write_files, key=lambda x: x.relative_path):
                 if hasattr(f, "owning_node") and f.owning_node is not None:
                     node = f.owning_node
@@ -77,6 +87,14 @@ class RunController(sandbox_run_control.RunController, Singleton):
         for node, alias in self._node_to_alias.items():
             if alias == alias_or_name or node.unit_address == alias_or_name:
                 return node
+        matching = [
+            node
+            for node, alias in self._node_to_alias.items()
+            if os.path.basename(alias) == alias_or_name
+            or os.path.basename(node.unit_address) == alias_or_name
+        ]
+        if len(matching) == 1:
+            return matching[0]
         return None
 
     def get_alias_for_node(self, node: dag_storage.Node) -> str:
@@ -241,6 +259,85 @@ class RunController(sandbox_run_control.RunController, Singleton):
         return tmpl_formatter.format_template(
             template_str, {"nodes": node_items}
         ).strip()
+
+    def resolve_default_target(self) -> Optional[dag_storage.Node]:
+        self._ensure_nodes()
+        cfg = get_singleton(agent_node_config.NodeConfig)
+        edit_mgr = get_singleton(sandbox_file_editor.EditManager)
+
+        if len(cfg.read_write_files) == 1:
+            rw_file = next(iter(cfg.read_write_files))
+            node = getattr(rw_file, "owning_node", None)
+            if node is None:
+                node = self.get_node_for_alias(
+                    getattr(rw_file, "relative_path", str(rw_file))
+                )
+            if node is not None:
+                return node
+            return self.nodes[0] if self.nodes else None
+
+        if not cfg.read_write_files and len(self.nodes) <= 1:
+            return self.nodes[0] if self.nodes else None
+
+        open_nodes = self.open_nodes()
+        if not open_nodes:
+            return None
+
+        unsubmitted_files = [
+            f
+            for f in cfg.read_write_files
+            if f not in edit_mgr.locked_files
+            and (
+                getattr(f, "owning_node", None) is None
+                or self.get_node_state(f.owning_node) == "OPEN"
+            )
+            and (
+                self.get_node_for_alias(getattr(f, "relative_path", "")) is None
+                or self.get_node_state(
+                    self.get_node_for_alias(getattr(f, "relative_path", ""))  # type: ignore
+                )
+                == "OPEN"
+            )
+        ]
+
+        if len(unsubmitted_files) == 1:
+            f = unsubmitted_files[0]
+            node = getattr(f, "owning_node", None)
+            if node is None:
+                node = self.get_node_for_alias(
+                    getattr(f, "relative_path", str(f))
+                )
+            if node is not None:
+                return node
+            return open_nodes[0]
+
+        if not cfg.read_write_files and len(open_nodes) == 1:
+            return open_nodes[0]
+
+        last_f = edit_mgr.last_read_or_edited_file
+        if last_f is not None:
+            last_path = getattr(
+                last_f, "relative_path", getattr(last_f, "short_name", str(last_f))
+            )
+            cand_node = self.get_node_for_alias(last_path)
+            if cand_node is None:
+                cand_node = getattr(last_f, "owning_node", None)
+
+            if cand_node is not None and self.get_node_state(cand_node) == "OPEN":
+                if cfg.read_write_files:
+                    is_valid_rw = any(
+                        (
+                            f == last_f
+                            or getattr(f, "relative_path", "") == last_path
+                        )
+                        for f in unsubmitted_files
+                    )
+                    if is_valid_rw:
+                        return cand_node
+                else:
+                    return cand_node
+
+        return None
 
 
 class AdvanceTool(sandbox_run_control.AdvanceTool, Singleton):
@@ -432,23 +529,24 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
             ).strip()
 
         if not target_str:
-            if rc.is_multi_node:
-                # Requirement: In multi-target sessions, tool execution fails when the target parameter is omitted or does not match an open session target, reminding the agent to specify an open target.
+            # Requirement: When the target parameter is omitted and exactly one session read-write file exists or one unsubmitted read-write file remains, the target parameter defaults to that target.
+            # Requirement: When the target parameter is omitted and multiple unsubmitted read-write files exist, the target parameter defaults to the last read or written path if it corresponds to an open session target, and otherwise tool execution fails, reminding the agent to specify an open target.
+            target_node = rc.resolve_default_target()
+            if target_node is None:
                 open_targets = ", ".join(
                     f"`{rc.get_alias_for_node(n)}`" for n in rc.open_nodes()
                 )
                 return tool_provider.Response(
                     is_failed=True,
                     is_terminated=False,
-                    content="Error: Target parameter must be specified in a multi-target session.",
+                    content="Error: Target parameter must be specified when multiple unsubmitted targets exist.",
                     reminder=f"Specify an open target: {open_targets}",
                     suppression_key="submit",
                 )
-            target_node = rc.nodes[0]
         else:
             target_node = rc.get_node_for_alias(target_str)
+            # Requirement: Tool execution fails when the target parameter does not match an open session target, reminding the agent to specify an open target.
             if target_node is None or rc.get_node_state(target_node) != "OPEN":
-                # Requirement: In multi-target sessions, tool execution fails when the target parameter is omitted or does not match an open session target, reminding the agent to specify an open target.
                 open_targets = ", ".join(
                     f"`{rc.get_alias_for_node(n)}`" for n in rc.open_nodes()
                 )
@@ -477,12 +575,12 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
 
         # Verification check for target
         passed, _ = rc.evaluate_verification_for_node(target_node)
-        # Requirement: Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool with reasoning text indicating that verification results must be inspected before submitting.
+        # Requirement: Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool targeting the submitted target with reasoning text indicating that verification results must be inspected before submitting.
         if not passed:
             follow_up = tool_provider.FollowUpToolCall(
                 tool_name="check_file",
                 wire_parameter_bindings=tool_provider.WireParameterBindings(
-                    bindings=set()
+                    bindings={("path", target_alias)}
                 ),
                 reasoning_text="Verification results must be inspected before submitting.",
             )
@@ -587,7 +685,6 @@ class FailTool(sandbox_run_control.FailTool, Singleton):
     def execute_tool(
         self, actual_parameter_bindings: tool_provider.ActualParameterBindings
     ) -> tool_provider.Response:
-        # Requirement: Executing the fail tool marks the target as failed and in-session dependent targets as blocked, producing a terminating response carrying the explanation when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
         exp = str(bindings_map.get("explanation", "Failed"))
         raw_target = bindings_map.get("target")
@@ -602,9 +699,32 @@ class FailTool(sandbox_run_control.FailTool, Singleton):
             ).strip()
 
         if not target_str:
-            target_node = rc.nodes[0]
+            # Requirement: When the target parameter is omitted and exactly one session read-write file exists or one unsubmitted read-write file remains, the target parameter defaults to that target.
+            # Requirement: When the target parameter is omitted and multiple unsubmitted read-write files exist, the target parameter defaults to the last read or written path if it corresponds to an open session target, and otherwise tool execution fails, reminding the agent to specify an open target.
+            target_node = rc.resolve_default_target()
+            if target_node is None:
+                open_targets = ", ".join(
+                    f"`{rc.get_alias_for_node(n)}`" for n in rc.open_nodes()
+                )
+                return tool_provider.Response(
+                    is_failed=True,
+                    is_terminated=False,
+                    content="Error: Target parameter must be specified when multiple unsubmitted targets exist.",
+                    reminder=f"Specify an open target: {open_targets}",
+                )
         else:
-            target_node = rc.get_node_for_alias(target_str) or rc.nodes[0]
+            target_node = rc.get_node_for_alias(target_str)
+            # Requirement: Tool execution fails when the target parameter does not match an open session target, reminding the agent to specify an open target.
+            if target_node is None or rc.get_node_state(target_node) != "OPEN":
+                open_targets = ", ".join(
+                    f"`{rc.get_alias_for_node(n)}`" for n in rc.open_nodes()
+                )
+                return tool_provider.Response(
+                    is_failed=True,
+                    is_terminated=False,
+                    content=f"Error: Target '{target_str}' is not an open target.",
+                    reminder=f"Specify an open target: {open_targets}",
+                )
 
         target_alias = rc.get_alias_for_node(target_node)
         # Requirement: Executing the fail tool marks the target as failed, locks the target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response carrying the explanation when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
@@ -693,44 +813,152 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
 
         rc = get_singleton(RunController)
 
-        # Backward compatibility for single-target sessions:
-        # If blame_target omitted, but target provided in single-target session: blamee is target
-        if not rc.is_multi_node and raw_blame_target is None and raw_target is not None:
-            blamee = raw_target
-            source_node = rc.nodes[0]
-        else:
-            blamee = raw_blame_target
-            if raw_target is not None:
-                target_str = (
-                    getattr(raw_target, "relative_path", None)
-                    or getattr(raw_target, "short_name", None)
-                    or str(raw_target)
-                ).strip()
-                source_node = rc.get_node_for_alias(target_str) or rc.nodes[0]
-            else:
-                source_node = rc.nodes[0]
-
-        # Requirement: Executing the blame tool fails if the target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
-        allowed_blame_targets = rc.get_blame_targets_for_node(source_node)
-        matched_target: Optional[agent_file_alias.BoundFile] = None
-        blamee_str = ""
-        if blamee is not None:
-            blamee_str = (
-                getattr(blamee, "relative_path", None)
-                or getattr(blamee, "short_name", None)
-                or str(blamee)
+        target_str = ""
+        if raw_target is not None:
+            target_str = (
+                getattr(raw_target, "relative_path", None)
+                or getattr(raw_target, "short_name", None)
+                or str(raw_target)
             ).strip()
-        for bt in allowed_blame_targets:
-            bt_name = getattr(bt, "relative_path", getattr(bt, "short_name", ""))
-            if bt == blamee or bt_name == blamee_str:
-                matched_target = bt
-                break
+
+        blame_target_str = ""
+        if raw_blame_target is not None:
+            blame_target_str = (
+                getattr(raw_blame_target, "relative_path", None)
+                or getattr(raw_blame_target, "short_name", None)
+                or str(raw_blame_target)
+            ).strip()
+
+        def _match_node_blame_target(
+            node: dag_storage.Node, val: Any, val_str: str
+        ) -> Optional[agent_file_alias.BoundFile]:
+            for bt in rc.get_blame_targets_for_node(node):
+                bt_name = getattr(bt, "relative_path", getattr(bt, "short_name", ""))
+                if val is not None and bt == val:
+                    return bt
+                if val_str and bt_name == val_str:
+                    return bt
+            return None
+
+        open_nodes = rc.open_nodes()
+
+        # Resolve blamee and source_node
+        if raw_blame_target is not None or blame_target_str:
+            blamee = raw_blame_target
+            blamee_str = blame_target_str
+            if target_str:
+                cand_node = rc.get_node_for_alias(target_str)
+                if cand_node is not None and rc.get_node_state(cand_node) == "OPEN":
+                    source_node = cand_node
+                else:
+                    matching_nodes = [
+                        n
+                        for n in open_nodes
+                        if _match_node_blame_target(
+                            n, raw_blame_target, blame_target_str
+                        )
+                        is not None
+                    ]
+                    if matching_nodes:
+                        source_node = matching_nodes[0]
+                    else:
+                        source_node = cand_node or (
+                            open_nodes[0]
+                            if open_nodes
+                            else (rc.nodes[0] if rc.nodes else None)
+                        )
+            else:
+                # Requirement: When the blame target matches a configured blame target of an open session target, the source target parameter defaults to that session target.
+                matching_nodes = [
+                    n
+                    for n in open_nodes
+                    if _match_node_blame_target(
+                        n, raw_blame_target, blame_target_str
+                    )
+                    is not None
+                ]
+                if matching_nodes:
+                    if len(matching_nodes) == 1:
+                        source_node = matching_nodes[0]
+                    else:
+                        def_node = rc.resolve_default_target()
+                        source_node = (
+                            def_node
+                            if def_node in matching_nodes
+                            else matching_nodes[0]
+                        )
+                else:
+                    # Requirement: When the source target parameter is omitted and cannot be inferred from the blame target, the source target parameter defaults to the single session target or remaining unsubmitted target, or to the last read or written path if it corresponds to an open session target.
+                    source_node = rc.resolve_default_target() or (
+                        open_nodes[0]
+                        if open_nodes
+                        else (rc.nodes[0] if rc.nodes else None)
+                    )
+        elif raw_target is not None or target_str:
+            # Check if raw_target / target_str matches a configured blame target of an open node
+            # Requirement: When the blame target parameter is omitted and the source target parameter matches a configured blame target, the blame target parameter defaults to that target and the source target parameter defaults to the session target configured with that blame target.
+            matching_nodes = [
+                n
+                for n in open_nodes
+                if _match_node_blame_target(n, raw_target, target_str) is not None
+            ]
+            if matching_nodes:
+                blamee = raw_target
+                blamee_str = target_str
+                if len(matching_nodes) == 1:
+                    source_node = matching_nodes[0]
+                else:
+                    def_node = rc.resolve_default_target()
+                    source_node = (
+                        def_node
+                        if def_node in matching_nodes
+                        else matching_nodes[0]
+                    )
+            else:
+                cand_node = rc.get_node_for_alias(target_str)
+                if cand_node is not None and rc.get_node_state(cand_node) == "OPEN":
+                    source_node = cand_node
+                    blamee = None
+                    blamee_str = ""
+                else:
+                    source_node = rc.resolve_default_target() or (
+                        open_nodes[0]
+                        if open_nodes
+                        else (rc.nodes[0] if rc.nodes else None)
+                    )
+                    blamee = raw_target
+                    blamee_str = target_str
+        else:
+            # Both omitted
+            # Requirement: When the source target parameter is omitted and cannot be inferred from the blame target, the source target parameter defaults to the single session target or remaining unsubmitted target, or to the last read or written path if it corresponds to an open session target.
+            source_node = rc.resolve_default_target() or (
+                open_nodes[0]
+                if open_nodes
+                else (rc.nodes[0] if rc.nodes else None)
+            )
+            blamee = None
+            blamee_str = ""
+
+        if source_node is None:
+            open_targets = ", ".join(
+                f"`{rc.get_alias_for_node(n)}`" for n in open_nodes
+            )
+            return tool_provider.Response(
+                is_failed=True,
+                is_terminated=False,
+                content="Error: No open target found for blame.",
+                reminder=f"Specify an open target: {open_targets}",
+            )
+
+        allowed_blame_targets = rc.get_blame_targets_for_node(source_node)
+        matched_target = _match_node_blame_target(source_node, blamee, blamee_str)
 
         if matched_target is None:
             avail = ", ".join(
                 getattr(t, "relative_path", getattr(t, "short_name", ""))
                 for t in allowed_blame_targets
             )
+            # Requirement: Executing the blame tool fails if the blame target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
@@ -825,7 +1053,6 @@ class CheckFileTool(sandbox_run_control.CheckFileTool, Singleton):
         cfg = get_singleton(agent_node_config.NodeConfig)
 
         # Requirement: Executing the check file tool updates verification results if outdated.
-        # Requirement: When a path target is specified, executing the check file tool evaluates verification checks for that target.
         target_str = ""
         if raw_target is not None:
             target_str = (
@@ -837,7 +1064,35 @@ class CheckFileTool(sandbox_run_control.CheckFileTool, Singleton):
         target_node: Optional[dag_storage.Node] = None
         if target_str:
             target_node = rc.get_node_for_alias(target_str)
+            # Requirement: Tool execution fails when the specified path parameter does not match an open session target, reminding the agent to specify an open target.
+            if target_node is None or rc.get_node_state(target_node) != "OPEN":
+                open_targets = ", ".join(
+                    f"`{rc.get_alias_for_node(n)}`" for n in rc.open_nodes()
+                )
+                return tool_provider.Response(
+                    is_failed=True,
+                    is_terminated=False,
+                    content=f"Error: Specified path '{target_str}' does not match an open session target.",
+                    reminder=f"Specify an open target: {open_targets}",
+                    suppression_key="check_file",
+                )
+        else:
+            # Requirement: When the path parameter is omitted and exactly one session read-write file exists or one unsubmitted read-write file remains, the path parameter defaults to that read-write file.
+            # Requirement: When the path parameter is omitted and multiple unsubmitted read-write files exist, the path parameter defaults to the last read or written path if it corresponds to an open session target, and otherwise tool execution fails, reminding the agent to specify an open target.
+            target_node = rc.resolve_default_target()
+            if target_node is None:
+                open_targets = ", ".join(
+                    f"`{rc.get_alias_for_node(n)}`" for n in rc.open_nodes()
+                )
+                return tool_provider.Response(
+                    is_failed=True,
+                    is_terminated=False,
+                    content="Error: 'path' must be specified when multiple unsubmitted targets exist.",
+                    reminder=f"Specify an open target: {open_targets}",
+                    suppression_key="check_file",
+                )
 
+        # Requirement: When a path target is specified or defaulted, executing the check file tool evaluates verification checks for that target.
         if target_node is not None:
             passed, diag = rc.evaluate_verification_for_node(target_node)
         else:
@@ -859,6 +1114,15 @@ class CheckFileTool(sandbox_run_control.CheckFileTool, Singleton):
                 for f in cfg.read_write_files:
                     if f == raw_target or getattr(f, "relative_path", "") == getattr(
                         raw_target, "relative_path", str(raw_target)
+                    ):
+                        rw_file = f
+                        break
+            if rw_file is None and target_node is not None:
+                target_alias = rc.get_alias_for_node(target_node)
+                for f in cfg.read_write_files:
+                    if (
+                        getattr(f, "owning_node", None) == target_node
+                        or getattr(f, "relative_path", "") == target_alias
                     ):
                         rw_file = f
                         break

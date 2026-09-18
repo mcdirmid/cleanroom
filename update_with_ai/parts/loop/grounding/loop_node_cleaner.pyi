@@ -39,13 +39,3 @@ FRESH_REQUIREMENTS:
 """
         ...
 
-    @property
-    def primary_node(self) -> dag_storage.Node:
-        """
-PURPOSE:
-Primary target node currently being cleaned in the agent session
-
-FRESH_REQUIREMENTS:
-- The primary target node currently being cleaned in the agent session.
-"""
-        ...

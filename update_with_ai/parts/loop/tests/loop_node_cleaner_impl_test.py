@@ -283,13 +283,11 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         )
 
     def test_cleaned_node_lifecycle(self) -> None:
-        """CUJ: CleanedNodes holds and exposes target nodes and primary node in the session tier."""
+        """CUJ: CleanedNodes holds and exposes target nodes in the session tier."""
         with enter_phase("agent_session", registry=self.registry) as scope:
             cleaned_nodes = scope.get_singleton(CleanedNodes)
             with self.assertRaises(RuntimeError):
                 _ = cleaned_nodes.nodes
-            with self.assertRaises(RuntimeError):
-                _ = cleaned_nodes.primary_node
 
             target1 = Node(unit_address="//pkg:target1")
             target2 = Node(unit_address="//pkg:target2")
@@ -298,8 +296,6 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             cleaned_nodes.set_nodes([target1, target2])
             # Requirement: [CleanedNodes] The cleaned nodes service presents the sequence of nodes currently being cleaned in the agent session.
             self.assertEqual(cleaned_nodes.nodes, (target1, target2))
-            # Requirement: [CleanedNodes] The cleaned nodes service presents the primary target node currently being cleaned in the agent session.
-            self.assertEqual(cleaned_nodes.primary_node, target1)
 
     def test_clean_node_seeds_history_and_materializes_templates(self) -> None:
         """CUJ: Seeding conversation history with task prompt, pending messages, and startup executions."""

@@ -76,11 +76,10 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
         try:
             cleaned_nodes_obj = get_singleton(loop_node_cleaner.CleanedNodes)
             nodes = tuple(cleaned_nodes_obj.nodes)
-            primary_node = cleaned_nodes_obj.primary_node
         except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
             return
 
-        if not nodes or primary_node is None:
+        if not nodes:
             return
 
         try:
@@ -187,29 +186,37 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
                             self._templates.add((rw, content_obj))
 
         # 2.5 Template parameters
-        primary_data = manifests.get(primary_node, {})
-        raw_params = primary_data.get("template_parameters")
-        if isinstance(raw_params, dict):
-            self._template_parameters = dict(raw_params)
-        elif isinstance(raw_params, str):
-            try:
-                decoded = json.loads(raw_params)
-                if isinstance(decoded, dict):
-                    self._template_parameters = decoded
-            except (json.JSONDecodeError, ValueError):
-                pass
+        for n in nodes:
+            n_data = manifests.get(n, {})
+            raw_params = n_data.get("template_parameters")
+            if isinstance(raw_params, dict):
+                self._template_parameters.update(raw_params)
+            elif isinstance(raw_params, str):
+                try:
+                    decoded = json.loads(raw_params)
+                    if isinstance(decoded, dict):
+                        self._template_parameters.update(decoded)
+                except (json.JSONDecodeError, ValueError):
+                    pass
 
         # 3. Guide
-        guide_target = primary_data.get("guide")
+        single_node_data = manifests.get(nodes[0], {}) if len(nodes) == 1 else {}
+        guide_target = single_node_data.get("guide")
         m_cfg: Optional[agent_config.AgentConfig] = None
         try:
             m_cfg = get_singleton(agent_config.AgentConfig)
         except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
             pass
         model_step_mode = m_cfg.is_step_mode if m_cfg is not None else False
-        allows_step = primary_data.get(
-            "allows_step_mode",
-            primary_data.get("step_mode", primary_data.get("step_sections", True)),
+        allows_step = (
+            single_node_data.get(
+                "allows_step_mode",
+                single_node_data.get(
+                    "step_mode", single_node_data.get("step_sections", True)
+                ),
+            )
+            if len(nodes) == 1
+            else False
         )
         self._allows_step_mode = bool(allows_step)
         self._is_step_mode = (
@@ -382,9 +389,12 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
                 self._verification_checks.append(check)
             self._verification_checks_by_node[n] = tuple(node_checks)
 
-        v_msg = primary_data.get("verification_success_message")
-        if v_msg and str(v_msg).strip():
-            self._verification_success_message = str(v_msg).strip()
+        if len(nodes) == 1:
+            v_msg = single_node_data.get("verification_success_message")
+            if v_msg and str(v_msg).strip():
+                self._verification_success_message = str(v_msg).strip()
+        else:
+            self._verification_success_message = None
 
     @property
     def read_only_files(self) -> Set[agent_file_alias.ReadOnlyFile]:
@@ -400,13 +410,13 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
 
     @property
     def allows_step_mode(self) -> bool:
-        # Requirement: The node config exposes whether the node allows step mode from the primary target node manifest.
+        # Requirement: The node config exposes whether the nodes allow step mode from the target node manifests.
         # Requirement: [NodeConfig] The node config indicates whether the node allows step mode.
         return self._allows_step_mode
 
     @property
     def is_step_mode(self) -> bool:
-        # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the primary node allows step mode, and session feedback is absent.
+        # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the target node allows step mode, and session feedback is absent.
         # Requirement: [NodeConfig] The node config indicates whether session step mode is active.
         return self._is_step_mode
 
@@ -420,7 +430,7 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
 
     @property
     def template_parameters(self) -> Mapping[str, Any]:
-        # Requirement: The node config exposes declared template parameters from the primary target node manifest.
+        # Requirement: The node config exposes declared template parameters from the target node manifests.
         # Requirement: [NodeConfig] The node config provides the session template parameters, providing parameter bindings for template evaluation.
         return self._template_parameters
 
@@ -472,7 +482,7 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
 
     @property
     def verification_success_message(self) -> Optional[str]:
-        # Requirement: Declared verification success message from the primary target node manifest as the session verification success message.
+        # Requirement: Declared verification success message from the target node manifest when the session contains exactly one node as the session verification success message.
         # Requirement: [NodeConfig] The node config provides the session verification success message when configured.
         return self._verification_success_message
 

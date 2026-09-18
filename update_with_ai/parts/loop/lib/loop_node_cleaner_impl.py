@@ -30,13 +30,6 @@ class CleanedNodes(loop_node_cleaner.CleanedNodes, Singleton):
             raise RuntimeError("CleanedNodes has not been configured with nodes.")
         return self._nodes
 
-    @property
-    def primary_node(self) -> dag_storage.Node:
-        # Requirement: [CleanedNodes] The cleaned nodes service presents the primary target node currently being cleaned in the agent session.
-        if not self._nodes:
-            raise RuntimeError("CleanedNodes has not been configured with nodes.")
-        return self._nodes[0]
-
     def set_nodes(self, nodes: Sequence[dag_storage.Node]) -> None:
         # Requirement: The cleaned nodes present the nodes currently being cleaned to session services.
         self._nodes = tuple(nodes)
@@ -69,7 +62,6 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
 
         def setup_session(session: LifecycleScope) -> None:
             # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the cleaned nodes present the nodes currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
-            # Requirement: The cleaned nodes designate the first node in the sequence as the primary node.
             cleaned_nodes = session.get_singleton(CleanedNodes)
             cleaned_nodes.set_nodes(dirty_nodes)
 
@@ -131,21 +123,21 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
                     "Call submit(target='<file_name>') to submit each file individually.\n"
                     "<!-- endif -->\n"
                     "<!-- if: not_multi_node -->\n"
-                    "<primary_prompt>\n"
+                    "<task_prompt>\n"
                     "<!-- endif -->\n"
                     "<!-- if: has_guide -->\n"
                     "\n"
                     "<guide_instruction>\n"
                     "<!-- endif -->"
                 )
-                primary_prompt = node_items[0]["task_prompt"] if node_items else ""
+                single_prompt = node_items[0]["task_prompt"] if node_items else ""
                 rendered_prompt = formatter.format_template(
                     prompt_template,
                     {
                         "is_multi_node": is_multi_node,
                         "not_multi_node": not is_multi_node,
                         "nodes": node_items,
-                        "primary_prompt": primary_prompt,
+                        "task_prompt": single_prompt,
                         "has_guide": bool(guide_instruction),
                         "guide_instruction": guide_instruction,
                     },

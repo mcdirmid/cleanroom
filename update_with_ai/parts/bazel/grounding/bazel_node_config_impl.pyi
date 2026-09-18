@@ -60,16 +60,16 @@ GROUNDING_ARGUMENT:
     def allows_step_mode(self) -> bool:
         """
 PURPOSE:
-Whether the node allows step mode from the primary node manifest
+Whether the nodes allow step mode from target node manifests
 
 FRESH_REQUIREMENTS:
-- The node config exposes whether the node allows step mode from the primary target node manifest.
+- The node config exposes whether the nodes allow step mode from the target node manifests.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config indicates whether the node allows step mode.
 
 GROUNDING_ARGUMENT:
-- Derived by loading the primary target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(loop_node_cleaner.CleanedNodes).primary_node) and extracting allows_step_mode.
+- Derived by loading the target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest for the single target node when get_singleton(loop_node_cleaner.CleanedNodes).nodes contains exactly one node, extracting allows_step_mode.
 """
         ...
 
@@ -81,7 +81,7 @@ PURPOSE:
 Whether step mode is active for the session
 
 FRESH_REQUIREMENTS:
-- The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the primary node allows step mode, and session feedback is absent.
+- The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the target node allows step mode, and session feedback is absent.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config indicates whether session step mode is active.
@@ -105,7 +105,7 @@ INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session guide file when step mode is active.
 
 GROUNDING_ARGUMENT:
-- Derived by loading the primary target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(loop_node_cleaner.CleanedNodes).primary_node), constructing an UnboundFile for the declared guide target when step mode is active.
+- Derived by loading the target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest for the single session node in get_singleton(loop_node_cleaner.CleanedNodes).nodes, constructing an UnboundFile for the declared guide target when step mode is active.
 """
         ...
 
@@ -135,13 +135,13 @@ PURPOSE:
 Declared template parameters from the manifest
 
 FRESH_REQUIREMENTS:
-- The node config exposes declared template parameters from the primary target node manifest.
+- The node config exposes declared template parameters from the target node manifests.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session template parameters, providing parameter bindings for template evaluation.
 
 GROUNDING_ARGUMENT:
-- Extracted from the primary target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(loop_node_cleaner.CleanedNodes).primary_node).
+- Extracted from target node manifests via bazel_manifest_loader.BazelManifestLoader.get_manifest across nodes in get_singleton(loop_node_cleaner.CleanedNodes).nodes.
 """
         ...
 
@@ -159,7 +159,7 @@ INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session guide, providing structured instructional text when step mode is active.
 
 GROUNDING_ARGUMENT:
-- Derived by loading the primary target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(loop_node_cleaner.CleanedNodes).primary_node), reading and parsing the guide markdown when step mode is active.
+- Derived by loading the target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest for the single session node in get_singleton(loop_node_cleaner.CleanedNodes).nodes, reading and parsing the guide markdown when step mode is active.
 """
         ...
 
@@ -261,13 +261,13 @@ PURPOSE:
 Session verification success message resolved from manifest metadata
 
 FRESH_REQUIREMENTS:
-- Declared verification success message from the primary target node manifest as the session verification success message.
+- Declared verification success message from the target node manifest when the session contains exactly one node as the session verification success message.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session verification success message when configured.
 
 GROUNDING_ARGUMENT:
-- Derived by loading the primary target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest(get_singleton(loop_node_cleaner.CleanedNodes).primary_node), extracting the declared verification_success_message string when present.
+- Derived by loading the target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest for the single session node when get_singleton(loop_node_cleaner.CleanedNodes).nodes contains exactly one node, extracting the declared verification_success_message string when present.
 """
         ...
 

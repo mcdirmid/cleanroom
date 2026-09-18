@@ -39,7 +39,7 @@ Every guide follows this structure:
 - [ ] The Summary states the guide's subject declaratively: an alignment guide names the artifact and its source ("The module implements `low/<name>.md`"); a conformance guide names the artifact ("The artifact conforms to this guide")
 - [ ] The Summary is concise (one or at most two paragraphs), stating complete high-level requirements so the initial write or edit is accurate in substance, while leaving fine-grained rules to checklist sections
 - [ ] The Summary serves two purposes: (a) preserving an already working artifact without edits when contracts and verification pass, and (b) establishing a minimal valid artifact that passes initial verification when starting from scratch or a template, delegating expanded coverage to checklist steps
-- [ ] File references never use file paths; only virtual file names are used (except when files share names, where the directory prefix is appended, mainly `low/<name>.md` and `high/<name>.md`)
+- [ ] File references and multi-node session targets use package-relative file alias relative paths (e.g. `high/<name>.md`, `grounding/<name>.pyi`, `lib/<name>.py`, `tests/<name>_test.py`, `logs/<name>_qa.log`) and never expose host repository filesystem paths
 - [ ] Rules governing the editing process, tool usage, incremental editing strategy, or write permissions belong in the `## Summary` (which is visible before editing begins and throughout all steps in step mode); checklist items verify the artifact after changes are made and show up too late to control how editing is done; rules that apply specifically and exclusively to recovering from verification failure belong in `## Verification failure`
 - [ ] Applicability restrictions and not-applicable conditions (e.g. only applying to implementation specs whose name ends in `_impl.md`) are never in the Summary; they belong in `## Lint checks`
 - [ ] No directive framing — never "ensure", "produce", "transform" (the file pre-exists; the prompt triggers, the guide constrains)
@@ -64,7 +64,7 @@ Every guide follows this structure:
 - [ ] Items carry the precision: exact spellings, required forms, conformance checks — never style preferences the source already dictates
 - [ ] Each item is checkable given the Summary, the section, and the artifact
 - [ ] Sections are ordered fine-grain-first (layout, imports, types, contracts, pitfalls)
-- [ ] File references in all sections use virtual file names and never expose file paths (unless disambiguation is required for same-named files, using `low/<name>.md` and `high/<name>.md`)
+- [ ] File references in all sections use package-relative file alias relative paths and never expose host repository filesystem paths
 - [ ] If the artifact has a linter, a `## Lint checks` section (with the exact title "Lint checks") describes what is checked
 - [ ] All checklist items that can be deterministically verified by verifying the presence or absence of a specific string, marker, or token belong in `## Lint checks` (and are implemented by the artifact's linter), never in judgment-based content sections
 - [ ] The `## Lint checks` section contains only linter-verified checks and applicability constraints (e.g., target spec must end in `_impl.md`) — no human judgment points
@@ -116,7 +116,7 @@ Every guide follows this structure:
 - [ ] No-trigger test: no sentence directs the reader to do something the prompt already drives ("ensure", "produce", "call advance")
 - [ ] Capability test: every action the guide names is one the reader can perform with its tools — no test runs, no shell, no unreadable files
 - [ ] Perspective test: all environmental communications to the agent are declarative and impersonal without second-person pronouns ("you", "your"); injected assistant reasoning uses the first-person perspective ("I", "let me")
-- [ ] Path test: no file paths appear anywhere in the guide; only virtual file names appear (with directory prefixes only for disambiguation such as `low/<name>.md` and `high/<name>.md`)
+- [ ] Path test: no host filesystem paths appear anywhere in the guide; only package-relative file alias relative paths appear (such as `high/<name>.md`, `grounding/<name>.pyi`, `lib/<name>.py`, `tests/<name>_test.py`, `logs/<name>_qa.log`)
 - [ ] Linter test: if a linter exists for the artifact, a section titled `## Lint checks` lists all automated and applicability checks, and no applicability rules appear in the Summary
 - [ ] Deterministic test: every check verifiable by verifying presence or absence of a specific string or token is listed in `## Lint checks`
 
@@ -127,7 +127,7 @@ Every guide follows this structure:
 - [ ] Second-person environmental address — using "you" or "your" in guides, prompts, tool responses, or reminders instead of declarative, impersonal constraints; or failing to use first-person perspective when injecting assistant reasoning
 - [ ] Ambiguity — "should", "can optionally" — "must", "never", "only"
 - [ ] Buried rules — the load-bearing constraint after examples — front-load; examples after rules
-- [ ] Exposing file paths — using filesystem paths (e.g. `specs/low/<name>.md`) instead of virtual file names (`low/<name>.md`)
+- [ ] Exposing file paths — using host or repository filesystem paths (e.g. `specs/low/<name>.md` or `testing/parts/...`) instead of package-relative file alias relative paths (e.g. `high/<name>.md`, `grounding/<name>.pyi`)
 - [ ] Applicability in Summary — stating not-applicable conditions or spec filters in the Summary instead of `## Lint checks`
 - [ ] Mixed lint/judgment points — a point the linter half-checks left whole — split: the linter part in `## Lint checks`, the judgment part in its content section
 - [ ] Deterministic checks outside Lint checks — placing string-presence or string-absence checks in content sections instead of `## Lint checks`

@@ -635,7 +635,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             submit = scope.get_singleton(SubmitToolImpl)
             b = ActualParameterBindings(bindings=set())
             # Requirement: Executing the submit tool updates verification results if outdated.
-            # Requirement: Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool with reasoning text indicating that verification results must be inspected before submitting.
+            # Requirement: Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool targeting the submitted target with reasoning text indicating that verification results must be inspected before submitting.
             resp = submit.execute_tool(b)
 
             self.assertTrue(resp.is_failed)
@@ -647,7 +647,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
             assert resp.follow_up_tool_call is not None
             self.assertEqual(resp.follow_up_tool_call.tool_name, "check_file")
             self.assertEqual(
-                len(resp.follow_up_tool_call.wire_parameter_bindings.bindings), 0
+                resp.follow_up_tool_call.wire_parameter_bindings.bindings,
+                {("path", "target")},
             )
             self.assertEqual(
                 resp.follow_up_tool_call.reasoning_text,
@@ -750,7 +751,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
             b = ActualParameterBindings(
                 bindings={(fail_tool.explanation, "Cannot solve bug")}
             )
-            # Requirement: Executing the fail tool marks the target as failed and in-session dependent targets as blocked, producing a terminating response carrying the explanation when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
+            # Requirement: When the target parameter is omitted and exactly one session read-write file exists or one unsubmitted read-write file remains, the target parameter defaults to that target.
+            # Requirement: Executing the fail tool marks the target as failed, locks the target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response carrying the explanation when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
             resp = fail_tool.execute_tool(b)
 
             self.assertTrue(resp.is_failed)
@@ -782,7 +784,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (blame_tool.explanation, "Broken"),
                 }
             )
-            # Requirement: Executing the blame tool fails if the target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
+            # Requirement: When the source target parameter is omitted and cannot be inferred from the blame target, the source target parameter defaults to the single session target or remaining unsubmitted target, or to the last read or written path if it corresponds to an open session target.
+            # Requirement: Executing the blame tool fails if the blame target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
             resp_inv = blame_tool.execute_tool(b_invalid)
             self.assertTrue(resp_inv.is_failed)
             self.assertIsNotNone(resp_inv.reminder)
@@ -794,6 +797,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (blame_tool.explanation, "Broken type signature"),
                 }
             )
+            # Requirement: When the blame target matches a configured blame target of an open session target, the source target parameter defaults to that session target.
             # Requirement: On successful blame tool execution, the response marks the submitted target of the blame as resolved, locks the submitted target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response attributing defect feedback to the blame target owning node when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
             resp_val = blame_tool.execute_tool(b_valid)
             self.assertFalse(resp_val.is_failed)
@@ -807,6 +811,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (blame_tool.explanation, "Legacy blame call"),
                 }
             )
+            # Requirement: When the blame target parameter is omitted and the source target parameter matches a configured blame target, the blame target parameter defaults to that target and the source target parameter defaults to the session target configured with that blame target.
             # Requirement: On successful blame tool execution, the response marks the submitted target of the blame as resolved, locks the submitted target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response attributing defect feedback to the blame target owning node when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
             resp_leg = blame_tool.execute_tool(b_legacy)
             self.assertFalse(resp_leg.is_failed)
@@ -832,18 +837,27 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # Address lookup by unit address fallback
             self.assertEqual(rc.get_node_for_alias("//pkg:unit1"), node1)
 
-            # 1. Submitting without target in multi-target session fails
+            # 1. Submitting without target in multi-target session fails when multiple unsubmitted targets exist
             b_no_target = ActualParameterBindings(bindings=set())
-            # Requirement: In multi-target sessions, tool execution fails when the target parameter is omitted or does not match an open session target, reminding the agent to specify an open target.
+            # Requirement: When the target parameter is omitted and multiple unsubmitted read-write files exist, the target parameter defaults to the last read or written path if it corresponds to an open session target, and otherwise tool execution fails, reminding the agent to specify an open target.
             resp1 = submit.execute_tool(b_no_target)
             self.assertTrue(resp1.is_failed)
             self.assertIn("Target parameter must be specified", resp1.content)
+
+            # 1b. Submitting without target defaults to last read or written path if open session target
+            self.edit_mgr.last_read_or_edited_file = TargetFileObj("unit2.py")
+            # Requirement: When the target parameter is omitted and multiple unsubmitted read-write files exist, the target parameter defaults to the last read or written path if it corresponds to an open session target, and otherwise tool execution fails, reminding the agent to specify an open target.
+            # Requirement: Tool execution fails when an in-session dependency of the target has not yet been submitted, reminding the agent that in-session dependencies must be submitted before dependent targets.
+            resp_dep_def = submit.execute_tool(b_no_target)
+            self.assertTrue(resp_dep_def.is_failed)
+            self.assertIn("must be submitted before `unit2.py`", resp_dep_def.content)
+            self.edit_mgr.last_read_or_edited_file = None
 
             # 2. Submitting unknown target fails
             b_unknown = ActualParameterBindings(
                 bindings={(submit.target, "unknown.py")}
             )
-            # Requirement: In multi-target sessions, tool execution fails when the target parameter is omitted or does not match an open session target, reminding the agent to specify an open target.
+            # Requirement: Tool execution fails when the target parameter does not match an open session target, reminding the agent to specify an open target.
             resp2 = submit.execute_tool(b_unknown)
             self.assertTrue(resp2.is_failed)
             self.assertIn("is not an open target", resp2.content)
@@ -872,12 +886,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIn("Target `unit1.py` submitted successfully.", resp4.content)
             self.assertIn("- `unit2.py`", resp4.content)
 
-            # 5. Submitting node2 succeeds and terminates session without summary
-            b_node2 = ActualParameterBindings(
-                bindings={(submit.target, TargetFileObj("unit2.py"))}
-            )
+            # 5. Submitting when only one unsubmitted target remains defaults to that target
+            # Requirement: When the target parameter is omitted and exactly one session read-write file exists or one unsubmitted read-write file remains, the target parameter defaults to that target.
             # Requirement: Tool execution marks the target as submitted, and produces a terminating response indicating that the session completed successfully when all session targets are resolved, or produces a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
-            resp5 = submit.execute_tool(b_node2)
+            resp5 = submit.execute_tool(b_no_target)
             self.assertFalse(resp5.is_failed)
             self.assertTrue(resp5.is_terminated)
             self.assertEqual(rc.get_node_state(node2), "SUBMITTED")
@@ -895,38 +907,65 @@ class SandboxRunControlImplTest(unittest.TestCase):
             node3: "f_unit3.py",
         }
         self.storage.dependencies[node2] = {Dependency(node=node1)}
+        f_rw1 = ReadWriteFile(
+            relative_path="f_unit1.py",
+            workspace_path=_make_workspace_path("pkg/f_unit1.py"),
+            owning_node=node1,
+        )
+        f_rw3 = ReadWriteFile(
+            relative_path="f_unit3.py",
+            workspace_path=_make_workspace_path("pkg/f_unit3.py"),
+            owning_node=node3,
+        )
+        self.node_cfg._read_write_files = {f_rw1, f_rw3}
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             fail_tool = scope.get_singleton(FailToolImpl)
             rc = scope.get_singleton(RunControllerImpl)
 
-            # Fail node1: blocks node2, node3 remains open -> non-terminating
-            b_fail = ActualParameterBindings(
-                bindings={
-                    (fail_tool.target, TargetFileObj("f_unit1.py")),
-                    (fail_tool.explanation, "Broken base"),
-                }
+            # 1. Failing without target in multi-target session fails when multiple unsubmitted targets exist
+            b_no_target = ActualParameterBindings(
+                bindings={(fail_tool.explanation, "No target")}
             )
-            # Requirement: Executing the fail tool marks the target as failed and in-session dependent targets as blocked, producing a terminating response carrying the explanation when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
-            resp1 = fail_tool.execute_tool(b_fail)
+            # Requirement: When the target parameter is omitted and multiple unsubmitted read-write files exist, the target parameter defaults to the last read or written path if it corresponds to an open session target, and otherwise tool execution fails, reminding the agent to specify an open target.
+            resp_no_target = fail_tool.execute_tool(b_no_target)
+            self.assertTrue(resp_no_target.is_failed)
+            self.assertIn("Target parameter must be specified", resp_no_target.content)
+
+            # 1b. Defaulting to last read/written path when multiple unsubmitted exist
+            self.edit_mgr.last_read_or_edited_file = TargetFileObj("f_unit1.py")
+            # Requirement: When the target parameter is omitted and multiple unsubmitted read-write files exist, the target parameter defaults to the last read or written path if it corresponds to an open session target, and otherwise tool execution fails, reminding the agent to specify an open target.
+            # Requirement: Executing the fail tool marks the target as failed, locks the target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response carrying the explanation when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
+            resp1 = fail_tool.execute_tool(b_no_target)
             self.assertFalse(resp1.is_failed)
             self.assertFalse(resp1.is_terminated)
             self.assertEqual(rc.get_node_state(node1), "FAILED")
             self.assertEqual(rc.get_node_state(node2), "BLOCKED")
             self.assertIn("Remaining open files:\n- `f_unit3.py`", resp1.content)
+            self.assertIn(f_rw1, self.edit_mgr.locked_files)
+            self.edit_mgr.last_read_or_edited_file = None
 
-            # Fail node3: no open nodes remain -> terminates with failure
-            b_fail3 = ActualParameterBindings(
+            # 2. Failing already-failed node fails because it is not an open target
+            b_fail_again = ActualParameterBindings(
                 bindings={
-                    (fail_tool.target, "f_unit3.py"),
-                    (fail_tool.explanation, "Failed unit 3"),
+                    (fail_tool.target, TargetFileObj("f_unit1.py")),
+                    (fail_tool.explanation, "Already failed"),
                 }
             )
-            # Requirement: Executing the fail tool marks the target as failed and in-session dependent targets as blocked, producing a terminating response carrying the explanation when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
-            resp2 = fail_tool.execute_tool(b_fail3)
+            # Requirement: Tool execution fails when the target parameter does not match an open session target, reminding the agent to specify an open target.
+            resp_inv = fail_tool.execute_tool(b_fail_again)
+            self.assertTrue(resp_inv.is_failed)
+            self.assertIn("is not an open target", resp_inv.content)
+
+            # 3. Failing when only 1 unsubmitted target remains defaults to that target
+            # Requirement: When the target parameter is omitted and exactly one session read-write file exists or one unsubmitted read-write file remains, the target parameter defaults to that target.
+            # Requirement: Executing the fail tool marks the target as failed, locks the target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response carrying the explanation when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
+            resp2 = fail_tool.execute_tool(b_no_target)
             self.assertTrue(resp2.is_failed)
             self.assertTrue(resp2.is_terminated)
-            self.assertIn("Failed: Failed unit 3", resp2.content)
+            self.assertEqual(rc.get_node_state(node3), "FAILED")
+            self.assertIn(f_rw3, self.edit_mgr.locked_files)
+            self.assertIn("Failed: No target", resp2.content)
 
     def test_multi_node_blame_blocks_dependents_and_terminates(self) -> None:
         """CUJ: Multi-node blame marks target BLAME, dependents BLOCKED, and terminates when no open nodes remain."""
@@ -950,12 +989,17 @@ class SandboxRunControlImplTest(unittest.TestCase):
             owning_node=node3,
         )
         self.node_cfg._read_write_files = {b_rw1, b_rw3}
-        bt = ReadOnlyFile(
-            relative_path="upstream_spec.md",
-            workspace_path=_make_workspace_path("pkg/upstream_spec.md"),
-            owning_node=Node(unit_address="//pkg:upstream_unit", role_address="spec"),
+        bt1 = ReadOnlyFile(
+            relative_path="upstream_spec1.md",
+            workspace_path=_make_workspace_path("pkg/upstream_spec1.md"),
+            owning_node=Node(unit_address="//pkg:upstream_unit1", role_address="spec"),
         )
-        self.node_cfg.blame_targets_by_node = {node1: {bt}, node3: {bt}}
+        bt3 = ReadOnlyFile(
+            relative_path="upstream_spec3.md",
+            workspace_path=_make_workspace_path("pkg/upstream_spec3.md"),
+            owning_node=Node(unit_address="//pkg:upstream_unit3", role_address="spec"),
+        )
+        self.node_cfg.blame_targets_by_node = {node1: {bt1}, node3: {bt3}}
 
         with enter_phase("agent_session", registry=self.registry) as scope:
             blame_tool = scope.get_singleton(BlameToolImpl)
@@ -969,18 +1013,18 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (blame_tool.explanation, "Bad"),
                 }
             )
-            # Requirement: Executing the blame tool fails if the target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
+            # Requirement: Executing the blame tool fails if the blame target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
             resp_bad = blame_tool.execute_tool(b_bad)
             self.assertTrue(resp_bad.is_failed)
 
-            # Blame node1 with valid target: marks node1 BLAME, blocks node2. node3 remains open -> non-terminating!
+            # Blame node1 with valid target and omitted target: infers node1 from blame target!
             b_ok = ActualParameterBindings(
                 bindings={
-                    (blame_tool.target, TargetFileObj("b_unit1.py")),
-                    (blame_tool.blame_target, "upstream_spec.md"),
+                    (blame_tool.blame_target, "upstream_spec1.md"),
                     (blame_tool.explanation, "Spec defect"),
                 }
             )
+            # Requirement: When the blame target matches a configured blame target of an open session target, the source target parameter defaults to that session target.
             # Requirement: On successful blame tool execution, the response marks the submitted target of the blame as resolved, locks the submitted target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response attributing defect feedback to the blame target owning node when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
             resp_ok = blame_tool.execute_tool(b_ok)
             self.assertFalse(resp_ok.is_failed)
@@ -990,29 +1034,29 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(rc.get_node_state(node3), "OPEN")
             self.assertIn(b_rw1, self.edit_mgr.locked_files)
             self.assertNotIn(b_rw3, self.edit_mgr.locked_files)
-            self.assertNotIn(bt, self.edit_mgr.locked_files)
+            self.assertNotIn(bt1, self.edit_mgr.locked_files)
             self.assertIn(
-                "Target `b_unit1.py` blamed `upstream_spec.md`: Spec defect",
+                "Target `b_unit1.py` blamed `upstream_spec1.md`: Spec defect",
                 resp_ok.content,
             )
             self.assertIn("- `b_unit3.py`", resp_ok.content)
 
-            # Blame node3: no open nodes remain -> terminates!
+            # Blame node3: blame target passed via target parameter -> terminates!
             b_ok3 = ActualParameterBindings(
                 bindings={
-                    (blame_tool.target, "b_unit3.py"),
-                    (blame_tool.blame_target, "upstream_spec.md"),
+                    (blame_tool.target, "upstream_spec3.md"),
                     (blame_tool.explanation, "Spec defect 3"),
                 }
             )
+            # Requirement: When the blame target parameter is omitted and the source target parameter matches a configured blame target, the blame target parameter defaults to that target and the source target parameter defaults to the session target configured with that blame target.
             # Requirement: On successful blame tool execution, the response marks the submitted target of the blame as resolved, locks the submitted target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response attributing defect feedback to the blame target owning node when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
             resp_ok3 = blame_tool.execute_tool(b_ok3)
             self.assertFalse(resp_ok3.is_failed)
             self.assertTrue(resp_ok3.is_terminated)
             self.assertEqual(rc.get_node_state(node3), "BLAME")
             self.assertIn(b_rw3, self.edit_mgr.locked_files)
-            self.assertNotIn(bt, self.edit_mgr.locked_files)
-            self.assertIn("Blamed upstream_spec.md: Spec defect 3", resp_ok3.content)
+            self.assertNotIn(bt3, self.edit_mgr.locked_files)
+            self.assertIn("Blamed upstream_spec3.md: Spec defect 3", resp_ok3.content)
 
     def test_check_file_with_src_parameter(self) -> None:
         """CUJ: CheckFileTool evaluates specific verification checks when src target is specified."""
@@ -1033,7 +1077,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             check_file = scope.get_singleton(CheckFileTool)
 
             # Test target rt_unit1.py passes
-            # Requirement: When a path target is specified, executing the check file tool evaluates verification checks for that target.
+            # Requirement: When a path target is specified or defaulted, executing the check file tool evaluates verification checks for that target.
             b1 = ActualParameterBindings(
                 bindings={(check_file.src, TargetFileObj("rt_unit1.py"))}
             )
@@ -1057,6 +1101,62 @@ class SandboxRunControlImplTest(unittest.TestCase):
             b_path = ActualParameterBindings(bindings={(check_file.path, "rt_unit1.py")})
             resp_path = check_file.execute_tool(b_path)
             self.assertFalse(resp_path.is_failed)
+
+            # Test target via invalid path parameter
+            # Requirement: Tool execution fails when the specified path parameter does not match an open session target, reminding the agent to specify an open target.
+            b_bad = ActualParameterBindings(
+                bindings={(check_file.path, "nonexistent.py")}
+            )
+            resp_bad = check_file.execute_tool(b_bad)
+            self.assertTrue(resp_bad.is_failed)
+            self.assertIn(
+                "does not match an open session target", resp_bad.content
+            )
+            self.assertIsNotNone(resp_bad.reminder)
+            assert resp_bad.reminder is not None
+            self.assertIn("Specify an open target:", resp_bad.reminder)
+
+            # When path parameter is omitted and multiple unsubmitted targets exist, fails if last accessed target is None
+            b_empty = ActualParameterBindings(bindings=set())
+            # Requirement: When the path parameter is omitted and multiple unsubmitted read-write files exist, the path parameter defaults to the last read or written path if it corresponds to an open session target, and otherwise tool execution fails, reminding the agent to specify an open target.
+            resp_empty = check_file.execute_tool(b_empty)
+            self.assertTrue(resp_empty.is_failed)
+            self.assertIn("'path' must be specified when multiple unsubmitted targets exist", resp_empty.content)
+
+            # When last read or written path is set to an open session target, defaults to it
+            self.edit_mgr.last_read_or_edited_file = TargetFileObj("rt_unit1.py")
+            self.edit_mgr.file_update_revision = 10
+            # Requirement: When the path parameter is omitted and multiple unsubmitted read-write files exist, the path parameter defaults to the last read or written path if it corresponds to an open session target, and otherwise tool execution fails, reminding the agent to specify an open target.
+            # Requirement: When a path target is specified or defaulted, executing the check file tool evaluates verification checks for that target.
+            resp_def = check_file.execute_tool(b_empty)
+            self.assertFalse(resp_def.is_failed)
+            self.assertIn("Check 1 passed", resp_def.content)
+            self.edit_mgr.last_read_or_edited_file = None
+
+            # When exactly one unsubmitted target remains, defaults to that target
+            rc = scope.get_singleton(RunControllerImpl)
+            rc.set_node_state(node1, "SUBMITTED")
+            self.edit_mgr.file_update_revision = 11
+
+            # Specifying a target that is already SUBMITTED fails
+            # Requirement: Tool execution fails when the specified path parameter does not match an open session target, reminding the agent to specify an open target.
+            b_closed = ActualParameterBindings(
+                bindings={(check_file.path, "rt_unit1.py")}
+            )
+            resp_closed = check_file.execute_tool(b_closed)
+            self.assertTrue(resp_closed.is_failed)
+            self.assertIn(
+                "does not match an open session target", resp_closed.content
+            )
+            self.assertIsNotNone(resp_closed.reminder)
+            assert resp_closed.reminder is not None
+            self.assertIn("Specify an open target: `rt_unit2.py`", resp_closed.reminder)
+
+            # Requirement: When the path parameter is omitted and exactly one session read-write file exists or one unsubmitted read-write file remains, the path parameter defaults to that read-write file.
+            # Requirement: When a path target is specified or defaulted, executing the check file tool evaluates verification checks for that target.
+            resp_one = check_file.execute_tool(b_empty)
+            self.assertTrue(resp_one.is_failed)
+            self.assertIn("Check 2 failed", resp_one.content)
 
     def test_check_file_tool_failing_verification_presents_diagnostics_and_instructions(
         self,
@@ -1262,6 +1362,160 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
             assert resp_last.reminder is not None
             self.assertIn("until src2.py is updated.", resp_last.reminder)
+
+    def test_default_target_resolution_with_read_write_files(self) -> None:
+        """CUJ: RunController resolves default targets across single, multiple unsubmitted, and locked files."""
+        node1 = Node(unit_address="//pkg:t1", role_address="lib")
+        node2 = Node(unit_address="//pkg:t2", role_address="lib")
+        rw1 = ReadWriteFile(
+            relative_path="t1.py",
+            workspace_path=_make_workspace_path("/workspace/t1.py"),
+            owning_node=node1,
+        )
+        rw2 = ReadWriteFile(
+            relative_path="t2.py",
+            workspace_path=_make_workspace_path("/workspace/t2.py"),
+            owning_node=node2,
+        )
+        ro_file = ReadOnlyFile(
+            relative_path="readme.md",
+            workspace_path=_make_workspace_path("/workspace/readme.md"),
+            owning_node=Node(unit_address="//pkg:ro", role_address="doc"),
+        )
+        self.node_cfg._read_write_files = {rw1, rw2}
+        vcheck1 = MockVerificationCheck(passes=True)
+        vcheck2 = MockVerificationCheck(passes=True)
+        self.node_cfg.verification_checks_by_node = {node1: [vcheck1], node2: [vcheck2]}
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            submit = scope.get_singleton(SubmitToolImpl)
+            check_file = scope.get_singleton(CheckFileTool)
+            rc = scope.get_singleton(RunControllerImpl)
+
+            b_empty = ActualParameterBindings(bindings=set())
+
+            # 1. Multiple unsubmitted files, last_read_or_edited_file is None -> submit & check_file fail
+            # Requirement: When the target parameter is omitted and multiple unsubmitted read-write files exist, the target parameter defaults to the last read or written path if it corresponds to an open session target, and otherwise tool execution fails, reminding the agent to specify an open target.
+            # Requirement: When the path parameter is omitted and multiple unsubmitted read-write files exist, the path parameter defaults to the last read or written path if it corresponds to an open session target, and otherwise tool execution fails, reminding the agent to specify an open target.
+            resp_sub_fail = submit.execute_tool(b_empty)
+            self.assertTrue(resp_sub_fail.is_failed)
+            self.assertIn("Target parameter must be specified", resp_sub_fail.content)
+            resp_chk_fail = check_file.execute_tool(b_empty)
+            self.assertTrue(resp_chk_fail.is_failed)
+            self.assertIn("'path' must be specified", resp_chk_fail.content)
+
+            # 2. Multiple unsubmitted files, last_read_or_edited_file is read-only -> fails
+            self.edit_mgr.last_read_or_edited_file = ro_file
+            # Requirement: When the target parameter is omitted and multiple unsubmitted read-write files exist, the target parameter defaults to the last read or written path if it corresponds to an open session target, and otherwise tool execution fails, reminding the agent to specify an open target.
+            # Requirement: When the path parameter is omitted and multiple unsubmitted read-write files exist, the path parameter defaults to the last read or written path if it corresponds to an open session target, and otherwise tool execution fails, reminding the agent to specify an open target.
+            self.assertTrue(submit.execute_tool(b_empty).is_failed)
+            self.assertTrue(check_file.execute_tool(b_empty).is_failed)
+
+            # 3. Multiple unsubmitted files, last_read_or_edited_file is rw1 -> defaults to rw1
+            self.edit_mgr.last_read_or_edited_file = rw1
+            # Requirement: When the path parameter is omitted and multiple unsubmitted read-write files exist, the path parameter defaults to the last read or written path if it corresponds to an open session target, and otherwise tool execution fails, reminding the agent to specify an open target.
+            # Requirement: When a path target is specified or defaulted, executing the check file tool evaluates verification checks for that target.
+            resp_chk_ok = check_file.execute_tool(b_empty)
+            self.assertFalse(resp_chk_ok.is_failed)
+
+            # Requirement: When the target parameter is omitted and multiple unsubmitted read-write files exist, the target parameter defaults to the last read or written path if it corresponds to an open session target, and otherwise tool execution fails, reminding the agent to specify an open target.
+            # Requirement: Tool execution marks the target as submitted, locks the target read-write files in the edit manager against modification, and produces a terminating response indicating that the session completed successfully when all session targets are resolved, or produces a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
+            resp_sub_ok = submit.execute_tool(b_empty)
+            self.assertFalse(resp_sub_ok.is_failed)
+            self.assertEqual(rc.get_node_state(node1), "SUBMITTED")
+            self.assertIn(rw1, self.edit_mgr.locked_files)
+
+            # 4. Now rw1 is submitted and locked; last_read_or_edited_file is still rw1 (now locked)
+            # Exactly one unsubmitted read-write file remains (rw2) -> defaults to rw2 even if last accessed was rw1
+            # Requirement: When the target parameter is omitted and exactly one session read-write file exists or one unsubmitted read-write file remains, the target parameter defaults to that target.
+            # Requirement: When the path parameter is omitted and exactly one session read-write file exists or one unsubmitted read-write file remains, the path parameter defaults to that read-write file.
+            # Requirement: When a path target is specified or defaulted, executing the check file tool evaluates verification checks for that target.
+            self.edit_mgr.file_update_revision = 50
+            resp_chk_rw2 = check_file.execute_tool(b_empty)
+            self.assertFalse(resp_chk_rw2.is_failed)
+
+            # Requirement: When the target parameter is omitted and exactly one session read-write file exists or one unsubmitted read-write file remains, the target parameter defaults to that target.
+            # Requirement: Tool execution marks the target as submitted, locks the target read-write files in the edit manager against modification, and produces a terminating response indicating that the session completed successfully when all session targets are resolved, or produces a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
+            resp_sub_rw2 = submit.execute_tool(b_empty)
+            self.assertFalse(resp_sub_rw2.is_failed)
+            self.assertTrue(resp_sub_rw2.is_terminated)
+            self.assertEqual(rc.get_node_state(node2), "SUBMITTED")
+            self.assertIn(rw2, self.edit_mgr.locked_files)
+
+    def test_multi_node_target_matching_by_alias_relative_path_and_unique_filename(
+        self,
+    ) -> None:
+        """CUJ: Run controller matches session targets by alias, relative path, or unique filename across submit, check_file, fail, and blame."""
+        node1 = Node(unit_address="//pkg:unit1", role_address="lib")
+        node2 = Node(unit_address="//pkg:unit2", role_address="lib")
+        node3 = Node(unit_address="//pkg2:unit2", role_address="lib")
+        self.node_cfg.src_file_alias_by_node = {
+            node1: "testing/parts/pkg/logs/unit1_qa.log",
+            node2: "testing/parts/pkg/logs/unit2_qa.log",
+            node3: "testing/parts/pkg2/logs/unit2_qa.log",
+        }
+        vcheck1 = MockVerificationCheck(passes=True)
+        vcheck2 = MockVerificationCheck(passes=True)
+        vcheck3 = MockVerificationCheck(passes=True)
+        self.node_cfg.verification_checks_by_node = {
+            node1: [vcheck1],
+            node2: [vcheck2],
+            node3: [vcheck3],
+        }
+        self.guide_del.has_steps_remaining = False
+
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            submit = scope.get_singleton(SubmitToolImpl)
+            check_file = scope.get_singleton(CheckFileToolImpl)
+            fail = scope.get_singleton(FailToolImpl)
+            rc = scope.get_singleton(RunControllerImpl)
+
+            # Requirement: Session targets are matched by alias, relative path, or unique filename.
+            # 1. Look up by exact alias / relative path
+            self.assertEqual(
+                rc.get_node_for_alias("testing/parts/pkg/logs/unit1_qa.log"), node1
+            )
+            # 2. Look up by unit address
+            self.assertEqual(rc.get_node_for_alias("//pkg:unit1"), node1)
+            # 3. Look up by unique filename / basename
+            self.assertEqual(rc.get_node_for_alias("unit1_qa.log"), node1)
+            # 4. Ambiguous basename returns None (unit2_qa.log is shared by node2 and node3)
+            self.assertIsNone(rc.get_node_for_alias("unit2_qa.log"))
+
+            # 5. Check file tool accepts unique filename
+            # Requirement: When a path target is specified or defaulted, executing the check file tool evaluates verification checks for that target.
+            resp_chk = check_file.execute_tool(
+                ActualParameterBindings(
+                    bindings={(check_file.path, TargetFileObj("unit1_qa.log"))}
+                )
+            )
+            self.assertFalse(resp_chk.is_failed)
+
+            # 6. Submit tool accepts unique filename
+            # Requirement: Tool execution marks the target as submitted, locks the target read-write files in the edit manager against modification, and produces a terminating response indicating that the session completed successfully when all session targets are resolved, or produces a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
+            resp_sub = submit.execute_tool(
+                ActualParameterBindings(
+                    bindings={
+                        (submit.target, TargetFileObj("unit1_qa.log")),
+                        (submit.change_summary, "Completed unit 1"),
+                    }
+                )
+            )
+            self.assertFalse(resp_sub.is_failed)
+            self.assertEqual(rc.get_node_state(node1), "SUBMITTED")
+
+            # 7. Fail tool accepts exact relative path for node2
+            # Requirement: Executing the fail tool marks the target as failed, locks the target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response carrying the explanation when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
+            resp_fail = fail.execute_tool(
+                ActualParameterBindings(
+                    bindings={
+                        (fail.target, "testing/parts/pkg/logs/unit2_qa.log"),
+                        (fail.explanation, "Failing unit 2"),
+                    }
+                )
+            )
+            self.assertFalse(resp_fail.is_failed)
+            self.assertEqual(rc.get_node_state(node2), "FAILED")
 
 
 if __name__ == "__main__":

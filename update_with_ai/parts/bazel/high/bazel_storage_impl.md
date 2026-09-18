@@ -15,7 +15,7 @@ Coordinating multi-node builds requires fast in-memory access to target metadata
 
 The agent storage maintains node definitions, task prompts, dependencies, and reverse dependencies mapped to nodes in dag storage.
 
-A node in dag storage is dirty if it has messages explaining why it requires cleaning, or if its declared source file is missing from the workspace root.
+A node in dag storage is dirty if it has messages explaining why it requires cleaning, or if its declared source file is missing from the workspace root, recording a change message to implement the source file for the node.
 
 The agent storage serializes pending messages and reverse dependencies for nodes into protobuf text format files using the proto package store.
 

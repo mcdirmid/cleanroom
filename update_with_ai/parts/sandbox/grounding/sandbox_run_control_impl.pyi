@@ -25,7 +25,7 @@ INHERITED_REQUIREMENTS:
 - [RunController] The run controller installs a blame tool when blame targets are configured, attributing task failure to an upstream dependency node.
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, RunController installs run control tools and exposes verification check sequences delegated from imported agent_node_config.NodeConfig, coordinating with tool_provider.ToolManager, sandbox_file_editor.EditManager, and dag_storage.DagStorage in the same session lifecycle tier.
+- As an agent_session singleton, RunController installs run control tools and exposes verification check sequences delegated from imported agent_node_config.NodeConfig, coordinating with tool_provider.ToolManager, sandbox_file_editor.EditManager, and dag_storage.DagStorage in the same session lifecycle tier, resolving session target nodes by alias, relative path, or unique filename.
 """
 
     @property
@@ -61,6 +61,7 @@ Installs submit, fail, and check file tools unconditionally, advance tool when g
 FRESH_REQUIREMENTS:
 - The run controller unconditionally installs the submit tool, fail tool, and check file tool for the agent session, installs the advance tool only when guide step mode is active, and obtains configured blame targets and verification checks from the node config, installing the blame tool only when blame targets are configured.
 - Verification checks exposed by the run controller include the session verification checks from node config.
+- Session targets are matched by alias, relative path, or unique filename.
 
 GROUNDING_ARGUMENT:
 - Reads step mode, blame targets, and verification checks from imported agent_node_config.NodeConfig, and installs SubmitTool, FailTool, CheckFileTool, optionally AdvanceTool, and optionally BlameTool directly into imported tool_provider.ToolManager in the same session lifecycle tier.
@@ -245,10 +246,12 @@ Implements execute_tool to evaluate completion criteria, in-session dependencies
 
 FRESH_REQUIREMENTS:
 - Executing the submit tool updates verification results if outdated.
-- In multi-target sessions, tool execution fails when the target parameter is omitted or does not match an open session target, reminding the agent to specify an open target.
+- When the target parameter is omitted and exactly one session read-write file exists or one unsubmitted read-write file remains, the target parameter defaults to that target.
+- When the target parameter is omitted and multiple unsubmitted read-write files exist, the target parameter defaults to the last read or written path if it corresponds to an open session target, and otherwise tool execution fails, reminding the agent to specify an open target.
+- Tool execution fails when the target parameter does not match an open session target, reminding the agent to specify an open target.
 - Tool execution fails when an in-session dependency of the target has not yet been submitted, reminding the agent that in-session dependencies must be submitted before dependent targets.
 - Tool execution fails when guide step mode is active and guide steps remain in guide delivery, reminding the agent that the advance tool must be called while guide steps remain and specifying the advance tool as a follow-up tool call with reasoning text indicating that remaining guide steps must be completed before finishing.
-- Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool with reasoning text indicating that verification results must be inspected before submitting.
+- Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool targeting the submitted target with reasoning text indicating that verification results must be inspected before submitting.
 - Tool execution fails when session feedback is present and no workspace files were modified, reminding the agent that workspace files must be modified to address feedback or that the fail tool must be used.
 - Tool execution fails if workspace files were modified and the change summary is omitted, reminding the agent that a change summary must be provided when completing the session after modifying workspace files.
 - Tool execution marks the target as submitted, locks the target read-write files in the edit manager against modification, and produces a terminating response indicating that the session completed successfully when all session targets are resolved, or produces a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
@@ -258,7 +261,7 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings directly, extracts target and change_summary, queries step mode from imported agent_node_config.NodeConfig and steps remaining from imported sandbox_guide_delivery.GuideDelivery returning a failure response specifying AdvanceTool as follow_up_tool_call if steps remain, inspects workspace modifications via imported sandbox_file_editor.EditManager, evaluates verification checks via RunController.evaluate_verification in the same session tier, sanitizes diagnostics through imported agent_file_alias.AliasManager, formats remaining open targets with template_format.TemplateFormatter, attaches suppression key 'submit', and produces a response indicating success.
+- Receives actual parameter bindings directly, extracts target and change_summary, resolves omitted targets against the single session read-write file, remaining unsubmitted read-write file, or last read or written path via imported sandbox_file_editor.EditManager, queries step mode from imported agent_node_config.NodeConfig and steps remaining from imported sandbox_guide_delivery.GuideDelivery returning a failure response specifying AdvanceTool as follow_up_tool_call if steps remain, inspects workspace modifications via imported sandbox_file_editor.EditManager, evaluates verification checks via RunController.evaluate_verification in the same session tier, sanitizes diagnostics through imported agent_file_alias.AliasManager, formats remaining open targets with template_format.TemplateFormatter, attaches suppression key 'submit', and produces a response indicating success.
 """
         ...
 
@@ -323,6 +326,9 @@ PURPOSE:
 Implements execute_tool to produce a failure response
 
 FRESH_REQUIREMENTS:
+- When the target parameter is omitted and exactly one session read-write file exists or one unsubmitted read-write file remains, the target parameter defaults to that target.
+- When the target parameter is omitted and multiple unsubmitted read-write files exist, the target parameter defaults to the last read or written path if it corresponds to an open session target, and otherwise tool execution fails, reminding the agent to specify an open target.
+- Tool execution fails when the target parameter does not match an open session target, reminding the agent to specify an open target.
 - Executing the fail tool marks the target as failed, locks the target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response carrying the explanation when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
 
 INHERITED_REQUIREMENTS:
@@ -330,7 +336,7 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings directly, extracts target and explanation, updates node state in RunController, formats remaining open targets with template_format.TemplateFormatter, and constructs a failure response.
+- Receives actual parameter bindings directly, extracts target and explanation, resolves omitted targets against the single session read-write file, remaining unsubmitted read-write file, or last read or written path via imported sandbox_file_editor.EditManager, validates that the target matches an open session target in RunController, updates node state in RunController, formats remaining open targets with template_format.TemplateFormatter, and constructs a failure response.
 """
         ...
 
@@ -432,7 +438,10 @@ PURPOSE:
 Implements execute_tool to validate blame target and produce a terminating feedback response
 
 FRESH_REQUIREMENTS:
-- Executing the blame tool fails if the target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
+- When the blame target matches a configured blame target of an open session target, the source target parameter defaults to that session target.
+- When the blame target parameter is omitted and the source target parameter matches a configured blame target, the blame target parameter defaults to that target and the source target parameter defaults to the session target configured with that blame target.
+- When the source target parameter is omitted and cannot be inferred from the blame target, the source target parameter defaults to the single session target or remaining unsubmitted target, or to the last read or written path if it corresponds to an open session target.
+- Executing the blame tool fails if the blame target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
 - On successful blame tool execution, the response marks the submitted target of the blame as resolved, locks the submitted target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response attributing defect feedback to the blame target owning node when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
 
 INHERITED_REQUIREMENTS:
@@ -440,7 +449,7 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, resolves the target and blame target via imported agent_file_alias.AliasManager, validates the blame target against RunController.blame_targets in the same session lifecycle tier, updates node state in RunController, formats remaining open targets with template_format.TemplateFormatter, and constructs a feedback response.
+- Receives actual parameter bindings, resolves the target and blame target via imported agent_file_alias.AliasManager, infers or defaults the source target from open nodes in RunController or via imported sandbox_file_editor.EditManager, validates the blame target against RunController.blame_targets in the same session lifecycle tier, updates node state in RunController, formats remaining open targets with template_format.TemplateFormatter, and constructs a feedback response.
 """
         ...
 
@@ -553,7 +562,10 @@ Executes the check file tool, updating verification results and presenting them
 
 FRESH_REQUIREMENTS:
 - Executing the check file tool updates verification results if outdated.
-- When a path target is specified, executing the check file tool evaluates verification checks for that target.
+- When the path parameter is omitted and exactly one session read-write file exists or one unsubmitted read-write file remains, the path parameter defaults to that read-write file.
+- When the path parameter is omitted and multiple unsubmitted read-write files exist, the path parameter defaults to the last read or written path if it corresponds to an open session target, and otherwise tool execution fails, reminding the agent to specify an open target.
+- Tool execution fails when the specified path parameter does not match an open session target, reminding the agent to specify an open target.
+- When a path target is specified or defaulted, executing the check file tool evaluates verification checks for that target.
 - Reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous check file tool execution.
 - Specifies a follow-up execution of the view file tool on the session source file (resolving to the specified path target if a read-write file, the last accessed read-write file, or the primary session read-write file) and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check file tool execution.
 - Fails when verification fails, presenting diagnostic feedback sanitized through the alias manager alongside any configured verification failure instructions.
@@ -564,6 +576,6 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Evaluates verification via RunController.evaluate_verification in the same session lifecycle tier, resolves the session source file against actual parameter bindings, the last accessed file from imported sandbox_file_editor.EditManager, or session read-write files from NodeConfig, sanitizes diagnostics through imported agent_file_alias.AliasManager, formats failure instructions from imported sandbox_guide_delivery.GuideDelivery, attaches suppression key 'check_file', and constructs a tool_provider.Response presenting verification outcome alongside check output.
+- Evaluates verification via RunController.evaluate_verification in the same session lifecycle tier, resolves the session source file against actual parameter bindings, the single session read-write file, remaining unsubmitted read-write file, or the last accessed file from imported sandbox_file_editor.EditManager, sanitizes diagnostics through imported agent_file_alias.AliasManager, formats failure instructions from imported sandbox_guide_delivery.GuideDelivery, attaches suppression key 'check_file', and constructs a tool_provider.Response presenting verification outcome alongside check output.
 """
         ...

@@ -27,7 +27,6 @@ Cleans dirty nodes within an agent session phase and returns resulting messages
 
 FRESH_REQUIREMENTS:
 - The node cleaner cleans dirty nodes within an agent session phase where the cleaned nodes present the nodes currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
-- The cleaned nodes designate the first node in the sequence as the primary node.
 - Within the agent session phase, missing read-write files materialize from sandbox startup templates.
 - The conversation is initialized with startup context comprising the node definition and task prompt retrieved from graph storage for dirty nodes, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox formatted with synthetic tool requests and captured responses.
 - The task prompt is formatted using the template formatter.
@@ -86,21 +85,6 @@ INHERITED_REQUIREMENTS:
 
 GROUNDING_ARGUMENT:
 - Holds the active Node sequence configured via the set_nodes configuration operation when the agent session phase is initiated.
-"""
-        ...
-
-    @property
-    @override
-    def primary_node(self) -> dag_storage.Node:
-        """
-PURPOSE:
-Primary target node currently being cleaned in the agent session
-
-INHERITED_REQUIREMENTS:
-- [CleanedNodes] The cleaned nodes service presents the primary target node currently being cleaned in the agent session.
-
-GROUNDING_ARGUMENT:
-- Holds the primary Node corresponding to the first node in the sequence configured via the set_nodes configuration operation.
 """
         ...
 

@@ -21,4 +21,4 @@ The *cleaned nodes* is an agent session service that presents the nodes currentl
 The cleaned nodes service provides:
 
 - The sequence of nodes currently being cleaned in the agent session.
-- The primary target node currently being cleaned in the agent session.
+

@@ -23,15 +23,15 @@ The node config provides:
 
 - Declared source files and templates from the manifests as the session read-write files and templates, mapping read-write files to initial file content.
 
-- Declared template parameters from the primary target node manifest as the session template parameters.
+- Declared template parameters from the target node manifests as the session template parameters.
 
 - Declared direct dependencies and transitive star dependencies resolved across dependency manifests as the session read-only files, excluding declared silent dependencies and their source files, and excluding files present in the session read-write files.
 
-- Whether the nodes allow step mode, resolved from the primary target node manifest.
+- Whether the nodes allow step mode, resolved from the target node manifests.
 
-- Whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the primary node allows step mode, and session feedback is absent.
+- Whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the target node allows step mode, and session feedback is absent.
 
-- Declared guide targets from the primary target node manifest as the guide file and task guide when guide step mode is active.
+- Declared guide targets from the target node manifest as the guide file and task guide when guide step mode is active.
 
 - Declared feedback dependencies from the manifests as blame targets mapped to their owning dependency nodes, and blame targets by node mapping each session node to its declared blame targets.
 
@@ -39,7 +39,7 @@ The node config provides:
 
 - Declared src file alias by node mapping each session node to the relative path of its declared source file alias.
 
-- Declared verification success message from the primary target node manifest as the session verification success message.
+- Declared verification success message from the target node manifest when the session contains exactly one node as the session verification success message.
 
 - Declared feedback messages retrieved from graph storage for the session nodes as the session feedback.
 

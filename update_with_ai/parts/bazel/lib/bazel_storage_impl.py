@@ -138,18 +138,20 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         return messages
 
     def is_dirty(self, node: dag_storage.Node) -> bool:
-        # Requirement: A node in dag storage is dirty if it has messages explaining why it requires cleaning, or if its declared source file is missing from the workspace root.
+        # Requirement: A node in dag storage is dirty if it has messages explaining why it requires cleaning, or if its declared source file is missing from the workspace root, recording a change message to implement the source file for the node.
         # Requirement: [DagStorage] A node is dirty if, but not only if, it has messages.
-        if len(self.get_messages(node)) > 0:
-            return True
         if node in self._source_files:
             src_rel = self._source_files[node]
             paths_service = get_singleton(file_paths.FilePaths)
             root = paths_service.get_workspace_root()
             resolved = Path(root.path) / src_rel
             if not resolved.is_file():
+                content = f"implement {src_rel}"
+                msgs = self.get_messages(node)
+                if not any(m.content == content for m in msgs):
+                    self.add_message(dag_storage.Change(content=content), to=node)
                 return True
-        return False
+        return len(self.get_messages(node)) > 0
 
     def register_dependent(self, node: dag_storage.Node) -> None:
         # Requirement: Registering a node as a dependent adds the node to the dependents of all of its non-silent dependencies.

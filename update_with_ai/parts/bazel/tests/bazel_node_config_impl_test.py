@@ -57,23 +57,16 @@ class MockCleanedNodes(CleanedNodes, Singleton):
     tier = "agent_session"
 
     def __init__(self) -> None:
-        self._primary_node = Node(unit_address="//test/pkg:my_target")
-        self._nodes: Sequence[Node] = (self._primary_node,)
-
-    @property
-    def primary_node(self) -> Node:
-        return self._primary_node
+        self._nodes: Sequence[Node] = (Node(unit_address="//test/pkg:my_target"),)
 
     @property
     def nodes(self) -> Sequence[Node]:
         return self._nodes
 
     def set_node(self, node: Node) -> None:
-        self._primary_node = node
         self._nodes = (node,)
 
-    def set_nodes(self, primary: Node, nodes: Sequence[Node]) -> None:
-        self._primary_node = primary
+    def set_nodes(self, nodes: Sequence[Node]) -> None:
         self._nodes = tuple(nodes)
 
 
@@ -139,7 +132,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             # Requirement: The node config exposes templates mapping read-write files to initial file content.
             # Requirement: [NodeConfig] The node config provides templates mapping read-write files to initial file content.
             self.assertIn((rw, "template"), cfg.templates)
-            # Requirement: The node config exposes declared template parameters from the primary target node manifest.
+            # Requirement: The node config exposes declared template parameters from the target node manifests.
             # Requirement: [NodeConfig] The node config provides the session template parameters, providing parameter bindings for template evaluation.
             self.assertEqual(cfg.template_parameters, {"key": "value"})
             # Requirement: The node config exposes the declared guide target as the guide file when step mode is active.
@@ -161,7 +154,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             # Requirement: The node config exposes declared src file alias by node mapping each session node to the short name of its declared source file alias.
             # Requirement: [NodeConfig] The node config provides the source file alias short name mapped by session node.
             self.assertEqual(cfg.src_file_alias_by_node[node], "rw.txt")
-            # Requirement: Declared verification success message from the primary target node manifest as the session verification success message.
+            # Requirement: Declared verification success message from the target node manifest when the session contains exactly one node as the session verification success message.
             # Requirement: [NodeConfig] The node config provides the session verification success message when configured.
             self.assertEqual(cfg.verification_success_message, "All tests passed")
 
@@ -181,10 +174,10 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             cfg._allows_step_mode = False
             cfg._is_step_mode = False
-            # Requirement: The node config exposes whether the node allows step mode from the primary target node manifest.
+            # Requirement: The node config exposes whether the nodes allow step mode from the target node manifests.
             # Requirement: [NodeConfig] The node config indicates whether the node allows step mode.
             self.assertFalse(cfg.allows_step_mode)
-            # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the primary node allows step mode, and session feedback is absent.
+            # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the target node allows step mode, and session feedback is absent.
             # Requirement: [NodeConfig] The node config indicates whether session step mode is active.
             self.assertFalse(cfg.is_step_mode)
             cfg._allows_step_mode = True
@@ -480,10 +473,10 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 cfg = scope.get_singleton(NodeConfig)
                 alias_mgr = scope.get_singleton(AliasManager)
 
-                # Requirement: The node config exposes whether the node allows step mode from the primary target node manifest.
+                # Requirement: The node config exposes whether the nodes allow step mode from the target node manifests.
                 # Requirement: [NodeConfig] The node config indicates whether the node allows step mode.
                 self.assertFalse(cfg.allows_step_mode)
-                # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the primary node allows step mode, and session feedback is absent.
+                # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the target node allows step mode, and session feedback is absent.
                 # Requirement: [NodeConfig] The node config indicates whether session step mode is active.
                 self.assertFalse(cfg.is_step_mode)
                 self.assertIsNone(cfg.guide_file)
@@ -570,11 +563,11 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 cfg = scope.get_singleton(NodeConfig)
                 alias_mgr = scope.get_singleton(AliasManager)
 
-                # Requirement: The node config exposes whether the node allows step mode from the primary target node manifest.
+                # Requirement: The node config exposes whether the nodes allow step mode from the target node manifests.
                 # Requirement: [NodeConfig] The node config indicates whether the node allows step mode.
                 self.assertTrue(cfg.allows_step_mode)
                 self.assertEqual(cfg.feedback, ("Fix failing mock test",))
-                # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the primary node allows step mode, and session feedback is absent.
+                # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the target node allows step mode, and session feedback is absent.
                 # Requirement: [NodeConfig] The node config indicates whether session step mode is active.
                 self.assertFalse(cfg.is_step_mode)
                 self.assertIsNone(cfg.guide_file)
@@ -638,10 +631,6 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             tier = "agent_session"
 
             @property
-            def primary_node(self) -> Node:
-                return Node(unit_address="//pkg:tgt")
-
-            @property
             def nodes(self) -> Sequence[Node]:
                 return ()
 
@@ -655,10 +644,6 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         # 2. DagStorage missing / failing -> self._feedback = ()
         class MockCleanedNodesTgt(CleanedNodes, Singleton):
             tier = "agent_session"
-
-            @property
-            def primary_node(self) -> Node:
-                return Node(unit_address="//pkg:tgt")
 
             @property
             def nodes(self) -> Sequence[Node]:
@@ -731,10 +716,6 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 tier = "agent_session"
 
                 @property
-                def primary_node(self) -> Node:
-                    return Node(unit_address="//pkg:my_target")
-
-                @property
                 def nodes(self) -> Sequence[Node]:
                     return (Node(unit_address="//pkg:my_target"),)
 
@@ -783,11 +764,11 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                     self.assertEqual(bound_f.relative_path, "pkg/impl.py")
                     self.assertEqual(content, "# Template code\n")
 
-                # Requirement: The node config exposes declared template parameters from the primary target node manifest.
+                # Requirement: The node config exposes declared template parameters from the target node manifests.
                 # Requirement: [NodeConfig] The node config provides the session template parameters, providing parameter bindings for template evaluation.
                 self.assertEqual(cfg.template_parameters, {"key": "value"})
 
-                # Requirement: Declared verification success message from the primary target node manifest as the session verification success message.
+                # Requirement: Declared verification success message from the target node manifest when the session contains exactly one node as the session verification success message.
                 # Requirement: [NodeConfig] The node config provides the session verification success message when configured.
                 self.assertEqual(
                     cfg.verification_success_message, "Build passed successfully"
@@ -808,10 +789,6 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             class MockCleanedNodesPkg(CleanedNodes, Singleton):
                 tier = "agent_session"
-
-                @property
-                def primary_node(self) -> Node:
-                    return Node(unit_address="//pkg:my_target")
 
                 @property
                 def nodes(self) -> Sequence[Node]:
@@ -897,7 +874,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                             # Requirement: [NodeConfig] The node config provides templates mapping read-write files to initial file content.
                             self.assertEqual(cfg.templates, set())
                             # Invalid JSON param string results in default empty dict
-                            # Requirement: The node config exposes declared template parameters from the primary target node manifest.
+                            # Requirement: The node config exposes declared template parameters from the target node manifests.
                             # Requirement: [NodeConfig] The node config provides the session template parameters, providing parameter bindings for template evaluation.
                             self.assertEqual(cfg.template_parameters, {})
                             # Guide read failure results in guide being None
@@ -974,10 +951,6 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 tier = "agent_session"
 
                 @property
-                def primary_node(self) -> Node:
-                    return Node(unit_address="//pkg:my_target")
-
-                @property
                 def nodes(self) -> Sequence[Node]:
                     return (Node(unit_address="//pkg:my_target"),)
 
@@ -1044,7 +1017,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                         cfg = scope.get_singleton(NodeConfig)
                         alias_mgr = scope.get_singleton(AliasManager)
 
-                        # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the primary node allows step mode, and session feedback is absent.
+                        # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the target node allows step mode, and session feedback is absent.
                         # Requirement: [NodeConfig] The node config indicates whether session step mode is active.
                         self.assertTrue(cfg.is_step_mode)
 
@@ -1089,10 +1062,6 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
         class MockCleanedNodesRoot(CleanedNodes, Singleton):
             tier = "agent_session"
-
-            @property
-            def primary_node(self) -> Node:
-                return Node(unit_address="//pkg:root")
 
             @property
             def nodes(self) -> Sequence[Node]:
@@ -1200,10 +1169,6 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             tier = "agent_session"
 
             @property
-            def primary_node(self) -> Node:
-                return node_a
-
-            @property
             def nodes(self) -> Sequence[Node]:
                 return (node_a, node_b, node_c)
 
@@ -1299,9 +1264,11 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 # a.py is an in-batch read-write file, so it MUST NOT be in read_only_files!
                 self.assertEqual(ro_names, {"pkg/ext.py"})
 
-                # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the primary node allows step mode, and session feedback is absent.
+                # Requirement: The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the target node allows step mode, and session feedback is absent.
                 # Requirement: [NodeConfig] The node config indicates whether session step mode is active.
                 self.assertFalse(cfg.is_step_mode)
+                self.assertFalse(cfg.allows_step_mode)
+                self.assertIsNone(cfg.verification_success_message)
 
                 # Requirement: The node config exposes blame targets by node mapping each session node to its declared blame targets.
                 # Requirement: [NodeConfig] The node config provides the session blame targets mapped by session node.
