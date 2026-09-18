@@ -96,10 +96,8 @@ class MockAgentConfig:
 
     def __init__(
         self,
-        edit_followup_read: bool = True,
-        edit_delta_output: bool = False,
+        edit_delta_output: bool = True,
     ) -> None:
-        self.edit_followup_read = edit_followup_read
         self.edit_delta_output = edit_delta_output
 
 
@@ -329,23 +327,14 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             )
             # Requirement: Replace file content tool execution reads the file content from the filesystem, treating missing files as empty.
             # Requirement: On success, the tool writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred.
-            # Requirement: Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
             # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
-            # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and when configured to perform follow-up reads on edits, produces a response specifying a follow-up execution of the view file tool on the modified read-write file, accompanied by a reminder justifying inspecting the updated file.
+            # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, and records that workspace file modifications occurred.
+            # Requirement: Editing tool responses omit suppression keys.
             resp = replace_tool.execute_tool(b_ok)
             self.assertFalse(resp.is_failed)
-            self.assertEqual(resp.suppression_key, self.rw_file.short_name)
-            self.assertIsNotNone(resp.follow_up_tool_call)
-            assert resp.follow_up_tool_call is not None
-            self.assertEqual(resp.follow_up_tool_call.tool_name, "view_file")
-            bindings_dict = dict(
-                resp.follow_up_tool_call.wire_parameter_bindings.bindings
-            )
-            self.assertEqual(bindings_dict.get("path"), self.rw_file.short_name)
-            self.assertNotIn("line_numbers", bindings_dict)
-            self.assertEqual(
-                resp.reminder, "Inspect the updated file to verify changes."
-            )
+            self.assertIsNone(resp.suppression_key)
+            self.assertIsNone(resp.follow_up_tool_call)
+            self.assertIsNone(resp.reminder)
             self.assertTrue(edit_mgr.has_modifications)
             with open(self.target_path, "r", encoding="utf-8") as f:
                 self.assertEqual(f.read(), "Line 1\nUpdated Line 2\nLine 3\n")
@@ -564,7 +553,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 self.assertEqual(f.read(), "gamma gamma\nbeta\n")
 
     def test_replace_file_content_tool_diff_and_followup_configs(self) -> None:
-        """CUJ: ReplaceFileContentTool produces unified diff and respects follow-up read configuration."""
+        """CUJ: ReplaceFileContentTool produces unified diff and respects delta output configuration."""
         with open(self.target_path, "w", encoding="utf-8") as f:
             f.write("Line 1\nLine 2\nLine 3\n")
 
@@ -573,7 +562,6 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
             # 1. Delta output enabled produces diff delta in response content
             self.agent_cfg.edit_delta_output = True
-            self.agent_cfg.edit_followup_read = True
 
             b_diff = ActualParameterBindings(
                 bindings={
@@ -583,16 +571,18 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 }
             )
             # Requirement: When configured to produce delta output, successful editing tool execution includes a diff delta representation in the response content.
+            # Requirement: Editing tool responses omit suppression keys.
             resp_diff = replace_tool.execute_tool(b_diff)
             self.assertFalse(resp_diff.is_failed)
             self.assertIn("```diff", resp_diff.content)
             self.assertIn("-Line 1", resp_diff.content)
             self.assertIn("+Header", resp_diff.content)
-            self.assertIsNotNone(resp_diff.follow_up_tool_call)
+            self.assertIsNone(resp_diff.follow_up_tool_call)
+            self.assertIsNone(resp_diff.reminder)
+            self.assertIsNone(resp_diff.suppression_key)
 
-            # 2. Followup read disabled omits follow_up_tool_call and reminder
+            # 2. Delta output disabled omits diff delta
             self.agent_cfg.edit_delta_output = False
-            self.agent_cfg.edit_followup_read = False
 
             b_no_followup = ActualParameterBindings(
                 bindings={
@@ -604,12 +594,13 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             resp_no_followup = replace_tool.execute_tool(b_no_followup)
             self.assertFalse(resp_no_followup.is_failed)
             self.assertNotIn("```diff", resp_no_followup.content)
+            self.assertEqual(resp_no_followup.content, "Successfully replaced content.")
             self.assertIsNone(resp_no_followup.follow_up_tool_call)
             self.assertIsNone(resp_no_followup.reminder)
+            self.assertIsNone(resp_no_followup.suppression_key)
 
             # Reset config
-            self.agent_cfg.edit_delta_output = False
-            self.agent_cfg.edit_followup_read = True
+            self.agent_cfg.edit_delta_output = True
 
     def test_diff_based_has_modifications(self) -> None:
         """CUJ: EditManager tracks real content differences and detects reverted modifications."""

@@ -24,6 +24,4 @@ The agent config provides:
 
 - Whether the agent should perform *startup reads* to inspect declared files at session start.
 
-- Whether editing tools should execute a *follow-up read* on modified files.
-
 - Whether editing tools should produce *delta output*.

@@ -1,4 +1,5 @@
 import json
+import time
 from typing import Any, Optional, Set, Tuple
 from update_with_ai.parts.agent.lib import agent_config
 from update_with_ai.parts.loop.lib import loop_conversation
@@ -44,119 +45,72 @@ class _SimpleParameterConverter:
 _DEFAULT_CONVERTER = _SimpleParameterConverter()
 
 
-def _measure_prefix_reuse(
-    prev_payload: Optional[list[dict[str, Any]]],
-    curr_payload: list[dict[str, Any]],
-    tools_payload: Optional[list[dict[str, Any]]] = None,
+def _format_token_usage(
+    prompt_tokens: Optional[int], cached_tokens: Optional[int]
 ) -> Tuple[str, str]:
-    if prev_payload is None:
-        curr_wire = json.dumps(curr_payload, ensure_ascii=False)
-        tools_info = (
-            f", {len(tools_payload)} tools" if tools_payload is not None else ""
-        )
-        summary = f"initial request ({len(curr_payload)} messages sent to OpenAI)"
-        transcript = (
-            f"Prefix reuse: N/A (initial request, {len(curr_payload)} messages"
-            f"{tools_info}, {len(curr_wire)} chars sent to OpenAI)"
-        )
+    if prompt_tokens is None:
+        summary = "initial request"
+        transcript = "Conversation tokens: initial request"
         return summary, transcript
 
-    matched_messages = 0
-    divergence_idx: Optional[int] = None
-    min_msg_count = min(len(prev_payload), len(curr_payload))
-    for i in range(min_msg_count):
-        if prev_payload[i] == curr_payload[i]:
-            matched_messages += 1
-        else:
-            divergence_idx = i
-            break
-    if divergence_idx is None and len(prev_payload) > len(curr_payload):
-        divergence_idx = len(curr_payload)
-
-    prev_wire = json.dumps(prev_payload, ensure_ascii=False)
-    curr_wire = json.dumps(curr_payload, ensure_ascii=False)
-    common_prefix_chars = 0
-    min_wire_len = min(len(prev_wire), len(curr_wire))
-    while (
-        common_prefix_chars < min_wire_len
-        and prev_wire[common_prefix_chars] == curr_wire[common_prefix_chars]
-    ):
-        common_prefix_chars += 1
-
-    reuse_pct = (common_prefix_chars / len(curr_wire) * 100.0) if curr_wire else 100.0
-    prev_retained_pct = (
-        (common_prefix_chars / len(prev_wire) * 100.0) if prev_wire else 100.0
+    size_kb = int(round(prompt_tokens / 1000.0))
+    size_str = f"{size_kb}K tokens"
+    cache_pct = (
+        int(round((cached_tokens / prompt_tokens) * 100.0))
+        if (cached_tokens is not None and prompt_tokens > 0)
+        else 0
     )
+    summary = f"{size_str}, {cache_pct}% cached"
+    transcript = f"Conversation tokens: {size_str} ({cache_pct}% cached on last turn)"
+    return summary, transcript
 
-    if divergence_idx is None:
-        summary = (
-            f"Prefix reuse: {reuse_pct:.1f}% "
-            f"({matched_messages}/{len(curr_payload)} messages, 100% of prev request retained)"
-        )
+
+def _format_tool_log(
+    fn_name: str,
+    args_dict: dict[str, Any],
+    resp: tool_provider.Response,
+    turns: int,
+    is_followup: bool = False,
+) -> Tuple[str, str]:
+    prefix = f"[Turn {turns}] Follow-up Tool" if is_followup else f"[Turn {turns}] Tool"
+    current_time = time.strftime("%H:%M:%S")
+
+    file_path = (
+        args_dict.get("path")
+        or args_dict.get("file")
+        or args_dict.get("file_alias")
+    )
+    is_read = fn_name == "view_file"
+    is_write = fn_name in ("replace", "update_lines", "replace_file_content")
+
+    if not resp.is_failed and (is_read or is_write) and file_path:
+        action = "read" if is_read else "wrote"
+        action_title = "Read" if is_read else "Wrote"
+        summary = f"{prefix} {fn_name}: {action} {file_path} at {current_time}"
+        transcript = f"{action_title} {file_path} at {current_time}"
+        if resp.reminder:
+            transcript += f"\n\nReminder: {resp.reminder}"
+        return summary, transcript
+
+    raw_snippet = (resp.content or "").strip()
+    first_line = raw_snippet.splitlines()[0] if raw_snippet else ""
+    if len(first_line) > 80:
+        first_line = first_line[:77] + "..."
+
+    if resp.is_failed:
+        status_str = f"FAILED -> {first_line}"
+    elif resp.is_terminated:
+        status_str = f"COMPLETED -> {first_line}"
     else:
-        summary = (
-            f"Prefix reuse: {reuse_pct:.1f}% "
-            f"({matched_messages}/{len(curr_payload)} messages, diverged at msg {divergence_idx})"
-        )
+        status_str = f"OK -> {first_line}"
 
-    transcript_lines = [
-        f"Prefix reuse: {reuse_pct:.1f}% "
-        f"({common_prefix_chars}/{len(curr_wire)} chars wire match, "
-        f"{matched_messages}/{len(curr_payload)} messages matched, "
-        f"{prev_retained_pct:.1f}% of prev request retained)"
-    ]
-    if tools_payload is not None:
-        transcript_lines.append(
-            f"Tools payload: {len(tools_payload)} tools, static canonical schema."
-        )
-
-    if divergence_idx is not None:
-        p_m = (
-            prev_payload[divergence_idx] if divergence_idx < len(prev_payload) else None
-        )
-        c_m = (
-            curr_payload[divergence_idx] if divergence_idx < len(curr_payload) else None
-        )
-        transcript_lines.append(
-            f"Divergence detected at message index {divergence_idx}:"
-        )
-        if p_m is not None and c_m is not None:
-            if p_m.get("role") != c_m.get("role"):
-                transcript_lines.append(
-                    f"  Role mismatch: prev={p_m.get('role')!r} vs curr={c_m.get('role')!r}"
-                )
-            if p_m.get("tool_call_id") != c_m.get("tool_call_id"):
-                transcript_lines.append(
-                    f"  tool_call_id mismatch: prev={p_m.get('tool_call_id')!r} vs curr={c_m.get('tool_call_id')!r}"
-                )
-            p_content = p_m.get("content") or ""
-            c_content = c_m.get("content") or ""
-            if p_content != c_content:
-                p_preview = p_content[:120].replace("\n", "\\n")
-                c_preview = c_content[:120].replace("\n", "\\n")
-                transcript_lines.append(
-                    f"  Content changed (prev_len={len(p_content)}, curr_len={len(c_content)}):"
-                )
-                transcript_lines.append(f"    prev: {p_preview!r}")
-                transcript_lines.append(f"    curr: {c_preview!r}")
-            if p_m.get("tool_calls") != c_m.get("tool_calls"):
-                transcript_lines.append(
-                    f"  tool_calls mismatch: prev={p_m.get('tool_calls')} vs curr={c_m.get('tool_calls')}"
-                )
-        elif p_m is not None:
-            transcript_lines.append(
-                f"  Current conversation is shorter than previous conversation ({len(curr_payload)} < {len(prev_payload)})"
-            )
-        else:
-            transcript_lines.append(  # pragma: no cover (assumption: previous payload is never shorter when divergence index is set)
-                f"  Previous conversation was shorter ({len(prev_payload)} < {len(curr_payload)})"
-            )
-    else:
-        transcript_lines.append(
-            f"Prefix intact: All {len(prev_payload)} messages from previous request matched as exact prefix."
-        )
-
-    return summary, "\n".join(transcript_lines)
+    summary = f"{prefix} {fn_name}: {status_str}"
+    transcript = (
+        f"{resp.content}\n\nReminder: {resp.reminder}"
+        if resp.reminder
+        else (resp.content or "")
+    )
+    return summary, transcript
 
 
 class LoopDriver(loop_driver.LoopDriver, Singleton):
@@ -212,7 +166,8 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
         last_response: tool_provider.Response = tool_provider.Response(
             is_failed=False, is_terminated=False, content="Initialized"
         )
-        prev_messages_payload: Optional[list[dict[str, Any]]] = None
+        last_turn_prompt_tokens: Optional[int] = None
+        last_turn_cached_tokens: Optional[int] = None
 
         # Requirement: [AgentDriver] The agent driver drives turns by sending model requests to a language model and executing requested tools.
         while turns < limit:
@@ -250,23 +205,21 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
 
             messages_payload = json.loads(json.dumps(messages_payload, sort_keys=True))
 
-            reuse_summary, reuse_transcript = _measure_prefix_reuse(
-                prev_messages_payload, messages_payload, tools_payload=tools_payload
+            token_summary, token_transcript = _format_token_usage(
+                last_turn_prompt_tokens, last_turn_cached_tokens
             )
-            # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+            # Requirement: The loop driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool names and arguments or text previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in tool result transcripts when present.
             logger.consume(
                 runner_logger.LogEvent(
                     event_name="model_request",
-                    summary=f"[Turn {turns}] {reuse_summary}",
-                    transcript_representation=f"=== Turn {turns} ===\nMessages: {len(messages_payload)}\n{reuse_transcript}",
+                    summary=f"[Turn {turns}] {token_summary}",
+                    transcript_representation=f"=== Turn {turns} ===\nMessages: {len(messages_payload)}\n{token_transcript}",
                 )
             )
 
             if client is None:  # pragma: no cover
                 # Fallback for environments without live OpenAI network / mock
                 break
-
-            prev_messages_payload = json.loads(json.dumps(messages_payload))
 
             try:
                 # Requirement: When driving a turn, the agent driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter name, and correlates tool results with model invocations according to OpenAI tool calling conventions.
@@ -290,6 +243,21 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                     )
                 )
                 raise RuntimeError(f"Model error: {e}")
+
+            usage = getattr(completion, "usage", None)
+            if usage is not None:
+                if isinstance(usage, dict):
+                    last_turn_prompt_tokens = usage.get("prompt_tokens")
+                    details = usage.get("prompt_tokens_details") or {}
+                    last_turn_cached_tokens = details.get("cached_tokens", 0)
+                else:
+                    last_turn_prompt_tokens = getattr(usage, "prompt_tokens", None)
+                    details = getattr(usage, "prompt_tokens_details", None)
+                    last_turn_cached_tokens = (
+                        getattr(details, "cached_tokens", 0)
+                        if details is not None
+                        else 0
+                    )
 
             choice = completion.choices[0]
             finish_reason = choice.finish_reason
@@ -340,7 +308,7 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                     f"[Turn {turns}] Assistant (text): {json.dumps(text_preview)}"
                 )
 
-            # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+            # Requirement: The loop driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool names and arguments or text previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in tool result transcripts when present.
             logger.consume(
                 runner_logger.LogEvent(
                     event_name="model_completion",
@@ -435,30 +403,11 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                 )
                 last_response = resp
 
-                raw_snippet = (resp.content or "").strip()
-                first_line = raw_snippet.splitlines()[0] if raw_snippet else ""
-                if len(first_line) > 80:
-                    first_line = first_line[:77] + "..."
-
-                if resp.is_failed:
-                    tool_status_summary = (
-                        f"[Turn {turns}] Tool {fn_name}: FAILED -> {first_line}"
-                    )
-                elif resp.is_terminated:
-                    tool_status_summary = (
-                        f"[Turn {turns}] Tool {fn_name}: COMPLETED -> {first_line}"
-                    )
-                else:
-                    tool_status_summary = (
-                        f"[Turn {turns}] Tool {fn_name}: OK -> {first_line}"
-                    )
-
-                transcript_rep = (
-                    f"{resp.content}\n\nReminder: {resp.reminder}"
-                    if resp.reminder
-                    else resp.content
+                tool_status_summary, transcript_rep = _format_tool_log(
+                    fn_name, args_dict, resp, turns, is_followup=False
                 )
-                # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+
+                # Requirement: The loop driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool names and arguments or text previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in tool result transcripts when present.
                 logger.consume(
                     runner_logger.LogEvent(
                         event_name="tool_execution",
@@ -525,20 +474,13 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                         followup.tool_name, followup.wire_parameter_bindings
                     )
                     last_response = follow_resp
-                    raw_snippet = (follow_resp.content or "").strip()
-                    first_line = raw_snippet.splitlines()[0] if raw_snippet else ""
-                    if len(first_line) > 80:
-                        first_line = first_line[:77] + "..."
-                    if follow_resp.is_failed:
-                        status_sum = f"[Turn {turns}] Follow-up Tool {followup.tool_name}: FAILED -> {first_line}"
-                    elif follow_resp.is_terminated:
-                        status_sum = f"[Turn {turns}] Follow-up Tool {followup.tool_name}: COMPLETED -> {first_line}"
-                    else:
-                        status_sum = f"[Turn {turns}] Follow-up Tool {followup.tool_name}: OK -> {first_line}"
-                    t_rep = (
-                        f"{follow_resp.content}\n\nReminder: {follow_resp.reminder}"
-                        if follow_resp.reminder
-                        else follow_resp.content
+                    follow_args = dict(followup.wire_parameter_bindings.bindings)
+                    status_sum, t_rep = _format_tool_log(
+                        followup.tool_name,
+                        follow_args,
+                        follow_resp,
+                        turns,
+                        is_followup=True,
                     )
                     logger.consume(
                         runner_logger.LogEvent(

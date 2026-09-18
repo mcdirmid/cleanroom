@@ -89,10 +89,6 @@ class BazelModelConfigImplTest(unittest.TestCase):
             # Requirement: [AgentConfig] The agent config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
             self.assertTrue(agent_cfg.inject_followups)
             self.assertTrue(cfg.inject_followups)
-            # Requirement: Whether editing tools should execute a follow-up read on modified files.
-            # Requirement: [AgentConfig] The agent config provides whether editing tools should execute a follow-up read on modified files.
-            self.assertTrue(agent_cfg.edit_followup_read)
-            self.assertTrue(cfg.edit_followup_read)
             # Requirement: Whether editing tools should produce delta output.
             # Requirement: [AgentConfig] The agent config provides whether editing tools should produce delta output.
             self.assertFalse(agent_cfg.edit_delta_output)
@@ -133,7 +129,6 @@ class BazelModelConfigImplTest(unittest.TestCase):
         os.environ["STEP_MODE"] = "false"
         os.environ["STARTUP_READS"] = "0"
         os.environ["INJECT_FOLLOWUPS"] = "false"
-        os.environ["EDIT_FOLLOWUP_READ"] = "false"
         os.environ["EDIT_DELTA_OUTPUT"] = "true"
         os.environ["NODE_VISIT_LIMIT"] = "42"
         os.environ["BATCH_SIZE"] = "3"
@@ -164,8 +159,6 @@ class BazelModelConfigImplTest(unittest.TestCase):
             self.assertFalse(cfg.is_startup_reads)
             # Requirement: The agent config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
             self.assertFalse(cfg.inject_followups)
-            # Requirement: Whether editing tools should execute a follow-up read on modified files.
-            self.assertFalse(cfg.edit_followup_read)
             # Requirement: Whether editing tools should produce delta output.
             self.assertTrue(cfg.edit_delta_output)
             # Requirement: The dag config provides the node visit limit bounding node visits during graph cleaning.
@@ -190,7 +183,6 @@ class BazelModelConfigImplTest(unittest.TestCase):
                 "do_step_mode": False,
                 "session_start_reads": False,
                 "inject_followups": False,
-                "edit_followup_read": False,
                 "edit_delta_output": True,
                 "node_visit_limit": 450,
                 "batch_size": 4,
@@ -228,8 +220,6 @@ class BazelModelConfigImplTest(unittest.TestCase):
                 self.assertFalse(cfg.is_startup_reads)
                 # Requirement: The agent config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
                 self.assertFalse(cfg.inject_followups)
-                # Requirement: Whether editing tools should execute a follow-up read on modified files.
-                self.assertFalse(cfg.edit_followup_read)
                 # Requirement: Whether editing tools should produce delta output.
                 self.assertTrue(cfg.edit_delta_output)
                 # Requirement: The dag config provides the node visit limit bounding node visits during graph cleaning.
@@ -279,8 +269,6 @@ class BazelModelConfigImplTest(unittest.TestCase):
                 self.assertTrue(cfg.is_step_mode)
                 # Requirement: The agent config provides whether the agent should perform startup reads to inspect declared files at session start.
                 self.assertTrue(cfg.is_startup_reads)
-                # Requirement: Whether editing tools should execute a follow-up read on modified files.
-                self.assertTrue(cfg.edit_followup_read)
                 # Requirement: Whether editing tools should produce delta output.
                 self.assertFalse(cfg.edit_delta_output)
 

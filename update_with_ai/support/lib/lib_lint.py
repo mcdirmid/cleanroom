@@ -46,6 +46,7 @@ from build_lint_common import (
     module_stem,
     package_of,
     parse_dependency_header,
+    parse_package_build_dependencies,
     parse_pyi_dependencies,
     parse_spec_build_dependencies,
     read_text,
@@ -121,137 +122,301 @@ def main() -> int:
     pyi_paths = [p for p in args.pyi_deps.split(",") if p]
     dir_name = os.path.dirname(args.module_path) or package or "."
 
-    if stem.endswith("_asm"):
-        asm_content = generate_asm_content(dir_name, raw_deps)
-        if dir_name:
-            os.makedirs(dir_name, exist_ok=True)
-        if (
-            not os.path.exists(args.module_path)
-            or read_text(args.module_path) != asm_content
-        ):
-            write_text(args.module_path, asm_content)
-
-    allowed_deps: set[str] = set()
-    for d in raw_deps:
-        m = re.search(r'requirement\(["\']([^"\']+)["\']\)', d)
-        if m:
-            allowed_deps.add(m.group(1))
-        elif ":" in d:
-            allowed_deps.add(d.split(":")[-1])
-        elif d and not d.startswith("//"):
-            allowed_deps.add(d)
-
-    if args.pyi:
-        for d in parse_pyi_dependencies(args.pyi, pyi_paths):
-            allowed_deps.add(d)
-    elif pyi_paths:
-        for d in parse_pyi_dependencies("", pyi_paths):
-            allowed_deps.add(d)
-
-    for d in extract_target_pyright_deps(args.build_path, RULE, stem):
-        allowed_deps.add(d.split(":")[-1])
-
-    if not allowed_deps and os.path.exists(args.module_path):
-        parsed = parse_dependency_header(read_text(args.module_path))
-        if parsed is not None:
-            allowed_deps = set(parsed)
-
-    import_map, label_map, sibling_stems = build_module_resolution_map(
-        args.build_path, dir_name, raw_deps
+    pkg_build_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(args.build_path))),
+        "BUILD.bazel",
     )
-    if os.path.exists(args.module_path) and not stem.endswith("_asm"):
-        _, imported_cross_parts = rewrite_lib_imports(
-            args.module_path, dir_name, import_map, sibling_stems
-        )
-        for s in imported_cross_parts:
-            if s in label_map and label_map[s] not in raw_deps:
-                raw_deps.append(label_map[s])
-            allowed_deps.add(s)
-
-    has_declared_deps = bool(raw_deps or args.pyi or pyi_paths or allowed_deps)
-    if (
-        has_declared_deps
-        and os.path.exists(args.module_path)
-        and not stem.endswith("_asm")
-    ):
-        ensure_dependency_header(
-            args.module_path,
-            sorted(allowed_deps),
-            import_map=import_map,
-            sibling_stems=sibling_stems,
+    pkg_deps = None
+    if os.path.isfile(pkg_build_path):
+        pkg_deps = parse_package_build_dependencies(
+            pkg_build_path, stem, resolve_cross_package=False
         )
 
-    syntax_errors = check_syntax(args.module_path)
-    if syntax_errors:
-        for err in syntax_errors:
-            sys.stderr.write(err + "\n")
-        return 1
+    if pkg_deps is not None:
+        parent_pkg = package_of(pkg_build_path)
+        content = (
+            read_text(args.module_path) if os.path.isfile(args.module_path) else ""
+        )
+        pyi_content = (
+            read_text(args.pyi) if args.pyi and os.path.isfile(args.pyi) else ""
+        )
+        uses_lifecycle = (
+            "support.lib.lifecycle" in content
+            or re.search(
+                r"\b(LifecycleRegistry|Singleton|get_singleton|get_default_registry)\b",
+                content,
+            )
+            is not None
+            or stem.endswith("_impl")
+            or "@singleton_type" in pyi_content
+        )
 
-    # Separate library dependencies from external specification dependencies
-    lib_deps: list[str] = []
-    for d in raw_deps:
-        stem_d = d.split(":")[-1]
-        if stem_d.endswith("_ext"):
-            # External specification dependency: find its .pyi file
-            candidates = [
-                p
+        raw_deps = []
+        lib_deps = []
+        allowed_deps = set()
+        ext_stems: set[str] = set()
+
+        for d in pkg_deps:
+            stem_d = d.split(":")[-1]
+            if stem_d.endswith("_ext"):
+                ext_stems.add(stem_d)
+            else:
+                if d.startswith("//"):
+                    raw = d[2:]
+                    p_part, t_part = (
+                        raw.split(":", 1)
+                        if ":" in raw
+                        else (raw, os.path.basename(raw))
+                    )
+                    if p_part == parent_pkg:
+                        lib_label = f":{t_part}"
+                    else:
+                        p_lib = p_part if p_part.endswith("/lib") else f"{p_part}/lib"
+                        lib_label = f"//{p_lib}:{t_part}"
+                    lib_deps.append(lib_label)
+                    allowed_deps.add(t_part)
+                    raw_deps.append(lib_label)
+                elif d.startswith(":"):
+                    t_part = d[1:]
+                    lib_deps.append(f":{t_part}")
+                    allowed_deps.add(t_part)
+                    raw_deps.append(f":{t_part}")
+                else:
+                    lib_deps.append(f":{d}")
+                    allowed_deps.add(d)
+                    raw_deps.append(f":{d}")
+
+        if uses_lifecycle:
+            lifecycle_label = "//update_python_with_ai/support/lib:lifecycle"
+            lib_deps.append(lifecycle_label)
+            allowed_deps.add("lifecycle")
+
+        for stem_d in ext_stems:
+            spec_file = f"{stem_d}.pyi"
+            build_dir = os.path.dirname(args.build_path)
+            for search_dir in [
+                os.path.join(build_dir, "..", "grounding"),
+                os.path.join(build_dir, "..", "specs", "grounding"),
+                "update_with_ai/specs/grounding",
+                "specs/grounding",
+            ]:
+                candidate = os.path.join(search_dir, spec_file)
+                if os.path.isfile(candidate):
+                    pyi_paths.append(candidate)
+                    break
+            if not any(
+                os.path.splitext(os.path.basename(p))[0] == stem_d
                 for p in pyi_paths
-                if os.path.splitext(os.path.basename(p))[0] == stem_d
-            ]
-            if not candidates:
-                spec_file = f"{stem_d}.pyi"
-                build_dir = os.path.dirname(args.build_path)
-                for search_dir in [
-                    os.path.join(build_dir, "..", "grounding"),
-                    os.path.join(build_dir, "..", "specs", "grounding"),
-                    "update_with_ai/specs/grounding",
-                    "specs/grounding",
-                ]:
-                    candidate = os.path.join(search_dir, spec_file)
-                    if os.path.isfile(candidate):
-                        pyi_paths.append(candidate)
-                        break
-                if not any(
-                    os.path.splitext(os.path.basename(p))[0] == stem_d
-                    for p in pyi_paths
+            ):
+                for cand in Path("update_with_ai/parts").glob(
+                    f"*/grounding/{spec_file}"
                 ):
-                    for cand in Path("update_with_ai/parts").glob(
-                        f"*/grounding/{spec_file}"
-                    ):
-                        pyi_paths.append(str(cand))
-                        break
-        else:
-            lib_deps.append(d)
+                    pyi_paths.append(str(cand))
+                    break
 
-    # Collect build dependencies from all dependent .pyi files
-    target_deps: list[str] = []
-    for p in pyi_paths:
-        for dep_expr in parse_spec_build_dependencies(p):
-            if dep_expr not in target_deps:
-                target_deps.append(dep_expr)
+        target_deps: list[str] = []
+        for p in pyi_paths:
+            for dep_expr in parse_spec_build_dependencies(p):
+                if dep_expr not in target_deps:
+                    target_deps.append(dep_expr)
 
-    has_pip_req = any(d.startswith("requirement(") for d in target_deps)
+        if args.pyi and os.path.isfile(args.pyi):
+            for d in parse_pyi_dependencies(args.pyi, pyi_paths):
+                allowed_deps.add(d)
+        elif pyi_paths:
+            for d in parse_pyi_dependencies("", pyi_paths):
+                allowed_deps.add(d)
 
-    if not os.path.exists(args.build_path):
-        d = os.path.dirname(args.build_path)
-        if d:
-            os.makedirs(d, exist_ok=True)
-        header = "# " + (package + "/BUILD.bazel" if package else "BUILD.bazel") + "\n"
-        loads = load_line(["pyright_library"])
+        if stem.endswith("_asm"):
+            asm_content = generate_asm_content(dir_name, raw_deps)
+            if dir_name:
+                os.makedirs(dir_name, exist_ok=True)
+            if (
+                not os.path.exists(args.module_path)
+                or read_text(args.module_path) != asm_content
+            ):
+                write_text(args.module_path, asm_content)
+
+        has_declared_deps = True
+        import_map, label_map, sibling_stems = build_module_resolution_map(
+            args.build_path, dir_name, raw_deps
+        )
+        if os.path.exists(args.module_path) and not stem.endswith("_asm"):
+            rewrite_lib_imports(
+                args.module_path, dir_name, import_map, sibling_stems
+            )
+            ensure_dependency_header(
+                args.module_path,
+                sorted(allowed_deps),
+                import_map=import_map,
+                sibling_stems=sibling_stems,
+            )
+
+        syntax_errors = check_syntax(args.module_path)
+        if syntax_errors:
+            for err in syntax_errors:
+                sys.stderr.write(err + "\n")
+            return 1
+
+        has_pip_req = any(d.startswith("requirement(") for d in target_deps)
+        if not os.path.exists(args.build_path):
+            d = os.path.dirname(args.build_path)
+            if d:
+                os.makedirs(d, exist_ok=True)
+            header = (
+                "# " + (package + "/BUILD.bazel" if package else "BUILD.bazel") + "\n"
+            )
+            loads = load_line(["pyright_library"])
+            if has_pip_req:
+                loads += '\nload("@pip//:requirements.bzl", "requirement")'
+            write_text(args.build_path, header + loads + "\n")
+        text = read_text(args.build_path)
+        text = ensure_load(text, ["pyright_library"])
         if has_pip_req:
-            loads += '\nload("@pip//:requirements.bzl", "requirement")'
-        write_text(args.build_path, header + loads + "\n")
-    text = read_text(args.build_path)
-    text = ensure_load(text, ["pyright_library"])
-    if has_pip_req:
-        text = ensure_pip_load(text)
-    # pyright_deps cover the spec-derived deps plus the transitive closure
-    # of sibling-module imports: pyright must resolve every module the
-    # target's files import, directly or transitively.
-    roots = sorted(set(lib_deps + local_imports(package, args.module_path)))
-    deps = transitive_closure(package, roots)
-    text = ensure_target(text, RULE, stem, srcs, deps, package, target_deps=target_deps)
-    write_text(args.build_path, text)
+            text = ensure_pip_load(text)
+
+        text = ensure_target(
+            text,
+            RULE,
+            stem,
+            srcs,
+            lib_deps,
+            package,
+            target_deps=target_deps,
+            exact_deps=True,
+        )
+        write_text(args.build_path, text)
+    else:
+        if stem.endswith("_asm"):
+            asm_content = generate_asm_content(dir_name, raw_deps)
+            if dir_name:
+                os.makedirs(dir_name, exist_ok=True)
+            if (
+                not os.path.exists(args.module_path)
+                or read_text(args.module_path) != asm_content
+            ):
+                write_text(args.module_path, asm_content)
+
+        allowed_deps = set()
+        for d in raw_deps:
+            m = re.search(r'requirement\(["\']([^"\']+)["\']\)', d)
+            if m:
+                allowed_deps.add(m.group(1))
+            elif ":" in d:
+                allowed_deps.add(d.split(":")[-1])
+            elif d and not d.startswith("//"):
+                allowed_deps.add(d)
+
+        if args.pyi:
+            for d in parse_pyi_dependencies(args.pyi, pyi_paths):
+                allowed_deps.add(d)
+        elif pyi_paths:
+            for d in parse_pyi_dependencies("", pyi_paths):
+                allowed_deps.add(d)
+
+        for d in extract_target_pyright_deps(args.build_path, RULE, stem):
+            allowed_deps.add(d.split(":")[-1])
+
+        if not allowed_deps and os.path.exists(args.module_path):
+            parsed = parse_dependency_header(read_text(args.module_path))
+            if parsed is not None:
+                allowed_deps = set(parsed)
+
+        import_map, label_map, sibling_stems = build_module_resolution_map(
+            args.build_path, dir_name, raw_deps
+        )
+        if os.path.exists(args.module_path) and not stem.endswith("_asm"):
+            _, imported_cross_parts = rewrite_lib_imports(
+                args.module_path, dir_name, import_map, sibling_stems
+            )
+            for s in imported_cross_parts:
+                if s in label_map and label_map[s] not in raw_deps:
+                    raw_deps.append(label_map[s])
+                allowed_deps.add(s)
+
+        has_declared_deps = bool(raw_deps or args.pyi or pyi_paths or allowed_deps)
+        if (
+            has_declared_deps
+            and os.path.exists(args.module_path)
+            and not stem.endswith("_asm")
+        ):
+            ensure_dependency_header(
+                args.module_path,
+                sorted(allowed_deps),
+                import_map=import_map,
+                sibling_stems=sibling_stems,
+            )
+
+        syntax_errors = check_syntax(args.module_path)
+        if syntax_errors:
+            for err in syntax_errors:
+                sys.stderr.write(err + "\n")
+            return 1
+
+        # Separate library dependencies from external specification dependencies
+        lib_deps = []
+        for d in raw_deps:
+            stem_d = d.split(":")[-1]
+            if stem_d.endswith("_ext"):
+                candidates = [
+                    p
+                    for p in pyi_paths
+                    if os.path.splitext(os.path.basename(p))[0] == stem_d
+                ]
+                if not candidates:
+                    spec_file = f"{stem_d}.pyi"
+                    build_dir = os.path.dirname(args.build_path)
+                    for search_dir in [
+                        os.path.join(build_dir, "..", "grounding"),
+                        os.path.join(build_dir, "..", "specs", "grounding"),
+                        "update_with_ai/specs/grounding",
+                        "specs/grounding",
+                    ]:
+                        candidate = os.path.join(search_dir, spec_file)
+                        if os.path.isfile(candidate):
+                            pyi_paths.append(candidate)
+                            break
+                    if not any(
+                        os.path.splitext(os.path.basename(p))[0] == stem_d
+                        for p in pyi_paths
+                    ):
+                        for cand in Path("update_with_ai/parts").glob(
+                            f"*/grounding/{spec_file}"
+                        ):
+                            pyi_paths.append(str(cand))
+                            break
+            else:
+                lib_deps.append(d)
+
+        target_deps = []
+        for p in pyi_paths:
+            for dep_expr in parse_spec_build_dependencies(p):
+                if dep_expr not in target_deps:
+                    target_deps.append(dep_expr)
+
+        has_pip_req = any(d.startswith("requirement(") for d in target_deps)
+
+        if not os.path.exists(args.build_path):
+            d = os.path.dirname(args.build_path)
+            if d:
+                os.makedirs(d, exist_ok=True)
+            header = (
+                "# " + (package + "/BUILD.bazel" if package else "BUILD.bazel") + "\n"
+            )
+            loads = load_line(["pyright_library"])
+            if has_pip_req:
+                loads += '\nload("@pip//:requirements.bzl", "requirement")'
+            write_text(args.build_path, header + loads + "\n")
+        text = read_text(args.build_path)
+        text = ensure_load(text, ["pyright_library"])
+        if has_pip_req:
+            text = ensure_pip_load(text)
+        roots = sorted(set(lib_deps + local_imports(package, args.module_path)))
+        deps = transitive_closure(package, roots)
+        text = ensure_target(
+            text, RULE, stem, srcs, deps, package, target_deps=target_deps
+        )
+        write_text(args.build_path, text)
 
     structure_errors = check_lib_structure(args.module_path)
     import_errors = check_sibling_imports(package, args.module_path)

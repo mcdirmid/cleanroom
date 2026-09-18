@@ -293,7 +293,6 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                 is_terminated=False,
                 content=f"Error: `{target_file.short_name}` has been locked against further modification.",
                 reminder="Files that have been the target of a submit, fail, or blame cannot be modified.",
-                suppression_key=target_file.short_name,
             )
 
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
@@ -443,6 +442,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         edit_mgr = get_singleton(EditManager)
         edit_mgr.record_initial_content(host_path, content)
 
+        # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, and records that workspace file modifications occurred.
         # Requirement: On success, the tool writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred.
         # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
         os.makedirs(os.path.dirname(host_path), exist_ok=True)
@@ -453,11 +453,9 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
 
         try:
             cfg = get_singleton(agent_config.AgentConfig)
-            followup_read = cfg.edit_followup_read
             delta_output = cfg.edit_delta_output
         except (LookupError, KeyError, AttributeError):
-            followup_read = True
-            delta_output = False
+            delta_output = True
 
         content_msg = "Successfully replaced content."
         if delta_output:
@@ -473,28 +471,14 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
             diff_text = "".join(diff_lines)
             content_msg = f"Successfully replaced content.\n\n```diff\n{diff_text}```"
 
-        follow_up = None
-        reminder = None
-        if followup_read:
-            # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and when configured to perform follow-up reads on edits, produces a response specifying a follow-up execution of the view file tool on the modified read-write file, accompanied by a reminder justifying inspecting the updated file.
-            follow_up = tool_provider.FollowUpToolCall(
-                tool_name="view_file",
-                wire_parameter_bindings=tool_provider.WireParameterBindings(
-                    bindings={
-                        ("path", target_file.short_name),
-                    }
-                ),
-            )
-            reminder = "Inspect the updated file to verify changes."
-
-        # Requirement: Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
+        # Requirement: Editing tool responses omit suppression keys.
         return tool_provider.Response(
             is_failed=False,
             is_terminated=False,
             content=content_msg,
-            reminder=reminder,
-            suppression_key=target_file.short_name,
-            follow_up_tool_call=follow_up,
+            reminder=None,
+            suppression_key=None,
+            follow_up_tool_call=None,
         )
 
 

@@ -76,11 +76,12 @@ pyright_library(
 pyright_library(
     name = "sandbox_change_summary_validator_impl",
     srcs = ["sandbox_change_summary_validator_impl.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_file_alias",
         "//update_with_ai/parts/agent/lib:agent_node_config",
         ":sandbox_change_summary_validator",
-        ":sandbox_run_control",
     ],
     visibility = ["//visibility:public"],
 )

@@ -200,24 +200,6 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def edit_followup_read(self) -> bool:
-        """
-PURPOSE:
-Indicates whether editing tools should execute a follow-up read on modified files
-
-FRESH_REQUIREMENTS:
-- Whether editing tools should execute a follow-up read on modified files.
-
-INHERITED_REQUIREMENTS:
-- [AgentConfig] The agent config provides whether editing tools should execute a follow-up read on modified files.
-
-GROUNDING_ARGUMENT:
-- Resolved from the target configuration module located in the workspace runfiles tree or build output directory via model_config_ext.
-"""
-        ...
-
-    @property
-    @override
     def edit_delta_output(self) -> bool:
         """
 PURPOSE:

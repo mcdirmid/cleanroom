@@ -285,7 +285,7 @@ FRESH_REQUIREMENTS:
 - Before modifying a file, editing tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
 - Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
 - Before modifying a file, editing tool execution fails if the target edit overlaps with auto-generated dependency imports between '# --- DO NOT EDIT: Auto-generated dependencies ---' and '# --- END DO NOT EDIT ---', reminding the agent that auto-generated dependencies are managed by the build toolchain.
-- On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and when configured to perform follow-up reads on edits, produces a response specifying a follow-up execution of the view file tool on the modified read-write file, accompanied by a reminder justifying inspecting the updated file.
+- On successful execution, an editing tool writes the updated file content to the filesystem, and records that workspace file modifications occurred.
 - When configured to produce delta output, successful editing tool execution includes a diff delta representation in the response content.
 - Replace file content tool execution reads the file content from the filesystem, treating missing files as empty.
 - When a start line is provided, execution fails if the start line is less than one or exceeds the total line count plus one.
@@ -295,13 +295,13 @@ FRESH_REQUIREMENTS:
 - When allow multiple is true, execution fails if the target content is not found within the designated line range, and replaces all occurrences of the target content within the designated line range.
 - When target content is not found within the designated line range but exists elsewhere in the file, failure feedback indicates the line numbers where the target content was located.
 - On success, the tool writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred.
-- Successful editing tool responses carry a suppression key matching the short name of the modified read-write file.
+- Editing tool responses omit suppression keys.
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, resolves the target read-write file via imported agent_file_alias.AliasManager, inspects and updates file content using the filesystem, scans file content for out-of-bounds line occurrences when target content is missing from designated line ranges, checks configuration via imported agent_config.AgentConfig, attaches the read-write file's short name as a suppression key on successful responses, and notifies EditManager in the same session lifecycle tier that workspace files were modified.
+- Receives actual parameter bindings, resolves the target read-write file via imported agent_file_alias.AliasManager, inspects and updates file content using the filesystem, scans file content for out-of-bounds line occurrences when target content is missing from designated line ranges, checks configuration via imported agent_config.AgentConfig, omits suppression keys and follow-up tool calls on responses, and notifies EditManager in the same session lifecycle tier that workspace files were modified.
 """
         ...

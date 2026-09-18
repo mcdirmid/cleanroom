@@ -36,6 +36,10 @@ def load_line(names: Sequence[str]) -> str:
 def package_of(build_path: str) -> str:
     """The Bazel package of a BUILD file path (its directory)."""
     d = os.path.dirname(build_path)
+    if d.startswith("/"):
+        ws = find_workspace_root(d)
+        if d.startswith(ws):
+            d = os.path.relpath(d, ws)
     return d.lstrip("./") or ""
 
 
@@ -282,6 +286,152 @@ def parse_spec_build_dependencies(spec_path: str) -> list[str]:
     return deps
 
 
+def find_workspace_root(start_path: str = ".") -> str:
+    """Find the Bazel workspace root directory by looking for WORKSPACE or MODULE.bazel."""
+    cur = os.path.abspath(start_path)
+    if os.path.isfile(cur):
+        cur = os.path.dirname(cur)
+    while cur and cur != os.path.dirname(cur):
+        if (
+            os.path.isfile(os.path.join(cur, "MODULE.bazel"))
+            or os.path.isfile(os.path.join(cur, "WORKSPACE"))
+            or os.path.isfile(os.path.join(cur, "WORKSPACE.bazel"))
+            or os.path.isdir(os.path.join(cur, ".git"))
+        ):
+            return cur
+        cur = os.path.dirname(cur)
+    return os.path.abspath(".")
+
+
+def _parse_build_targets(build_file_path: str) -> dict[str, list[str]]:
+    """Parse a declarative Bazel BUILD file and return a mapping of target names to module_deps/deps."""
+    if not os.path.isfile(build_file_path):
+        return {}
+    try:
+        content = read_text(build_file_path)
+        tree = ast.parse(content, filename=build_file_path)
+    except (OSError, SyntaxError):
+        return {}
+
+    targets: dict[str, list[str]] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+            call = node.value
+            target_name: Optional[str] = None
+            deps: list[str] = []
+            for kw in call.keywords:
+                if (
+                    kw.arg == "name"
+                    and isinstance(kw.value, ast.Constant)
+                    and isinstance(kw.value.value, str)
+                ):
+                    target_name = kw.value.value
+                elif kw.arg in ("module_deps", "unit_deps", "deps") and isinstance(
+                    kw.value, (ast.List, ast.Tuple)
+                ):
+                    for elt in kw.value.elts:
+                        if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+                            deps.append(elt.value)
+            if (
+                target_name is None
+                and call.args
+                and isinstance(call.args[0], ast.Constant)
+                and isinstance(call.args[0].value, str)
+            ):
+                target_name = call.args[0].value
+            if target_name:
+                targets[target_name] = deps
+    return targets
+
+
+def parse_package_build_dependencies(
+    pkg_build_path: str,
+    target_name: str,
+    resolve_cross_package: bool = False,
+    workspace_root: Optional[str] = None,
+) -> Optional[list[str]]:
+    """Parse the direct and transitive dependencies for target_name from the package BUILD.bazel.
+
+    If resolve_cross_package is False, only sibling dependencies within the package are followed.
+    If resolve_cross_package is True, cross-package dependencies are also followed across package BUILD files.
+    Returns None if pkg_build_path does not exist or target_name is not defined in it.
+    """
+    if not os.path.isfile(pkg_build_path):
+        return None
+
+    target_map = _parse_build_targets(pkg_build_path)
+    if target_name not in target_map:
+        return None
+
+    if workspace_root is None:
+        workspace_root = find_workspace_root(pkg_build_path)
+
+    visited: set[tuple[str, str]] = set()
+    queue: list[tuple[str, str]] = [(pkg_build_path, target_name)]
+    resolved: list[str] = []
+    seen: set[str] = set()
+
+    parsed_files: dict[str, dict[str, list[str]]] = {
+        os.path.abspath(pkg_build_path): target_map
+    }
+
+    while queue:
+        cur_bpath, cur_target = queue.pop(0)
+        norm_bpath = os.path.abspath(cur_bpath)
+        key = (norm_bpath, cur_target)
+        if key in visited:
+            continue
+        visited.add(key)
+
+        if norm_bpath not in parsed_files:
+            parsed_files[norm_bpath] = _parse_build_targets(norm_bpath)
+
+        curr_targets = parsed_files[norm_bpath]
+        if cur_target not in curr_targets:
+            continue
+
+        curr_deps = curr_targets[cur_target]
+        curr_pkg = package_of(cur_bpath)
+
+        for d in curr_deps:
+            if not d:
+                continue
+            canonical_label = d
+            if d.startswith(":"):
+                canonical_label = f"//{curr_pkg}{d}" if curr_pkg else d
+                sibling_name = d[1:]
+                queue.append((cur_bpath, sibling_name))
+            elif d.startswith("//"):
+                raw = d[2:]
+                pkg_part, target_part = (
+                    raw.split(":", 1) if ":" in raw else (raw, os.path.basename(raw))
+                )
+                if pkg_part == curr_pkg:
+                    queue.append((cur_bpath, target_part))
+                elif resolve_cross_package:
+                    other_bpath = os.path.join(workspace_root, pkg_part, "BUILD.bazel")
+                    if os.path.isfile(other_bpath):
+                        queue.append((other_bpath, target_part))
+            else:
+                canonical_label = f":{d}"
+                queue.append((cur_bpath, d))
+
+            if canonical_label not in seen:
+                seen.add(canonical_label)
+                resolved.append(canonical_label)
+
+    return resolved
+
+
+def _dep_sort_key(label: str) -> tuple[int, str]:
+    """Sort key: lifecycle first, then other cross-package labels, then sibling labels."""
+    if "lifecycle" in label:
+        return (0, label)
+    if label.startswith("//"):
+        return (1, label)
+    return (2, label)
+
+
 def _new_target(
     rule: str,
     stem: str,
@@ -291,10 +441,19 @@ def _new_target(
     target_deps: Optional[Sequence[str]] = None,
 ) -> str:
     """A new rule block: name, srcs, deps (external deps), pyright_deps (the known deps), and public visibility."""
-    want = [
-        d if d.startswith("//") else ("//" + package + ":" + d.lstrip(":"))
-        for d in deps
-    ]
+    if rule == "pyright_library":
+        want = [
+            d
+            if (d.startswith("//") or d.startswith(":"))
+            else (":" + d)
+            for d in deps
+        ]
+    else:
+        want = [
+            d if d.startswith("//") else ("//" + package + ":" + d.lstrip(":"))
+            for d in deps
+        ]
+    want = sorted(set(want), key=_dep_sort_key)
     rendered_deps = _render_expr_list(target_deps or [])
     if rule == "pyright_test":
         target_str = (
@@ -323,13 +482,35 @@ def ensure_target(
     deps: list[str],
     package: str,
     target_deps: Optional[Sequence[str]] = None,
+    exact_deps: bool = False,
 ) -> str:
     """Return text with the named rule target present and its pyright_deps
-    and deps covering the known deps (add-only)."""
-    want = [
-        d if d.startswith("//") else ("//" + package + ":" + d.lstrip(":"))
-        for d in deps
-    ]
+    and deps covering the known deps. When exact_deps is True, pyright_deps
+    is generated wholly from deps instead of merging add-only."""
+    if exact_deps:
+        want_list = []
+        for d in deps:
+            if d.startswith("//"):
+                if rule == "pyright_library" and package and d.startswith("//" + package + ":"):
+                    want_list.append(":" + d.split(":")[-1])
+                else:
+                    want_list.append(d)
+            elif d.startswith(":"):
+                if rule == "pyright_test" and package:
+                    want_list.append("//" + package + ":" + d.lstrip(":"))
+                else:
+                    want_list.append(d)
+            else:
+                if rule == "pyright_test" and package:
+                    want_list.append("//" + package + ":" + d)
+                else:
+                    want_list.append(":" + d)
+        want = sorted(set(want_list), key=_dep_sort_key)
+    else:
+        want = [
+            d if d.startswith("//") else ("//" + package + ":" + d.lstrip(":"))
+            for d in deps
+        ]
     span = _find_block(text, rule, stem)
     if span is None:
         if not text.endswith("\n"):
@@ -337,10 +518,18 @@ def ensure_target(
         return (
             text
             + "\n"
-            + _new_target(rule, stem, srcs, deps, package, target_deps=target_deps)
+            + _new_target(rule, stem, srcs, want, package, target_deps=target_deps)
         )
     start, end = span
     block = text[start:end]
+    if exact_deps:
+        block = _set_attr_list(block, "pyright_deps", want)
+        if target_deps is not None:
+            block = _set_attr_expr_list(block, "deps", target_deps)
+        if rule != "pyright_test" and "visibility" not in block:
+            block = _set_attr_list(block, "visibility", ["//visibility:public"])
+        return text[:start] + block + text[end:]
+
     existing = _attr_list(block, "pyright_deps")
     # Canonical labels for the expected deps: a same-name entry in the wrong
     # package is replaced by the canonical label (the deps live in the given

@@ -46,6 +46,7 @@ The `openai_ext` external component specifies the third-party Python SDK mechani
   - `"content_filter"`: Generation terminated by safety filter.
 - **Token Accounting**: `response.usage` (`openai.types.CompletionUsage`):
   - `response.usage.prompt_tokens: int`: Count of input prompt tokens consumed.
+  - `response.usage.prompt_tokens_details.cached_tokens: Optional[int]`: Count of cached prompt tokens.
   - `response.usage.completion_tokens: int`: Count of generated response tokens.
   - `response.usage.total_tokens: int`: Aggregate token count for accounting and session limits.
 

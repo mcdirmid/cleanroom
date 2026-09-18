@@ -10,7 +10,11 @@
 ## Mandatory Specification-First (HLS-First) Rule
 
 - **ALWAYS start with HLS changes when changing code in a parts directory**: Never make stealth changes to library code (`lib/*.py`), unit tests (`tests/*_test.py`), or grounding specs (`grounding/*.pyi`) without first authoring and aligning the corresponding High-Level Specification (`high/*.md`).
-- **Four-Way Strict Alignment**: Every behavior, boundary condition, error diagnostic, or parameter must follow the pipeline: `HLS` (`high/*.md`) $\\to$ `Grounding` (`grounding/*.pyi`) $\\to$ `Library` (`lib/*.py`) $\\to$ `Unit Tests` (`tests/*_test.py`).
+- **Automatic Downstream Alignment**: Whenever changes are made to HLS files (`high/*.md`), immediately and automatically cascade alignment across the entire downstream pipeline: `HLS` (`high/*.md`) $\to$ `Grounding` (`grounding/*.pyi`) $\to$ `Library` (`lib/*.py`) $\to$ `Unit Tests` (`tests/*_test.py`). Do not stop after editing HLS files or wait for separate prompts to complete downstream alignment.
+- **Well-Grounded Specifications During Alignment**: When aligning grounding specifications (`grounding/*.pyi`), ensure the specification remains strictly well-grounded:
+  - All properties, operational parameters, and dependencies must have explicit derivation paths from in-scope collaborators, configurations, or inputs without floating directives or ungrounded gaps.
+  - Implementation stubs (`<name>_impl.pyi`) must maintain sound `GROUNDING_ARGUMENT:` reasoning that demonstrates concrete collaborator wiring, parameter provenance, and tier-appropriate lifecycle interactions for all implemented operations and properties.
+- **Four-Way Strict Alignment**: Every behavior, boundary condition, error diagnostic, or parameter must follow the pipeline: `HLS` (`high/*.md`) $\to$ `Grounding` (`grounding/*.pyi`) $\to$ `Library` (`lib/*.py`) $\to$ `Unit Tests` (`tests/*_test.py`).
 - **Verbatim Requirement Citations**: Implementation and test comments must cite exact requirement strings from `FRESH_REQUIREMENTS:` or `INHERITED_REQUIREMENTS:` using `# Requirement: <exact text>`. Fabricating unmandated requirement comments or implementing uncontracted behavior is prohibited.
 
 ## Guide Editing & Meta-Rules

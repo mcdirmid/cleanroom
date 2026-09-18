@@ -18,4 +18,4 @@ The openai_ext component provides the external domain knowledge and protocol mec
 
 - HTTP error status translation: Translates standard HTTP response status codes into structured domain outcomes, mapping 401 unauthorized errors to authentication failures, 429 rate limit errors to throttling conditions, 5xx server errors to endpoint unavailability, and request timeouts to network deadline outcomes.
 
-- Completion response parsing and token usage accounting: Deserializes endpoint response JSON payloads into model-generated message records, structured assistant tool calls containing function names and argument strings, completion finish reasons, and token consumption metrics covering prompt tokens, completion tokens, and total tokens.
+- Completion response parsing and token usage accounting: Deserializes endpoint response JSON payloads into model-generated message records, structured assistant tool calls containing function names and argument strings, completion finish reasons, and token consumption metrics covering prompt tokens, cached prompt tokens, completion tokens, and total tokens.

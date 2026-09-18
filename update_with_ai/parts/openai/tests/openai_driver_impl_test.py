@@ -15,13 +15,19 @@ from update_with_ai.parts.loop.lib.loop_guard import (
     LoopGuard,
     LoopReminder,
 )
-from update_with_ai.parts.loop.lib.loop_driver import AgentOutcome, AgentDriver
+from update_with_ai.parts.loop.lib.loop_driver import (
+    AgentOutcome,
+    AgentDriver,
+    LoopOutcome,
+    LoopDriver,
+)
 from update_with_ai.parts.openai.lib.openai_driver_impl import (
     AgentDriver as AgentDriverImpl,
     OpenAIError,
     __initialize__,
     _DEFAULT_CONVERTER,
-    _measure_prefix_reuse,
+    _format_token_usage,
+    _format_tool_log,
 )
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.openai.lib.openai_config import OpenaiConfig
@@ -207,9 +213,31 @@ class DummyChoice:
         self.finish_reason = finish_reason
 
 
+class DummyPromptTokensDetails:
+    def __init__(self, cached_tokens: Optional[int] = None) -> None:
+        self.cached_tokens = cached_tokens
+
+
+class DummyUsage:
+    def __init__(
+        self,
+        prompt_tokens: Optional[int] = None,
+        cached_tokens: Optional[int] = None,
+    ) -> None:
+        self.prompt_tokens = prompt_tokens
+        self.prompt_tokens_details = (
+            DummyPromptTokensDetails(cached_tokens=cached_tokens)
+            if cached_tokens is not None
+            else None
+        )
+
+
 class DummyCompletion:
-    def __init__(self, choices: List[DummyChoice]) -> None:
+    def __init__(
+        self, choices: List[DummyChoice], usage: Any = None
+    ) -> None:
         self.choices = choices
+        self.usage = usage
 
 
 class OpenAIDriverImplTest(unittest.TestCase):
@@ -286,7 +314,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             self.assertEqual(self.history.messages[1].role, "user")
             self.assertIn("No tools were executed", self.history.messages[1].content)
             self.assertEqual(self.history.messages[2].role, "assistant")
-            # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+            # Requirement: The loop driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool names and arguments or text previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in tool result transcripts when present.
             # Requirement: [AgentDriver] The agent driver records log events for interaction turns, tool executions, and turn outcomes to the runner logger.
             comp_events = [
                 e for e in self.logger.events if e.event_name == "model_completion"
@@ -508,7 +536,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
                 runner.run()
 
             self.assertIn("Model error: API Rate Limited", str(ctx.exception))
-            # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+            # Requirement: The loop driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool names and arguments or text previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in tool result transcripts when present.
             self.assertTrue(
                 any(
                     e.event_name == "model_error"
@@ -803,7 +831,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             outcome = runner.run()
 
             self.assertTrue(outcome.is_success)
-            # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+            # Requirement: The loop driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool names and arguments or text previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in tool result transcripts when present.
             tool_events = [
                 e for e in self.logger.events if e.event_name == "tool_execution"
             ]
@@ -815,17 +843,23 @@ class OpenAIDriverImplTest(unittest.TestCase):
             self.assertNotIn("Reminder:", tool_events[1].transcript_representation)
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
-    def test_prefix_reuse_measured_and_logged_across_turns(
+    def test_token_usage_measured_and_logged_across_turns(
         self, mock_openai_cls: MagicMock
     ) -> None:
-        """CUJ: Measuring and logging prefix reuse for conversations sent to OpenAI across turns."""
+        """CUJ: Measuring and logging conversation token size and cache percentage across turns."""
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
 
         tc1 = DummyToolCall(id="c1", name="step_tool", arguments="{}")
         tc2 = DummyToolCall(id="c2", name="finish", arguments="{}")
-        comp1 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc1]))])
-        comp2 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc2]))])
+        comp1 = DummyCompletion(
+            [DummyChoice(DummyMessage(None, tool_calls=[tc1]))],
+            usage=DummyUsage(prompt_tokens=1000, cached_tokens=800),
+        )
+        comp2 = DummyCompletion(
+            [DummyChoice(DummyMessage(None, tool_calls=[tc2]))],
+            usage=DummyUsage(prompt_tokens=2200, cached_tokens=1100),
+        )
         mock_client.chat.completions.create.side_effect = [comp1, comp2]
 
         self.tool_mgr.responses["step_tool"] = Response(
@@ -844,42 +878,57 @@ class OpenAIDriverImplTest(unittest.TestCase):
             outcome = runner.run()
 
             self.assertTrue(outcome.is_success)
-            # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+            # Requirement: The loop driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool names and arguments or text previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in tool result transcripts when present.
             req_events = [
                 e for e in self.logger.events if e.event_name == "model_request"
             ]
             self.assertEqual(len(req_events), 2)
             self.assertIn("[Turn 1] initial request", req_events[0].summary)
-            self.assertIn("Prefix reuse: N/A", req_events[0].transcript_representation)
-            self.assertIn("[Turn 2] Prefix reuse:", req_events[1].summary)
-            self.assertIn("100% of prev request retained", req_events[1].summary)
-            self.assertIn("Prefix intact:", req_events[1].transcript_representation)
+            self.assertIn(
+                "Conversation tokens: initial request",
+                req_events[0].transcript_representation,
+            )
+            self.assertIn("[Turn 2] 1K tokens, 80% cached", req_events[1].summary)
+            self.assertIn(
+                "Conversation tokens: 1K tokens (80% cached on last turn)",
+                req_events[1].transcript_representation,
+            )
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
-    def test_prefix_reuse_divergence_diagnostics_logged(
+    def test_tool_execution_file_read_and_write_logged_without_inlining_content(
         self, mock_openai_cls: MagicMock
     ) -> None:
-        """CUJ: Measuring and logging prefix reuse divergence diagnostics when previous turn message diverges."""
+        """CUJ: Logging file read and write operations with timestamp without inlining file contents."""
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
 
-        self.history.append_message(Message(role="user", content="Initial prompt"))
-
-        tc1 = DummyToolCall(id="c1", name="step_tool", arguments="{}")
-        tc2 = DummyToolCall(id="c2", name="finish", arguments="{}")
+        tc1 = DummyToolCall(
+            id="c1", name="view_file", arguments=json.dumps({"path": "lib/foo.py"})
+        )
+        tc2 = DummyToolCall(
+            id="c2", name="replace", arguments=json.dumps({"file": "lib/bar.py"})
+        )
+        tc3 = DummyToolCall(id="c3", name="finish", arguments="{}")
         comp1 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc1]))])
         comp2 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc2]))])
-        mock_client.chat.completions.create.side_effect = [comp1, comp2]
+        comp3 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc3]))])
+        mock_client.chat.completions.create.side_effect = [comp1, comp2, comp3]
 
-        def handle_step(bindings: Any) -> Response:
-            self.history._messages[0] = Message(role="user", content="Changed prompt")
-            return Response(is_failed=False, is_terminated=False, content="Step done.")
-
-        self.tool_mgr.handlers["step_tool"] = handle_step
+        self.tool_mgr.responses["view_file"] = Response(
+            is_failed=False,
+            is_terminated=False,
+            content="secret file content that should not appear in the logs",
+            reminder="Check line numbers",
+        )
+        self.tool_mgr.responses["replace"] = Response(
+            is_failed=False,
+            is_terminated=False,
+            content="replaced file diff chunk",
+        )
         self.tool_mgr.responses["finish"] = Response(
             is_failed=False,
             is_terminated=True,
-            content="Finished.",
+            content="Finished work.",
         )
 
         with enter_phase("agent_session", registry=self.registry) as scope:
@@ -887,17 +936,36 @@ class OpenAIDriverImplTest(unittest.TestCase):
             outcome = runner.run()
 
             self.assertTrue(outcome.is_success)
-            # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
-            req_events = [
-                e for e in self.logger.events if e.event_name == "model_request"
+            # Requirement: The loop driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool names and arguments or text previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in tool result transcripts when present.
+            tool_events = [
+                e for e in self.logger.events if e.event_name == "tool_execution"
             ]
-            self.assertEqual(len(req_events), 2)
-            self.assertIn("diverged at msg 0", req_events[1].summary)
+            self.assertEqual(len(tool_events), 3)
+
+            # View file tool event (read)
+            self.assertIn("Tool view_file: read lib/foo.py at", tool_events[0].summary)
+            self.assertIn("Read lib/foo.py at", tool_events[0].transcript_representation)
             self.assertIn(
-                "Divergence detected at message index 0:",
-                req_events[1].transcript_representation,
+                "Reminder: Check line numbers",
+                tool_events[0].transcript_representation,
             )
-            self.assertIn("Content changed", req_events[1].transcript_representation)
+            self.assertNotIn("secret file content", tool_events[0].summary)
+            self.assertNotIn(
+                "secret file content", tool_events[0].transcript_representation
+            )
+
+            # Replace tool event (write)
+            self.assertIn("Tool replace: wrote lib/bar.py at", tool_events[1].summary)
+            self.assertIn("Wrote lib/bar.py at", tool_events[1].transcript_representation)
+            self.assertNotIn("replaced file diff chunk", tool_events[1].summary)
+            self.assertNotIn(
+                "replaced file diff chunk", tool_events[1].transcript_representation
+            )
+
+            # Non-file tool event
+            self.assertIn(
+                "Tool finish: COMPLETED -> Finished work.", tool_events[2].summary
+            )
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
     def test_follow_up_tool_call_dispatched_when_inject_followups_enabled(
@@ -1032,35 +1100,53 @@ class OpenAIDriverImplTest(unittest.TestCase):
         self.assertIsNotNone(_DEFAULT_CONVERTER.wire_type)
         self.assertEqual(_DEFAULT_CONVERTER.convert("hello"), "hello")
 
-    def test_prefix_reuse_divergence_variants(self) -> None:
-        """CUJ: Divergence reporting for role, tool call id, tool calls, and payload length mismatches."""
-        # 1. Role mismatch
-        prev1 = [{"role": "user", "content": "hello"}]
-        curr1 = [{"role": "assistant", "content": "hello"}]
-        _, t1 = _measure_prefix_reuse(prev1, curr1)
-        # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
-        self.assertIn("Role mismatch:", t1)
+    def test_format_token_usage_and_tool_log_variants(self) -> None:
+        """CUJ: Formatting token usage variants and tool log variants for files and non-file operations."""
+        # Requirement: The loop driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool names and arguments or text previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in tool result transcripts when present.
+        s1, t1 = _format_token_usage(None, None)
+        self.assertEqual(s1, "initial request")
+        self.assertEqual(t1, "Conversation tokens: initial request")
 
-        # 2. Tool call ID mismatch
-        prev2 = [{"role": "tool", "tool_call_id": "c1", "content": "ok"}]
-        curr2 = [{"role": "tool", "tool_call_id": "c2", "content": "ok"}]
-        _, t2 = _measure_prefix_reuse(prev2, curr2)
-        # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
-        self.assertIn("tool_call_id mismatch:", t2)
+        s2, t2 = _format_token_usage(1499, 750)
+        self.assertEqual(s2, "1K tokens, 50% cached")
+        self.assertEqual(t2, "Conversation tokens: 1K tokens (50% cached on last turn)")
 
-        # 3. Tool calls mismatch
-        prev3 = [{"role": "assistant", "tool_calls": [{"id": "1"}]}]
-        curr3 = [{"role": "assistant", "tool_calls": [{"id": "2"}]}]
-        _, t3 = _measure_prefix_reuse(prev3, curr3)
-        # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
-        self.assertIn("tool_calls mismatch:", t3)
+        s3, t3 = _format_token_usage(2800, 2240)
+        self.assertEqual(s3, "3K tokens, 80% cached")
+        self.assertEqual(t3, "Conversation tokens: 3K tokens (80% cached on last turn)")
 
-        # 4. Current payload shorter than previous payload
-        prev4 = [{"role": "user", "content": "1"}, {"role": "user", "content": "2"}]
-        curr4 = [{"role": "user", "content": "1"}]
-        _, t4 = _measure_prefix_reuse(prev4, curr4)
-        # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
-        self.assertIn("Current conversation is shorter than previous conversation", t4)
+        s4, t4 = _format_token_usage(1000, 0)
+        self.assertEqual(s4, "1K tokens, 0% cached")
+        self.assertEqual(t4, "Conversation tokens: 1K tokens (0% cached on last turn)")
+
+        s5, t5 = _format_token_usage(1000, None)
+        self.assertEqual(s5, "1K tokens, 0% cached")
+        self.assertEqual(t5, "Conversation tokens: 1K tokens (0% cached on last turn)")
+
+        # Tool log variants:
+        # Failed tool execution retains error details
+        failed_resp = Response(
+            is_failed=True, is_terminated=False, content="file not found error"
+        )
+        s_fail, t_fail = _format_tool_log(
+            "view_file", {"path": "missing.py"}, failed_resp, 1
+        )
+        self.assertIn("FAILED -> file not found error", s_fail)
+        self.assertEqual(t_fail, "file not found error")
+
+        # Follow-up tool execution prefix
+        ok_write = Response(is_failed=False, is_terminated=False, content="ok")
+        s_fu, t_fu = _format_tool_log(
+            "replace_file_content",
+            {"file": "mod.py"},
+            ok_write,
+            2,
+            is_followup=True,
+        )
+        self.assertIn(
+            "[Turn 2] Follow-up Tool replace_file_content: wrote mod.py at", s_fu
+        )
+        self.assertIn("Wrote mod.py at", t_fu)
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
     def test_completion_and_output_formatting_and_truncation(
@@ -1112,7 +1198,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         with enter_phase("agent_session", registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
-            # Requirement: The agent driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, prefix reuse measurements comparing current wire payloads against previous request payloads with divergence diagnostics, tool names and arguments or text previews, and execution outcomes, including corrective reminders in tool result transcripts when present.
+            # Requirement: The loop driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool names and arguments or text previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in tool result transcripts when present.
             self.assertTrue(outcome.is_success)
             comp_events = [
                 e for e in self.logger.events if e.event_name == "model_completion"

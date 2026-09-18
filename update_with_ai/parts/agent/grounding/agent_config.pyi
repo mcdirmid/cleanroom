@@ -61,17 +61,6 @@ FRESH_REQUIREMENTS:
         ...
 
     @property
-    def edit_followup_read(self) -> bool:
-        """
-PURPOSE:
-Indicates whether editing tools should execute a follow-up read on modified files
-
-FRESH_REQUIREMENTS:
-- The agent config provides whether editing tools should execute a follow-up read on modified files.
-"""
-        ...
-
-    @property
     def edit_delta_output(self) -> bool:
         """
 PURPOSE:
