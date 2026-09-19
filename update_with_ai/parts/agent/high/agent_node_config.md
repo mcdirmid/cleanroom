@@ -18,11 +18,11 @@ A *guide* provides structured instructional text containing a *summary*, sequent
 
 A *verification check* is a polymorphic service that can *verify* session criteria, communicating whether verification passed and diagnostic feedback on failure.
 
-The *cleaned nodes* is an agent session service that presents the *nodes* currently being cleaned in the agent session.
+A *per node info* is data describing configuration parameters for a node, providing its declared read-only files, read-write files, templates, template parameters, guide, guide file, whether the node allows step mode, blame targets, verification checks, source file alias, verification success message, and feedback.
 
-The *node config* is an agent session service that exposes configuration parameters for the session execution environment.
+The *role config* is an agent session service that provides the *role* of the session, the sequence of *nodes* currently being cleaned, and an execution *version* that increments whenever the cleaned nodes change.
 
-The node config provides:
+The *node config* is an agent session service that caches per node info for active nodes from role config, unloading cached per node info when nodes are no longer being cleaned. The node config loads per node info for each cleaned node to dynamically provide:
 
 - The session *read-only files*, restricting bound files to inspection.
 
@@ -53,3 +53,5 @@ The node config provides:
 - The session *verification success message*, exposing informative verification feedback when configured.
 
 - The session *feedback*, exposing incoming feedback delivered to the node when present.
+
+- The session *per node info by node*, mapping each active node to its per node info.

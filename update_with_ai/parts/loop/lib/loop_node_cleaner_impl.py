@@ -19,22 +19,36 @@ from support.lib.lifecycle import (
 )
 
 
-class CleanedNodes(agent_node_config.CleanedNodes, Singleton):
+class RoleConfig(agent_node_config.RoleConfig, Singleton):
     tier = agent_session
 
     def __init__(self) -> None:
+        self._role: str = ""
         self._nodes: Sequence[dag_storage.Node] = ()
+        self._version: int = 0
+
+    @property
+    def role(self) -> str:
+        # Requirement: [RoleConfig] The role config provides the role of the session.
+        return self._role
 
     @property
     def nodes(self) -> Sequence[dag_storage.Node]:
-        # Requirement: [CleanedNodes] The cleaned nodes present the nodes currently being cleaned in the agent session.
+        # Requirement: [RoleConfig] The role config provides the sequence of nodes currently being cleaned in the agent session.
         if not self._nodes:
-            raise RuntimeError("CleanedNodes has not been configured with nodes.")
+            raise RuntimeError("RoleConfig has not been configured with nodes.")
         return self._nodes
 
+    @property
+    def version(self) -> int:
+        # Requirement: [RoleConfig] The role config provides an execution version that increments whenever the cleaned nodes change.
+        return self._version
+
     def set_nodes(self, nodes: Sequence[dag_storage.Node]) -> None:
-        # Requirement: The cleaned nodes present the nodes currently being cleaned to session services.
+        # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes, the nodes currently being cleaned, and an incremented version to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
         self._nodes = tuple(nodes)
+        self._role = nodes[0].role_address if nodes else ""
+        self._version += 1
 
 
 class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
@@ -63,9 +77,9 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
             return set()
 
         def setup_session(session: LifecycleScope) -> None:
-            # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the cleaned nodes present the nodes currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
-            cleaned_nodes = session.get_singleton(CleanedNodes)
-            cleaned_nodes.set_nodes(dirty_nodes)
+            # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes, the nodes currently being cleaned, and an incremented version to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
+            role_config = session.get_singleton(RoleConfig)
+            role_config.set_nodes(dirty_nodes)
 
         def _execute_session() -> Set[dag_storage.Message]:
             # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the cleaned nodes present the nodes currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
@@ -307,7 +321,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         tier=system,
     )
     reg.register_singleton(
-        CleanedNodes,
-        keys=[CleanedNodes, agent_node_config.CleanedNodes],
+        RoleConfig,
+        keys=[RoleConfig, agent_node_config.RoleConfig],
         tier=agent_session,
     )

@@ -13,37 +13,41 @@ Multi-turn agent execution within Bazel workspaces requires binding node-specifi
 
 ## Types and Behavior
 
-The node config and alias manager realize session configuration and file alias resolution for the target nodes presented by the cleaned nodes using the bazel manifest loader.
+The node config and alias manager realize session configuration and file alias resolution for the target nodes presented by the role config using the bazel manifest loader.
 
-When initialized for an agent session, the node config and alias manager retrieve the active nodes from the cleaned nodes and load target manifests.
+The node config caches per node info loaded for active nodes from the role config, checking the role config version to unload cached per node info when nodes are no longer being cleaned, and loading per node info for newly active nodes from target node manifests using the bazel manifest loader.
 
-The node config provides session parameters resolved from the target node manifests.
+Loading per node info for a node resolves its declared source files and templates from the manifest as the node read-write files and templates, declared template parameters as the node template parameters, direct dependencies and transitive star dependencies resolved across dependency manifests as the node read-only files excluding declared silent dependencies and read-write files, whether the node allows step mode, declared guide targets as the guide file and task guide, declared feedback dependencies as blame targets mapped to their owning dependency nodes, declared verification commands as verification checks, declared source file alias relative path as the src file alias, declared verification success message, and feedback messages from graph storage as the feedback.
 
-The node config provides:
+The node config dynamically aggregates session parameters across active nodes' per node info.
 
-- Declared source files and templates from the manifests as the session read-write files and templates, mapping read-write files to initial file content.
+The node config dynamically provides:
 
-- Declared template parameters from the target node manifests as the session template parameters.
+- The session read-only files aggregating read-only files across the active nodes, excluding files present in the session read-write files.
 
-- Declared direct dependencies and transitive star dependencies resolved across dependency manifests as the session read-only files, excluding declared silent dependencies and their source files, and excluding files present in the session read-write files.
+- The session read-write files and templates aggregating read-write files and templates across the active nodes, mapping read-write files to initial file content.
 
-- Whether the nodes allow step mode, resolved from the target node manifests.
+- The session template parameters combining template parameters across the active nodes.
+
+- Whether the node allows step mode resolved when the session contains exactly one node.
 
 - Whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the target node allows step mode, and session feedback is absent.
 
-- Declared guide targets from the target node manifest as the guide file and task guide when guide step mode is active.
+- The session guide file and task guide from the single active node when guide step mode is active.
 
-- Declared feedback dependencies from the manifests as blame targets mapped to their owning dependency nodes, and blame targets by node mapping each session node to its declared blame targets.
+- The session blame targets aggregating blame targets across the active nodes, and blame targets by node mapping each active node to its declared blame targets.
 
-- Declared verification checks from the manifests' verification commands as the session verification checks, and verification checks by node mapping each session node to its verification checks.
+- The session verification checks aggregating verification checks across the active nodes, and verification checks by node mapping each active node to its verification checks.
 
-- Declared src file alias by node mapping each session node to the relative path of its declared source file alias.
+- The session src file alias by node mapping each active node to the relative path of its declared source file alias.
 
-- Declared verification success message from the target node manifest when the session contains exactly one node as the session verification success message.
+- The session verification success message from the active node when the session contains exactly one node.
 
-- Declared feedback messages retrieved from graph storage for the session nodes as the session feedback.
+- The session feedback combining feedback messages retrieved from graph storage across the active nodes.
 
-The alias manager maintains virtual file addressing and path masking for the active session.
+- The session per node info by node mapping each active node to its per node info.
+
+The alias manager maintains virtual file addressing and path masking for the active session, retrieving the active nodes from the role config.
 
 The alias manager:
 

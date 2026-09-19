@@ -11,7 +11,7 @@ from update_with_ai.parts.loop.lib.loop_conversation import (
 )
 from update_with_ai.parts.loop.lib.loop_node_cleaner_impl import (
     NodeCleaner as NodeCleanerImpl,
-    CleanedNodes as CleanedNodesImpl,
+    RoleConfig as RoleConfigImpl,
     __initialize__,
 )
 from update_with_ai.parts.loop.lib.loop_driver import AgentOutcome, AgentDriver
@@ -21,7 +21,7 @@ from update_with_ai.parts.agent.lib.agent_storage import (
     TaskPrompt,
 )
 from update_with_ai.parts.loop.lib.loop_node_cleaner import NodeCleaner
-from update_with_ai.parts.agent.lib.agent_node_config import CleanedNodes, NodeConfig
+from update_with_ai.parts.agent.lib.agent_node_config import RoleConfig, NodeConfig
 from update_with_ai.parts.dag.lib.dag_storage import (
     Change,
     Dependency,
@@ -289,20 +289,29 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             self.formatter, keys=[TemplateFormatter], tier=agent_session
         )
 
-    def test_cleaned_node_lifecycle(self) -> None:
-        """CUJ: CleanedNodes holds and exposes target nodes in the session tier."""
+    def test_role_config_lifecycle(self) -> None:
+        """CUJ: RoleConfig holds and exposes role, target nodes, and version in the session tier."""
         with enter_phase(agent_session, registry=self.registry) as scope:
-            cleaned_nodes = scope.get_singleton(CleanedNodes)
+            role_config = scope.get_singleton(RoleConfig)
             with self.assertRaises(RuntimeError):
-                _ = cleaned_nodes.nodes
+                _ = role_config.nodes
 
-            target1 = Node(unit_address="//pkg:target1")
-            target2 = Node(unit_address="//pkg:target2")
-            assert isinstance(cleaned_nodes, CleanedNodesImpl)
-            # Requirement: The cleaned nodes present the nodes currently being cleaned to session services.
-            cleaned_nodes.set_nodes([target1, target2])
-            # Requirement: [CleanedNodes] The cleaned nodes present the nodes currently being cleaned in the agent session.
-            self.assertEqual(cleaned_nodes.nodes, (target1, target2))
+            target1 = Node(unit_address="//pkg:target1", role_address="spec")
+            target2 = Node(unit_address="//pkg:target2", role_address="spec")
+            assert isinstance(role_config, RoleConfigImpl)
+            # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes, the nodes currently being cleaned, and an incremented version to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
+            role_config.set_nodes([target1, target2])
+            # Requirement: [RoleConfig] The role config provides the sequence of nodes currently being cleaned in the agent session.
+            self.assertEqual(role_config.nodes, (target1, target2))
+            # Requirement: [RoleConfig] The role config provides the role of the session.
+            self.assertEqual(role_config.role, "spec")
+            # Requirement: [RoleConfig] The role config provides an execution version that increments whenever the cleaned nodes change.
+            self.assertEqual(role_config.version, 1)
+
+            # Setting nodes again increments version
+            role_config.set_nodes([target1])
+            self.assertEqual(role_config.version, 2)
+            self.assertEqual(role_config.nodes, (target1,))
 
     def test_clean_node_seeds_history_and_materializes_templates(self) -> None:
         """CUJ: Seeding conversation history with task prompt, pending messages, and startup executions."""

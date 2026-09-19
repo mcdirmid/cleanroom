@@ -13,7 +13,7 @@ Driving node execution requires bridging abstract graph clean directives to conc
 
 ## Types and Behavior
 
-The node cleaner cleans dirty nodes within an agent session phase where the cleaned nodes present the nodes currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
+The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes, the nodes currently being cleaned, and an incremented version to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
 
 Within the agent session phase, missing read-write files materialize from sandbox startup templates.
 

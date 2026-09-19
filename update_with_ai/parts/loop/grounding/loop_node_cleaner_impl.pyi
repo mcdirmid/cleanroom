@@ -16,7 +16,7 @@ PURPOSE:
 Implements node cleaner orchestrating sandbox and loop driver
 
 GROUNDING_ARGUMENT:
-- Through the agent session phase boundary, as a system singleton, NodeCleaner coordinates system singletons (agent_storage, dag_storage) in the same lifecycle. While system singletons cannot directly access narrower agent_session singletons under static lifecycle isolation, this service initiates and executes within an explicit agent session phase that instantiates and scopes session-level singletons (loop_driver, sandbox, loop_conversation, agent_node_config.CleanedNodes), with defining modules all imported.
+- Through the agent session phase boundary, as a system singleton, NodeCleaner coordinates system singletons (agent_storage, dag_storage) in the same lifecycle. While system singletons cannot directly access narrower agent_session singletons under static lifecycle isolation, this service initiates and executes within an explicit agent session phase that instantiates and scopes session-level singletons (loop_driver, sandbox, loop_conversation, agent_node_config.RoleConfig), with defining modules all imported.
 """
 
     @operation
@@ -26,7 +26,7 @@ PURPOSE:
 Cleans dirty nodes within an agent session phase and returns resulting messages
 
 FRESH_REQUIREMENTS:
-- The node cleaner cleans dirty nodes within an agent session phase where the cleaned nodes present the nodes currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
+- The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes, the nodes currently being cleaned, and an incremented version to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
 - Within the agent session phase, missing read-write files materialize from sandbox startup templates.
 - The conversation is initialized with startup context comprising the node definition and task prompt retrieved from graph storage for dirty nodes, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox formatted with synthetic tool requests and captured responses.
 - The task prompt is formatted using the template formatter.
@@ -40,7 +40,7 @@ FRESH_REQUIREMENTS:
 - When dirty nodes define no task prompt, cleaning resolves the nodes without establishing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
 
 GROUNDING_ARGUMENT:
-- Receives nodes as an input argument and retrieves task prompts and node definitions from imported agent_storage in the same system lifecycle tier. When dirty nodes define no task prompt, cleaning resolves without executing an agent session phase, producing change messages if incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise. Within the orchestrated agent session phase, it configures agent_node_config.CleanedNodes, materializes startup templates from sandbox, initializes conversation with incoming pending messages formatted per target node and augmenting the task prompt with guide instructions formatted using template_format.TemplateFormatter, executes loop_driver, and maps the resulting loop outcome to change or feedback messages for dag_storage, relying on the requirements of collaborator types to satisfy message generation and dirty state management.
+- Receives nodes as an input argument and retrieves task prompts and node definitions from imported agent_storage in the same system lifecycle tier. When dirty nodes define no task prompt, cleaning resolves without executing an agent session phase, producing change messages if incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise. Within the orchestrated agent session phase, it configures agent_node_config.RoleConfig, materializes startup templates from sandbox, initializes conversation with incoming pending messages formatted per target node and augmenting the task prompt with guide instructions formatted using template_format.TemplateFormatter, executes loop_driver, and maps the resulting loop outcome to change or feedback messages for dag_storage, relying on the requirements of collaborator types to satisfy message generation and dirty state management.
 """
         ...
 
@@ -64,14 +64,29 @@ GROUNDING_ARGUMENT:
         ...
 
 @singleton_type('agent_session')
-class CleanedNodes(agent_node_config.CleanedNodes):
+class RoleConfig(agent_node_config.RoleConfig):
     """
 PURPOSE:
-Implements cleaned nodes presenting the active nodes and providing configuration
+Implements role config presenting the active role, nodes, and version
 
 GROUNDING_ARGUMENT:
-- Maintains active node references in self.nodes across the execution phase, requiring no external singleton dependencies.
+- Maintains active node references, role, and version in self across the execution phase, requiring no external singleton dependencies.
 """
+
+    @property
+    @override
+    def role(self) -> str:
+        """
+PURPOSE:
+Role of the agent session
+
+INHERITED_REQUIREMENTS:
+- [RoleConfig] The role config provides the role of the session.
+
+GROUNDING_ARGUMENT:
+- Holds the active role configured via set_nodes when the agent session phase is initiated.
+"""
+        ...
 
     @property
     @override
@@ -81,10 +96,25 @@ PURPOSE:
 Sequence of nodes currently being cleaned in the agent session
 
 INHERITED_REQUIREMENTS:
-- [CleanedNodes] The cleaned nodes present the nodes currently being cleaned in the agent session.
+- [RoleConfig] The role config provides the sequence of nodes currently being cleaned in the agent session.
 
 GROUNDING_ARGUMENT:
-- Holds the active Node sequence configured via the set_nodes configuration operation when the agent session phase is initiated.
+- Holds the active Node sequence configured via set_nodes when the agent session phase is initiated.
+"""
+        ...
+
+    @property
+    @override
+    def version(self) -> int:
+        """
+PURPOSE:
+Execution version that increments whenever the cleaned nodes change
+
+INHERITED_REQUIREMENTS:
+- [RoleConfig] The role config provides an execution version that increments whenever the cleaned nodes change.
+
+GROUNDING_ARGUMENT:
+- Holds the integer version incremented by set_nodes when the active nodes change.
 """
         ...
 
@@ -95,9 +125,9 @@ PURPOSE:
 Sets the nodes currently being cleaned in the agent session
 
 FRESH_REQUIREMENTS:
-- The cleaned nodes present the nodes currently being cleaned to session services.
+- The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes, the nodes currently being cleaned, and an incremented version to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
 
 GROUNDING_ARGUMENT:
-- Receives nodes directly as a positional parameter and configures the instance state within self.
+- Receives nodes directly as a positional parameter, sets nodes and role on self, and increments the integer version.
 """
         ...

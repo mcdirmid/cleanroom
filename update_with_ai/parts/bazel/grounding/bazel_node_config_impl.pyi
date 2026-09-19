@@ -15,7 +15,7 @@ PURPOSE:
 Implements node config from node manifest metadata
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, NodeConfig accesses target nodes from agent_node_config.CleanedNodes.nodes and loads their manifests via bazel_manifest_loader.BazelManifestLoader.get_manifest during session initialization, deriving session file sets, templates, and guidance configurations.
+- As an agent_session singleton, NodeConfig accesses active target nodes and version from agent_node_config.RoleConfig, caching per node info for active nodes and unloading per node info when nodes leave, and dynamically aggregates session file sets, templates, and guidance configurations.
 """
 
     @property
@@ -26,13 +26,13 @@ PURPOSE:
 Declared direct dependencies and transitive star dependencies
 
 FRESH_REQUIREMENTS:
-- The node config exposes declared direct dependencies and transitive star dependencies resolved across dependency manifests using the bazel manifest loader as the session's read-only files, excluding silent dependencies and files present in read-write files.
+- The session read-only files aggregating read-only files across the active nodes, excluding files present in the session read-write files.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session read-only files restricted to inspection.
 
 GROUNDING_ARGUMENT:
-- Derived by loading target node manifests via bazel_manifest_loader.BazelManifestLoader.get_manifest across nodes in get_singleton(agent_node_config.CleanedNodes).nodes, extracting direct dependencies and resolving the transitive closure of star dependencies across manifests, and constructing ReadOnlyFile instances excluding files present in read_write_files.
+- Derived dynamically by aggregating read-only files across active nodes' cached PerNodeInfo from self.per_node_info_by_node, excluding files present in self.read_write_files.
 """
         ...
 
@@ -41,16 +41,16 @@ GROUNDING_ARGUMENT:
     def read_write_files(self) -> Set[agent_file_alias.ReadWriteFile]:
         """
 PURPOSE:
-Declared source files and silent source files across session nodes
+Declared source files and templates across active nodes
 
 FRESH_REQUIREMENTS:
-- The node config exposes declared source files and silent source files across session nodes as read-write files.
+- The session read-write files and templates aggregating read-write files and templates across the active nodes, mapping read-write files to initial file content.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session read-write files permitted for inspection and modification.
 
 GROUNDING_ARGUMENT:
-- Derived by loading target node manifests via bazel_manifest_loader.BazelManifestLoader.get_manifest across nodes in get_singleton(agent_node_config.CleanedNodes).nodes, extracting declared source files and silent source files, and constructing ReadWriteFile instances.
+- Derived dynamically by aggregating read-write files across active nodes' cached PerNodeInfo from self.per_node_info_by_node.
 """
         ...
 
@@ -59,16 +59,16 @@ GROUNDING_ARGUMENT:
     def allows_step_mode(self) -> bool:
         """
 PURPOSE:
-Whether the nodes allow step mode from target node manifests
+Whether the node allows step mode from target node manifest
 
 FRESH_REQUIREMENTS:
-- The node config exposes whether the nodes allow step mode from the target node manifests.
+- Whether the node allows step mode resolved when the session contains exactly one node.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config indicates whether the node allows step mode.
 
 GROUNDING_ARGUMENT:
-- Derived by loading the target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest for the single target node when get_singleton(agent_node_config.CleanedNodes).nodes contains exactly one node, extracting allows_step_mode.
+- Derived dynamically from the single active node's cached PerNodeInfo in self.per_node_info_by_node when get_singleton(agent_node_config.RoleConfig).nodes contains exactly one node.
 """
         ...
 
@@ -80,13 +80,13 @@ PURPOSE:
 Whether step mode is active for the session
 
 FRESH_REQUIREMENTS:
-- The node config exposes whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the target node allows step mode, and session feedback is absent.
+- Whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the target node allows step mode, and session feedback is absent.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config indicates whether session step mode is active.
 
 GROUNDING_ARGUMENT:
-- Derived by querying agent_config.AgentConfig.is_step_mode in the system lifecycle tier, verifying that get_singleton(agent_node_config.CleanedNodes).nodes contains exactly one node, checking self.allows_step_mode, and verifying that self.feedback is empty.
+- Derived dynamically by querying agent_config.AgentConfig.is_step_mode in the system lifecycle tier, verifying that get_singleton(agent_node_config.RoleConfig).nodes contains exactly one node, checking self.allows_step_mode, and verifying that self.feedback is empty.
 """
         ...
 
@@ -98,13 +98,13 @@ PURPOSE:
 Guide file configured when step mode is active
 
 FRESH_REQUIREMENTS:
-- The node config exposes the declared guide target as the guide file when step mode is active.
+- The session guide file and task guide from the single active node when guide step mode is active.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session guide file when step mode is active.
 
 GROUNDING_ARGUMENT:
-- Derived by loading the target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest for the single session node in get_singleton(agent_node_config.CleanedNodes).nodes, constructing an UnboundFile for the declared guide target when step mode is active.
+- Derived dynamically from the single active node's cached PerNodeInfo in self.per_node_info_by_node when self.is_step_mode is true.
 """
         ...
 
@@ -116,13 +116,13 @@ PURPOSE:
 Startup template mappings for declared source files
 
 FRESH_REQUIREMENTS:
-- The node config exposes templates mapping read-write files to initial file content.
+- The session read-write files and templates aggregating read-write files and templates across the active nodes, mapping read-write files to initial file content.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides templates mapping read-write files to initial file content.
 
 GROUNDING_ARGUMENT:
-- Derived by loading target node manifests via bazel_manifest_loader.BazelManifestLoader.get_manifest across nodes in get_singleton(agent_node_config.CleanedNodes).nodes, pairing read-write files with template contents.
+- Derived dynamically by aggregating templates across active nodes' cached PerNodeInfo from self.per_node_info_by_node.
 """
         ...
 
@@ -134,13 +134,13 @@ PURPOSE:
 Declared template parameters from the manifest
 
 FRESH_REQUIREMENTS:
-- The node config exposes declared template parameters from the target node manifests.
+- The session template parameters combining template parameters across the active nodes.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session template parameters, providing parameter bindings for template evaluation.
 
 GROUNDING_ARGUMENT:
-- Extracted from target node manifests via bazel_manifest_loader.BazelManifestLoader.get_manifest across nodes in get_singleton(agent_node_config.CleanedNodes).nodes.
+- Derived dynamically by combining template parameters across active nodes' cached PerNodeInfo from self.per_node_info_by_node.
 """
         ...
 
@@ -152,13 +152,13 @@ PURPOSE:
 Task guide configured when step mode is active
 
 FRESH_REQUIREMENTS:
-- The node config exposes the declared guide target as the task guide when step mode is active.
+- The session guide file and task guide from the single active node when guide step mode is active.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session guide, providing structured instructional text when step mode is active.
 
 GROUNDING_ARGUMENT:
-- Derived by loading the target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest for the single session node in get_singleton(agent_node_config.CleanedNodes).nodes, reading and parsing the guide markdown when step mode is active.
+- Derived dynamically from the single active node's cached PerNodeInfo in self.per_node_info_by_node when self.is_step_mode is true.
 """
         ...
 
@@ -170,13 +170,13 @@ PURPOSE:
 Blame targets mapped to owning dependency nodes
 
 FRESH_REQUIREMENTS:
-- The node config exposes declared feedback dependencies as blame targets mapped to owning dependency nodes.
+- The session blame targets aggregating blame targets across the active nodes, and blame targets by node mapping each active node to its declared blame targets.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides blame targets eligible for defect attribution.
 
 GROUNDING_ARGUMENT:
-- Derived by unioning the values of self.blame_targets_by_node.
+- Derived dynamically by unioning blame targets across active nodes' cached PerNodeInfo from self.per_node_info_by_node.
 """
         ...
 
@@ -188,13 +188,13 @@ PURPOSE:
 Session blame targets mapped by session node
 
 FRESH_REQUIREMENTS:
-- The node config exposes blame targets by node mapping each session node to its declared blame targets.
+- The session blame targets aggregating blame targets across the active nodes, and blame targets by node mapping each active node to its declared blame targets.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session blame targets mapped by session node.
 
 GROUNDING_ARGUMENT:
-- Derived by loading target node manifests via bazel_manifest_loader.BazelManifestLoader.get_manifest for each node in get_singleton(agent_node_config.CleanedNodes).nodes, mapping declared feedback dependencies to BoundFile instances.
+- Derived dynamically by mapping each active node to its blame targets from self.per_node_info_by_node.
 """
         ...
 
@@ -206,13 +206,13 @@ PURPOSE:
 Session verification checks derived from manifest verification commands
 
 FRESH_REQUIREMENTS:
-- The node config exposes declared verification checks from the manifest verification commands.
+- The session verification checks aggregating verification checks across the active nodes, and verification checks by node mapping each active node to its verification checks.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session verification checks evaluated during session advancement.
 
 GROUNDING_ARGUMENT:
-- Derived by concatenating verification checks from self.verification_checks_by_node across all session nodes.
+- Derived dynamically by concatenating verification checks across active nodes' cached PerNodeInfo from self.per_node_info_by_node.
 """
         ...
 
@@ -224,13 +224,13 @@ PURPOSE:
 Session verification checks mapped by session node
 
 FRESH_REQUIREMENTS:
-- The node config exposes verification checks by node mapping each session node to its verification checks.
+- The session verification checks aggregating verification checks across the active nodes, and verification checks by node mapping each active node to its verification checks.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session verification checks mapped by session node.
 
 GROUNDING_ARGUMENT:
-- Derived by loading target node manifests via bazel_manifest_loader.BazelManifestLoader.get_manifest for each node in get_singleton(agent_node_config.CleanedNodes).nodes, constructing CommandVerificationCheck instances from declared verify command strings.
+- Derived dynamically by mapping each active node to its verification checks from self.per_node_info_by_node.
 """
         ...
 
@@ -242,13 +242,13 @@ PURPOSE:
 Source file alias relative path mapped by session node
 
 FRESH_REQUIREMENTS:
-- The node config exposes declared src file alias by node mapping each session node to the relative path of its declared source file alias.
+- The session src file alias by node mapping each active node to the relative path of its declared source file alias.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the source file alias relative path mapped by session node.
 
 GROUNDING_ARGUMENT:
-- Derived by loading target node manifests via bazel_manifest_loader.BazelManifestLoader.get_manifest for each node in get_singleton(agent_node_config.CleanedNodes).nodes and extracting the relative path of its declared src file.
+- Derived dynamically by mapping each active node to its declared src_file_alias from self.per_node_info_by_node.
 """
         ...
 
@@ -260,13 +260,13 @@ PURPOSE:
 Session verification success message resolved from manifest metadata
 
 FRESH_REQUIREMENTS:
-- Declared verification success message from the target node manifest when the session contains exactly one node as the session verification success message.
+- The session verification success message from the active node when the session contains exactly one node.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session verification success message when configured.
 
 GROUNDING_ARGUMENT:
-- Derived by loading the target node manifest via bazel_manifest_loader.BazelManifestLoader.get_manifest for the single session node when get_singleton(agent_node_config.CleanedNodes).nodes contains exactly one node, extracting the declared verification_success_message string when present.
+- Derived dynamically from the single active node's cached PerNodeInfo in self.per_node_info_by_node when get_singleton(agent_node_config.RoleConfig).nodes contains exactly one node.
 """
         ...
 
@@ -278,13 +278,31 @@ PURPOSE:
 Session feedback retrieved from graph storage for session nodes
 
 FRESH_REQUIREMENTS:
-- Declared feedback messages retrieved from graph storage for the session nodes as the session feedback.
+- The session feedback combining feedback messages retrieved from graph storage across the active nodes.
 
 INHERITED_REQUIREMENTS:
 - [NodeConfig] The node config provides the session feedback, exposing incoming feedback delivered to the node when present.
 
 GROUNDING_ARGUMENT:
-- Derived by querying dag_storage.DagStorage for incoming feedback messages across all nodes in get_singleton(agent_node_config.CleanedNodes).nodes.
+- Derived dynamically by combining feedback messages across active nodes' cached PerNodeInfo from self.per_node_info_by_node.
+"""
+        ...
+
+    @property
+    @override
+    def per_node_info_by_node(self) -> Mapping[dag_storage.Node, agent_node_config.PerNodeInfo]:
+        """
+PURPOSE:
+Session per node info mapped by session node
+
+FRESH_REQUIREMENTS:
+- The session per node info by node mapping each active node to its per node info.
+
+INHERITED_REQUIREMENTS:
+- [NodeConfig] The node config provides the session per node info by node, mapping each active node to its per node info.
+
+GROUNDING_ARGUMENT:
+- Maintains cached PerNodeInfo entries loaded via bazel_manifest_loader.BazelManifestLoader.get_manifest for each active node from get_singleton(agent_node_config.RoleConfig), checking version to unload cached entries when nodes are no longer being cleaned.
 """
         ...
 
@@ -298,7 +316,7 @@ INHERITANCE:
 - tool_provider.ParameterConverter: Implements parameter converter for file alias actual type
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, AliasManager resolves accessible workspace files for get_singleton(agent_node_config.CleanedNodes).nodes into relative paths and maintains host path mappings.
+- As an agent_session singleton, AliasManager resolves accessible workspace files for get_singleton(agent_node_config.RoleConfig).nodes into relative paths and maintains host path mappings.
 """
 
     @property

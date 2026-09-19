@@ -90,21 +90,158 @@ Validates session criteria, returning whether verification passed and diagnostic
 """
         ...
 
-@singleton_type('agent_session')
-class CleanedNodes(Protocol):
+@dataclass(frozen=True)
+@data_type
+class PerNodeInfo:
     """
 PURPOSE:
-Defined as an agent session service that presents the nodes currently being cleaned in the agent session
+Data describing configuration parameters for a node
 """
+
+    def __init__(self, node: dag_storage.Node, read_only_files: Set[agent_file_alias.ReadOnlyFile], read_write_files: Set[agent_file_alias.ReadWriteFile], templates: Set[Tuple[agent_file_alias.BoundFile, agent_file_alias.FileContent]], template_parameters: Mapping[str, Any], allows_step_mode: bool, guide_file: Optional[agent_file_alias.UnboundFile], guide: Optional[Guide], blame_targets: Set[agent_file_alias.BoundFile], verification_checks: Sequence[VerificationCheck], src_file_alias: Optional[str], verification_success_message: Optional[str], feedback: Sequence[str]) -> None:
+        ...
+
+    @property
+    def node(self) -> dag_storage.Node:
+        """
+PURPOSE:
+Target node for the configuration parameters
+"""
+        ...
+
+    @property
+    def read_only_files(self) -> Set[agent_file_alias.ReadOnlyFile]:
+        """
+PURPOSE:
+Bound files restricted to inspection for the node
+"""
+        ...
+
+    @property
+    def read_write_files(self) -> Set[agent_file_alias.ReadWriteFile]:
+        """
+PURPOSE:
+Bound files permitted for inspection and modification for the node
+"""
+        ...
+
+    @property
+    def templates(self) -> Set[Tuple[agent_file_alias.BoundFile, agent_file_alias.FileContent]]:
+        """
+PURPOSE:
+Mapping read-write files to initial file content for the node
+"""
+        ...
+
+    @property
+    def template_parameters(self) -> Mapping[str, Any]:
+        """
+PURPOSE:
+Parameter bindings for template evaluation for the node
+"""
+        ...
+
+    @property
+    def allows_step_mode(self) -> bool:
+        """
+PURPOSE:
+Whether the node allows guide step mode
+"""
+        ...
+
+    @property
+    def guide_file(self) -> Optional[agent_file_alias.UnboundFile]:
+        """
+PURPOSE:
+Unbound guide file configured for the node
+"""
+        ...
+
+    @property
+    def guide(self) -> Optional[Guide]:
+        """
+PURPOSE:
+Structured instructional text configured for the node
+"""
+        ...
+
+    @property
+    def blame_targets(self) -> Set[agent_file_alias.BoundFile]:
+        """
+PURPOSE:
+Bound files owned by upstream dependency nodes eligible for defect attribution for the node
+"""
+        ...
+
+    @property
+    def verification_checks(self) -> Sequence[VerificationCheck]:
+        """
+PURPOSE:
+Verification checks evaluated for the node
+"""
+        ...
+
+    @property
+    def src_file_alias(self) -> Optional[str]:
+        """
+PURPOSE:
+Relative path of the declared source file alias for the node
+"""
+        ...
+
+    @property
+    def verification_success_message(self) -> Optional[str]:
+        """
+PURPOSE:
+Informative verification feedback configured for the node
+"""
+        ...
+
+    @property
+    def feedback(self) -> Sequence[str]:
+        """
+PURPOSE:
+Incoming feedback delivered to the node
+"""
+        ...
+
+@singleton_type('agent_session')
+class RoleConfig(Protocol):
+    """
+PURPOSE:
+Defined as an agent session service that provides the role, nodes, and version of the agent session
+"""
+
+    @property
+    def role(self) -> str:
+        """
+PURPOSE:
+Role of the agent session
+
+FRESH_REQUIREMENTS:
+- The role config provides the role of the session.
+"""
+        ...
 
     @property
     def nodes(self) -> Sequence[dag_storage.Node]:
         """
 PURPOSE:
-Nodes currently being cleaned in the agent session
+Sequence of nodes currently being cleaned in the agent session
 
 FRESH_REQUIREMENTS:
-- The cleaned nodes present the nodes currently being cleaned in the agent session.
+- The role config provides the sequence of nodes currently being cleaned in the agent session.
+"""
+        ...
+
+    @property
+    def version(self) -> int:
+        """
+PURPOSE:
+Execution version that increments whenever the cleaned nodes change
+
+FRESH_REQUIREMENTS:
+- The role config provides an execution version that increments whenever the cleaned nodes change.
 """
         ...
 
@@ -277,5 +414,16 @@ Incoming feedback delivered to the node when present
 
 FRESH_REQUIREMENTS:
 - The node config provides the session feedback, exposing incoming feedback delivered to the node when present.
+"""
+        ...
+
+    @property
+    def per_node_info_by_node(self) -> Mapping[dag_storage.Node, PerNodeInfo]:
+        """
+PURPOSE:
+Mapping each active node to its per node info
+
+FRESH_REQUIREMENTS:
+- The node config provides the session per node info by node, mapping each active node to its per node info.
 """
         ...
