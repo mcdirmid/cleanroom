@@ -83,6 +83,7 @@ FRAMEWORK_SYMBOLS = {
     "operation",
     "override",
     "LifecycleTier",
+    "LifecycleScope",
 }
 DATACLASS_SYMBOLS = {"dataclass"}
 

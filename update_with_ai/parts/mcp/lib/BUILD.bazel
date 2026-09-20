@@ -1,0 +1,163 @@
+# update_with_ai/parts/mcp/lib/BUILD.bazel
+load("//bin:pyright_library.bzl", "pyright_library")
+load("@pip//:requirements.bzl", "requirement")
+
+pyright_library(
+    name = "mcp_session",
+    srcs = ["mcp_session.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        "//update_with_ai/parts/dag/lib:dag_subgraph",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "mcp_session_impl",
+    srcs = ["mcp_session_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_config",
+        "//update_with_ai/parts/agent/lib:agent_node_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        "//update_with_ai/parts/dag/lib:dag_subgraph",
+        ":mcp_session",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "mcp_gate",
+    srcs = ["mcp_gate.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        "//update_with_ai/parts/dag/lib:dag_subgraph",
+        ":mcp_session",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "mcp_gate_impl",
+    srcs = ["mcp_gate_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        "//update_with_ai/parts/dag/lib:dag_subgraph",
+        "//update_with_ai/parts/sandbox/lib:sandbox_file_editor",
+        "//update_with_ai/parts/sandbox/lib:sandbox_file_reader",
+        "//update_with_ai/parts/sandbox/lib:tool_provider",
+        ":mcp_gate",
+        ":mcp_session",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "mcp_cache_arbiter",
+    srcs = ["mcp_cache_arbiter.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        "//update_with_ai/parts/dag/lib:dag_storage",
+        "//update_with_ai/parts/dag/lib:dag_subgraph",
+        ":mcp_session",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "mcp_cache_arbiter_impl",
+    srcs = ["mcp_cache_arbiter_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        "//update_with_ai/parts/dag/lib:dag_storage",
+        "//update_with_ai/parts/dag/lib:dag_subgraph",
+        ":mcp_cache_arbiter",
+        ":mcp_session",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "mcp_server",
+    srcs = ["mcp_server.py"],
+    deps = [
+        requirement("mcp"),
+        requirement("starlette"),
+    ],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        "//update_with_ai/parts/dag/lib:dag_subgraph",
+        ":mcp_gate",
+        ":mcp_session",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "mcp_server_impl",
+    srcs = ["mcp_server_impl.py"],
+    deps = [
+        requirement("mcp"),
+        requirement("starlette"),
+    ],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        "//update_with_ai/parts/dag/lib:dag_storage",
+        "//update_with_ai/parts/dag/lib:dag_subgraph",
+        "//update_with_ai/parts/sandbox/lib:tool_provider",
+        ":mcp_cache_arbiter",
+        ":mcp_gate",
+        ":mcp_server",
+        ":mcp_session",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "mcp_asm",
+    srcs = ["mcp_asm.py"],
+    deps = [
+        requirement("mcp"),
+        requirement("starlette"),
+    ],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_config",
+        "//update_with_ai/parts/agent/lib:agent_node_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        "//update_with_ai/parts/dag/lib:dag_storage",
+        "//update_with_ai/parts/dag/lib:dag_subgraph",
+        "//update_with_ai/parts/sandbox/lib:sandbox_file_editor",
+        "//update_with_ai/parts/sandbox/lib:sandbox_file_reader",
+        "//update_with_ai/parts/sandbox/lib:tool_provider",
+        ":mcp_cache_arbiter",
+        ":mcp_cache_arbiter_impl",
+        ":mcp_gate",
+        ":mcp_gate_impl",
+        ":mcp_server",
+        ":mcp_server_impl",
+        ":mcp_session",
+        ":mcp_session_impl",
+    ],
+    visibility = ["//visibility:public"],
+)

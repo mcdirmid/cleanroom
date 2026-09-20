@@ -2433,6 +2433,9 @@ def check_undeclared_imports(
     for d in list(allowed_set):
         if d.endswith("_ext"):
             allowed_set.add(d[:-4])
+            if d == "fastmcp_ext":
+                allowed_set.add("mcp")
+                allowed_set.add("starlette")
     allowed_set = {d for d in allowed_set if not d.endswith("_ext")}
 
     stdlib = getattr(sys, "stdlib_module_names", set()) | {

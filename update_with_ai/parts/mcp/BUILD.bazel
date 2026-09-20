@@ -1,0 +1,110 @@
+# update_with_ai/parts/mcp/BUILD.bazel
+
+load("//update_python_with_ai/support/lib:update_python_with_ai.bzl", "update_python_with_ai")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "high_specs",
+    srcs = glob(["high/*.md"]),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "grounding_specs",
+    srcs = glob(["grounding/*.pyi"]),
+    visibility = ["//visibility:public"],
+)
+
+update_python_with_ai(
+    name = "fastmcp_ext",
+    module_deps = [],
+)
+
+update_python_with_ai(
+    name = "mcp_session",
+    module_deps = [
+        "//update_with_ai/parts/agent:agent_config",
+        "//update_with_ai/parts/agent:agent_session",
+        "//update_with_ai/parts/dag:dag_subgraph",
+    ],
+)
+
+update_python_with_ai(
+    name = "mcp_session_impl",
+    module_deps = [
+        ":mcp_session",
+        "//update_with_ai/parts/agent:agent_config",
+        "//update_with_ai/parts/agent:agent_node_config",
+        "//update_with_ai/parts/agent:agent_session",
+        "//update_with_ai/parts/dag:dag_subgraph",
+    ],
+)
+
+update_python_with_ai(
+    name = "mcp_gate",
+    module_deps = [
+        ":mcp_session",
+    ],
+)
+
+update_python_with_ai(
+    name = "mcp_gate_impl",
+    module_deps = [
+        ":mcp_gate",
+        ":mcp_session",
+        "//update_with_ai/parts/core:filesystem_ext",
+        "//update_with_ai/parts/sandbox:sandbox_file_editor",
+        "//update_with_ai/parts/sandbox:sandbox_file_reader",
+        "//update_with_ai/parts/sandbox:tool_provider",
+    ],
+)
+
+update_python_with_ai(
+    name = "mcp_cache_arbiter",
+    module_deps = [
+        ":mcp_session",
+        "//update_with_ai/parts/dag:dag_storage",
+    ],
+)
+
+update_python_with_ai(
+    name = "mcp_cache_arbiter_impl",
+    module_deps = [
+        ":mcp_cache_arbiter",
+        ":mcp_session",
+        "//update_with_ai/parts/dag:dag_storage",
+        "//update_with_ai/parts/dag:dag_subgraph",
+    ],
+)
+
+update_python_with_ai(
+    name = "mcp_server",
+    module_deps = [
+        ":fastmcp_ext",
+        ":mcp_gate",
+        ":mcp_session",
+    ],
+)
+
+update_python_with_ai(
+    name = "mcp_server_impl",
+    module_deps = [
+        ":fastmcp_ext",
+        ":mcp_cache_arbiter",
+        ":mcp_gate",
+        ":mcp_server",
+        ":mcp_session",
+        "//update_with_ai/parts/sandbox:tool_provider",
+    ],
+)
+
+update_python_with_ai(
+    name = "mcp_asm",
+    module_deps = [
+        ":mcp_cache_arbiter_impl",
+        ":mcp_gate_impl",
+        ":mcp_server_impl",
+        ":mcp_session_impl",
+    ],
+)

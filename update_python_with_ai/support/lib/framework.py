@@ -6,6 +6,11 @@ T = TypeVar("T")
 LifecycleTier = Literal["system", "agent_session"]
 
 
+class LifecycleScope:
+    """Represents an active lifecycle scope managing singleton instances and cleanup."""
+    pass
+
+
 def singleton_type(
     lifecycle: LifecycleTier = "agent_session",
 ) -> Callable[[type[T]], type[T]]:
