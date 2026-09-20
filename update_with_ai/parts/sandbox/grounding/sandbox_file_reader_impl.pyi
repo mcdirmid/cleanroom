@@ -1,5 +1,6 @@
 from typing import Optional, Set, Type
 from framework import operation, override, singleton_type
+import agent_config
 import agent_file_alias
 import filesystem_ext
 import agent_node_config
@@ -67,13 +68,13 @@ GROUNDING_ARGUMENT:
     def initialize(self) -> None:
         """
 PURPOSE:
-Provides that initialization unconditionally installs the view file tool into the tool manager and never installs the search tool
+Provides that initialization unconditionally installs the view file tool, installs the can read tool into the tool manager when mcp mode is active, and never installs the search tool
 
 FRESH_REQUIREMENTS:
-- The read manager unconditionally installs the view file tool into the tool manager and never installs the search tool.
+- The read manager unconditionally installs the view file tool into the tool manager, installs the can read tool when mcp mode is active, and never installs the search tool.
 
 GROUNDING_ARGUMENT:
-- Installs ViewFileTool directly into imported tool_provider.ToolManager in the same session lifecycle tier, and never installs SearchTool.
+- Installs ViewFileTool directly into imported tool_provider.ToolManager, installs CanReadTool when imported collaborator agent_config.AgentConfig.is_mcp_mode is active in the same session lifecycle tier, and never installs SearchTool.
 """
         ...
 
@@ -142,6 +143,92 @@ INHERITED_REQUIREMENTS:
 
 GROUNDING_ARGUMENT:
 - Receives actual parameter bindings, resolves host paths using imported agent_file_alias.AliasManager workspace root in the same session lifecycle tier, resolves unbound .py and module requests to matching declared .pyi grounding specifications, rejects test file requests with contract-directed guidance, reads file content via the filesystem, formats lines with one-indexed right-aligned line numbers followed by a colon and space, filters > META: paragraphs for markdown files, formats read-only markdown content using imported template_format.TemplateFormatter and agent_node_config.NodeConfig.template_parameters in the same session lifecycle tier, attaches the file's relative path as a suppression key on responses for read-write files while omitting it for read-only files, masks host paths in read-only output, and records the read file in imported sandbox_file_editor.EditManager in the same session lifecycle tier.
+"""
+        ...
+
+    @property
+    @override
+    def description(self) -> str:
+        """
+PURPOSE:
+Established that each tool has a description which informs the agent why and when to use the tool
+
+GROUNDING_ARGUMENT:
+- Constant tool description string.
+"""
+        ...
+
+    @property
+    @override
+    def parameters(self) -> Set[tool_provider.Parameter]:
+        """
+PURPOSE:
+Established that each tool defines input parameters accepted for its invocation
+
+GROUNDING_ARGUMENT:
+- Set composed of self's constant parameter descriptors (path_parameter).
+"""
+        ...
+
+@singleton_type('agent_session')
+class CanReadTool(tool_provider.Tool):
+    """
+PURPOSE:
+Implements the can read tool to validate workspace file inspection access
+
+INHERITED_ASSUMPTIONS:
+- [Tool] All parameters of a tool have unique names.
+
+FRESH_REQUIREMENTS:
+- The can read tool is named `can_read`.
+- The can read tool path parameter uses the alias manager to convert a file alias.
+
+GROUNDING_ARGUMENT:
+- As an agent_session singleton, CanReadTool validates file inspection access across declared session files, interacting with imported agent_file_alias.AliasManager, agent_node_config.NodeConfig, sandbox_file_editor.EditManager, and tool_provider in the same session lifecycle tier.
+"""
+
+    @property
+    @override
+    def name(self) -> str:
+        """
+PURPOSE:
+Establishes that the can read tool is named can_read
+
+GROUNDING_ARGUMENT:
+- Constant tool schema identifier ('can_read').
+"""
+        ...
+
+    @property
+    def path_parameter(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
+        """
+PURPOSE:
+Parameter accepting the target file alias
+
+GROUNDING_ARGUMENT:
+- Constant parameter descriptor configured with alias manager converter.
+"""
+        ...
+
+    @operation
+    @override
+    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
+        """
+PURPOSE:
+Implements execute_tool on the can read tool to validate file inspection access and alias resolution
+
+FRESH_REQUIREMENTS:
+- When an unbound file is supplied, tool execution resolves to that grounding specification file alias if the relative path or qualified path addresses a module name or ends with `.py` and matches a declared read-only grounding specification ending with `.pyi`.
+- When an unbound file is supplied, tool execution fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract if the unbound file addresses a test file ending with `_test.py`.
+- When an unbound file is supplied, tool execution fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead, otherwise.
+- When a bound file is supplied or resolved, tool execution records the read file in the edit manager and produces a successful response indicating that access is permitted.
+
+INHERITED_REQUIREMENTS:
+- [Tool] When a parameter is required, an argument must be supplied for tool execution.
+- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
+
+GROUNDING_ARGUMENT:
+- Receives actual parameter bindings, resolves unbound .py and module requests to matching declared .pyi grounding specifications via imported agent_node_config.NodeConfig in the same session lifecycle tier, rejects test file requests with contract-directed guidance, records the read file in imported sandbox_file_editor.EditManager in the same session lifecycle tier, and produces a successful response indicating access is permitted for bound files.
 """
         ...
 

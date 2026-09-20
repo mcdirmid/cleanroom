@@ -1,6 +1,6 @@
 # sandbox_file_reader_impl implementation component
 
-imports: filesystem_ext, tool_provider, agent_file_alias, agent_node_config, template_format, sandbox_file_editor
+imports: filesystem_ext, tool_provider, agent_file_alias, agent_node_config, agent_config, template_format, sandbox_file_editor
 implements: sandbox_file_reader
 
 ## Purpose
@@ -13,7 +13,7 @@ Permissive or forgiving tool implementations allow agents to drift into ambiguou
 
 ## Types and Behavior
 
-The read manager provides the view file tool for the agent session and omits the search tool, obtaining declared read-only files, read-write files, and the guide file, when configured, from the session node configuration.
+The read manager provides the view file tool for the agent session, omits the search tool, and installs a *can read tool* that is an agent session tool validating inspection access for a file path when mcp mode is active, obtaining declared read-only files, read-write files, and the guide file, when configured, from the session node configuration.
 
 The view file tool is named `view_file`, accepting a file alias *path* parameter using the alias manager. Tool execution:
 
@@ -32,6 +32,16 @@ Executing the view file tool requires a bound file. When an unbound file is supp
 - Fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead, otherwise.
 
 View file tool responses for read-write files carry a suppression key matching the file's relative path, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
+
+The can read tool is named `can_read`, accepting a file alias *path parameter* using the alias manager. Tool execution:
+
+- Resolves to that grounding specification file alias if the relative path or qualified path addresses a module name or ends with `.py` and matches a declared read-only grounding specification ending with `.pyi`, when an unbound file is supplied.
+
+- Fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract, when an unbound file addresses a test file ending with `_test.py`.
+
+- Fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead, when an unbound file is supplied otherwise.
+
+- Records the read file in the edit manager and produces a successful response indicating that access is permitted, when a bound file is supplied or resolved.
 
 The *regex pattern parameter type* is a parameter type for regex patterns that converts a wire type string into a regex pattern.
 

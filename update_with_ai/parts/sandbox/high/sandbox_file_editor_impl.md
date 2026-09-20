@@ -13,7 +13,7 @@ Unchecked modifications to source code can introduce partial edits, exceed LLM w
 
 ## Types and Behavior
 
-The edit manager provides the replace file content tool for the agent session. Materializing templates retrieves configured templates from the node config, formats initial template content using the template formatter with session template parameters, checks whether target files exist in the filesystem at the host path formed from the alias manager workspace root and the read-write file workspace path, and writes formatted template content for missing files while preserving existing files.
+The edit manager provides the replace file content tool for the agent session, and installs a *can write tool* that is an agent session tool validating modification access for a read-write file when mcp mode is active. Materializing templates retrieves configured templates from the node config, formats initial template content using the template formatter with session template parameters, checks whether target files exist in the filesystem at the host path formed from the alias manager workspace root and the read-write file workspace path, and writes formatted template content for missing files while preserving existing files.
 
 The edit manager exposes whether workspace file modifications occurred during the session by comparing current workspace file content against initial content before editing, tracks a file update revision that increments whenever workspace files are updated, and exposes read-write files locked against modification, supporting locking and unlocking individual read-write files. The edit manager tracks the last read or edited file alias across the session, recording file reads from the file reader and file edits from editing tools.
 
@@ -52,3 +52,11 @@ The replace file content tool is named `replace_file_content`, accepting in sequ
 - Specifies a follow-up execution of the view file tool on the target file with reasoning text indicating that the target content was not found, when target content is not found anywhere in the file.
 
 - Writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred on success.
+
+The can write tool is named `can_write`, accepting a file alias *path parameter* using the alias manager. Tool execution:
+
+- Fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+
+- Fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
+
+- Records the file edit in the edit manager and produces a successful response indicating that modification is permitted, when an unlocked read-write file is supplied.

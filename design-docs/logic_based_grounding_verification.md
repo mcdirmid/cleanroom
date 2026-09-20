@@ -239,8 +239,11 @@ flowchart TD
     RuleCache --> Verifier
     
     Fail --> Diagnostic["8. Structured Grounding Diagnostic<br/>(Missing param, inaccessible tier, missing import)"]
-    Diagnostic --> HLSRepair["9. LLM Upstream HLS Repair<br/>Patches high/<name>.md"]
+    Diagnostic --> FaultRouter{"Fault Attribution"}
+    FaultRouter -- "Local Defect" --> HLSRepair["9a. Local HLS Repair<br/>Patches high/<name>.md"]
+    FaultRouter -- "Collaborator Defect" --> UpstreamRepair["9b. Upstream Escalation<br/>Patches high/<collaborator>.md"]
     HLSRepair --> HLS
+    UpstreamRepair --> HLS
 ```
 
 ### 6.1 Downstream Witness Generation (Code Generation Blueprint)
@@ -248,10 +251,11 @@ When the grounding verifier succeeds, it outputs the **derivation witness**—th
 
 This witness is included directly in the prompt given to the AI agent authoring the library code (`update_python_with_ai/guides/grounding_to_lib.md`). The agent is no longer forced to guess collaborator wiring; the verified proof provides the deterministic blueprint.
 
-### 6.2 Upstream HLS Self-Healing (Specification Repair)
+### 6.2 Upstream HLS Self-Healing & Fault Attribution
 Cleanroom's foundational rule states: **Grounding problems must be resolved upstream at the specification level (HLS first), never downstream in code.**
 
-When the grounding verifier detects an error:
+When the grounding verifier detects an error, it performs **Fault Attribution** to distinguish between local defects and collaborator omissions:
+
 1. **The Diagnostic**: The verifier generates an actionable, machine-readable diagnostic explaining the exact architectural gap:
    ```json
    {
@@ -274,27 +278,49 @@ When the grounding verifier detects an error:
      "reason": "RunnerLogger is a 'system' service and cannot access 'agent_session' context without an explicit operation parameter."
    }
    ```
-2. **LLM Specification Repair Prompt**:
-   The diagnostic is supplied to an LLM repair prompt with the current `high/<name>.md` and the HLS guide:
+
+2. **Fault Attribution: Local Defect vs. Upstream Collaborator Defect**:
+   - **Case A: Local HLS Defect**: The required capability or value is already provided by an imported collaborator or `_ext` spec, but the local specification omitted an import, dropped an operation parameter, or violated tier custody.
+     - *Action*: Dispatch an in-place repair prompt for the local HLS (`high/<name>.md`).
+   - **Case B: Collaborator Interface Defect (Upstream Escalation)**: The local component legitimately requires a capability $C$ that conceptually belongs to a collaborator component $B$, but $B$'s interface does not expose it.
+     - *Anti-Pattern Prevented*: Forcing local repair would compel Component $A$ to contort its prose, invent artificial workarounds, or drop a necessary requirement.
+     - *Action*: The verifier pauses $A$'s alignment and **escalates an upstream repair request** to collaborator $B$'s HLS (`high/<collaborator>.md`) and interface stub (`grounding/<collaborator>.pyi`). Once $B$ exposes capability $C$, alignment cascades back down to $A$.
+
+3. **LLM Specification Repair Prompt**:
+   For local repairs, the diagnostic is supplied to an LLM repair prompt with the current `high/<name>.md` and the HLS guide:
    > *"The specification has a grounding gap: `RunnerLogger` attempts to log `session_id`, but as a system service it has no custody of session state. Refactor the `## Types and Behavior` prose in `high/runner_logger.md` to accept `session_id` as an operation parameter, or declare how the identity is bound."*
-3. **Automated Re-Alignment Cascade**:
+
+4. **Automated Re-Alignment Cascade**:
    The LLM patches the HLS prose. Tooling automatically cascades the update:
    $$\text{HLS (`high/*.md`)} \xrightarrow{\text{align}} \text{Grounding (`grounding/*.pyi`)} \xrightarrow{\text{verify}} \text{Verifier Passes} \xrightarrow{\text{cascade}} \text{Lib \& Tests}$$
 
 This closes the loop: specifications become **self-healing** through automated grounding feedback.
 
-### 6.3 Semantic Gap Plugging & Rule Codification (The Neuro-Symbolic Bridge)
+### 6.3 Semantic Gap Plugging & The Closed-World Oracle Guardrail
 When the verifier encounters a domain-specific requirement that does not immediately unify with standard predicates (such as comparing temporal snapshots or repairing JSON syntax):
+
 1. **The LLM Semantic Oracle**: The verifier queries an LLM to explain the missing derivation path:
    > *"How does `EditManager` maintain custody of 'initial content' before editing?"*
-2. **LLM Explains & Formulates Rule**:
+
+2. **The Closed-World Guardrail (Preventing Self-Fulfilling Derivations)**:
+   A major failure mode of unconstrained LLMs is fabricating "self-fulfilling" derivations—inventing phantom helpers (e.g. *"Calls `PathHelper.to_disk()`"*) out of thin air to make the proof pass on paper.
+   - **The Strict Invariant**: The logic engine enforces a **Closed-World Constraint** on the Oracle. Every node and transition in the hypothesized derivation must strictly unify with:
+     1. An existing symbol or method in declared, imported `.pyi` interface stubs,
+     2. An in-scope parameter or declared internal state on `self`, or
+     3. A physical capability anchored to an imported `_ext` boundary.
+   - If the oracle claims that a capability requires a *new* collaborator operation, the system rejects the derivation as an ungrounded hallucination and diverts it to **Upstream Escalation (Section 6.2)**.
+
+3. **LLM Explains & Formulates Rule**:
+   Under the closed-world constraint, the LLM identifies how existing structures satisfy the requirement:
    > *"EditManager records `initial_content: Dict[FileAlias, str]` during materialization and evaluates current content against this store."*
-3. **Codification**: The explanation is codified into the component's static grounding facts:
+
+4. **Codification**: The explanation is codified into the component's static grounding facts:
    ```prolog
    maintains_state("EditManager", "initial_content", "Dict[FileAlias, str]").
    derives_comparison("workspace_files_modified", "current_content", "initial_content").
    ```
-4. **Permanent Regression Defense**: Once codified, this derivation is deterministic. Future verification runs check the rule statically without re-querying the LLM.
+
+5. **Permanent Regression Defense**: Once codified, this derivation is deterministic. Future verification runs check the rule statically without re-querying the LLM.
 
 ---
 

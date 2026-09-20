@@ -8,6 +8,7 @@ from typing import Any, Mapping, Optional, Set, Tuple
 
 from update_with_ai.parts.dag.lib.dag_storage import Node
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.agent.lib.agent_file_alias import (
     AliasManager,
@@ -32,6 +33,7 @@ from update_with_ai.parts.sandbox.lib.sandbox_file_reader import (
 from update_with_ai.parts.sandbox.lib.sandbox_file_reader_impl import (
     ReadManager as ReadManagerImpl,
     ViewFileTool as ViewFileToolImpl,
+    CanReadTool,
     RegexPatternParameterType as RegexPatternParameterTypeImpl,
     SearchTool as SearchToolImpl,
     __initialize__,
@@ -85,6 +87,13 @@ class MockBooleanConverter:
 
     def convert(self, wire_value: Any) -> bool:
         return bool(wire_value)
+
+
+class MockAgentConfig:
+    tier = agent_session
+
+    def __init__(self, is_mcp_mode: bool = False) -> None:
+        self.is_mcp_mode = is_mcp_mode
 
 
 def _make_directory_path(path: str) -> DirectoryPath:
@@ -222,6 +231,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         self.alias_mgr = MockAliasManager(self.test_dir)
         self.template_formatter = MockTemplateFormatter()
         self.edit_mgr = MockEditManager()
+        self.agent_cfg = MockAgentConfig(is_mcp_mode=False)
         self.node_cfg = MockNodeConfig(
             ro_files={self.ro_file, self.ro_py_file, self.ro_pyi_file, self.ro_md_file},
             rw_files={self.rw_file},
@@ -247,6 +257,9 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         self.registry.register_instance(
             self.edit_mgr, keys=[EditManager], tier=agent_session
         )
+        self.registry.register_instance(
+            self.agent_cfg, keys=[AgentConfig], tier=agent_session
+        )
 
     def tearDown(self) -> None:
         shutil.rmtree(self.test_dir, ignore_errors=True)
@@ -262,13 +275,22 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         """CUJ: ReadManager installs tools and exposes declared files from NodeConfig."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             read_mgr = scope.get_singleton(ReadManager)
-            # Requirement: The read manager unconditionally installs the view file tool into the tool manager and never installs the search tool.
+            # Requirement: The read manager unconditionally installs the view file tool into the tool manager, installs the can read tool when mcp mode is active, and never installs the search tool.
             # Requirement: [ReadManager] The read manager installs the view file tool and search tool.
             tool_names = {t.name for t in self.tool_mgr.installed_tools}
             # Requirement: The view file tool is named `view_file`.
             self.assertIn("view_file", tool_names)
             # Requirement: The search tool is named `search_files`.
             self.assertNotIn("search_files", tool_names)
+            self.assertNotIn("can_read", tool_names)
+
+            # When mcp mode is active, the can read tool is installed
+            self.agent_cfg.is_mcp_mode = True
+            scope.get_singleton(ReadManagerImpl).initialize()
+            tool_names_mcp = {t.name for t in self.tool_mgr.installed_tools}
+            # Requirement: The read manager unconditionally installs the view file tool into the tool manager, installs the can read tool when mcp mode is active, and never installs the search tool.
+            # Requirement: The can read tool is named `can_read`.
+            self.assertIn("can_read", tool_names_mcp)
 
             # Requirement: The read manager exposes declared read-only files, read-write files, and optional guide file obtained from the node config.
             # Requirement: [ReadManager] The read manager exposes the session's set of read-only files.
@@ -496,6 +518,79 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertFalse(resp.is_failed)
             self.assertEqual(self.edit_mgr.last_read_or_edited_file, self.rw_file)
 
+    def test_can_read_tool_execution(self) -> None:
+        """CUJ: CanReadTool validates workspace file inspection access and alias resolution."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            can_read = scope.get_singleton(CanReadTool)
+            # Requirement: The can read tool is named `can_read`.
+            self.assertEqual(can_read.name, "can_read")
+            self.assertIsInstance(can_read.description, str)
+            self.assertEqual(can_read.parameters, {can_read.path_parameter})
+            # Requirement: The can read tool path parameter uses the alias manager to convert a file alias.
+            self.assertIs(can_read.path_parameter.parameter_converter, self.alias_mgr)
+
+            # 1. Successful bound file validation records file read
+            bindings_ro = ActualParameterBindings(
+                bindings={(can_read.path_parameter, self.ro_file)}
+            )
+            # Requirement: When a bound file is supplied or resolved, tool execution records the read file in the edit manager and produces a successful response indicating that access is permitted.
+            resp_ro = can_read.execute_tool(bindings_ro)
+            self.assertFalse(resp_ro.is_failed)
+            self.assertIn("Access permitted", resp_ro.content)
+            self.assertEqual(self.edit_mgr.last_read_or_edited_file, self.ro_file)
+
+            # 2. Step-mode guide file rejection
+            bindings_guide = ActualParameterBindings(
+                bindings={(can_read.path_parameter, self.guide_unbound)}
+            )
+            # Requirement: When an unbound file is supplied, tool execution fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead, otherwise.
+            resp_guide = can_read.execute_tool(bindings_guide)
+            self.assertTrue(resp_guide.is_failed)
+            self.assertIn("advance", resp_guide.content)
+
+            # 3. Transparent resolution from .py to .pyi
+            # Requirement: When an unbound file is supplied, tool execution resolves to that grounding specification file alias if the relative path or qualified path addresses a module name or ends with `.py` and matches a declared read-only grounding specification ending with `.pyi`.
+            resp_py = can_read.execute_tool(
+                ActualParameterBindings(
+                    bindings={
+                        (can_read.path_parameter, UnboundFile(relative_path="stub.py"))
+                    }
+                )
+            )
+            self.assertFalse(resp_py.is_failed)
+            self.assertEqual(self.edit_mgr.last_read_or_edited_file, self.ro_pyi_file)
+
+            # 4. Cleanroom blindness: _test.py rejection
+            # Requirement: When an unbound file is supplied, tool execution fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract if the unbound file addresses a test file ending with `_test.py`.
+            resp_test = can_read.execute_tool(
+                ActualParameterBindings(
+                    bindings={
+                        (
+                            can_read.path_parameter,
+                            UnboundFile(relative_path="my_target_test.py"),
+                        )
+                    }
+                )
+            )
+            self.assertTrue(resp_test.is_failed)
+            self.assertIn("Test files are not inspectable by design", resp_test.content)
+
+            # 5. Undeclared file rejection
+            # Requirement: When an unbound file is supplied, tool execution fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead, otherwise.
+            resp_unknown = can_read.execute_tool(
+                ActualParameterBindings(
+                    bindings={
+                        (
+                            can_read.path_parameter,
+                            UnboundFile(relative_path="unknown.txt"),
+                        )
+                    }
+                )
+            )
+            self.assertTrue(resp_unknown.is_failed)
+            self.assertIn("Available files:", resp_unknown.content)
+            self.assertEqual(resp_unknown.reminder, "Only declared files can be inspected.")
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -503,4 +598,3 @@ if __name__ == "__main__":
 # Untested requirements:
 # - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 # - [Tool] When a parameter is required, an argument must be supplied for tool execution.
-# - When an unbound file is supplied, tool execution fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead, otherwise.

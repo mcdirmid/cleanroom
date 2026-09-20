@@ -28,6 +28,7 @@ from update_with_ai.parts.sandbox.lib.sandbox_file_editor import (
     ReplaceFileContentTool,
 )
 from update_with_ai.parts.sandbox.lib.sandbox_file_editor_impl import (
+    CanWriteTool,
     EditManager as EditManagerImpl,
     ReplaceFileContentTool as ReplaceFileContentToolImpl,
     __initialize__,
@@ -98,8 +99,10 @@ class MockAgentConfig:
     def __init__(
         self,
         edit_delta_output: bool = True,
+        is_mcp_mode: bool = False,
     ) -> None:
         self.edit_delta_output = edit_delta_output
+        self.is_mcp_mode = is_mcp_mode
 
 
 def _make_directory_path(path: str) -> DirectoryPath:
@@ -251,11 +254,20 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         """CUJ: EditManager installs tools and materializes missing templates without overwriting existing files."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             edit_mgr = scope.get_singleton(EditManager)
-            # Requirement: The edit manager unconditionally installs the replace file content tool into the tool manager.
+            # Requirement: The edit manager unconditionally installs the replace file content tool into the tool manager, and installs the can write tool when mcp mode is active.
             # Requirement: [EditManager] The edit manager installs the replace file content tool.
             tool_names = {t.name for t in self.tool_mgr.installed_tools}
             # Requirement: The replace file content tool is named `replace_file_content`.
             self.assertIn("replace_file_content", tool_names)
+            self.assertNotIn("can_write", tool_names)
+
+            # When mcp mode is active, can_write is installed
+            self.agent_cfg.is_mcp_mode = True
+            scope.get_singleton(EditManagerImpl).initialize()
+            tool_names_mcp = {t.name for t in self.tool_mgr.installed_tools}
+            # Requirement: The edit manager unconditionally installs the replace file content tool into the tool manager, and installs the can write tool when mcp mode is active.
+            # Requirement: The can write tool is named `can_write`.
+            self.assertIn("can_write", tool_names_mcp)
 
             self.assertFalse(edit_mgr.has_modifications)
 
@@ -949,6 +961,58 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 resp_rw.content,
             )
             self.assertEqual(edit_mgr.last_read_or_edited_file, self.rw_file)
+
+    def test_can_write_tool_execution(self) -> None:
+        """CUJ: CanWriteTool validates modification access for read-write files and prevents modification of locked files."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            can_write = scope.get_singleton(CanWriteTool)
+            edit_mgr = scope.get_singleton(EditManager)
+            # Requirement: The can write tool is named `can_write`.
+            self.assertEqual(can_write.name, "can_write")
+            self.assertIsInstance(can_write.description, str)
+            self.assertEqual(can_write.parameters, {can_write.path_parameter})
+            # Requirement: The can write tool path parameter uses the alias manager to convert a file alias.
+            self.assertIs(
+                can_write.path_parameter.parameter_converter, self.alias_mgr
+            )
+
+            # 1. Non-read-write file fails
+            b_ro = ActualParameterBindings(
+                bindings={(can_write.path_parameter, self.ro_file)}
+            )
+            # Requirement: Tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+            resp_ro = can_write.execute_tool(b_ro)
+            self.assertTrue(resp_ro.is_failed)
+            self.assertIn("is not a declared read-write file", resp_ro.content)
+            self.assertEqual(
+                resp_ro.reminder, "Only declared read-write files can be modified."
+            )
+
+            # 2. Unlocked read-write file succeeds and records edit
+            b_rw = ActualParameterBindings(
+                bindings={(can_write.path_parameter, self.rw_file)}
+            )
+            # Requirement: When an unlocked read-write file is supplied, tool execution records the file edit in the edit manager and produces a successful response indicating that modification is permitted.
+            resp_rw = can_write.execute_tool(b_rw)
+            self.assertFalse(resp_rw.is_failed)
+            self.assertIn("Modification permitted", resp_rw.content)
+            self.assertEqual(edit_mgr.last_read_or_edited_file, self.rw_file)
+
+            # 3. Locked file fails
+            edit_mgr.lock_file(self.rw_file)
+            # Requirement: Tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
+            resp_locked = can_write.execute_tool(b_rw)
+            self.assertTrue(resp_locked.is_failed)
+            self.assertIn("locked against further modification", resp_locked.content)
+            self.assertEqual(
+                resp_locked.reminder,
+                "Files that have been the target of a submit, fail, or blame cannot be modified.",
+            )
+
+            # 4. Unlocking permits modification again
+            edit_mgr.unlock_file(self.rw_file)
+            resp_unlocked = can_write.execute_tool(b_rw)
+            self.assertFalse(resp_unlocked.is_failed)
 
 
 if __name__ == "__main__":
