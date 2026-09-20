@@ -21,6 +21,7 @@ FRESH_REQUIREMENTS:
 - The run controller installs a fail tool that terminates the run in failure.
 - The run controller installs a check file tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
 - The run controller installs a blame tool when blame targets are configured, attributing task failure to an upstream dependency node.
+- The run controller installs a get work tool that retrieves active dirty nodes, materializes startup templates, and delivers the session task prompt.
 """
 
     @property
@@ -318,6 +319,64 @@ Parameter identifying the session file path to check
         """
 PURPOSE:
 Parameter identifying the session file path to check as an alias of path
+"""
+        ...
+
+    @property
+    @override
+    def name(self) -> str:
+        """
+PURPOSE:
+Established that each tool has a name which the agent uses to execute the tool
+"""
+        ...
+
+    @property
+    @override
+    def description(self) -> str:
+        """
+PURPOSE:
+Established that each tool has a description which informs the agent why and when to use the tool
+"""
+        ...
+
+    @property
+    @override
+    def parameters(self) -> Set[tool_provider.Parameter]:
+        """
+PURPOSE:
+Established that each tool defines input parameters accepted for its invocation
+"""
+        ...
+
+    @operation
+    @override
+    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
+        """
+PURPOSE:
+Executed with a set of actual parameter bindings to produce a response
+
+INHERITED_REQUIREMENTS:
+- [Tool] When a parameter is required, an argument must be supplied for tool execution.
+- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
+"""
+        ...
+
+@singleton_type('agent_session')
+class GetWorkTool(tool_provider.Tool, Protocol):
+    """
+PURPOSE:
+Defined as a tool that retrieves active dirty nodes, materializes startup templates, and delivers the session task prompt
+
+INHERITED_ASSUMPTIONS:
+- [Tool] All parameters of a tool have unique names.
+"""
+
+    @property
+    def max_batch_size(self) -> tool_provider.Parameter:
+        """
+PURPOSE:
+Parameter specifying the maximum number of dirty nodes to process together
 """
         ...
 

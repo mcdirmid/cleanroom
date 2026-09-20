@@ -53,6 +53,8 @@ class RoleConfig(Protocol):
     @property
     def version(self) -> int: ...
 
+    def set_nodes(self, nodes: Sequence[dag_storage.Node]) -> None: ...
+
 
 class NodeConfig(Protocol):
     @property

@@ -1,3 +1,5 @@
+# Requirements specified in loop_node_cleaner_impl.pyi
+
 from typing import Optional, Sequence, Set
 from . import loop_conversation
 from . import loop_driver
@@ -7,7 +9,6 @@ from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.agent.lib import agent_storage
 from update_with_ai.parts.dag.lib import dag_storage
 from update_with_ai.parts.sandbox.lib import sandbox
-from update_with_ai.parts.sandbox.lib import template_format
 from support.lib.lifecycle import (
     LifecycleRegistry,
     LifecycleScope,
@@ -35,8 +36,6 @@ class RoleConfig(agent_node_config.RoleConfig, Singleton):
     @property
     def nodes(self) -> Sequence[dag_storage.Node]:
         # Requirement: [RoleConfig] The role config provides the sequence of nodes currently being cleaned in the agent session.
-        if not self._nodes:
-            raise RuntimeError("RoleConfig has not been configured with nodes.")
         return self._nodes
 
     @property
@@ -44,10 +43,15 @@ class RoleConfig(agent_node_config.RoleConfig, Singleton):
         # Requirement: [RoleConfig] The role config provides an execution version that increments whenever the cleaned nodes change.
         return self._version
 
+    def set_role(self, role: str) -> None:
+        # Requirement: [RoleConfig] The role config can set role to configure the role of the agent session.
+        self._role = role
+
     def set_nodes(self, nodes: Sequence[dag_storage.Node]) -> None:
-        # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes, the nodes currently being cleaned, and an incremented version to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
+        # Requirement: [RoleConfig] The role config can set nodes to configure the nodes currently being cleaned in the agent session and increment the execution version.
         self._nodes = tuple(nodes)
-        self._role = nodes[0].role_address if nodes else ""
+        if nodes:
+            self._role = nodes[0].role_address
         self._version += 1
 
 
@@ -76,131 +80,25 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
                 return {dag_storage.Change()}
             return set()
 
+        role = dirty_nodes[0].role_address if dirty_nodes else ""
+
         def setup_session(session: LifecycleScope) -> None:
-            # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes, the nodes currently being cleaned, and an incremented version to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
+            # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
             role_config = session.get_singleton(RoleConfig)
-            role_config.set_nodes(dirty_nodes)
+            role_config.set_role(role)
 
         def _execute_session() -> Set[dag_storage.Message]:
-            # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the cleaned nodes present the nodes currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
+            # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
             with enter_phase(agent_session, setup=setup_session) as session:
-                # Requirement: Within the agent session phase, missing read-write files materialize from sandbox startup templates.
-                sb = session.get_singleton(sandbox.Sandbox)
-                sb.materialize_startup_templates()
-
                 hist = session.get_singleton(loop_conversation.Conversation)
-                n_cfg = session.get_singleton(agent_node_config.NodeConfig)
-                formatter = session.get_singleton(template_format.TemplateFormatter)
 
-                # Requirement: The conversation is initialized with startup context comprising the node definition and task prompt retrieved from graph storage for dirty nodes, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox formatted with synthetic tool requests and captured responses.
-                # Requirement: The task prompt is formatted using the template formatter.
-                guide_file_alias: Optional[str] = None
-                if n_cfg.guide_file is not None:
-                    guide_file_alias = n_cfg.guide_file.relative_path
-                else:
-                    for ro in n_cfg.read_only_files:
-                        if ro.relative_path.endswith(".md"):
-                            guide_file_alias = ro.relative_path
-                            break
-
-                node_items: list[dict[str, str]] = []
-                for n in dirty_nodes:
-                    defn = storage.get_node_definition(n)
-                    prompt_str = (
-                        str(defn.task_prompt)
-                        if defn is not None and defn.task_prompt
-                        else ""
-                    )
-                    alias_str = n_cfg.src_file_alias_by_node.get(n, "")
-                    node_items.append(
-                        {"src_alias": alias_str, "task_prompt": prompt_str}
-                    )
-
-                is_multi_node = len(dirty_nodes) > 1
-
-                guide_instruction = ""
-                if guide_file_alias is not None:
-                    if n_cfg.is_step_mode:
-                        # Requirement: Task prompt instructions for a guided node include directing the agent to call advance without arguments to view each guide step and omit a change summary until all guide steps are complete when guide step mode is active.
-                        guide_instruction = "Call advance() without arguments to view each guide step. Do not supply change_summary until all guide steps are complete."
-                    else:
-                        # Requirement: Task prompt instructions for a guided node include identifying the guide file by its file alias and directing the agent to call the submit tool with a change summary describing modifications when complete, or call submit without arguments if no workspace files were modified, when guide step mode is inactive.
-                        guide_instruction = f"The guide is in file {guide_file_alias}. Call submit with a change summary describing modifications when complete, or call submit without arguments if no workspace files were modified. Inspect {guide_file_alias} using view_file for all implementation constraints, contracts, and requirements."
-
-                # Requirement: When cleaning multiple nodes, the task prompt enumerates each target file identified by its file alias alongside its task prompt.
-                # Requirement: The task prompt is formatted using the template formatter.
-                prompt_template = (
-                    "<!-- if: is_multi_node -->\n"
-                    "Process the following files:\n"
-                    "<!-- for: node in nodes -->\n"
-                    "- `<node.src_alias>`: <node.task_prompt>\n"
-                    "<!-- endfor -->\n"
-                    "\n"
-                    "Call submit(target='<file_name>') to submit each file individually.\n"
-                    "<!-- endif -->\n"
-                    "<!-- if: not_multi_node -->\n"
-                    "<task_prompt>\n"
-                    "<!-- endif -->\n"
-                    "<!-- if: has_guide -->\n"
-                    "\n"
-                    "<guide_instruction>\n"
-                    "<!-- endif -->"
-                )
-                single_prompt = node_items[0]["task_prompt"] if node_items else ""
-                rendered_prompt = formatter.format_template(
-                    prompt_template,
-                    {
-                        "is_multi_node": is_multi_node,
-                        "not_multi_node": not is_multi_node,
-                        "nodes": node_items,
-                        "task_prompt": single_prompt,
-                        "has_guide": bool(guide_instruction),
-                        "guide_instruction": guide_instruction,
-                    },
-                ).strip()
-
+                # Requirement: The conversation is initialized with instructions directing the agent to call the get work tool.
                 hist.append_message(
-                    loop_conversation.Message(role="user", content=rendered_prompt)
+                    loop_conversation.Message(
+                        role="user",
+                        content="Call get_work to retrieve your work.",
+                    )
                 )
-
-                # Requirement: The conversation is initialized with startup context comprising the node definition and task prompt retrieved from graph storage for dirty nodes, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox formatted with synthetic tool requests and captured responses.
-                # Requirement: Incoming feedback and change messages are formatted per target node identified by its file alias, prefaced with directives to fix read-write target files based on the feedback.
-                for n in dirty_nodes:
-                    target_name = n_cfg.src_file_alias_by_node.get(n) or ", ".join(
-                        sorted(f.relative_path for f in n_cfg.read_write_files)
-                    )
-                    messages_sorted = sorted(
-                        storage.get_messages(n),
-                        key=lambda m: (m.content, type(m).__name__),
-                    )
-                    for msg in messages_sorted:
-                        if isinstance(msg, dag_storage.Feedback):
-                            body = f"Fix {target_name} based on feedback: {msg.content}"
-                        else:
-                            prefix = f"Incoming {type(msg).__name__.lower()}"
-                            if is_multi_node:
-                                body = (
-                                    f"{prefix} for {target_name}: {msg.content}"
-                                    if msg.content
-                                    else f"{prefix} for {target_name}"
-                                )
-                            else:
-                                body = (
-                                    f"{prefix}: {msg.content}"
-                                    if msg.content
-                                    else prefix
-                                )
-                        hist.append_message(
-                            loop_conversation.Message(role="user", content=body)
-                        )
-
-                for i, startup_exec in enumerate(sb.get_startup_tool_executions()):
-                    hist.append_tool_response(
-                        response=startup_exec.response,
-                        tool_name=startup_exec.tool_name,
-                        tool_call_id=f"startup_{i}_{startup_exec.tool_name}",
-                        wire_parameter_bindings=startup_exec.wire_parameter_bindings,
-                    )
 
                 runner = session.get_singleton(loop_driver.LoopDriver)
                 outcome = runner.run()
@@ -264,13 +162,15 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
                             content=blame_exp or content, target=blamed_node
                         )
                     )
-                # Requirement: Resolving dirty nodes produces change messages for downstream dependent nodes when the outcome signals successful advancement with workspace file modifications, and no change messages or change summaries when no workspace files were modified.
-                elif sb.has_modifications:
-                    messages.add(dag_storage.Change())
+                else:
+                    sb = session.get_singleton(sandbox.Sandbox)
+                    # Requirement: Resolving dirty nodes produces change messages for downstream dependent nodes when the outcome signals successful advancement with workspace file modifications, and no change messages or change summaries when no workspace files were modified.
+                    if sb.has_modifications:
+                        messages.add(dag_storage.Change())
 
                 return messages
 
-        # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the cleaned nodes present the nodes currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
+        # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
         for attempt in range(2):
             try:
                 return _execute_session()

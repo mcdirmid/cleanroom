@@ -70,3 +70,14 @@ FRESH_REQUIREMENTS:
 - The agent config provides whether editing tools should produce delta output.
 """
         ...
+
+    @property
+    def is_mcp_mode(self) -> bool:
+        """
+PURPOSE:
+Indicates whether the agent should operate in mcp mode
+
+FRESH_REQUIREMENTS:
+- The agent config provides whether the agent should operate in mcp mode.
+"""
+        ...

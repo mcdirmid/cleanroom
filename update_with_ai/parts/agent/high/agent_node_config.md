@@ -20,7 +20,7 @@ A *verification check* is a polymorphic service that can *verify* session criter
 
 A *per node info* is data describing configuration parameters for a node, providing its declared read-only files, read-write files, templates, template parameters, guide, guide file, whether the node allows step mode, blame targets, verification checks, source file alias, verification success message, and feedback.
 
-The *role config* is an agent session service that provides the *role* of the session, the sequence of *nodes* currently being cleaned, and an execution *version* that increments whenever the cleaned nodes change.
+The *role config* is an agent session service that provides the *role* of the session, the sequence of *nodes* currently being cleaned, and an execution *version* that increments whenever the cleaned nodes change. The role config can *set nodes* to configure the nodes currently being cleaned in the agent session and increment the execution version.
 
 The *node config* is an agent session service that caches per node info for active nodes from role config, unloading cached per node info when nodes are no longer being cleaned. The node config loads per node info for each cleaned node to dynamically provide:
 

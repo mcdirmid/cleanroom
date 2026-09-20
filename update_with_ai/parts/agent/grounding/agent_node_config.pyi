@@ -245,6 +245,17 @@ FRESH_REQUIREMENTS:
 """
         ...
 
+    @operation
+    def set_nodes(self, nodes: Sequence[dag_storage.Node]) -> None:
+        """
+PURPOSE:
+Configures the sequence of nodes currently being cleaned and increments the execution version
+
+FRESH_REQUIREMENTS:
+- The role config can set nodes to configure the nodes currently being cleaned in the agent session and increment the execution version.
+"""
+        ...
+
 @singleton_type('agent_session')
 class NodeConfig(Protocol):
     """

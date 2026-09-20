@@ -316,7 +316,7 @@ INHERITANCE:
 - tool_provider.ParameterConverter: Implements parameter converter for file alias actual type
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, AliasManager resolves accessible workspace files for get_singleton(agent_node_config.RoleConfig).nodes into relative paths and maintains host path mappings.
+- As an agent_session singleton, AliasManager resolves accessible workspace files for get_singleton(agent_node_config.RoleConfig).nodes into relative paths and maintains host path mappings, checking the role config version to update file aliases and path masking.
 """
 
     @property

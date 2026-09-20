@@ -263,13 +263,37 @@ class ToolManager(Protocol):
 
 ParameterConverter: Type[Any] = ParameterType
 IdentityParameterConverter: Type[Any] = IdentityParameterType
-StringParameterType: Type[Any] = IdentityParameterType
-StringParameterConverter: Type[Any] = IdentityParameterType
-IntegerParameterType: Type[Any] = IdentityParameterType
-IntegerParameterConverter: Type[Any] = IdentityParameterType
-BooleanParameterType: Type[Any] = IdentityParameterType
-BooleanParameterConverter: Type[Any] = IdentityParameterType
-FloatParameterType: Type[Any] = IdentityParameterType
-FloatParameterConverter: Type[Any] = IdentityParameterType
+
+
+class StringParameterConverter(IdentityParameterType[str]):
+    def __init__(self) -> None:
+        super().__init__(str)
+
+
+StringParameterType: Type[Any] = StringParameterConverter
+
+
+class IntegerParameterConverter(IdentityParameterType[int]):
+    def __init__(self) -> None:
+        super().__init__(int)
+
+
+IntegerParameterType: Type[Any] = IntegerParameterConverter
+
+
+class BooleanParameterConverter(IdentityParameterType[bool]):
+    def __init__(self) -> None:
+        super().__init__(bool)
+
+
+BooleanParameterType: Type[Any] = BooleanParameterConverter
+
+
+class FloatParameterConverter(IdentityParameterType[float]):
+    def __init__(self) -> None:
+        super().__init__(float)
+
+
+FloatParameterType: Type[Any] = FloatParameterConverter
 ListParameterConverter: Type[Any] = ListParameterType
 DictionaryParameterConverter: Type[Any] = DictionaryParameterType

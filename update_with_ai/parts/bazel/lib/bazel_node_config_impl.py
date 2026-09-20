@@ -665,6 +665,7 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
         self._short_name_to_aliases: Dict[str, List[agent_file_alias.BoundFile]] = {}
         self._paths: Dict[str, str] = {}
         self._masking_patterns: List[Tuple[re.Pattern[str], str]] = []
+        self._cached_version: Optional[int] = None
         env_root = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
         root_path = env_root if env_root and os.path.isabs(env_root) else os.getcwd()
         self._workspace_root: file_paths.WorkspaceRoot = _make_host_path(
@@ -672,11 +673,22 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
         )
 
     def initialize(self) -> None:
+        self._sync_cache()
+
+    def _sync_cache(self) -> None:
         try:
-            get_singleton(agent_node_config.RoleConfig)
+            role_cfg = get_singleton(agent_node_config.RoleConfig)
             n_cfg = get_singleton(agent_node_config.NodeConfig)
         except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
             return
+
+        if role_cfg.version == self._cached_version:
+            return
+
+        self._aliases.clear()
+        self._paths.clear()
+        self._short_name_to_aliases.clear()
+        self._masking_patterns.clear()
 
         patterns: List[Tuple[re.Pattern[str], str]] = []
         declared_files = n_cfg.read_write_files | n_cfg.read_only_files
@@ -711,6 +723,8 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
         if n_cfg.guide_file is not None:
             self._aliases[n_cfg.guide_file.relative_path] = n_cfg.guide_file
 
+        self._cached_version = role_cfg.version
+
     @property
     def actual_type(self) -> Type[agent_file_alias.FileAlias]:
         return agent_file_alias.FileAlias
@@ -727,6 +741,7 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
 
     def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
         # Requirement: Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
+        self._sync_cache()
         if wire_value in self._aliases:
             return self._aliases[wire_value]
         matches = self._short_name_to_aliases.get(wire_value)
@@ -736,6 +751,7 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
 
     def sanitize_text(self, text: str) -> str:
         # Requirement: The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its relative path, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking, stripping workspace root path prefixes, and stripping execution root path prefixes.
+        self._sync_cache()
         res = text
         for pattern, rel_path in self._masking_patterns:
             res = pattern.sub(rel_path, res)

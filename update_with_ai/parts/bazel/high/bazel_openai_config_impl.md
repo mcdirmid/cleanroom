@@ -17,36 +17,4 @@ The openai config, agent config, and dag config resolve the target configuration
 
 The openai config, agent config, and dag config load execution parameters and authentication credentials for language model agent runs from the target module.
 
-The openai config provides:
-
-- The model name designating the target model.
-
-- The base url designating the remote model API endpoint address.
-
-- The api key providing authentication credentials from the designated environment variable, or ambient environment credentials.
-
-- The timeout specifying the maximum request duration in seconds.
-
-- The temperature specifying the sampling temperature for model requests.
-
-- The max tokens bound resolved from the target module when token generation is constrained.
-
-The agent config provides:
-
-- The conversation limit bounding interaction turns.
-
-- Whether the agent should use step mode to communicate a guide to the agent progressively.
-
-- Whether the agent should perform startup reads to inspect declared files at session start.
-
-- Whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
-
-- Whether editing tools should produce delta output.
-
-The dag config provides:
-
-- The node visit limit bounding node visits during graph cleaning.
-
-- The batch size bounding dirty nodes processed together in an agent session.
-
 When the target module is absent, execution parameters and authentication credentials fall back to ambient environment variables and standard defaults.

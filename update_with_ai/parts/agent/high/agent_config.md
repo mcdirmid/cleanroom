@@ -25,3 +25,5 @@ The agent config provides:
 - Whether the agent should perform *startup reads* to inspect declared files at session start.
 
 - Whether editing tools should produce *delta output*.
+
+- Whether the agent should operate in *mcp mode*.

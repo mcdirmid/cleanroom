@@ -55,3 +55,8 @@ class CheckFileTool(tool_provider.Tool, Protocol):
 
 RunTestsTool = CheckFileTool
 
+
+class GetWorkTool(tool_provider.Tool, Protocol):
+    @property
+    def max_batch_size(self) -> tool_provider.Parameter: ...
+

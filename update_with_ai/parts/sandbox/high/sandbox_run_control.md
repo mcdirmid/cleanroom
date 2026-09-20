@@ -29,3 +29,5 @@ The run controller:
 - Installs a *check file tool* that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
 
 - Installs a *blame tool* when blame targets are configured, attributing task failure to an upstream dependency node.
+
+- Installs a *get work tool* that retrieves active dirty nodes, materializes startup templates, and delivers the session task prompt.

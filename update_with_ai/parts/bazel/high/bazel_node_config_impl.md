@@ -47,7 +47,7 @@ The node config dynamically provides:
 
 - The session per node info by node mapping each active node to its per node info.
 
-The alias manager maintains virtual file addressing and path masking for the active session, retrieving the active nodes from the role config.
+The alias manager maintains virtual file addressing and path masking for the active session, checking the role config version to update file aliases and path masking for the active nodes retrieved from the role config.
 
 The alias manager:
 

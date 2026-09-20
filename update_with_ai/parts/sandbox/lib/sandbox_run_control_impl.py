@@ -1,9 +1,12 @@
 # Requirements specified in sandbox_run_control_impl.pyi
 import os
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from update_with_ai.parts.agent.lib import agent_config
 from update_with_ai.parts.agent.lib import agent_file_alias
 from update_with_ai.parts.agent.lib import agent_node_config
 from update_with_ai.parts.dag.lib import dag_storage
+from update_with_ai.parts.dag.lib import dag_subgraph
+from . import sandbox
 from . import sandbox_file_editor
 from . import sandbox_guide_delivery
 from . import sandbox_run_control
@@ -11,6 +14,7 @@ from . import template_format
 from . import tool_provider
 from support.lib.lifecycle import (
     LifecycleRegistry,
+    LifecycleResolutionError,
     Singleton,
     get_default_registry,
     get_singleton,
@@ -63,13 +67,20 @@ class RunController(sandbox_run_control.RunController, Singleton):
                         self._node_to_alias[node] = f.relative_path
                         self._node_states[node] = "OPEN"
         if not self._nodes:
-            dummy_node = dag_storage.Node(
-                unit_address="//session:target", role_address=""
-            )
-            self._nodes.append(dummy_node)
-            self._alias_to_node["target"] = dummy_node
-            self._node_to_alias[dummy_node] = "target"
-            self._node_states[dummy_node] = "OPEN"
+            try:
+                role_cfg = get_singleton(agent_node_config.RoleConfig)
+                has_role = bool(role_cfg.role)
+            except Exception:
+                has_role = False
+            if not has_role:
+                dummy_node = dag_storage.Node(
+                    unit_address="//session:target", role_address=""
+                )
+                self._nodes.append(dummy_node)
+                self._alias_to_node["target"] = dummy_node
+                self._node_to_alias[dummy_node] = "target"
+                self._node_states[dummy_node] = "OPEN"
+
 
     @property
     def nodes(self) -> Sequence[dag_storage.Node]:
@@ -148,9 +159,137 @@ class RunController(sandbox_run_control.RunController, Singleton):
                 ):
                     edit_mgr.lock_file(f)
 
+    def reset_nodes(self, nodes: Sequence[dag_storage.Node]) -> None:
+        self._nodes = list(nodes)
+        self._alias_to_node = {}
+        self._node_to_alias = {}
+        self._node_states = {}
+        self._cached_node_passed = {}
+        self._cached_node_diag = {}
+        self._cached_node_revision = {}
+        self._cached_passed = None
+        self._cached_diag = ""
+        self._cached_revision = None
+        cfg = get_singleton(agent_node_config.NodeConfig)
+        for n in self._nodes:
+            alias = cfg.src_file_alias_by_node.get(n, n.unit_address)
+            self._alias_to_node[alias] = n
+            self._node_to_alias[n] = alias
+            self._node_states[n] = "OPEN"
+        if not self._nodes:
+            self._ensure_nodes()
+        try:
+            tm = get_singleton(tool_provider.ToolManager)
+            if cfg.is_step_mode:
+                tm.install_tool(get_singleton(AdvanceTool))
+            if self.blame_targets or any(cfg.blame_targets_by_node.values()):
+                tm.install_tool(get_singleton(BlameTool))
+        except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+            pass
+
+    def format_task_prompt(self, nodes: Sequence[dag_storage.Node]) -> str:
+        n_cfg = get_singleton(agent_node_config.NodeConfig)
+        formatter = get_singleton(template_format.TemplateFormatter)
+        storage = get_singleton(dag_storage.DagStorage)
+
+        guide_file_alias: Optional[str] = None
+        if n_cfg.guide_file is not None:
+            guide_file_alias = n_cfg.guide_file.relative_path
+        else:
+            for ro in n_cfg.read_only_files:
+                if ro.relative_path.endswith(".md"):
+                    guide_file_alias = ro.relative_path
+                    break
+
+        node_items: list[dict[str, str]] = []
+        for n in nodes:
+            get_defn = getattr(storage, "get_node_definition", None)
+            defn = get_defn(n) if get_defn is not None else None
+            prompt_str = (
+                str(defn.task_prompt)
+                if defn is not None and getattr(defn, "task_prompt", None)
+                else ""
+            )
+            alias_str = n_cfg.src_file_alias_by_node.get(n, "")
+            node_items.append(
+                {"src_alias": alias_str, "task_prompt": prompt_str}
+            )
+
+        is_multi_node = len(nodes) > 1
+
+        guide_instruction = ""
+        if guide_file_alias is not None:
+            if n_cfg.is_step_mode:
+                guide_instruction = "Call advance() without arguments to view each guide step. Do not supply change_summary until all guide steps are complete."
+            else:
+                guide_instruction = f"The guide is in file {guide_file_alias}. Call submit with a change summary describing modifications when complete, or call submit without arguments if no workspace files were modified. Inspect {guide_file_alias} using view_file for all implementation constraints, contracts, and requirements."
+
+        prompt_template = (
+            "<!-- if: is_multi_node -->\n"
+            "Process the following files:\n"
+            "<!-- for: node in nodes -->\n"
+            "- `<node.src_alias>`: <node.task_prompt>\n"
+            "<!-- endfor -->\n"
+            "\n"
+            "Call submit(target='<file_name>') to submit each file individually.\n"
+            "<!-- endif -->\n"
+            "<!-- if: not_multi_node -->\n"
+            "<task_prompt>\n"
+            "<!-- endif -->\n"
+            "<!-- if: has_guide -->\n"
+            "\n"
+            "<guide_instruction>\n"
+            "<!-- endif -->"
+        )
+        single_prompt = node_items[0]["task_prompt"] if node_items else ""
+        rendered_prompt = formatter.format_template(
+            prompt_template,
+            {
+                "is_multi_node": is_multi_node,
+                "not_multi_node": not is_multi_node,
+                "nodes": node_items,
+                "task_prompt": single_prompt,
+                "has_guide": bool(guide_instruction),
+                "guide_instruction": guide_instruction,
+            },
+        ).strip()
+
+        message_parts: List[str] = [rendered_prompt]
+        for n in nodes:
+            target_name = (
+                n_cfg.src_file_alias_by_node.get(n)
+                or ", ".join(sorted(f.relative_path for f in n_cfg.read_write_files))
+                or self.get_alias_for_node(n)
+            )
+            messages_sorted = sorted(
+                storage.get_messages(n),
+                key=lambda m: (m.content, type(m).__name__),
+            )
+            for msg in messages_sorted:
+                if isinstance(msg, dag_storage.Feedback):
+                    body = f"Fix {target_name} based on feedback: {msg.content}"
+                else:
+                    prefix = f"Incoming {type(msg).__name__.lower()}"
+                    if is_multi_node:
+                        body = (
+                            f"{prefix} for {target_name}: {msg.content}"
+                            if msg.content
+                            else f"{prefix} for {target_name}"
+                        )
+                    else:
+                        body = (
+                            f"{prefix}: {msg.content}"
+                            if msg.content
+                            else prefix
+                        )
+                message_parts.append(body)
+
+        return "\n\n".join(message_parts).strip()
+
     def initialize(self) -> None:
-        # Requirement: The run controller unconditionally installs the submit tool, fail tool, and run tests tool for the agent session, installs the advance tool only when guide step mode is active, and obtains configured blame targets and verification checks from the node config, installing the blame tool only when blame targets are configured.
+        # Requirement: The run controller unconditionally installs the submit tool, fail tool, check file tool, and get work tool for the agent session, installs the advance tool only when guide step mode is active, and obtains configured blame targets and verification checks from the node config, installing the blame tool only when blame targets are configured.
         # Requirement: Verification checks exposed by the run controller include the session verification checks from node config.
+        # Requirement: Session targets are matched by alias, relative path, or unique filename.
         self._ensure_nodes()
         tm = get_singleton(tool_provider.ToolManager)
         cfg = get_singleton(agent_node_config.NodeConfig)
@@ -159,6 +298,7 @@ class RunController(sandbox_run_control.RunController, Singleton):
         tm.install_tool(get_singleton(SubmitTool))
         tm.install_tool(get_singleton(FailTool))
         tm.install_tool(get_singleton(CheckFileTool))
+        tm.install_tool(get_singleton(GetWorkTool))
         if self.blame_targets or any(cfg.blame_targets_by_node.values()):
             tm.install_tool(get_singleton(BlameTool))
 
@@ -614,7 +754,8 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
                 suppression_key="submit",
             )
 
-        # Requirement: Tool execution marks the target as submitted, locks the target read-write files in the edit manager against modification, and produces a terminating response indicating that the session completed successfully when all session targets are resolved, or produces a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
+        # Requirement: Tool execution marks the target as submitted, locks the target read-write files in the edit manager against modification, and produces a terminating response indicating that the session completed successfully when mcp mode is inactive and all session targets are resolved, produces a non-terminating response with a reminder to call the get work tool when mcp mode is active and all session targets are resolved, or produces a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
+        # Requirement: [SubmitTool] The finish tool, fail tool, and blame tool produce terminating responses when mcp mode is inactive, and produce non-terminating responses directing the agent to call the get work tool when mcp mode is active and all session targets are resolved.
         rc.set_node_state(target_node, "SUBMITTED")
         rc.lock_node_files(target_node)
         open_nodes = rc.open_nodes()
@@ -635,6 +776,25 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
             if summary_str
             else "Session completed successfully."
         )
+
+        is_mcp = False
+        try:
+            a_cfg = get_singleton(agent_config.AgentConfig)
+            is_mcp = a_cfg.is_mcp_mode
+        except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+            pass
+
+        if is_mcp:
+            mcp_reminder = "All session targets are resolved. Call get_work to process next tasks."
+            content = f"{msg}\n\n{mcp_reminder}".strip() if msg else mcp_reminder
+            return tool_provider.Response(
+                is_failed=False,
+                is_terminated=False,
+                content=content,
+                reminder=mcp_reminder,
+                suppression_key="submit",
+            )
+
         return tool_provider.Response(
             is_failed=False,
             is_terminated=True,
@@ -728,7 +888,8 @@ class FailTool(sandbox_run_control.FailTool, Singleton):
                 )
 
         target_alias = rc.get_alias_for_node(target_node)
-        # Requirement: Executing the fail tool marks the target as failed, locks the target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response carrying the explanation when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
+        # Requirement: Executing the fail tool marks the target as failed, locks the target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response carrying the explanation when mcp mode is inactive and no open targets remain, producing a non-terminating response with a reminder to call the get work tool when mcp mode is active and no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
+        # Requirement: [FailTool] The finish tool, fail tool, and blame tool produce terminating responses when mcp mode is inactive, and produce non-terminating responses directing the agent to call the get work tool when mcp mode is active and all session targets are resolved.
         rc.set_node_state(target_node, "FAILED")
         rc.lock_node_files(target_node)
         rc.block_dependents(target_node)
@@ -744,6 +905,22 @@ class FailTool(sandbox_run_control.FailTool, Singleton):
                 is_terminated=False,
                 content=content,
                 reminder=open_reminder,
+            )
+
+        is_mcp = False
+        try:
+            a_cfg = get_singleton(agent_config.AgentConfig)
+            is_mcp = a_cfg.is_mcp_mode
+        except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+            pass
+
+        if is_mcp:
+            mcp_reminder = "All session targets are resolved. Call get_work to process next tasks."
+            return tool_provider.Response(
+                is_failed=True,
+                is_terminated=False,
+                content=f"Failed: {exp}\n\n{mcp_reminder}",
+                reminder=mcp_reminder,
             )
 
         return tool_provider.Response(
@@ -967,7 +1144,8 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
                 reminder="Only upstream files configured as blame targets can be blamed.",
             )
 
-        # Requirement: On successful blame tool execution, the response marks the submitted target of the blame as resolved, locks the submitted target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response attributing defect feedback to the blame target owning node when no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
+        # Requirement: On successful blame tool execution, the response marks the submitted target of the blame as resolved, locks the submitted target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response attributing defect feedback to the blame target owning node when mcp mode is inactive and no open targets remain, producing a non-terminating response with a reminder to call the get work tool when mcp mode is active and no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
+        # Requirement: [BlameTool] The finish tool, fail tool, and blame tool produce terminating responses when mcp mode is inactive, and produce non-terminating responses directing the agent to call the get work tool when mcp mode is active and all session targets are resolved.
         target_name = getattr(
             matched_target, "relative_path", getattr(matched_target, "short_name", "")
         )
@@ -985,6 +1163,22 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
                 is_terminated=False,
                 content=content,
                 reminder=open_reminder,
+            )
+
+        is_mcp = False
+        try:
+            a_cfg = get_singleton(agent_config.AgentConfig)
+            is_mcp = a_cfg.is_mcp_mode
+        except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+            pass
+
+        if is_mcp:
+            mcp_reminder = "All session targets are resolved. Call get_work to process next tasks."
+            return tool_provider.Response(
+                is_failed=False,
+                is_terminated=False,
+                content=f"Blamed {target_name}: {exp}\n\n{mcp_reminder}",
+                reminder=mcp_reminder,
             )
 
         return tool_provider.Response(
@@ -1217,6 +1411,106 @@ class CheckFileTool(sandbox_run_control.CheckFileTool, Singleton):
         )
 
 
+class GetWorkTool(sandbox_run_control.GetWorkTool, Singleton):
+    tier = agent_session
+
+    def __init__(self) -> None:
+        pass
+
+    @property
+    def name(self) -> str:
+        # Requirement: The get work tool is named `get_work`, accepting an optional integer max batch size parameter.
+        return "get_work"
+
+    @property
+    def description(self) -> str:
+        return "Retrieves active dirty targets, materializes startup templates, and returns the session task prompt."
+
+    @property
+    def max_batch_size(self) -> tool_provider.Parameter:
+        # Requirement: The get work tool is named `get_work`, accepting an optional integer max batch size parameter.
+        int_conv = get_singleton(tool_provider.IntegerParameterConverter)
+        return tool_provider.Parameter(
+            name="max_batch_size",
+            description="Maximum number of dirty nodes to process together.",
+            parameter_converter=int_conv,
+            is_required=False,
+        )
+
+    @property
+    def parameters(self) -> Set[tool_provider.Parameter]:
+        return {self.max_batch_size}
+
+    def execute_tool(
+        self, actual_parameter_bindings: tool_provider.ActualParameterBindings
+    ) -> tool_provider.Response:
+        rc = get_singleton(RunController)
+        open_nodes = [
+            n for n in rc.open_nodes() if n.unit_address != "//session:target"
+        ]
+        if open_nodes:
+            # Requirement: Tool execution fails when open session targets remain, reminding the agent that open targets must be resolved before requesting new work.
+            open_targets = ", ".join(
+                f"`{rc.get_alias_for_node(n)}`" for n in open_nodes
+            )
+            return tool_provider.Response(
+                is_failed=True,
+                is_terminated=False,
+                content=f"Error: Open session targets remain: {open_targets}.",
+                reminder=f"Open session targets must be resolved before requesting new work: {open_targets}.",
+            )
+
+        # Requirement: When no open targets remain, executing the get work tool obtains dirty nodes from dag storage and dag subgraph, updating the active nodes and execution version on role config.
+        subgraph = get_singleton(dag_subgraph.DagSubgraph)
+        batch = list(subgraph.next_ready_batch())
+
+        role_cfg = get_singleton(agent_node_config.RoleConfig)
+        if role_cfg.role and any(n.role_address != role_cfg.role for n in batch):
+            batch = []
+
+        bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
+        raw_max = bindings_map.get("max_batch_size")
+        if raw_max is not None:
+            try:
+                max_b = int(raw_max)
+                if max_b > 0:
+                    batch = batch[:max_b]
+            except (ValueError, TypeError):
+                pass
+
+        # Requirement: If no dirty nodes are ready for cleaning, executing the get work tool produces an idle response indicating that no dirty nodes are ready.
+        if not batch:
+            return tool_provider.Response(
+                is_failed=False,
+                is_terminated=False,
+                content="No dirty nodes are ready for cleaning.",
+                reminder="No dirty nodes are ready for cleaning.",
+            )
+
+        # Requirement: When ready dirty nodes are obtained, executing the get work tool materializes startup templates on disk, constructs the task prompt from dirty node definitions, guide instructions, and incoming messages from dag storage formatted via the template formatter, and returns the rendered task prompt.
+        role_cfg = get_singleton(agent_node_config.RoleConfig)
+        role_cfg.set_nodes(batch)
+        rc.reset_nodes(batch)
+
+        try:
+            alias_mgr = get_singleton(agent_file_alias.AliasManager)
+            init_fn = getattr(alias_mgr, "initialize", None)
+            if callable(init_fn):
+                init_fn()
+        except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+            pass
+
+        sb = get_singleton(sandbox.Sandbox)
+        sb.materialize_startup_templates()
+
+        rendered_prompt = rc.format_task_prompt(batch)
+        return tool_provider.Response(
+            is_failed=False,
+            is_terminated=False,
+            content=rendered_prompt,
+        )
+
+
 RunTestsTool = CheckFileTool
 
 
@@ -1258,6 +1552,15 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
             CheckFileTool,
             sandbox_run_control.CheckFileTool,
             sandbox_run_control.RunTestsTool,
+            tool_provider.Tool,
+        ],
+        tier=agent_session,
+    )
+    reg.register_singleton(
+        GetWorkTool,
+        keys=[
+            GetWorkTool,
+            sandbox_run_control.GetWorkTool,
             tool_provider.Tool,
         ],
         tier=agent_session,

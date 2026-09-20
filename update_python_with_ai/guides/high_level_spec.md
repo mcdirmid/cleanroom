@@ -30,7 +30,7 @@ Component visibility and lifetimes are governed by hierarchical lifecycle tiers 
 
 - [ ] The document consists exclusively of optional front-matter, `## Purpose`, and `## Types and Behavior` (or `## Grounding Gaps Covered` for external boundary specifications)
 - [ ] An interface component (`high/<name>.md`) defines public object types, data types, and capabilities as the bill of sale for consumers and mock generation
-- [ ] An implementation component (`high/<name>_impl.md`) refines capabilities into concrete tool naming, algorithms, preconditions, and error feedback for realized types
+- [ ] An implementation component (`high/<name>_impl.md`) refines capabilities into concrete tool naming, algorithms, preconditions, and error feedback for realized types without repeating property catalogs or data fields already defined in implemented interface components
 - [ ] An external boundary component (`high/<name>_ext.md`) describes external domain knowledge and grounding gaps covered without specifying an API or types, containing strictly `## Purpose` and `## Grounding Gaps Covered` sections, using zero semantic italics, and grounding to an external boundary stub without Python code
 - [ ] An assembly component (`high/<name>_asm.md`) aggregates constituent implementation and sub-assembly components, closing their combined interface components and propagating unresolved dependencies
 
@@ -140,3 +140,4 @@ Component visibility and lifetimes are governed by hierarchical lifecycle tiers 
 - [ ] Bolding types — using `**term**` instead of `*term*` for introductions
 - [ ] Spatial containment — writing "in a <service>" instead of recognizing that tools and services are independent peer services in the session tier
 - [ ] Second-person tool feedback — specifying tool feedback, error diagnostics, or reminders using second-person pronouns ("you", "your") instead of declarative, impersonal constraints
+- [ ] Redundant interface restatements — repeating property catalogs, data fields, or capabilities in implementation specifications that are already defined in implemented interface components rather than focusing on realization details, concrete algorithms, and binding sources

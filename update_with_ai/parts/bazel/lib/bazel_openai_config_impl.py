@@ -161,6 +161,15 @@ class OpenaiConfig(
             if "edit_delta_output" in data
             else os.environ.get("EDIT_DELTA_OUTPUT", "false").lower() in ("true", "1")
         )
+        self._is_mcp_mode = (
+            bool(data["mcp_mode"])
+            if "mcp_mode" in data
+            else (
+                os.environ.get("MCP_MODE")
+                or os.environ.get("CLEANROOM_MCP_MODE", "false")
+            ).lower()
+            in ("true", "1")
+        )
         self._node_visit_limit = (
             int(data["node_visit_limit"])
             if "node_visit_limit" in data
@@ -226,6 +235,11 @@ class OpenaiConfig(
     def edit_delta_output(self) -> bool:
         # Requirement: Whether editing tools should produce delta output.
         return self._edit_delta_output
+
+    @property
+    def is_mcp_mode(self) -> bool:
+        # Requirement: Whether the agent should operate in mcp mode.
+        return self._is_mcp_mode
 
     @property
     def node_visit_limit(self) -> dag_config.NodeVisitLimit:

@@ -293,13 +293,18 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         """CUJ: RoleConfig holds and exposes role, target nodes, and version in the session tier."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             role_config = scope.get_singleton(RoleConfig)
-            with self.assertRaises(RuntimeError):
-                _ = role_config.nodes
+            # Requirement: [RoleConfig] The role config provides the sequence of nodes currently being cleaned in the agent session.
+            self.assertEqual(role_config.nodes, ())
+
+            assert isinstance(role_config, RoleConfigImpl)
+            # Requirement: [RoleConfig] The role config can set role to configure the role of the agent session.
+            role_config.set_role("lib")
+            # Requirement: [RoleConfig] The role config provides the role of the session.
+            self.assertEqual(role_config.role, "lib")
 
             target1 = Node(unit_address="//pkg:target1", role_address="spec")
             target2 = Node(unit_address="//pkg:target2", role_address="spec")
-            assert isinstance(role_config, RoleConfigImpl)
-            # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes, the nodes currently being cleaned, and an incremented version to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
+            # Requirement: [RoleConfig] The role config can set nodes to configure the nodes currently being cleaned in the agent session and increment the execution version.
             role_config.set_nodes([target1, target2])
             # Requirement: [RoleConfig] The role config provides the sequence of nodes currently being cleaned in the agent session.
             self.assertEqual(role_config.nodes, (target1, target2))
@@ -313,101 +318,22 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             self.assertEqual(role_config.version, 2)
             self.assertEqual(role_config.nodes, (target1,))
 
-    def test_clean_node_seeds_history_and_materializes_templates(self) -> None:
-        """CUJ: Seeding conversation history with task prompt, pending messages, and startup executions."""
-        node = Node(unit_address="//pkg:clean_test")
+    def test_clean_node_seeds_history_with_get_work_instruction(self) -> None:
+        """CUJ: Seeding conversation history with instructions directing agent to call get_work."""
+        node = Node(unit_address="//pkg:clean_test", role_address="lib")
         self.storage.definitions[node] = NodeDefinition(
             node=node,
             task_prompt=TaskPrompt("Clean this node"),
         )
-        rw_file = ReadWriteFile(
-            relative_path="foo.py",
-            workspace_path=_make_workspace_path("/tmp/foo.py"),
-            owning_node=node,
-        )
-        self.node_cfg.read_write_files = {rw_file}
-        self.storage.messages[node] = {
-            Feedback(content="Z defect explanation"),
-            Change(content="A spec updated"),
-        }
-        startup_exec = StartupToolExecution(
-            tool_name="view_file",
-            wire_parameter_bindings=WireParameterBindings(
-                bindings={("path", "dag_storage.pyi")}
-            ),
-            response=Response(
-                is_failed=False, is_terminated=False, content="spec content"
-            ),
-        )
-        self.sandbox.startup_executions.append(startup_exec)
-
         with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
-            # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the cleaned nodes present the nodes currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
+            # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
+            # Requirement: The conversation is initialized with instructions directing the agent to call the get work tool.
             msgs = cleaner.clean_nodes([node])
 
-            # Requirement: Within the agent session phase, missing read-write files materialize from sandbox startup templates.
-            self.assertTrue(self.sandbox.templates_materialized)
-            # Verify history seeded
-            # Requirement: The conversation is initialized with startup context comprising the node definition and task prompt retrieved from graph storage for dirty nodes, incoming pending messages ordered deterministically by content and formatted with their message content, and paired startup tool executions from the sandbox formatted with synthetic tool requests and captured responses.
-            history_contents = [m.content for m in self.history.messages]
-            self.assertTrue(any("Clean this node" in c for c in history_contents))
-            # Verify messages are ordered deterministically by content and formatted with their content
-            # Requirement: Incoming feedback and change messages are formatted per target node identified by its file alias, prefaced with directives to fix read-write target files based on the feedback.
-            change_idx = next(
-                i
-                for i, c in enumerate(history_contents)
-                if "Incoming change: A spec updated" in c
-            )
-            feedback_idx = next(
-                i
-                for i, c in enumerate(history_contents)
-                if "Fix foo.py based on feedback: Z defect explanation" in c
-            )
-            self.assertLess(change_idx, feedback_idx)
-            self.assertTrue(any("spec content" in c for c in history_contents))
-            self.assertEqual(
-                self.history.tool_responses[0][3], startup_exec.wire_parameter_bindings
-            )
-
-    def test_clean_node_formats_feedback_in_prompt_when_feedback_present(self) -> None:
-        """CUJ: Incoming feedback messages are formatted into seeded history as actionable instructions."""
-        node = Node(unit_address="//pkg:step_fb_test")
-        self.storage.definitions[node] = NodeDefinition(
-            node=node,
-            task_prompt=TaskPrompt("Clean this node in step mode"),
-        )
-        rw_file = ReadWriteFile(
-            relative_path="foo.py",
-            workspace_path=_make_workspace_path("/tmp/foo.py"),
-            owning_node=node,
-        )
-        self.node_cfg.read_write_files = {rw_file}
-        self.storage.messages[node] = {
-            Feedback(content="Z defect explanation"),
-            Change(content="A spec updated"),
-            Change(content=""),
-        }
-        self.node_cfg.is_step_mode = True
-
-        with enter_phase(system, registry=self.registry) as scope:
-            cleaner = scope.get_singleton(NodeCleanerImpl)
-            # Requirement: Incoming feedback and change messages are formatted per target node identified by its file alias, prefaced with directives to fix read-write target files based on the feedback.
-            _ = cleaner.clean_nodes([node])
-
-            history_contents = [m.content for m in self.history.messages]
-            self.assertTrue(
-                any("Clean this node in step mode" in c for c in history_contents)
-            )
-            self.assertTrue(
-                any("Incoming change: A spec updated" in c for c in history_contents)
-            )
-            self.assertTrue(
-                any(
-                    "Fix foo.py based on feedback: Z defect explanation" in c
-                    for c in history_contents
-                )
-            )
+            self.assertEqual(len(self.history.messages), 1)
+            self.assertEqual(self.history.messages[0].role, "user")
+            self.assertIn("get_work", self.history.messages[0].content)
 
     def test_clean_node_with_modifications_produces_change_message(self) -> None:
         """CUJ: Producing Change message when workspace file modifications occur."""
@@ -625,7 +551,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
 
         with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
-            # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the cleaned nodes present the nodes currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
+            # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
             with self.assertRaises(RuntimeError) as ctx:
                 cleaner.clean_nodes([node])
             self.assertIn("Agent failed: unrecoverable tool error", str(ctx.exception))
@@ -788,144 +714,6 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             self.assertEqual(fb.content, "Defect in dep 1")
             self.assertEqual(len(self.storage.messages.get(dependency2, set())), 0)
 
-    def test_clean_node_seeds_history_with_step_mode_guide(self) -> None:
-        """CUJ: Seeding conversation history augments task prompt with advance instruction in step mode."""
-        node = Node(unit_address="//pkg:step_guide_test")
-        self.storage.definitions[node] = NodeDefinition(
-            node=node,
-            task_prompt=TaskPrompt("Ensure the lib conforms to the guide"),
-        )
-        self.node_cfg.guide_file = UnboundFile(relative_path="guide.md")
-        self.node_cfg.is_step_mode = True
-
-        with enter_phase(system, registry=self.registry) as scope:
-            cleaner = scope.get_singleton(NodeCleanerImpl)
-            # Requirement: Task prompt instructions for a guided node include directing the agent to call advance without arguments to view each guide step and omit a change summary until all guide steps are complete when guide step mode is active.
-            _ = cleaner.clean_nodes([node])
-
-            history_contents = [m.content for m in self.history.messages]
-            prompt_content = next(
-                c for c in history_contents if "Ensure the lib conforms" in c
-            )
-            self.assertIn("advance", prompt_content)
-            self.assertIn("change_summary", prompt_content)
-            self.assertNotIn("guide.md", prompt_content)
-
-    def test_clean_node_seeds_history_with_non_step_mode_guide(self) -> None:
-        """CUJ: Seeding conversation history augments task prompt with guide file alias when not in step mode."""
-        node = Node(unit_address="//pkg:nostep_guide_test")
-        self.storage.definitions[node] = NodeDefinition(
-            node=node,
-            task_prompt=TaskPrompt("Ensure the lib conforms to the guide"),
-        )
-        self.node_cfg.guide_file = UnboundFile(relative_path="my_guide.md")
-        self.node_cfg.is_step_mode = False
-
-        with enter_phase(system, registry=self.registry) as scope:
-            cleaner = scope.get_singleton(NodeCleanerImpl)
-            # Requirement: Task prompt instructions for a guided node include identifying the guide file by its file alias and directing the agent to call the submit tool with a change summary describing modifications when complete, or call submit without arguments if no workspace files were modified, when guide step mode is inactive.
-            _ = cleaner.clean_nodes([node])
-
-            history_contents = [m.content for m in self.history.messages]
-            prompt_content = next(
-                c for c in history_contents if "Ensure the lib conforms" in c
-            )
-            self.assertIn("my_guide.md", prompt_content)
-            self.assertIn("submit", prompt_content)
-            self.assertIn("change summary", prompt_content)
-            self.assertIn(
-                "call submit without arguments if no workspace files were modified",
-                prompt_content,
-            )
-            self.assertNotIn("advance", prompt_content)
-
-    def test_clean_node_seeds_history_without_guide_leaves_prompt_unaugmented(
-        self,
-    ) -> None:
-        """CUJ: Seeding conversation history leaves task prompt unaugmented when no guide is configured."""
-        node = Node(unit_address="//pkg:noguide_test")
-        self.storage.definitions[node] = NodeDefinition(
-            node=node,
-            task_prompt=TaskPrompt("Ensure the lib conforms without guide"),
-        )
-        self.node_cfg.guide_file = None
-
-        with enter_phase(system, registry=self.registry) as scope:
-            cleaner = scope.get_singleton(NodeCleanerImpl)
-            _ = cleaner.clean_nodes([node])
-
-            history_contents = [m.content for m in self.history.messages]
-            prompt_content = next(
-                c
-                for c in history_contents
-                if "Ensure the lib conforms without guide" in c
-            )
-            self.assertEqual(prompt_content, "Ensure the lib conforms without guide")
-
-    def test_clean_node_seeds_history_guide_from_read_only_files(self) -> None:
-        """CUJ: Resolving guide file alias from read-only markdown files when guide_file is None."""
-        node = Node(unit_address="//pkg:ro_guide_test")
-        self.storage.definitions[node] = NodeDefinition(
-            node=node,
-            task_prompt=TaskPrompt("Ensure the lib conforms to the guide"),
-        )
-        self.node_cfg.guide_file = None
-        self.node_cfg.read_only_files.add(
-            ReadOnlyFile(
-                relative_path="ro_guide.md",
-                workspace_path=_make_workspace_path("pkg/ro_guide.md"),
-                owning_node=node,
-            )
-        )
-        self.node_cfg.is_step_mode = False
-
-        with enter_phase(system, registry=self.registry) as scope:
-            cleaner = scope.get_singleton(NodeCleanerImpl)
-            # Requirement: Task prompt instructions for a guided node include identifying the guide file by its file alias and directing the agent to call the submit tool with a change summary describing modifications when complete, or call submit without arguments if no workspace files were modified, when guide step mode is inactive.
-            _ = cleaner.clean_nodes([node])
-
-            history_contents = [m.content for m in self.history.messages]
-            prompt_content = next(
-                c for c in history_contents if "Ensure the lib conforms" in c
-            )
-            self.assertIn("ro_guide.md", prompt_content)
-            self.assertIn("submit", prompt_content)
-
-    def test_clean_node_seeds_history_node_disallows_step_mode(self) -> None:
-        """CUJ: When node disallows step mode, model step mode is overridden: feedback is included and guide file is named."""
-        node = Node(unit_address="//pkg:disallowed_step_test")
-        self.storage.definitions[node] = NodeDefinition(
-            node=node,
-            task_prompt=TaskPrompt("Ensure the lib conforms to the guide"),
-        )
-        self.node_cfg.guide_file = UnboundFile(relative_path="qa.md")
-        self.node_cfg.allows_step_mode = False
-        self.node_cfg.is_step_mode = True
-        self.storage.messages[node] = {
-            Feedback(content="Fix defect 1"),
-        }
-
-        with enter_phase(system, registry=self.registry) as scope:
-            cleaner = scope.get_singleton(NodeCleanerImpl)
-            # Requirement: Incoming feedback and change messages are formatted per target node identified by its file alias, prefaced with directives to fix read-write target files based on the feedback.
-            # Requirement: Task prompt instructions for a guided node include identifying the guide file by its file alias and directing the agent to call the submit tool with a change summary describing modifications when complete, or call submit without arguments if no workspace files were modified, when guide step mode is inactive.
-            _ = cleaner.clean_nodes([node])
-
-            history_contents = [m.content for m in self.history.messages]
-            prompt_content = next(
-                c for c in history_contents if "Ensure the lib conforms" in c
-            )
-            self.assertIn("qa.md", prompt_content)
-            self.assertIn("submit", prompt_content)
-            self.assertIn("change summary", prompt_content)
-            self.assertIn(
-                "call submit without arguments if no workspace files were modified",
-                prompt_content,
-            )
-            self.assertNotIn("advance", prompt_content)
-            self.assertTrue(
-                any("feedback: Fix defect 1" in c for c in history_contents)
-            )
 
     def test_clean_node_retries_on_unexpected_execution_failure(self) -> None:
         """CUJ: Retries execution of the agent session phase a second time on unexpected failure."""
@@ -951,7 +739,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
 
         with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
-            # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the cleaned nodes present the nodes currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
+            # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
             msgs = cleaner.clean_nodes([node])
             self.assertEqual(attempts, 2)
             self.assertEqual(msgs, set())
@@ -967,62 +755,10 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
 
         with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
-            # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the cleaned nodes present the nodes currently being cleaned to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
+            # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
             with self.assertRaises(RuntimeError):
                 cleaner.clean_nodes([node])
             self.assertEqual(self.runner.run_count, 2)
-
-    def test_clean_nodes_multi_node_prompt_and_message_formatting(self) -> None:
-        """CUJ: Multi-node session formats prompt with file list and formats per-node feedback and change messages."""
-        node1 = Node(unit_address="//pkg:unit1")
-        node2 = Node(unit_address="//pkg:unit2")
-        self.storage.definitions[node1] = NodeDefinition(
-            node=node1, task_prompt=TaskPrompt("Prompt for unit 1")
-        )
-        self.storage.definitions[node2] = NodeDefinition(
-            node=node2, task_prompt=TaskPrompt("")
-        )
-        self.node_cfg.src_file_alias_by_node = {
-            node1: "unit1.py",
-            node2: "unit2.py",
-        }
-        self.node_cfg.guide_file = UnboundFile(relative_path="guide.md")
-        self.node_cfg.is_step_mode = False
-        self.storage.messages[node1] = {
-            Change(content=""),
-            Change(content="spec 1 updated"),
-        }
-        self.storage.messages[node2] = {Feedback(content="defect in unit 2")}
-
-        with enter_phase(system, registry=self.registry) as scope:
-            cleaner = scope.get_singleton(NodeCleanerImpl)
-            # Requirement: When cleaning multiple nodes, the task prompt enumerates each target file identified by its file alias alongside its task prompt.
-            # Requirement: The task prompt is formatted using the template formatter.
-            # Requirement: Incoming feedback and change messages are formatted per target node identified by its file alias, prefaced with directives to fix read-write target files based on the feedback.
-            msgs = cleaner.clean_nodes([node1, node2])
-
-            history_contents = [m.content for m in self.history.messages]
-            prompt = history_contents[0]
-            self.assertIn("Process the following files:", prompt)
-            self.assertIn("- `unit1.py`: Prompt for unit 1", prompt)
-            self.assertIn("- `unit2.py`", prompt)
-            self.assertIn("The guide is in file guide.md. Call submit", prompt)
-
-            self.assertTrue(
-                any(
-                    "Incoming change for unit1.py: spec 1 updated" in c
-                    for c in history_contents
-                )
-            )
-            self.assertTrue(
-                any("Incoming change for unit1.py" in c for c in history_contents)
-            )
-            self.assertTrue(
-                any(
-                    "Fix unit2.py based on feedback: defect in unit 2" in c
-                    for c in history_contents
-                )
-            )
 
     def test_clean_multi_node_delivers_changes_to_dependents(self) -> None:
         """CUJ: Multi-node cleaning delivers change messages to dependents of all cleaned nodes."""
