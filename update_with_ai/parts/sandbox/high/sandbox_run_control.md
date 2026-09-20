@@ -12,7 +12,9 @@ Autonomous agents require unambiguous control tools to signal when a task is fin
 
 ## Types and Behavior
 
-The *run controller* is an agent session service configured with *blame targets*, which are bound files owned by upstream dependency nodes in dag storage, and verification checks. The run controller provides tools for terminating agent sessions and attributing outcomes.
+A *resolve tool* is a polymorphic tool service defining a file alias *resolve target* parameter identifying the active node being resolved.
+
+The *run controller* is an agent session service configured with *blame targets*, which are bound files owned by upstream dependency nodes in dag storage, and node config verification checks. The run controller provides tools for terminating agent sessions and attributing outcomes.
 
 The run controller:
 
@@ -20,14 +22,14 @@ The run controller:
 
 - Caches verification evaluation results alongside the edit manager file update revision, reusing the cached verification outcome as long as no workspace files have been updated since that evaluation.
 
+- Installs a *check file tool* that updates verification results if outdated, accepting a file alias *path* parameter, presenting verification outcomes to the agent and failing when verification failed.
+
 - Installs an *advance tool* when guide step mode is active, coordinating step progression through guide delivery upon passing verification.
 
-- Installs a *finish tool* that concludes the session upon passing verification and enforces change documentation.
+- Installs a *submit tool* which is a resolve tool that concludes active nodes upon passing verification, marks the resolve target clean in the current get work turn, accepting a text *change summary* parameter, and enforces change documentation.
 
-- Installs a *fail tool* that terminates the run in failure.
+- Installs a *fail tool* which is a resolve tool that terminates the run in failure, accepting a text *explanation* parameter.
 
-- Installs a *check file tool* that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
+- Installs a *blame tool* which is a resolve tool, when blame targets are configured, attributing task failure to an upstream dependency node, accepting a file alias *blame target* parameter and a text explanation parameter.
 
-- Installs a *blame tool* when blame targets are configured, attributing task failure to an upstream dependency node.
-
-- Installs a *get work tool* that retrieves active dirty nodes, materializes startup templates, and delivers the session task prompt.
+- Installs a *get work tool* that retrieves active dirty nodes, materializes startup templates, accepting an integer *max batch size* parameter, and delivers the session task prompt.

@@ -73,14 +73,14 @@ Component lifecycles and visibilities are governed by explicit decorator argumen
 - [ ] Actions, capabilities, and callable behaviors introduced as italicized verbs in `high/<name>.md` map to `@operation` methods
 - [ ] Italicized argument concepts introduced in operation descriptions map to typed positional arguments
 - [ ] Operations and properties of parameterized types use the declared type parameters directly in parameter and return type annotations
-- [ ] Unbound references to parameterized entities in heterogeneous collections use bare generic references or explicit `Any` type arguments (e.g. `Sequence[Parameter]`)
+- [ ] References to parameterized types declare explicit type arguments when the argument types are known, reserving bare generic references or explicit `Any` type arguments strictly for heterogeneous collections (e.g. `Sequence[Parameter]`)
 - [ ] Return types map deterministically to standard Python types: `str` for strings, `int` for integers, `bool` for booleans, `None` for unit returns
 - [ ] Meta-type references whose values are data type symbols map to `Type` (or `Type[T]`)
 - [ ] Optional concepts map to `Optional[T]`
 - [ ] Alternating outcomes map to `Union[T1, T2]`
 - [ ] Unordered entity collections map to `Set[T]`
 - [ ] Ordered sequences map to `List[T]`
-- [ ] Paired records map to `Tuple[T1, T2]`
+- [ ] Paired records and compound operational outcomes described in HLS (such as status and output or diagnostic text) map to `Tuple[T1, T2]`
 - [ ] Self-references and forward references use string literals (e.g. `-> "EntityName"`)
 - [ ] Every `@data_type` declares at least one property participating in its structural identity
 - [ ] Grounding operations that govern relational or identity-sensitive requirements (such as matching a specific resource, entity, or state) declare explicit parameters, metadata markers, or collaborator lookup operations to distinguish targets; grounding operations without the arguments or attributes necessary to evaluate requirement conditions is prohibited

@@ -1,5 +1,5 @@
-from typing import Protocol, Sequence, Set, Tuple
-from framework import operation, override, singleton_type
+from typing import Protocol, Sequence, Set
+from framework import operation, override, poly_type, singleton_type
 import dag_storage
 import agent_file_alias
 import agent_node_config
@@ -16,12 +16,12 @@ Defined as an agent session service that installs run control tools and exposes 
 FRESH_REQUIREMENTS:
 - The run controller exposes verification checks that validate session criteria.
 - The run controller caches verification evaluation results alongside the edit manager file update revision, reusing the cached verification outcome as long as no workspace files have been updated since that evaluation.
+- The run controller installs a check file tool that updates verification results if outdated, accepting a file alias path parameter, presenting verification outcomes to the agent and failing when verification failed.
 - The run controller installs an advance tool when guide step mode is active, coordinating step progression through guide delivery upon passing verification.
-- The run controller installs a submit tool that concludes target processing upon passing verification and enforces change documentation.
-- The run controller installs a fail tool that terminates the run in failure.
-- The run controller installs a check file tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
-- The run controller installs a blame tool when blame targets are configured, attributing task failure to an upstream dependency node.
-- The run controller installs a get work tool that retrieves active dirty nodes, materializes startup templates, and delivers the session task prompt.
+- The run controller installs a submit tool which is a resolve tool that concludes active nodes upon passing verification, marks the resolve target clean in the current get work turn, accepting a text change summary parameter, and enforces change documentation.
+- The run controller installs a fail tool which is a resolve tool that terminates the run in failure, accepting a text explanation parameter.
+- The run controller installs a blame tool which is a resolve tool, when blame targets are configured, attributing task failure to an upstream dependency node, accepting a file alias blame target parameter and a text explanation parameter.
+- The run controller installs a get work tool that retrieves active dirty nodes, materializes startup templates, accepting an integer max batch size parameter, and delivers the session task prompt.
 """
 
     @property
@@ -37,6 +37,64 @@ Verification checks configured for the session
         """
 PURPOSE:
 Upstream bound files that can be attributed when prerequisite defects occur
+"""
+        ...
+
+@singleton_type('agent_session')
+class CheckFileTool(tool_provider.Tool, Protocol):
+    """
+PURPOSE:
+Defined as a tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed
+
+INHERITED_ASSUMPTIONS:
+- [Tool] All parameters of a tool have unique names.
+"""
+
+    @property
+    def path(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
+        """
+PURPOSE:
+Parameter identifying the session file path to check
+"""
+        ...
+
+    @property
+    @override
+    def name(self) -> str:
+        """
+PURPOSE:
+Established that each tool has a name which the agent uses to execute the tool
+"""
+        ...
+
+    @property
+    @override
+    def description(self) -> str:
+        """
+PURPOSE:
+Established that each tool has a description which informs the agent why and when to use the tool
+"""
+        ...
+
+    @property
+    @override
+    def parameters(self) -> Set[tool_provider.Parameter]:
+        """
+PURPOSE:
+Established that each tool defines input parameters accepted for its invocation
+"""
+        ...
+
+    @operation
+    @override
+    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
+        """
+PURPOSE:
+Executed with a set of actual parameter bindings to produce a response
+
+INHERITED_REQUIREMENTS:
+- [Tool] When a parameter is required, an argument must be supplied for tool execution.
+- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 """
         ...
 
@@ -90,29 +148,21 @@ INHERITED_REQUIREMENTS:
 """
         ...
 
-@singleton_type('agent_session')
-class SubmitTool(tool_provider.Tool, Protocol):
+@poly_type
+class ResolveTool(tool_provider.Tool, Protocol):
     """
 PURPOSE:
-Defined as a tool that concludes target processing and enforces change documentation
+Defined as a polymorphic tool service for resolving active nodes in an agent session
 
 INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.
 """
 
     @property
-    def target(self) -> tool_provider.Parameter:
+    def resolve_target(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
         """
 PURPOSE:
-Parameter identifying the session target file being submitted
-"""
-        ...
-
-    @property
-    def change_summary(self) -> tool_provider.Parameter:
-        """
-PURPOSE:
-Parameter describing workspace file modifications
+Parameter identifying the active node being resolved
 """
         ...
 
@@ -157,7 +207,74 @@ INHERITED_REQUIREMENTS:
         ...
 
 @singleton_type('agent_session')
-class FailTool(tool_provider.Tool, Protocol):
+class SubmitTool(ResolveTool, Protocol):
+    """
+PURPOSE:
+Defined as a tool that concludes active nodes upon passing verification and enforces change documentation
+
+INHERITED_ASSUMPTIONS:
+- [Tool] All parameters of a tool have unique names.
+"""
+
+    @property
+    def change_summary(self) -> tool_provider.Parameter[str, str]:
+        """
+PURPOSE:
+Parameter describing workspace file modifications
+"""
+        ...
+
+    @property
+    @override
+    def resolve_target(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
+        """
+PURPOSE:
+Parameter identifying the active node being resolved
+"""
+        ...
+
+    @property
+    @override
+    def name(self) -> str:
+        """
+PURPOSE:
+Established that each tool has a name which the agent uses to execute the tool
+"""
+        ...
+
+    @property
+    @override
+    def description(self) -> str:
+        """
+PURPOSE:
+Established that each tool has a description which informs the agent why and when to use the tool
+"""
+        ...
+
+    @property
+    @override
+    def parameters(self) -> Set[tool_provider.Parameter]:
+        """
+PURPOSE:
+Established that each tool defines input parameters accepted for its invocation
+"""
+        ...
+
+    @operation
+    @override
+    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
+        """
+PURPOSE:
+Executed with a set of actual parameter bindings to produce a response
+
+INHERITED_REQUIREMENTS:
+- [Tool] When a parameter is required, an argument must be supplied for tool execution.
+- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
+"""
+        ...
+
+@singleton_type('agent_session')
+class FailTool(ResolveTool, Protocol):
     """
 PURPOSE:
 Defined as a tool that terminates the run in failure
@@ -167,15 +284,7 @@ INHERITED_ASSUMPTIONS:
 """
 
     @property
-    def target(self) -> tool_provider.Parameter:
-        """
-PURPOSE:
-Parameter identifying the session target file being failed
-"""
-        ...
-
-    @property
-    def explanation(self) -> tool_provider.Parameter:
+    def explanation(self) -> tool_provider.Parameter[str, str]:
         """
 PURPOSE:
 Parameter accepting a text explanation of why the run failed
@@ -184,6 +293,15 @@ Parameter accepting a text explanation of why the run failed
 
     @property
     @override
+    def resolve_target(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
+        """
+PURPOSE:
+Parameter identifying the active node being resolved
+"""
+        ...
+
+    @property
+    @override
     def name(self) -> str:
         """
 PURPOSE:
@@ -223,25 +341,17 @@ INHERITED_REQUIREMENTS:
         ...
 
 @singleton_type('agent_session')
-class BlameTool(tool_provider.Tool, Protocol):
+class BlameTool(ResolveTool, Protocol):
     """
 PURPOSE:
-Defined as a tool that attributes failure to a dependency node via a blame target
+Defined as a tool that attributes task failure to an upstream dependency node via a blame target
 
 INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.
 """
 
     @property
-    def target(self) -> tool_provider.Parameter:
-        """
-PURPOSE:
-Parameter identifying the session target file being blamed from
-"""
-        ...
-
-    @property
-    def blame_target(self) -> tool_provider.Parameter:
+    def blame_target(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
         """
 PURPOSE:
 Parameter identifying the target bound file being blamed
@@ -249,7 +359,7 @@ Parameter identifying the target bound file being blamed
         ...
 
     @property
-    def explanation(self) -> tool_provider.Parameter:
+    def explanation(self) -> tool_provider.Parameter[str, str]:
         """
 PURPOSE:
 Parameter accepting a text explanation of the prerequisite defect
@@ -258,67 +368,10 @@ Parameter accepting a text explanation of the prerequisite defect
 
     @property
     @override
-    def name(self) -> str:
+    def resolve_target(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
         """
 PURPOSE:
-Established that each tool has a name which the agent uses to execute the tool
-"""
-        ...
-
-    @property
-    @override
-    def description(self) -> str:
-        """
-PURPOSE:
-Established that each tool has a description which informs the agent why and when to use the tool
-"""
-        ...
-
-    @property
-    @override
-    def parameters(self) -> Set[tool_provider.Parameter]:
-        """
-PURPOSE:
-Established that each tool defines input parameters accepted for its invocation
-"""
-        ...
-
-    @operation
-    @override
-    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
-        """
-PURPOSE:
-Executed with a set of actual parameter bindings to produce a response
-
-INHERITED_REQUIREMENTS:
-- [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
-"""
-        ...
-
-@singleton_type('agent_session')
-class CheckFileTool(tool_provider.Tool, Protocol):
-    """
-PURPOSE:
-Defined as a tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed
-
-INHERITED_ASSUMPTIONS:
-- [Tool] All parameters of a tool have unique names.
-"""
-
-    @property
-    def path(self) -> tool_provider.Parameter:
-        """
-PURPOSE:
-Parameter identifying the session file path to check
-"""
-        ...
-
-    @property
-    def src(self) -> tool_provider.Parameter:
-        """
-PURPOSE:
-Parameter identifying the session file path to check as an alias of path
+Parameter identifying the active node being resolved
 """
         ...
 
@@ -373,10 +426,10 @@ INHERITED_ASSUMPTIONS:
 """
 
     @property
-    def max_batch_size(self) -> tool_provider.Parameter:
+    def max_batch_size(self) -> tool_provider.Parameter[int, int]:
         """
 PURPOSE:
-Parameter specifying the maximum number of dirty nodes to process together
+Parameter specifying the maximum number of dirty nodes to batch in a session
 """
         ...
 

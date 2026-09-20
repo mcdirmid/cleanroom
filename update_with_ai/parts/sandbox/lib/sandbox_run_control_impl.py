@@ -37,6 +37,7 @@ class RunController(sandbox_run_control.RunController, Singleton):
         self._node_to_alias: Dict[dag_storage.Node, str] = {}
         self._node_states: Dict[dag_storage.Node, str] = {}
         self._initialized_nodes = False
+        self._cleaned_in_turn: Set[dag_storage.Node] = set()
 
     def _ensure_nodes(self) -> None:
         cfg = get_singleton(agent_node_config.NodeConfig)
@@ -70,7 +71,7 @@ class RunController(sandbox_run_control.RunController, Singleton):
             try:
                 role_cfg = get_singleton(agent_node_config.RoleConfig)
                 has_role = bool(role_cfg.role)
-            except Exception:
+            except (LifecycleResolutionError, KeyError):
                 has_role = False
             if not has_role:
                 dummy_node = dag_storage.Node(
@@ -80,7 +81,6 @@ class RunController(sandbox_run_control.RunController, Singleton):
                 self._alias_to_node["target"] = dummy_node
                 self._node_to_alias[dummy_node] = "target"
                 self._node_states[dummy_node] = "OPEN"
-
 
     @property
     def nodes(self) -> Sequence[dag_storage.Node]:
@@ -125,7 +125,15 @@ class RunController(sandbox_run_control.RunController, Singleton):
         self._ensure_nodes()
         return [n for n in self._nodes if self._node_states.get(n) == "OPEN"]
 
-    def get_in_session_dependencies(
+    def is_clean_in_turn(self, node: dag_storage.Node) -> bool:
+        self._ensure_nodes()
+        return node in self._cleaned_in_turn or self.get_node_state(node) == "SUBMITTED"
+
+    def mark_clean_in_turn(self, node: dag_storage.Node) -> None:
+        self._ensure_nodes()
+        self._cleaned_in_turn.add(node)
+
+    def get_in_batch_dependencies(
         self, node: dag_storage.Node
     ) -> Set[dag_storage.Node]:
         self._ensure_nodes()
@@ -136,16 +144,42 @@ class RunController(sandbox_run_control.RunController, Singleton):
                 deps.add(d.node)
         return deps
 
-    def block_dependents(self, node: dag_storage.Node) -> None:
+    def get_in_session_dependencies(
+        self, node: dag_storage.Node
+    ) -> Set[dag_storage.Node]:
+        return self.get_in_batch_dependencies(node)
+
+    def fail_dependents(self, node: dag_storage.Node) -> None:
         self._ensure_nodes()
         to_check = [node]
         while to_check:
             curr = to_check.pop(0)
             for n in self._nodes:
                 if self._node_states.get(n) == "OPEN":
-                    if curr in self.get_in_session_dependencies(n):
-                        self._node_states[n] = "BLOCKED"
+                    if curr in self.get_in_batch_dependencies(n):
+                        self._node_states[n] = "FAILED"
+                        self.lock_node_files(n)
                         to_check.append(n)
+
+    def block_dependents(self, node: dag_storage.Node) -> None:
+        self.fail_dependents(node)
+
+    def check_in_batch_dependencies(
+        self, node: dag_storage.Node, suppression_key: Optional[str] = None
+    ) -> Optional[tool_provider.Response]:
+        target_alias = self.get_alias_for_node(node)
+        in_batch_deps = self.get_in_batch_dependencies(node)
+        for dep in in_batch_deps:
+            if not self.is_clean_in_turn(dep):
+                dep_alias = self.get_alias_for_node(dep)
+                return tool_provider.Response(
+                    is_failed=True,
+                    is_terminated=False,
+                    content=f"Error: In-batch dependency `{dep_alias}` must be submitted before `{target_alias}`.",
+                    reminder=f"In-batch dependencies must be submitted before dependent targets. Submit `{dep_alias}` first.",
+                    suppression_key=suppression_key,
+                )
+        return None
 
     def lock_node_files(self, node: dag_storage.Node) -> None:
         self._ensure_nodes()
@@ -170,6 +204,7 @@ class RunController(sandbox_run_control.RunController, Singleton):
         self._cached_passed = None
         self._cached_diag = ""
         self._cached_revision = None
+        self._cleaned_in_turn.clear()
         cfg = get_singleton(agent_node_config.NodeConfig)
         for n in self._nodes:
             alias = cfg.src_file_alias_by_node.get(n, n.unit_address)
@@ -289,15 +324,25 @@ class RunController(sandbox_run_control.RunController, Singleton):
     def initialize(self) -> None:
         # Requirement: The run controller unconditionally installs the submit tool, fail tool, check file tool, and get work tool for the agent session, installs the advance tool only when guide step mode is active, and obtains configured blame targets and verification checks from the node config, installing the blame tool only when blame targets are configured.
         # Requirement: Verification checks exposed by the run controller include the session verification checks from node config.
-        # Requirement: Session targets are matched by alias, relative path, or unique filename.
+        # Requirement: A resolve tool defines a file alias resolve target parameter (with target accepted as an alias) using the alias manager, and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes.
+        # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
+        # Requirement: When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
+        # Requirement: Tool execution fails when the resolve target parameter is omitted and cannot be defaulted, or when the specified resolve target parameter does not match an open active node, reminding the agent to specify an open target.
+        # Requirement: Tool execution fails when an in-batch dependency of the resolve target is not clean in the current get work turn, reminding the agent that in-batch dependencies must be submitted before dependent targets.
+        # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
+        # Requirement: Automatically marks in-batch dependent nodes as failed and locks their read-write files upon node failure or blame attribution.
+        # Requirement: Produces a non-terminating response with a reminder listing remaining active nodes formatted via the template formatter when other active nodes remain.
+        # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
+        # Requirement: When all active nodes are resolved, resolving an active node produces a non-terminating response with a reminder to call the get work tool when mcp mode is active.
         self._ensure_nodes()
+        self._cleaned_in_turn.clear()
         tm = get_singleton(tool_provider.ToolManager)
         cfg = get_singleton(agent_node_config.NodeConfig)
+        tm.install_tool(get_singleton(CheckFileTool))
         if cfg.is_step_mode:
             tm.install_tool(get_singleton(AdvanceTool))
         tm.install_tool(get_singleton(SubmitTool))
         tm.install_tool(get_singleton(FailTool))
-        tm.install_tool(get_singleton(CheckFileTool))
         tm.install_tool(get_singleton(GetWorkTool))
         if self.blame_targets or any(cfg.blame_targets_by_node.values()):
             tm.install_tool(get_singleton(BlameTool))
@@ -424,22 +469,18 @@ class RunController(sandbox_run_control.RunController, Singleton):
         if not open_nodes:
             return None
 
-        unsubmitted_files = [
-            f
-            for f in cfg.read_write_files
-            if f not in edit_mgr.locked_files
-            and (
-                getattr(f, "owning_node", None) is None
-                or self.get_node_state(f.owning_node) == "OPEN"
-            )
-            and (
-                self.get_node_for_alias(getattr(f, "relative_path", "")) is None
-                or self.get_node_state(
-                    self.get_node_for_alias(getattr(f, "relative_path", ""))  # type: ignore
-                )
-                == "OPEN"
-            )
-        ]
+        def _is_file_open(f: agent_file_alias.BoundFile) -> bool:
+            if f in edit_mgr.locked_files:
+                return False
+            owning_node = getattr(f, "owning_node", None)
+            if owning_node is not None and self.get_node_state(owning_node) != "OPEN":
+                return False
+            alias_node = self.get_node_for_alias(getattr(f, "relative_path", ""))
+            if alias_node is not None and self.get_node_state(alias_node) != "OPEN":
+                return False
+            return True
+
+        unsubmitted_files = [f for f in cfg.read_write_files if _is_file_open(f)]
 
         if len(unsubmitted_files) == 1:
             f = unsubmitted_files[0]
@@ -479,6 +520,233 @@ class RunController(sandbox_run_control.RunController, Singleton):
                     return cand_node
 
         return None
+
+
+class CheckFileTool(sandbox_run_control.CheckFileTool, Singleton):
+    tier = agent_session
+
+    def __init__(self) -> None:
+        self._last_tested_revision: Optional[int] = None
+        self._last_tested_node_revision: Dict[dag_storage.Node, int] = {}
+
+    @property
+    def name(self) -> str:
+        # Requirement: The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias) using the alias manager, and shares a constant suppression key `check_file`.
+        return "check_file"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Checks static type correctness and syntax for the specified source file alias or open targets. "
+            "Call check_file often while developing to catch type and syntax errors early."
+        )
+
+    @property
+    def path(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
+        return tool_provider.Parameter(
+            name="path",
+            description="Source file alias to check. May be omitted to check open targets.",
+            parameter_converter=alias_mgr,
+            is_required=False,
+        )
+
+    @property
+    def src(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
+        return tool_provider.Parameter(
+            name="src",
+            description="Source file alias to check (alias of path). May be omitted to check open targets.",
+            parameter_converter=alias_mgr,
+            is_required=False,
+        )
+
+    @property
+    def target(self) -> tool_provider.Parameter:
+        return self.path
+
+    @property
+    def parameters(self) -> Set[tool_provider.Parameter]:
+        # Requirement: The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias) using the alias manager, and shares a constant suppression key `check_file`.
+        return {self.path, self.src}
+
+    def execute_tool(
+        self, actual_parameter_bindings: tool_provider.ActualParameterBindings
+    ) -> tool_provider.Response:
+        bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
+        raw_target = (
+            bindings_map.get("path")
+            or bindings_map.get("src")
+            or bindings_map.get("target")
+            or bindings_map.get("resolve_target")
+        )
+
+        rc = get_singleton(RunController)
+        guide_del = get_singleton(sandbox_guide_delivery.GuideDelivery)
+        edit_mgr = get_singleton(sandbox_file_editor.EditManager)
+        cfg = get_singleton(agent_node_config.NodeConfig)
+
+        # Requirement: Executing the check file tool updates verification results if outdated and evaluates verification checks for that target.
+        target_str = ""
+        if raw_target is not None:
+            target_str = (
+                getattr(raw_target, "relative_path", None)
+                or getattr(raw_target, "short_name", None)
+                or str(raw_target)
+            ).strip()
+
+        target_node: Optional[dag_storage.Node] = None
+        if target_str:
+            target_node = rc.get_node_for_alias(target_str)
+            # Requirement: Tool execution fails when the specified resolve target parameter does not match an open active node, reminding the agent to specify an open target.
+            if target_node is None or rc.get_node_state(target_node) != "OPEN":
+                open_targets = ", ".join(
+                    f"`{rc.get_alias_for_node(n)}`" for n in rc.open_nodes()
+                )
+                return tool_provider.Response(
+                    is_failed=True,
+                    is_terminated=False,
+                    content=f"Error: Specified path '{target_str}' does not match an open session target.",
+                    reminder=f"Specify an open target: {open_targets}",
+                    suppression_key="check_file",
+                )
+        else:
+            # Requirement: When the path parameter is omitted, the path parameter defaults using resolve target defaulting rules.
+            target_node = rc.resolve_default_target()
+            if target_node is None:
+                open_targets = ", ".join(
+                    f"`{rc.get_alias_for_node(n)}`" for n in rc.open_nodes()
+                )
+                return tool_provider.Response(
+                    is_failed=True,
+                    is_terminated=False,
+                    content="Error: 'path' must be specified when multiple unsubmitted targets exist.",
+                    reminder=f"Specify an open target: {open_targets}",
+                    suppression_key="check_file",
+                )
+
+        # Requirement: Executing the check file tool updates verification results if outdated and evaluates verification checks for that target.
+        if target_node is not None:
+            passed, diag = rc.evaluate_verification_for_node(target_node)
+        else:
+            passed, diag = rc.evaluate_verification()
+
+        current_rev = edit_mgr.file_update_revision
+        is_repeated = (
+            self._last_tested_revision is not None
+            and self._last_tested_revision == current_rev
+        )
+        self._last_tested_revision = current_rev
+
+        reminder: Optional[str] = None
+        follow_up: Optional[tool_provider.FollowUpToolCall] = None
+
+        if is_repeated:
+            rw_file = None
+            if raw_target is not None:
+                for f in cfg.read_write_files:
+                    if f == raw_target or getattr(f, "relative_path", "") == getattr(
+                        raw_target, "relative_path", str(raw_target)
+                    ):
+                        rw_file = f
+                        break
+            if rw_file is None and target_node is not None:
+                target_alias = rc.get_alias_for_node(target_node)
+                for f in cfg.read_write_files:
+                    if (
+                        getattr(f, "owning_node", None) == target_node
+                        or getattr(f, "relative_path", "") == target_alias
+                    ):
+                        rw_file = f
+                        break
+            if rw_file is None:
+                last_f = edit_mgr.last_read_or_edited_file
+                if last_f is not None:
+                    for f in cfg.read_write_files:
+                        if f == last_f or getattr(f, "relative_path", "") == getattr(
+                            last_f, "relative_path", ""
+                        ):
+                            rw_file = f
+                            break
+            if rw_file is None and cfg.read_write_files:
+                rw_file = next(
+                    iter(
+                        sorted(
+                            cfg.read_write_files,
+                            key=lambda f: getattr(
+                                f, "relative_path", getattr(f, "short_name", "")
+                            ),
+                        )
+                    ),
+                    None,
+                )
+            src_name = (
+                getattr(rw_file, "relative_path", getattr(rw_file, "short_name", ""))
+                if rw_file
+                else "session read-write files"
+            )
+            status_word = "passes" if passed else "failed"
+            action_word = "advance" if cfg.is_step_mode else "submit"
+            # Requirement: Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous check file tool execution.
+            reminder = f"Verification {status_word}, no new information will be revealed by this tool call until {src_name} is updated."
+            if rw_file is not None:
+                rw_file_alias = getattr(
+                    rw_file, "relative_path", getattr(rw_file, "short_name", "")
+                )
+                if passed:
+                    reasoning_text = (
+                        f"Oh, verification passes and no new information will be revealed by calling check_file again until files are updated. "
+                        f"Let me read {rw_file_alias} again and see if I can figure out a different course of action. "
+                        f"If it is already correct, I need to {action_word} the agent session rather than check files again."
+                    )
+                else:
+                    reasoning_text = (
+                        f"Oh, verification failed and no new information will be revealed by calling check_file again until files are updated. "
+                        f"Let me read {rw_file_alias} again and see if I can figure out a different course of action."
+                    )
+                # Requirement: Tool execution specifies a follow-up execution of the view file tool on the active node source file (resolving to the specified path target if a read-write file, the last accessed read-write file, or the primary session read-write file) and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check file tool execution.
+                follow_up = tool_provider.FollowUpToolCall(
+                    tool_name="view_file",
+                    wire_parameter_bindings=tool_provider.WireParameterBindings(
+                        bindings={("path", rw_file_alias)}
+                    ),
+                    reasoning_text=reasoning_text,
+                )
+
+        if not passed:
+            # Requirement: Tool execution fails when verification fails, presenting diagnostic feedback sanitized through the alias manager alongside any configured verification failure instructions.
+            vf_block = ""
+            guide_obj = getattr(guide_del, "guide", None)
+            if guide_obj and getattr(guide_obj, "verification_failure", None):
+                vf_block = (
+                    f"\n\n## Verification failure\n{guide_obj.verification_failure}"
+                )
+            content = f"Verification failed: {diag}{vf_block}".strip()
+            return tool_provider.Response(
+                is_failed=True,
+                is_terminated=False,
+                content=content,
+                reminder=reminder,
+                suppression_key="check_file",
+                follow_up_tool_call=follow_up,
+            )
+
+        # Requirement: Tool execution produces a response presenting passing verification results using the session verification success message when configured or default passing verification results alongside sanitized check output when verification passes.
+        base_msg = (
+            cfg.verification_success_message
+            or "Verification passed: All checks succeeded."
+        )
+        content = base_msg
+        if diag:
+            content = f"{content}\n\n{diag}".strip()
+        return tool_provider.Response(
+            is_failed=False,
+            is_terminated=False,
+            content=content,
+            reminder=reminder,
+            suppression_key="check_file",
+            follow_up_tool_call=follow_up,
+        )
 
 
 class AdvanceTool(sandbox_run_control.AdvanceTool, Singleton):
@@ -586,7 +854,32 @@ class AdvanceTool(sandbox_run_control.AdvanceTool, Singleton):
         )
 
 
-class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
+class _ResolveTool(sandbox_run_control.ResolveTool):
+    tier = agent_session
+
+    @property
+    def resolve_target(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
+        # Requirement: A resolve tool defines a file alias resolve target parameter (with target accepted as an alias) using the alias manager, and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes.
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
+        return tool_provider.Parameter(
+            name="resolve_target",
+            description="Active node target file alias being resolved. Required in multi-target sessions; may be omitted in single-target sessions.",
+            parameter_converter=alias_mgr,
+            is_required=False,
+        )
+
+    @property
+    def target(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
+        return tool_provider.Parameter(
+            name="target",
+            description="Active node target file alias being resolved (alias of resolve_target).",
+            parameter_converter=alias_mgr,
+            is_required=False,
+        )
+
+
+class SubmitTool(_ResolveTool, sandbox_run_control.SubmitTool, Singleton):
     tier = agent_session
 
     def __init__(self) -> None:
@@ -594,7 +887,7 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
 
     @property
     def name(self) -> str:
-        # Requirement: The submit tool is named `submit`, accepting an optional target parameter and a text change summary parameter, and shares a constant suppression key `submit`.
+        # Requirement: The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter using the string parameter converter, and shares a constant suppression key `submit`.
         return "submit"
 
     @property
@@ -602,19 +895,8 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
         return "Submits a completed target file and enforces change documentation."
 
     @property
-    def target(self) -> tool_provider.Parameter:
-        alias_mgr = get_singleton(agent_file_alias.AliasManager)
-        return tool_provider.Parameter(
-            name="target",
-            description="Target file alias being submitted. Required in multi-target sessions; may be omitted in single-target sessions.",
-            parameter_converter=alias_mgr,
-            is_required=False,
-        )
-
-    @property
-    def change_summary(self) -> tool_provider.Parameter:
-        # Requirement: The submit tool change summary parameter uses a string parameter converter to accept text.
-        # Requirement: The submit tool is named `submit`, accepting an optional target parameter and a text change summary parameter, and shares a constant suppression key `submit`.
+    def change_summary(self) -> tool_provider.Parameter[str, str]:
+        # Requirement: The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter using the string parameter converter, and shares a constant suppression key `submit`.
         str_conv = get_singleton(tool_provider.StringParameterConverter)
         return tool_provider.Parameter(
             name="change_summary",
@@ -625,14 +907,18 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
 
     @property
     def parameters(self) -> Set[tool_provider.Parameter]:
-        return {self.target, self.change_summary}
+        return {self.resolve_target, self.target, self.change_summary}
 
     def execute_tool(
         self, actual_parameter_bindings: tool_provider.ActualParameterBindings
     ) -> tool_provider.Response:
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
         summary_str = str(bindings_map.get("change_summary", "") or "").strip()
-        raw_target = bindings_map.get("target")
+        raw_target = (
+            bindings_map.get("resolve_target")
+            if bindings_map.get("resolve_target") is not None
+            else bindings_map.get("target")
+        )
 
         guide_del = get_singleton(sandbox_guide_delivery.GuideDelivery)
         cfg = get_singleton(agent_node_config.NodeConfig)
@@ -670,8 +956,8 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
             ).strip()
 
         if not target_str:
-            # Requirement: When the target parameter is omitted and exactly one session read-write file exists or one unsubmitted read-write file remains, the target parameter defaults to that target.
-            # Requirement: When the target parameter is omitted and multiple unsubmitted read-write files exist, the target parameter defaults to the last read or written path if it corresponds to an open session target, and otherwise tool execution fails, reminding the agent to specify an open target.
+            # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
+            # Requirement: When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
             target_node = rc.resolve_default_target()
             if target_node is None:
                 open_targets = ", ".join(
@@ -686,7 +972,7 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
                 )
         else:
             target_node = rc.get_node_for_alias(target_str)
-            # Requirement: Tool execution fails when the target parameter does not match an open session target, reminding the agent to specify an open target.
+            # Requirement: Tool execution fails when the resolve target parameter is omitted and cannot be defaulted, or when the specified resolve target parameter does not match an open active node, reminding the agent to specify an open target.
             if target_node is None or rc.get_node_state(target_node) != "OPEN":
                 open_targets = ", ".join(
                     f"`{rc.get_alias_for_node(n)}`" for n in rc.open_nodes()
@@ -701,22 +987,14 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
 
         target_alias = rc.get_alias_for_node(target_node)
 
-        # Requirement: Tool execution fails when an in-session dependency of the target has not yet been submitted, reminding the agent that in-session dependencies must be submitted before dependent targets.
-        in_session_deps = rc.get_in_session_dependencies(target_node)
-        for dep in in_session_deps:
-            if rc.get_node_state(dep) != "SUBMITTED":
-                dep_alias = rc.get_alias_for_node(dep)
-                return tool_provider.Response(
-                    is_failed=True,
-                    is_terminated=False,
-                    content=f"Error: In-session dependency `{dep_alias}` must be submitted before `{target_alias}`.",
-                    reminder=f"In-session dependencies must be submitted before dependent targets. Submit `{dep_alias}` first.",
-                    suppression_key="submit",
-                )
+        # Requirement: Tool execution fails when an in-batch dependency of the resolve target is not clean in the current get work turn, reminding the agent that in-batch dependencies must be submitted before dependent targets.
+        dep_resp = rc.check_in_batch_dependencies(target_node, suppression_key="submit")
+        if dep_resp is not None:
+            return dep_resp
 
         # Verification check for target
         passed, _ = rc.evaluate_verification_for_node(target_node)
-        # Requirement: Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool targeting the submitted target with reasoning text indicating that verification results must be inspected before submitting.
+        # Requirement: Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool targeting the resolve target with reasoning text indicating that verification results must be inspected before submitting.
         if not passed:
             follow_up = tool_provider.FollowUpToolCall(
                 tool_name="check_file",
@@ -754,13 +1032,15 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
                 suppression_key="submit",
             )
 
-        # Requirement: Tool execution marks the target as submitted, locks the target read-write files in the edit manager against modification, and produces a terminating response indicating that the session completed successfully when mcp mode is inactive and all session targets are resolved, produces a non-terminating response with a reminder to call the get work tool when mcp mode is active and all session targets are resolved, or produces a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
-        # Requirement: [SubmitTool] The finish tool, fail tool, and blame tool produce terminating responses when mcp mode is inactive, and produce non-terminating responses directing the agent to call the get work tool when mcp mode is active and all session targets are resolved.
+        # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
+        # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
         rc.set_node_state(target_node, "SUBMITTED")
+        rc.mark_clean_in_turn(target_node)
         rc.lock_node_files(target_node)
         open_nodes = rc.open_nodes()
 
         if open_nodes:
+            # Requirement: Produces a non-terminating response with a reminder listing remaining active nodes formatted via the template formatter when other active nodes remain.
             open_reminder = rc.format_open_targets_reminder()
             content = f"Target `{target_alias}` submitted successfully.\n\n{open_reminder}".strip()
             return tool_provider.Response(
@@ -785,6 +1065,7 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
             pass
 
         if is_mcp:
+            # Requirement: When all active nodes are resolved, resolving an active node produces a non-terminating response with a reminder to call the get work tool when mcp mode is active.
             mcp_reminder = "All session targets are resolved. Call get_work to process next tasks."
             content = f"{msg}\n\n{mcp_reminder}".strip() if msg else mcp_reminder
             return tool_provider.Response(
@@ -795,6 +1076,7 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
                 suppression_key="submit",
             )
 
+        # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
         return tool_provider.Response(
             is_failed=False,
             is_terminated=True,
@@ -803,7 +1085,7 @@ class SubmitTool(sandbox_run_control.SubmitTool, Singleton):
         )
 
 
-class FailTool(sandbox_run_control.FailTool, Singleton):
+class FailTool(_ResolveTool, sandbox_run_control.FailTool, Singleton):
     tier = agent_session
 
     def __init__(self) -> None:
@@ -811,7 +1093,7 @@ class FailTool(sandbox_run_control.FailTool, Singleton):
 
     @property
     def name(self) -> str:
-        # Requirement: The fail tool is named `fail`.
+        # Requirement: The fail tool is named `fail`, accepting a resolve target parameter and a text explanation parameter using the string parameter converter.
         return "fail"
 
     @property
@@ -819,18 +1101,8 @@ class FailTool(sandbox_run_control.FailTool, Singleton):
         return "Terminates the run or marks a target in failure."
 
     @property
-    def target(self) -> tool_provider.Parameter:
-        alias_mgr = get_singleton(agent_file_alias.AliasManager)
-        return tool_provider.Parameter(
-            name="target",
-            description="Target file alias being failed. Required in multi-target sessions; may be omitted in single-target sessions.",
-            parameter_converter=alias_mgr,
-            is_required=False,
-        )
-
-    @property
-    def explanation(self) -> tool_provider.Parameter:
-        # Requirement: The fail tool explanation parameter uses a string parameter converter to accept text.
+    def explanation(self) -> tool_provider.Parameter[str, str]:
+        # Requirement: The fail tool is named `fail`, accepting a resolve target parameter and a text explanation parameter using the string parameter converter.
         str_conv = get_singleton(tool_provider.StringParameterConverter)
         return tool_provider.Parameter(
             name="explanation",
@@ -841,14 +1113,18 @@ class FailTool(sandbox_run_control.FailTool, Singleton):
 
     @property
     def parameters(self) -> Set[tool_provider.Parameter]:
-        return {self.target, self.explanation}
+        return {self.resolve_target, self.target, self.explanation}
 
     def execute_tool(
         self, actual_parameter_bindings: tool_provider.ActualParameterBindings
     ) -> tool_provider.Response:
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
         exp = str(bindings_map.get("explanation", "Failed"))
-        raw_target = bindings_map.get("target")
+        raw_target = (
+            bindings_map.get("resolve_target")
+            if bindings_map.get("resolve_target") is not None
+            else bindings_map.get("target")
+        )
 
         rc = get_singleton(RunController)
         target_str = ""
@@ -860,8 +1136,8 @@ class FailTool(sandbox_run_control.FailTool, Singleton):
             ).strip()
 
         if not target_str:
-            # Requirement: When the target parameter is omitted and exactly one session read-write file exists or one unsubmitted read-write file remains, the target parameter defaults to that target.
-            # Requirement: When the target parameter is omitted and multiple unsubmitted read-write files exist, the target parameter defaults to the last read or written path if it corresponds to an open session target, and otherwise tool execution fails, reminding the agent to specify an open target.
+            # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
+            # Requirement: When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
             target_node = rc.resolve_default_target()
             if target_node is None:
                 open_targets = ", ".join(
@@ -875,7 +1151,7 @@ class FailTool(sandbox_run_control.FailTool, Singleton):
                 )
         else:
             target_node = rc.get_node_for_alias(target_str)
-            # Requirement: Tool execution fails when the target parameter does not match an open session target, reminding the agent to specify an open target.
+            # Requirement: Tool execution fails when the resolve target parameter is omitted and cannot be defaulted, or when the specified resolve target parameter does not match an open active node, reminding the agent to specify an open target.
             if target_node is None or rc.get_node_state(target_node) != "OPEN":
                 open_targets = ", ".join(
                     f"`{rc.get_alias_for_node(n)}`" for n in rc.open_nodes()
@@ -888,14 +1164,22 @@ class FailTool(sandbox_run_control.FailTool, Singleton):
                 )
 
         target_alias = rc.get_alias_for_node(target_node)
-        # Requirement: Executing the fail tool marks the target as failed, locks the target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response carrying the explanation when mcp mode is inactive and no open targets remain, producing a non-terminating response with a reminder to call the get work tool when mcp mode is active and no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
-        # Requirement: [FailTool] The finish tool, fail tool, and blame tool produce terminating responses when mcp mode is inactive, and produce non-terminating responses directing the agent to call the get work tool when mcp mode is active and all session targets are resolved.
+
+        # Requirement: Tool execution fails when an in-batch dependency of the resolve target is not clean in the current get work turn, reminding the agent that in-batch dependencies must be submitted before dependent targets.
+        dep_resp = rc.check_in_batch_dependencies(target_node)
+        if dep_resp is not None:
+            return dep_resp
+
+        # Requirement: Executing the fail tool marks the active node as failed and resolves the active node.
+        # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
+        # Requirement: Automatically marks in-batch dependent nodes as failed and locks their read-write files upon node failure or blame attribution.
         rc.set_node_state(target_node, "FAILED")
         rc.lock_node_files(target_node)
-        rc.block_dependents(target_node)
+        rc.fail_dependents(target_node)
 
         open_nodes = rc.open_nodes()
         if open_nodes:
+            # Requirement: Produces a non-terminating response with a reminder listing remaining active nodes formatted via the template formatter when other active nodes remain.
             open_reminder = rc.format_open_targets_reminder()
             content = (
                 f"Target `{target_alias}` failed: {exp}\n\n{open_reminder}".strip()
@@ -915,6 +1199,7 @@ class FailTool(sandbox_run_control.FailTool, Singleton):
             pass
 
         if is_mcp:
+            # Requirement: When all active nodes are resolved, resolving an active node produces a non-terminating response with a reminder to call the get work tool when mcp mode is active.
             mcp_reminder = "All session targets are resolved. Call get_work to process next tasks."
             return tool_provider.Response(
                 is_failed=True,
@@ -923,6 +1208,7 @@ class FailTool(sandbox_run_control.FailTool, Singleton):
                 reminder=mcp_reminder,
             )
 
+        # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
         return tool_provider.Response(
             is_failed=True,
             is_terminated=True,
@@ -930,7 +1216,7 @@ class FailTool(sandbox_run_control.FailTool, Singleton):
         )
 
 
-class BlameTool(sandbox_run_control.BlameTool, Singleton):
+class BlameTool(_ResolveTool, sandbox_run_control.BlameTool, Singleton):
     tier = agent_session
 
     def __init__(self) -> None:
@@ -938,7 +1224,7 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
 
     @property
     def name(self) -> str:
-        # Requirement: The blame tool is named `blame`.
+        # Requirement: The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter using the alias manager, and a text explanation parameter using the string parameter converter.
         return "blame"
 
     @property
@@ -946,18 +1232,8 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
         return "Attributes failure to a dependency node via a blame target."
 
     @property
-    def target(self) -> tool_provider.Parameter:
-        alias_mgr = get_singleton(agent_file_alias.AliasManager)
-        return tool_provider.Parameter(
-            name="target",
-            description="Session target file alias attributing the blame. Required in multi-target sessions; may be omitted in single-target sessions.",
-            parameter_converter=alias_mgr,
-            is_required=False,
-        )
-
-    @property
-    def blame_target(self) -> tool_provider.Parameter:
-        # Requirement: The blame tool blame target parameter uses the alias manager to convert a file alias.
+    def blame_target(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
+        # Requirement: The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter using the alias manager, and a text explanation parameter using the string parameter converter.
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         return tool_provider.Parameter(
             name="blame_target",
@@ -967,8 +1243,8 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
         )
 
     @property
-    def explanation(self) -> tool_provider.Parameter:
-        # Requirement: The blame tool explanation parameter uses a string parameter converter to accept text.
+    def explanation(self) -> tool_provider.Parameter[str, str]:
+        # Requirement: The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter using the alias manager, and a text explanation parameter using the string parameter converter.
         str_conv = get_singleton(tool_provider.StringParameterConverter)
         return tool_provider.Parameter(
             name="explanation",
@@ -979,13 +1255,17 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
 
     @property
     def parameters(self) -> Set[tool_provider.Parameter]:
-        return {self.target, self.blame_target, self.explanation}
+        return {self.resolve_target, self.target, self.blame_target, self.explanation}
 
     def execute_tool(
         self, actual_parameter_bindings: tool_provider.ActualParameterBindings
     ) -> tool_provider.Response:
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
-        raw_target = bindings_map.get("target")
+        raw_target = (
+            bindings_map.get("resolve_target")
+            if bindings_map.get("resolve_target") is not None
+            else bindings_map.get("target")
+        )
         raw_blame_target = bindings_map.get("blame_target")
         exp = str(bindings_map.get("explanation", ""))
 
@@ -1046,7 +1326,7 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
                             else (rc.nodes[0] if rc.nodes else None)
                         )
             else:
-                # Requirement: When the blame target matches a configured blame target of an open session target, the source target parameter defaults to that session target.
+                # Requirement: Tool execution defaults the resolve target parameter to that active node when the blame target matches a configured blame target of an open active node.
                 matching_nodes = [
                     n
                     for n in open_nodes
@@ -1066,15 +1346,14 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
                             else matching_nodes[0]
                         )
                 else:
-                    # Requirement: When the source target parameter is omitted and cannot be inferred from the blame target, the source target parameter defaults to the single session target or remaining unsubmitted target, or to the last read or written path if it corresponds to an open session target.
+                    # Requirement: Tool execution defaults the resolve target parameter using resolve target defaulting rules when the resolve target parameter is omitted and cannot be inferred from the blame target.
                     source_node = rc.resolve_default_target() or (
                         open_nodes[0]
                         if open_nodes
                         else (rc.nodes[0] if rc.nodes else None)
                     )
         elif raw_target is not None or target_str:
-            # Check if raw_target / target_str matches a configured blame target of an open node
-            # Requirement: When the blame target parameter is omitted and the source target parameter matches a configured blame target, the blame target parameter defaults to that target and the source target parameter defaults to the session target configured with that blame target.
+            # Requirement: Tool execution defaults the blame target parameter to that target and the resolve target parameter to the active node configured with that blame target when the blame target parameter is omitted and the resolve target parameter matches a configured blame target.
             matching_nodes = [
                 n
                 for n in open_nodes
@@ -1108,7 +1387,7 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
                     blamee_str = target_str
         else:
             # Both omitted
-            # Requirement: When the source target parameter is omitted and cannot be inferred from the blame target, the source target parameter defaults to the single session target or remaining unsubmitted target, or to the last read or written path if it corresponds to an open session target.
+            # Requirement: Tool execution defaults the resolve target parameter using resolve target defaulting rules when the resolve target parameter is omitted and cannot be inferred from the blame target.
             source_node = rc.resolve_default_target() or (
                 open_nodes[0]
                 if open_nodes
@@ -1136,7 +1415,7 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
                 getattr(t, "relative_path", getattr(t, "short_name", ""))
                 for t in allowed_blame_targets
             )
-            # Requirement: Executing the blame tool fails if the blame target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
+            # Requirement: Tool execution fails if the blame target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
@@ -1144,18 +1423,26 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
                 reminder="Only upstream files configured as blame targets can be blamed.",
             )
 
-        # Requirement: On successful blame tool execution, the response marks the submitted target of the blame as resolved, locks the submitted target read-write files in the edit manager against modification, and marks in-session dependent targets as blocked, producing a terminating response attributing defect feedback to the blame target owning node when mcp mode is inactive and no open targets remain, producing a non-terminating response with a reminder to call the get work tool when mcp mode is active and no open targets remain, or producing a non-terminating response with a reminder listing remaining open target files formatted via the template formatter when open targets remain.
-        # Requirement: [BlameTool] The finish tool, fail tool, and blame tool produce terminating responses when mcp mode is inactive, and produce non-terminating responses directing the agent to call the get work tool when mcp mode is active and all session targets are resolved.
+        source_alias = rc.get_alias_for_node(source_node)
+
+        # Requirement: Tool execution fails when an in-batch dependency of the resolve target is not clean in the current get work turn, reminding the agent that in-batch dependencies must be submitted before dependent targets.
+        dep_resp = rc.check_in_batch_dependencies(source_node)
+        if dep_resp is not None:
+            return dep_resp
+
+        # Requirement: Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
+        # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
+        # Requirement: Automatically marks in-batch dependent nodes as failed and locks their read-write files upon node failure or blame attribution.
         target_name = getattr(
             matched_target, "relative_path", getattr(matched_target, "short_name", "")
         )
-        source_alias = rc.get_alias_for_node(source_node)
         rc.set_node_state(source_node, "BLAME")
         rc.lock_node_files(source_node)
-        rc.block_dependents(source_node)
+        rc.fail_dependents(source_node)
 
         open_nodes = rc.open_nodes()
         if open_nodes:
+            # Requirement: Produces a non-terminating response with a reminder listing remaining active nodes formatted via the template formatter when other active nodes remain.
             open_reminder = rc.format_open_targets_reminder()
             content = f"Target `{source_alias}` blamed `{target_name}`: {exp}\n\n{open_reminder}".strip()
             return tool_provider.Response(
@@ -1173,6 +1460,7 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
             pass
 
         if is_mcp:
+            # Requirement: When all active nodes are resolved, resolving an active node produces a non-terminating response with a reminder to call the get work tool when mcp mode is active.
             mcp_reminder = "All session targets are resolved. Call get_work to process next tasks."
             return tool_provider.Response(
                 is_failed=False,
@@ -1181,233 +1469,11 @@ class BlameTool(sandbox_run_control.BlameTool, Singleton):
                 reminder=mcp_reminder,
             )
 
+        # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
         return tool_provider.Response(
             is_failed=False,
             is_terminated=True,
             content=f"Blamed {target_name}: {exp}",
-        )
-
-
-class CheckFileTool(sandbox_run_control.CheckFileTool, Singleton):
-    tier = agent_session
-
-    def __init__(self) -> None:
-        self._last_tested_revision: Optional[int] = None
-        self._last_tested_node_revision: Dict[dag_storage.Node, int] = {}
-
-    @property
-    def name(self) -> str:
-        # Requirement: The check file tool is named `check_file`, accepting an optional path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
-        return "check_file"
-
-    @property
-    def description(self) -> str:
-        return (
-            "Checks static type correctness and syntax for the specified source file alias or open targets. "
-            "Call check_file often while developing to catch type and syntax errors early."
-        )
-
-    @property
-    def path(self) -> tool_provider.Parameter:
-        alias_mgr = get_singleton(agent_file_alias.AliasManager)
-        return tool_provider.Parameter(
-            name="path",
-            description="Source file alias to check. May be omitted to check open targets.",
-            parameter_converter=alias_mgr,
-            is_required=False,
-        )
-
-    @property
-    def src(self) -> tool_provider.Parameter:
-        alias_mgr = get_singleton(agent_file_alias.AliasManager)
-        return tool_provider.Parameter(
-            name="src",
-            description="Source file alias to check (alias of path). May be omitted to check open targets.",
-            parameter_converter=alias_mgr,
-            is_required=False,
-        )
-
-    @property
-    def target(self) -> tool_provider.Parameter:
-        return self.path
-
-    @property
-    def parameters(self) -> Set[tool_provider.Parameter]:
-        # Requirement: The check file tool is named `check_file`, accepting an optional path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
-        return {self.path, self.src}
-
-    def execute_tool(
-        self, actual_parameter_bindings: tool_provider.ActualParameterBindings
-    ) -> tool_provider.Response:
-        bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
-        raw_target = bindings_map.get("path") or bindings_map.get("src") or bindings_map.get("target")
-
-        rc = get_singleton(RunController)
-        guide_del = get_singleton(sandbox_guide_delivery.GuideDelivery)
-        edit_mgr = get_singleton(sandbox_file_editor.EditManager)
-        cfg = get_singleton(agent_node_config.NodeConfig)
-
-        # Requirement: Executing the check file tool updates verification results if outdated.
-        target_str = ""
-        if raw_target is not None:
-            target_str = (
-                getattr(raw_target, "relative_path", None)
-                or getattr(raw_target, "short_name", None)
-                or str(raw_target)
-            ).strip()
-
-        target_node: Optional[dag_storage.Node] = None
-        if target_str:
-            target_node = rc.get_node_for_alias(target_str)
-            # Requirement: Tool execution fails when the specified path parameter does not match an open session target, reminding the agent to specify an open target.
-            if target_node is None or rc.get_node_state(target_node) != "OPEN":
-                open_targets = ", ".join(
-                    f"`{rc.get_alias_for_node(n)}`" for n in rc.open_nodes()
-                )
-                return tool_provider.Response(
-                    is_failed=True,
-                    is_terminated=False,
-                    content=f"Error: Specified path '{target_str}' does not match an open session target.",
-                    reminder=f"Specify an open target: {open_targets}",
-                    suppression_key="check_file",
-                )
-        else:
-            # Requirement: When the path parameter is omitted and exactly one session read-write file exists or one unsubmitted read-write file remains, the path parameter defaults to that read-write file.
-            # Requirement: When the path parameter is omitted and multiple unsubmitted read-write files exist, the path parameter defaults to the last read or written path if it corresponds to an open session target, and otherwise tool execution fails, reminding the agent to specify an open target.
-            target_node = rc.resolve_default_target()
-            if target_node is None:
-                open_targets = ", ".join(
-                    f"`{rc.get_alias_for_node(n)}`" for n in rc.open_nodes()
-                )
-                return tool_provider.Response(
-                    is_failed=True,
-                    is_terminated=False,
-                    content="Error: 'path' must be specified when multiple unsubmitted targets exist.",
-                    reminder=f"Specify an open target: {open_targets}",
-                    suppression_key="check_file",
-                )
-
-        # Requirement: When a path target is specified or defaulted, executing the check file tool evaluates verification checks for that target.
-        if target_node is not None:
-            passed, diag = rc.evaluate_verification_for_node(target_node)
-        else:
-            passed, diag = rc.evaluate_verification()
-
-        current_rev = edit_mgr.file_update_revision
-        is_repeated = (
-            self._last_tested_revision is not None
-            and self._last_tested_revision == current_rev
-        )
-        self._last_tested_revision = current_rev
-
-        reminder: Optional[str] = None
-        follow_up: Optional[tool_provider.FollowUpToolCall] = None
-
-        if is_repeated:
-            rw_file = None
-            if raw_target is not None:
-                for f in cfg.read_write_files:
-                    if f == raw_target or getattr(f, "relative_path", "") == getattr(
-                        raw_target, "relative_path", str(raw_target)
-                    ):
-                        rw_file = f
-                        break
-            if rw_file is None and target_node is not None:
-                target_alias = rc.get_alias_for_node(target_node)
-                for f in cfg.read_write_files:
-                    if (
-                        getattr(f, "owning_node", None) == target_node
-                        or getattr(f, "relative_path", "") == target_alias
-                    ):
-                        rw_file = f
-                        break
-            if rw_file is None:
-                last_f = edit_mgr.last_read_or_edited_file
-                if last_f is not None:
-                    for f in cfg.read_write_files:
-                        if f == last_f or getattr(f, "relative_path", "") == getattr(
-                            last_f, "relative_path", ""
-                        ):
-                            rw_file = f
-                            break
-            if rw_file is None and cfg.read_write_files:
-                rw_file = next(
-                    iter(
-                        sorted(
-                            cfg.read_write_files,
-                            key=lambda f: getattr(
-                                f, "relative_path", getattr(f, "short_name", "")
-                            ),
-                        )
-                    ),
-                    None,
-                )
-            src_name = (
-                getattr(rw_file, "relative_path", getattr(rw_file, "short_name", ""))
-                if rw_file
-                else "session read-write files"
-            )
-            status_word = "passes" if passed else "failed"
-            action_word = "advance" if cfg.is_step_mode else "submit"
-            # Requirement: Reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous check file tool execution.
-            reminder = f"Verification {status_word}, no new information will be revealed by this tool call until {src_name} is updated."
-            if rw_file is not None:
-                rw_file_alias = getattr(
-                    rw_file, "relative_path", getattr(rw_file, "short_name", "")
-                )
-                if passed:
-                    reasoning_text = (
-                        f"Oh, verification passes and no new information will be revealed by calling check_file again until files are updated. "
-                        f"Let me read {rw_file_alias} again and see if I can figure out a different course of action. "
-                        f"If it is already correct, I need to {action_word} the agent session rather than check files again."
-                    )
-                else:
-                    reasoning_text = (
-                        f"Oh, verification failed and no new information will be revealed by calling check_file again until files are updated. "
-                        f"Let me read {rw_file_alias} again and see if I can figure out a different course of action."
-                    )
-                # Requirement: Specifies a follow-up execution of the view file tool on the session source file (resolving to the specified path target if a read-write file, the last accessed read-write file, or the primary session read-write file) and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check file tool execution.
-                follow_up = tool_provider.FollowUpToolCall(
-                    tool_name="view_file",
-                    wire_parameter_bindings=tool_provider.WireParameterBindings(
-                        bindings={("path", rw_file_alias)}
-                    ),
-                    reasoning_text=reasoning_text,
-                )
-
-        if not passed:
-            # Requirement: Fails when verification fails, presenting diagnostic feedback sanitized through the alias manager alongside any configured verification failure instructions.
-            vf_block = ""
-            guide_obj = getattr(guide_del, "guide", None)
-            if guide_obj and getattr(guide_obj, "verification_failure", None):
-                vf_block = (
-                    f"\n\n## Verification failure\n{guide_obj.verification_failure}"
-                )
-            content = f"Verification failed: {diag}{vf_block}".strip()
-            return tool_provider.Response(
-                is_failed=True,
-                is_terminated=False,
-                content=content,
-                reminder=reminder,
-                suppression_key="check_file",
-                follow_up_tool_call=follow_up,
-            )
-
-        # Requirement: Produces a response presenting passing verification results using the session verification success message when configured or default passing verification results alongside sanitized check output when verification passes.
-        base_msg = (
-            cfg.verification_success_message
-            or "Verification passed: All checks succeeded."
-        )
-        content = base_msg
-        if diag:
-            content = f"{content}\n\n{diag}".strip()
-        return tool_provider.Response(
-            is_failed=False,
-            is_terminated=False,
-            content=content,
-            reminder=reminder,
-            suppression_key="check_file",
-            follow_up_tool_call=follow_up,
         )
 
 
@@ -1419,7 +1485,7 @@ class GetWorkTool(sandbox_run_control.GetWorkTool, Singleton):
 
     @property
     def name(self) -> str:
-        # Requirement: The get work tool is named `get_work`, accepting an optional integer max batch size parameter.
+        # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter using the integer parameter converter.
         return "get_work"
 
     @property
@@ -1427,8 +1493,8 @@ class GetWorkTool(sandbox_run_control.GetWorkTool, Singleton):
         return "Retrieves active dirty targets, materializes startup templates, and returns the session task prompt."
 
     @property
-    def max_batch_size(self) -> tool_provider.Parameter:
-        # Requirement: The get work tool is named `get_work`, accepting an optional integer max batch size parameter.
+    def max_batch_size(self) -> tool_provider.Parameter[int, int]:
+        # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter using the integer parameter converter.
         int_conv = get_singleton(tool_provider.IntegerParameterConverter)
         return tool_provider.Parameter(
             name="max_batch_size",
@@ -1449,7 +1515,7 @@ class GetWorkTool(sandbox_run_control.GetWorkTool, Singleton):
             n for n in rc.open_nodes() if n.unit_address != "//session:target"
         ]
         if open_nodes:
-            # Requirement: Tool execution fails when open session targets remain, reminding the agent that open targets must be resolved before requesting new work.
+            # Requirement: Tool execution fails when open active nodes remain, reminding the agent that open nodes must be resolved before requesting new work.
             open_targets = ", ".join(
                 f"`{rc.get_alias_for_node(n)}`" for n in open_nodes
             )
@@ -1460,7 +1526,7 @@ class GetWorkTool(sandbox_run_control.GetWorkTool, Singleton):
                 reminder=f"Open session targets must be resolved before requesting new work: {open_targets}.",
             )
 
-        # Requirement: When no open targets remain, executing the get work tool obtains dirty nodes from dag storage and dag subgraph, updating the active nodes and execution version on role config.
+        # Requirement: Tool execution obtains dirty nodes from dag storage and dag subgraph, updating the active nodes and execution version on role config, when no open active nodes remain.
         subgraph = get_singleton(dag_subgraph.DagSubgraph)
         batch = list(subgraph.next_ready_batch())
 
@@ -1478,7 +1544,7 @@ class GetWorkTool(sandbox_run_control.GetWorkTool, Singleton):
             except (ValueError, TypeError):
                 pass
 
-        # Requirement: If no dirty nodes are ready for cleaning, executing the get work tool produces an idle response indicating that no dirty nodes are ready.
+        # Requirement: Tool execution produces an idle response indicating that no dirty nodes are ready if no dirty nodes are ready for cleaning.
         if not batch:
             return tool_provider.Response(
                 is_failed=False,
@@ -1487,7 +1553,7 @@ class GetWorkTool(sandbox_run_control.GetWorkTool, Singleton):
                 reminder="No dirty nodes are ready for cleaning.",
             )
 
-        # Requirement: When ready dirty nodes are obtained, executing the get work tool materializes startup templates on disk, constructs the task prompt from dirty node definitions, guide instructions, and incoming messages from dag storage formatted via the template formatter, and returns the rendered task prompt.
+        # Requirement: Tool execution materializes startup templates on disk, constructs the task prompt from dirty node definitions, guide instructions, and incoming messages from dag storage formatted via the template formatter, and returns the rendered task prompt when ready dirty nodes are obtained.
         role_cfg = get_singleton(agent_node_config.RoleConfig)
         role_cfg.set_nodes(batch)
         rc.reset_nodes(batch)
@@ -1510,15 +1576,21 @@ class GetWorkTool(sandbox_run_control.GetWorkTool, Singleton):
             content=rendered_prompt,
         )
 
-
-RunTestsTool = CheckFileTool
-
-
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         RunController,
         keys=[RunController, sandbox_run_control.RunController],
+        tier=agent_session,
+    )
+    reg.register_singleton(
+        CheckFileTool,
+        keys=[
+            CheckFileTool,
+            sandbox_run_control.CheckFileTool,
+            sandbox_run_control.RunTestsTool,
+            tool_provider.Tool,
+        ],
         tier=agent_session,
     )
     reg.register_singleton(
@@ -1531,6 +1603,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         keys=[
             SubmitTool,
             sandbox_run_control.SubmitTool,
+            sandbox_run_control.ResolveTool,
             sandbox_run_control.FinishTool,
             tool_provider.Tool,
         ],
@@ -1538,20 +1611,20 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     )
     reg.register_singleton(
         FailTool,
-        keys=[FailTool, sandbox_run_control.FailTool, tool_provider.Tool],
+        keys=[
+            FailTool,
+            sandbox_run_control.FailTool,
+            sandbox_run_control.ResolveTool,
+            tool_provider.Tool,
+        ],
         tier=agent_session,
     )
     reg.register_singleton(
         BlameTool,
-        keys=[BlameTool, sandbox_run_control.BlameTool, tool_provider.Tool],
-        tier=agent_session,
-    )
-    reg.register_singleton(
-        CheckFileTool,
         keys=[
-            CheckFileTool,
-            sandbox_run_control.CheckFileTool,
-            sandbox_run_control.RunTestsTool,
+            BlameTool,
+            sandbox_run_control.BlameTool,
+            sandbox_run_control.ResolveTool,
             tool_provider.Tool,
         ],
         tier=agent_session,

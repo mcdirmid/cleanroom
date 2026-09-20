@@ -34,6 +34,7 @@ from update_with_ai.parts.sandbox.lib.sandbox_run_control import (
     CheckFileTool,
     FailTool,
     GetWorkTool,
+    ResolveTool,
     RunController,
     RunTestsTool,
     SubmitTool,
@@ -45,7 +46,6 @@ from update_with_ai.parts.sandbox.lib.sandbox_run_control_impl import (
     FailTool as FailToolImpl,
     GetWorkTool as GetWorkToolImpl,
     RunController as RunControllerImpl,
-    RunTestsTool as RunTestsToolImpl,
     SubmitTool as SubmitToolImpl,
     __initialize__,
 )
@@ -502,25 +502,25 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # Requirement: Verification checks exposed by the run controller include the session verification checks from node config.
             # Requirement: [RunController] The run controller exposes verification checks that validate session criteria.
             self.assertEqual(ctrl.verification_checks, [])
-            # Requirement: The run controller unconditionally installs the submit tool, fail tool, check file tool, and get work tool for the agent session, installs the advance tool only when guide step mode is active, and obtains configured blame targets and verification checks from the node config, installing the blame tool only when blame targets are configured.
+            # Requirement: The run controller initializes by unconditionally installing the submit tool, fail tool, check file tool, and get work tool for the agent session, installing the advance tool only when guide step mode is active, obtaining configured blame targets and verification checks from the node config, and installing the blame tool only when blame targets are configured.
             # Requirement: [RunController] The run controller installs an advance tool when guide step mode is active, coordinating step progression through guide delivery upon passing verification.
-            # Requirement: [RunController] The run controller installs a submit tool that concludes target processing upon passing verification and enforces change documentation.
-            # Requirement: [RunController] The run controller installs a fail tool that terminates the run in failure.
-            # Requirement: [RunController] The run controller installs a check file tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
-            # Requirement: [RunController] The run controller installs a blame tool when blame targets are configured, attributing task failure to an upstream dependency node.
-            # Requirement: [RunController] The run controller installs a get work tool that retrieves active dirty nodes, materializes startup templates, and delivers the session task prompt.
+            # Requirement: [RunController] The run controller installs a submit tool which is a resolve tool that concludes active nodes upon passing verification, marks the resolve target clean in the current get work turn, accepting a text change summary parameter, and enforces change documentation.
+            # Requirement: [RunController] The run controller installs a fail tool which is a resolve tool that terminates the run in failure, accepting a text explanation parameter.
+            # Requirement: [RunController] The run controller installs a check file tool that updates verification results if outdated, accepting a file alias path parameter, presenting verification outcomes to the agent and failing when verification failed.
+            # Requirement: [RunController] The run controller installs a blame tool which is a resolve tool, when blame targets are configured, attributing task failure to an upstream dependency node, accepting a file alias blame target parameter and a text explanation parameter.
+            # Requirement: [RunController] The run controller installs a get work tool that retrieves active dirty nodes, materializes startup templates, accepting an integer max batch size parameter, and delivers the session task prompt.
             tool_names = {t.name for t in self.tool_mgr.installed_tools}
             # Requirement: The advance tool is named `advance`, accepts no parameters, and shares a constant suppression key `advance`.
             self.assertIn("advance", tool_names)
-            # Requirement: The submit tool is named `submit`, accepting a target parameter and a text change summary parameter, and shares a constant suppression key `submit`.
+            # Requirement: The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter using the string parameter converter, and shares a constant suppression key `submit`.
             self.assertIn("submit", tool_names)
-            # Requirement: The fail tool is named `fail`, accepting a target parameter and a text explanation parameter.
+            # Requirement: The fail tool is named `fail`, accepting a resolve target parameter and a text explanation parameter using the string parameter converter.
             self.assertIn("fail", tool_names)
-            # Requirement: The check file tool is named `check_file`, accepting a path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
+            # Requirement: The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias) using the alias manager, and shares a constant suppression key `check_file`.
             self.assertIn("check_file", tool_names)
-            # Requirement: The blame tool is named `blame`, accepting a source target parameter, a file alias blame target parameter, and a text explanation parameter.
+            # Requirement: The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter using the alias manager, and a text explanation parameter using the string parameter converter.
             self.assertIn("blame", tool_names)
-            # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter.
+            # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter using the integer parameter converter.
             self.assertIn("get_work", tool_names)
 
     def test_run_controller_initialization_without_blame_and_step_mode(self) -> None:
@@ -565,7 +565,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
         with enter_phase(agent_session, registry=reg) as scope:
             ctrl = scope.get_singleton(RunController)
-            # Requirement: The run controller unconditionally installs the submit tool, fail tool, check file tool, and get work tool for the agent session, installs the advance tool only when guide step mode is active, and obtains configured blame targets and verification checks from the node config, installing the blame tool only when blame targets are configured.
+            # Requirement: The run controller initializes by unconditionally installing the submit tool, fail tool, check file tool, and get work tool for the agent session, installing the advance tool only when guide step mode is active, obtaining configured blame targets and verification checks from the node config, and installing the blame tool only when blame targets are configured.
             tool_names = {t.name for t in tool_mgr.installed_tools}
             self.assertIn("submit", tool_names)
             self.assertIn("fail", tool_names)
@@ -738,12 +738,12 @@ class SandboxRunControlImplTest(unittest.TestCase):
         """CUJ: SubmitTool declares target and change_summary parameters with converters."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             submit = scope.get_singleton(SubmitToolImpl)
-            # Requirement: The submit tool is named `submit`, accepting a target parameter and a text change summary parameter, and shares a constant suppression key `submit`.
+            # Requirement: The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter using the string parameter converter, and shares a constant suppression key `submit`.
             self.assertEqual(submit.name, "submit")
             self.assertIsInstance(submit.description, str)
-            self.assertEqual(submit.parameters, {submit.target, submit.change_summary})
-            # Requirement: The submit tool change summary parameter uses a string parameter converter to accept text.
+            self.assertEqual(submit.parameters, {submit.resolve_target, submit.target, submit.change_summary})
             self.assertIs(submit.change_summary.parameter_converter, self.str_conv)
+            self.assertIs(submit.resolve_target.parameter_converter, self.alias_mgr)
             self.assertIs(submit.target.parameter_converter, self.alias_mgr)
 
     def test_submit_tool_fails_when_steps_remain_specifies_advance_followup(
@@ -774,7 +774,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
                 resp.follow_up_tool_call.reasoning_text,
                 "Remaining guide steps must be completed before finishing.",
             )
-            # Requirement: The submit tool is named `submit`, accepting a target parameter and a text change summary parameter, and shares a constant suppression key `submit`.
+            # Requirement: The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter using the string parameter converter, and shares a constant suppression key `submit`.
             self.assertEqual(resp.suppression_key, "submit")
 
     def test_submit_tool_fails_when_verification_failing_specifies_check_file_followup(
@@ -793,7 +793,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             submit = scope.get_singleton(SubmitToolImpl)
             b = ActualParameterBindings(bindings=set())
             # Requirement: Executing the submit tool updates verification results if outdated.
-            # Requirement: Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool targeting the submitted target with reasoning text indicating that verification results must be inspected before submitting.
+            # Requirement: Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool targeting the resolve target with reasoning text indicating that verification results must be inspected before submitting.
             resp = submit.execute_tool(b)
 
             self.assertTrue(resp.is_failed)
@@ -867,9 +867,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
             b = ActualParameterBindings(
                 bindings={(submit.change_summary, "Unneeded change summary")}
             )
-            # Requirement: Tool execution marks the target as submitted and resolves the target.
-            # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
-            # Requirement: When all session targets are resolved, resolving a target produces a terminating response indicating that the session completed successfully for submitted targets, carrying the explanation for failed targets, or attributing defect feedback to the blame target owning node for blamed targets, when mcp mode is inactive.
+            # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
+            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
             resp = submit.execute_tool(b)
 
             self.assertFalse(resp.is_failed)
@@ -889,9 +889,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
             b = ActualParameterBindings(
                 bindings={(submit.change_summary, "Added new feature")}
             )
-            # Requirement: Tool execution marks the target as submitted and resolves the target.
-            # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
-            # Requirement: When all session targets are resolved, resolving a target produces a terminating response indicating that the session completed successfully for submitted targets, carrying the explanation for failed targets, or attributing defect feedback to the blame target owning node for blamed targets, when mcp mode is inactive.
+            # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
+            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
             resp = submit.execute_tool(b)
 
             self.assertFalse(resp.is_failed)
@@ -905,18 +905,17 @@ class SandboxRunControlImplTest(unittest.TestCase):
             fail_tool = scope.get_singleton(FailToolImpl)
             self.assertIsInstance(fail_tool.description, str)
             self.assertGreater(len(fail_tool.parameters), 0)
-            # Requirement: The fail tool is named `fail`, accepting a target parameter and a text explanation parameter.
+            # Requirement: The fail tool is named `fail`, accepting a resolve target parameter and a text explanation parameter using the string parameter converter.
             self.assertEqual(fail_tool.name, "fail")
-            # Requirement: The fail tool explanation parameter uses a string parameter converter to accept text.
             self.assertIs(fail_tool.explanation.parameter_converter, self.str_conv)
 
             b = ActualParameterBindings(
                 bindings={(fail_tool.explanation, "Cannot solve bug")}
             )
-            # Requirement: When a target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted target.
-            # Requirement: Executing the fail tool marks the target as failed and resolves the target.
-            # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
-            # Requirement: When all session targets are resolved, resolving a target produces a terminating response indicating that the session completed successfully for submitted targets, carrying the explanation for failed targets, or attributing defect feedback to the blame target owning node for blamed targets, when mcp mode is inactive.
+            # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
+            # Requirement: Executing the fail tool marks the active node as failed and resolves the active node.
+            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
             resp = fail_tool.execute_tool(b)
 
             self.assertTrue(resp.is_failed)
@@ -929,7 +928,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             blame_tool = scope.get_singleton(BlameToolImpl)
             self.assertIsInstance(blame_tool.description, str)
             self.assertGreater(len(blame_tool.parameters), 0)
-            # Requirement: The blame tool is named `blame`, accepting a source target parameter, a file alias blame target parameter, and a text explanation parameter.
+            # Requirement: The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter using the alias manager, and a text explanation parameter using the string parameter converter.
             self.assertEqual(blame_tool.name, "blame")
             self.assertIs(blame_tool.blame_target.parameter_converter, self.alias_mgr)
             self.assertIs(blame_tool.explanation.parameter_converter, self.str_conv)
@@ -946,7 +945,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (blame_tool.explanation, "Broken"),
                 }
             )
-            # Requirement: Tool execution defaults the source target parameter using session target defaulting rules when the source target parameter is omitted and cannot be inferred from the blame target.
+            # Requirement: Tool execution defaults the resolve target parameter using resolve target defaulting rules when the resolve target parameter is omitted and cannot be inferred from the blame target.
             # Requirement: Tool execution fails if the blame target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
             resp_inv = blame_tool.execute_tool(b_invalid)
             self.assertTrue(resp_inv.is_failed)
@@ -959,10 +958,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (blame_tool.explanation, "Broken type signature"),
                 }
             )
-            # Requirement: Tool execution defaults the source target parameter to that session target when the blame target matches a configured blame target of an open session target.
-            # Requirement: Tool execution marks the blame target as attributed and resolves the source target on successful tool execution.
-            # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
-            # Requirement: When all session targets are resolved, resolving a target produces a terminating response indicating that the session completed successfully for submitted targets, carrying the explanation for failed targets, or attributing defect feedback to the blame target owning node for blamed targets, when mcp mode is inactive.
+            # Requirement: Tool execution defaults the resolve target parameter to that active node when the blame target matches a configured blame target of an open active node.
+            # Requirement: Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
+            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
             resp_val = blame_tool.execute_tool(b_valid)
             self.assertFalse(resp_val.is_failed)
             self.assertTrue(resp_val.is_terminated)
@@ -975,10 +974,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (blame_tool.explanation, "Legacy blame call"),
                 }
             )
-            # Requirement: Tool execution defaults the blame target parameter to that target and the source target parameter to the session target configured with that blame target when the blame target parameter is omitted and the source target parameter matches a configured blame target.
-            # Requirement: Tool execution marks the blame target as attributed and resolves the source target on successful tool execution.
-            # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
-            # Requirement: When all session targets are resolved, resolving a target produces a terminating response indicating that the session completed successfully for submitted targets, carrying the explanation for failed targets, or attributing defect feedback to the blame target owning node for blamed targets, when mcp mode is inactive.
+            # Requirement: Tool execution defaults the blame target parameter to that target and the resolve target parameter to the active node configured with that blame target when the blame target parameter is omitted and the resolve target parameter matches a configured blame target.
+            # Requirement: Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
+            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
             resp_leg = blame_tool.execute_tool(b_legacy)
             self.assertFalse(resp_leg.is_failed)
             self.assertTrue(resp_leg.is_terminated)
@@ -1005,15 +1004,15 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             # 1. Submitting without target in multi-target session fails when multiple unsubmitted targets exist
             b_no_target = ActualParameterBindings(bindings=set())
-            # Requirement: When a target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open session target.
+            # Requirement: When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
             resp1 = submit.execute_tool(b_no_target)
             self.assertTrue(resp1.is_failed)
             self.assertIn("Target parameter must be specified", resp1.content)
 
             # 1b. Submitting without target defaults to last read or written path if open session target
             self.edit_mgr.last_read_or_edited_file = TargetFileObj("unit2.py")
-            # Requirement: When a target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open session target.
-            # Requirement: Tool execution fails when an in-session dependency of the target has not yet been submitted, reminding the agent that in-session dependencies must be submitted before dependent targets.
+            # Requirement: When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
+            # Requirement: Tool execution fails when an in-batch dependency of the resolve target is not clean in the current get work turn, reminding the agent that in-batch dependencies must be submitted before dependent targets.
             resp_dep_def = submit.execute_tool(b_no_target)
             self.assertTrue(resp_dep_def.is_failed)
             self.assertIn("must be submitted before `unit2.py`", resp_dep_def.content)
@@ -1023,7 +1022,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             b_unknown = ActualParameterBindings(
                 bindings={(submit.target, "unknown.py")}
             )
-            # Requirement: Tool execution fails when a target parameter is omitted and cannot be defaulted, or when the specified target parameter does not match an open session target, reminding the agent to specify an open target.
+            # Requirement: Tool execution fails when the resolve target parameter is omitted and cannot be defaulted, or when the specified resolve target parameter does not match an open active node, reminding the agent to specify an open target.
             resp2 = submit.execute_tool(b_unknown)
             self.assertTrue(resp2.is_failed)
             self.assertIn("is not an open target", resp2.content)
@@ -1032,7 +1031,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             b_dep_first = ActualParameterBindings(
                 bindings={(submit.target, "unit2.py")}
             )
-            # Requirement: Tool execution fails when an in-session dependency of the target has not yet been submitted, reminding the agent that in-session dependencies must be submitted before dependent targets.
+            # Requirement: Tool execution fails when an in-batch dependency of the resolve target is not clean in the current get work turn, reminding the agent that in-batch dependencies must be submitted before dependent targets.
             resp3 = submit.execute_tool(b_dep_first)
             self.assertTrue(resp3.is_failed)
             self.assertIn("must be submitted before `unit2.py`", resp3.content)
@@ -1044,9 +1043,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (submit.change_summary, "Cleaned unit 1"),
                 }
             )
-            # Requirement: Tool execution marks the target as submitted and resolves the target.
-            # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
-            # Requirement: When blame, submit, or fail is successfully called on a submit target and other submit targets remain, resolving the target produces a non-terminating response with a reminder listing remaining submit targets left for the agent to handle formatted via the template formatter.
+            # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
+            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
+            # Requirement: Produces a non-terminating response with a reminder listing remaining active nodes formatted via the template formatter when other active nodes remain.
             resp4 = submit.execute_tool(b_node1)
             self.assertFalse(resp4.is_failed)
             self.assertFalse(resp4.is_terminated)
@@ -1055,10 +1054,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIn("- `unit2.py`", resp4.content)
 
             # 5. Submitting when only one unsubmitted target remains defaults to that target
-            # Requirement: When a target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted target.
-            # Requirement: Tool execution marks the target as submitted and resolves the target.
-            # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
-            # Requirement: When all session targets are resolved, resolving a target produces a terminating response indicating that the session completed successfully for submitted targets, carrying the explanation for failed targets, or attributing defect feedback to the blame target owning node for blamed targets, when mcp mode is inactive.
+            # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
+            # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
+            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
             resp5 = submit.execute_tool(b_no_target)
             self.assertFalse(resp5.is_failed)
             self.assertTrue(resp5.is_terminated)
@@ -1067,7 +1066,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(rc.format_open_targets_reminder(), "")
 
     def test_multi_node_fail_blocks_dependents_and_terminates(self) -> None:
-        """CUJ: Multi-node fail marks target FAILED, dependents BLOCKED, and terminates when no open nodes remain."""
+        """CUJ: Multi-node fail marks target FAILED, in-batch dependents FAILED, and terminates when no open nodes remain."""
         node1 = Node(unit_address="//pkg:f_unit1", role_address="lib")
         node2 = Node(unit_address="//pkg:f_unit2", role_address="lib")
         node3 = Node(unit_address="//pkg:f_unit3", role_address="lib")
@@ -1082,12 +1081,17 @@ class SandboxRunControlImplTest(unittest.TestCase):
             workspace_path=_make_workspace_path("pkg/f_unit1.py"),
             owning_node=node1,
         )
+        f_rw2 = ReadWriteFile(
+            relative_path="f_unit2.py",
+            workspace_path=_make_workspace_path("pkg/f_unit2.py"),
+            owning_node=node2,
+        )
         f_rw3 = ReadWriteFile(
             relative_path="f_unit3.py",
             workspace_path=_make_workspace_path("pkg/f_unit3.py"),
             owning_node=node3,
         )
-        self.node_cfg._read_write_files = {f_rw1, f_rw3}
+        self.node_cfg._read_write_files = {f_rw1, f_rw2, f_rw3}
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             fail_tool = scope.get_singleton(FailToolImpl)
@@ -1097,24 +1101,26 @@ class SandboxRunControlImplTest(unittest.TestCase):
             b_no_target = ActualParameterBindings(
                 bindings={(fail_tool.explanation, "No target")}
             )
-            # Requirement: When a target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open session target.
+            # Requirement: When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
             resp_no_target = fail_tool.execute_tool(b_no_target)
             self.assertTrue(resp_no_target.is_failed)
             self.assertIn("Target parameter must be specified", resp_no_target.content)
 
             # 1b. Defaulting to last read/written path when multiple unsubmitted exist
             self.edit_mgr.last_read_or_edited_file = TargetFileObj("f_unit1.py")
-            # Requirement: When a target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open session target.
-            # Requirement: Executing the fail tool marks the target as failed and resolves the target.
-            # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
-            # Requirement: When blame, submit, or fail is successfully called on a submit target and other submit targets remain, resolving the target produces a non-terminating response with a reminder listing remaining submit targets left for the agent to handle formatted via the template formatter.
+            # Requirement: When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
+            # Requirement: Executing the fail tool marks the active node as failed and resolves the active node.
+            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
+            # Requirement: Automatically marks in-batch dependent nodes as failed and locks their read-write files upon node failure or blame attribution.
+            # Requirement: Produces a non-terminating response with a reminder listing remaining active nodes formatted via the template formatter when other active nodes remain.
             resp1 = fail_tool.execute_tool(b_no_target)
             self.assertFalse(resp1.is_failed)
             self.assertFalse(resp1.is_terminated)
             self.assertEqual(rc.get_node_state(node1), "FAILED")
-            self.assertEqual(rc.get_node_state(node2), "BLOCKED")
+            self.assertEqual(rc.get_node_state(node2), "FAILED")
             self.assertIn("Remaining submit targets to handle:\n- `f_unit3.py`", resp1.content)
             self.assertIn(f_rw1, self.edit_mgr.locked_files)
+            self.assertIn(f_rw2, self.edit_mgr.locked_files)
             self.edit_mgr.last_read_or_edited_file = None
 
             # 2. Failing already-failed node fails because it is not an open target
@@ -1124,16 +1130,16 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (fail_tool.explanation, "Already failed"),
                 }
             )
-            # Requirement: Tool execution fails when a target parameter is omitted and cannot be defaulted, or when the specified target parameter does not match an open session target, reminding the agent to specify an open target.
+            # Requirement: Tool execution fails when the resolve target parameter is omitted and cannot be defaulted, or when the specified resolve target parameter does not match an open active node, reminding the agent to specify an open target.
             resp_inv = fail_tool.execute_tool(b_fail_again)
             self.assertTrue(resp_inv.is_failed)
             self.assertIn("is not an open target", resp_inv.content)
 
             # 3. Failing when only 1 unsubmitted target remains defaults to that target
-            # Requirement: When a target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted target.
-            # Requirement: Executing the fail tool marks the target as failed and resolves the target.
-            # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
-            # Requirement: When all session targets are resolved, resolving a target produces a terminating response indicating that the session completed successfully for submitted targets, carrying the explanation for failed targets, or attributing defect feedback to the blame target owning node for blamed targets, when mcp mode is inactive.
+            # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
+            # Requirement: Executing the fail tool marks the active node as failed and resolves the active node.
+            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
             resp2 = fail_tool.execute_tool(b_no_target)
             self.assertTrue(resp2.is_failed)
             self.assertTrue(resp2.is_terminated)
@@ -1142,7 +1148,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIn("Failed: No target", resp2.content)
 
     def test_multi_node_blame_blocks_dependents_and_terminates(self) -> None:
-        """CUJ: Multi-node blame marks target BLAME, dependents BLOCKED, and terminates when no open nodes remain."""
+        """CUJ: Multi-node blame marks target BLAME, in-batch dependents FAILED, and terminates when no open nodes remain."""
         node1 = Node(unit_address="//pkg:b_unit1", role_address="lib")
         node2 = Node(unit_address="//pkg:b_unit2", role_address="lib")
         node3 = Node(unit_address="//pkg:b_unit3", role_address="lib")
@@ -1157,12 +1163,17 @@ class SandboxRunControlImplTest(unittest.TestCase):
             workspace_path=_make_workspace_path("pkg/b_unit1.py"),
             owning_node=node1,
         )
+        b_rw2 = ReadWriteFile(
+            relative_path="b_unit2.py",
+            workspace_path=_make_workspace_path("pkg/b_unit2.py"),
+            owning_node=node2,
+        )
         b_rw3 = ReadWriteFile(
             relative_path="b_unit3.py",
             workspace_path=_make_workspace_path("pkg/b_unit3.py"),
             owning_node=node3,
         )
-        self.node_cfg._read_write_files = {b_rw1, b_rw3}
+        self.node_cfg._read_write_files = {b_rw1, b_rw2, b_rw3}
         bt1 = ReadOnlyFile(
             relative_path="upstream_spec1.md",
             workspace_path=_make_workspace_path("pkg/upstream_spec1.md"),
@@ -1198,17 +1209,19 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (blame_tool.explanation, "Spec defect"),
                 }
             )
-            # Requirement: Tool execution defaults the source target parameter to that session target when the blame target matches a configured blame target of an open session target.
-            # Requirement: Tool execution marks the blame target as attributed and resolves the source target on successful tool execution.
-            # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
-            # Requirement: When blame, submit, or fail is successfully called on a submit target and other submit targets remain, resolving the target produces a non-terminating response with a reminder listing remaining submit targets left for the agent to handle formatted via the template formatter.
+            # Requirement: Tool execution defaults the resolve target parameter to that active node when the blame target matches a configured blame target of an open active node.
+            # Requirement: Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
+            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
+            # Requirement: Automatically marks in-batch dependent nodes as failed and locks their read-write files upon node failure or blame attribution.
+            # Requirement: Produces a non-terminating response with a reminder listing remaining active nodes formatted via the template formatter when other active nodes remain.
             resp_ok = blame_tool.execute_tool(b_ok)
             self.assertFalse(resp_ok.is_failed)
             self.assertFalse(resp_ok.is_terminated)
             self.assertEqual(rc.get_node_state(node1), "BLAME")
-            self.assertEqual(rc.get_node_state(node2), "BLOCKED")
+            self.assertEqual(rc.get_node_state(node2), "FAILED")
             self.assertEqual(rc.get_node_state(node3), "OPEN")
             self.assertIn(b_rw1, self.edit_mgr.locked_files)
+            self.assertIn(b_rw2, self.edit_mgr.locked_files)
             self.assertNotIn(b_rw3, self.edit_mgr.locked_files)
             self.assertNotIn(bt1, self.edit_mgr.locked_files)
             self.assertIn(
@@ -1224,10 +1237,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (blame_tool.explanation, "Spec defect 3"),
                 }
             )
-            # Requirement: Tool execution defaults the blame target parameter to that target and the source target parameter to the session target configured with that blame target when the blame target parameter is omitted and the source target parameter matches a configured blame target.
-            # Requirement: Tool execution marks the blame target as attributed and resolves the source target on successful tool execution.
-            # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
-            # Requirement: When all session targets are resolved, resolving a target produces a terminating response indicating that the session completed successfully for submitted targets, carrying the explanation for failed targets, or attributing defect feedback to the blame target owning node for blamed targets, when mcp mode is inactive.
+            # Requirement: Tool execution defaults the blame target parameter to that target and the resolve target parameter to the active node configured with that blame target when the blame target parameter is omitted and the resolve target parameter matches a configured blame target.
+            # Requirement: Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
+            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
             resp_ok3 = blame_tool.execute_tool(b_ok3)
             self.assertFalse(resp_ok3.is_failed)
             self.assertTrue(resp_ok3.is_terminated)
@@ -1235,6 +1248,175 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIn(b_rw3, self.edit_mgr.locked_files)
             self.assertNotIn(bt3, self.edit_mgr.locked_files)
             self.assertIn("Blamed upstream_spec3.md: Spec defect 3", resp_ok3.content)
+
+    def test_resolve_tool_types_and_parameters(self) -> None:
+        """CUJ: ResolveTool defines resolve_target parameter with target accepted as an alias."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            submit = scope.get_singleton(SubmitToolImpl)
+            fail_tool = scope.get_singleton(FailToolImpl)
+            blame_tool = scope.get_singleton(BlameToolImpl)
+            self.assertTrue(hasattr(submit, "resolve_target"))
+            self.assertTrue(hasattr(fail_tool, "resolve_target"))
+            self.assertTrue(hasattr(blame_tool, "resolve_target"))
+            # Requirement: A resolve tool defines a file alias resolve target parameter (with target accepted as an alias) using the alias manager, and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes.
+            self.assertEqual(submit.resolve_target.name, "resolve_target")
+            self.assertEqual(submit.target.name, "target")
+            self.assertEqual(fail_tool.resolve_target.name, "resolve_target")
+            self.assertEqual(fail_tool.target.name, "target")
+            self.assertEqual(blame_tool.resolve_target.name, "resolve_target")
+            self.assertEqual(blame_tool.target.name, "target")
+
+    def test_in_batch_dependency_clean_in_turn_enforcement(self) -> None:
+        """CUJ: Submit, fail, and blame fail when in-batch dependency is not clean in the current turn."""
+        node1 = Node(unit_address="//pkg:dep_u1", role_address="lib")
+        node2 = Node(unit_address="//pkg:dep_u2", role_address="lib")
+        self.node_cfg.src_file_alias_by_node = {node1: "dep_u1.py", node2: "dep_u2.py"}
+        self.storage.dependencies[node2] = {Dependency(node=node1)}
+        rw1 = ReadWriteFile(
+            relative_path="dep_u1.py",
+            workspace_path=_make_workspace_path("pkg/dep_u1.py"),
+            owning_node=node1,
+        )
+        rw2 = ReadWriteFile(
+            relative_path="dep_u2.py",
+            workspace_path=_make_workspace_path("pkg/dep_u2.py"),
+            owning_node=node2,
+        )
+        self.node_cfg._read_write_files = {rw1, rw2}
+        bt = ReadOnlyFile(
+            relative_path="upstream_dep.md",
+            workspace_path=_make_workspace_path("pkg/upstream_dep.md"),
+            owning_node=Node(unit_address="//pkg:up", role_address="spec"),
+        )
+        self.node_cfg.blame_targets_by_node = {node2: {bt}}
+        vcheck = MockVerificationCheck(passes=True)
+        self.node_cfg.verification_checks_by_node = {node1: [vcheck], node2: [vcheck]}
+        self.guide_del.has_steps_remaining = False
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            submit = scope.get_singleton(SubmitToolImpl)
+            fail_tool = scope.get_singleton(FailToolImpl)
+            blame_tool = scope.get_singleton(BlameToolImpl)
+            rc = scope.get_singleton(RunControllerImpl)
+
+            # 1. Fail on node2 fails because in-batch dependency node1 is not clean
+            b_fail = ActualParameterBindings(
+                bindings={
+                    (fail_tool.resolve_target, "dep_u2.py"),
+                    (fail_tool.explanation, "Failing dependent"),
+                }
+            )
+            # Requirement: Tool execution fails when an in-batch dependency of the resolve target is not clean in the current get work turn, reminding the agent that in-batch dependencies must be submitted before dependent targets.
+            resp_fail = fail_tool.execute_tool(b_fail)
+            self.assertTrue(resp_fail.is_failed)
+            self.assertIn("must be submitted before `dep_u2.py`", resp_fail.content)
+
+            # 2. Blame on node2 fails because in-batch dependency node1 is not clean
+            b_blame = ActualParameterBindings(
+                bindings={
+                    (blame_tool.resolve_target, "dep_u2.py"),
+                    (blame_tool.blame_target, "upstream_dep.md"),
+                    (blame_tool.explanation, "Blaming dependent"),
+                }
+            )
+            # Requirement: Tool execution fails when an in-batch dependency of the resolve target is not clean in the current get work turn, reminding the agent that in-batch dependencies must be submitted before dependent targets.
+            resp_blame = blame_tool.execute_tool(b_blame)
+            self.assertTrue(resp_blame.is_failed)
+            self.assertIn("must be submitted before `dep_u2.py`", resp_blame.content)
+
+            # 3. Submit on node2 fails because in-batch dependency node1 is not clean
+            b_submit2 = ActualParameterBindings(
+                bindings={
+                    (submit.resolve_target, "dep_u2.py"),
+                    (submit.change_summary, "Cleaned 2"),
+                }
+            )
+            # Requirement: Tool execution fails when an in-batch dependency of the resolve target is not clean in the current get work turn, reminding the agent that in-batch dependencies must be submitted before dependent targets.
+            resp_sub2 = submit.execute_tool(b_submit2)
+            self.assertTrue(resp_sub2.is_failed)
+            self.assertIn("must be submitted before `dep_u2.py`", resp_sub2.content)
+
+            # 4. Submit node1 using target alias parameter: marks node1 clean in turn
+            b_sub1 = ActualParameterBindings(
+                bindings={
+                    (submit.target, "dep_u1.py"),
+                    (submit.change_summary, "Cleaned 1"),
+                }
+            )
+            # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
+            resp_sub1 = submit.execute_tool(b_sub1)
+            self.assertFalse(resp_sub1.is_failed)
+            self.assertTrue(rc.is_clean_in_turn(node1))
+
+            # 5. Now submit on node2 succeeds!
+            # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
+            resp_sub2_ok = submit.execute_tool(b_submit2)
+            self.assertFalse(resp_sub2_ok.is_failed)
+            self.assertTrue(resp_sub2_ok.is_terminated)
+            self.assertEqual(rc.get_node_state(node2), "SUBMITTED")
+
+    def test_cascading_failure_to_in_batch_dependents_and_file_locking(self) -> None:
+        """CUJ: Failing an active node whose in-batch dependencies are clean cascades failure to in-batch dependents and locks files."""
+        node1 = Node(unit_address="//pkg:casc1", role_address="lib")
+        node2 = Node(unit_address="//pkg:casc2", role_address="lib")
+        node3 = Node(unit_address="//pkg:casc3", role_address="lib")
+        node4 = Node(unit_address="//pkg:casc4", role_address="lib")
+        self.node_cfg.src_file_alias_by_node = {
+            node1: "casc1.py",
+            node2: "casc2.py",
+            node3: "casc3.py",
+            node4: "casc4.py",
+        }
+        self.storage.dependencies[node2] = {Dependency(node=node1)}
+        self.storage.dependencies[node3] = {Dependency(node=node2)}
+        rw1 = ReadWriteFile(
+            relative_path="casc1.py",
+            workspace_path=_make_workspace_path("pkg/casc1.py"),
+            owning_node=node1,
+        )
+        rw2 = ReadWriteFile(
+            relative_path="casc2.py",
+            workspace_path=_make_workspace_path("pkg/casc2.py"),
+            owning_node=node2,
+        )
+        rw3 = ReadWriteFile(
+            relative_path="casc3.py",
+            workspace_path=_make_workspace_path("pkg/casc3.py"),
+            owning_node=node3,
+        )
+        rw4 = ReadWriteFile(
+            relative_path="casc4.py",
+            workspace_path=_make_workspace_path("pkg/casc4.py"),
+            owning_node=node4,
+        )
+        self.node_cfg._read_write_files = {rw1, rw2, rw3, rw4}
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            fail_tool = scope.get_singleton(FailToolImpl)
+            rc = scope.get_singleton(RunControllerImpl)
+
+            b_fail = ActualParameterBindings(
+                bindings={
+                    (fail_tool.resolve_target, "casc1.py"),
+                    (fail_tool.explanation, "Cascading bug"),
+                }
+            )
+            # Requirement: Executing the fail tool marks the active node as failed and resolves the active node.
+            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
+            # Requirement: Automatically marks in-batch dependent nodes as failed and locks their read-write files upon node failure or blame attribution.
+            # Requirement: Produces a non-terminating response with a reminder listing remaining active nodes formatted via the template formatter when other active nodes remain.
+            resp = fail_tool.execute_tool(b_fail)
+            self.assertFalse(resp.is_failed)
+            self.assertFalse(resp.is_terminated)
+            self.assertEqual(rc.get_node_state(node1), "FAILED")
+            self.assertEqual(rc.get_node_state(node2), "FAILED")
+            self.assertEqual(rc.get_node_state(node3), "FAILED")
+            self.assertEqual(rc.get_node_state(node4), "OPEN")
+            self.assertIn(rw1, self.edit_mgr.locked_files)
+            self.assertIn(rw2, self.edit_mgr.locked_files)
+            self.assertIn(rw3, self.edit_mgr.locked_files)
+            self.assertNotIn(rw4, self.edit_mgr.locked_files)
+            self.assertIn("- `casc4.py`", resp.content)
 
     def test_check_file_with_src_parameter(self) -> None:
         """CUJ: CheckFileTool evaluates specific verification checks when src target is specified."""
@@ -1253,11 +1435,12 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             check_file = scope.get_singleton(CheckFileTool)
+            src_param = next(p for p in check_file.parameters if p.name == "src")
 
             # Test target rt_unit1.py passes
             # Requirement: Executing the check file tool updates verification results if outdated and evaluates verification checks for that target.
             b1 = ActualParameterBindings(
-                bindings={(check_file.src, TargetFileObj("rt_unit1.py"))}
+                bindings={(src_param, TargetFileObj("rt_unit1.py"))}
             )
             resp1 = check_file.execute_tool(b1)
             self.assertFalse(resp1.is_failed)
@@ -1270,7 +1453,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(vcheck1.call_count, 1)
 
             # Test target rt_unit2.py fails
-            b2 = ActualParameterBindings(bindings={(check_file.src, "rt_unit2.py")})
+            b2 = ActualParameterBindings(bindings={(src_param, "rt_unit2.py")})
             resp2 = check_file.execute_tool(b2)
             self.assertTrue(resp2.is_failed)
             self.assertEqual(vcheck2.call_count, 1)
@@ -1281,7 +1464,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertFalse(resp_path.is_failed)
 
             # Test target via invalid path parameter
-            # Requirement: Tool execution fails when a target parameter is omitted and cannot be defaulted, or when the specified target parameter does not match an open session target, reminding the agent to specify an open target.
+            # Requirement: Tool execution fails when the resolve target parameter is omitted and cannot be defaulted, or when the specified resolve target parameter does not match an open active node, reminding the agent to specify an open target.
             b_bad = ActualParameterBindings(
                 bindings={(check_file.path, "nonexistent.py")}
             )
@@ -1296,7 +1479,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             # When path parameter is omitted and multiple unsubmitted targets exist, fails if last accessed target is None
             b_empty = ActualParameterBindings(bindings=set())
-            # Requirement: When the path parameter is omitted, the path parameter defaults using session target defaulting rules.
+            # Requirement: When the path parameter is omitted, the path parameter defaults using resolve target defaulting rules.
             resp_empty = check_file.execute_tool(b_empty)
             self.assertTrue(resp_empty.is_failed)
             self.assertIn("'path' must be specified when multiple unsubmitted targets exist", resp_empty.content)
@@ -1304,7 +1487,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # When last read or written path is set to an open session target, defaults to it
             self.edit_mgr.last_read_or_edited_file = TargetFileObj("rt_unit1.py")
             self.edit_mgr.file_update_revision = 10
-            # Requirement: When the path parameter is omitted, the path parameter defaults using session target defaulting rules.
+            # Requirement: When the path parameter is omitted, the path parameter defaults using resolve target defaulting rules.
             # Requirement: Executing the check file tool updates verification results if outdated and evaluates verification checks for that target.
             resp_def = check_file.execute_tool(b_empty)
             self.assertFalse(resp_def.is_failed)
@@ -1317,7 +1500,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.edit_mgr.file_update_revision = 11
 
             # Specifying a target that is already SUBMITTED fails
-            # Requirement: Tool execution fails when a target parameter is omitted and cannot be defaulted, or when the specified target parameter does not match an open session target, reminding the agent to specify an open target.
+            # Requirement: Tool execution fails when the resolve target parameter is omitted and cannot be defaulted, or when the specified resolve target parameter does not match an open active node, reminding the agent to specify an open target.
             b_closed = ActualParameterBindings(
                 bindings={(check_file.path, "rt_unit1.py")}
             )
@@ -1330,7 +1513,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             assert resp_closed.reminder is not None
             self.assertIn("Specify an open target: `rt_unit2.py`", resp_closed.reminder)
 
-            # Requirement: When the path parameter is omitted, the path parameter defaults using session target defaulting rules.
+            # Requirement: When the path parameter is omitted, the path parameter defaults using resolve target defaulting rules.
             # Requirement: Executing the check file tool updates verification results if outdated and evaluates verification checks for that target.
             resp_one = check_file.execute_tool(b_empty)
             self.assertTrue(resp_one.is_failed)
@@ -1352,13 +1535,14 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             check_file = scope.get_singleton(CheckFileTool)
-            # Requirement: The check file tool is named `check_file`, accepting a path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
+            # Requirement: The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias) using the alias manager, and shares a constant suppression key `check_file`.
             self.assertEqual(check_file.name, "check_file")
-            self.assertEqual(check_file.parameters, {check_file.path, check_file.src})
+            self.assertEqual({p.name for p in check_file.parameters}, {"path", "src"})
+            self.assertIn(check_file.path, check_file.parameters)
             self.assertIsInstance(check_file.description, str)
 
             b = ActualParameterBindings(bindings=set())
-            # Requirement: [RunController] The run controller installs a check file tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
+            # Requirement: [RunController] The run controller installs a check file tool that updates verification results if outdated, accepting a file alias path parameter, presenting verification outcomes to the agent and failing when verification failed.
             # Requirement: Tool execution fails when verification fails, presenting diagnostic feedback sanitized through the alias manager alongside any configured verification failure instructions.
             resp = check_file.execute_tool(b)
 
@@ -1370,7 +1554,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
                 "## Verification failure\nInspect diagnostics and fix workspace files.",
                 resp.content,
             )
-            # Requirement: The check file tool is named `check_file`, accepting a path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
+            # Requirement: The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias) using the alias manager, and shares a constant suppression key `check_file`.
             self.assertEqual(resp.suppression_key, "check_file")
 
     def test_check_file_tool_passing_verification_presents_results(self) -> None:
@@ -1383,7 +1567,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         with enter_phase(agent_session, registry=self.registry) as scope:
             check_file = scope.get_singleton(CheckFileTool)
             b = ActualParameterBindings(bindings=set())
-            # Requirement: [RunController] The run controller installs a check file tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
+            # Requirement: [RunController] The run controller installs a check file tool that updates verification results if outdated, accepting a file alias path parameter, presenting verification outcomes to the agent and failing when verification failed.
             # Requirement: Tool execution produces a response presenting passing verification results using the session verification success message when configured or default passing verification results alongside sanitized check output when verification passes.
             resp = check_file.execute_tool(b)
 
@@ -1391,7 +1575,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertFalse(resp.is_terminated)
             self.assertIn("Verification passed", resp.content)
             self.assertIn("All tests pass in test.py", resp.content)
-            # Requirement: The check file tool is named `check_file`, accepting a path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
+            # Requirement: The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias) using the alias manager, and shares a constant suppression key `check_file`.
             self.assertEqual(resp.suppression_key, "check_file")
 
             # Custom verification_success_message
@@ -1412,7 +1596,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             b = ActualParameterBindings(bindings=set())
 
             # First execution runs checks
-            # Requirement: [RunController] The run controller installs a check file tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
+            # Requirement: [RunController] The run controller installs a check file tool that updates verification results if outdated, accepting a file alias path parameter, presenting verification outcomes to the agent and failing when verification failed.
             # Requirement: Executing the check file tool updates verification results if outdated and evaluates verification checks for that target.
             resp1 = check_file.execute_tool(b)
             self.assertTrue(resp1.is_failed)
@@ -1465,7 +1649,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIsNone(resp1.follow_up_tool_call)
 
             # Requirement: Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous check file tool execution.
-            # Requirement: Tool execution specifies a follow-up execution of the view file tool on the session source file (resolving to the specified path target if a read-write file, the last accessed read-write file, or the primary session read-write file) and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check file tool execution.
+            # Requirement: Tool execution specifies a follow-up execution of the view file tool on the active node source file (resolving to the specified path target if a read-write file, the last accessed read-write file, or the primary session read-write file) and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check file tool execution.
             # When is_step_mode is False (default for coverage / non-step nodes), reasoning directs to submit
             self.node_cfg.is_step_mode = False
             resp2 = check_file.execute_tool(b)
@@ -1573,8 +1757,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
             b_empty = ActualParameterBindings(bindings=set())
 
             # 1. Multiple unsubmitted files, last_read_or_edited_file is None -> submit & check_file fail
-            # Requirement: When a target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open session target.
-            # Requirement: When the path parameter is omitted, the path parameter defaults using session target defaulting rules.
+            # Requirement: When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
+            # Requirement: When the path parameter is omitted, the path parameter defaults using resolve target defaulting rules.
             resp_sub_fail = submit.execute_tool(b_empty)
             self.assertTrue(resp_sub_fail.is_failed)
             self.assertIn("Target parameter must be specified", resp_sub_fail.content)
@@ -1584,22 +1768,22 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             # 2. Multiple unsubmitted files, last_read_or_edited_file is read-only -> fails
             self.edit_mgr.last_read_or_edited_file = ro_file
-            # Requirement: When a target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open session target.
-            # Requirement: When the path parameter is omitted, the path parameter defaults using session target defaulting rules.
+            # Requirement: When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
+            # Requirement: When the path parameter is omitted, the path parameter defaults using resolve target defaulting rules.
             self.assertTrue(submit.execute_tool(b_empty).is_failed)
             self.assertTrue(check_file.execute_tool(b_empty).is_failed)
 
             # 3. Multiple unsubmitted files, last_read_or_edited_file is rw1 -> defaults to rw1
             self.edit_mgr.last_read_or_edited_file = rw1
-            # Requirement: When the path parameter is omitted, the path parameter defaults using session target defaulting rules.
+            # Requirement: When the path parameter is omitted, the path parameter defaults using resolve target defaulting rules.
             # Requirement: Executing the check file tool updates verification results if outdated and evaluates verification checks for that target.
             resp_chk_ok = check_file.execute_tool(b_empty)
             self.assertFalse(resp_chk_ok.is_failed)
 
-            # Requirement: When a target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open session target.
-            # Requirement: Tool execution marks the target as submitted and resolves the target.
-            # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
-            # Requirement: When blame, submit, or fail is successfully called on a submit target and other submit targets remain, resolving the target produces a non-terminating response with a reminder listing remaining submit targets left for the agent to handle formatted via the template formatter.
+            # Requirement: When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
+            # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
+            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
+            # Requirement: Produces a non-terminating response with a reminder listing remaining active nodes formatted via the template formatter when other active nodes remain.
             resp_sub_ok = submit.execute_tool(b_empty)
             self.assertFalse(resp_sub_ok.is_failed)
             self.assertEqual(rc.get_node_state(node1), "SUBMITTED")
@@ -1607,17 +1791,17 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             # 4. Now rw1 is submitted and locked; last_read_or_edited_file is still rw1 (now locked)
             # Exactly one unsubmitted read-write file remains (rw2) -> defaults to rw2 even if last accessed was rw1
-            # Requirement: When a target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted target.
-            # Requirement: When the path parameter is omitted, the path parameter defaults using session target defaulting rules.
+            # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
+            # Requirement: When the path parameter is omitted, the path parameter defaults using resolve target defaulting rules.
             # Requirement: Executing the check file tool updates verification results if outdated and evaluates verification checks for that target.
             self.edit_mgr.file_update_revision = 50
             resp_chk_rw2 = check_file.execute_tool(b_empty)
             self.assertFalse(resp_chk_rw2.is_failed)
 
-            # Requirement: When a target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted target.
-            # Requirement: Tool execution marks the target as submitted and resolves the target.
-            # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
-            # Requirement: When all session targets are resolved, resolving a target produces a terminating response indicating that the session completed successfully for submitted targets, carrying the explanation for failed targets, or attributing defect feedback to the blame target owning node for blamed targets, when mcp mode is inactive.
+            # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
+            # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
+            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
             resp_sub_rw2 = submit.execute_tool(b_empty)
             self.assertFalse(resp_sub_rw2.is_failed)
             self.assertTrue(resp_sub_rw2.is_terminated)
@@ -1652,7 +1836,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             fail = scope.get_singleton(FailToolImpl)
             rc = scope.get_singleton(RunControllerImpl)
 
-            # Requirement: Session targets are matched by alias, relative path, or unique filename against open session targets.
+            # Requirement: A resolve tool defines a file alias resolve target parameter (with target accepted as an alias) using the alias manager, and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes.
             # 1. Look up by exact alias / relative path
             self.assertEqual(
                 rc.get_node_for_alias("testing/parts/pkg/logs/unit1_qa.log"), node1
@@ -1674,7 +1858,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertFalse(resp_chk.is_failed)
 
             # 6. Submit tool accepts unique filename
-            # Requirement: When all session targets are resolved, resolving a target produces a non-terminating response with a reminder to call the get work tool when mcp mode is active.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a non-terminating response with a reminder to call the get work tool when mcp mode is active.
             resp_sub = submit.execute_tool(
                 ActualParameterBindings(
                     bindings={
@@ -1687,9 +1871,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(rc.get_node_state(node1), "SUBMITTED")
 
             # 7. Fail tool accepts exact relative path for node2
-            # Requirement: Executing the fail tool marks the target as failed and resolves the target.
-            # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
-            # Requirement: When all session targets are resolved, resolving a target produces a terminating response indicating that the session completed successfully for submitted targets, carrying the explanation for failed targets, or attributing defect feedback to the blame target owning node for blamed targets, when mcp mode is inactive.
+            # Requirement: Executing the fail tool marks the active node as failed and resolves the active node.
+            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
             resp_fail = fail.execute_tool(
                 ActualParameterBindings(
                     bindings={
@@ -1711,7 +1895,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             submit = scope.get_singleton(SubmitToolImpl)
-            # Requirement: When all session targets are resolved, resolving a target produces a non-terminating response with a reminder to call the get work tool when mcp mode is active.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a non-terminating response with a reminder to call the get work tool when mcp mode is active.
             resp_sub = submit.execute_tool(
                 ActualParameterBindings(
                     bindings={(submit.change_summary, "Added new feature")}
@@ -1726,7 +1910,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         self.agent_cfg.is_mcp_mode = True
         with enter_phase(agent_session, registry=self.registry) as scope:
             fail = scope.get_singleton(FailToolImpl)
-            # Requirement: When all session targets are resolved, resolving a target produces a non-terminating response with a reminder to call the get work tool when mcp mode is active.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a non-terminating response with a reminder to call the get work tool when mcp mode is active.
             resp_fail = fail.execute_tool(
                 ActualParameterBindings(
                     bindings={(fail.explanation, "Cannot solve bug")}
@@ -1741,7 +1925,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         self.agent_cfg.is_mcp_mode = True
         with enter_phase(agent_session, registry=self.registry) as scope:
             blame = scope.get_singleton(BlameToolImpl)
-            # Requirement: When all session targets are resolved, resolving a target produces a non-terminating response with a reminder to call the get work tool when mcp mode is active.
+            # Requirement: When all active nodes are resolved, resolving an active node produces a non-terminating response with a reminder to call the get work tool when mcp mode is active.
             resp_blame = blame.execute_tool(
                 ActualParameterBindings(
                     bindings={
@@ -1768,11 +1952,11 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
             param_names = {p.name for p in get_work.parameters}
             self.assertIn("max_batch_size", param_names)
-            # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter.
+            # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter using the integer parameter converter.
             self.assertEqual(get_work.max_batch_size.name, "max_batch_size")
             self.assertFalse(get_work.max_batch_size.is_required)
 
-            # Requirement: Tool execution fails when open session targets remain, reminding the agent that open targets must be resolved before requesting new work.
+            # Requirement: Tool execution fails when open active nodes remain, reminding the agent that open nodes must be resolved before requesting new work.
             # Requirement: [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
             resp = get_work.execute_tool(ActualParameterBindings(bindings=set()))
             self.assertTrue(resp.is_failed)
@@ -1802,7 +1986,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.subgraph.ready_batches = []
             self.subgraph.batch_index = 0
 
-            # Requirement: Tool execution obtains dirty nodes from dag storage and dag subgraph, updating the active nodes and execution version on role config, when no open targets remain.
+            # Requirement: Tool execution obtains dirty nodes from dag storage and dag subgraph, updating the active nodes and execution version on role config, when no open active nodes remain.
             # Requirement: Tool execution produces an idle response indicating that no dirty nodes are ready if no dirty nodes are ready for cleaning.
             resp = get_work.execute_tool(ActualParameterBindings(bindings=set()))
             self.assertFalse(resp.is_failed)
@@ -1847,8 +2031,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             # Call get_work with max_batch_size = 1
             # Requirement: [Tool] When a parameter is required, an argument must be supplied for tool execution.
-            # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter.
-            # Requirement: Tool execution obtains dirty nodes from dag storage and dag subgraph, updating the active nodes and execution version on role config, when no open targets remain.
+            # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter using the integer parameter converter.
+            # Requirement: Tool execution obtains dirty nodes from dag storage and dag subgraph, updating the active nodes and execution version on role config, when no open active nodes remain.
             # Requirement: Tool execution materializes startup templates on disk, constructs the task prompt from dirty node definitions, guide instructions, and incoming messages from dag storage formatted via the template formatter, and returns the rendered task prompt when ready dirty nodes are obtained.
             initial_version = self.role_cfg.execution_version
             resp = get_work.execute_tool(

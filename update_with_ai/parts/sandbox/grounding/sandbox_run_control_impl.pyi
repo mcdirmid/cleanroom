@@ -21,15 +21,15 @@ Implements run controller to install advance, submit, fail, and optional blame t
 INHERITED_REQUIREMENTS:
 - [RunController] The run controller exposes verification checks that validate session criteria.
 - [RunController] The run controller caches verification evaluation results alongside the edit manager file update revision, reusing the cached verification outcome as long as no workspace files have been updated since that evaluation.
+- [RunController] The run controller installs a check file tool that updates verification results if outdated, accepting a file alias path parameter, presenting verification outcomes to the agent and failing when verification failed.
 - [RunController] The run controller installs an advance tool when guide step mode is active, coordinating step progression through guide delivery upon passing verification.
-- [RunController] The run controller installs a submit tool that concludes target processing upon passing verification and enforces change documentation.
-- [RunController] The run controller installs a fail tool that terminates the run in failure.
-- [RunController] The run controller installs a check file tool that updates verification results if outdated, presenting verification outcomes to the agent and failing when verification failed.
-- [RunController] The run controller installs a blame tool when blame targets are configured, attributing task failure to an upstream dependency node.
-- [RunController] The run controller installs a get work tool that retrieves active dirty nodes, materializes startup templates, and delivers the session task prompt.
+- [RunController] The run controller installs a submit tool which is a resolve tool that concludes active nodes upon passing verification, marks the resolve target clean in the current get work turn, accepting a text change summary parameter, and enforces change documentation.
+- [RunController] The run controller installs a fail tool which is a resolve tool that terminates the run in failure, accepting a text explanation parameter.
+- [RunController] The run controller installs a blame tool which is a resolve tool, when blame targets are configured, attributing task failure to an upstream dependency node, accepting a file alias blame target parameter and a text explanation parameter.
+- [RunController] The run controller installs a get work tool that retrieves active dirty nodes, materializes startup templates, accepting an integer max batch size parameter, and delivers the session task prompt.
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, RunController installs run control tools and exposes verification check sequences delegated from imported agent_node_config.NodeConfig, coordinating with tool_provider.ToolManager, sandbox_file_editor.EditManager, and dag_storage.DagStorage in the same session lifecycle tier, resolving session target nodes by alias, relative path, or unique filename.
+- As an agent_session singleton, RunController installs run control tools and exposes verification check sequences delegated from imported agent_node_config.NodeConfig, coordinating with tool_provider.ToolManager, sandbox_file_editor.EditManager, and dag_storage.DagStorage in the same session lifecycle tier, resolving active nodes by file alias, relative path, or unique filename.
 """
 
     @property
@@ -63,16 +63,18 @@ PURPOSE:
 Installs submit, fail, check file, and get work tools unconditionally, advance tool when guide step mode is active, and blame tool when blame targets are configured
 
 FRESH_REQUIREMENTS:
-- The run controller unconditionally installs the submit tool, fail tool, check file tool, and get work tool for the agent session, installs the advance tool only when guide step mode is active, and obtains configured blame targets and verification checks from the node config, installing the blame tool only when blame targets are configured.
+- The run controller initializes by unconditionally installing the submit tool, fail tool, check file tool, and get work tool for the agent session, installing the advance tool only when guide step mode is active, obtaining configured blame targets and verification checks from the node config, and installing the blame tool only when blame targets are configured.
 - Verification checks exposed by the run controller include the session verification checks from node config.
-- Session targets are matched by alias, relative path, or unique filename against open session targets.
-- When a target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted target.
-- When a target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open session target.
-- Tool execution fails when a target parameter is omitted and cannot be defaulted, or when the specified target parameter does not match an open session target, reminding the agent to specify an open target.
-- Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
-- When blame, submit, or fail is successfully called on a submit target and other submit targets remain, resolving the target produces a non-terminating response with a reminder listing remaining submit targets left for the agent to handle formatted via the template formatter.
-- When all session targets are resolved, resolving a target produces a terminating response indicating that the session completed successfully for submitted targets, carrying the explanation for failed targets, or attributing defect feedback to the blame target owning node for blamed targets, when mcp mode is inactive.
-- When all session targets are resolved, resolving a target produces a non-terminating response with a reminder to call the get work tool when mcp mode is active.
+- A resolve tool defines a file alias resolve target parameter (with target accepted as an alias) using the alias manager, and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes.
+- When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
+- When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
+- Tool execution fails when the resolve target parameter is omitted and cannot be defaulted, or when the specified resolve target parameter does not match an open active node, reminding the agent to specify an open target.
+- Tool execution fails when an in-batch dependency of the resolve target is not clean in the current get work turn, reminding the agent that in-batch dependencies must be submitted before dependent targets.
+- Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
+- Automatically marks in-batch dependent nodes as failed and locks their read-write files upon node failure or blame attribution.
+- Produces a non-terminating response with a reminder listing remaining active nodes formatted via the template formatter when other active nodes remain.
+- When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
+- When all active nodes are resolved, resolving an active node produces a non-terminating response with a reminder to call the get work tool when mcp mode is active.
 
 GROUNDING_ARGUMENT:
 - Reads step mode, blame targets, and verification checks from imported agent_node_config.NodeConfig, and installs SubmitTool, FailTool, CheckFileTool, GetWorkTool, optionally AdvanceTool, and optionally BlameTool directly into imported tool_provider.ToolManager in the same session lifecycle tier.
@@ -92,6 +94,94 @@ FRESH_REQUIREMENTS:
 
 GROUNDING_ARGUMENT:
 - Tracks cached verification outcome and revision on self, inspecting file_update_revision from imported sandbox_file_editor.EditManager, executing self.verification_checks and caching results when revision changes.
+"""
+        ...
+
+@singleton_type('agent_session')
+class CheckFileTool(sandbox_run_control.CheckFileTool):
+    """
+PURPOSE:
+Implements check file tool to evaluate and present verification results
+
+INHERITED_ASSUMPTIONS:
+- [Tool] All parameters of a tool have unique names.
+
+FRESH_REQUIREMENTS:
+- The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias) using the alias manager, and shares a constant suppression key `check_file`.
+
+GROUNDING_ARGUMENT:
+- As an agent_session singleton, CheckFileTool evaluates verification checks via RunController, presenting results with suppression key 'check_file' in the same session lifecycle tier.
+"""
+
+    @property
+    @override
+    def name(self) -> str:
+        """
+PURPOSE:
+Name of the tool used by the agent
+
+GROUNDING_ARGUMENT:
+- Returns the literal string 'check_file'.
+"""
+        ...
+
+    @property
+    @override
+    def path(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
+        """
+PURPOSE:
+Parameter identifying the session file path to check
+
+GROUNDING_ARGUMENT:
+- Constant parameter descriptor configured with alias manager converter.
+"""
+        ...
+
+    @property
+    @override
+    def description(self) -> str:
+        """
+PURPOSE:
+Description of the tool informing the agent why and when to use it
+
+GROUNDING_ARGUMENT:
+- Returns a constant description informing the agent that checking files evaluates verification checks.
+"""
+        ...
+
+    @property
+    @override
+    def parameters(self) -> Set[tool_provider.Parameter]:
+        """
+PURPOSE:
+Parameters accepted by the tool
+
+GROUNDING_ARGUMENT:
+- Returns a set containing the optional path and src parameters.
+"""
+        ...
+
+    @operation
+    @override
+    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
+        """
+PURPOSE:
+Executes the check file tool, updating verification results and presenting them
+
+FRESH_REQUIREMENTS:
+- When the path parameter is omitted, the path parameter defaults using resolve target defaulting rules.
+- Executing the check file tool updates verification results if outdated and evaluates verification checks for that target.
+- Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous check file tool execution.
+- Tool execution specifies a follow-up execution of the view file tool on the active node source file (resolving to the specified path target if a read-write file, the last accessed read-write file, or the primary session read-write file) and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check file tool execution.
+- Tool execution fails when verification fails, presenting diagnostic feedback sanitized through the alias manager alongside any configured verification failure instructions.
+- Tool execution produces a response presenting passing verification results using the session verification success message when configured or default passing verification results alongside sanitized check output when verification passes.
+
+INHERITED_REQUIREMENTS:
+- [Tool] When a parameter is required, an argument must be supplied for tool execution.
+- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
+
+GROUNDING_ARGUMENT:
+- Evaluates verification via RunController.evaluate_verification in the same session lifecycle tier, resolves the active node source file against actual parameter bindings, the single session read-write file, remaining unsubmitted read-write file, or the last accessed file from imported sandbox_file_editor.EditManager, sanitizes diagnostics through imported agent_file_alias.AliasManager, formats failure instructions from imported sandbox_guide_delivery.GuideDelivery, attaches suppression key 'check_file', and constructs a tool_provider.Response presenting verification outcome alongside check output.
 """
         ...
 
@@ -181,8 +271,7 @@ INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.
 
 FRESH_REQUIREMENTS:
-- The submit tool is named `submit`, accepting a target parameter and a text change summary parameter, and shares a constant suppression key `submit`.
-- The submit tool change summary parameter uses a string parameter converter to accept text.
+- The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter using the string parameter converter, and shares a constant suppression key `submit`.
 
 GROUNDING_ARGUMENT:
 - As an agent_session singleton, SubmitTool validates session completion criteria, interacting with imported sandbox_guide_delivery.GuideDelivery, sandbox_file_editor.EditManager, agent_node_config.NodeConfig, template_format.TemplateFormatter, and RunController in the same session lifecycle tier.
@@ -202,19 +291,19 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def target(self) -> tool_provider.Parameter:
+    def resolve_target(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
         """
 PURPOSE:
-Parameter identifying the target file being submitted
+Parameter identifying the active node being resolved
 
 GROUNDING_ARGUMENT:
-- Constant parameter descriptor configured with alias manager converter.
+- Constant parameter descriptor configured with alias manager converter matching resolve_target and accepting target as alias.
 """
         ...
 
     @property
     @override
-    def change_summary(self) -> tool_provider.Parameter:
+    def change_summary(self) -> tool_provider.Parameter[str, str]:
         """
 PURPOSE:
 Parameter describing workspace file modifications
@@ -244,7 +333,7 @@ PURPOSE:
 Established that each tool defines input parameters accepted for its invocation
 
 GROUNDING_ARGUMENT:
-- Set composed of target and change_summary parameter descriptors.
+- Set composed of resolve_target and change_summary parameter descriptors.
 """
         ...
 
@@ -257,19 +346,18 @@ Implements execute_tool to evaluate completion criteria, in-session dependencies
 
 FRESH_REQUIREMENTS:
 - Executing the submit tool updates verification results if outdated.
-- Tool execution fails when an in-session dependency of the target has not yet been submitted, reminding the agent that in-session dependencies must be submitted before dependent targets.
 - Tool execution fails when guide step mode is active and guide steps remain in guide delivery, reminding the agent that the advance tool must be called while guide steps remain and specifying the advance tool as a follow-up tool call with reasoning text indicating that remaining guide steps must be completed before finishing.
-- Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool targeting the submitted target with reasoning text indicating that verification results must be inspected before submitting.
+- Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool targeting the resolve target with reasoning text indicating that verification results must be inspected before submitting.
 - Tool execution fails when session feedback is present and no workspace files were modified, reminding the agent that workspace files must be modified to address feedback or that the fail tool must be used.
 - Tool execution fails if workspace files were modified and the change summary is omitted, reminding the agent that a change summary must be provided when completing the session after modifying workspace files.
-- Tool execution marks the target as submitted and resolves the target.
+- Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings directly, extracts target and change_summary, resolves omitted targets against the single session read-write file, remaining unsubmitted read-write file, or last read or written path via imported sandbox_file_editor.EditManager, queries step mode from imported agent_node_config.NodeConfig and steps remaining from imported sandbox_guide_delivery.GuideDelivery returning a failure response specifying AdvanceTool as follow_up_tool_call if steps remain, inspects workspace modifications via imported sandbox_file_editor.EditManager, evaluates verification checks via RunController.evaluate_verification in the same session tier, sanitizes diagnostics through imported agent_file_alias.AliasManager, formats remaining open targets with template_format.TemplateFormatter, attaches suppression key 'submit', and produces a response indicating success.
+- Receives actual parameter bindings directly, extracts resolve_target and change_summary, resolves omitted targets against the single session read-write file, remaining unsubmitted read-write file, or last read or written path via imported sandbox_file_editor.EditManager, queries step mode from imported agent_node_config.NodeConfig and steps remaining from imported sandbox_guide_delivery.GuideDelivery returning a failure response specifying AdvanceTool as follow_up_tool_call if steps remain, inspects workspace modifications via imported sandbox_file_editor.EditManager, evaluates verification checks via RunController.evaluate_verification in the same session tier, sanitizes diagnostics through imported agent_file_alias.AliasManager, formats remaining open active nodes with template_format.TemplateFormatter, attaches suppression key 'submit', and produces a response indicating success.
 """
         ...
 
@@ -283,8 +371,7 @@ INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.
 
 FRESH_REQUIREMENTS:
-- The fail tool is named `fail`, accepting a target parameter and a text explanation parameter.
-- The fail tool explanation parameter uses a string parameter converter to accept text.
+- The fail tool is named `fail`, accepting a resolve target parameter and a text explanation parameter using the string parameter converter.
 
 GROUNDING_ARGUMENT:
 - As an agent_session singleton, FailTool terminates the session in failure, coordinating with RunController and template_format.TemplateFormatter in the same session lifecycle tier.
@@ -304,19 +391,19 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def target(self) -> tool_provider.Parameter:
+    def resolve_target(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
         """
 PURPOSE:
-Parameter identifying the session target file being failed
+Parameter identifying the active node being resolved
 
 GROUNDING_ARGUMENT:
-- Constant parameter descriptor configured with alias manager converter.
+- Constant parameter descriptor configured with alias manager converter matching resolve_target and accepting target as alias.
 """
         ...
 
     @property
     @override
-    def explanation(self) -> tool_provider.Parameter:
+    def explanation(self) -> tool_provider.Parameter[str, str]:
         """
 PURPOSE:
 Parameter accepting a text explanation of why the run failed
@@ -334,14 +421,14 @@ PURPOSE:
 Implements execute_tool to produce a failure response
 
 FRESH_REQUIREMENTS:
-- Executing the fail tool marks the target as failed and resolves the target.
+- Executing the fail tool marks the active node as failed and resolves the active node.
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings directly, extracts target and explanation, resolves omitted targets against the single session read-write file, remaining unsubmitted read-write file, or last read or written path via imported sandbox_file_editor.EditManager, validates that the target matches an open session target in RunController, updates node state in RunController, formats remaining open targets with template_format.TemplateFormatter, and constructs a failure response.
+- Receives actual parameter bindings directly, extracts resolve_target and explanation, resolves omitted targets against the single session read-write file, remaining unsubmitted read-write file, or last read or written path via imported sandbox_file_editor.EditManager, validates that the target matches an open active node in RunController, updates node state in RunController, formats remaining open active nodes with template_format.TemplateFormatter, and constructs a failure response.
 """
         ...
 
@@ -365,7 +452,7 @@ PURPOSE:
 Established that each tool defines input parameters accepted for its invocation
 
 GROUNDING_ARGUMENT:
-- Set composed of self's constant parameter descriptors (target, explanation).
+- Set composed of self's constant parameter descriptors (resolve_target, explanation).
 """
         ...
 
@@ -379,7 +466,7 @@ INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.
 
 FRESH_REQUIREMENTS:
-- The blame tool is named `blame`, accepting a source target parameter, a file alias blame target parameter, and a text explanation parameter.
+- The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter using the alias manager, and a text explanation parameter using the string parameter converter.
 
 GROUNDING_ARGUMENT:
 - As an agent_session singleton, BlameTool attributes prerequisite defects to dependency nodes, coordinating with RunController, template_format.TemplateFormatter, and imported agent_file_alias.AliasManager in the same session lifecycle tier.
@@ -399,19 +486,19 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def target(self) -> tool_provider.Parameter:
+    def resolve_target(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
         """
 PURPOSE:
-Parameter identifying the session target file being blamed from
+Parameter identifying the active node being resolved
 
 GROUNDING_ARGUMENT:
-- Constant parameter descriptor configured with alias manager converter.
+- Constant parameter descriptor configured with alias manager converter matching resolve_target and accepting target as alias.
 """
         ...
 
     @property
     @override
-    def blame_target(self) -> tool_provider.Parameter:
+    def blame_target(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
         """
 PURPOSE:
 Parameter identifying the target bound file
@@ -423,7 +510,7 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def explanation(self) -> tool_provider.Parameter:
+    def explanation(self) -> tool_provider.Parameter[str, str]:
         """
 PURPOSE:
 Parameter accepting a text explanation of the prerequisite defect
@@ -441,18 +528,18 @@ PURPOSE:
 Implements execute_tool to validate blame target and produce a terminating feedback response
 
 FRESH_REQUIREMENTS:
-- Tool execution defaults the source target parameter to that session target when the blame target matches a configured blame target of an open session target.
-- Tool execution defaults the blame target parameter to that target and the source target parameter to the session target configured with that blame target when the blame target parameter is omitted and the source target parameter matches a configured blame target.
-- Tool execution defaults the source target parameter using session target defaulting rules when the source target parameter is omitted and cannot be inferred from the blame target.
+- Tool execution defaults the resolve target parameter to that active node when the blame target matches a configured blame target of an open active node.
+- Tool execution defaults the blame target parameter to that target and the resolve target parameter to the active node configured with that blame target when the blame target parameter is omitted and the resolve target parameter matches a configured blame target.
+- Tool execution defaults the resolve target parameter using resolve target defaulting rules when the resolve target parameter is omitted and cannot be inferred from the blame target.
 - Tool execution fails if the blame target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
-- Tool execution marks the blame target as attributed and resolves the source target on successful tool execution.
+- Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, resolves the target and blame target via imported agent_file_alias.AliasManager, infers or defaults the source target from open nodes in RunController or via imported sandbox_file_editor.EditManager, validates the blame target against RunController.blame_targets in the same session lifecycle tier, updates node state in RunController, formats remaining open targets with template_format.TemplateFormatter, and constructs a feedback response.
+- Receives actual parameter bindings, resolves the resolve_target and blame target via imported agent_file_alias.AliasManager, infers or defaults the resolve_target from open active nodes in RunController or via imported sandbox_file_editor.EditManager, validates the blame target against RunController.blame_targets in the same session lifecycle tier, updates node state in RunController, formats remaining open active nodes with template_format.TemplateFormatter, and constructs a feedback response.
 """
         ...
 
@@ -476,107 +563,7 @@ PURPOSE:
 Established that each tool defines input parameters accepted for its invocation
 
 GROUNDING_ARGUMENT:
-- Set composed of self's constant parameter descriptors (target, blame_target, explanation).
-"""
-        ...
-
-@singleton_type('agent_session')
-class CheckFileTool(sandbox_run_control.CheckFileTool):
-    """
-PURPOSE:
-Implements check file tool to evaluate and present verification results
-
-INHERITED_ASSUMPTIONS:
-- [Tool] All parameters of a tool have unique names.
-
-FRESH_REQUIREMENTS:
-- The check file tool is named `check_file`, accepting a path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
-
-GROUNDING_ARGUMENT:
-- As an agent_session singleton, CheckFileTool evaluates verification checks via RunController, presenting results with suppression key 'check_file' in the same session lifecycle tier.
-"""
-
-    @property
-    @override
-    def name(self) -> str:
-        """
-PURPOSE:
-Name of the tool used by the agent
-
-GROUNDING_ARGUMENT:
-- Returns the literal string 'check_file'.
-"""
-        ...
-
-    @property
-    @override
-    def path(self) -> tool_provider.Parameter:
-        """
-PURPOSE:
-Parameter identifying the session file path to check
-
-GROUNDING_ARGUMENT:
-- Constant parameter descriptor configured with alias manager converter.
-"""
-        ...
-
-    @property
-    @override
-    def src(self) -> tool_provider.Parameter:
-        """
-PURPOSE:
-Parameter identifying the session file path to check as an alias of path
-
-GROUNDING_ARGUMENT:
-- Constant parameter descriptor configured with alias manager converter matching path.
-"""
-        ...
-
-    @property
-    @override
-    def description(self) -> str:
-        """
-PURPOSE:
-Description of the tool informing the agent why and when to use it
-
-GROUNDING_ARGUMENT:
-- Returns a constant description informing the agent that checking files evaluates verification checks.
-"""
-        ...
-
-    @property
-    @override
-    def parameters(self) -> Set[tool_provider.Parameter]:
-        """
-PURPOSE:
-Parameters accepted by the tool
-
-GROUNDING_ARGUMENT:
-- Returns a set containing the optional path and src parameters.
-"""
-        ...
-
-    @operation
-    @override
-    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
-        """
-PURPOSE:
-Executes the check file tool, updating verification results and presenting them
-
-FRESH_REQUIREMENTS:
-- When the path parameter is omitted, the path parameter defaults using session target defaulting rules.
-- Executing the check file tool updates verification results if outdated and evaluates verification checks for that target.
-- Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous check file tool execution.
-- Tool execution specifies a follow-up execution of the view file tool on the session source file (resolving to the specified path target if a read-write file, the last accessed read-write file, or the primary session read-write file) and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check file tool execution.
-- Tool execution fails when verification fails, presenting diagnostic feedback sanitized through the alias manager alongside any configured verification failure instructions.
-- Tool execution produces a response presenting passing verification results using the session verification success message when configured or default passing verification results alongside sanitized check output when verification passes.
-
-INHERITED_REQUIREMENTS:
-- [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
-
-GROUNDING_ARGUMENT:
-- Evaluates verification via RunController.evaluate_verification in the same session lifecycle tier, resolves the session source file against actual parameter bindings, the single session read-write file, remaining unsubmitted read-write file, or the last accessed file from imported sandbox_file_editor.EditManager, sanitizes diagnostics through imported agent_file_alias.AliasManager, formats failure instructions from imported sandbox_guide_delivery.GuideDelivery, attaches suppression key 'check_file', and constructs a tool_provider.Response presenting verification outcome alongside check output.
+- Set composed of self's constant parameter descriptors (resolve_target, blame_target, explanation).
 """
         ...
 
@@ -590,7 +577,7 @@ INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.
 
 FRESH_REQUIREMENTS:
-- The get work tool is named `get_work`, accepting an integer max batch size parameter.
+- The get work tool is named `get_work`, accepting an integer max batch size parameter using the integer parameter converter.
 
 GROUNDING_ARGUMENT:
 - As an agent_session singleton, GetWorkTool retrieves dirty nodes from dag_storage.DagStorage and dag_subgraph.DagSubgraph in the system tier, updates agent_node_config.RoleConfig in the session tier, materializes startup templates via sandbox.Sandbox in the session tier, formats the task prompt via template_format.TemplateFormatter and RunController, and returns the response.
@@ -598,7 +585,7 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def max_batch_size(self) -> tool_provider.Parameter:
+    def max_batch_size(self) -> tool_provider.Parameter[int, int]:
         """
 PURPOSE:
 Parameter specifying the maximum number of dirty nodes to process together
@@ -652,8 +639,8 @@ PURPOSE:
 Retrieves dirty nodes, materializes startup templates, and returns the task prompt
 
 FRESH_REQUIREMENTS:
-- Tool execution fails when open session targets remain, reminding the agent that open targets must be resolved before requesting new work.
-- Tool execution obtains dirty nodes from dag storage and dag subgraph, updating the active nodes and execution version on role config, when no open targets remain.
+- Tool execution fails when open active nodes remain, reminding the agent that open nodes must be resolved before requesting new work.
+- Tool execution obtains dirty nodes from dag storage and dag subgraph, updating the active nodes and execution version on role config, when no open active nodes remain.
 - Tool execution produces an idle response indicating that no dirty nodes are ready if no dirty nodes are ready for cleaning.
 - Tool execution materializes startup templates on disk, constructs the task prompt from dirty node definitions, guide instructions, and incoming messages from dag storage formatted via the template formatter, and returns the rendered task prompt when ready dirty nodes are obtained.
 
