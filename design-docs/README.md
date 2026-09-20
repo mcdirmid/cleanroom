@@ -31,6 +31,11 @@ The design documentation is organized across four foundational areas:
   - Details the custom "by-hand" AST linter, closed-world linker, and zero-token MRO requirements inheritance engine.
   - **Architectural Extensions (Section 8, TODO)**: Unused import ledgers, supervising LLM diagnostics evaluation, requirement prioritization, and atomic failure/response requirement decomposition.
   - **Grounding Translation & Alignment Challenges (Section 9)**: In-depth ledger of solved vs. open grounding problems, analyzing why prompt engineering alone fails at boundary enforcement, mock-to-protocol parity, and structural type translation.
+- **[Logic-Based Grounding Verification & Formal Specification](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/logic_based_grounding_verification.md)** (`logic_based_grounding_verification.md`):
+  - Formal analysis of logic programming paradigms (First-Order Logic, Prolog, Datalog, and Constructive Type Theory) for specification grounding.
+  - Explains why classical First-Order Logic falls short (monotonicity, frame problem, constructive value synthesis vs propositional truth, lifecycle scoping, exhaustive branching).
+  - Clarifies Datalog's forward chaining and goal-directed Magic Sets query evaluation.
+  - Proposes a 3-tier formal verification architecture combining Datalog scope checking, typed dataflow reachability, and effect framing to replace unverified natural language `GROUNDING_ARGUMENT:` blocks.
 - **[Legacy Grounding Format (Historical Archive)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/grounding_format.md)** (`grounding_format.md`):
   - *Archived / Superseded*: Historical documentation of the earlier 4-column Markdown table format (`type | name | signature | comment`). Preserved for context on the evolution of Cleanroom grounding.
 
