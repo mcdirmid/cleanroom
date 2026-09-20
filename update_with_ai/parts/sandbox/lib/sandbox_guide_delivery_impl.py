@@ -1,3 +1,4 @@
+# Requirements specified in sandbox_guide_delivery_impl.pyi
 from typing import List, Optional
 from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.agent.lib import agent_file_alias

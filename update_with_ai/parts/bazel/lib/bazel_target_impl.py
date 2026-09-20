@@ -1,3 +1,4 @@
+# Requirements specified in bazel_target_impl.pyi
 from typing import Optional
 from . import bazel_target
 from update_with_ai.parts.dag.lib import dag_storage

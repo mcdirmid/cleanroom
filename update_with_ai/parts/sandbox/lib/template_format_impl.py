@@ -1,3 +1,4 @@
+# Requirements specified in template_format_impl.pyi
 import re
 from typing import Any, Mapping, Optional, Sequence
 from update_with_ai.parts.agent.lib.agent_session import agent_session

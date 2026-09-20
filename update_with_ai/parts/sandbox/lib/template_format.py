@@ -1,3 +1,4 @@
+# Requirements specified in template_format.pyi
 from typing import Any, Mapping, Protocol
 
 

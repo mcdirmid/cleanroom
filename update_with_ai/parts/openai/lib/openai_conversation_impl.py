@@ -1,3 +1,4 @@
+# Requirements specified in openai_conversation_impl.pyi
 import json
 from typing import List, Optional
 from update_with_ai.parts.agent.lib.agent_session import agent_session

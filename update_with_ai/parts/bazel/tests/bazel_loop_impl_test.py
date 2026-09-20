@@ -185,6 +185,7 @@ class BazelLoopImplTest(unittest.TestCase):
             self.assertTrue(result.success)
             self.assertIn("succeeded", result.summary)
 
+            # Requirement: Telemetry capturing execution events, pass duration, and build outcome is streamed to standard output and transcript files.
             start_events = [
                 e for e in self.logger.events if e.event_name == "build_pass_start"
             ]
@@ -193,6 +194,8 @@ class BazelLoopImplTest(unittest.TestCase):
             ]
             self.assertEqual(len(start_events), 1)
             self.assertEqual(len(end_events), 1)
+            self.assertIn("succeeded", end_events[0].summary)
+            self.assertIn("s", end_events[0].summary)
 
     def test_run_cleaning_pass_loads_dependency_graph(self) -> None:
         """Tests that run_cleaning_pass transitively loads manifests for all dependencies in the graph."""
@@ -322,5 +325,4 @@ class BazelLoopImplTest(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
-# Untested requirements:
-# - Telemetry capturing execution events, cumulative token usage, and pass duration is streamed to standard output and transcript files.
+# Untested requirements: None

@@ -1,3 +1,4 @@
+# Requirements specified in bazel_target.pyi
 from typing import Protocol
 from dataclasses import dataclass
 from update_with_ai.parts.dag.lib import dag_storage

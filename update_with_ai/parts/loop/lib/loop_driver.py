@@ -1,3 +1,4 @@
+# Requirements specified in loop_driver.pyi
 """Loop driver interface and data types."""
 
 from dataclasses import dataclass

@@ -32,7 +32,7 @@ INHERITED_REQUIREMENTS:
 - [LoopGuard] Consecutive repetitions reaching a fatal threshold produce a loop failure communicating session termination.
 
 GROUNDING_ARGUMENT:
-- The operation accesses tool_name and parameter bindings passed as arguments, evaluates them against internal repetition tracking state on self, and constructs LoopReminder or LoopFailure data variants without requiring external collaborator singletons.
+- The operation accesses tool_name and parameter bindings passed as arguments, projecting edit tool invocations to target file and line range bounds and general tools to full parameter bindings, evaluates them against internal repetition tracking state on self, and constructs LoopReminder or LoopFailure data variants without requiring external collaborator singletons.
 """
         ...
 

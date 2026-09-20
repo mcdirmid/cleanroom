@@ -26,14 +26,14 @@ Executes a complete topological cleaning pass over the acyclic subgraph rooted a
 FRESH_REQUIREMENTS:
 - Target labels are resolved against workspace directories or runfiles trees to populate graph storage before cleaning.
 - Cleaning halts immediately and produces a failing build result if node cleaning fails, if any reachable node in the target subgraph remains dirty after cleaning, or if an unexpected failure occurs during cleaning, capturing the failure reason in the build summary.
-- Telemetry capturing execution events, cumulative token usage, and pass duration is streamed to standard output and transcript files.
+- Telemetry capturing execution events, pass duration, and build outcome is streamed to standard output and transcript files.
 
 INHERITED_REQUIREMENTS:
 - [Loop] The loop executes a cleaning pass over an acyclic subgraph rooted at a target node in graph storage.
 - [Loop] The loop produces a build result upon pass completion.
 
 GROUNDING_ARGUMENT:
-- Receives root as a parameter, uses imported bazel_manifest_loader to resolve and load workspace targets into dag_storage, invokes imported loop_cleaner to execute topological cleaning passes with the node cleaner, and logs summary duration and token telemetry to runner_logger, with all collaborator singletons residing in the same system lifecycle tier.
+- Receives root as a parameter, uses imported bazel_manifest_loader to resolve and load workspace targets into dag_storage, invokes imported loop_cleaner to execute topological cleaning passes with the node cleaner, and logs summary duration and build outcome telemetry to runner_logger, with all collaborator singletons residing in the same system lifecycle tier.
 """
         ...
 

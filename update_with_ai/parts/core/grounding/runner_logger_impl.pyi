@@ -7,9 +7,6 @@ class RunnerLogger(runner_logger.RunnerLogger):
 PURPOSE:
 Implements runner logger to write compact summaries and verbose file logs
 
-FRESH_REQUIREMENTS:
-- The runner logger intercepts termination signals to flush and close transcript log files.
-
 GROUNDING_ARGUMENT:
 - As a system singleton, RunnerLogger handles telemetry logging to standard output and transcript log files without external singleton service dependencies.
 """

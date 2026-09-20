@@ -21,6 +21,6 @@ When executing a cleaning pass:
 
 - Cleaning halts immediately and produces a failing build result if node cleaning fails, if any reachable node in the target subgraph remains dirty after cleaning, or if an unexpected failure occurs during cleaning, capturing the failure reason in the build summary.
 
-- Telemetry capturing execution events, cumulative token usage, and pass duration is streamed to standard output and transcript files.
+- Telemetry capturing execution events, pass duration, and build outcome is streamed to standard output and transcript files.
 
 > META: "Cycles are only guarded by an assumption and a node visitation limit; cycle detection is never to be turned into a requirement."

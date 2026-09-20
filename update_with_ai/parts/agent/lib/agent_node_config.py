@@ -1,3 +1,4 @@
+# Requirements specified in agent_node_config.pyi
 """Node configuration interface and types."""
 
 from dataclasses import dataclass

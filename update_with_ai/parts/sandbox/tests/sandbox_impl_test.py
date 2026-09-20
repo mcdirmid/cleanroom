@@ -303,7 +303,7 @@ class SandboxImplTest(unittest.TestCase):
         with enter_phase(agent_session, registry=self.registry) as scope:
             sb = scope.get_singleton(Sandbox)
             # Requirement: When step mode is not used, startup tool executions contain no advance tool execution.
-            # Requirement: When startup reads are not performed, startup tool executions contain no file read executions.
+            # Requirement: When startup reads are not performed or the session has multiple read-write files, startup tool executions contain no file read executions.
             executions = sb.get_startup_tool_executions()
             self.assertEqual(len(executions), 0)
 

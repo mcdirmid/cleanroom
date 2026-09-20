@@ -1,7 +1,7 @@
+# Requirements specified in sandbox_asm.pyi
 from __future__ import annotations
 from typing import Optional
 from support.lib.lifecycle import LifecycleRegistry
-from . import sandbox_change_summary_validator_impl
 from . import sandbox_file_editor_impl
 from . import sandbox_file_reader_impl
 from . import sandbox_guide_delivery_impl
@@ -11,7 +11,6 @@ from . import template_format_impl
 from . import tool_provider_impl
 
 CONSTITUENTS = (
-    sandbox_change_summary_validator_impl,
     sandbox_file_editor_impl,
     sandbox_file_reader_impl,
     sandbox_guide_delivery_impl,

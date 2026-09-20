@@ -22,6 +22,6 @@ The template formatter:
 
 - Preserves parameter placeholders whose keys are absent from the supplied parameters as unrendered placeholders.
 
-- Evaluates conditional blocks and line-suffix conditionals based on the truthiness of their condition keys in the parameters, including enclosed content when true and omitting content when false.
+- Evaluates conditional blocks and line-suffix conditionals based on the truthiness of their condition keys in the parameters, including enclosed content when true or absent from parameters and omitting content when false.
 
 - Repeats loop blocks and line-suffix loops across items when the collection key resolves to a sequence in the parameters, binding loop item variables during repetition.

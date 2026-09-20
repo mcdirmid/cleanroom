@@ -1,3 +1,4 @@
+# Requirements specified in dag_storage.pyi
 from typing import Optional, Protocol, Set
 from dataclasses import dataclass
 

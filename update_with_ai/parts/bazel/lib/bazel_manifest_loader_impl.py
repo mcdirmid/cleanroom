@@ -1,3 +1,4 @@
+# Requirements specified in bazel_manifest_loader_impl.pyi
 import json
 import os
 from typing import Any, Dict, List, Optional, Sequence, Set, cast

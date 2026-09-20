@@ -246,7 +246,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             # Convert mapped relative path
             converted = alias_mgr.convert("module.py")
-            # Requirement: Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
+            # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
             self.assertEqual(converted, bound)
             self.assertEqual(alias_mgr.to_actual("module.py"), bound)
             self.assertEqual(alias_mgr.to_wire(bound), "module.py")
@@ -261,7 +261,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             alias_mgr._short_name_to_aliases["nested.py"] = [bound_nested]
 
             # Unambiguous short name resolves to bound file
-            # Requirement: Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
+            # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
             resolved = alias_mgr.convert("nested.py")
             self.assertEqual(resolved, bound_nested)
 
@@ -273,13 +273,13 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             )
             alias_mgr._short_name_to_aliases["nested.py"].append(bound_dup)
             ambiguous = alias_mgr.convert("nested.py")
-            # Requirement: Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
+            # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
             self.assertIsInstance(ambiguous, UnboundFile)
             self.assertEqual(ambiguous.relative_path, "nested.py")
 
             # Convert unmapped relative path produces UnboundFile
             unmapped = alias_mgr.convert("unknown.py")
-            # Requirement: Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
+            # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
             self.assertIsInstance(unmapped, UnboundFile)
             self.assertEqual(unmapped.relative_path, "unknown.py")
 
@@ -294,7 +294,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             text = "Error in /workspace/pkg/module.py at line 10"
             sanitized = alias_mgr.sanitize_text(text)
-            # Requirement: Sanitizing text masks occurrences of relative workspace paths and preceding path prefixes with the corresponding file alias relative paths.
+            # Requirement: [AliasManager] Sanitizing text masks occurrences of relative workspace paths and preceding path prefixes with the corresponding file alias relative paths.
             self.assertNotIn("/workspace/pkg/module.py", sanitized)
             self.assertIn("module.py", sanitized)
 
@@ -435,8 +435,8 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 self.assertTrue(passed)
                 self.assertEqual(diag.strip(), "verified")
 
-                # Requirement: The alias manager converts relative paths to matching file aliases, producing unbound files when unmapped.
-                # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, and produces an unbound file if the relative path is not found.
+                # Requirement: The alias manager converts relative paths to matching file aliases, producing unbound files when unmapped or ambiguous.
+                # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
                 alias_impl = alias_mgr.convert("test/pkg/impl.py")
                 self.assertIsInstance(alias_impl, ReadWriteFile)
                 self.assertEqual(alias_impl.relative_path, "test/pkg/impl.py")
@@ -965,15 +965,15 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                         with enter_phase(agent_session, registry=reg) as scope:
                             cfg = scope.get_singleton(NodeConfig)
                             # Template read failure results in empty templates
-                            # Requirement: The node config exposes templates mapping read-write files to initial file content.
+                            # Requirement: The session read-write files and templates aggregating read-write files and templates across the active nodes, mapping read-write files to initial file content.
                             # Requirement: [NodeConfig] The node config provides templates mapping read-write files to initial file content.
                             self.assertEqual(cfg.templates, set())
                             # Invalid JSON param string results in default empty dict
-                            # Requirement: The node config exposes declared template parameters from the target node manifests.
+                            # Requirement: The session template parameters combining template parameters across the active nodes.
                             # Requirement: [NodeConfig] The node config provides the session template parameters, providing parameter bindings for template evaluation.
                             self.assertEqual(cfg.template_parameters, {})
                             # Guide read failure results in guide being None
-                            # Requirement: The node config exposes the declared guide target as the guide file when step mode is active.
+                            # Requirement: The session guide file and task guide from the single active node when guide step mode is active.
                             # Requirement: [NodeConfig] The node config provides the session guide file when step mode is active.
                             self.assertIsNotNone(cfg.guide_file)
                             self.assertIsNone(cfg.guide)
@@ -1150,8 +1150,8 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                         self.assertNotIn("my_guide.md", ro_names)
 
                         # Guide file is registered in AliasManager
-                        # Requirement: The alias manager converts relative paths to matching file aliases, producing unbound files when unmapped.
-                        # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, and produces an unbound file if the relative path is not found.
+                        # Requirement: The alias manager converts relative paths to matching file aliases, producing unbound files when unmapped or ambiguous.
+                        # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
                         converted_guide = alias_mgr.convert("my_guide.md")
                         self.assertEqual(converted_guide, cfg.guide_file)
             finally:
@@ -1526,7 +1526,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         text = "Path without word boundary: [/non_regex_matched/custom_path.py]"
         sanitized = alias_mgr.sanitize_text(text)
         # Requirement: The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its relative path, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking, stripping workspace root path prefixes, and stripping execution root path prefixes.
-        # Requirement: [AliasManager] Sanitizing text masks occurrences of relative workspace paths and preceding path prefixes with the corresponding file alias short names.
+        # Requirement: [AliasManager] Sanitizing text masks occurrences of relative workspace paths and preceding path prefixes with the corresponding file alias relative paths.
         self.assertEqual(sanitized, "Path without word boundary: [custom_path.py]")
 
 

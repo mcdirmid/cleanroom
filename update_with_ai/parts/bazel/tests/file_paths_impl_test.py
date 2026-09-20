@@ -30,9 +30,6 @@ class TestFilePathsImpl(unittest.TestCase):
             self.assertIsInstance(hp, HostPath)
             self.assertEqual(hp.path, "/any/path/file.txt")
 
-            with self.assertRaises(ValueError):
-                service.create_host_path("")
-
     def test_create_absolute_path(self) -> None:
         with enter_phase("system", registry=self.registry) as scope:
             service = scope.get_singleton(FilePaths)

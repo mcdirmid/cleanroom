@@ -1,3 +1,4 @@
+# Requirements specified in tool_provider_impl.pyi
 import inspect
 from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Set, Tuple, Type
 from . import tool_provider

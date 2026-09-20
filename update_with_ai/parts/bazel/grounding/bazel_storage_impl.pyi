@@ -46,6 +46,9 @@ GROUNDING_ARGUMENT:
         """
 PURPOSE:
 Establishes dependencies that refer to the node's upstream nodes in the graph
+
+GROUNDING_ARGUMENT:
+- Receives the node parameter directly and reads recorded upstream dependencies from local storage state.
 """
         ...
 
@@ -55,6 +58,9 @@ Establishes dependencies that refer to the node's upstream nodes in the graph
         """
 PURPOSE:
 Establishes dependents that refer to downstream nodes depending on it
+
+GROUNDING_ARGUMENT:
+- Receives the node parameter directly and queries reverse dependencies from package textproto files using bazel_target and update_with_ai_proto_ext.
 """
         ...
 
@@ -64,6 +70,9 @@ Establishes dependents that refer to downstream nodes depending on it
         """
 PURPOSE:
 Establishes messages explaining why the node requires cleaning
+
+GROUNDING_ARGUMENT:
+- Receives the node parameter directly and queries pending messages from package textproto files using bazel_target and update_with_ai_proto_ext.
 """
         ...
 
@@ -76,6 +85,9 @@ Defines dirty state on a node to indicate that it needs to be cleaned
 
 INHERITED_REQUIREMENTS:
 - [DagStorage] A node is dirty if, but not only if, it has messages.
+
+GROUNDING_ARGUMENT:
+- Receives the node parameter directly, evaluating whether the pending messages set retrieved from package textproto storage is non-empty, or whether its declared source file is missing from the workspace root, recording a change message to implement the source file via add_message when missing.
 """
         ...
 
@@ -88,6 +100,9 @@ Provides that a node can be registered as a dependent to all of its non-silent d
 
 INHERITED_REQUIREMENTS:
 - [DagStorage] Registering a node as a dependent adds the node to the dependents of all of its non-silent dependencies.
+
+GROUNDING_ARGUMENT:
+- Receives the node parameter directly, inspects its non-silent dependencies from local state, and writes updated reverse dependencies to package textproto files using bazel_target and update_with_ai_proto_ext.
 """
         ...
 
@@ -100,6 +115,9 @@ Provides that the dependents of a node can be cleared to avoid stale dependent r
 
 INHERITED_REQUIREMENTS:
 - [DagStorage] Clearing the dependents of a node empties all recorded dependents for that node.
+
+GROUNDING_ARGUMENT:
+- Receives the node parameter directly and empties recorded dependents for that node in package textproto storage using bazel_target and update_with_ai_proto_ext.
 """
         ...
 
@@ -112,6 +130,9 @@ Provides that messages can be added to a node to inform on why it needs to be cl
 
 INHERITED_REQUIREMENTS:
 - [DagStorage] Adding a message to a node records the message for that node.
+
+GROUNDING_ARGUMENT:
+- Receives message and target node as parameters and records the message in package textproto storage using bazel_target and update_with_ai_proto_ext.
 """
         ...
 
@@ -124,6 +145,9 @@ Provides that messages of a node can be cleared to inform that it no longer need
 
 INHERITED_REQUIREMENTS:
 - [DagStorage] Clearing messages for a node removes all recorded messages for that node.
+
+GROUNDING_ARGUMENT:
+- Receives the node parameter directly and clears recorded messages in package textproto storage using bazel_target and update_with_ai_proto_ext.
 """
         ...
 

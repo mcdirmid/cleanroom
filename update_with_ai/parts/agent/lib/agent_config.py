@@ -1,3 +1,4 @@
+# Requirements specified in agent_config.pyi
 """Agent configuration interface and data types."""
 
 from typing import Protocol

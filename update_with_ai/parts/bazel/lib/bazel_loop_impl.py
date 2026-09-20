@@ -1,4 +1,5 @@
 # Requirements specified in bazel_loop_impl.pyi
+import time
 from typing import Any, Optional, Set, cast
 from . import bazel_manifest_loader
 from update_with_ai.parts.loop.lib import loop
@@ -28,9 +29,10 @@ class Loop(loop.Loop, Singleton):
         pass
 
     def run_cleaning_pass(self, root: dag_storage.Node) -> loop.BuildResult:
+        start_time = time.time()
         logger = get_singleton(runner_logger.RunnerLogger)
         root_str = _format_node(root)
-        # Requirement: Telemetry capturing execution events, cumulative token usage, and pass duration is streamed to standard output and transcript files.
+        # Requirement: Telemetry capturing execution events, pass duration, and build outcome is streamed to standard output and transcript files.
         logger.consume(
             runner_logger.LogEvent(
                 event_name="build_pass_start",
@@ -83,18 +85,20 @@ class Loop(loop.Loop, Singleton):
             success = False
             failure_reason = str(e)
 
+        duration = time.time() - start_time
         if success:
             summary = f"Cleaning pass succeeded for {root_str}"
         else:
             reason_suffix = f": {failure_reason}" if failure_reason else ""
             summary = f"Cleaning pass failed for {root_str}{reason_suffix}"
 
-        # Requirement: Telemetry capturing execution events, cumulative token usage, and pass duration is streamed to standard output and transcript files.
+        telemetry_summary = f"{summary} in {duration:.1f}s"
+        # Requirement: Telemetry capturing execution events, pass duration, and build outcome is streamed to standard output and transcript files.
         logger.consume(
             runner_logger.LogEvent(
                 event_name="build_pass_end",
-                summary=summary,
-                transcript_representation=f"=== Cleaning Pass Ended: {summary} ===",
+                summary=telemetry_summary,
+                transcript_representation=f"=== Cleaning Pass Ended: {telemetry_summary} ===",
             )
         )
         # Requirement: [Loop] The loop produces a build result upon pass completion.

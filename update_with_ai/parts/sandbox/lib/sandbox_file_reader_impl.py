@@ -1,3 +1,4 @@
+# Requirements specified in sandbox_file_reader_impl.pyi
 import os
 import re
 from typing import Any, Optional, Set, Type, cast

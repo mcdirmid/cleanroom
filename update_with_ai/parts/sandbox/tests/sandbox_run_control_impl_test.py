@@ -907,6 +907,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertGreater(len(fail_tool.parameters), 0)
             # Requirement: The fail tool is named `fail`, accepting a target parameter and a text explanation parameter.
             self.assertEqual(fail_tool.name, "fail")
+            # Requirement: The fail tool explanation parameter uses a string parameter converter to accept text.
             self.assertIs(fail_tool.explanation.parameter_converter, self.str_conv)
 
             b = ActualParameterBindings(

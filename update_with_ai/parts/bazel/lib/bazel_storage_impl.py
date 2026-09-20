@@ -1,3 +1,4 @@
+# Requirements specified in bazel_storage_impl.pyi
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Set
 from update_with_ai.parts.agent.lib import agent_storage

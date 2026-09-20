@@ -1,3 +1,4 @@
+# Requirements specified in openai_driver_impl.pyi
 import json
 import time
 from typing import Any, Optional, Set, Tuple

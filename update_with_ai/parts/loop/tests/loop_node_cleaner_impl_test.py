@@ -297,7 +297,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             self.assertEqual(role_config.nodes, ())
 
             assert isinstance(role_config, RoleConfigImpl)
-            # Requirement: [RoleConfig] The role config can set role to configure the role of the agent session.
+            # Configures role of the agent session.
             role_config.set_role("lib")
             # Requirement: [RoleConfig] The role config provides the role of the session.
             self.assertEqual(role_config.role, "lib")
@@ -533,8 +533,8 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             msgs = cleaner.clean_nodes([node])
             self.assertEqual(len(msgs), 0)
 
-            # Requirement: [NodeCleaner] Cleaning dirty nodes communicates whether processing should continue.
-            # Requirement: [NodeCleaner] Processing cannot continue only if a failure occurs while cleaning the nodes that cannot be handled by cleaning any other node.
+            # Requirement: [NodeCleaner] A node cleaner can clean dirty nodes, communicating whether processing should continue.
+            # Requirement: [NodeCleaner] Processing cannot continue only if a failure occurs while cleaning the nodes that cannot be handled by cleaning any other node; otherwise, processing continues.
             cont = cleaner.clean([node])
             self.assertFalse(cont)
             self.assertTrue(self.storage.is_dirty(node))
@@ -597,7 +597,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
 
         with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
-            # Requirement: [NodeCleaner] Cleaning dirty nodes communicates whether processing should continue.
+            # Requirement: [NodeCleaner] A node cleaner can clean dirty nodes, communicating whether processing should continue.
             cont = cleaner.clean([node])
 
             self.assertTrue(cont)
@@ -639,7 +639,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
 
         with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
-            # Requirement: [NodeCleaner] Cleaning dirty nodes communicates whether processing should continue.
+            # Requirement: [NodeCleaner] A node cleaner can clean dirty nodes, communicating whether processing should continue.
             cont = cleaner.clean([node])
 
             self.assertTrue(cont)
@@ -673,7 +673,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: Resolving dirty nodes produces change messages for downstream dependent nodes when the outcome signals successful advancement with workspace file modifications, and no change messages or change summaries when no workspace files were modified.
-            # Requirement: [NodeCleaner] Cleaning dirty nodes communicates whether processing should continue.
+            # Requirement: [NodeCleaner] A node cleaner can clean dirty nodes, communicating whether processing should continue.
             cont = cleaner.clean([node])
 
             self.assertTrue(cont)
@@ -779,7 +779,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: Cleaning dirty nodes registers the nodes as dependents to their non-silent dependencies in graph storage, delivering resulting change messages to downstream dependents and feedback messages to their addressed dependency node.
-            # Requirement: [NodeCleaner] Cleaning dirty nodes communicates whether processing should continue.
+            # Requirement: [NodeCleaner] A node cleaner can clean dirty nodes, communicating whether processing should continue.
             cont = cleaner.clean([node1, node2])
             self.assertTrue(cont)
             self.assertEqual(len(self.storage.messages[dep1]), 1)
@@ -808,7 +808,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: Resolving dirty nodes produces no propagating messages when the outcome signals run failure, leaving the nodes dirty and communicating that processing cannot continue.
-            # Requirement: [NodeCleaner] Processing cannot continue only if a failure occurs while cleaning the nodes that cannot be handled by cleaning any other node.
+            # Requirement: [NodeCleaner] Processing cannot continue only if a failure occurs while cleaning the nodes that cannot be handled by cleaning any other node; otherwise, processing continues.
             cont = cleaner.clean([node1, node2])
             self.assertFalse(cont)
             self.assertTrue(self.storage.is_dirty(node1))
@@ -825,7 +825,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: When dirty nodes define no task prompt, cleaning resolves the nodes without establishing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
-            # Requirement: [NodeCleaner] Cleaning dirty nodes communicates whether processing should continue.
+            # Requirement: [NodeCleaner] A node cleaner can clean dirty nodes, communicating whether processing should continue.
             cont = cleaner.clean([node1, node2])
             self.assertTrue(cont)
             self.assertEqual(len(self.storage.messages[dep1]), 1)
@@ -846,7 +846,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
                 Feedback(content="generic feedback", target=None)
             }  # type: ignore
             # Requirement: Cleaning dirty nodes registers the nodes as dependents to their non-silent dependencies in graph storage, delivering resulting change messages to downstream dependents and feedback messages to their addressed dependency node.
-            # Requirement: [NodeCleaner] Cleaning dirty nodes communicates whether processing should continue.
+            # Requirement: [NodeCleaner] A node cleaner can clean dirty nodes, communicating whether processing should continue.
             cont = cleaner.clean([node])
             self.assertTrue(cont)
             self.assertIn(dep_node, self.storage.messages)

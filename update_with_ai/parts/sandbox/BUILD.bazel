@@ -28,17 +28,7 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "sandbox_asm",
-    module_deps = [':sandbox_change_summary_validator_impl', ':sandbox_file_editor_impl', ':sandbox_file_reader_impl', ':sandbox_guide_delivery_impl', ':sandbox_impl', ':sandbox_run_control_impl', ':template_format_impl', ':tool_provider_impl'],
-)
-
-update_python_with_ai(
-    name = "sandbox_change_summary_validator",
-    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config'],
-)
-
-update_python_with_ai(
-    name = "sandbox_change_summary_validator_impl",
-    module_deps = ['//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', ':sandbox_change_summary_validator'],
+    module_deps = [':sandbox_file_editor_impl', ':sandbox_file_reader_impl', ':sandbox_guide_delivery_impl', ':sandbox_impl', ':sandbox_run_control_impl', ':template_format_impl', ':tool_provider_impl'],
 )
 
 update_python_with_ai(

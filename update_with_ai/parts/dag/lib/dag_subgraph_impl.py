@@ -1,3 +1,4 @@
+# Requirements specified in dag_subgraph_impl.pyi
 from collections import deque
 from typing import Dict, List, Optional, Sequence, Set
 from . import dag_config

@@ -2,7 +2,7 @@
 
 assembles: bazel_asm, bazel_loop_impl, bazel_openai_config_impl, dag_asm, loop_asm, runner_logger_impl, sandbox_asm
 imports: bazel_target_labels_ext, commonmark_ext, filesystem_ext, json_manifest_ext, model_config_ext, openai_ext, update_with_ai_proto_ext
-implements: agent_config, agent_file_alias, agent_node_config, agent_storage, bazel_manifest_loader, bazel_target, dag_config, dag_storage, dag_subgraph, file_paths, loop, loop_cleaner, loop_conversation, loop_driver, loop_guard, loop_node_cleaner, openai_config, runner_logger, sandbox, sandbox_change_summary_validator, sandbox_file_editor, sandbox_file_reader, sandbox_guide_delivery, sandbox_run_control, template_format, tool_provider
+implements: agent_config, agent_file_alias, agent_node_config, agent_storage, bazel_manifest_loader, bazel_target, dag_config, dag_storage, dag_subgraph, file_paths, loop, loop_cleaner, loop_conversation, loop_driver, loop_guard, loop_node_cleaner, openai_config, runner_logger, sandbox, sandbox_file_editor, sandbox_file_reader, sandbox_guide_delivery, sandbox_run_control, template_format, tool_provider
 
 ## Purpose
 
@@ -30,4 +30,4 @@ The bazel openai loop assembly aggregates the following constituents:
 
 - The runner logger implementation from runner_logger_impl, closing the runner logger interface to stream terminal progress summaries and unbuffered transcript logs.
 
-- The sandbox assembly from sandbox_asm, closing the sandbox, sandbox change summary validator, sandbox file editor, sandbox file reader, sandbox guide delivery, sandbox run control, template format, and tool provider interfaces.
+- The sandbox assembly from sandbox_asm, closing the sandbox, sandbox file editor, sandbox file reader, sandbox guide delivery, sandbox run control, template format, and tool provider interfaces.

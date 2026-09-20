@@ -1,3 +1,4 @@
+# Requirements specified in loop_conversation.pyi
 """Loop conversation interface and data types."""
 
 from dataclasses import dataclass

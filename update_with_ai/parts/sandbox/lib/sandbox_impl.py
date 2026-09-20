@@ -1,3 +1,4 @@
+# Requirements specified in sandbox_impl.pyi
 from typing import List, Optional, Set, Tuple, Union
 from update_with_ai.parts.agent.lib import agent_config
 from update_with_ai.parts.agent.lib import agent_node_config

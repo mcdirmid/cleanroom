@@ -314,9 +314,9 @@ class OpenAIDriverImplTest(unittest.TestCase):
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
-            # Requirement: When a model response produces no tool executions, the agent driver appends a prompt to the conversation reminding that progress and conclusion require invoking tools, and continues the turn loop.
-            # Requirement: [AgentDriver] When a model response contains no tool executions, the agent driver injects a tool reminder into the conversation and continues the turn loop.
-            # Requirement: When tool execution produces a terminating response, the agent driver concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
+            # Requirement: When a model response produces no tool executions, the loop driver appends a prompt to the conversation reminding that progress and conclusion require invoking tools, and continues the turn loop.
+            # Requirement: [LoopDriver] When a model response contains no tool executions, the loop driver injects a tool reminder into the conversation and continues the turn loop.
+            # Requirement: When tool execution produces a terminating response, the loop driver concludes the run and returns a loop outcome, or halts with an unexpected failure if the response indicates terminating failure.
             self.assertTrue(outcome.is_success)
             self.assertEqual(len(self.history.messages), 4)
             self.assertEqual(self.history.messages[0].role, "assistant")
@@ -327,7 +327,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             self.assertIn("No tools were executed", self.history.messages[1].content)
             self.assertEqual(self.history.messages[2].role, "assistant")
             # Requirement: The loop driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool names and arguments or text previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in tool result transcripts when present.
-            # Requirement: [AgentDriver] The agent driver records log events for interaction turns, tool executions, and turn outcomes to the runner logger.
+            # Requirement: [LoopDriver] The loop driver records log events for interaction turns, tool executions, and turn outcomes to the runner logger.
             comp_events = [
                 e for e in self.logger.events if e.event_name == "model_completion"
             ]
@@ -356,8 +356,8 @@ class OpenAIDriverImplTest(unittest.TestCase):
         with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
 
-            # Requirement: When turns reach the conversation limit from agent config, the agent driver halts with an unexpected failure.
-            # Requirement: [AgentDriver] When the conversation limit from agent config is exceeded, the agent driver halts with an unexpected failure.
+            # Requirement: When turns reach the conversation limit from agent config, the loop driver halts with an unexpected failure.
+            # Requirement: [LoopDriver] When the conversation limit from agent config is exceeded, the loop driver halts with an unexpected failure.
             with self.assertRaises(RuntimeError) as ctx:
                 runner.run()
             self.assertIn("Conversation limit reached", str(ctx.exception))
@@ -413,15 +413,15 @@ class OpenAIDriverImplTest(unittest.TestCase):
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
-            # Requirement: [AgentDriver] The agent driver drives turns by sending model requests to a language model and executing requested tools.
-            # Requirement: When tool execution produces a terminating response, the agent driver concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
-            # Requirement: [AgentDriver] When tool execution produces a termination outcome, the agent driver concludes and returns an agent outcome, or halts with an unexpected failure if the termination indicates a failing outcome.
+            # Requirement: [LoopDriver] The loop driver drives turns by sending model requests to a language model and executing requested tools.
+            # Requirement: When tool execution produces a terminating response, the loop driver concludes the run and returns a loop outcome, or halts with an unexpected failure if the response indicates terminating failure.
+            # Requirement: [LoopDriver] When tool execution produces a termination outcome, the loop driver concludes and returns a loop outcome, or halts with an unexpected failure if the termination indicates a failing outcome.
             self.assertTrue(outcome.is_success)
             self.assertTrue(outcome.response.is_terminated)
             self.assertEqual(outcome.response.content, "Task completed successfully")
             self.assertEqual(len(self.tool_mgr.executions), 1)
             self.assertEqual(self.tool_mgr.executions[0][0], "finish_task")
-            # Requirement: [AgentDriver] The agent driver appends model responses and correlates tool responses with tool call identifiers in the conversation.
+            # Requirement: [LoopDriver] The loop driver appends model responses and correlates tool responses with tool call identifiers in the conversation.
             self.assertEqual(len(self.history.tool_responses), 1)
             self.assertEqual(self.history.tool_responses[0][1], "finish_task")
 
@@ -474,7 +474,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             self.assertEqual(tool_res_msg["tool_call_id"], "call_fail")
 
             # Requirement: When tool execution produces a non-terminating failure response, the failure feedback is appended to the conversation and the run continues.
-            # Requirement: When tool execution produces a terminating response, the agent driver concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
+            # Requirement: When tool execution produces a terminating response, the loop driver concludes the run and returns a loop outcome, or halts with an unexpected failure if the response indicates terminating failure.
             self.assertTrue(outcome.is_success)
             self.assertEqual(len(self.history.tool_responses), 2)
             self.assertTrue(self.history.tool_responses[0][0].is_failed)
@@ -522,7 +522,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             outcome = runner.run()
 
             # Requirement: When a model response is truncated at the generation limit, the loop driver terminates any truncated tool invocation by repairing unclosed arguments into valid JSON and appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
-            # Requirement: When tool execution produces a terminating response, the agent driver concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
+            # Requirement: When tool execution produces a terminating response, the loop driver concludes the run and returns a loop outcome, or halts with an unexpected failure if the response indicates terminating failure.
             self.assertTrue(outcome.is_success)
             # Expect: assistant Part 1 -> user continuation prompt -> assistant Part 2 -> tool response
             self.assertEqual(len(self.history.messages), 4)
@@ -612,7 +612,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             outcome = runner.run()
 
             # Requirement: When a model response is truncated at the generation limit, the loop driver terminates any truncated tool invocation by repairing unclosed arguments into valid JSON and appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
-            # Requirement: When tool execution produces a terminating response, the agent driver concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
+            # Requirement: When tool execution produces a terminating response, the loop driver concludes the run and returns a loop outcome, or halts with an unexpected failure if the response indicates terminating failure.
             self.assertTrue(outcome.is_success)
 
             # Turn 1 assistant message has repaired valid JSON arguments
@@ -758,8 +758,8 @@ class OpenAIDriverImplTest(unittest.TestCase):
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
-            # Requirement: Before executing each tool call, the agent driver records the tool execution in the loop guard, injecting a loop reminder into the conversation when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
-            # Requirement: [AgentDriver] The agent driver evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
+            # Requirement: Before executing each tool call, the loop driver records the tool execution in the loop guard, injecting a loop reminder into the conversation when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
+            # Requirement: [LoopDriver] The loop driver evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
             self.assertTrue(outcome.is_success)
             self.assertTrue(
                 any(e.event_name == "loop_reminder" for e in self.logger.events)
@@ -793,8 +793,8 @@ class OpenAIDriverImplTest(unittest.TestCase):
             with self.assertRaises(RuntimeError) as ctx:
                 runner.run()
 
-            # Requirement: Before executing each tool call, the agent driver records the tool execution in the loop guard, injecting a loop reminder into the conversation when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
-            # Requirement: [AgentDriver] The agent driver evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
+            # Requirement: Before executing each tool call, the loop driver records the tool execution in the loop guard, injecting a loop reminder into the conversation when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
+            # Requirement: [LoopDriver] The loop driver evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
             self.assertIn(
                 "Fatal loop detected: tool executed 5 times.", str(ctx.exception)
             )
@@ -1113,7 +1113,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             outcome = runner.run()
 
             # Requirement: When configured by agent configuration to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool, appending a synthetic assistant invocation carrying the follow-up tool call's reasoning text as prior thought preceding the requested tool execution and the resulting follow-up response to the conversation immediately following the originating response.
-            # Requirement: [AgentDriver] The agent driver can dispatch follow-up tool calls specified by tool responses, recording the follow-up execution in the conversation.
+            # Requirement: [LoopDriver] The loop driver can dispatch follow-up tool calls specified by tool responses, recording the follow-up execution in the conversation.
             self.assertTrue(outcome.is_success)
             self.assertTrue(outcome.response.is_terminated)
             self.assertEqual(outcome.response.content, "Followup tool executed.")
@@ -1201,13 +1201,13 @@ class OpenAIDriverImplTest(unittest.TestCase):
             with self.assertRaises(RuntimeError) as ctx:
                 runner.run()
 
-            # Requirement: When tool execution produces a terminating response, the agent driver concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
-            # Requirement: [AgentDriver] When tool execution produces a termination outcome, the agent driver concludes and returns an agent outcome, or halts with an unexpected failure if the termination indicates a failing outcome.
+            # Requirement: When tool execution produces a terminating response, the loop driver concludes the run and returns a loop outcome, or halts with an unexpected failure if the response indicates terminating failure.
+            # Requirement: [LoopDriver] When tool execution produces a termination outcome, the loop driver concludes and returns a loop outcome, or halts with an unexpected failure if the termination indicates a failing outcome.
             self.assertIn("Agent failed: Cannot proceed", str(ctx.exception))
 
     def test_default_converter_and_parameter_fallback(self) -> None:
         """CUJ: Default parameter converter properties and fallback parameter resolution."""
-        # Requirement: [AgentDriver] The agent driver drives turns by sending model requests to a language model and executing requested tools.
+        # Requirement: [LoopDriver] The loop driver drives turns by sending model requests to a language model and executing requested tools.
         self.assertEqual(_DEFAULT_CONVERTER.actual_type, str)
         self.assertIsNotNone(_DEFAULT_CONVERTER.wire_type)
         self.assertEqual(_DEFAULT_CONVERTER.convert("hello"), "hello")
@@ -1353,7 +1353,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         with enter_phase(agent_session, registry=self.registry) as scope:
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
-            # Requirement: [AgentDriver] The agent driver drives turns by sending model requests to a language model and executing requested tools.
+            # Requirement: [LoopDriver] The loop driver drives turns by sending model requests to a language model and executing requested tools.
             self.assertTrue(outcome.is_success)
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
@@ -1420,7 +1420,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             with self.assertRaises(RuntimeError) as ctx:
                 runner.run()
 
-            # Requirement: [AgentDriver] The agent driver can dispatch follow-up tool calls specified by tool responses, recording the follow-up execution in the conversation.
+            # Requirement: [LoopDriver] The loop driver can dispatch follow-up tool calls specified by tool responses, recording the follow-up execution in the conversation.
             self.assertIn("Agent failed: Fatal followup error", str(ctx.exception))
 
 

@@ -38,7 +38,7 @@ PURPOSE:
 Provides the next batch of ready dirty nodes to clean
 
 FRESH_REQUIREMENTS:
-- When obtaining the next ready batch, uncleaned dirty nodes in topological order whose dependencies in the target subgraph are clean in dag storage are selected, grouped by role address up to a maximum batch size.
+- When obtaining the next ready batch, uncleaned dirty nodes in topological order whose dependencies in the target subgraph are clean in dag storage or present in the same ready batch are selected, grouped by role address up to a maximum batch size.
 """
         ...
 

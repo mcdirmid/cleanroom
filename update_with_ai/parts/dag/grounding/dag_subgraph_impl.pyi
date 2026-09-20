@@ -55,11 +55,11 @@ PURPOSE:
 Provides the next batch of ready dirty nodes to clean
 
 FRESH_REQUIREMENTS:
-- The next ready batch consists of contiguous dirty nodes in topological order that share the same role address and have all their dependencies in the target subgraph clean in dag storage, starting from the earliest ready dirty node and bounded by the batch size obtained from dag config.
+- The next ready batch consists of contiguous dirty nodes in topological order that share the same role address and have all their dependencies in the target subgraph clean in dag storage or present in the same ready batch, starting from the earliest ready dirty node and bounded by the batch size obtained from dag config.
 - If no dirty node in the target subgraph has all its dependencies in the target subgraph clean in dag storage, the next ready batch is an empty sequence.
 
 INHERITED_REQUIREMENTS:
-- [DagSubgraph] When obtaining the next ready batch, uncleaned dirty nodes in topological order whose dependencies in the target subgraph are clean in dag storage are selected, grouped by role address up to a maximum batch size.
+- [DagSubgraph] When obtaining the next ready batch, uncleaned dirty nodes in topological order whose dependencies in the target subgraph are clean in dag storage or present in the same ready batch are selected, grouped by role address up to a maximum batch size.
 
 GROUNDING_ARGUMENT:
 - Scans topologically ordered nodes for the target subgraph using imported dag_storage to evaluate dependency cleanliness, groups contiguous matching candidates by role up to batch_size from imported dag_config, and returns the batch.

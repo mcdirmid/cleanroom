@@ -1,3 +1,4 @@
+# Requirements specified in sandbox.pyi
 from typing import List, Protocol
 from dataclasses import dataclass
 from . import tool_provider

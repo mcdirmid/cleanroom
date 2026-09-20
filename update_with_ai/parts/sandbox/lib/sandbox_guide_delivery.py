@@ -1,3 +1,4 @@
+# Requirements specified in sandbox_guide_delivery.pyi
 from typing import Optional, Protocol
 from . import tool_provider
 from update_with_ai.parts.agent.lib import agent_file_alias, agent_node_config

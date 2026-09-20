@@ -94,6 +94,70 @@ class LoopGuardImplTest(unittest.TestCase):
                 LoopFailure,
             )
 
+    def test_consecutive_edits_same_line_range_different_content(self) -> None:
+        """CUJ: Consecutive edits to the same file and line range with different content trigger loop guard."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            guard = scope.get_singleton(LoopGuard)
+            path_param = Parameter(
+                name="path",
+                description="path",
+                parameter_converter=STRING_PARAMETER_TYPE,
+                is_required=True,
+            )
+            start_param = Parameter(
+                name="start_line",
+                description="start",
+                parameter_converter=STRING_PARAMETER_TYPE,
+                is_required=True,
+            )
+            end_param = Parameter(
+                name="end_line",
+                description="end",
+                parameter_converter=STRING_PARAMETER_TYPE,
+                is_required=True,
+            )
+            content_param = Parameter(
+                name="target_content",
+                description="content",
+                parameter_converter=STRING_PARAMETER_TYPE,
+                is_required=True,
+            )
+
+            bindings1 = ActualParameterBindings(
+                bindings={
+                    (path_param, "foo.py"),
+                    (start_param, 10),
+                    (end_param, 20),
+                    (content_param, "content A"),
+                }
+            )
+            bindings2 = ActualParameterBindings(
+                bindings={
+                    (path_param, "foo.py"),
+                    (start_param, 10),
+                    (end_param, 20),
+                    (content_param, "content B"),
+                }
+            )
+
+            # Call 1 -> None
+            self.assertIsNone(
+                guard.record_tool_execution("replace_file_content", bindings1)
+            )
+
+            # Call 2 with different content but same file & range -> LoopReminder
+            # Requirement: Produces a loop reminder at the reminder threshold of two repetitions when consecutive edits target the same file and line range.
+            res = guard.record_tool_execution("replace_file_content", bindings2)
+            self.assertIsInstance(res, LoopReminder)
+
+            guard.record_tool_execution("replace_file_content", bindings1)
+            guard.record_tool_execution("replace_file_content", bindings2)
+
+            # Call 5 -> LoopFailure
+            # Requirement: Produces a loop failure at the fatal threshold when consecutive edits target the same file and line range.
+            fatal = guard.record_tool_execution("replace_file_content", bindings1)
+            self.assertIsInstance(fatal, LoopFailure)
+
     def test_record_progress_resets_counters(self) -> None:
         """CUJ: Forward progress resets consecutive repetition counters."""
         with enter_phase(agent_session, registry=self.registry) as scope:

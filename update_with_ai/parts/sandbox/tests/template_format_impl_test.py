@@ -65,8 +65,8 @@ class TemplateFormatImplTest(unittest.TestCase):
 
             result = formatter.format_template(template, params)
             expected = "Header\nLine 1\nLine 3\nFooter"
-            # Requirement: Identifies line-suffix conditional comments matching conditional markers, retaining the preceding line content when the condition key evaluates to true and omitting the line when false.
-            # Requirement: [TemplateFormatter] Evaluates conditional blocks and line-suffix conditionals based on the truthiness of their condition keys in the parameters, including enclosed content when true and omitting content when false.
+            # Requirement: Identifies line-suffix conditional comments matching conditional markers, retaining the preceding line content when the condition key evaluates to true or is absent from parameters and omitting the line when false.
+            # Requirement: [TemplateFormatter] Evaluates conditional blocks and line-suffix conditionals based on the truthiness of their condition keys in the parameters, including enclosed content when true or absent from parameters and omitting content when false.
             self.assertEqual(result, expected)
 
     def test_line_suffix_loop(self) -> None:
@@ -128,8 +128,8 @@ class TemplateFormatImplTest(unittest.TestCase):
 
             result = formatter.format_template(template, params)
             expected = "Intro\n## Terms\n- auth_token: definition\nOutro"
-            # Requirement: Identifies block conditional markers enclosing multi-line sections, including enclosed lines when the condition key evaluates to true and omitting enclosed lines when false.
-            # Requirement: [TemplateFormatter] Evaluates conditional blocks and line-suffix conditionals based on the truthiness of their condition keys in the parameters, including enclosed content when true and omitting content when false.
+            # Requirement: Identifies block conditional markers enclosing multi-line sections, including enclosed lines when the condition key evaluates to true or is absent from parameters and omitting enclosed lines when false.
+            # Requirement: [TemplateFormatter] Evaluates conditional blocks and line-suffix conditionals based on the truthiness of their condition keys in the parameters, including enclosed content when true or absent from parameters and omitting content when false.
             self.assertEqual(result, expected)
 
     def test_block_loop(self) -> None:
@@ -239,7 +239,7 @@ class TemplateFormatImplTest(unittest.TestCase):
                 "<!-- endif -->\n"
                 "<!-- endif -->"
             )
-            # Requirement: Identifies block conditional markers enclosing multi-line sections, including enclosed lines when the condition key evaluates to true and omitting enclosed lines when false.
+            # Requirement: Identifies block conditional markers enclosing multi-line sections, including enclosed lines when the condition key evaluates to true or is absent from parameters and omitting enclosed lines when false.
             res_nested_if = formatter.format_template(
                 nested_if_tmpl, {"outer_flag": True, "inner_flag": True}
             )
@@ -247,7 +247,7 @@ class TemplateFormatImplTest(unittest.TestCase):
 
             # Unbound block if: retains body content
             unbound_if_tmpl = "<!-- if: absent_flag -->\nDefault text\n<!-- endif -->"
-            # Requirement: Identifies block conditional markers enclosing multi-line sections, including enclosed lines when the condition key evaluates to true and omitting enclosed lines when false.
+            # Requirement: Identifies block conditional markers enclosing multi-line sections, including enclosed lines when the condition key evaluates to true or is absent from parameters and omitting enclosed lines when false.
             res_unbound_if = formatter.format_template(unbound_if_tmpl, {})
             self.assertEqual(res_unbound_if, "Default text")
 

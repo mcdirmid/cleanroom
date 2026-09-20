@@ -1,3 +1,4 @@
+# Requirements specified in file_paths.pyi
 """File paths interface and data types."""
 
 from abc import ABC, abstractmethod

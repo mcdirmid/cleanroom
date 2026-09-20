@@ -1,3 +1,4 @@
+# Requirements specified in agent_storage.pyi
 from typing import Optional, Protocol, Set
 from dataclasses import dataclass
 from update_with_ai.parts.dag.lib import dag_storage

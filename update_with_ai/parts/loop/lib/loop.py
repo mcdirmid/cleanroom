@@ -1,3 +1,4 @@
+# Requirements specified in loop.pyi
 from dataclasses import dataclass
 from typing import Protocol
 from update_with_ai.parts.dag.lib import dag_storage

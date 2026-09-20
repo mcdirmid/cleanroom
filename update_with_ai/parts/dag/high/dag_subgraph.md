@@ -20,6 +20,6 @@ The dag subgraph:
 
 - Reports whether the target subgraph is *complete*, which holds if, but only if, all reachable nodes in the target subgraph are clean in dag storage.
 
-- Provides the *next ready batch* of dirty nodes to clean, selecting uncleaned dirty nodes in topological order whose dependencies in the target subgraph are clean in dag storage, grouped by role address up to a maximum batch size.
+- Provides the *next ready batch* of dirty nodes to clean, selecting uncleaned dirty nodes in topological order whose dependencies in the target subgraph are clean in dag storage or present in the same ready batch, grouped by role address up to a maximum batch size.
 
 - Can *record visit* for a batch of nodes being cleaned, incrementing visit counts for each node in the batch and enforcing execution iteration limits.

@@ -1,12 +1,12 @@
 # sandbox_asm assembly component
 
-assembles: sandbox_change_summary_validator_impl, sandbox_file_editor_impl, sandbox_file_reader_impl, sandbox_guide_delivery_impl, sandbox_impl, sandbox_run_control_impl, template_format_impl, tool_provider_impl
+assembles: sandbox_file_editor_impl, sandbox_file_reader_impl, sandbox_guide_delivery_impl, sandbox_impl, sandbox_run_control_impl, template_format_impl, tool_provider_impl
 imports: agent_config, agent_file_alias, agent_node_config, commonmark_ext, dag_storage, filesystem_ext
-implements: sandbox, sandbox_file_reader, sandbox_file_editor, sandbox_run_control, sandbox_guide_delivery, sandbox_change_summary_validator, tool_provider, template_format
+implements: sandbox, sandbox_file_reader, sandbox_file_editor, sandbox_run_control, sandbox_guide_delivery, tool_provider, template_format
 
 ## Purpose
 
-The sandbox_asm assembly component aggregates file inspection, guarded editing, execution control, guide delivery, change validation, and tool dispatch services into the sandbox subsystem assembly.
+The sandbox_asm assembly component aggregates file inspection, guarded editing, execution control, guide delivery, and tool dispatch services into the sandbox subsystem assembly.
 
 Autonomous agents operating on source workspaces require isolated environments that combine file inspection tools, guarded in-place editors, progressive instruction delivery, and strict run completion verifiers. Without an integrated sandbox assembly, tools and validation services must be configured and wired independently across session boundaries, risking inconsistent argument conversion and permissive file write behaviors. The sandbox_asm assembly component unites concrete sandbox, tool provider, and verification modules into a cohesive subsystem, closing the sandbox and tool execution interfaces while declaring required dependencies on file aliases, configurations, and operating system storage boundaries.
 
@@ -27,8 +27,6 @@ The sandbox assembly aggregates the following implementation components:
 - The sandbox run control implementation from sandbox_run_control_impl, closing the sandbox run control interface to provide advance, finish, fail, blame, and check file execution control tools with sequential verification checks.
 
 - The sandbox guide delivery implementation from sandbox_guide_delivery_impl, closing the sandbox guide delivery interface to parse markdown instructions and deliver progressive milestone steps.
-
-- The sandbox change summary validator implementation from sandbox_change_summary_validator_impl, closing the sandbox change summary validator interface to evaluate net file modifications against reported change summaries.
 
 - The tool provider implementation from tool_provider_impl, closing the tool provider interface to manage session tool registration, parameter conversion, and tool invocation dispatch.
 

@@ -1,3 +1,4 @@
+# Requirements specified in sandbox_file_editor_impl.pyi
 import difflib
 import os
 import subprocess

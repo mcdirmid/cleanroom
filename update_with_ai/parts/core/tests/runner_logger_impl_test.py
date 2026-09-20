@@ -124,5 +124,4 @@ class RunnerLoggerTest(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
-# Untested requirements:
-# - The runner logger intercepts termination signals to flush and close transcript log files.
+# Untested requirements: None

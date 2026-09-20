@@ -1,3 +1,4 @@
+# Requirements specified in runner_logger.pyi
 from typing import Protocol
 from dataclasses import dataclass
 

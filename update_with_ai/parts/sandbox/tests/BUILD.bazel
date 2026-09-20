@@ -24,20 +24,6 @@ pyright_test(
     ],
 )
 
-pyright_test(
-    name = "sandbox_change_summary_validator_impl_test",
-    srcs = ["sandbox_change_summary_validator_impl_test.py"],
-    deps = [],
-    pyright_deps = [
-        "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_file_alias",
-        "//update_with_ai/parts/agent/lib:agent_node_config",
-        "//update_with_ai/parts/agent/lib:agent_session",
-        "//update_with_ai/parts/dag/lib:dag_storage",
-        "//update_with_ai/parts/sandbox/lib:sandbox_change_summary_validator",
-        "//update_with_ai/parts/sandbox/lib:sandbox_change_summary_validator_impl",
-    ],
-)
 
 pyright_test(
     name = "sandbox_file_editor_impl_test",

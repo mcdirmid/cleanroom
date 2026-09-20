@@ -1,3 +1,4 @@
+# Requirements specified in openai_config.pyi
 """OpenAI model configuration interface."""
 
 from typing import Optional, Protocol

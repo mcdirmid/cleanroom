@@ -1,3 +1,4 @@
+# Requirements specified in file_paths_impl.pyi
 """File paths service implementation."""
 
 import os

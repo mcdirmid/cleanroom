@@ -1,3 +1,4 @@
+# Requirements specified in agent_file_alias.pyi
 """File alias interface and data types."""
 
 from __future__ import annotations

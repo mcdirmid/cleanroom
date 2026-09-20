@@ -1,3 +1,4 @@
+# Requirements specified in dag_subgraph.pyi
 from typing import List, Protocol, Sequence
 from update_with_ai.parts.dag.lib import dag_storage
 

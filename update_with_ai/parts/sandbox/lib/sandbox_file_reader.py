@@ -1,3 +1,4 @@
+# Requirements specified in sandbox_file_reader.pyi
 from typing import Optional, Protocol, Set
 from update_with_ai.parts.agent.lib import agent_file_alias
 from . import tool_provider

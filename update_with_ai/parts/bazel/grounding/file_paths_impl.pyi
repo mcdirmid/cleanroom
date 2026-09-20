@@ -7,6 +7,9 @@ class FilePaths(file_paths.FilePaths):
     """
 PURPOSE:
 The file paths implementation is a system service implementing the file paths interface.
+
+GROUNDING_ARGUMENT:
+- As a system singleton, FilePaths provides path creation and resolution services without external singleton service dependencies.
 """
 
     @operation
@@ -23,7 +26,7 @@ INHERITED_REQUIREMENTS:
 - [FilePaths] Returns a host path encapsulating the path string.
 
 GROUNDING_ARGUMENT:
-Instantiates a host path record holding the path string.
+- Instantiates a host path record holding the path string.
 """
         ...
 
@@ -42,7 +45,7 @@ INHERITED_REQUIREMENTS:
 - [FilePaths] If the path string is not absolute, raises a failure.
 
 GROUNDING_ARGUMENT:
-Verifies that the path string is absolute using the host filesystem, raising ValueError if not, and instantiates an absolute path record holding the path string.
+- Verifies that the path string is absolute using the host filesystem, raising ValueError if not, and instantiates an absolute path record holding the path string.
 """
         ...
 
@@ -61,7 +64,7 @@ INHERITED_REQUIREMENTS:
 - [FilePaths] If the path string is absolute, raises a failure.
 
 GROUNDING_ARGUMENT:
-Verifies that the path string is not absolute using the host filesystem, raising ValueError if absolute, and instantiates a workspace path record holding the path string.
+- Verifies that the path string is not absolute using the host filesystem, raising ValueError if absolute, and instantiates a workspace path record holding the path string.
 """
         ...
 
@@ -80,7 +83,7 @@ INHERITED_REQUIREMENTS:
 - [FilePaths] If the path string is not absolute, raises a failure.
 
 GROUNDING_ARGUMENT:
-Verifies that the path string is absolute using the host filesystem, raising ValueError if not, and instantiates a directory path record holding the path string.
+- Verifies that the path string is absolute using the host filesystem, raising ValueError if not, and instantiates a directory path record holding the path string.
 """
         ...
 
@@ -95,7 +98,7 @@ INHERITED_REQUIREMENTS:
 - [FilePaths] Returns a workspace root representing the physical workspace root directory.
 
 GROUNDING_ARGUMENT:
-Checks the environment for BUILD_WORKSPACE_DIRECTORY, falling back to current working directory, and instantiates a workspace root record holding the resolved directory path.
+- Checks the environment for BUILD_WORKSPACE_DIRECTORY, falling back to current working directory, and instantiates a workspace root record holding the resolved directory path.
 """
         ...
 
@@ -113,7 +116,7 @@ INHERITED_REQUIREMENTS:
 - [FilePaths] Returns a directory path formed by joining the workspace root and the workspace path.
 
 GROUNDING_ARGUMENT:
-Joins root.path and relative.path using os.path.join and instantiates a directory path record holding the joined path.
+- Joins root.path and relative.path using os.path.join and instantiates a directory path record holding the joined path.
 """
         ...
 
@@ -131,6 +134,6 @@ INHERITED_REQUIREMENTS:
 - [FilePaths] Returns an absolute path formed by joining the workspace root and the workspace path.
 
 GROUNDING_ARGUMENT:
-Joins root.path and relative.path using os.path.join and instantiates an absolute path record holding the joined path.
+- Joins root.path and relative.path using os.path.join and instantiates an absolute path record holding the joined path.
 """
         ...

@@ -1,3 +1,4 @@
+# Requirements specified in dag_config.pyi
 """DAG configuration interface and data types."""
 
 from typing import Protocol

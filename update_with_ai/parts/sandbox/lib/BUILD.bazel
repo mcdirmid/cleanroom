@@ -45,8 +45,6 @@ pyright_library(
         "//update_with_ai/parts/bazel/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
         ":sandbox",
-        ":sandbox_change_summary_validator",
-        ":sandbox_change_summary_validator_impl",
         ":sandbox_file_editor",
         ":sandbox_file_editor_impl",
         ":sandbox_file_reader",
@@ -60,30 +58,6 @@ pyright_library(
         ":template_format_impl",
         ":tool_provider",
         ":tool_provider_impl",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "sandbox_change_summary_validator",
-    srcs = ["sandbox_change_summary_validator.py"],
-    pyright_deps = [
-        "//update_with_ai/parts/agent/lib:agent_file_alias",
-        "//update_with_ai/parts/agent/lib:agent_node_config",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "sandbox_change_summary_validator_impl",
-    srcs = ["sandbox_change_summary_validator_impl.py"],
-    deps = [],
-    pyright_deps = [
-        "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_file_alias",
-        "//update_with_ai/parts/agent/lib:agent_node_config",
-        "//update_with_ai/parts/agent/lib:agent_session",
-        ":sandbox_change_summary_validator",
     ],
     visibility = ["//visibility:public"],
 )
