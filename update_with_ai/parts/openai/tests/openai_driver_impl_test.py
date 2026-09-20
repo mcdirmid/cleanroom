@@ -163,8 +163,14 @@ class MockConverter:
         return str
 
     @property
-    def wire_type(self) -> Any:
-        return None
+    def wire_type(self) -> type:
+        return str
+
+    def to_actual(self, value: Any) -> Any:
+        return value
+
+    def to_wire(self, value: Any) -> Any:
+        return value
 
     def convert(self, wire_value: Any) -> Any:
         return wire_value

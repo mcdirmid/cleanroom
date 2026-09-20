@@ -1,16 +1,16 @@
-from typing import Any, Optional, Protocol, Set, Tuple, Type, Union
+from typing import Any, Mapping, Optional, Protocol, Sequence, Set, Tuple, Type, Union
 from framework import data_type, operation, override, poly_type, singleton_type, variant
 from dataclasses import dataclass
 
 @poly_type
-class ParameterConverter(Protocol):
+class ParameterType[ActualT, WireT](Protocol):
     """
 PURPOSE:
 Polymorphic service that has an actual type, a primitive wire type, and can convert a wire type value to produce a value of that actual type
 """
 
     @property
-    def actual_type(self) -> Type:
+    def actual_type(self) -> Type[ActualT]:
         """
 PURPOSE:
 References the data type produced by the converter
@@ -18,7 +18,7 @@ References the data type produced by the converter
         ...
 
     @property
-    def wire_type(self) -> WireType:
+    def wire_type(self) -> Type[WireT]:
         """
 PURPOSE:
 Primitive wire type accepted by the converter
@@ -26,7 +26,23 @@ Primitive wire type accepted by the converter
         ...
 
     @operation
-    def convert(self, wire_value: Union[str, int, bool]) -> Any:
+    def to_actual(self, value: WireT) -> ActualT:
+        """
+PURPOSE:
+Converts a wire type value to produce a value of that actual type
+"""
+        ...
+
+    @operation
+    def to_wire(self, value: ActualT) -> WireT:
+        """
+PURPOSE:
+Converts an actual type value to produce a value of that wire type
+"""
+        ...
+
+    @operation
+    def convert(self, wire_value: WireT) -> ActualT:
         """
 PURPOSE:
 Converts a wire type value to produce a value of that actual type
@@ -38,7 +54,7 @@ Converts a wire type value to produce a value of that actual type
 class WireType:
     """
 PURPOSE:
-Defined as a primitive wire type limited to string, integer, or boolean
+Defined as a primitive wire type limited to string, integer, boolean, float, list, or dictionary
 """
     ...
 
@@ -75,16 +91,57 @@ Classifies boolean as an allowed primitive wire type
     def __init__(self) -> None:
         ...
 
-@poly_type
-class IdentityParameterConverter(ParameterConverter, Protocol):
+@dataclass(frozen=True)
+@variant
+class Float(WireType):
     """
 PURPOSE:
-Defined as a polymorphic parameter converter that works for parameters where the actual and wire types are the same, wrapping string, integer, or boolean
+Classifies float as an allowed primitive wire type
 """
+
+    def __init__(self) -> None:
+        ...
+
+@dataclass(frozen=True)
+@variant
+class List(WireType):
+    """
+PURPOSE:
+Classifies list as an allowed primitive wire type
+"""
+
+    def __init__(self) -> None:
+        ...
+
+@dataclass(frozen=True)
+@variant
+class Dictionary(WireType):
+    """
+PURPOSE:
+Classifies dictionary as an allowed primitive wire type
+"""
+
+    def __init__(self) -> None:
+        ...
+
+@dataclass(frozen=True)
+@data_type
+class IdentityParameterType[T](ParameterType[T, T]):
+    """
+PURPOSE:
+Parameter type that works for parameters where the actual and wire types are the same target type
+
+INHERITANCE:
+- ParameterType
+"""
+    target_type: Type[T]
+
+    def __init__(self, target_type: Type[T]) -> None:
+        ...
 
     @property
     @override
-    def actual_type(self) -> Type:
+    def actual_type(self) -> Type[T]:
         """
 PURPOSE:
 References the data type produced by the converter
@@ -93,7 +150,7 @@ References the data type produced by the converter
 
     @property
     @override
-    def wire_type(self) -> WireType:
+    def wire_type(self) -> Type[T]:
         """
 PURPOSE:
 Primitive wire type accepted by the converter
@@ -102,112 +159,149 @@ Primitive wire type accepted by the converter
 
     @operation
     @override
-    def convert(self, wire_value: Union[str, int, bool]) -> Any:
+    def to_actual(self, value: T) -> T:
         """
 PURPOSE:
 Converts a wire type value to produce a value of that actual type
 """
         ...
 
-@singleton_type('agent_session')
-class StringParameterConverter(IdentityParameterConverter, Protocol):
-    """
-PURPOSE:
-Defined as an identity parameter converter that wraps string
-"""
-
-    @property
+    @operation
     @override
-    def actual_type(self) -> Type:
+    def to_wire(self, value: T) -> T:
         """
 PURPOSE:
-Sets the converter actual type to string
-"""
-        ...
-
-    @property
-    @override
-    def wire_type(self) -> WireType:
-        """
-PURPOSE:
-Sets the converter wire type to string
+Converts an actual type value to produce a value of that wire type
 """
         ...
 
     @operation
     @override
-    def convert(self, wire_value: str) -> str:
+    def convert(self, wire_value: T) -> T:
         """
 PURPOSE:
-Converts a wire type string to produce that string value directly
+Converts a wire type value to produce a value of that actual type
 """
         ...
 
-@singleton_type('agent_session')
-class IntegerParameterConverter(IdentityParameterConverter, Protocol):
+@dataclass(frozen=True)
+@data_type
+class ListParameterType[ItemActualT, ItemWireT](ParameterType[Sequence[ItemActualT], Sequence[ItemWireT]]):
     """
 PURPOSE:
-Defined as an identity parameter converter that wraps integer
+Parameter type that converts a wire type list to an actual type list, having an item parameter type that converts individual elements
+
+INHERITANCE:
+- ParameterType
 """
+    item_type: ParameterType[ItemActualT, ItemWireT]
+
+    def __init__(self, item_type: ParameterType[ItemActualT, ItemWireT]) -> None:
+        ...
 
     @property
     @override
-    def actual_type(self) -> Type:
+    def actual_type(self) -> Type[Sequence[ItemActualT]]:
         """
 PURPOSE:
-Sets the converter actual type to integer
+References the data type produced by the converter
 """
         ...
 
     @property
     @override
-    def wire_type(self) -> WireType:
+    def wire_type(self) -> Type[Sequence[ItemWireT]]:
         """
 PURPOSE:
-Sets the converter wire type to integer
+Primitive wire type accepted by the converter
 """
         ...
 
     @operation
     @override
-    def convert(self, wire_value: int) -> int:
+    def to_actual(self, value: Sequence[ItemWireT]) -> Sequence[ItemActualT]:
         """
 PURPOSE:
-Converts a wire type integer to produce that integer value directly
-"""
-        ...
-
-@singleton_type('agent_session')
-class BooleanParameterConverter(IdentityParameterConverter, Protocol):
-    """
-PURPOSE:
-Defined as an identity parameter converter that wraps boolean
-"""
-
-    @property
-    @override
-    def actual_type(self) -> Type:
-        """
-PURPOSE:
-Sets the converter actual type to boolean
-"""
-        ...
-
-    @property
-    @override
-    def wire_type(self) -> WireType:
-        """
-PURPOSE:
-Sets the converter wire type to boolean
+Converts a wire type value to produce a value of that actual type
 """
         ...
 
     @operation
     @override
-    def convert(self, wire_value: bool) -> bool:
+    def to_wire(self, value: Sequence[ItemActualT]) -> Sequence[ItemWireT]:
         """
 PURPOSE:
-Converts a wire type boolean to produce that boolean value directly
+Converts an actual type value to produce a value of that wire type
+"""
+        ...
+
+    @operation
+    @override
+    def convert(self, wire_value: Sequence[ItemWireT]) -> Sequence[ItemActualT]:
+        """
+PURPOSE:
+Converts a wire type value to produce a value of that actual type
+"""
+        ...
+
+@dataclass(frozen=True)
+@data_type
+class DictionaryParameterType[KeyActualT, KeyWireT, ValActualT, ValWireT](ParameterType[Mapping[KeyActualT, ValActualT], Mapping[KeyWireT, ValWireT]]):
+    """
+PURPOSE:
+Parameter type that converts a wire type dictionary to an actual type dictionary, having a key parameter type that converts dictionary keys and a value parameter type that converts dictionary values
+
+INHERITANCE:
+- ParameterType
+"""
+    value_type: ParameterType[ValActualT, ValWireT]
+    key_type: ParameterType[KeyActualT, KeyWireT] = ...
+
+    def __init__(self, value_type: ParameterType[ValActualT, ValWireT], key_type: ParameterType[KeyActualT, KeyWireT]=...) -> None:
+        ...
+
+    @property
+    @override
+    def actual_type(self) -> Type[Mapping[KeyActualT, ValActualT]]:
+        """
+PURPOSE:
+References the data type produced by the converter
+"""
+        ...
+
+    @property
+    @override
+    def wire_type(self) -> Type[Mapping[KeyWireT, ValWireT]]:
+        """
+PURPOSE:
+Primitive wire type accepted by the converter
+"""
+        ...
+
+    @operation
+    @override
+    def to_actual(self, value: Mapping[KeyWireT, ValWireT]) -> Mapping[KeyActualT, ValActualT]:
+        """
+PURPOSE:
+Converts a wire type value to produce a value of that actual type
+"""
+        ...
+
+    @operation
+    @override
+    def to_wire(self, value: Mapping[KeyActualT, ValActualT]) -> Mapping[KeyWireT, ValWireT]:
+        """
+PURPOSE:
+Converts an actual type value to produce a value of that wire type
+"""
+        ...
+
+    @operation
+    @override
+    def convert(self, wire_value: Mapping[KeyWireT, ValWireT]) -> Mapping[KeyActualT, ValActualT]:
+        """
+PURPOSE:
+Converts a wire type value to produce a value of that actual type
 """
         ...
 
@@ -259,13 +353,13 @@ FRESH_REQUIREMENTS:
 
 @dataclass(frozen=True)
 @data_type
-class Parameter:
+class Parameter[ActualT, WireT]:
     """
 PURPOSE:
 Describes an input accepted by a tool
 """
 
-    def __init__(self, name: str, description: str, parameter_converter: ParameterConverter, is_required: bool=...) -> None:
+    def __init__(self, name: str, description: str, parameter_type: ParameterType[ActualT, WireT], is_required: bool=..., default_value: Optional[ActualT]=...) -> None:
         ...
 
     @property
@@ -285,11 +379,15 @@ Established that each parameter has a description for the agent's benefit guidin
         ...
 
     @property
-    def parameter_converter(self) -> ParameterConverter:
+    def parameter_type(self) -> ParameterType[ActualT, WireT]:
         """
 PURPOSE:
-Established that each parameter has a parameter converter specifying its types and performing conversion
+Established that each parameter has a parameter type specifying its types and performing conversion
 """
+        ...
+
+    @property
+    def parameter_converter(self) -> ParameterType[ActualT, WireT]:
         ...
 
     @property
@@ -297,6 +395,14 @@ Established that each parameter has a parameter converter specifying its types a
         """
 PURPOSE:
 Indicates that an argument must be supplied for tool execution
+"""
+        ...
+
+    @property
+    def default_value(self) -> Optional[ActualT]:
+        """
+PURPOSE:
+Represents the value used when an argument is omitted during tool execution
 """
         ...
 
@@ -319,6 +425,10 @@ Set mapping parameters to resolved values of their actual types
 """
         ...
 
+    @operation
+    def get_value(self, name: str, default: Optional[Any]=...) -> Any:
+        ...
+
 @dataclass(frozen=True)
 @data_type
 class WireParameterBindings:
@@ -327,11 +437,11 @@ PURPOSE:
 Maps parameter names to values of their wire types
 """
 
-    def __init__(self, bindings: Set[Tuple[str, Union[str, int, bool]]]) -> None:
+    def __init__(self, bindings: Set[Tuple[str, Any]]) -> None:
         ...
 
     @property
-    def bindings(self) -> Set[Tuple[str, Union[str, int, bool]]]:
+    def bindings(self) -> Set[Tuple[str, Any]]:
         """
 PURPOSE:
 Set mapping parameter names to values of their wire types
@@ -468,3 +578,31 @@ FRESH_REQUIREMENTS:
 - Executing a tool by name with wire parameter bindings produces the tool response upon resolving parameter conversions.
 """
         ...
+
+    @operation
+    def execute_tool_with_arguments(self, name: str, arguments: Mapping[str, Any]) -> Response:
+        """
+PURPOSE:
+Executes tools with arguments by name with raw argument mappings from parameter names to arguments
+"""
+        ...
+
+    @operation
+    def create_tool_callable(self, name: str) -> Any:
+        """
+PURPOSE:
+Creates tool callables producing executable callable routines configured with parameter signatures and documentation for external server registration
+"""
+        ...
+ParameterConverter: Type[Any] = ...
+IdentityParameterConverter: Type[Any] = ...
+StringParameterType: Type[Any] = ...
+StringParameterConverter: Type[Any] = ...
+IntegerParameterType: Type[Any] = ...
+IntegerParameterConverter: Type[Any] = ...
+BooleanParameterType: Type[Any] = ...
+BooleanParameterConverter: Type[Any] = ...
+FloatParameterType: Type[Any] = ...
+FloatParameterConverter: Type[Any] = ...
+ListParameterConverter: Type[Any] = ...
+DictionaryParameterConverter: Type[Any] = ...

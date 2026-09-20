@@ -63,6 +63,7 @@ Component lifecycles and visibilities are governed by explicit decorator argumen
 - [ ] Leaf data types with direct public construction declare `@dataclass(frozen=True, init=True)` (or default `@dataclass(frozen=True)`) and define a matching `def __init__(self, ...): ...`
 - [ ] Instances can only be created from leaf data types without variants or leaf variant branches; base types with variants and sum-type roots never declare `def __init__`
 - [ ] Polymorphic types never declare lifecycle tiers in their docstrings or class decorators
+- [ ] Entities parameterized by actual, wire, element, or key and value types map to generic classes declared with Python 3.12 type parameter syntax (`class TypeName[T]:` or `class TypeName[ActualT, WireT]:`)
 - [ ] Singletons never declare containment hierarchies; services in the same tier access each other as flat peer collaborators
 - [ ] Data types never inherit from active services or polymorphic interfaces
 
@@ -71,6 +72,8 @@ Component lifecycles and visibilities are governed by explicit decorator argumen
 - [ ] Attributes, exposed states, and entity references introduced as italicized nouns in `high/<name>.md` map to `@property` methods
 - [ ] Actions, capabilities, and callable behaviors introduced as italicized verbs in `high/<name>.md` map to `@operation` methods
 - [ ] Italicized argument concepts introduced in operation descriptions map to typed positional arguments
+- [ ] Operations and properties of parameterized types use the declared type parameters directly in parameter and return type annotations
+- [ ] Unbound references to parameterized entities in heterogeneous collections use bare generic references or explicit `Any` type arguments (e.g. `Sequence[Parameter]`)
 - [ ] Return types map deterministically to standard Python types: `str` for strings, `int` for integers, `bool` for booleans, `None` for unit returns
 - [ ] Meta-type references whose values are data type symbols map to `Type` (or `Type[T]`)
 - [ ] Optional concepts map to `Optional[T]`

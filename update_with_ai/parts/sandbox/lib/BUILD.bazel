@@ -133,16 +133,13 @@ pyright_library(
 pyright_library(
     name = "sandbox_file_reader_impl",
     srcs = ["sandbox_file_reader_impl.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_file_alias",
         "//update_with_ai/parts/agent/lib:agent_node_config",
-        "//update_with_ai/parts/agent/lib:agent_session",
-        "//update_with_ai/parts/bazel/lib:file_paths",
-        "//update_with_ai/parts/dag/lib:dag_storage",
+        ":sandbox_file_editor",
         ":sandbox_file_reader",
-        ":sandbox_guide_delivery",
-        ":sandbox_run_control",
         ":template_format",
         ":tool_provider",
     ],
@@ -226,7 +223,9 @@ pyright_library(
 pyright_library(
     name = "tool_provider",
     srcs = ["tool_provider.py"],
+    deps = [],
     pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
     ],
     visibility = ["//visibility:public"],
 )

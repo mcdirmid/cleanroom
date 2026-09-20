@@ -21,6 +21,6 @@ Executing the view file tool requires a bound file. If an unbound file is suppli
 
 View file tool responses for read-write files carry a suppression key matching the file's relative path, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
 
-The *regex pattern converter* is a parameter converter for regex patterns that converts a wire type string into a regex pattern.
+The *regex pattern parameter type* is a parameter type for regex patterns that converts a wire type string into a regex pattern.
 
-The search tool is named `search_files`, accepting a regex pattern *pattern* parameter using the regex pattern converter. The search tool searches for regex pattern matches across the read-only files and read-write files in the filesystem. Search tool execution fails when given an invalid regex pattern. On successful execution, the response provides matched line contents and line numbers for read-only files, sanitized by the alias manager to mask host paths. For read-write files, the response only says that matches were found but cannot be displayed to prevent unanchored edits.
+The search tool is named `search_files`, accepting a regex pattern *pattern* parameter using the regex pattern parameter type. The search tool searches for regex pattern matches across the read-only files and read-write files in the filesystem. Search tool execution fails when given an invalid regex pattern. On successful execution, the response provides matched line contents and line numbers for read-only files, sanitized by the alias manager to mask host paths. For read-write files, the response only says that matches were found but cannot be displayed to prevent unanchored edits.

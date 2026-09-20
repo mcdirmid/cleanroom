@@ -29,9 +29,10 @@ from update_with_ai.parts.sandbox.lib.sandbox_impl import (
 )
 from update_with_ai.parts.sandbox.lib.sandbox_run_control import AdvanceTool
 from update_with_ai.parts.sandbox.lib.tool_provider import (
+    STRING_PARAMETER_TYPE,
     ActualParameterBindings,
     Parameter,
-    ParameterConverter,
+    ParameterType,
     Response,
     String,
     Tool,
@@ -144,19 +145,6 @@ class MockAdvanceTool:
         return Response(is_failed=False, is_terminated=False, content="Guide step 1")
 
 
-class DummyConverter:
-    @property
-    def actual_type(self) -> type:
-        return object
-
-    @property
-    def wire_type(self) -> WireType:
-        return String()
-
-    def convert(self, wire_value: Any) -> Any:
-        return wire_value
-
-
 class MockViewFileTool:
     tier = agent_session
 
@@ -165,7 +153,7 @@ class MockViewFileTool:
         self.path_parameter = Parameter(
             name="path",
             description="path",
-            parameter_converter=DummyConverter(),
+            parameter_converter=STRING_PARAMETER_TYPE,
             is_required=True,
         )
 

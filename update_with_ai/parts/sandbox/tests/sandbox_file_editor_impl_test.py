@@ -232,15 +232,6 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.tool_mgr, keys=[ToolManager], tier=agent_session
         )
         self.registry.register_instance(
-            self.str_conv, keys=[StringParameterConverter], tier=agent_session
-        )
-        self.registry.register_instance(
-            self.int_conv, keys=[IntegerParameterConverter], tier=agent_session
-        )
-        self.registry.register_instance(
-            self.bool_conv, keys=[BooleanParameterConverter], tier=agent_session
-        )
-        self.registry.register_instance(
             self.agent_cfg, keys=[AgentConfig], tier=agent_session
         )
         self.registry.register_instance(
@@ -815,26 +806,29 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             )
             self.assertFalse(replace_tool.file_alias_parameter.is_required)
             # Requirement: The replace file content tool target content parameter uses a string parameter converter to accept text.
-            self.assertIs(
-                replace_tool.target_content_parameter.parameter_converter, self.str_conv
+            self.assertEqual(
+                replace_tool.target_content_parameter.parameter_converter.actual_type,
+                str,
             )
             # Requirement: The replace file content tool replacement content parameter uses a string parameter converter to accept text.
-            self.assertIs(
-                replace_tool.replacement_content_parameter.parameter_converter,
-                self.str_conv,
+            self.assertEqual(
+                replace_tool.replacement_content_parameter.parameter_converter.actual_type,
+                str,
             )
             # Requirement: The replace file content tool start line parameter uses an integer parameter converter to accept an integer.
-            self.assertIs(
-                replace_tool.start_line_parameter.parameter_converter, self.int_conv
+            self.assertEqual(
+                replace_tool.start_line_parameter.parameter_converter.actual_type,
+                int,
             )
             # Requirement: The replace file content tool end line parameter uses an integer parameter converter to accept an integer.
-            self.assertIs(
-                replace_tool.end_line_parameter.parameter_converter, self.int_conv
+            self.assertEqual(
+                replace_tool.end_line_parameter.parameter_converter.actual_type,
+                int,
             )
             # Requirement: The replace file content tool allow multiple parameter uses a boolean parameter converter to accept a boolean.
-            self.assertIs(
-                replace_tool.allow_multiple_parameter.parameter_converter,
-                self.bool_conv,
+            self.assertEqual(
+                replace_tool.allow_multiple_parameter.parameter_converter.actual_type,
+                bool,
             )
     def test_materialize_templates_runs_verification_checks(self) -> None:
         """CUJ: Running verification checks when templates are materialized."""

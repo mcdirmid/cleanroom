@@ -47,6 +47,9 @@ The design documentation is organized across four foundational areas:
 - **[Antigravity Tiered Sub-Agent Architecture & Integration Design](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/antigravity_integration.md)** (`antigravity_integration.md`):
   - Architecture for integrating Cleanroom with Google Antigravity under Google One Ultra subscriptions.
   - Covers the Coordinator $\rightarrow$ Worker subagent delegation hierarchy, sandbox hardening via disabled write tools, out-of-process Python MCP service, per-node context isolation, and quota/token efficiency trade-offs.
+- **[Cleanroom Bazel Role Sub-Agent FastMCP Server & Unified Sandbox Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/bazel_role_mcp_server.md)** (`bazel_role_mcp_server.md`):
+  - Definitive reference for the centralized FastMCP server and unified "double-duty" sandbox core orchestrating Antigravity role sub-agents.
+  - Covers the shared sandbox domain engine, typed tool-like objects (`McpTool`), Bazel target label addressing, async zero-token long-polling, self-contained dynamic prompt dispatch, and real-time confinement via Antigravity lifecycle hooks.
 
 ---
 

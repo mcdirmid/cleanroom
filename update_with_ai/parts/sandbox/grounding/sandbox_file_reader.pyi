@@ -51,7 +51,7 @@ INHERITED_ASSUMPTIONS:
 """
 
     @property
-    def path_parameter(self) -> tool_provider.Parameter:
+    def path_parameter(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
         """
 PURPOSE:
 Establishes that the view file tool takes a path parameter
@@ -112,7 +112,7 @@ FRESH_REQUIREMENTS:
 """
 
     @property
-    def regex_pattern_parameter(self) -> tool_provider.Parameter:
+    def regex_pattern_parameter(self) -> tool_provider.Parameter[agent_file_alias.RegexPattern, str]:
         """
 PURPOSE:
 Establishes that the search tool takes a regex pattern parameter

@@ -273,6 +273,7 @@ class SpecLintVisitor(ast.NodeVisitor):
         self.current_class_kind: Optional[str] = None
         self.current_class_properties: int = 0
         self.current_class_methods: int = 0
+        self.current_type_params: Set[str] = set()
         self._current_module_body: List[ast.stmt] = []
 
     def add_error(self, node: ast.AST, message: str):
@@ -352,6 +353,10 @@ class SpecLintVisitor(ast.NodeVisitor):
         prev_kind = self.current_class_kind
         prev_props = self.current_class_properties
         prev_methods = self.current_class_methods
+        prev_type_params = set(self.current_type_params)
+        for tp in getattr(node, "type_params", []):
+            if hasattr(tp, "name"):
+                self.current_type_params.add(tp.name)
 
         self.current_class = node.name
         self.current_class_properties = 0
@@ -450,11 +455,12 @@ class SpecLintVisitor(ast.NodeVisitor):
 
         # Check bases for obsolete classes
         for base in node.bases:
+            target = base.value if isinstance(base, ast.Subscript) else base
             base_id = ""
-            if isinstance(base, ast.Name):
-                base_id = base.id
-            elif isinstance(base, ast.Attribute):
-                base_id = base.attr
+            if isinstance(target, ast.Name):
+                base_id = target.id
+            elif isinstance(target, ast.Attribute):
+                base_id = target.attr
             if base_id in ("SystemService", "AgentSessionService"):
                 self.add_error(
                     base,
@@ -560,6 +566,7 @@ class SpecLintVisitor(ast.NodeVisitor):
         self.current_class_kind = prev_kind
         self.current_class_properties = prev_props
         self.current_class_methods = prev_methods
+        self.current_type_params = prev_type_params
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
         if node.name == "__orphan__":
@@ -1120,6 +1127,7 @@ class SpecLintVisitor(ast.NodeVisitor):
             name in BUILTIN_TYPES
             or name in self.declared_symbols
             or name in self.imported_symbols
+            or name in self.current_type_params
         ):
             return
         known = list(BUILTIN_TYPES | self.declared_symbols | self.imported_symbols)
@@ -1194,10 +1202,11 @@ class SpecRegistry:
 
                 bases = []
                 for base in node.bases:
+                    target = base.value if isinstance(base, ast.Subscript) else base
                     b_id = (
-                        base.id
-                        if isinstance(base, ast.Name)
-                        else (base.attr if isinstance(base, ast.Attribute) else "")
+                        target.id
+                        if isinstance(target, ast.Name)
+                        else (target.attr if isinstance(target, ast.Attribute) else "")
                     )
                     if b_id:
                         bases.append(b_id)
@@ -1289,13 +1298,14 @@ class SpecRegistry:
     def resolve_base_class(
         self, current_module: str, base_expr: ast.AST
     ) -> Optional[Tuple[str, ast.ClassDef, str]]:
-        if isinstance(base_expr, ast.Attribute):
-            mod_id = base_expr.value.id if isinstance(base_expr.value, ast.Name) else ""
-            cls_name = base_expr.attr
+        target = base_expr.value if isinstance(base_expr, ast.Subscript) else base_expr
+        if isinstance(target, ast.Attribute):
+            mod_id = target.value.id if isinstance(target.value, ast.Name) else ""
+            cls_name = target.attr
             if (mod_id, cls_name) in self.module_classes:
                 return cls_name, self.module_classes[(mod_id, cls_name)], mod_id
-        elif isinstance(base_expr, ast.Name):
-            base_name = base_expr.id
+        elif isinstance(target, ast.Name):
+            base_name = target.id
             if (current_module, base_name) in self.module_classes:
                 return (
                     base_name,

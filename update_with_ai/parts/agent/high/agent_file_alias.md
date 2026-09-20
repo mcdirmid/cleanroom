@@ -22,6 +22,6 @@ A bound file is mapped to an actual workspace file, having a *workspace path* an
 
 The *alias manager* is an agent session service configured with a workspace root. The alias manager:
 
-- Is a parameter converter for the actual type file alias and the wire type string, allowing file aliases to be used as tool parameters. Converting a wire type string produces the matching file alias if its relative path is found, and produces an unbound file if the relative path is not found.
+- Is a parameter type for the actual type file alias and the wire type string, allowing file aliases to be used as tool parameters. Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
 
 - *Sanitizes* text by masking occurrences of relative workspace paths and preceding path prefixes with file alias relative paths so that agents observe file aliases rather than environment paths.

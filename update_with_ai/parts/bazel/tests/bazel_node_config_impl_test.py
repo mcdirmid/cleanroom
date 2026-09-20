@@ -39,7 +39,10 @@ from update_with_ai.parts.agent.lib.agent_node_config import (
     NodeConfig,
     StepSection,
 )
-from update_with_ai.parts.sandbox.lib.tool_provider import ParameterConverter, String
+from update_with_ai.parts.sandbox.lib.tool_provider import (
+    ParameterType,
+    String,
+)
 
 
 def _make_workspace_path(path: str) -> WorkspacePath:
@@ -227,8 +230,8 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             # Parameter converter interface
             self.assertEqual(alias_mgr.actual_type, FileAlias)
-            self.assertEqual(alias_mgr.wire_type, String())
-            self.assertIs(scope.get_singleton(ParameterConverter), alias_mgr)
+            self.assertEqual(alias_mgr.wire_type, str)
+            self.assertIs(scope.get_singleton(ParameterType), alias_mgr)
             self.assertIsNotNone(alias_mgr.workspace_root)
 
             # Map an alias
@@ -243,14 +246,40 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             # Convert mapped relative path
             converted = alias_mgr.convert("module.py")
-            # Requirement: The alias manager converts relative paths to matching file aliases, producing unbound files when unmapped.
-            # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, and produces an unbound file if the relative path is not found.
+            # Requirement: Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
             self.assertEqual(converted, bound)
+            self.assertEqual(alias_mgr.to_actual("module.py"), bound)
+            self.assertEqual(alias_mgr.to_wire(bound), "module.py")
+
+            # Courtesy short-name resolution
+            bound_nested = ReadWriteFile(
+                relative_path="pkg/sub/nested.py",
+                workspace_path=_make_workspace_path("pkg/sub/nested.py"),
+                owning_node=node,
+            )
+            alias_mgr._aliases["pkg/sub/nested.py"] = bound_nested
+            alias_mgr._short_name_to_aliases["nested.py"] = [bound_nested]
+
+            # Unambiguous short name resolves to bound file
+            # Requirement: Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
+            resolved = alias_mgr.convert("nested.py")
+            self.assertEqual(resolved, bound_nested)
+
+            # Ambiguous short name falls back to UnboundFile
+            bound_dup = ReadWriteFile(
+                relative_path="other/sub/nested.py",
+                workspace_path=_make_workspace_path("other/sub/nested.py"),
+                owning_node=node,
+            )
+            alias_mgr._short_name_to_aliases["nested.py"].append(bound_dup)
+            ambiguous = alias_mgr.convert("nested.py")
+            # Requirement: Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
+            self.assertIsInstance(ambiguous, UnboundFile)
+            self.assertEqual(ambiguous.relative_path, "nested.py")
 
             # Convert unmapped relative path produces UnboundFile
             unmapped = alias_mgr.convert("unknown.py")
-            # Requirement: The alias manager converts relative paths to matching file aliases, producing unbound files when unmapped.
-            # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, and produces an unbound file if the relative path is not found.
+            # Requirement: Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
             self.assertIsInstance(unmapped, UnboundFile)
             self.assertEqual(unmapped.relative_path, "unknown.py")
 
@@ -265,8 +294,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             text = "Error in /workspace/pkg/module.py at line 10"
             sanitized = alias_mgr.sanitize_text(text)
-            # Requirement: The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its relative path, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking, stripping workspace root path prefixes, and stripping execution root path prefixes.
-            # Requirement: [AliasManager] Sanitizing text masks occurrences of relative workspace paths and preceding path prefixes with the corresponding file alias short names.
+            # Requirement: Sanitizing text masks occurrences of relative workspace paths and preceding path prefixes with the corresponding file alias relative paths.
             self.assertNotIn("/workspace/pkg/module.py", sanitized)
             self.assertIn("module.py", sanitized)
 

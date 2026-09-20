@@ -22,13 +22,13 @@ Introduces regex pattern as the pattern used to search in files
     ...
 
 @singleton_type('agent_session')
-class AliasManager(tool_provider.ParameterConverter, Protocol):
+class AliasManager(tool_provider.ParameterType['FileAlias', str], Protocol):
     """
 PURPOSE:
 Defined as an agent session service configured with a workspace root that sanitizes output text
 
 INHERITANCE:
-- tool_provider.ParameterConverter: Established that the alias manager is a parameter converter for file aliases, allowing file aliases to be used as tool parameters
+- tool_provider.ParameterType: Established that the alias manager is a parameter type for file aliases, allowing file aliases to be used as tool parameters
 """
 
     @property
@@ -50,7 +50,7 @@ Sets the converter actual type for the alias manager to file alias
 
     @property
     @override
-    def wire_type(self) -> tool_provider.WireType:
+    def wire_type(self) -> Type[str]:
         """
 PURPOSE:
 Sets the converter wire type for the alias manager to string
@@ -59,13 +59,31 @@ Sets the converter wire type for the alias manager to string
 
     @operation
     @override
+    def to_actual(self, value: str) -> 'FileAlias':
+        """
+PURPOSE:
+Converts a wire type string to a file alias, producing an unbound file if the relative path is not found or is ambiguous
+"""
+        ...
+
+    @operation
+    @override
+    def to_wire(self, value: 'FileAlias') -> str:
+        """
+PURPOSE:
+Converts a file alias to produce its relative path string
+"""
+        ...
+
+    @operation
+    @override
     def convert(self, wire_value: str) -> 'FileAlias':
         """
 PURPOSE:
-Converts a wire type string to a file alias, producing an unbound file if the relative path is not found
+Converts a wire type string to a file alias, producing an unbound file if the relative path is not found or is ambiguous
 
 FRESH_REQUIREMENTS:
-- Converting a wire type string produces the matching file alias if its relative path is found, and produces an unbound file if the relative path is not found.
+- Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
 """
         ...
 

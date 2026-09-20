@@ -13,24 +13,10 @@ from update_with_ai.parts.loop.lib.loop_guard_impl import (
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.sandbox.lib.tool_provider import (
+    STRING_PARAMETER_TYPE,
     ActualParameterBindings,
     Parameter,
-    String,
-    WireType,
 )
-
-
-class DummyConverter:
-    @property
-    def actual_type(self) -> type:
-        return str
-
-    @property
-    def wire_type(self) -> WireType:
-        return String()
-
-    def convert(self, wire_value: object) -> str:
-        return str(wire_value)
 
 
 class LoopGuardImplTest(unittest.TestCase):
@@ -40,7 +26,7 @@ class LoopGuardImplTest(unittest.TestCase):
         self.param = Parameter(
             name="file_name",
             description="file name",
-            parameter_converter=DummyConverter(),
+            parameter_converter=STRING_PARAMETER_TYPE,
             is_required=True,
         )
 

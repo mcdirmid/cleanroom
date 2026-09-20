@@ -30,20 +30,7 @@ except ImportError:  # pragma: no cover
     OpenAIError: Any = _OpenAIError
 
 
-class _SimpleParameterConverter:
-    @property
-    def actual_type(self) -> type:
-        return str
-
-    @property
-    def wire_type(self) -> tool_provider.WireType:
-        return tool_provider.String()
-
-    def convert(self, wire_value: Any) -> Any:
-        return wire_value
-
-
-_DEFAULT_CONVERTER = _SimpleParameterConverter()
+_DEFAULT_CONVERTER = tool_provider.STRING_PARAMETER_TYPE
 
 
 def _repair_json(raw: str) -> str:

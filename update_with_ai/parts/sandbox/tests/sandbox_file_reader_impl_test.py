@@ -32,15 +32,15 @@ from update_with_ai.parts.sandbox.lib.sandbox_file_reader import (
 from update_with_ai.parts.sandbox.lib.sandbox_file_reader_impl import (
     ReadManager as ReadManagerImpl,
     ViewFileTool as ViewFileToolImpl,
-    RegexPatternConverter as RegexPatternConverterImpl,
+    RegexPatternParameterType as RegexPatternParameterTypeImpl,
     SearchTool as SearchToolImpl,
     __initialize__,
 )
 from update_with_ai.parts.sandbox.lib.tool_provider import (
     ActualParameterBindings,
-    BooleanParameterConverter,
+    BooleanParameterType,
     Parameter,
-    ParameterConverter,
+    ParameterType,
     Response,
     String,
     Tool,
@@ -233,7 +233,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.tool_mgr, keys=[ToolManager], tier=agent_session
         )
         self.registry.register_instance(
-            self.bool_conv, keys=[BooleanParameterConverter], tier=agent_session
+            self.bool_conv, keys=[BooleanParameterType], tier=agent_session
         )
         self.registry.register_instance(
             self.alias_mgr, keys=[AliasManager], tier=agent_session
@@ -253,8 +253,8 @@ class SandboxFileReaderImplTest(unittest.TestCase):
 
     def test_regex_pattern_converter(self) -> None:
         """CUJ: Converting wire string into RegexPattern."""
-        conv = RegexPatternConverterImpl()
-        # Requirement: The regex pattern converter converts a wire type string into a regex pattern.
+        conv = RegexPatternParameterTypeImpl()
+        # Requirement: The regex pattern parameter type converts a wire type string into a regex pattern.
         pattern = conv.convert(r"foo\d+")
         self.assertEqual(pattern, r"foo\d+")
 

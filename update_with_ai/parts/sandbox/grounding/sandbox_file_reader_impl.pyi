@@ -108,7 +108,7 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def path_parameter(self) -> tool_provider.Parameter:
+    def path_parameter(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
         """
 PURPOSE:
 Parameter accepting the target file alias
@@ -171,13 +171,13 @@ GROUNDING_ARGUMENT:
         ...
 
 @singleton_type('agent_session')
-class RegexPatternConverter(tool_provider.ParameterConverter):
+class RegexPatternParameterType(tool_provider.ParameterType[agent_file_alias.RegexPattern, str]):
     """
 PURPOSE:
-Defined as a parameter converter for regex patterns that converts a wire type string into a regex pattern
+Defined as a parameter type for regex patterns that converts a wire type string into a regex pattern
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, RegexPatternConverter converts wire strings to regex patterns without requiring external singleton dependencies.
+- As an agent_session singleton, RegexPatternParameterType converts wire strings to regex patterns without requiring external singleton dependencies.
 """
 
     @property
@@ -194,13 +194,37 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def wire_type(self) -> tool_provider.WireType:
+    def wire_type(self) -> Type[str]:
         """
 PURPOSE:
 Sets the converter wire type to string
 
 GROUNDING_ARGUMENT:
-- Constant wire type descriptor identifying WireType.STRING.
+- Constant wire type descriptor identifying str.
+"""
+        ...
+
+    @operation
+    @override
+    def to_actual(self, value: str) -> agent_file_alias.RegexPattern:
+        """
+PURPOSE:
+Converts a wire type string to a regex pattern
+
+GROUNDING_ARGUMENT:
+- Receives value directly as a parameter and constructs an agent_file_alias.RegexPattern record.
+"""
+        ...
+
+    @operation
+    @override
+    def to_wire(self, value: agent_file_alias.RegexPattern) -> str:
+        """
+PURPOSE:
+Converts a regex pattern to produce its string representation
+
+GROUNDING_ARGUMENT:
+- Extracts the string value from the agent_file_alias.RegexPattern record.
 """
         ...
 
@@ -212,7 +236,7 @@ PURPOSE:
 Converts a wire type string to a regex pattern
 
 FRESH_REQUIREMENTS:
-- The regex pattern converter converts a wire type string into a regex pattern.
+- The regex pattern parameter type converts a wire type string into a regex pattern.
 
 GROUNDING_ARGUMENT:
 - Receives wire_value directly as a parameter and constructs a agent_file_alias.RegexPattern record.
@@ -230,7 +254,7 @@ INHERITED_ASSUMPTIONS:
 
 FRESH_REQUIREMENTS:
 - The search tool is named `search_files`.
-- The search tool regex pattern parameter uses the regex pattern converter.
+- The search tool regex pattern parameter uses the regex pattern parameter type.
 
 INHERITED_REQUIREMENTS:
 - [SearchTool] The search tool accepts a regex pattern parameter.
@@ -253,7 +277,7 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def regex_pattern_parameter(self) -> tool_provider.Parameter:
+    def regex_pattern_parameter(self) -> tool_provider.Parameter[agent_file_alias.RegexPattern, str]:
         """
 PURPOSE:
 Parameter accepting the regex pattern to search

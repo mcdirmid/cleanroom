@@ -10,11 +10,15 @@ Autonomous agent loops risk unpredictable deviations when environment actions ar
 
 ## Types and Behavior
 
-A *parameter converter* is a polymorphic service that has an *actual type*, a primitive *wire type* (limited to *string*, *integer*, or *boolean*), and can *convert* a wire type value to produce a value of that actual type. An actual type is a meta type: its values are references to data types, not the values of those data types.
+A *parameter type* is a polymorphic service that has an *actual type*, a primitive *wire type* (limited to *string*, *integer*, *boolean*, *float*, *list*, or *dictionary*), and can *convert* a wire type value to produce a value of that actual type. An actual type is a meta type: its values are references to data types, not the values of those data types.
 
-An *identity parameter converter* is a polymorphic parameter converter that works for parameters where the actual and wire types are the same, wrapping string, integer, or boolean. There are three identity parameter converters, one for each wire type: a *string parameter converter*, an *integer parameter converter*, and a *boolean parameter converter*. Converting a wire type value with an identity parameter converter produces that value directly as its actual value.
+An *identity parameter type* is a parameter type that works for parameters where the actual and wire types are the same target type. Converting a wire type value with an identity parameter type produces that value directly as its actual value.
 
-A *tool* is a polymorphic service implemented by a component to define an executable action. A tool has a *name* (used to identify the tool), a *description* (which informs the model why and when to use the tool), and *parameters*. A *parameter* describes an input accepted by a tool, having a *name* and a *description* (guiding how arguments are supplied), a *parameter converter*, and can be *required* to indicate that an argument must be supplied for tool execution. It is assumed that all parameters of a tool have unique names.
+A *list parameter type* is a parameter type that converts a wire type list to an actual type list, having an *item parameter type* that converts individual elements. Converting a wire type list with a list parameter type converts each element with its item parameter type.
+
+A *dictionary parameter type* is a parameter type that converts a wire type dictionary to an actual type dictionary, having a *key parameter type* that converts dictionary keys and a *value parameter type* that converts dictionary values. Converting a wire type dictionary with a dictionary parameter type converts each key with its key parameter type and each value with its value parameter type.
+
+A *tool* is a polymorphic service implemented by a component to define an executable action. A tool has a *name* (used to identify the tool), a *description* (which informs the model why and when to use the tool), and *parameters*. A *parameter* describes an input accepted by a tool, having a *name* and a *description* (guiding how arguments are supplied), a parameter type, a *default value* representing the value used when an argument is omitted during tool execution, and can be *required* to indicate that an argument must be supplied for tool execution. It is assumed that all parameters of a tool have unique names.
 
 A tool can be *executed* directly with a set of *actual parameter bindings*, which map parameters to resolved values of their actual types. Executing a tool produces a *response* communicating:
 
@@ -39,3 +43,7 @@ The tool manager:
 - Exposes *installed tools* available for execution.
 
 - *Executes* tools by name with *wire parameter bindings* mapping parameter names to wire type values, producing the tool response upon resolving parameter conversions.
+
+- *Executes tools with arguments* by name with raw argument mappings from parameter names to arguments, producing the tool response upon resolving parameter conversions.
+
+- *Creates tool callables* producing executable callable routines configured with parameter signatures and documentation for external server registration, returning the tool response content combined with reminders when present.

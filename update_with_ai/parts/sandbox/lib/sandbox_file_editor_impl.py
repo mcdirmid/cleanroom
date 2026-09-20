@@ -183,55 +183,50 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
     @property
     def target_content_parameter(self) -> tool_provider.Parameter:
         # Requirement: The replace file content tool target content parameter uses a string parameter converter to accept text.
-        str_conv = get_singleton(tool_provider.StringParameterConverter)
         return tool_provider.Parameter(
             name="target_content",
             description="Exact text to replace",
-            parameter_converter=str_conv,
+            parameter_converter=tool_provider.STRING_PARAMETER_TYPE,
             is_required=True,
         )
 
     @property
     def replacement_content_parameter(self) -> tool_provider.Parameter:
         # Requirement: The replace file content tool replacement content parameter uses a string parameter converter to accept text.
-        str_conv = get_singleton(tool_provider.StringParameterConverter)
         return tool_provider.Parameter(
             name="replacement_content",
             description="Replacement text content",
-            parameter_converter=str_conv,
+            parameter_converter=tool_provider.STRING_PARAMETER_TYPE,
             is_required=True,
         )
 
     @property
     def start_line_parameter(self) -> tool_provider.Parameter:
         # Requirement: The replace file content tool start line parameter uses an integer parameter converter to accept an integer.
-        int_conv = get_singleton(tool_provider.IntegerParameterConverter)
         return tool_provider.Parameter(
             name="start_line",
             description="Optional 1-based starting line number (inclusive)",
-            parameter_converter=int_conv,
+            parameter_converter=tool_provider.INTEGER_PARAMETER_TYPE,
             is_required=False,
         )
 
     @property
     def end_line_parameter(self) -> tool_provider.Parameter:
         # Requirement: The replace file content tool end line parameter uses an integer parameter converter to accept an integer.
-        int_conv = get_singleton(tool_provider.IntegerParameterConverter)
         return tool_provider.Parameter(
             name="end_line",
             description="Optional 1-based ending line number (inclusive)",
-            parameter_converter=int_conv,
+            parameter_converter=tool_provider.INTEGER_PARAMETER_TYPE,
             is_required=False,
         )
 
     @property
     def allow_multiple_parameter(self) -> tool_provider.Parameter:
         # Requirement: The replace file content tool allow multiple parameter uses a boolean parameter converter to accept a boolean.
-        bool_conv = get_singleton(tool_provider.BooleanParameterConverter)
         return tool_provider.Parameter(
             name="allow_multiple",
             description="Whether to allow replacing multiple occurrences (defaults to false)",
-            parameter_converter=bool_conv,
+            parameter_converter=tool_provider.BOOLEAN_PARAMETER_TYPE,
             is_required=False,
         )
     @property

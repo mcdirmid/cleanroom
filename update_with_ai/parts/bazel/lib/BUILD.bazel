@@ -60,18 +60,9 @@ pyright_library(
 pyright_library(
     name = "bazel_node_config_impl",
     srcs = ["bazel_node_config_impl.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_config",
-        "//update_with_ai/parts/agent/lib:agent_file_alias",
-        "//update_with_ai/parts/agent/lib:agent_node_config",
-        "//update_with_ai/parts/agent/lib:agent_session",
-        "//update_with_ai/parts/agent/lib:agent_storage",
-        "//update_with_ai/parts/dag/lib:dag_storage",
-        "//update_with_ai/parts/sandbox/lib:tool_provider",
-        ":bazel_manifest_loader",
-        ":bazel_target",
-        ":file_paths",
     ],
     visibility = ["//visibility:public"],
 )

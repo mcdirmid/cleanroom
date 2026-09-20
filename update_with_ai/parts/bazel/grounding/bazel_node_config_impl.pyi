@@ -333,13 +333,37 @@ GROUNDING_ARGUMENT:
 
     @property
     @override
-    def wire_type(self) -> tool_provider.WireType:
+    def wire_type(self) -> Type[str]:
         """
 PURPOSE:
 String wire type
 
 GROUNDING_ARGUMENT:
-- Constant wire type descriptor identifying WireType.STRING.
+- Constant wire type descriptor identifying str.
+"""
+        ...
+
+    @operation
+    @override
+    def to_actual(self, value: str) -> agent_file_alias.FileAlias:
+        """
+PURPOSE:
+Converts relative paths to matching file aliases
+
+GROUNDING_ARGUMENT:
+- Receives value string and delegates to convert.
+"""
+        ...
+
+    @operation
+    @override
+    def to_wire(self, value: agent_file_alias.FileAlias) -> str:
+        """
+PURPOSE:
+Converts file alias to relative path string
+
+GROUNDING_ARGUMENT:
+- Returns value.relative_path.
 """
         ...
 
@@ -351,13 +375,13 @@ PURPOSE:
 Converts relative paths to matching file aliases
 
 FRESH_REQUIREMENTS:
-- The alias manager converts relative paths to matching file aliases, producing unbound files when unmapped.
+- The alias manager converts relative paths to matching file aliases, producing unbound files when unmapped or ambiguous.
 
 INHERITED_REQUIREMENTS:
-- [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, and produces an unbound file if the relative path is not found.
+- [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
 
 GROUNDING_ARGUMENT:
-- Receives wire_value string directly as a parameter and looks up the corresponding file alias in session mappings on self, returning an unbound file if not found.
+- Receives wire_value string directly as a parameter and looks up the corresponding file alias in session mappings on self or through unambiguous short name resolution, returning an unbound file if not found or ambiguous.
 """
         ...
 

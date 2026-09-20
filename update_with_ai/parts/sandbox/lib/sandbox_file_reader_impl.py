@@ -74,13 +74,15 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
         )
 
     @property
-    def path_parameter(self) -> tool_provider.Parameter:
+    def path_parameter(
+        self,
+    ) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
         # Requirement: The view file tool path parameter uses the alias manager to convert a file alias.
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         return tool_provider.Parameter(
             name="path",
             description="Target file alias",
-            parameter_converter=alias_mgr,
+            parameter_type=alias_mgr,
             is_required=True,
         )
 
@@ -263,23 +265,31 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
         )
 
 
-class RegexPatternConverter(tool_provider.ParameterConverter, Singleton):
+class RegexPatternParameterType(
+    tool_provider.ParameterType[agent_file_alias.RegexPattern, str], Singleton
+):
     tier = agent_session
 
     def __init__(self) -> None:
         pass
 
     @property
-    def actual_type(self) -> Type:
+    def actual_type(self) -> Type[agent_file_alias.RegexPattern]:
         return agent_file_alias.RegexPattern
 
     @property
-    def wire_type(self) -> tool_provider.WireType:
-        return tool_provider.String()
+    def wire_type(self) -> Type[str]:
+        return str
 
-    def convert(self, wire_value: Any) -> agent_file_alias.RegexPattern:
-        # Requirement: The regex pattern converter converts a wire type string into a regex pattern.
-        return agent_file_alias.RegexPattern(str(wire_value))
+    def to_actual(self, value: str) -> agent_file_alias.RegexPattern:
+        return agent_file_alias.RegexPattern(value)
+
+    def to_wire(self, value: agent_file_alias.RegexPattern) -> str:
+        return str(value)
+
+    def convert(self, wire_value: str) -> agent_file_alias.RegexPattern:
+        # Requirement: The regex pattern parameter type converts a wire type string into a regex pattern.
+        return agent_file_alias.RegexPattern(wire_value)
 
 
 class SearchTool(sandbox_file_reader.SearchTool, Singleton):
@@ -297,12 +307,15 @@ class SearchTool(sandbox_file_reader.SearchTool, Singleton):
         return "Searches for regex pattern matches across session files."
 
     @property
-    def regex_pattern_parameter(self) -> tool_provider.Parameter:
-        conv = get_singleton(RegexPatternConverter)
+    def regex_pattern_parameter(
+        self,
+    ) -> tool_provider.Parameter[agent_file_alias.RegexPattern, str]:
+        # Requirement: The search tool regex pattern parameter uses the regex pattern parameter type.
+        conv = get_singleton(RegexPatternParameterType)
         return tool_provider.Parameter(
             name="pattern",
             description="Regex pattern to search",
-            parameter_converter=conv,
+            parameter_type=conv,
             is_required=True,
         )
 
@@ -377,8 +390,11 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         tier=agent_session,
     )
     reg.register_singleton(
-        RegexPatternConverter,
-        keys=[RegexPatternConverter, tool_provider.ParameterConverter],
+        RegexPatternParameterType,
+        keys=[
+            RegexPatternParameterType,
+            tool_provider.ParameterType,
+        ],
         tier=agent_session,
     )
     reg.register_singleton(

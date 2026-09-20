@@ -48,7 +48,7 @@ class _CommandVerificationCheck(agent_node_config.VerificationCheck):
             return False, str(e)
 
 
-def _make_host_path(cls, path: str):
+def _make_host_path(cls: Any, path: str) -> Any:
     if issubclass(cls, str):
         return cls(path)
     obj = object.__new__(cls)
@@ -662,11 +662,12 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
 
     def __init__(self) -> None:
         self._aliases: Dict[str, agent_file_alias.FileAlias] = {}
+        self._short_name_to_aliases: Dict[str, List[agent_file_alias.BoundFile]] = {}
         self._paths: Dict[str, str] = {}
         self._masking_patterns: List[Tuple[re.Pattern[str], str]] = []
         env_root = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
         root_path = env_root if env_root and os.path.isabs(env_root) else os.getcwd()
-        self._workspace_root = _make_host_path(
+        self._workspace_root: file_paths.WorkspaceRoot = _make_host_path(
             file_paths.WorkspaceRoot, os.path.normpath(root_path)
         )
 
@@ -678,8 +679,9 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
             return
 
         patterns: List[Tuple[re.Pattern[str], str]] = []
+        declared_files = n_cfg.read_write_files | n_cfg.read_only_files
         for f in sorted(
-            (n_cfg.read_write_files | n_cfg.read_only_files),
+            declared_files,
             key=lambda x: len(x.workspace_path.path),
             reverse=True,
         ):
@@ -698,24 +700,39 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
             )
             patterns.append((pat, f.relative_path))
 
+        short_names: Dict[str, List[agent_file_alias.BoundFile]] = {}
+        for f in declared_files:
+            basename = os.path.basename(f.relative_path)
+            short_names.setdefault(basename, []).append(f)
+        self._short_name_to_aliases = short_names
+
         self._masking_patterns = patterns
 
         if n_cfg.guide_file is not None:
             self._aliases[n_cfg.guide_file.relative_path] = n_cfg.guide_file
 
     @property
-    def actual_type(self) -> Type:
+    def actual_type(self) -> Type[agent_file_alias.FileAlias]:
         return agent_file_alias.FileAlias
 
     @property
-    def wire_type(self) -> tool_provider.WireType:
-        return tool_provider.String()
+    def wire_type(self) -> Type[str]:
+        return str
+
+    def to_actual(self, value: str) -> agent_file_alias.FileAlias:
+        return self.convert(value)
+
+    def to_wire(self, value: agent_file_alias.FileAlias) -> str:
+        return value.relative_path
 
     def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
-        # Requirement: The alias manager converts relative paths to matching file aliases, producing unbound files when unmapped.
-        return self._aliases.get(
-            wire_value, agent_file_alias.UnboundFile(relative_path=wire_value)
-        )
+        # Requirement: Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
+        if wire_value in self._aliases:
+            return self._aliases[wire_value]
+        matches = self._short_name_to_aliases.get(wire_value)
+        if matches is not None and len(matches) == 1:
+            return matches[0]
+        return agent_file_alias.UnboundFile(relative_path=wire_value)
 
     def sanitize_text(self, text: str) -> str:
         # Requirement: The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its relative path, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking, stripping workspace root path prefixes, and stripping execution root path prefixes.
@@ -751,6 +768,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         keys=[
             AliasManager,
             agent_file_alias.AliasManager,
+            tool_provider.ParameterType,
             tool_provider.ParameterConverter,
         ],
         tier=agent_session,

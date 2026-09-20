@@ -72,7 +72,10 @@ flowchart TD
 
 ## 3. Sub-Agent Configuration & Sandbox Hardening
 
-To enforce Cleanroom's sandbox rules within Antigravity without virtual workspaces or native code overrides, worker subagent types are registered via Antigravity's `define_subagent` interface with restrictive capability flags and native-style MCP tool exposure:
+> [!NOTE]
+> **Architectural Evolution**: For the updated and definitive FastMCP server and sandbox design, see [Cleanroom Bazel Role Sub-Agent FastMCP Server & Unified Sandbox Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/bazel_role_mcp_server.md).
+> 
+> Rather than disabling native write tools (`enable_write_tools=False`) and shadowing file operations with custom MCP tools, the production architecture allows native Antigravity file tools (`view_file`, `replace_file_content`, `write_to_file`, `list_dir`) and enforces Cleanroom confinement and role blindness externally via **Antigravity Lifecycle Hooks (`.agents/hooks.json`)** querying the sandbox's `AccessGate` over IPC. FastMCP exposes only Cleanroom workflow lifecycle tools (`get_work`, `check_file`, `submit`, `blame`, `fail`).
 
 ```python
 define_subagent(
@@ -116,7 +119,8 @@ The MCP service exposes two distinct tool interfaces:
 
 ### B. Role Sandbox Toolset (`cleanroom_role_mcp`) — Native Tool Parity
 
-To eliminate cognitive friction and prompt-syntax hallucinations, tools exposed to worker sub-agents match the exact names, argument conventions, and behaviors of Antigravity's native tools:
+> [!NOTE]
+> **Production Tool Partitioning**: As detailed in [bazel_role_mcp_server.md](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/bazel_role_mcp_server.md), file manipulation (`view_file`, `replace_file_content`, `write_to_file`, `list_dir`) is performed directly by Antigravity's **native tools** and gated by **Antigravity lifecycle hooks** querying the sandbox access gate. FastMCP exposes only the workflow lifecycle tools: `get_work`, `check_file` (formerly `run_checks`), `submit`, `blame`, and `fail`.
 
 | Tool Name | Parameters | Return Schema | Description & Confinement Enforcement | Cleanroom Internal Mapping |
 | :--- | :--- | :--- | :--- | :--- |

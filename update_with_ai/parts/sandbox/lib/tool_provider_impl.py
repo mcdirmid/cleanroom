@@ -1,4 +1,5 @@
-from typing import Dict, Optional, Set, Tuple, Type
+import inspect
+from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Set, Tuple, Type
 from . import tool_provider
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
 from update_with_ai.parts.agent.lib.agent_session import agent_session
@@ -53,9 +54,12 @@ class ToolManager(tool_provider.ToolManager, Singleton):
                         content=f"Error: Required parameter '{p_name}' missing for tool '{name}'.",
                         reminder="Required parameters of the tool must be supplied.",
                     )
+                # Requirement: When an argument is omitted for a parameter that is not required and has a default value, the tool manager binds the default value as the actual parameter value.
+                if p.default_value is not None:
+                    actual_bindings.add((p, p.default_value))
             else:
                 raw_val = wire_dict[p_name]
-                conv_val = p.parameter_converter.convert(raw_val)
+                conv_val = p.parameter_type.convert(raw_val)
                 actual_bindings.add((p, conv_val))
 
         # Requirement: When parameter mappings are successfully resolved, executing a tool by name delegates to the matching tool with the resolved actual parameter bindings and returns the tool's response.
@@ -64,62 +68,52 @@ class ToolManager(tool_provider.ToolManager, Singleton):
             tool_provider.ActualParameterBindings(bindings=actual_bindings)
         )
 
+    def execute_tool_with_arguments(
+        self, name: str, arguments: Mapping[str, Any]
+    ) -> tool_provider.Response:
+        # Requirement: Executing a tool with arguments converts raw argument mappings into wire parameter bindings and delegates to tool execution by name.
+        wire_bindings = tool_provider.WireParameterBindings.from_dict(arguments)
+        return self.execute_tool(name, wire_bindings)
 
-class StringParameterConverter(tool_provider.StringParameterConverter, Singleton):
-    tier = agent_session
+    def create_tool_callable(self, name: str) -> Any:
+        # Requirement: Creating a tool callable constructs a callable function with parameter signatures derived from the tool parameters, executes the tool with supplied arguments upon invocation, and returns the response content combined with reminders when guidance is present.
+        tool = self._tools.get(name)
+        if tool is None:
+            raise ValueError(f"Unknown tool '{name}'")
 
-    def __init__(self) -> None:
-        pass
+        sorted_params = sorted(
+            tool.parameters, key=lambda p: (not p.is_required, p.name)
+        )
+        params = []
+        for p in sorted_params:
+            param_kind = inspect.Parameter.POSITIONAL_OR_KEYWORD
+            annotation = p.parameter_type.wire_type
+            default = (
+                p.default_value
+                if not p.is_required and p.default_value is not None
+                else (None if not p.is_required else inspect.Parameter.empty)
+            )
+            params.append(
+                inspect.Parameter(
+                    name=p.name,
+                    kind=param_kind,
+                    default=default,
+                    annotation=annotation,
+                )
+            )
 
-    @property
-    def actual_type(self) -> Type:
-        return str
+        sig = inspect.Signature(parameters=params, return_annotation=str)
 
-    @property
-    def wire_type(self) -> tool_provider.WireType:
-        return tool_provider.String()
+        def callable_fn(*args: Any, **kwargs: Any) -> str:
+            bound = sig.bind(*args, **kwargs)
+            bound.apply_defaults()
+            resp = self.execute_tool_with_arguments(name, bound.arguments)
+            return resp.output_text
 
-    def convert(self, wire_value: str) -> str:
-        # Requirement: Converting a wire type string produces that string directly as its actual value.
-        return str(wire_value)
-
-
-class IntegerParameterConverter(tool_provider.IntegerParameterConverter, Singleton):
-    tier = agent_session
-
-    def __init__(self) -> None:
-        pass
-
-    @property
-    def actual_type(self) -> Type:
-        return int
-
-    @property
-    def wire_type(self) -> tool_provider.WireType:
-        return tool_provider.Integer()
-
-    def convert(self, wire_value: int) -> int:
-        # Requirement: Converting a wire type integer produces that integer directly as its actual value.
-        return int(wire_value)
-
-
-class BooleanParameterConverter(tool_provider.BooleanParameterConverter, Singleton):
-    tier = agent_session
-
-    def __init__(self) -> None:
-        pass
-
-    @property
-    def actual_type(self) -> Type:
-        return bool
-
-    @property
-    def wire_type(self) -> tool_provider.WireType:
-        return tool_provider.Boolean()
-
-    def convert(self, wire_value: bool) -> bool:
-        # Requirement: Converting a wire type boolean produces that boolean directly as its actual value.
-        return bool(wire_value)
+        callable_fn.__name__ = tool.name
+        callable_fn.__doc__ = tool.description
+        setattr(callable_fn, "__signature__", sig)
+        return callable_fn
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
@@ -129,33 +123,41 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         keys=[ToolManager, tool_provider.ToolManager],
         tier=agent_session,
     )
-    reg.register_singleton(
-        StringParameterConverter,
+    str_type = tool_provider.IdentityParameterType(str)
+    reg.register_instance(
+        str_type,
         keys=[
-            StringParameterConverter,
-            tool_provider.StringParameterConverter,
-            tool_provider.IdentityParameterConverter,
-            tool_provider.ParameterConverter,
+            getattr(tool_provider, "StringParameterType", tool_provider.IdentityParameterType),
+            getattr(tool_provider, "StringParameterConverter", tool_provider.IdentityParameterType),
+            tool_provider.ParameterType,
         ],
         tier=agent_session,
     )
-    reg.register_singleton(
-        IntegerParameterConverter,
+    int_type = tool_provider.IdentityParameterType(int)
+    reg.register_instance(
+        int_type,
         keys=[
-            IntegerParameterConverter,
-            tool_provider.IntegerParameterConverter,
-            tool_provider.IdentityParameterConverter,
-            tool_provider.ParameterConverter,
+            getattr(tool_provider, "IntegerParameterType", tool_provider.IdentityParameterType),
+            getattr(tool_provider, "IntegerParameterConverter", tool_provider.IdentityParameterType),
         ],
         tier=agent_session,
     )
-    reg.register_singleton(
-        BooleanParameterConverter,
+    bool_type = tool_provider.IdentityParameterType(bool)
+    reg.register_instance(
+        bool_type,
         keys=[
-            BooleanParameterConverter,
-            tool_provider.BooleanParameterConverter,
-            tool_provider.IdentityParameterConverter,
-            tool_provider.ParameterConverter,
+            getattr(tool_provider, "BooleanParameterType", tool_provider.IdentityParameterType),
+            getattr(tool_provider, "BooleanParameterConverter", tool_provider.IdentityParameterType),
         ],
         tier=agent_session,
     )
+    float_type = tool_provider.IdentityParameterType(float)
+    reg.register_instance(
+        float_type,
+        keys=[
+            getattr(tool_provider, "FloatParameterType", tool_provider.IdentityParameterType),
+            getattr(tool_provider, "FloatParameterConverter", tool_provider.IdentityParameterType),
+        ],
+        tier=agent_session,
+    )
+

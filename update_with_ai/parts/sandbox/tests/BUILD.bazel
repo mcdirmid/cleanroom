@@ -126,9 +126,9 @@ pyright_test(
 pyright_test(
     name = "tool_provider_impl_test",
     srcs = ["tool_provider_impl_test.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/sandbox/lib:tool_provider",
         "//update_with_ai/parts/sandbox/lib:tool_provider_impl",
     ],
