@@ -14,6 +14,7 @@ from support.lib.lifecycle import (
     LifecycleScope,
     LifecycleTier,
     Singleton,
+    begin_phase,
     enter_phase,
     get_active_scope,
     get_default_registry,
@@ -574,6 +575,143 @@ class TestLifecycle(unittest.TestCase):
         self.assertIsNotNone(p2.parent.parent)
         assert p2.parent.parent is not None
         self.assertEqual(p2.parent.parent.phase, "system")
+
+    def test_begin_phase_and_activate_multi_turn(self) -> None:
+        """CUJ: begin_phase and scope.activate() support asynchronous multi-turn sessions."""
+        test_reg = LifecycleRegistry()
+
+        class TurnCounterService(Singleton):
+            tier = agent_session_tier
+
+            def __init__(self) -> None:
+                self.turns: List[str] = []
+                self.closed = False
+
+            def record_turn(self, name: str) -> None:
+                self.turns.append(name)
+
+            def close(self) -> None:
+                self.closed = True
+
+        test_reg.register_singleton(TurnCounterService, keys=[TurnCounterService])
+
+        # 1. begin_phase creates and opens scope without binding to active scope ContextVar
+        scope = begin_phase(agent_session_tier, registry=test_reg)
+        self.assertTrue(scope.is_open)
+        self.assertFalse(scope.is_closed)
+        self.assertIsNone(get_active_scope())
+
+        # 2. Turn 1: Activate scope temporarily to resolve and update state
+        with scope.activate() as active:
+            self.assertIs(active, scope)
+            self.assertIs(get_active_scope(), scope)
+            svc = get_singleton(TurnCounterService)
+            svc.record_turn("turn_1")
+
+        # After turn 1 exits, active scope is restored to None, but scope remains open
+        self.assertIsNone(get_active_scope())
+        self.assertTrue(scope.is_open)
+        self.assertFalse(scope.is_closed)
+
+        # 3. Turn 2: Re-activate scope and verify state persistence across turns
+        with scope.activate():
+            self.assertIs(get_active_scope(), scope)
+            svc = get_singleton(TurnCounterService)
+            self.assertEqual(svc.turns, ["turn_1"])
+            svc.record_turn("turn_2")
+
+        self.assertIsNone(get_active_scope())
+
+        # 4. Explicit close tears down singletons and marks scope closed
+        self.assertFalse(svc.closed)
+        scope.close()
+        self.assertTrue(svc.closed)
+        self.assertFalse(scope.is_open)
+        self.assertTrue(scope.is_closed)
+
+        # 5. Subsequent activate or get raises LifecycleError
+        with self.assertRaises(LifecycleError):
+            with scope.activate():
+                pass
+
+        with self.assertRaises(LifecycleError):
+            scope.get(TurnCounterService)
+
+        # 6. Idempotent close
+        scope.close()
+
+    def test_begin_child_phase(self) -> None:
+        """CUJ: begin_child_phase creates nested open scopes with isolated teardowns."""
+        test_reg = LifecycleRegistry()
+
+        class SystemService(Singleton):
+            tier = system
+            closed = False
+
+            def close(self) -> None:
+                self.closed = True
+
+        class SessionService(Singleton):
+            tier = agent_session_tier
+            closed = False
+
+            def close(self) -> None:
+                self.closed = True
+
+        test_reg.register_singleton(SystemService, keys=[SystemService])
+        test_reg.register_singleton(SessionService, keys=[SessionService])
+
+        system_scope = begin_phase(system, registry=test_reg)
+        session_scope = system_scope.begin_child_phase(agent_session_tier)
+
+        self.assertTrue(system_scope.is_open)
+        self.assertTrue(session_scope.is_open)
+
+        with session_scope.activate():
+            session_svc = get_singleton(SessionService)
+            system_svc = get_singleton(SystemService)
+            self.assertIsInstance(session_svc, SessionService)
+            self.assertIsInstance(system_svc, SystemService)
+
+        # Closing child scope tears down child singletons only
+        session_scope.close()
+        self.assertTrue(session_svc.closed)
+        self.assertFalse(system_svc.closed)
+        self.assertTrue(system_scope.is_open)
+
+        # Closing parent scope tears down parent singletons
+        system_scope.close()
+        self.assertTrue(system_svc.closed)
+
+    def test_scope_open_error_cleans_up(self) -> None:
+        """CUJ: Error during scope initialization closes any instantiated singletons."""
+        test_reg = LifecycleRegistry()
+        teardown_called = []
+
+        class GoodService(Singleton):
+            tier = agent_session_tier
+
+            def initialize(self) -> None:
+                pass
+
+            def close(self) -> None:
+                teardown_called.append("good_service_closed")
+
+        class FailingService(Singleton):
+            tier = agent_session_tier
+
+            def initialize(self) -> None:
+                # Trigger GoodService instantiation first
+                get_singleton(GoodService)
+                raise RuntimeError("Initialization failure in FailingService")
+
+        test_reg.register_singleton(GoodService, keys=[GoodService])
+        test_reg.register_singleton(FailingService, keys=[FailingService])
+
+        with self.assertRaises(RuntimeError):
+            begin_phase(agent_session_tier, registry=test_reg)
+
+        self.assertIn("good_service_closed", teardown_called)
 
 
 if __name__ == "__main__":

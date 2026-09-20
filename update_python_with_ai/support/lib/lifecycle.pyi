@@ -168,6 +168,7 @@ registry.register_singleton(
 from typing import (
     Any,
     Callable,
+    ContextManager,
     Optional,
     Sequence,
     TypeVar,
@@ -216,6 +217,8 @@ class LifecycleScope:
     tier: LifecycleTier
     registry: LifecycleRegistry
     parent: Optional[LifecycleScope]
+    is_open: bool
+    is_closed: bool
     def __init__(
         self,
         phase: LifecycleTier | str,
@@ -227,6 +230,23 @@ class LifecycleScope:
     def get(self, key: type[T]) -> T: ...
     def get_singleton(self, key: type[T]) -> T: ...
     def __call__(self, key: type[T]) -> T: ...
+    def open(self) -> LifecycleScope: ...
+    def activate(self) -> ContextManager[LifecycleScope]: ...
+    def close(self) -> None: ...
+    def enter_child_phase(
+        self,
+        phase: LifecycleTier | str,
+        *,
+        setup: Optional[Callable[[LifecycleScope], None]] = None,
+        defer_startup: bool = False,
+    ) -> LifecycleScope: ...
+    def begin_child_phase(
+        self,
+        phase: LifecycleTier | str,
+        *,
+        setup: Optional[Callable[[LifecycleScope], None]] = None,
+        defer_startup: bool = False,
+    ) -> LifecycleScope: ...
     def __enter__(self) -> LifecycleScope: ...
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None: ...
 
@@ -270,6 +290,16 @@ def get_singleton(key: type[T]) -> T: ...
 
 
 def enter_phase(
+    phase: LifecycleTier | str,
+    *,
+    parent: Optional[LifecycleScope] = None,
+    registry: Optional[LifecycleRegistry] = None,
+    setup: Optional[Callable[[LifecycleScope], None]] = None,
+    defer_startup: bool = False,
+) -> LifecycleScope: ...
+
+
+def begin_phase(
     phase: LifecycleTier | str,
     *,
     parent: Optional[LifecycleScope] = None,

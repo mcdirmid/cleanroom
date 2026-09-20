@@ -412,13 +412,31 @@ class LifecycleScope:
         self._setup = setup
         self._defer_startup = defer_startup
         self._phase_started = False
+        self._is_open = False
+        self._is_closed = False
         self._instances_by_desc: Dict[SingletonDescriptor, Any] = {}
         self._init_states: Dict[SingletonDescriptor, _InitState] = {}
         self._token: Optional[Any] = None
         self._instantiated_order: List[Any] = []
 
+    @property
+    def is_open(self) -> bool:
+        """Returns whether this lifecycle scope is open."""
+        return self._is_open
+
+    @property
+    def is_closed(self) -> bool:
+        """Returns whether this lifecycle scope has been closed."""
+        return self._is_closed
+
     def get(self, key: type[T]) -> T:
         """Retrieves a singleton matching key from this scope or delegates to parent."""
+        key_name = getattr(key, "__name__", str(key))
+        if self._is_closed:
+            raise LifecycleError(
+                f"Cannot resolve '{key_name}' from closed phase '{self.phase}'"
+            )
+
         # 1. Check if descriptor is registered in this scope's phase prototype
         desc = self.prototype.get_descriptor(key)
         if desc is not None:
@@ -498,6 +516,54 @@ class LifecycleScope:
         yield self
         self._start_phase()
 
+    def open(self) -> LifecycleScope:
+        """Opens this lifecycle scope and runs startup initializations."""
+        if self._is_closed:
+            raise LifecycleError(f"Cannot reopen closed lifecycle scope '{self.phase}'")
+        if self._is_open:
+            return self
+        self._is_open = True
+        try:
+            with self.activate():
+                if self._setup is not None:
+                    self._setup(self)
+                if not self._defer_startup:
+                    self._start_phase()
+        except BaseException:
+            self._is_open = False
+            self.close()
+            raise
+        return self
+
+    @contextmanager
+    def activate(self):
+        """Context manager temporarily activating this scope for singleton resolution."""
+        if self._is_closed:
+            raise LifecycleError(
+                f"Cannot activate closed lifecycle scope '{self.phase}'"
+            )
+        token = _active_scope.set(self)
+        try:
+            yield self
+        finally:
+            _active_scope.reset(token)
+
+    def close(self) -> None:
+        """Tears down all instantiated singletons in reverse order of creation (LIFO)."""
+        if self._is_closed:
+            return
+        self._is_closed = True
+        self._is_open = False
+        token = _active_scope.set(self)
+        try:
+            for inst in reversed(self._instantiated_order):
+                if hasattr(inst, "teardown") and callable(inst.teardown):
+                    inst.teardown()
+                elif hasattr(inst, "close") and callable(inst.close):
+                    inst.close()
+        finally:
+            _active_scope.reset(token)
+
     def enter_child_phase(
         self,
         phase: LifecycleTier | str,
@@ -514,7 +580,29 @@ class LifecycleScope:
             defer_startup=defer_startup,
         )
 
+    def begin_child_phase(
+        self,
+        phase: LifecycleTier | str,
+        *,
+        setup: Optional[Callable[[LifecycleScope], None]] = None,
+        defer_startup: bool = False,
+    ) -> LifecycleScope:
+        """Begins a child LifecycleScope nested inside this scope without a context manager."""
+        scope = LifecycleScope(
+            phase=phase,
+            registry=self.registry,
+            parent=self,
+            setup=setup,
+            defer_startup=defer_startup,
+        )
+        return scope.open()
+
     def __enter__(self) -> LifecycleScope:
+        if self._is_closed:
+            raise LifecycleError(
+                f"Cannot enter closed lifecycle scope '{self.phase}'"
+            )
+        self._is_open = True
         self._token = _active_scope.set(self)
         try:
             if self._setup is not None:
@@ -525,20 +613,17 @@ class LifecycleScope:
             if self._token is not None:
                 _active_scope.reset(self._token)
                 self._token = None
+            self.close()
             raise
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        # Teardown in reverse order of instantiation (LIFO)
-        for inst in reversed(self._instantiated_order):
-            if hasattr(inst, "teardown") and callable(inst.teardown):
-                inst.teardown()
-            elif hasattr(inst, "close") and callable(inst.close):
-                inst.close()
-
-        if self._token is not None:
-            _active_scope.reset(self._token)
-            self._token = None
+        try:
+            self.close()
+        finally:
+            if self._token is not None:
+                _active_scope.reset(self._token)
+                self._token = None
 
 
 def singleton(
@@ -557,7 +642,7 @@ def singleton(
     return decorator
 
 
-def enter_phase(
+def _create_scope(
     phase: LifecycleTier | str,
     *,
     parent: Optional[LifecycleScope] = None,
@@ -565,7 +650,6 @@ def enter_phase(
     setup: Optional[Callable[[LifecycleScope], None]] = None,
     defer_startup: bool = False,
 ) -> LifecycleScope:
-    """Context manager entering a lifecycle phase scope."""
     tier = _resolve_tier(phase)
     active = get_active_scope()
     if parent is not None:
@@ -597,3 +681,45 @@ def enter_phase(
         setup=setup,
         defer_startup=defer_startup,
     )
+
+
+def enter_phase(
+    phase: LifecycleTier | str,
+    *,
+    parent: Optional[LifecycleScope] = None,
+    registry: Optional[LifecycleRegistry] = None,
+    setup: Optional[Callable[[LifecycleScope], None]] = None,
+    defer_startup: bool = False,
+) -> LifecycleScope:
+    """Context manager entering a lifecycle phase scope."""
+    return _create_scope(
+        phase=phase,
+        parent=parent,
+        registry=registry,
+        setup=setup,
+        defer_startup=defer_startup,
+    )
+
+
+def begin_phase(
+    phase: LifecycleTier | str,
+    *,
+    parent: Optional[LifecycleScope] = None,
+    registry: Optional[LifecycleRegistry] = None,
+    setup: Optional[Callable[[LifecycleScope], None]] = None,
+    defer_startup: bool = False,
+) -> LifecycleScope:
+    """Begins a lifecycle phase without binding to a context manager.
+
+    Creates the scope, executes setup and startup initializations (unless deferred),
+    and leaves the scope open for activation via scope.activate().
+    Call scope.close() when the phase is completed.
+    """
+    scope = _create_scope(
+        phase=phase,
+        parent=parent,
+        registry=registry,
+        setup=setup,
+        defer_startup=defer_startup,
+    )
+    return scope.open()
