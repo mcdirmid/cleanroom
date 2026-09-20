@@ -70,7 +70,7 @@ FRESH_REQUIREMENTS:
 - When a target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open session target.
 - Tool execution fails when a target parameter is omitted and cannot be defaulted, or when the specified target parameter does not match an open session target, reminding the agent to specify an open target.
 - Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
-- When open session targets remain, resolving a target produces a non-terminating response with a reminder listing remaining open target files formatted via the template formatter.
+- When blame, submit, or fail is successfully called on a submit target and other submit targets remain, resolving the target produces a non-terminating response with a reminder listing remaining submit targets left for the agent to handle formatted via the template formatter.
 - When all session targets are resolved, resolving a target produces a terminating response indicating that the session completed successfully for submitted targets, carrying the explanation for failed targets, or attributing defect feedback to the blame target owning node for blamed targets, when mcp mode is inactive.
 - When all session targets are resolved, resolving a target produces a non-terminating response with a reminder to call the get work tool when mcp mode is active.
 
@@ -262,7 +262,7 @@ FRESH_REQUIREMENTS:
 - Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool targeting the submitted target with reasoning text indicating that verification results must be inspected before submitting.
 - Tool execution fails when session feedback is present and no workspace files were modified, reminding the agent that workspace files must be modified to address feedback or that the fail tool must be used.
 - Tool execution fails if workspace files were modified and the change summary is omitted, reminding the agent that a change summary must be provided when completing the session after modifying workspace files.
-- Executing the submit tool marks the target as submitted and resolves the target.
+- Tool execution marks the target as submitted and resolves the target.
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
@@ -441,11 +441,11 @@ PURPOSE:
 Implements execute_tool to validate blame target and produce a terminating feedback response
 
 FRESH_REQUIREMENTS:
-- When the blame target matches a configured blame target of an open session target, the source target parameter defaults to that session target.
-- When the blame target parameter is omitted and the source target parameter matches a configured blame target, the blame target parameter defaults to that target and the source target parameter defaults to the session target configured with that blame target.
-- When the source target parameter is omitted and cannot be inferred from the blame target, the source target parameter defaults using session target defaulting rules.
-- Executing the blame tool fails if the blame target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
-- On successful blame tool execution, the response marks the blame target as attributed and resolves the source target.
+- Tool execution defaults the source target parameter to that session target when the blame target matches a configured blame target of an open session target.
+- Tool execution defaults the blame target parameter to that target and the source target parameter to the session target configured with that blame target when the blame target parameter is omitted and the source target parameter matches a configured blame target.
+- Tool execution defaults the source target parameter using session target defaulting rules when the source target parameter is omitted and cannot be inferred from the blame target.
+- Tool execution fails if the blame target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
+- Tool execution marks the blame target as attributed and resolves the source target on successful tool execution.
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
@@ -653,9 +653,9 @@ Retrieves dirty nodes, materializes startup templates, and returns the task prom
 
 FRESH_REQUIREMENTS:
 - Tool execution fails when open session targets remain, reminding the agent that open targets must be resolved before requesting new work.
-- When no open targets remain, executing the get work tool obtains dirty nodes from dag storage and dag subgraph, updating the active nodes and execution version on role config.
-- If no dirty nodes are ready for cleaning, executing the get work tool produces an idle response indicating that no dirty nodes are ready.
-- When ready dirty nodes are obtained, executing the get work tool materializes startup templates on disk, constructs the task prompt from dirty node definitions, guide instructions, and incoming messages from dag storage formatted via the template formatter, and returns the rendered task prompt.
+- Tool execution obtains dirty nodes from dag storage and dag subgraph, updating the active nodes and execution version on role config, when no open targets remain.
+- Tool execution produces an idle response indicating that no dirty nodes are ready if no dirty nodes are ready for cleaning.
+- Tool execution materializes startup templates on disk, constructs the task prompt from dirty node definitions, guide instructions, and incoming messages from dag storage formatted via the template formatter, and returns the rendered task prompt when ready dirty nodes are obtained.
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.

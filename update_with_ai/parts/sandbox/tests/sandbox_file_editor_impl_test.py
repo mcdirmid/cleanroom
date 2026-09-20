@@ -304,8 +304,8 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.replacement_content_parameter, "New"),
                 }
             )
-            # Requirement: When allow multiple is not set or false, execution fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence.
-            # Requirement: When target content is not found anywhere in the file, failure feedback specifies a follow-up execution of the view file tool on the target file with reasoning text indicating that the target content was not found.
+            # Requirement: Tool execution fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence, when allow multiple is not set or false.
+            # Requirement: Tool execution specifies a follow-up execution of the view file tool on the target file with reasoning text indicating that the target content was not found, when target content is not found anywhere in the file.
             resp_not_found = replace_tool.execute_tool(b_not_found)
             self.assertTrue(resp_not_found.is_failed)
             self.assertIn("target_content not found in file", resp_not_found.content)
@@ -330,8 +330,8 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.replacement_content_parameter, "Updated Line 2"),
                 }
             )
-            # Requirement: Replace file content tool execution reads the file content from the filesystem, treating missing files as empty.
-            # Requirement: On success, the tool writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred.
+            # Requirement: Tool execution reads the file content from the filesystem, treating missing files as empty.
+            # Requirement: Tool execution writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred on success.
             # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
             # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and reminds the agent to call the check file tool to verify syntax and type correctness before making further modifications.
             # Requirement: Editing tool responses share a constant suppression key replace_file_content.
@@ -355,8 +355,8 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.replacement_content_parameter, "single"),
                 }
             )
-            # Requirement: When allow multiple is not set or false, execution fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence.
-            # Requirement: When target content matches multiple locations in the file and allow multiple is false, failure feedback indicates the first two matching line numbers to assist in narrowing the replacement region and instructs the agent to include more surrounding lines in target_content or specify start_line and end_line.
+            # Requirement: Tool execution fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence, when allow multiple is not set or false.
+            # Requirement: Tool execution provides failure feedback indicating the first two matching line numbers to assist in narrowing the replacement region and instructs the agent to include more surrounding lines in target_content or specify start_line and end_line, when target content matches multiple locations in the file and allow multiple is false.
             resp_dup = replace_tool.execute_tool(b_dup)
             self.assertTrue(resp_dup.is_failed)
             self.assertIn("matches 2 locations", resp_dup.content)
@@ -371,7 +371,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.allow_multiple_parameter, True),
                 }
             )
-            # Requirement: When allow multiple is true, execution fails if the target content is not found within the designated line range, and replaces all occurrences of the target content within the designated line range.
+            # Requirement: Tool execution fails if the target content is not found within the designated line range, and replaces all occurrences of the target content within the designated line range, when allow multiple is true.
             resp_dup_allowed = replace_tool.execute_tool(b_dup_allowed)
             self.assertFalse(resp_dup_allowed.is_failed)
             with open(self.target_path, "r", encoding="utf-8") as f:
@@ -414,7 +414,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.start_line_parameter, 0),
                 }
             )
-            # Requirement: When a start line is provided, execution fails if the start line is less than one or exceeds the total line count plus one.
+            # Requirement: Tool execution fails if the start line is less than one or exceeds the total line count plus one, when a start line is provided.
             resp_zero_start = replace_tool.execute_tool(b_zero_start)
             self.assertTrue(resp_zero_start.is_failed)
             self.assertIn("start_line 0 out of bounds", resp_zero_start.content)
@@ -428,7 +428,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.start_line_parameter, 5),
                 }
             )
-            # Requirement: When a start line is provided, execution fails if the start line is less than one or exceeds the total line count plus one.
+            # Requirement: Tool execution fails if the start line is less than one or exceeds the total line count plus one, when a start line is provided.
             resp_oob_start = replace_tool.execute_tool(b_oob_start)
             self.assertTrue(resp_oob_start.is_failed)
             self.assertIn("start_line 5 out of bounds", resp_oob_start.content)
@@ -442,7 +442,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.end_line_parameter, 0),
                 }
             )
-            # Requirement: When an end line is provided, execution fails if the end line is less than one or exceeds the total line count.
+            # Requirement: Tool execution fails if the end line is less than one or exceeds the total line count, when an end line is provided.
             resp_zero_end = replace_tool.execute_tool(b_zero_end)
             self.assertTrue(resp_zero_end.is_failed)
             self.assertIn("end_line 0 out of bounds", resp_zero_end.content)
@@ -456,7 +456,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.end_line_parameter, 4),
                 }
             )
-            # Requirement: When an end line is provided, execution fails if the end line is less than one or exceeds the total line count.
+            # Requirement: Tool execution fails if the end line is less than one or exceeds the total line count, when an end line is provided.
             resp_oob_end = replace_tool.execute_tool(b_oob_end)
             self.assertTrue(resp_oob_end.is_failed)
             self.assertIn("end_line 4 out of bounds", resp_oob_end.content)
@@ -471,7 +471,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.end_line_parameter, 2),
                 }
             )
-            # Requirement: When both start line and end line are provided, execution fails if the start line exceeds the end line.
+            # Requirement: Tool execution fails if the start line exceeds the end line, when both start line and end line are provided.
             resp_start_gt_end = replace_tool.execute_tool(b_start_gt_end)
             self.assertTrue(resp_start_gt_end.is_failed)
             self.assertIn("cannot be greater than end_line", resp_start_gt_end.content)
@@ -522,7 +522,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.end_line_parameter, 2),
                 }
             )
-            # Requirement: When target content is not found within the designated line range but exists elsewhere in the file, failure feedback indicates the line numbers where the target content was located.
+            # Requirement: Tool execution provides failure feedback indicating the line numbers where the target content was located, when target content is not found within the designated line range but exists elsewhere in the file.
             resp_scoped_locator = replace_tool.execute_tool(b_scoped_locator)
             self.assertTrue(resp_scoped_locator.is_failed)
             self.assertIn(
@@ -680,7 +680,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             edit_mgr = scope.get_singleton(EditManager)
 
             # 1. Replace tool on missing file treats content as empty -> target content not found fails cleanly
-            # Requirement: Replace file content tool execution reads the file content from the filesystem, treating missing files as empty.
+            # Requirement: Tool execution reads the file content from the filesystem, treating missing files as empty.
             b_rep = ActualParameterBindings(
                 bindings={
                     (replace_tool.file_alias_parameter, missing_rw_file),
@@ -693,7 +693,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertIn("target_content not found in file", resp_rep.content)
 
             # 2. Replace tool creating file treats missing file as empty and creates parent directories
-            # Requirement: On success, the tool writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred.
+            # Requirement: Tool execution writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred on success.
             b_create = ActualParameterBindings(
                 bindings={
                     (replace_tool.file_alias_parameter, missing_rw_file),
@@ -929,7 +929,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.replacement_content_parameter, "Modified Line 1"),
                 }
             )
-            # Requirement: When the path parameter is omitted, execution implicitly binds the target file to the last file read or edited in the edit manager if that file is a read-write file, informs the agent with a warning in the response content that the path was implicitly bound while allowing the tool execution to proceed, or fails if no file has been read or edited or if the last read or edited file is not a read-write file.
+            # Requirement: Tool execution implicitly binds the target file to the last file read or edited in the edit manager if that file is a read-write file, informs the agent with a warning in the response content that the path was implicitly bound while allowing the tool execution to proceed, or fails if no file has been read or edited or if the last read or edited file is not a read-write file, when the path parameter is omitted.
             resp_no_file = replace_tool.execute_tool(b_no_file)
             self.assertTrue(resp_no_file.is_failed)
             self.assertIn("no file has been read or edited yet", resp_no_file.content)

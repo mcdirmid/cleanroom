@@ -126,14 +126,13 @@ PURPOSE:
 Implements execute_tool on the view file tool to inspect file content with line number formatting and alias validation
 
 FRESH_REQUIREMENTS:
-- Executing the view file tool reads file content using the filesystem at the host path formed from the alias manager workspace root and bound file workspace path, returning content formatted with one-indexed right-aligned line numbers followed by a colon and space.
-- When the target file does not exist on disk, view file tool execution treats a read-write file as having empty content, and fails with a response guiding agent recovery when inspecting a missing read-only file.
-- Executing the view file tool with an unbound file whose relative path or qualified path addresses a module name or ends with .py and matches a declared read-only grounding specification ending with .pyi resolves to that grounding specification file alias.
-- Executing the view file tool with an unbound file addressing a test file ending with _test.py fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract.
-- Otherwise, executing the view file tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.
-- When an unbound file equals the guide file configured for step-mode, the view file tool failure response indicates that `advance` must be called to read the guide instead.
+- Tool execution records the read file in the edit manager on successful execution.
+- Tool execution reads file content from the filesystem at the host path formed from the alias manager workspace root and the bound file workspace path, returning the content formatted with one-indexed right-aligned line numbers followed by a colon and space, and formatting read-only markdown files ending with `.md` using the template formatter with session template parameters after filtering out paragraphs beginning with `> META:`.
+- Tool execution treats a read-write file as having empty content when the target file does not exist on disk, and fails with a response guiding agent recovery when inspecting a missing read-only file.
+- When an unbound file is supplied, tool execution resolves to that grounding specification file alias if the relative path or qualified path addresses a module name or ends with `.py` and matches a declared read-only grounding specification ending with `.pyi`.
+- When an unbound file is supplied, tool execution fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract if the unbound file addresses a test file ending with `_test.py`.
+- When an unbound file is supplied, tool execution fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead, otherwise.
 - View file tool responses for read-write files carry a suppression key matching the file's relative path, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
-- On successful execution, the view file tool records the read file in the edit manager.
 - When reading markdown files ending with .md, paragraphs beginning with > META: are filtered out from the returned content.
 - When reading read-only markdown files ending with .md, content is formatted using the template formatter with session template parameters after filtering out paragraphs beginning with > META:.
 
@@ -295,10 +294,10 @@ PURPOSE:
 Implements execute_tool on the search tool to search regex pattern matches across session files
 
 FRESH_REQUIREMENTS:
-- The search tool searches for regex pattern matches across read-only files and read-write files using the filesystem.
-- Executing the search tool fails when provided with an invalid regex pattern.
-- On successful search tool execution, matches in read-only files provide matched line contents and line numbers sanitized by the alias manager to mask host paths.
-- On successful search tool execution, matches in read-write files state that matches were found but cannot be displayed to prevent unanchored edits.
+- Tool execution searches for regex pattern matches across the read-only files and read-write files in the filesystem.
+- Tool execution fails when given an invalid regex pattern.
+- Tool execution provides matched line contents and line numbers for read-only files, sanitized by the alias manager to mask host paths, on successful execution.
+- Tool execution states that matches were found but cannot be displayed to prevent unanchored edits, for read-write files.
 
 INHERITED_REQUIREMENTS:
 - [SearchTool] Executing the search tool searches pattern matches across the session's read-only and read-write files.

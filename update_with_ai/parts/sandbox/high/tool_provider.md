@@ -18,7 +18,9 @@ A *list parameter type* is a parameter type that converts a wire type list to an
 
 A *dictionary parameter type* is a parameter type that converts a wire type dictionary to an actual type dictionary, having a *key parameter type* that converts dictionary keys and a *value parameter type* that converts dictionary values. Converting a wire type dictionary with a dictionary parameter type converts each key with its key parameter type and each value with its value parameter type.
 
-A *tool* is a polymorphic service implemented by a component to define an executable action. A tool has a *name* (used to identify the tool), a *description* (which informs the model why and when to use the tool), and *parameters*. A *parameter* describes an input accepted by a tool, having a *name* and a *description* (guiding how arguments are supplied), a parameter type, a *default value* representing the value used when an argument is omitted during tool execution, and can be *required* to indicate that an argument must be supplied for tool execution. It is assumed that all parameters of a tool have unique names.
+A *tool* is a polymorphic service implemented by a component to define an executable action. A tool has a *name* (used to identify the tool), a *description* (which informs the model why and when to use the tool), and *parameters*.
+
+A *parameter* describes an input accepted by a tool, having a *name* and a *description* (guiding how arguments are supplied), a parameter type, a *default value* representing the value used when an argument is omitted during tool execution, and can be *required* to indicate that an argument must be supplied for tool execution. It is assumed that all parameters of a tool have unique names.
 
 A tool can be *executed* directly with a set of *actual parameter bindings*, which map parameters to resolved values of their actual types. Executing a tool produces a *response* communicating:
 

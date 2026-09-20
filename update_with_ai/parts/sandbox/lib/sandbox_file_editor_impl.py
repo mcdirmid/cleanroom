@@ -263,6 +263,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
 
         edit_mgr = get_singleton(EditManager)
         is_implicit_path = False
+        # Requirement: Tool execution implicitly binds the target file to the last file read or edited in the edit manager if that file is a read-write file, informs the agent with a warning in the response content that the path was implicitly bound while allowing the tool execution to proceed, or fails if no file has been read or edited or if the last read or edited file is not a read-write file, when the path parameter is omitted.
         if target_file is None:
             last_file = edit_mgr.last_read_or_edited_file
             if last_file is None:
@@ -308,7 +309,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
             alias_mgr.workspace_root.path, target_file.workspace_path.path
         )
 
-        # Requirement: Replace file content tool execution reads the file content from the filesystem, treating missing files as empty.
+        # Requirement: Tool execution reads the file content from the filesystem, treating missing files as empty.
         if not os.path.exists(host_path):
             content = ""
         else:
@@ -318,7 +319,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         lines = content.splitlines(keepends=True)
         total_lines = len(lines)
 
-        # Requirement: When a start line is provided, execution fails if the start line is less than one or exceeds the total line count plus one.
+        # Requirement: Tool execution fails if the start line is less than one or exceeds the total line count plus one, when a start line is provided.
         if start_line is not None:
             if start_line < 1 or start_line > total_lines + 1:
                 return tool_provider.Response(
@@ -328,7 +329,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                     suppression_key="replace_file_content",
                 )
 
-        # Requirement: When an end line is provided, execution fails if the end line is less than one or exceeds the total line count.
+        # Requirement: Tool execution fails if the end line is less than one or exceeds the total line count, when an end line is provided.
         if end_line is not None:
             if end_line < 1 or end_line > total_lines:
                 return tool_provider.Response(
@@ -338,7 +339,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                     suppression_key="replace_file_content",
                 )
 
-        # Requirement: When both start line and end line are provided, execution fails if the start line exceeds the end line.
+        # Requirement: Tool execution fails if the start line exceeds the end line, when both start line and end line are provided.
         if start_line is not None and end_line is not None:
             if start_line > end_line:
                 return tool_provider.Response(
@@ -357,13 +358,13 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
 
         count = region.count(target_content)
 
-        # Requirement: When allow multiple is not set or false, execution fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence.
-        # Requirement: When allow multiple is true, execution fails if the target content is not found within the designated line range, and replaces all occurrences of the target content within the designated line range.
+        # Requirement: Tool execution fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence, when allow multiple is not set or false.
+        # Requirement: Tool execution fails if the target content is not found within the designated line range, and replaces all occurrences of the target content within the designated line range, when allow multiple is true.
         if count == 0:
             if start_line is not None or end_line is not None:
                 full_count = content.count(target_content)
                 if full_count > 0:
-                    # Requirement: When target content is not found within the designated line range but exists elsewhere in the file, failure feedback indicates the line numbers where the target content was located.
+                    # Requirement: Tool execution provides failure feedback indicating the line numbers where the target content was located, when target content is not found within the designated line range but exists elsewhere in the file.
                     first_idx = content.find(target_content)
                     actual_start_line = content[:first_idx].count("\n") + 1
                     actual_end_line = actual_start_line + target_content.count("\n")
@@ -417,7 +418,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                     content=f"Error: target_content matches {count} locations in line range [{s_idx + 1}, {e_idx}]. Set allow_multiple=true or narrow the line range.",
                     suppression_key="replace_file_content",
                 )
-            # Requirement: When target content matches multiple locations in the file and allow multiple is false, failure feedback indicates the first two matching line numbers to assist in narrowing the replacement region and instructs the agent to include more surrounding lines in target_content or specify start_line and end_line.
+            # Requirement: Tool execution provides failure feedback indicating the first two matching line numbers to assist in narrowing the replacement region and instructs the agent to include more surrounding lines in target_content or specify start_line and end_line, when target content matches multiple locations in the file and allow multiple is false.
             first_idx = region.find(target_content)
             second_idx = region.find(
                 target_content, first_idx + len(target_content)
@@ -455,7 +456,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         edit_mgr.record_initial_content(host_path, content)
 
         # Requirement: On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and reminds the agent to call the check file tool to verify syntax and type correctness before making further modifications.
-        # Requirement: On success, the tool writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred.
+        # Requirement: Tool execution writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred on success.
         # Requirement: [EditManager] Modifying a file records that workspace file modifications occurred during the session.
         os.makedirs(os.path.dirname(host_path), exist_ok=True)
         with open(host_path, "w", encoding="utf-8") as f:

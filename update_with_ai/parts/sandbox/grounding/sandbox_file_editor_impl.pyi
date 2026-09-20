@@ -328,17 +328,17 @@ FRESH_REQUIREMENTS:
 - Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
 - On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and reminds the agent to call the check file tool to verify syntax and type correctness before making further modifications.
 - When configured to produce delta output, successful editing tool execution includes a diff delta representation in the response content.
-- When the path parameter is omitted, execution implicitly binds the target file to the last file read or edited in the edit manager if that file is a read-write file, informs the agent with a warning in the response content that the path was implicitly bound while allowing the tool execution to proceed, or fails if no file has been read or edited or if the last read or edited file is not a read-write file.
-- Replace file content tool execution reads the file content from the filesystem, treating missing files as empty.
-- When a start line is provided, execution fails if the start line is less than one or exceeds the total line count plus one.
-- When an end line is provided, execution fails if the end line is less than one or exceeds the total line count.
-- When both start line and end line are provided, execution fails if the start line exceeds the end line.
-- When allow multiple is not set or false, execution fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence.
-- When allow multiple is true, execution fails if the target content is not found within the designated line range, and replaces all occurrences of the target content within the designated line range.
-- When target content matches multiple locations in the file and allow multiple is false, failure feedback indicates the first two matching line numbers to assist in narrowing the replacement region and instructs the agent to include more surrounding lines in target_content or specify start_line and end_line.
-- When target content is not found within the designated line range but exists elsewhere in the file, failure feedback indicates the line numbers where the target content was located.
-- When target content is not found anywhere in the file, failure feedback specifies a follow-up execution of the view file tool on the target file with reasoning text indicating that the target content was not found.
-- On success, the tool writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred.
+- Tool execution implicitly binds the target file to the last file read or edited in the edit manager if that file is a read-write file, informs the agent with a warning in the response content that the path was implicitly bound while allowing the tool execution to proceed, or fails if no file has been read or edited or if the last read or edited file is not a read-write file, when the path parameter is omitted.
+- Tool execution reads the file content from the filesystem, treating missing files as empty.
+- Tool execution fails if the start line is less than one or exceeds the total line count plus one, when a start line is provided.
+- Tool execution fails if the end line is less than one or exceeds the total line count, when an end line is provided.
+- Tool execution fails if the start line exceeds the end line, when both start line and end line are provided.
+- Tool execution fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence, when allow multiple is not set or false.
+- Tool execution fails if the target content is not found within the designated line range, and replaces all occurrences of the target content within the designated line range, when allow multiple is true.
+- Tool execution provides failure feedback indicating the first two matching line numbers to assist in narrowing the replacement region and instructs the agent to include more surrounding lines in target_content or specify start_line and end_line, when target content matches multiple locations in the file and allow multiple is false.
+- Tool execution provides failure feedback indicating the line numbers where the target content was located, when target content is not found within the designated line range but exists elsewhere in the file.
+- Tool execution specifies a follow-up execution of the view file tool on the target file with reasoning text indicating that the target content was not found, when target content is not found anywhere in the file.
+- Tool execution writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred on success.
 - Editing tool responses share a constant suppression key replace_file_content.
 
 INHERITED_REQUIREMENTS:

@@ -19,7 +19,13 @@ When driving a turn, the loop driver transmits a completion request following Op
 
 The loop driver logs log events for turn requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool call names and arguments or text response previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in the transcript when present.
 
-Before each tool execution, the loop driver evaluates the tool invocation with the loop guard. If the loop guard produces a loop failure, the loop driver halts execution with an unexpected failure carrying the loop failure explanation. If the loop guard produces a loop reminder, the loop driver appends the reminder to the conversation and proceeds with execution. Productive tool executions that modify workspace files or advance the guide step clear repetition tracking in the loop guard.
+Before each tool execution, the loop driver evaluates the tool invocation with the loop guard. Evaluating a tool invocation:
+
+- Halts execution with an unexpected failure carrying the loop failure explanation if the loop guard produces a loop failure.
+
+- Appends the reminder to the conversation and proceeds with execution if the loop guard produces a loop reminder.
+
+Productive tool executions that modify workspace files or advance the guide step clear repetition tracking in the loop guard.
 
 When tool execution produces a response indicating failure without terminating the run, the loop driver appends the failure feedback to the conversation and continues the turn loop. When tool execution produces a response indicating terminating failure, the loop driver halts execution with an unexpected failure carrying the failure explanation. When tool execution produces a response indicating successful session termination, the loop driver concludes the run and returns a successful loop outcome.
 

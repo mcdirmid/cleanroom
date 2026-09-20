@@ -138,7 +138,7 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
             elif not base_cand.endswith(".pyi"):
                 variations.extend([f"{stem}.py", f"{stem}.pyi"])
 
-            # Requirement: Executing the view file tool with an unbound file whose relative path or qualified path addresses a module name or ends with .py and matches a declared read-only grounding specification ending with .pyi resolves to that grounding specification file alias.
+            # Requirement: When an unbound file is supplied, tool execution resolves to that grounding specification file alias if the relative path or qualified path addresses a module name or ends with `.py` and matches a declared read-only grounding specification ending with `.pyi`.
             for var in variations:
                 for bf in all_bound_files:
                     if (
@@ -161,10 +161,10 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
                     target_file.relative_path.endswith("_test.py")
                     or "_test" in target_file.relative_path
                 ):
-                    # Requirement: Executing the view file tool with an unbound file addressing a test file ending with _test.py fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract.
+                    # Requirement: When an unbound file is supplied, tool execution fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract if the unbound file addresses a test file ending with `_test.py`.
                     guidance = f"Error: Unknown file '{target_file.relative_path}'. Test files are not inspectable by design; only declared grounding specifications (.pyi) and target library files (.py) are accessible. Available files: {', '.join(readable)}"
                 else:
-                    # Requirement: Otherwise, executing the view file tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.
+                    # Requirement: When an unbound file is supplied, tool execution fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead, otherwise.
                     guidance = f"Error: Unknown file '{target_file.relative_path}'. Available files: {', '.join(readable)}"
                 return tool_provider.Response(
                     is_failed=True,
@@ -173,14 +173,14 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
                     reminder="Only declared files can be inspected.",
                 )
 
-        # Requirement: Executing the view file tool reads file content using the filesystem at the host path formed from the alias manager workspace root and bound file workspace path, returning content formatted with one-indexed right-aligned line numbers followed by a colon and space.
+        # Requirement: Tool execution reads file content from the filesystem at the host path formed from the alias manager workspace root and the bound file workspace path, returning the content formatted with one-indexed right-aligned line numbers followed by a colon and space, and formatting read-only markdown files ending with `.md` using the template formatter with session template parameters after filtering out paragraphs beginning with `> META:`.
         assert isinstance(target_file, agent_file_alias.BoundFile)
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         host_path = os.path.join(
             alias_mgr.workspace_root.path, target_file.workspace_path.path
         )
 
-        # Requirement: When the target file does not exist on disk, view file tool execution treats a read-write file as having empty content, and fails with a response guiding agent recovery when inspecting a missing read-only file.
+        # Requirement: Tool execution treats a read-write file as having empty content when the target file does not exist on disk, and fails with a response guiding agent recovery when inspecting a missing read-only file.
         if not os.path.exists(host_path):
             if isinstance(target_file, agent_file_alias.ReadWriteFile):
                 lines = []
@@ -253,6 +253,7 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
 
         try:
             edit_mgr = get_singleton(sandbox_file_editor.EditManager)
+            # Requirement: Tool execution records the read file in the edit manager on successful execution.
             edit_mgr.record_file_read(target_file)
         except (LookupError, KeyError):
             pass

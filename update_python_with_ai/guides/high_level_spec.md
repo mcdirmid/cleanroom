@@ -69,6 +69,8 @@ Component visibility and lifetimes are governed by hierarchical lifecycle tiers 
 - [ ] The term "flag" is avoided; boolean choices express domain actions or conditions directly
 - [ ] Features, modes, and options express purpose rather than enablement (e.g. "whether the agent should use step mode to communicate a guide to the agent progressively" rather than "whether step mode is enabled")
 - [ ] Requirements state capabilities and invariants declaratively, avoiding procedural step-by-step recipes or chronological narratives
+- [ ] Prose paragraphs are concise and focused on a single responsibility or concept, containing at most three sentences; paragraphs never aggregate four or more sentences into dense prose blocks
+- [ ] Multi-sentence branching conditions, tool execution rules, parameter catalogs, or parallel behavioral constraints are decomposed into single-level bullet lists rather than compressed into narrative paragraphs
 
 ## Semantic italics and typography
 
@@ -141,3 +143,4 @@ Component visibility and lifetimes are governed by hierarchical lifecycle tiers 
 - [ ] Spatial containment — writing "in a <service>" instead of recognizing that tools and services are independent peer services in the session tier
 - [ ] Second-person tool feedback — specifying tool feedback, error diagnostics, or reminders using second-person pronouns ("you", "your") instead of declarative, impersonal constraints
 - [ ] Redundant interface restatements — repeating property catalogs, data fields, or capabilities in implementation specifications that are already defined in implemented interface components rather than focusing on realization details, concrete algorithms, and binding sources
+- [ ] Monolithic narrative paragraphs — packing multiple responsibilities, branching conditions, or tool execution outcomes into dense prose paragraphs of four or more sentences instead of decomposing them into concise paragraphs or declarative bullet points

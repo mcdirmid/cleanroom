@@ -399,8 +399,8 @@ class MockTemplateFormatter:
 
     def format_template(self, text: str, parameters: Any) -> str:
         nodes = parameters.get("nodes", [])
-        if "Remaining open files" in text:
-            lines = ["Remaining open files:"]
+        if "Remaining open files" in text or "Remaining submit targets" in text:
+            lines = ["Remaining submit targets to handle:"]
             for n in nodes:
                 lines.append(f"- `{n.get('src_alias', '')}`")
             return "\n".join(lines)
@@ -867,7 +867,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             b = ActualParameterBindings(
                 bindings={(submit.change_summary, "Unneeded change summary")}
             )
-            # Requirement: Executing the submit tool marks the target as submitted and resolves the target.
+            # Requirement: Tool execution marks the target as submitted and resolves the target.
             # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
             # Requirement: When all session targets are resolved, resolving a target produces a terminating response indicating that the session completed successfully for submitted targets, carrying the explanation for failed targets, or attributing defect feedback to the blame target owning node for blamed targets, when mcp mode is inactive.
             resp = submit.execute_tool(b)
@@ -889,7 +889,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             b = ActualParameterBindings(
                 bindings={(submit.change_summary, "Added new feature")}
             )
-            # Requirement: Executing the submit tool marks the target as submitted and resolves the target.
+            # Requirement: Tool execution marks the target as submitted and resolves the target.
             # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
             # Requirement: When all session targets are resolved, resolving a target produces a terminating response indicating that the session completed successfully for submitted targets, carrying the explanation for failed targets, or attributing defect feedback to the blame target owning node for blamed targets, when mcp mode is inactive.
             resp = submit.execute_tool(b)
@@ -945,8 +945,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (blame_tool.explanation, "Broken"),
                 }
             )
-            # Requirement: When the source target parameter is omitted and cannot be inferred from the blame target, the source target parameter defaults using session target defaulting rules.
-            # Requirement: Executing the blame tool fails if the blame target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
+            # Requirement: Tool execution defaults the source target parameter using session target defaulting rules when the source target parameter is omitted and cannot be inferred from the blame target.
+            # Requirement: Tool execution fails if the blame target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
             resp_inv = blame_tool.execute_tool(b_invalid)
             self.assertTrue(resp_inv.is_failed)
             self.assertIsNotNone(resp_inv.reminder)
@@ -958,8 +958,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (blame_tool.explanation, "Broken type signature"),
                 }
             )
-            # Requirement: When the blame target matches a configured blame target of an open session target, the source target parameter defaults to that session target.
-            # Requirement: On successful blame tool execution, the response marks the blame target as attributed and resolves the source target.
+            # Requirement: Tool execution defaults the source target parameter to that session target when the blame target matches a configured blame target of an open session target.
+            # Requirement: Tool execution marks the blame target as attributed and resolves the source target on successful tool execution.
             # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
             # Requirement: When all session targets are resolved, resolving a target produces a terminating response indicating that the session completed successfully for submitted targets, carrying the explanation for failed targets, or attributing defect feedback to the blame target owning node for blamed targets, when mcp mode is inactive.
             resp_val = blame_tool.execute_tool(b_valid)
@@ -974,8 +974,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (blame_tool.explanation, "Legacy blame call"),
                 }
             )
-            # Requirement: When the blame target parameter is omitted and the source target parameter matches a configured blame target, the blame target parameter defaults to that target and the source target parameter defaults to the session target configured with that blame target.
-            # Requirement: On successful blame tool execution, the response marks the blame target as attributed and resolves the source target.
+            # Requirement: Tool execution defaults the blame target parameter to that target and the source target parameter to the session target configured with that blame target when the blame target parameter is omitted and the source target parameter matches a configured blame target.
+            # Requirement: Tool execution marks the blame target as attributed and resolves the source target on successful tool execution.
             # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
             # Requirement: When all session targets are resolved, resolving a target produces a terminating response indicating that the session completed successfully for submitted targets, carrying the explanation for failed targets, or attributing defect feedback to the blame target owning node for blamed targets, when mcp mode is inactive.
             resp_leg = blame_tool.execute_tool(b_legacy)
@@ -1043,9 +1043,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (submit.change_summary, "Cleaned unit 1"),
                 }
             )
-            # Requirement: Executing the submit tool marks the target as submitted and resolves the target.
+            # Requirement: Tool execution marks the target as submitted and resolves the target.
             # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
-            # Requirement: When open session targets remain, resolving a target produces a non-terminating response with a reminder listing remaining open target files formatted via the template formatter.
+            # Requirement: When blame, submit, or fail is successfully called on a submit target and other submit targets remain, resolving the target produces a non-terminating response with a reminder listing remaining submit targets left for the agent to handle formatted via the template formatter.
             resp4 = submit.execute_tool(b_node1)
             self.assertFalse(resp4.is_failed)
             self.assertFalse(resp4.is_terminated)
@@ -1055,7 +1055,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             # 5. Submitting when only one unsubmitted target remains defaults to that target
             # Requirement: When a target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted target.
-            # Requirement: Executing the submit tool marks the target as submitted and resolves the target.
+            # Requirement: Tool execution marks the target as submitted and resolves the target.
             # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
             # Requirement: When all session targets are resolved, resolving a target produces a terminating response indicating that the session completed successfully for submitted targets, carrying the explanation for failed targets, or attributing defect feedback to the blame target owning node for blamed targets, when mcp mode is inactive.
             resp5 = submit.execute_tool(b_no_target)
@@ -1106,13 +1106,13 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # Requirement: When a target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open session target.
             # Requirement: Executing the fail tool marks the target as failed and resolves the target.
             # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
-            # Requirement: When open session targets remain, resolving a target produces a non-terminating response with a reminder listing remaining open target files formatted via the template formatter.
+            # Requirement: When blame, submit, or fail is successfully called on a submit target and other submit targets remain, resolving the target produces a non-terminating response with a reminder listing remaining submit targets left for the agent to handle formatted via the template formatter.
             resp1 = fail_tool.execute_tool(b_no_target)
             self.assertFalse(resp1.is_failed)
             self.assertFalse(resp1.is_terminated)
             self.assertEqual(rc.get_node_state(node1), "FAILED")
             self.assertEqual(rc.get_node_state(node2), "BLOCKED")
-            self.assertIn("Remaining open files:\n- `f_unit3.py`", resp1.content)
+            self.assertIn("Remaining submit targets to handle:\n- `f_unit3.py`", resp1.content)
             self.assertIn(f_rw1, self.edit_mgr.locked_files)
             self.edit_mgr.last_read_or_edited_file = None
 
@@ -1186,7 +1186,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (blame_tool.explanation, "Bad"),
                 }
             )
-            # Requirement: Executing the blame tool fails if the blame target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
+            # Requirement: Tool execution fails if the blame target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
             resp_bad = blame_tool.execute_tool(b_bad)
             self.assertTrue(resp_bad.is_failed)
 
@@ -1197,10 +1197,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (blame_tool.explanation, "Spec defect"),
                 }
             )
-            # Requirement: When the blame target matches a configured blame target of an open session target, the source target parameter defaults to that session target.
-            # Requirement: On successful blame tool execution, the response marks the blame target as attributed and resolves the source target.
+            # Requirement: Tool execution defaults the source target parameter to that session target when the blame target matches a configured blame target of an open session target.
+            # Requirement: Tool execution marks the blame target as attributed and resolves the source target on successful tool execution.
             # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
-            # Requirement: When open session targets remain, resolving a target produces a non-terminating response with a reminder listing remaining open target files formatted via the template formatter.
+            # Requirement: When blame, submit, or fail is successfully called on a submit target and other submit targets remain, resolving the target produces a non-terminating response with a reminder listing remaining submit targets left for the agent to handle formatted via the template formatter.
             resp_ok = blame_tool.execute_tool(b_ok)
             self.assertFalse(resp_ok.is_failed)
             self.assertFalse(resp_ok.is_terminated)
@@ -1223,8 +1223,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
                     (blame_tool.explanation, "Spec defect 3"),
                 }
             )
-            # Requirement: When the blame target parameter is omitted and the source target parameter matches a configured blame target, the blame target parameter defaults to that target and the source target parameter defaults to the session target configured with that blame target.
-            # Requirement: On successful blame tool execution, the response marks the blame target as attributed and resolves the source target.
+            # Requirement: Tool execution defaults the blame target parameter to that target and the source target parameter to the session target configured with that blame target when the blame target parameter is omitted and the source target parameter matches a configured blame target.
+            # Requirement: Tool execution marks the blame target as attributed and resolves the source target on successful tool execution.
             # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
             # Requirement: When all session targets are resolved, resolving a target produces a terminating response indicating that the session completed successfully for submitted targets, carrying the explanation for failed targets, or attributing defect feedback to the blame target owning node for blamed targets, when mcp mode is inactive.
             resp_ok3 = blame_tool.execute_tool(b_ok3)
@@ -1596,9 +1596,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertFalse(resp_chk_ok.is_failed)
 
             # Requirement: When a target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open session target.
-            # Requirement: Executing the submit tool marks the target as submitted and resolves the target.
+            # Requirement: Tool execution marks the target as submitted and resolves the target.
             # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
-            # Requirement: When open session targets remain, resolving a target produces a non-terminating response with a reminder listing remaining open target files formatted via the template formatter.
+            # Requirement: When blame, submit, or fail is successfully called on a submit target and other submit targets remain, resolving the target produces a non-terminating response with a reminder listing remaining submit targets left for the agent to handle formatted via the template formatter.
             resp_sub_ok = submit.execute_tool(b_empty)
             self.assertFalse(resp_sub_ok.is_failed)
             self.assertEqual(rc.get_node_state(node1), "SUBMITTED")
@@ -1614,7 +1614,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertFalse(resp_chk_rw2.is_failed)
 
             # Requirement: When a target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted target.
-            # Requirement: Executing the submit tool marks the target as submitted and resolves the target.
+            # Requirement: Tool execution marks the target as submitted and resolves the target.
             # Requirement: Resolving a session target locks its declared read-write files in the edit manager against subsequent modification, and marks in-session dependent targets as blocked upon target failure or blame attribution.
             # Requirement: When all session targets are resolved, resolving a target produces a terminating response indicating that the session completed successfully for submitted targets, carrying the explanation for failed targets, or attributing defect feedback to the blame target owning node for blamed targets, when mcp mode is inactive.
             resp_sub_rw2 = submit.execute_tool(b_empty)
@@ -1801,8 +1801,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.subgraph.ready_batches = []
             self.subgraph.batch_index = 0
 
-            # Requirement: When no open targets remain, executing the get work tool obtains dirty nodes from dag storage and dag subgraph, updating the active nodes and execution version on role config.
-            # Requirement: If no dirty nodes are ready for cleaning, executing the get work tool produces an idle response indicating that no dirty nodes are ready.
+            # Requirement: Tool execution obtains dirty nodes from dag storage and dag subgraph, updating the active nodes and execution version on role config, when no open targets remain.
+            # Requirement: Tool execution produces an idle response indicating that no dirty nodes are ready if no dirty nodes are ready for cleaning.
             resp = get_work.execute_tool(ActualParameterBindings(bindings=set()))
             self.assertFalse(resp.is_failed)
             self.assertFalse(resp.is_terminated)
@@ -1847,8 +1847,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # Call get_work with max_batch_size = 1
             # Requirement: [Tool] When a parameter is required, an argument must be supplied for tool execution.
             # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter.
-            # Requirement: When no open targets remain, executing the get work tool obtains dirty nodes from dag storage and dag subgraph, updating the active nodes and execution version on role config.
-            # Requirement: When ready dirty nodes are obtained, executing the get work tool materializes startup templates on disk, constructs the task prompt from dirty node definitions, guide instructions, and incoming messages from dag storage formatted via the template formatter, and returns the rendered task prompt.
+            # Requirement: Tool execution obtains dirty nodes from dag storage and dag subgraph, updating the active nodes and execution version on role config, when no open targets remain.
+            # Requirement: Tool execution materializes startup templates on disk, constructs the task prompt from dirty node definitions, guide instructions, and incoming messages from dag storage formatted via the template formatter, and returns the rendered task prompt when ready dirty nodes are obtained.
             initial_version = self.role_cfg.execution_version
             resp = get_work.execute_tool(
                 ActualParameterBindings(

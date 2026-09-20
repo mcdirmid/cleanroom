@@ -391,7 +391,7 @@ class RunController(sandbox_run_control.RunController, Singleton):
             return ""
         tmpl_formatter = get_singleton(template_format.TemplateFormatter)
         template_str = (
-            "Remaining open files:\n"
+            "Remaining submit targets to handle:\n"
             "<!-- for: node in nodes -->\n"
             "- `<node.src_alias>`\n"
             "<!-- endfor -->"

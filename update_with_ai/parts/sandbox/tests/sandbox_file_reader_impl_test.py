@@ -293,8 +293,8 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             bindings1 = ActualParameterBindings(
                 bindings={(view_tool.path_parameter, self.ro_file)}
             )
-            # Requirement: Executing the view file tool reads file content using the filesystem at the host path formed from the alias manager workspace root and bound file workspace path, returning content formatted with one-indexed right-aligned line numbers followed by a colon and space.
-            # Requirement: View file tool responses for read-write files carry a suppression key matching the file's short name, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
+            # Requirement: Tool execution reads file content from the filesystem at the host path formed from the alias manager workspace root and the bound file workspace path, returning the content formatted with one-indexed right-aligned line numbers followed by a colon and space, and formatting read-only markdown files ending with `.md` using the template formatter with session template parameters after filtering out paragraphs beginning with `> META:`.
+            # Requirement: View file tool responses for read-write files carry a suppression key matching the file's relative path, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
             resp1 = view_tool.execute_tool(bindings1)
             self.assertFalse(resp1.is_failed)
             self.assertIsNone(resp1.suppression_key)
@@ -342,7 +342,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
                 resp_unknown.reminder, "Only declared files can be inspected."
             )
 
-            # Requirement: Executing the view file tool with an unbound file whose relative path or qualified path addresses a module name or ends with .py and matches a declared read-only grounding specification ending with .pyi resolves to that grounding specification file alias.
+            # Requirement: When an unbound file is supplied, tool execution resolves to that grounding specification file alias if the relative path or qualified path addresses a module name or ends with `.py` and matches a declared read-only grounding specification ending with `.pyi`.
             # Transparent resolution: stub.py -> stub.pyi
             resp_py = view_tool.execute_tool(
                 ActualParameterBindings(
@@ -379,7 +379,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertFalse(resp_bare.is_failed)
             self.assertIn("class Stub:", resp_bare.content)
 
-            # Requirement: Executing the view file tool with an unbound file addressing a test file ending with _test.py fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract.
+            # Requirement: When an unbound file is supplied, tool execution fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract if the unbound file addresses a test file ending with `_test.py`.
             # Test files are rejected with dedicated guidance
             resp_test = view_tool.execute_tool(
                 ActualParameterBindings(
@@ -411,7 +411,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         with enter_phase(agent_session, registry=self.registry) as scope:
             view_tool = scope.get_singleton(ViewFileTool)
 
-            # Requirement: When the target file does not exist on disk, view file tool execution treats a read-write file as having empty content, and fails with a response guiding agent recovery when inspecting a missing read-only file.
+            # Requirement: Tool execution treats a read-write file as having empty content when the target file does not exist on disk, and fails with a response guiding agent recovery when inspecting a missing read-only file.
             rw_bindings = ActualParameterBindings(
                 bindings={(view_tool.path_parameter, missing_rw_file)}
             )
@@ -457,7 +457,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertGreater(len(search_tool.parameters), 0)
             conv = search_tool.regex_pattern_parameter.parameter_converter
             # Requirement: [SearchTool] The search tool accepts a regex pattern parameter.
-            # Requirement: The search tool regex pattern parameter uses the regex pattern converter.
+            # Requirement: The search tool regex pattern parameter uses the regex pattern parameter type.
             self.assertIsNotNone(conv.actual_type)
             self.assertIsNotNone(conv.wire_type)
 
@@ -465,22 +465,22 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             bindings = ActualParameterBindings(
                 bindings={(search_tool.regex_pattern_parameter, "Line")}
             )
-            # Requirement: The search tool searches for regex pattern matches across read-only files and read-write files using the filesystem.
+            # Requirement: Tool execution searches for regex pattern matches across the read-only files and read-write files in the filesystem.
             # Requirement: [SearchTool] Executing the search tool searches pattern matches across the session's read-only and read-write files.
             resp = search_tool.execute_tool(bindings)
             self.assertFalse(resp.is_failed)
             # Read-only shows line content
-            # Requirement: On successful search tool execution, matches in read-only files provide matched line contents and line numbers sanitized by the alias manager to mask host paths.
+            # Requirement: Tool execution provides matched line contents and line numbers for read-only files, sanitized by the alias manager to mask host paths, on successful execution.
             self.assertIn("readonly.txt:1: Line 1 readonly", resp.content)
             # Read-write masks details to prevent unanchored edits
-            # Requirement: On successful search tool execution, matches in read-write files state that matches were found but cannot be displayed to prevent unanchored edits.
+            # Requirement: Tool execution states that matches were found but cannot be displayed to prevent unanchored edits, for read-write files.
             self.assertIn("writable.txt: matches found", resp.content)
 
             # Invalid regex pattern fails
             bindings_invalid = ActualParameterBindings(
                 bindings={(search_tool.regex_pattern_parameter, "[unclosed")}
             )
-            # Requirement: Executing the search tool fails when provided with an invalid regex pattern.
+            # Requirement: Tool execution fails when given an invalid regex pattern.
             resp_inv = search_tool.execute_tool(bindings_invalid)
             self.assertTrue(resp_inv.is_failed)
 
@@ -491,6 +491,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             b = ActualParameterBindings(
                 bindings={(view_tool.path_parameter, self.rw_file)}
             )
+            # Requirement: Tool execution records the read file in the edit manager on successful execution.
             resp = view_tool.execute_tool(b)
             self.assertFalse(resp.is_failed)
             self.assertEqual(self.edit_mgr.last_read_or_edited_file, self.rw_file)
@@ -502,5 +503,4 @@ if __name__ == "__main__":
 # Untested requirements:
 # - [Tool] When tool execution fails, the response content includes error and diagnostic messages along with guidance on how the agent can execute the tool correctly.
 # - [Tool] When a parameter is required, an argument must be supplied for tool execution.
-# - Executing the view file tool with an unbound file fails with a response guiding agent recovery that lists available readable file aliases, and reminds the agent that only declared files can be inspected.
-# - When an unbound file equals the guide file configured for step-mode, the view file tool failure response indicates that `advance` must be called to read the guide instead.
+# - When an unbound file is supplied, tool execution fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead, otherwise.
