@@ -10,7 +10,7 @@ Grounding is intended to guarantee that an implementation is **realizable** befo
 - **Absence of Floating Directives**: No component relies on ambient context, implicit global variables, or uncontracted behavior.
 
 ### 1.1 The Current Grounding Failure Mode
-Today, structural AST rules (type annotations, decorators, MRO inheritance) are enforced deterministically by [`grounding_tool.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/support/lib/grounding_tool.py). However, semantic grounding itself—the proof that an operation can actually satisfy its requirements—relies on an unverified natural language block in implementation stubs:
+Today, structural AST rules (type annotations, decorators, MRO inheritance) are enforced deterministically by `grounding_tool.py`. However, semantic grounding itself—the proof that an operation can actually satisfy its requirements—relies on an unverified natural language block in implementation stubs:
 ```python
 GROUNDING_ARGUMENT:
 - Receives actual parameter bindings, resolves host paths using imported agent_file_alias.AliasManager workspace root in the same session lifecycle tier, resolves unbound .py and module requests...
@@ -18,7 +18,8 @@ GROUNDING_ARGUMENT:
 Because `SpecLintVisitor` treats `GROUNDING_ARGUMENT:` as an opaque string, semantic grounding is an **unverifiable honor system**:
 1. **LLM Hallucinations**: Models generate plausible-sounding narrative arguments that gloss over missing method arguments, inaccessible singleton collaborators, or unhandled branches.
 2. **Delayed Error Discovery**: Grounding gaps are not detected at the specification stage. Instead, they manifest late during library code generation (`grounding_to_lib`) or unit testing, forcing emergency ad-hoc fixes or fabricated requirements.
-3. **Lack of Falsifiability**: An agent or human cannot mechanically verify whether a proposed specification is sound without mentally executing the entire system.
+3. **Premature Implementation Leaks**: Authors prematurely jump straight to concrete library APIs (e.g. hardcoding `tool_provider.ToolManager.install_tool(...)` into docstrings or requirements) instead of stating the high-level domain capability and letting grounding reason about how it is grounded.
+4. **Lack of Falsifiability**: An agent or human cannot mechanically verify whether a proposed specification is sound without mentally executing the entire system.
 
 ### 1.2 Dual Objectives of Formal Grounding
 Formalizing grounding is not merely a gatekeeping check. It serves two distinct generative and self-healing functions in the Cleanroom pipeline:
@@ -27,195 +28,248 @@ Formalizing grounding is not merely a gatekeeping check. It serves two distinct 
 
 ---
 
-## 2. Theoretical Foundations: FOL vs. Datalog
+## 2. Foundational Principles: Separating Grounding from Control Flow
 
-### 2.1 Why Classical First-Order Logic (FOL) Falls Short
-The intuitive approach to formalizing grounding is:
-> *"Represent each requirement as a first-order logic rule, and use backward chaining from the target requirement back to root axioms provided by external boundary specs (`_ext`)."*
+### 2.1 The Two Orthogonal Functions in Grounding Stubs
+Historically, `.pyi` grounding specifications have conflated two separate concerns:
+1. **Presentation of Requirements**: A text-based organization of requirements under specific operations or types (`FRESH_REQUIREMENTS:`). This is an organizational convenience. It is orthogonal to semantic feasibility.
+2. **Semantic Grounding Reasoning**: A formal proof establishing whether the requirements can be feasibly realized using accessible capabilities and state.
 
-While attractive, classical First-Order Logic (FOL) and Horn-clause backward chaining (e.g., standard Prolog) cannot adequately represent software specification dependencies for fundamental mathematical reasons:
+### 2.2 Eliminating Accidental Complexity
+To make grounding mathematically verifiable, we discard two sources of accidental complexity:
 
-1. **Monotonicity vs. State Mutation (The Frame Problem)**:
-   Classical FOL is monotonic: if $P$ is proven, it remains true forever ($\Gamma \vdash P \implies \Gamma \cup \{A\} \vdash P$). Software requirements, however, describe destructive updates and state transitions (e.g., `EditManager.record_read`, `LoopGuard.record_progress`). In FOL, modeling transitions requires reifying states (Situation Calculus: $\text{Holds}(P, \text{do}(a, s))$), which immediately triggers the Frame Problem, causing proof searches to explode.
-2. **Propositional Truth vs. Constructive Value Synthesis (Curry–Howard)**:
-   FOL answers a boolean question: *"Is proposition $\phi$ true?"* Grounding asks whether a runtime value or transformation can be *constructed*:
-   $$\text{actual\_parameter\_bindings} \xrightarrow{\text{extract}} \text{path} \xrightarrow{\text{AliasManager}} \text{host\_path} \xrightarrow{\text{filesystem\_ext}} \text{raw\_text} \xrightarrow{\text{TemplateFormatter}} \text{Response}$$
-   Under the Curry–Howard isomorphism, this is **Type Inhabitation / Term Synthesis** in Constructive Logic, not classical truth evaluation.
-3. **Scoping and Lifecycle Tiers as Epistemic Modalities**:
-   Cleanroom enforces strict tier accessibility (`system` services cannot access `agent_session` services). In pure FOL, all terms share a flat universe. Grounding requires an **Object-Capability System** or **Epistemic Modal Logic** ($K_{\text{tier}} \phi$: "service at tier $T$ has access to $\phi$").
-4. **Exhaustive Branch Coverage vs. Single Proof Search**:
-   Backward chaining in Prolog stops at the *first* proof path. Software requirements mandate that *all* mutually exclusive input branches (e.g. bound file vs. unbound file vs. test file) are independently grounded.
+1. **Control-Flow Conditions (`when`, `if/else`) are for Code Generation, NOT Grounding**:
+   Grounding does not care whether a runtime branch evaluates to true or false. Grounding is strictly an **existential reachability problem**: can the component perform the required actions and observe the required information across all mandated behaviors? The runtime branching logic belongs strictly to library code generation (`grounding_to_lib`).
+2. **Prohibitions (`prohibits`, "never do X") Do Not Require Grounding**:
+   Doing nothing requires zero capability and zero state access. Prohibitions are safety invariants and unit test assertions, not grounding feasibility obligations.
 
-### 2.2 How Datalog Goes Beyond First-Order Logic (The Transitive Closure Paradox)
-It sounds paradoxical that Datalog—syntactically a restricted subset of FOL (function-free Horn clauses)—can express things FOL cannot.
+### 2.3 The Reachable Scope Environment (a - e)
+Every requirement has a scope to which it applies (an operation on an object type, or an invariant on an object type). For any given scope S, the accessible environment consists strictly of:
+- **a. Parameters** of operation S (if an operation requirement).
+- **b. Properties** of the enclosing object type (accessible via `self`).
+- **c. Operations** accessible on the same type, or reachable by traversing properties or parameters.
+- **d. Properties and operations** accessible via singleton objects visible from components imported into the local component, respecting lifecycle tier containment (child tiers can access ancestor tiers; ancestor tiers cannot access child tiers).
+- **e. Assumptions and extension facts** in scope (`_ext`), which are taken as axioms.
 
-The difference lies in **Least Fixed Point (LFP) Semantics vs. Classical Model Theory**:
-- **The Transitive Closure Barrier**: By the *Compactness Theorem of First-Order Logic*, it is mathematically impossible to write a finite FOL sentence that expresses unbounded reachability ("there exists a path of arbitrary length from $A$ to $B$"). FOL can only state reachability up to a fixed constant length $k$.
-- **Datalog's Recursive Power**: Datalog defines relations through recursion evaluated to a least fixed point:
-  ```prolog
-  reachable(X, Y) :- edge(X, Y).
-  reachable(X, Y) :- reachable(X, Z), edge(Z, Y).
-  ```
-  By the Immerman–Vardi theorem, Datalog with stratified negation captures all polynomial-time relational queries ($P\text{TIME}$), strictly exceeding the expressive power of finite First-Order Logic on finite models.
+### 2.4 Goal Extraction vs. Solver Inference
 
-In Cleanroom:
-- Transitive component import closures (`imports:`),
-- Lifecycle tier reachability graphs (`system` $\ge$ `agent_session`),
-- Dependency cleaning graph traversals (`dag_subgraph`), and
-- Multi-step requirement derivation chains back to `_ext` root axioms,
-are all **transitive closures**. Datalog computes them natively and deterministically in polynomial time.
+A core architectural principle of Cleanroom grounding is the strict separation between **Goal Extraction** (authoring specification obligations) and **Solver Inference** (proving reachability and synthesizing witnesses):
 
----
+1. **Specification Extraction (Without Inference)**:
+   - When extracting grounding requirements from High-Level Specifications (`high/*.md`), the author states **only direct domain obligations and explicit ambient observations**.
+   - **No Manual Mental Execution**: Specification authors must never mentally execute the implementation or unroll internal assembly plumbing into docstrings (e.g. manually unrolling `action("read", BoundFile)` into `knows("workspace root")`, `knows("workspace path")`, and `filesystem_ext.read_text`).
+   - **Compliance with HLS Rule 109**: High-level specifications must state capabilities and invariants declaratively around domain entities without micromanaging collaborator routing (e.g. stating "responses for read-only files mask host paths" rather than "sanitize host paths through the alias manager").
 
-## 3. Datalog: Forward Chaining, Backward Queries, and Magic Sets
+2. **Solver Inference (Reachability Proof & Witness Synthesis)**:
+   - The automated reasoning engine (Datalog / Reachability solver) is responsible for determining *how* high-level domain actions reach concrete external boundary primitives (`_ext`) or collaborator methods.
+   - The solver verifies that necessary context (e.g. `WorkspaceRoot` from `AliasManager`, `WorkspacePath` from `BoundFile`) is accessible in scope and proves the path to `filesystem_ext.read_text`.
+   - The resulting proof tree forms the **derivation witness**, which guides downstream library code generation (`lib/*.py`) without hallucinated wiring.
 
-### 3.1 Bottom-Up (Forward Chaining) Evaluation
-Standard Datalog engines (e.g. Soufflé, DDlog) evaluate rules **bottom-up (forward chaining)**:
-1. Start with the Extensional Database (EDB): base facts (e.g. `service("ReadManager", "agent_session")`, `imports("sandbox_file_reader_impl", "filesystem_ext")`).
-2. Iteratively apply Intensional Database (IDB) rules using **Semi-Naive Evaluation** to derive new facts until reaching a least fixed point.
-3. Every derived fact is guaranteed to be a true consequence of the rules.
-4. Because function symbols in recursive cycles are prohibited, evaluation **always terminates in polynomial time**.
+3. **Interface Grounding Contracts and Compounding**:
+   - Interface methods are abstract protocol stubs with ellipsis (`...`) bodies. They declare capability obligations and information guarantees that any conforming implementation must satisfy.
+   - When an implementation accesses an interface type (via parameter `a`, property `b`, or imported singleton `d`), the interface's declared `GROUNDING_REQUIREMENTS:` compound into the implementation's accessible scope environment.
 
-### 3.2 Top-Down Queries via the Magic Sets Transformation
-When querying whether a specific requirement is grounded:
-`?- is_grounded("sandbox_file_reader_impl", "execute_tool", "Response").`
+4. **Mandatory Numbered Requirements & Stable Citations**:
+   - Requirements under `FRESH_REQUIREMENTS:` must be explicitly numbered (`1.`, `2.`, ...) to provide unambiguous, stable citation anchors for justifications under `GROUNDING_REQUIREMENTS:` and `GROUNDING_ASSUMPTIONS:`.
 
-Evaluating raw forward chaining across the whole system would compute millions of irrelevant facts. The **Magic Sets Transformation** solves this:
-1. The compiler statically analyzes the top-down goal query.
-2. It introduces auxiliary "magic" filter predicates that restrict computation strictly to facts that are causally relevant to proving the goal.
-3. The rewritten program is evaluated **bottom-up (forward chaining)**.
+5. **Strongly Typed Domain Concepts**:
+   - Grounding requires named types. Complex domain parameters and payloads must not degenerate into untyped generic primitives (`dict`, `Mapping[str, Any]`, `str`). Concepts passed across collaborators must be introduced as explicit named types (e.g. `@data_type class TemplateParameters(Mapping[str, Any]): ...`).
 
-**Result**: Magic Sets provides the **goal-directed efficiency of top-down backward chaining** combined with the **termination guarantees, cycle safety, and set-at-a-time performance of bottom-up forward chaining**.
+6. **Schema Properties Omit Grounding**:
+   - Pure schema descriptors, constant identifiers, and parameter definitions (e.g. `name`, `description`, `path_parameter`) omit grounding blocks unless exercising an external capability.
 
-### 3.3 Forward Reachability in a Scoped Universe
-For single-operation grounding, forward chaining is particularly natural:
-1. Define the local universe for an operation:
-   $$\text{Base Facts} = \{\text{Op Parameters}\} \cup \{\text{In-Scope Ancestor Singletons}\} \cup \{\text{Imported Collaborator Methods}\} \cup \{\text{\_ext Primitives}\}$$
-2. Forward chaining computes the **forward reachable closure** of all values, types, and state capabilities the operation can generate.
-3. If the required postconditions and return types belong to this reachable set, the operation is grounded. If not, the set difference $(\text{Required} \setminus \text{Reachable})$ pinpoints the exact grounding gap.
+7. **Elimination of Inherited Prose Duplication**:
+   - Specifications using grounding contracts omit `INHERITED_REQUIREMENTS:` and `INHERITED_ASSUMPTIONS:`. Each type and operation declares its own fresh numbered requirements and justified grounding entries.
 
 ---
 
-## 4. Complex Requirement Patterns: Beyond a Simple Predicate Set
+## 3. The Core Grounding Predicates: `action` and `knows`
 
-While core architectural scope rules fit into a small relational metamodel, real-world specifications in Cleanroom feature complex behavioral patterns that exceed simple static predicates:
+All grounding obligations in scope S decompose into two typed predicates:
 
-### 4.1 Temporal Delta State (Initial vs. Current)
-In [`sandbox_file_editor_impl.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/sandbox/high/sandbox_file_editor_impl.md#L18):
-> *"The edit manager exposes whether workspace file modifications occurred during the session by comparing current workspace file content against initial content before editing..."*
+### 3.1 `action(...)` (Capability Feasibility)
 
-This requires comparing two distinct temporal snapshots of the *same* physical resource: $Content(t_0)$ vs $Content(t_{\text{now}})$. A static property predicate cannot express "initial session snapshot" without an explicit state model.
+Capabilities represent operations or state mutations invoked on domain entities or collaborators:
 
-### 4.2 Higher-Order Graph Quantification Across Execution Phases
-In [`bazel_loop_impl.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/bazel/high/bazel_loop_impl.md#L22):
-> *"Cleaning halts immediately and produces a failing build result if node cleaning fails, if any reachable node in the target subgraph remains dirty after cleaning, or if an unexpected failure occurs..."*
+- **Unary Action**: `action(verb, TargetType): <justification>`
+  - Examples: `action("read", agent_file_alias.BoundFile)`, `action("install", tool_provider.Tool)`
+- **Relational Action**: `action(verb, TargetType, preposition, AuxType): <justification>`
+  - Examples: `action("format", str, "with", template_format.TemplateParameters)`, `action("record", agent_file_alias.BoundFile, "in", sandbox_file_editor.EditManager)`
 
-This evaluates a second-order aggregation over a dynamic set: computing the transitive reachable subgraph from a target, filtering for nodes where `dirty == True`, and evaluating this predicate strictly *after* an iterative cleaning loop concludes.
+#### Subtyping and Subsumption
+Action resolution natively respects object-oriented and structural subtyping:
+- If a collaborator provides `action("install", tool_provider.Tool)`, an operation requiring `action("install", sandbox_file_reader.ViewFileTool)` is automatically proven grounded via covariance over the target type (`ViewFileTool <: Tool`).
+- The author does not need to invent ad-hoc aliases; the solver leverages the declared type hierarchy in the `.pyi` AST.
 
-### 4.3 Domain-Specific Algorithmic Synthesis
-In [`openai_driver_impl.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/openai/high/openai_driver_impl.md#L18):
-> *"When a model response is truncated at the generation limit, the loop driver terminates any truncated tool invocation by repairing unclosed arguments into valid JSON and appending a tool failure response with the tool's suppression key..."*
+### 3.2 `knows(...)` (Knowledge Custody)
 
-Standard libraries do not provide "repair unclosed JSON". This requirement specifies an internal algorithmic transformation. It cannot be satisfied simply by delegating to an imported collaborator; it requires an explicit internal utility contract.
+`knows` is strictly reserved for **ambient contextual data or state observations** that a requirement explicitly demands inspecting as an end in itself:
 
-### 4.4 Multi-Way Fallback with Non-Failing Warning Payloads
-In [`sandbox_file_editor_impl.md`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/parts/sandbox/high/sandbox_file_editor_impl.md#L34):
-> *"Implicitly binds the target file to the last file read or edited in the edit manager if that file is a read-write file, informs the agent with a warning in the response content that the path was implicitly bound while allowing the tool execution to proceed, or fails if no file has been read or edited or if the last read or edited file is not a read-write file, when the path parameter is omitted."*
+- **Syntax**: `knows(specifier, DataType): <justification>`
+  - Examples: `knows("guide file", Optional[agent_file_alias.UnboundFile])`, `knows("mcp mode", bool)`
 
-This branch ties parameter resolution directly to response payload mutation *without* failing execution, while branching to a fatal failure if the fallback condition is unmet.
+#### What `knows` is NOT:
+1. **Not Singletons**: Visible singletons in the same lifecycle tier are available by import. You never write `knows(AliasManager)` or `knows(NodeConfig)`.
+2. **Not Properties of Arguments in Scope**: If an operation receives `target_file: BoundFile`, accessing `target_file.workspace_path` or `target_file.relative_path` is intrinsic to holding `BoundFile`. You never write `knows("workspace path")`.
+3. **Not Internal Assembly Plumbing**: Intermediate variables needed only to fulfill an action (such as `workspace_root` needed to resolve a disk path for `action("read", BoundFile)`) are inferred by the solver, never declared as manual `knows` requirements.
 
 ---
 
-## 5. The 3-Tier Formal Grounding Architecture
+## 4. Datalog and Reachability in Scoped Environments
 
-Cleanroom addresses these challenges by decomposing grounding into three distinct, verifiable tiers:
+### 4.1 Forward Reachability
+For single-operation grounding, evaluation proceeds via forward reachability over the scoped environment:
+1. **Base Facts**:
+   ```
+   Environment(S) = Params(S) U Props(Self) U ReachableOps(Self) U VisibleSingletons(Imports) U ExtFacts
+   ```
+2. Forward chaining computes the reachable closure of all values, types, and operational capabilities the scope can access or invoke.
+3. For each required `action(...)` and `knows(...)`, the reasoner checks whether a provider exists in the reachable set (including via subtyping subsumption).
+4. If provable, the derivation witness (the exact collaborator calls and access paths) is recorded for downstream code generation. If unprovable, the set difference pinpoints the exact grounding gap.
+
+### 4.2 Transitive Closure & Lifecycle Tier Containment
+Transitive component imports (`imports:`) and lifecycle tier hierarchies (`system` >= `agent_session`) form directed acyclic reachability graphs. Datalog computes these transitive closures natively and deterministically in polynomial time, guaranteeing that no cycle or recursion can cause non-termination.
+
+---
+
+## 5. The Grounding Architecture
 
 ```mermaid
 flowchart TD
-    subgraph Tier1["Tier 1: Relational Scope & Lifecycle Rules (Datalog)"]
-        T1A["Lifecycle Tier Accessibility (system >= session)"]
-        T1B["Component Import Closure & Visibility"]
-        T1C["MRO & Interface Contract Conformance"]
+    subgraph Environment["Reachable Scope Environment (a - e)"]
+        A["a. Operation Parameters"]
+        B["b. Object Type Properties (self)"]
+        C["c. Reachable Operations (self / params / props)"]
+        D["d. Visible Singletons & Compounded Interfaces"]
+        E["e. Boundary Primitives (_ext) & Assumptions"]
     end
-    
-    subgraph Tier2["Tier 2: Typed Dataflow & Value Provenance (Constructive Graph)"]
-        T2A["Parameter Provenance (Where does input come from?)"]
-        T2B["Type Inhabitation (f: A -> B compositions)"]
-        T2C["Root External Capability Anchoring (_ext grounding)"]
+
+    subgraph Queries["Atomic Grounding Queries"]
+        Act["action(verb, TargetType, [prep, AuxType])<br/>Can S execute this capability?"]
+        Know["knows(specifier, DataType)<br/>Can S access this ambient state?"]
     end
-    
-    subgraph Tier3["Tier 3: Effect Framing & Branch Exhaustiveness (Contract Logic)"]
-        T3A["Modifies Frame (Permitted state mutations)"]
-        T3B["Precondition Satisfaction (Assumptions check)"]
-        T3C["Exhaustive Input Partitioning (All branches grounded)"]
+
+    Queries --> Reasoner["Logic Reasoner & Reachability Solver"]
+    Environment --> Reasoner
+
+    subgraph Outcomes["Grounding Proof"]
+        Pass["Grounded -> Derivation Witness Blueprint"]
+        Fail["Ungrounded -> Structured Diagnostic"]
     end
-    
-    Tier1 --> Tier2 --> Tier3
+
+    Reasoner --> Pass
+    Reasoner --> Fail
 ```
 
-### Tier 1: Relational Scope & Lifecycle Verification (Datalog Engine)
-Verifies systemic architectural rules across the whole corpus:
-- **Child tiers access ancestor tiers; ancestor tiers never access child tiers.**
-- **Components can only access singletons declared locally or in explicit `imports:`.**
-- **All referenced interfaces must be implemented completely.**
+### 5.1 Interface Contracts & Compounding Example: `sandbox_file_reader.pyi`
 
-### Tier 2: Typed Dataflow & Value Provenance (Constructive Graph)
-Replaces unstructured English in `GROUNDING_ARGUMENT:` with structured derivation blocks in `.pyi` docstrings:
+Interface specifications declare numbered domain requirements alongside capability obligations with explicit justifications:
+
 ```python
 @singleton_type('agent_session')
-class ViewFileTool(sandbox_file_reader.ViewFileTool):
+class ReadManager(Protocol):
+    """
+    PURPOSE:
+    Defined as an agent session service that manages inspection of workspace files
 
-    @operation
-    @override
-    def execute_tool(
-        self,
-        actual_parameter_bindings: tool_provider.ActualParameterBindings
-    ) -> tool_provider.Response:
+    FRESH_REQUIREMENTS:
+    1. The read manager is an agent session service that manages inspection of workspace files.
+    2. The read manager exposes the session read-only files and read-write files.
+    3. When step mode is active, the read manager is configured with an unbound guide file.
+
+    GROUNDING_REQUIREMENTS:
+      - action("install", tool_provider.Tool): Installs workspace file inspection tools into the session environment to satisfy requirement 1.
+    """
+
+    @property
+    def read_only_files(self) -> Set[agent_file_alias.ReadOnlyFile]:
         """
         PURPOSE:
-        Inspects workspace file content with line numbering and sanitization.
+        Exposes the agent session's set of read-only files to support session startup context injection
 
-        GROUNDING:
-          collaborators:
-            - agent_file_alias.AliasManager
-            - filesystem_ext
-            - sandbox_file_editor.EditManager
-          derivation:
-            alias = actual_parameter_bindings.get(self.path_parameter)
-            host_path = AliasManager.resolve_host_path(alias)
-            raw_text = filesystem_ext.read_text(host_path)
-            numbered_text = self._format_lines(raw_text)
-            sanitized_text = AliasManager.sanitize_text(numbered_text)
-            out = tool_provider.Response(content=sanitized_text)
-          effects:
-            - EditManager.record_read(alias)
+        FRESH_REQUIREMENTS:
+        1. Exposes the agent session read-only files.
         """
         ...
 ```
-The AST visitor type-checks every step against imported `.pyi` signatures and verifies that `filesystem_ext` anchors the root file-reading capability.
 
-### Tier 3: Effect Framing & Branch Exhaustiveness
-- **Frame Containment**: State mutations listed under `effects:` can only target services in the same lifecycle tier or registered stores.
-- **Exhaustive Branching**: Verifies that conditional requirements (`branch: ...`) form an exhaustive partition over input variants (e.g. `BoundFile` vs `UnboundFile`).
+Notice that the property `read_only_files` simply declares its domain requirement and return type without ritual grounding blocks, while `ReadManager` justifies its `action("install", tool_provider.Tool)` directly against requirement 1.
+
+### 5.2 Implementation Reachability Example: `sandbox_file_reader_impl.pyi`
+
+Implementation specifications are the target of reachability verification:
+
+#### `ReadManager.initialize`
+```python
+    @operation
+    def initialize(self) -> None:
+        """
+        PURPOSE:
+        Provides that initialization unconditionally installs the view file tool, installs the can read tool when mcp mode is active, and never installs the search tool
+
+        FRESH_REQUIREMENTS:
+        1. Provides that initialization unconditionally installs the view file tool, installs the can read tool when mcp mode is active, and never installs the search tool.
+
+        GROUNDING_REQUIREMENTS:
+          - action("install", tool_provider.Tool): Installs the view file tool and can read tool into the tool provider registry to satisfy requirement 1.
+        """
+        ...
+```
+Resolution:
+1. `action("install", tool_provider.Tool)`: Resolved via imported singleton `tool_provider.ToolManager.install_tool(tool: Tool)`. Covariance satisfies installing both `ViewFileTool` and `CanReadTool`.
+
+#### `ViewFileTool.execute_tool`
+```python
+    @operation
+    @override
+    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
+        """
+        PURPOSE:
+        Implements execute_tool on the view file tool to inspect file content with line number formatting and alias validation
+
+        FRESH_REQUIREMENTS:
+        1. Records the read file in the edit manager on successful execution.
+        2. Reads file content of the bound file from the filesystem, returning the content formatted with one-indexed right-aligned line numbers followed by a colon and space, and formatting read-only markdown files ending with .md with session template parameters after filtering out paragraphs beginning with > META:.
+        3. Treats a read-write file as having empty content when the target file does not exist on disk, and fails with a response guiding agent recovery when inspecting a missing read-only file.
+        4. Resolves to that grounding specification file alias if the relative path or qualified path addresses a module name or ends with .py and matches a declared read-only grounding specification ending with .pyi, when an unbound file is supplied.
+        5. Fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract if the unbound file addresses a test file ending with _test.py.
+        6. Fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that advance must be called to read the guide instead, otherwise.
+        7. View file tool responses for read-write files carry a suppression key matching the file's relative path, while responses for read-only files omit suppression keys and mask host paths.
+
+        GROUNDING_REQUIREMENTS:
+          - action("record", agent_file_alias.BoundFile, "in", sandbox_file_editor.EditManager): Records file inspection in the edit manager as required by requirement 1.
+          - action("read", agent_file_alias.BoundFile): Reads file content from the filesystem as required by requirement 2.
+          - action("format", str, "with", template_format.TemplateParameters): Formats markdown templates with session template parameters as required by requirement 2.
+          - action("sanitize", str, "using", agent_file_alias.AliasManager): Masks host paths in output responses as required by requirement 7.
+          - knows("guide file", Optional[agent_file_alias.UnboundFile]): Checks whether an unbound file matches the session guide file as required by requirement 6.
+        """
+        ...
+```
+
+Notice the stark contrast with old, procedural grounding annotations:
+- **No manual unrolling**: The author never writes `knows("workspace root")` or `knows("workspace path")`. The author states the domain goal: `action("read", agent_file_alias.BoundFile)`.
+- **Automatic Solver Inference**: The solver automatically unifies `action("read", BoundFile)` with `filesystem_ext.read_text(path: HostPath)` by finding `BoundFile.workspace_path` on the input entity and `AliasManager.workspace_root` on the visible session singleton, resolving them via `file_paths.resolve_path`.
+- **Derivation Witness**: The solver synthesizes the complete witness blueprint for library generation:
+  ```
+  host_path = file_paths.resolve_path(AliasManager.workspace_root, target_file.workspace_path)
+  content = filesystem_ext.read_text(host_path)
+  ```
 
 ---
 
 ## 6. The Bidirectional Neuro-Symbolic Workflow
 
-Rather than treating grounding as an isolated verification pass, Cleanroom integrates grounding bidirectionally across the authoring lifecycle:
-
 ```mermaid
 flowchart TD
-    HLS["1. High-Level Specification (HLS)<br/>high/<name>.md"]
-    Grounding["2. Grounding Stubs<br/>grounding/<name>.pyi"]
+    HLS["1. High-Level Specification (HLS)<br/>high/<name>.md<br/>(Declarative requirements without collaborator routing)"]
+    Grounding["2. Grounding Stubs<br/>grounding/<name>.pyi<br/>(Declares typed action and knows goals)"]
     
     HLS --> Grounding
     
     subgraph Verifier["3. Logic & Grounding Verifier"]
         ScopeCheck["Datalog Scope & Tier Check"]
-        FlowCheck["Typed Dataflow & Reachability"]
-        BranchCheck["Branch Exhaustiveness & Frame Check"]
-        ScopeCheck --> FlowCheck --> BranchCheck
+        Reachability["Reachability & Witness Solver (a - e)"]
+        ScopeCheck --> Reachability
     end
     
     Grounding --> Verifier
@@ -223,149 +277,96 @@ flowchart TD
     subgraph Outcome["Outcomes"]
         direction TB
         Pass["Proof Succeeded"]
-        Gap["Semantic Gap Encountered"]
-        Fail["Architectural Error in HLS"]
+        Fail["Grounding Gap (Unreachable Action or Knowledge)"]
     end
     
-    BranchCheck --> Pass
-    BranchCheck --> Gap
-    BranchCheck --> Fail
+    Reachability --> Pass
+    Reachability --> Fail
     
-    Pass --> Witness["4. Derivation Witness Extracted<br/>(Exact recipe for lib code gen)"]
-    Witness --> LibGen["5. Library Implementation<br/>lib/<name>.py"]
+    Pass --> Witness["4. Derivation Witness Extracted<br/>(Exact collaborator methods and property paths)"]
+    Witness --> LibGen["5. Library Implementation<br/>lib/<name>.py<br/>(Weaves witnesses into runtime control flow)"]
     
-    Gap --> LLMOracle["6. LLM Semantic Oracle<br/>Synthesizes missing derivation rule"]
-    LLMOracle --> RuleCache["7. Codify into Fact Base<br/>(Cached for future runs)"]
-    RuleCache --> Verifier
-    
-    Fail --> Diagnostic["8. Structured Grounding Diagnostic<br/>(Missing param, inaccessible tier, missing import)"]
+    Fail --> Diagnostic["6. Structured Grounding Diagnostic<br/>(Missing param, missing import, inaccessible tier)"]
     Diagnostic --> FaultRouter{"Fault Attribution"}
-    FaultRouter -- "Local Defect" --> HLSRepair["9a. Local HLS Repair<br/>Patches high/<name>.md"]
-    FaultRouter -- "Collaborator Defect" --> UpstreamRepair["9b. Upstream Escalation<br/>Patches high/<collaborator>.md"]
+    FaultRouter -- "Local Defect" --> HLSRepair["7a. Local HLS Repair<br/>Patches high/<name>.md"]
+    FaultRouter -- "Collaborator Defect" --> UpstreamRepair["7b. Upstream Escalation<br/>Patches high/<collaborator>.md"]
     HLSRepair --> HLS
     UpstreamRepair --> HLS
 ```
 
 ### 6.1 Downstream Witness Generation (Code Generation Blueprint)
-When the grounding verifier succeeds, it outputs the **derivation witness**—the structured proof tree showing exactly which collaborator method produces each value and which effect updates which state.
+When the grounding verifier succeeds, it outputs the **derivation witness**—the structured proof tree showing exactly which collaborator method produces each capability and which property path yields each value.
 
-This witness is included directly in the prompt given to the AI agent authoring the library code (`update_python_with_ai/guides/grounding_to_lib.md`). The agent is no longer forced to guess collaborator wiring; the verified proof provides the deterministic blueprint.
+This witness is included directly in the prompt given to the AI agent authoring the library code (`update_python_with_ai/guides/grounding_to_lib.md`). The code generator takes the verified witnesses and weaves them into the required `if/else` control flow branches.
 
 ### 6.2 Upstream HLS Self-Healing & Fault Attribution
 Cleanroom's foundational rule states: **Grounding problems must be resolved upstream at the specification level (HLS first), never downstream in code.**
 
-When the grounding verifier detects an error, it performs **Fault Attribution** to distinguish between local defects and collaborator omissions:
+When the grounding verifier detects an error, it generates an actionable, machine-readable diagnostic:
+```json
+{
+  "error": "UNGROUNDED_ACTION",
+  "component": "sandbox_file_reader_impl",
+  "operation": "execute_tool",
+  "missing_capability": "action('read', 'file')",
+  "required_by": "Tool execution reads file content from the filesystem...",
+  "reason": "Component 'sandbox_file_reader_impl' does not import 'filesystem_ext'."
+}
+```
+Or for missing knowledge:
+```json
+{
+  "error": "FLOATING_DIRECTIVE",
+  "component": "runner_logger_impl",
+  "operation": "log_turn",
+  "missing_knowledge": "knows('session id')",
+  "required_by": "The runner logger records the session identifier...",
+  "reason": "RunnerLogger is a 'system' service and cannot access 'agent_session' context without an explicit operation parameter."
+}
+```
 
-1. **The Diagnostic**: The verifier generates an actionable, machine-readable diagnostic explaining the exact architectural gap:
-   ```json
-   {
-     "error": "UNGROUNDED_REQUIREMENT",
-     "component": "sandbox_file_reader_impl",
-     "operation": "execute_tool",
-     "missing_capability": "filesystem_ext.read_text",
-     "required_by": "Tool execution reads file content from the filesystem at host path...",
-     "reason": "Component 'sandbox_file_reader_impl' does not import 'filesystem_ext'."
-   }
-   ```
-   Or for an ungrounded parameter:
-   ```json
-   {
-     "error": "FLOATING_DIRECTIVE",
-     "component": "runner_logger_impl",
-     "operation": "log_turn",
-     "missing_input": "session_id",
-     "required_by": "The runner logger records the session identifier...",
-     "reason": "RunnerLogger is a 'system' service and cannot access 'agent_session' context without an explicit operation parameter."
-   }
-   ```
-
-2. **Fault Attribution: Local Defect vs. Upstream Collaborator Defect**:
-   - **Case A: Local HLS Defect**: The required capability or value is already provided by an imported collaborator or `_ext` spec, but the local specification omitted an import, dropped an operation parameter, or violated tier custody.
-     - *Action*: Dispatch an in-place repair prompt for the local HLS (`high/<name>.md`).
-   - **Case B: Collaborator Interface Defect (Upstream Escalation)**: The local component legitimately requires a capability $C$ that conceptually belongs to a collaborator component $B$, but $B$'s interface does not expose it.
-     - *Anti-Pattern Prevented*: Forcing local repair would compel Component $A$ to contort its prose, invent artificial workarounds, or drop a necessary requirement.
-     - *Action*: The verifier pauses $A$'s alignment and **escalates an upstream repair request** to collaborator $B$'s HLS (`high/<collaborator>.md`) and interface stub (`grounding/<collaborator>.pyi`). Once $B$ exposes capability $C$, alignment cascades back down to $A$.
-
-3. **LLM Specification Repair Prompt**:
-   For local repairs, the diagnostic is supplied to an LLM repair prompt with the current `high/<name>.md` and the HLS guide:
-   > *"The specification has a grounding gap: `RunnerLogger` attempts to log `session_id`, but as a system service it has no custody of session state. Refactor the `## Types and Behavior` prose in `high/runner_logger.md` to accept `session_id` as an operation parameter, or declare how the identity is bound."*
-
-4. **Automated Re-Alignment Cascade**:
-   The LLM patches the HLS prose. Tooling automatically cascades the update:
-   $$\text{HLS (`high/*.md`)} \xrightarrow{\text{align}} \text{Grounding (`grounding/*.pyi`)} \xrightarrow{\text{verify}} \text{Verifier Passes} \xrightarrow{\text{cascade}} \text{Lib \& Tests}$$
-
-This closes the loop: specifications become **self-healing** through automated grounding feedback.
-
-### 6.3 Semantic Gap Plugging & The Closed-World Oracle Guardrail
-When the verifier encounters a domain-specific requirement that does not immediately unify with standard predicates (such as comparing temporal snapshots or repairing JSON syntax):
-
-1. **The LLM Semantic Oracle**: The verifier queries an LLM to explain the missing derivation path:
-   > *"How does `EditManager` maintain custody of 'initial content' before editing?"*
-
-2. **The Closed-World Guardrail (Preventing Self-Fulfilling Derivations)**:
-   A major failure mode of unconstrained LLMs is fabricating "self-fulfilling" derivations—inventing phantom helpers (e.g. *"Calls `PathHelper.to_disk()`"*) out of thin air to make the proof pass on paper.
-   - **The Strict Invariant**: The logic engine enforces a **Closed-World Constraint** on the Oracle. Every node and transition in the hypothesized derivation must strictly unify with:
-     1. An existing symbol or method in declared, imported `.pyi` interface stubs,
-     2. An in-scope parameter or declared internal state on `self`, or
-     3. A physical capability anchored to an imported `_ext` boundary.
-   - If the oracle claims that a capability requires a *new* collaborator operation, the system rejects the derivation as an ungrounded hallucination and diverts it to **Upstream Escalation (Section 6.2)**.
-
-3. **LLM Explains & Formulates Rule**:
-   Under the closed-world constraint, the LLM identifies how existing structures satisfy the requirement:
-   > *"EditManager records `initial_content: Dict[FileAlias, str]` during materialization and evaluates current content against this store."*
-
-4. **Codification**: The explanation is codified into the component's static grounding facts:
-   ```prolog
-   maintains_state("EditManager", "initial_content", "Dict[FileAlias, str]").
-   derives_comparison("workspace_files_modified", "current_content", "initial_content").
-   ```
-
-5. **Permanent Regression Defense**: Once codified, this derivation is deterministic. Future verification runs check the rule statically without re-querying the LLM.
+The fault router attributes the defect:
+- **Local Defect**: The local specification omitted an import, dropped a parameter, or violated tier custody. Repaired in local HLS.
+- **Collaborator Defect**: The collaborator legitimately needs to expose a capability or state, but its interface omits it. Escalated upstream to collaborator HLS and interface.
 
 ---
 
 ## 7. Comparative Evaluation
 
-| Dimension | Current Cleanroom (`.pyi` NLP) | Classical FOL (Prolog) | Full Theorem Provers (Dafny / Lean) | Proposed Neuro-Symbolic Datalog + Graphs |
+| Dimension | Current Cleanroom (`.pyi` NLP) | Classical FOL (Prolog) | Full Theorem Provers (Dafny / Lean) | Proposed Atomic Query + Reachability Solver |
 | :--- | :--- | :--- | :--- | :--- |
 | **Verification Reliability** | Low (LLM honor system) | Low–Medium (Cycles, non-termination) | Extremely High | **High (Deterministic proof)** |
 | **Termination Guarantee** | N/A (Unchecked) | No (Infinite SLD loops possible) | Undecidable (Manual proof tactics) | **Guaranteed (Polynomial time)** |
 | **Transitive Closure / Reachability**| Manual review | Cannot express finitely (Compactness) | Expressible via inductive proofs | **Native (Least Fixed Point)** |
-| **State Mutations & Effects** | Unchecked prose | Fails (Frame problem) | Verified via Hoare logic | **Verified via Effect Framing** |
-| **Witness Generation for Code Gen** | None (Guesses from stubs) | Poor | Manual extraction | **Automatic (Derivation tree blueprint)** |
-| **Upstream HLS Self-Healing** | Manual debugging | Manual | Complex error traces | **Automated (Diagnostic -> HLS patch)** |
-| **Authoring Burden** | Low (Free-form English) | Very High (Prolog clauses) | Prohibitive (Proof proofs) | **Low–Medium (Structured annotations)** |
+| **Capability Matching** | Unchecked prose | Unification on predicates | Verified via Hoare logic | **Action & Knowledge Reachability** |
+| **Witness Generation for Code Gen** | None (Guesses from stubs) | Poor | Manual extraction | **Automatic (Derivation witness blueprint)** |
+| **Authoring Burden** | Low (Free-form English) | Very High (Prolog clauses) | Prohibitive (Proof proofs) | **Minimal (Atomic action/knows queries)** |
 
 ---
 
 ## 8. Practical Implementation Roadmap
 
-### Phase 1: Datalog Scope & Import Verifier (Immediate)
+### Phase 1: Datalog Scope & Import Verifier (Complete)
 - Extract relational facts from `.pyi` AST: `service`, `tier`, `imports`, `operation`.
-- Implement a ~250-line semi-naive Datalog engine in Python (or run Soufflé via CLI).
-- Enforce strict tier containment (`system` $\ge$ `agent_session`) and imports completeness on `bazel run //update_with_ai/support/lib:grounding_tool -- --check`.
+- Enforce strict tier containment (`system` >= `agent_session`) and imports completeness.
 
-### Phase 2: Structured Grounding Blocks & Derivation Type-Checking
-- Introduce structured `GROUNDING:` blocks in implementation stubs specifying `collaborators:`, `derivation:`, and `effects:`.
-- Extend AST visitor in `grounding_tool.py` to type-check derivation steps against imported `.pyi` signatures and anchor root capabilities to `_ext` components.
-- Output derivation trees as witnesses for downstream code generation.
+### Phase 2: Atomic Grounding Queries & Interface Compounding (Complete)
+- Introduce atomic `action("verb", "object")` and `knows("<concept/value>")` queries.
+- Support `GROUNDING:` and `GROUNDING_ASSUMPTIONS:` across both interface (`<name>.pyi`) and implementation (`*_impl.pyi`) specifications.
+- Compound interface guarantees into the accessible scope environment for implementing and consuming components.
+- Implement the reachability solver in `grounding_tool.py` to verify that every query in scope S unifies with a provider in the scope environment (a - e).
+- Transitive dependency resolution: auto-index repository specifications and transitively resolve imports.
+- Output derivation witnesses for downstream code generation.
 
 ### Phase 3: Automated Upstream HLS Repair Loop
-- When Phase 1 or Phase 2 flags an unsatisfied requirement or tier violation, generate a structured diagnostic JSON file.
-- Implement an agent command / script (`repair_hls_from_grounding`) that feeds the diagnostic to an LLM with the target `high/<name>.md` and prompts an in-place prose repair.
-- Re-run the grounding tool to verify that the repair resolved the gap.
-
-### Phase 4: Neuro-Symbolic Rule Accumulation
-- For ungrounded semantic gaps, provide an interactive/automated prompt that asks the LLM to hypothesize the derivation path.
-- Validate and commit the resulting rule into a project-level fact ledger (`grounding_rules.dl`), growing the system's codified domain knowledge over time.
+- When an atomic query fails reachability, generate structured diagnostic JSON.
+- Implement automated prompt feeding the diagnostic to an LLM to patch the upstream HLS (`high/<name>.md`).
 
 ---
 
 ## 9. Conclusion
 
-Formalizing grounding transforms it from a subjective, easily-hallucinated narrative into an **active architectural engine**:
-- **Datalog** solves the transitive reachability and scope containment problem that First-Order Logic cannot finitely express.
-- **Typed Dataflow Graphs** solve the constructive value synthesis problem, generating concrete implementation blueprints for code generation.
-- **Upstream Diagnostic Feedback** enables AI agents to self-heal mistakes in High-Level Specifications before any implementation code is written.
-
-By combining deterministic symbolic verification for architecture and LLM reasoning for semantic translation and repair, Cleanroom achieves a fully grounded, self-correcting specification lifecycle.
+By separating orthogonal requirement presentation from semantic feasibility, discarding runtime control-flow distractions, and focusing on atomic `action(...)` and `knows(...)` reachability queries:
+- **The authoring burden is minimal**: The LLM transcribes atomic capability and knowledge phrases directly from HLS prose.
+- **No premature API leaks**: Authors never hardcode collaborator method calls or internal storage mechanisms into docstrings.
+- **The logic reasoner does the heavy lifting**: The engine deterministically solves reachability across the scope environment (a - e) and generates the execution blueprint for code generation.
