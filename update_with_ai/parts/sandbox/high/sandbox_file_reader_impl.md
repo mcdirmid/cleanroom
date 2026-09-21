@@ -15,7 +15,7 @@ Permissive or forgiving tool implementations allow agents to drift into ambiguou
 
 The read manager provides the view file tool for the agent session when mcp mode is inactive, omits the search tool, installs no inspection tools when mcp mode is active, and provides a can read operation validating inspection access for a file path, obtaining declared read-only files, read-write files, and the guide file, when configured, from the session node configuration.
 
-The view file tool is named `view_file`, accepting a file alias *path* parameter using the alias manager. Tool execution:
+The view file tool is named `view_file`, accepting a file alias *path* parameter. Tool execution:
 
 - Records the read file in the edit manager on successful execution.
 
@@ -45,7 +45,7 @@ The read manager executes can read to validate file inspection access. Executing
 
 The *regex pattern parameter type* is a parameter type for regex patterns that converts a wire type string into a regex pattern.
 
-The search tool is named `search_files`, accepting a regex pattern *pattern* parameter using the regex pattern parameter type. Tool execution:
+The search tool is named `search_files`, accepting a regex pattern *pattern* parameter. Tool execution:
 
 - Searches for regex pattern matches across the read-only files and read-write files in the filesystem.
 

@@ -19,28 +19,26 @@ Conversation identifier extraction resolves the caller conversation identifier f
 
 Lifecycle tools manage sub-agent session bounds:
 
-- The register role agent tool resolves the conversation identifier and delegates to the role session manager to register the session, returning structured registration confirmation.
+- The register role agent tool resolves the conversation identifier and registers the session, returning structured registration confirmation.
 
-- The deregister role agent tool resolves the conversation identifier and delegates to the role session manager to close and remove the session, returning structured deregistration confirmation.
+- The deregister role agent tool resolves the conversation identifier and closes and removes the session, returning structured deregistration confirmation.
 
 - The shutdown tool terminates the server, removes the workspace sentinel, and stops the process.
 
 Domain tool execution dispatches turns into session scopes:
 
-- Registered domain tools are dynamically exported from the installed tools of the session tool manager.
+- Registered domain tools are dynamically exported from installed session tools.
 
-- For each domain tool invocation, the mcp server resolves the caller conversation identifier, touches the session timestamp in the role session manager, and retrieves the session lifecycle scope.
+- Domain tool execution requires an active session matching the caller conversation identifier, failing with an error response when no matching session is registered.
 
-- If no session is registered for the conversation identifier, domain tool execution returns an error response indicating an unregistered session.
+- Domain tool execution executes within the active session scope for the caller conversation identifier, updating the session activity timestamp and returning the output content.
 
-- The retrieved scope is activated using the scope activate context manager for the duration of the tool execution turn.
-
-- Inside the activated scope, the tool is executed on the session tool manager using the supplied argument mapping, transitioning session status to idle when get work produces an idle response, or active when tasks are retrieved, synchronizing submitted nodes to dag storage and recording visits on dag subgraph when submission succeeds, and returning the output content.
+- Tool execution transitions session status to idle when get work produces an idle response, or active when tasks are retrieved, synchronizing submitted nodes to dag storage and recording visits on dag subgraph when submission succeeds.
 
 Hook IPC routes serve intercepted requests:
 
-- An access validation HTTP route receives requests containing a conversation identifier, tool name, and file path, delegating to the access gate and returning JSON-serialized access decisions.
+- An access validation HTTP route receives requests containing a conversation identifier, tool name, and file path, returning JSON-serialized access decisions.
 
-- A directory filter HTTP route receives requests containing a conversation identifier, directory path, and directory entries, delegating to the access gate and returning JSON-serialized filtered entries.
+- A directory filter HTTP route receives requests containing a conversation identifier, directory path, and directory entries, returning JSON-serialized filtered entries.
 
-Starting the server begins the transport loop in standard input and output mode or Server-Sent Events mode, launching a background monitoring task that evaluates the cache arbiter to dispatch sampling directives when idle sessions have ready work. Stopping the server cancels background tasks, terminates the transport loop, and deregisters all active sessions from the role session manager.
+Server startup begins the transport loop in standard input and output mode or Server-Sent Events mode, launching a background monitoring task that evaluates the cache arbiter to dispatch sampling directives when idle sessions have ready work. Server termination cancels background tasks, terminates the transport loop, and deregisters all active sessions.

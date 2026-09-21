@@ -345,9 +345,9 @@ PURPOSE:
 Implements execute_tool to replace matching content within a read-write file
 
 FRESH_REQUIREMENTS:
-- Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
-- Before modifying a file, editing tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
-- Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
+- Editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+- Editing tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
+- Editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
 - On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and reminds the agent to call the check file tool to verify syntax and type correctness before making further modifications.
 - When configured to produce delta output, successful editing tool execution includes a diff delta representation in the response content.
 - Tool execution implicitly binds the target file to the last file read or edited in the edit manager if that file is a read-write file, informs the agent with a warning in the response content that the path was implicitly bound while allowing the tool execution to proceed, or fails if no file has been read or edited or if the last read or edited file is not a read-write file, when the path parameter is omitted.

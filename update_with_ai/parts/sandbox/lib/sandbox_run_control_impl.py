@@ -324,7 +324,7 @@ class RunController(sandbox_run_control.RunController, Singleton):
     def initialize(self) -> None:
         # Requirement: The run controller unconditionally installs the submit tool, fail tool, check file tool, and get work tool for the agent session, installs the advance tool only when guide step mode is active, and obtains configured blame targets and verification checks from the node config, installing the blame tool only when blame targets are configured.
         # Requirement: Verification checks exposed by the run controller include the session verification checks from node config.
-        # Requirement: A resolve tool defines a file alias resolve target parameter (with target accepted as an alias) using the alias manager, and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes.
+        # Requirement: A resolve tool defines a file alias resolve target parameter (with target accepted as an alias), and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes.
         # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
         # Requirement: When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
         # Requirement: Tool execution fails when the resolve target parameter is omitted and cannot be defaulted, or when the specified resolve target parameter does not match an open active node, reminding the agent to specify an open target.
@@ -531,7 +531,7 @@ class CheckFileTool(sandbox_run_control.CheckFileTool, Singleton):
 
     @property
     def name(self) -> str:
-        # Requirement: The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias) using the alias manager, and shares a constant suppression key `check_file`.
+        # Requirement: The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
         return "check_file"
 
     @property
@@ -567,7 +567,7 @@ class CheckFileTool(sandbox_run_control.CheckFileTool, Singleton):
 
     @property
     def parameters(self) -> Set[tool_provider.Parameter]:
-        # Requirement: The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias) using the alias manager, and shares a constant suppression key `check_file`.
+        # Requirement: The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
         return {self.path, self.src}
 
     def execute_tool(
@@ -776,7 +776,7 @@ class AdvanceTool(sandbox_run_control.AdvanceTool, Singleton):
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
         rc = get_singleton(RunController)
 
-        # Requirement: On its first execution, the advance tool delivers the initial guide summary through guide delivery without updating verification results.
+        # Requirement: Executing the advance tool delivers the initial guide summary through guide delivery without updating verification results when guide delivery has not yet started.
         if self._is_first_call:
             self._is_first_call = False
             next_step = guide_del.advance_step(
@@ -794,7 +794,7 @@ class AdvanceTool(sandbox_run_control.AdvanceTool, Singleton):
                 follow_up_tool_call=follow_up,
             )
 
-        # Requirement: On subsequent executions, executing the advance tool updates verification results if outdated.
+        # Requirement: Executing the advance tool updates verification results if outdated when guide delivery has already started.
         passed, _ = rc.evaluate_verification()
         if not passed:
             # Requirement: Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool with reasoning text indicating that verification results must be inspected before advancing.
@@ -859,7 +859,7 @@ class _ResolveTool(sandbox_run_control.ResolveTool):
 
     @property
     def resolve_target(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
-        # Requirement: A resolve tool defines a file alias resolve target parameter (with target accepted as an alias) using the alias manager, and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes.
+        # Requirement: A resolve tool defines a file alias resolve target parameter (with target accepted as an alias), and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes.
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         return tool_provider.Parameter(
             name="resolve_target",
@@ -887,7 +887,7 @@ class SubmitTool(_ResolveTool, sandbox_run_control.SubmitTool, Singleton):
 
     @property
     def name(self) -> str:
-        # Requirement: The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter using the string parameter converter, and shares a constant suppression key `submit`.
+        # Requirement: The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter, and shares a constant suppression key `submit`.
         return "submit"
 
     @property
@@ -896,7 +896,7 @@ class SubmitTool(_ResolveTool, sandbox_run_control.SubmitTool, Singleton):
 
     @property
     def change_summary(self) -> tool_provider.Parameter[str, str]:
-        # Requirement: The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter using the string parameter converter, and shares a constant suppression key `submit`.
+        # Requirement: The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter, and shares a constant suppression key `submit`.
         str_conv = get_singleton(tool_provider.StringParameterConverter)
         return tool_provider.Parameter(
             name="change_summary",
@@ -1093,7 +1093,7 @@ class FailTool(_ResolveTool, sandbox_run_control.FailTool, Singleton):
 
     @property
     def name(self) -> str:
-        # Requirement: The fail tool is named `fail`, accepting a resolve target parameter and a text explanation parameter using the string parameter converter.
+        # Requirement: The fail tool is named `fail`, accepting a resolve target parameter and a text explanation parameter.
         return "fail"
 
     @property
@@ -1102,7 +1102,7 @@ class FailTool(_ResolveTool, sandbox_run_control.FailTool, Singleton):
 
     @property
     def explanation(self) -> tool_provider.Parameter[str, str]:
-        # Requirement: The fail tool is named `fail`, accepting a resolve target parameter and a text explanation parameter using the string parameter converter.
+        # Requirement: The fail tool is named `fail`, accepting a resolve target parameter and a text explanation parameter.
         str_conv = get_singleton(tool_provider.StringParameterConverter)
         return tool_provider.Parameter(
             name="explanation",
@@ -1224,7 +1224,7 @@ class BlameTool(_ResolveTool, sandbox_run_control.BlameTool, Singleton):
 
     @property
     def name(self) -> str:
-        # Requirement: The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter using the alias manager, and a text explanation parameter using the string parameter converter.
+        # Requirement: The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter, and a text explanation parameter.
         return "blame"
 
     @property
@@ -1233,7 +1233,7 @@ class BlameTool(_ResolveTool, sandbox_run_control.BlameTool, Singleton):
 
     @property
     def blame_target(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
-        # Requirement: The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter using the alias manager, and a text explanation parameter using the string parameter converter.
+        # Requirement: The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter, and a text explanation parameter.
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         return tool_provider.Parameter(
             name="blame_target",
@@ -1244,7 +1244,7 @@ class BlameTool(_ResolveTool, sandbox_run_control.BlameTool, Singleton):
 
     @property
     def explanation(self) -> tool_provider.Parameter[str, str]:
-        # Requirement: The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter using the alias manager, and a text explanation parameter using the string parameter converter.
+        # Requirement: The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter, and a text explanation parameter.
         str_conv = get_singleton(tool_provider.StringParameterConverter)
         return tool_provider.Parameter(
             name="explanation",
@@ -1485,7 +1485,7 @@ class GetWorkTool(sandbox_run_control.GetWorkTool, Singleton):
 
     @property
     def name(self) -> str:
-        # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter using the integer parameter converter.
+        # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter.
         return "get_work"
 
     @property
@@ -1494,7 +1494,7 @@ class GetWorkTool(sandbox_run_control.GetWorkTool, Singleton):
 
     @property
     def max_batch_size(self) -> tool_provider.Parameter[int, int]:
-        # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter using the integer parameter converter.
+        # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter.
         int_conv = get_singleton(tool_provider.IntegerParameterConverter)
         return tool_provider.Parameter(
             name="max_batch_size",

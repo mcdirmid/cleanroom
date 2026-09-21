@@ -39,7 +39,7 @@ PURPOSE:
 Resolves a manifest into target nodes, dependencies, node definitions, task prompts, and node configurations, populating the agent storage
 
 FRESH_REQUIREMENTS:
-- A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using a node identifier utility, populating the agent storage.
+- A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations, populating the agent storage.
 - A manifest loader resolves declared source files and templates into read-write files and templates in node configurations.
 - A manifest loader resolves declared silent source files into read-write files while excluding them from dependent read-only files.
 - A manifest loader resolves declared direct dependencies into read-only files, and star dependencies into transitive read-only file closures.

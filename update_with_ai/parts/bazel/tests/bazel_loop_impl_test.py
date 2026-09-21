@@ -174,7 +174,7 @@ class BazelLoopImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=self.registry):
             runner = get_singleton(loop.Loop)
-            # Requirement: Target labels are resolved against workspace directories or runfiles trees to populate graph storage before cleaning.
+            # Requirement: Target labels are resolved against workspace directories or runfiles trees to populate graph storage.
             # Requirement: [Loop] The loop executes a cleaning pass over an acyclic subgraph rooted at a target node in graph storage.
             # Requirement: [Loop] The loop produces a build result upon pass completion.
             result = runner.run_cleaning_pass(root)
@@ -223,7 +223,7 @@ class BazelLoopImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=self.registry):
             runner = get_singleton(loop.Loop)
-            # Requirement: Target labels are resolved against workspace directories or runfiles trees to populate graph storage before cleaning.
+            # Requirement: Target labels are resolved against workspace directories or runfiles trees to populate graph storage.
             # Requirement: [Loop] The loop executes a cleaning pass over an acyclic subgraph rooted at a target node in graph storage.
             # Requirement: [Loop] The loop produces a build result upon pass completion.
             result = runner.run_cleaning_pass(root)

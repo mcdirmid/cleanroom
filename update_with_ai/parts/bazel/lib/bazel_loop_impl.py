@@ -46,7 +46,7 @@ class Loop(loop.Loop, Singleton):
         cleaner = get_singleton(loop_cleaner.LoopCleaner)
         node_cleaner = get_singleton(loop_node_cleaner.NodeCleaner)
 
-        # Requirement: Target labels are resolved against workspace directories or runfiles trees to populate graph storage before cleaning.
+        # Requirement: Target labels are resolved against workspace directories or runfiles trees to populate graph storage.
         visited: Set[dag_storage.Node] = set()
         queue: list[dag_storage.Node] = [root]
         while queue:

@@ -23,10 +23,10 @@ class LoopCleaner(loop_cleaner.LoopCleaner, Singleton):
         self, node: dag_storage.Node, cleaner: loop_node_cleaner.NodeCleaner
     ) -> None:
         subgraph = get_singleton(dag_subgraph.DagSubgraph)
-        # Requirement: Target node initialization sets the target on the dag subgraph to collect reachable nodes and determine their topological order.
+        # Requirement: Target node scoping sets the target node on the dag subgraph to determine dependency-first topological order.
         subgraph.set_target(node)
 
-        # Requirement: Cleaning loops while the dag subgraph is not complete, obtaining the next ready batch of dirty nodes from the dag subgraph, recording the visit on the dag subgraph, and delegating cleaning to the node cleaner.
+        # Requirement: Cleaning processes ready batches of dirty nodes in topological order, recording node visits for each cleaned batch, and halts immediately if the node cleaner communicates that processing cannot continue.
         # Requirement: [LoopCleaner] Cleaning concludes when all nodes in the subgraph rooted at the node are clean.
         # Requirement: Cleaning concludes when the dag subgraph is complete, indicating all reachable nodes in the target subgraph are clean.
         while not subgraph.is_complete:
@@ -35,10 +35,8 @@ class LoopCleaner(loop_cleaner.LoopCleaner, Singleton):
             if not batch:
                 break
             subgraph.record_visit(batch)
-            # Requirement: [LoopCleaner] When cleaning a dirty node using the node cleaner, cleaning delegates to the node cleaner.
             should_continue = cleaner.clean(batch)
-            # Requirement: If the node cleaner communicates that processing cannot continue, cleaning halts immediately.
-            # Requirement: [LoopCleaner] If the node cleaner communicates that processing cannot continue, cleaning halts.
+            # Requirement: [LoopCleaner] Cleaning dirty nodes halts if the node cleaner communicates that processing cannot continue.
             if not should_continue:
                 return
 

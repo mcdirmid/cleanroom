@@ -160,7 +160,7 @@ class BazelStorageImplTest(unittest.TestCase):
             # Add Change and Feedback messages
             # Requirement: Adding a message to a node records the message explaining why the node requires cleaning.
             # Requirement: [DagStorage] Adding a message to a node records the message for that node.
-            # Requirement: The agent storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files using proto package store from update with ai proto ext.
+            # Requirement: The agent storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files.
             storage.add_message(Change(), to=node)
             storage.add_message(Feedback(), to=node)
 
@@ -173,7 +173,7 @@ class BazelStorageImplTest(unittest.TestCase):
             self.assertTrue(any(isinstance(m, Feedback) for m in msgs))
 
             # Verify textproto file was written to package directory
-            # Requirement: All nodes located within the same package directory resolved by the bazel target share a common package message file named `.update_with_ai.textproto`.
+            # Requirement: All nodes located within the same package directory share a common package message file named `.update_with_ai.textproto`.
             proto_path = os.path.join(
                 self.test_dir, "pkg/sub", ".update_with_ai.textproto"
             )

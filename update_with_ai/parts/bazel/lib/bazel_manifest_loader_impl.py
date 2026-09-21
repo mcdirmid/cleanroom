@@ -511,7 +511,7 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
         targets = data.get("targets", [data]) if isinstance(data, dict) else []
         for t in targets:
             label = t.get("label", "")
-            # Requirement: A manifest loader normalizes node references into canonical nodes using node identifier utilities.
+            # Requirement: A manifest loader normalizes node references into canonical nodes.
             node = node_util.normalize(label)
             # Cache the manifest for this node
             self._manifests[node] = bazel_manifest_loader.Manifest(
@@ -522,7 +522,7 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
             defn = agent_storage.NodeDefinition(node=node, task_prompt=prompt)
             results.append(defn)
 
-            # Requirement: [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using a node identifier utility, populating the agent storage.
+            # Requirement: [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations, populating the agent storage.
             storage_any = cast(Any, storage)
             if hasattr(storage_any, "_definitions"):
                 storage_any._definitions[node] = defn

@@ -465,7 +465,7 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                     bindings=actual_bindings_set
                 )
 
-                # Requirement: Before executing each tool call, the agent driver records the tool execution in the loop guard, injecting a loop reminder into the conversation when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
+                # Requirement: Evaluating a tool invocation with the loop guard records the tool execution in the loop guard, injecting a loop reminder into the conversation when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
                 # Requirement: [AgentDriver] The agent driver evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
                 guard_outcome = guard.record_tool_execution(fn_name, actual_bindings)
                 if isinstance(guard_outcome, loop_guard.LoopFailure):

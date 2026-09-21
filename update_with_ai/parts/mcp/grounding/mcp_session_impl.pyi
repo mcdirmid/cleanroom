@@ -14,7 +14,7 @@ PURPOSE:
 Implements role session manager to govern multi-turn sub-agent session scopes and active session registries
 
 INHERITED_REQUIREMENTS:
-- [RoleSessionManager] Registering a session initiates an agent session phase scope, sets role on role config, configures unit root on dag subgraph, and records the session as active, loading reachable target manifests into dag storage when a manifest loader is available.
+- [RoleSessionManager] Registering a session initiates an agent session phase scope, sets role on role config, configures unit root on dag subgraph, and records the session as active.
 - [RoleSessionManager] Deregistering a session closes the session scope, releasing held resources and file locks, and removes the session from the active registry.
 - [RoleSessionManager] Exposes all currently registered sessions mapped by conversation identifier.
 

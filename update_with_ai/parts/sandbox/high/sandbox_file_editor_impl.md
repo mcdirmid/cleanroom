@@ -19,7 +19,7 @@ The edit manager exposes whether workspace file modifications occurred during th
 
 Editing tools modify read-write files in the workspace.
 
-Before modifying a file, editing tool execution fails if:
+Editing tool execution fails if:
 
 - The file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
 
@@ -29,7 +29,7 @@ Before modifying a file, editing tool execution fails if:
 
 On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and reminds the agent to call the check file tool to verify syntax and type correctness before making further modifications. When configured to produce delta output, successful editing tool execution includes a diff delta representation in the response content. Editing tool responses share a constant suppression key replace_file_content.
 
-The replace file content tool is named `replace_file_content`, accepting in sequence an optional file alias *path* parameter, an integer *start_line* parameter, an integer *end_line* parameter, a boolean *allow_multiple* parameter, a text *target_content* parameter, and a text *replacement_content* parameter. Tool execution:
+The replace file content tool is named `replace_file_content`, accepting in sequence a file alias *path* parameter, an integer *start_line* parameter, an integer *end_line* parameter, a boolean *allow_multiple* parameter, a text *target_content* parameter, and a text *replacement_content* parameter. Tool execution:
 
 - Implicitly binds the target file to the last file read or edited in the edit manager if that file is a read-write file, informs the agent with a warning in the response content that the path was implicitly bound while allowing the tool execution to proceed, or fails if no file has been read or edited or if the last read or edited file is not a read-write file, when the path parameter is omitted.
 

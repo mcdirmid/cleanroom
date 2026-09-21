@@ -14,7 +14,7 @@ Autonomous agent workflows require executing tools with wire-type arguments supp
 
 The tool manager maintains tools installed during an agent session, and exposes installed tools to inform the agent of what tools it can execute.
 
-Executing a tool by name with wire parameter bindings converts wire arguments into actual parameter bindings and delegates execution to the matching tool. When an argument is omitted for a parameter that is not required and has a default value, the tool manager binds the default value as the actual parameter value.
+Executing a tool by name with wire parameter bindings converts wire arguments into actual parameter bindings and executes the matching tool. When an argument is omitted for a parameter that is not required and has a default value, the tool manager binds the default value as the actual parameter value.
 
 Execution fails if:
 
@@ -26,7 +26,7 @@ Execution fails if:
 
 On successful argument resolution, the tool manager executes the tool with the resolved actual parameter bindings and returns the response produced by the tool.
 
-Executing a tool with arguments converts raw argument mappings into wire parameter bindings and delegates to tool execution by name.
+Executing a tool with arguments converts raw argument mappings into wire parameter bindings and executes the tool by name.
 
 Creating a tool callable constructs a callable function with parameter signatures derived from the tool parameters, executes the tool with supplied arguments upon invocation, and returns the response content combined with reminders when guidance is present.
 

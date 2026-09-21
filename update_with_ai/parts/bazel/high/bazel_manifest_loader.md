@@ -20,7 +20,7 @@ The bazel manifest loader:
 
 - Retrieves the manifest for a node.
 
-- Resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using the bazel target, populating the agent storage.
+- Resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations, populating the agent storage.
 
 - Resolves declared source files and templates from manifests into read-write files and templates in a node configuration.
 

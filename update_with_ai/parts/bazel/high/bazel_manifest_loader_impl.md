@@ -21,9 +21,9 @@ The bazel manifest loader:
 
 - Parses manifests from JSON files written by the build system in workspace directories or runfiles trees into json manifests.
 
-- Extracts manifest node references from a json manifest and normalizes them into canonical nodes using the bazel target.
+- Extracts manifest node references from a json manifest and normalizes them into canonical nodes.
 
-- Extracts manifest file paths from a json manifest and resolves them relative to target package directories extracted by the bazel target.
+- Extracts manifest file paths from a json manifest and resolves them relative to target package directories.
 
 - Resolves a target node's declared source file, template, and silent source files into read-write files and startup template mappings in its node configuration.
 
@@ -37,7 +37,7 @@ The bazel manifest loader:
 
 - Derives file aliases for all accessible workspace files.
 
-- Synthesizes node definitions in bazel graph storage for referenced dependency targets lacking manifests.
+- Synthesizes node definitions for referenced dependency targets lacking manifests.
 
 - Resolves target manifests by loading unit manifests and role manifests to synthesize node definitions and dependencies across unit and role dimensions.
 

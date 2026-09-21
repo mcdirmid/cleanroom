@@ -15,7 +15,7 @@ Sub-agent orchestration across external client environments requires consistent 
 
 The cleanroom mcp runner operates as a system service executing the Cleanroom Model Context Protocol server.
 
-Executing the runner validates runner options and starts the server using the configured transport. When standard input/output transport is requested, the runner starts the server over standard input/output. When Server-Sent Events transport is requested, the runner configures server host and port parameters, logs startup progress to the runner logger, and starts the server over Server-Sent Events. The runner sets the batch size in the execution environment.
+Executing the runner validates runner options and executes the server using the configured transport. When standard input/output transport is requested, the runner executes the server over standard input/output. When Server-Sent Events transport is requested, the runner configures server host and port parameters, logs startup progress, and executes the server over Server-Sent Events. The runner sets the batch size in the execution environment.
 
 Parsing arguments converts command-line argument tokens into a runner options record:
 

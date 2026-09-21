@@ -51,7 +51,7 @@ FRESH_REQUIREMENTS:
 - Executing a tool by name fails if a parameter name does not match any parameter of the tool, and reminds the agent that only declared parameters of the tool can be provided.
 - Executing a tool by name fails if an argument is not supplied for a required parameter of the tool, and reminds the agent that required parameters of the tool must be supplied.
 - When an argument is omitted for a parameter that is not required and has a default value, the tool manager binds the default value as the actual parameter value.
-- When parameter mappings are successfully resolved, executing a tool by name delegates to the matching tool with the resolved actual parameter bindings and returns the tool's response.
+- When parameter mappings are successfully resolved, executing a tool by name executes the matching tool with the resolved actual parameter bindings and returns the tool's response.
 
 INHERITED_REQUIREMENTS:
 - [ToolManager] Executing a tool by name with wire parameter bindings produces the tool response upon resolving parameter conversions.
@@ -69,7 +69,7 @@ PURPOSE:
 Executes a tool by converting raw argument mappings into wire parameter bindings and delegating to tool execution by name
 
 FRESH_REQUIREMENTS:
-- Executing a tool with arguments converts raw argument mappings into wire parameter bindings and delegates to tool execution by name.
+- Executing a tool with arguments converts raw argument mappings into wire parameter bindings and executes the tool by name.
 
 GROUNDING_ARGUMENT:
 - Receives tool name and argument mappings, constructs WireParameterBindings, and delegates to execute_tool.

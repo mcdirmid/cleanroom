@@ -298,7 +298,7 @@ class McpServerImplTest(unittest.TestCase):
             server = sys_scope.get_singleton(McpServer)
             cid = ConversationId("subagent-alpha")
 
-            # Requirement: [McpServer] Exposes a register role agent tool that accepts a role address, a unit root, and an optional conversation identifier, registering the session with the role session manager.
+            # Requirement: [McpServer] Exposes a register role agent tool that accepts a role address, a unit root, and a conversation identifier, registering the subagent session.
             reg_msg = server.register_role_agent(cid, "code_cleaner", "//pkg:target")
             self.assertIn("Registered role agent", reg_msg)
             self.assertEqual(
@@ -306,7 +306,7 @@ class McpServerImplTest(unittest.TestCase):
                 [(cid, "code_cleaner", "//pkg:target")],
             )
 
-            # Requirement: [McpServer] Exposes a deregister role agent tool that accepts an optional conversation identifier, deregistering the session with the role session manager.
+            # Requirement: [McpServer] Exposes a deregister role agent tool that accepts a conversation identifier, deregistering the subagent session.
             dereg_msg = server.deregister_role_agent(cid)
             self.assertIn("Deregistered role agent", dereg_msg)
             self.assertEqual(self.mock_session_mgr.deregistered, [cid])
@@ -327,7 +327,7 @@ class McpServerImplTest(unittest.TestCase):
                 reminder="Waiting for upstream tasks.",
             )
 
-            # Requirement: [McpServer] Exposes domain tools from the session tool manager, accepting an optional conversation identifier and routing incoming tool calls to the active session scope for the caller conversation identifier.
+            # Requirement: [McpServer] Exposes domain tools accepting a conversation identifier, executing incoming tool calls within the active session scope for the caller conversation identifier.
             output = server.execute_domain_tool(cid, "get_work", {})
             self.assertIn("No dirty nodes are ready", output)
             self.assertIn("Waiting for upstream tasks.", output)
@@ -390,7 +390,7 @@ class McpServerImplTest(unittest.TestCase):
             server = sys_scope.get_singleton(McpServer)
             cid = ConversationId("hook-caller")
 
-            # Requirement: [McpServer] Hosts hook validation and directory filter endpoints, delegating access authorization to the access gate.
+            # Requirement: [McpServer] Hosts hook validation and directory filter endpoints, producing access decisions and sanitized directory listings.
             result = server.handle_validate_access(
                 cid, "replace_file_content", "pkg/foo.py"
             )
@@ -427,7 +427,7 @@ class McpServerImplTest(unittest.TestCase):
                     ConversationId("default"), "default_role", "//pkg:default"
                 )
 
-                # Requirement: [McpServer] Starting the server begins the transport loop, and stopping cleanly terminates sessions and endpoints.
+                # Requirement: [McpServer] Server startup begins the transport loop and writes the workspace sentinel, updating registered subagents on registration and deregistration, and server termination cleanly closes active sessions, shuts down endpoints, and removes the sentinel.
                 server.start("stdio")
                 self.assertTrue(server._running)
                 self.assertIsNotNone(server._app)
@@ -441,12 +441,12 @@ class McpServerImplTest(unittest.TestCase):
                 self.assertIsNotNone(tool_obj)
                 assert tool_obj is not None
                 self.assertEqual(tool_obj.name, "custom_tool")
-                # Requirement: [McpServer] Exposes domain tools from the session tool manager, accepting an optional conversation identifier and routing incoming tool calls to the active session scope for the caller conversation identifier.
+                # Requirement: [McpServer] Exposes domain tools accepting a conversation identifier, executing incoming tool calls within the active session scope for the caller conversation identifier.
                 res_tool = await tool_obj.run({"target": "pkg:1", "extra": "custom", "conversation_id": "active-1"})
                 self.assertIn("Executed custom_tool", res_tool)
 
                 # Execute FastMCP lifecycle tools
-                # Requirement: [McpServer] Exposes a register role agent tool that accepts a role address, a unit root, and an optional conversation identifier, registering the session with the role session manager.
+                # Requirement: [McpServer] Exposes a register role agent tool that accepts a role address, a unit root, and a conversation identifier, registering the subagent session.
                 reg_tool = server._app._tool_manager.get_tool("register_role_agent")
                 assert reg_tool is not None
                 res_reg = await reg_tool.run({"role": "role3", "unit_root": "//pkg:3", "conversation_id": "conv-3"})
@@ -457,7 +457,7 @@ class McpServerImplTest(unittest.TestCase):
                 runtime_obj = server._app._tool_manager.get_tool("runtime_tool")
                 self.assertIsNotNone(runtime_obj)
 
-                # Requirement: [McpServer] Exposes a deregister role agent tool that accepts an optional conversation identifier, deregistering the session with the role session manager.
+                # Requirement: [McpServer] Exposes a deregister role agent tool that accepts a conversation identifier, deregistering the subagent session.
                 dereg_tool = server._app._tool_manager.get_tool("deregister_role_agent")
                 assert dereg_tool is not None
                 res_dereg = await dereg_tool.run({"conversation_id": "conv-3"})
@@ -501,7 +501,7 @@ class McpServerImplTest(unittest.TestCase):
                     f_resp = await routes["/filter_dir"].endpoint(req_f)
                     self.assertIn(b"entries", f_resp.body)
 
-                # Requirement: [McpServer] Starting the server begins the transport loop and writes the workspace sentinel, updating registered subagents on registration and deregistration, and stopping cleanly terminates sessions, endpoints, and removes the sentinel.
+                # Requirement: [McpServer] Server startup begins the transport loop and writes the workspace sentinel, updating registered subagents on registration and deregistration, and server termination cleanly closes active sessions, shuts down endpoints, and removes the sentinel.
                 with tempfile.TemporaryDirectory() as tmpdir:
                     sentinel_path = os.path.join(tmpdir, ".mcp.active")
                     with patch.dict(os.environ, {"CLEANROOM_SENTINEL_PATH": sentinel_path}):
@@ -526,7 +526,7 @@ class McpServerImplTest(unittest.TestCase):
                             data3 = json.load(f)
                         self.assertNotIn("sub-new", data3["subagents"])
 
-                        # Requirement: [McpServer] Exposes a shutdown tool that stops the server and removes the workspace sentinel.
+                        # Requirement: [McpServer] Exposes a shutdown tool that terminates the server and removes the workspace sentinel.
                         shutdown_tool = server._app._tool_manager.get_tool("shutdown")
                         assert shutdown_tool is not None
                         res_shut = await shutdown_tool.run({})

@@ -17,7 +17,7 @@ The run controller initializes by unconditionally installing the submit tool, fa
 
 Evaluation of verification checks is cached alongside the edit manager file update revision. Verification checks are evaluated sequentially and results are cached whenever verification results are outdated, which occurs before initial evaluation and when workspace files have been updated since the previous evaluation. When workspace files have not been updated since the previous evaluation, verification check execution is omitted and the cached verification outcome is reused.
 
-The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias) using the alias manager, and shares a constant suppression key `check_file`. When the path parameter is omitted, the path parameter defaults using resolve target defaulting rules. Executing the check file tool updates verification results if outdated and evaluates verification checks for that target.
+The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`. When the path parameter is omitted, the path parameter defaults using resolve target defaulting rules. Executing the check file tool updates verification results if outdated and evaluates verification checks for that target.
 
 The check file tool:
 
@@ -29,7 +29,7 @@ The check file tool:
 
 - Produces a response presenting passing verification results using the session verification success message when configured or default passing verification results alongside sanitized check output when verification passes.
 
-The advance tool is named `advance`, accepts no parameters, and shares a constant suppression key `advance`. On its first execution, the advance tool delivers the initial guide summary through guide delivery without updating verification results. On subsequent executions, executing the advance tool updates verification results if outdated.
+The advance tool is named `advance`, accepts no parameters, and shares a constant suppression key `advance`. Executing the advance tool delivers the initial guide summary through guide delivery without updating verification results when guide delivery has not yet started, and updates verification results if outdated when guide delivery has already started.
 
 The advance tool:
 
@@ -41,7 +41,7 @@ The advance tool:
 
 - Produces a response specifying a follow-up execution of the submit tool without a change summary and with reasoning text indicating that all guide steps are complete when verification is passing, no steps remain, and no workspace files were modified.
 
-A resolve tool defines a file alias resolve target parameter (with target accepted as an alias) using the alias manager, and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes. When the resolve target parameter is omitted, it defaults to:
+A resolve tool defines a file alias resolve target parameter (with target accepted as an alias), and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes. When the resolve target parameter is omitted, it defaults to:
 
 - The single session read-write file or remaining unsubmitted active node.
 
@@ -63,7 +63,7 @@ A resolve tool:
 
 - Produces a non-terminating response with a reminder to call the get work tool when all active nodes are resolved and mcp mode is active.
 
-The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter using the string parameter converter, and shares a constant suppression key `submit`. Executing the submit tool updates verification results if outdated.
+The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter, and shares a constant suppression key `submit`. Executing the submit tool updates verification results if outdated.
 
 The submit tool:
 
@@ -77,13 +77,13 @@ The submit tool:
 
 - Marks the resolve target clean and submitted in the current get work turn and resolves the active node.
 
-The fail tool is named `fail`, accepting a resolve target parameter and a text explanation parameter using the string parameter converter.
+The fail tool is named `fail`, accepting a resolve target parameter and a text explanation parameter.
 
 The fail tool:
 
 - Marks the active node as failed and resolves the active node.
 
-The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter using the alias manager, and a text explanation parameter using the string parameter converter.
+The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter, and a text explanation parameter.
 
 The blame tool:
 
@@ -97,7 +97,7 @@ The blame tool:
 
 - Marks the blame target as attributed and resolves the active node on successful tool execution.
 
-The get work tool is named `get_work`, accepting an integer max batch size parameter using the integer parameter converter.
+The get work tool is named `get_work`, accepting an integer max batch size parameter.
 
 The get work tool:
 

@@ -8,7 +8,7 @@ import dag_subgraph
 class LoopCleaner(loop_cleaner.LoopCleaner):
     """
 PURPOSE:
-Implements loop cleaner to execute iterative topological graph cleaning using dag subgraph
+Implements loop cleaner to coordinate topological graph cleaning across a dag storage
 
 GROUNDING_ARGUMENT:
 - As a system singleton, LoopCleaner coordinates topological traversal and node cleaning passes, interacting with imported dag_storage and dag_subgraph in the same system lifecycle tier and the polymorphic loop_node_cleaner.NodeCleaner.
@@ -25,18 +25,16 @@ INHERITED_ASSUMPTIONS:
 - [LoopCleaner] It is assumed that the node roots an acyclic subgraph.
 
 FRESH_REQUIREMENTS:
-- Target node initialization sets the target on the dag subgraph to collect reachable nodes and determine their topological order.
-- Cleaning loops while the dag subgraph is not complete, obtaining the next ready batch of dirty nodes from the dag subgraph, recording the visit on the dag subgraph, and delegating cleaning to the node cleaner.
-- If the node cleaner communicates that processing cannot continue, cleaning halts immediately.
+- Target node scoping sets the target node on the dag subgraph to determine dependency-first topological order.
+- Cleaning processes ready batches of dirty nodes in topological order, recording node visits for each cleaned batch, and halts immediately if the node cleaner communicates that processing cannot continue.
 - Cleaning concludes when the dag subgraph is complete, indicating all reachable nodes in the target subgraph are clean.
 
 INHERITED_REQUIREMENTS:
 - [LoopCleaner] Cleaning a node cleans dirty nodes in dependency-first topological order, ensuring all dependencies of a node are clean before that node is cleaned.
-- [LoopCleaner] When cleaning a dirty node using the node cleaner, cleaning delegates to the node cleaner.
-- [LoopCleaner] If the node cleaner communicates that processing cannot continue, cleaning halts.
+- [LoopCleaner] Cleaning dirty nodes halts if the node cleaner communicates that processing cannot continue.
 - [LoopCleaner] Cleaning concludes when all nodes in the subgraph rooted at the node are clean.
 
 GROUNDING_ARGUMENT:
-- Receives node and cleaner as parameters, delegates target subgraph collection and ready batch calculation to imported dag_subgraph.DagSubgraph in the same system lifecycle tier, records visits on dag_subgraph, and invokes cleaner.clean on ready dirty batches until dag_subgraph is complete or processing halts.
+- Receives node and cleaner as parameters, sets target on imported dag_subgraph.DagSubgraph in the same system lifecycle tier, records visits on dag_subgraph, and invokes cleaner.clean on ready dirty batches until dag_subgraph is complete or processing halts.
 """
         ...

@@ -129,7 +129,7 @@ class ToolProviderImplTest(unittest.TestCase):
             wire_bindings = WireParameterBindings(bindings={("arg1", "val1")})
             resp = manager.execute_tool("my_tool", wire_bindings)
 
-            # Requirement: When parameter mappings are successfully resolved, executing a tool by name delegates to the matching tool with the resolved actual parameter bindings and returns the tool's response.
+            # Requirement: When parameter mappings are successfully resolved, executing a tool by name executes the matching tool with the resolved actual parameter bindings and returns the tool's response.
             # Requirement: [ToolManager] Executing a tool by name with wire parameter bindings produces the tool response upon resolving parameter conversions.
             self.assertFalse(resp.is_failed)
             self.assertEqual(resp.content, "dummy executed")
@@ -222,7 +222,7 @@ class ToolProviderImplTest(unittest.TestCase):
             tool = DummyTool("tool_with_args", {param})
             manager.install_tool(tool)
 
-            # Requirement: Executing a tool with arguments converts raw argument mappings into wire parameter bindings and delegates to tool execution by name.
+            # Requirement: Executing a tool with arguments converts raw argument mappings into wire parameter bindings and executes the tool by name.
             resp = manager.execute_tool_with_arguments("tool_with_args", {"target": "widget.pyi"})
             self.assertFalse(resp.is_failed)
             assert tool.last_bindings is not None

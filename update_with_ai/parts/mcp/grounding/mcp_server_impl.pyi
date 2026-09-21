@@ -16,12 +16,12 @@ PURPOSE:
 Implements FastMCP server to host tool registrations, session scope activation, and hook HTTP routes
 
 INHERITED_REQUIREMENTS:
-- [McpServer] Exposes a register role agent tool that accepts a role address, a unit root, and an optional conversation identifier, registering the session with the role session manager.
-- [McpServer] Exposes a deregister role agent tool that accepts an optional conversation identifier, deregistering the session with the role session manager.
-- [McpServer] Exposes a shutdown tool that stops the server and removes the workspace sentinel.
-- [McpServer] Exposes domain tools from the session tool manager, accepting an optional conversation identifier and routing incoming tool calls to the active session scope for the caller conversation identifier.
-- [McpServer] Hosts hook validation and directory filter endpoints, delegating access authorization to the access gate.
-- [McpServer] Starting the server begins the transport loop and writes the workspace sentinel, updating registered subagents on registration and deregistration, and stopping cleanly terminates sessions, endpoints, and removes the sentinel.
+- [McpServer] Exposes a register role agent tool that accepts a role address, a unit root, and a conversation identifier, registering the subagent session.
+- [McpServer] Exposes a deregister role agent tool that accepts a conversation identifier, deregistering the subagent session.
+- [McpServer] Exposes a shutdown tool that terminates the server and removes the workspace sentinel.
+- [McpServer] Exposes domain tools accepting a conversation identifier, executing incoming tool calls within the active session scope for the caller conversation identifier.
+- [McpServer] Hosts hook validation and directory filter endpoints, producing access decisions and sanitized directory listings.
+- [McpServer] Server startup begins the transport loop and writes the workspace sentinel, updating registered subagents on registration and deregistration, and server termination cleanly closes active sessions, shuts down endpoints, and removes the sentinel.
 
 GROUNDING_ARGUMENT:
 - As a system singleton, McpServer hosts a FastMCP application instance via imported fastmcp_ext, delegates session management to imported mcp_session.RoleSessionManager, activates scopes to execute tools in imported tool_provider.ToolManager, delegates hook requests to imported mcp_gate.AccessGate, and evaluates sampling via imported mcp_cache_arbiter.CacheArbiter.

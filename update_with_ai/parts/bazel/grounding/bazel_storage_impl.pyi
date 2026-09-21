@@ -14,8 +14,8 @@ Implements graph storage with in-memory definitions, manifest loader coordinatio
 
 FRESH_REQUIREMENTS:
 - The agent storage maintains node definitions and task prompts mapped to nodes in dag storage.
-- The agent storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files using proto package store from update with ai proto ext.
-- All nodes located within the same package directory resolved by the bazel target share a common package message file named `.update_with_ai.textproto`.
+- The agent storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files.
+- All nodes located within the same package directory share a common package message file named `.update_with_ai.textproto`.
 - The agent storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
 - Propagating dependencies exclude silent dependencies declared on a node.
 

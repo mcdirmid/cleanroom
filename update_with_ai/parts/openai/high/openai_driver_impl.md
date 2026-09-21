@@ -19,7 +19,7 @@ When driving a turn, the loop driver transmits a completion request following Op
 
 The loop driver logs log events for turn requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool call names and arguments or text response previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in the transcript when present.
 
-Before each tool execution, the loop driver evaluates the tool invocation with the loop guard. Evaluating a tool invocation:
+Evaluating a tool invocation with the loop guard:
 
 - Halts execution with an unexpected failure carrying the loop failure explanation if the loop guard produces a loop failure.
 

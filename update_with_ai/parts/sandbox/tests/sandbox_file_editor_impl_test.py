@@ -311,7 +311,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.replacement_content_parameter, "New Line 2"),
                 }
             )
-            # Requirement: Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+            # Requirement: Editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
             resp_ro = replace_tool.execute_tool(b_ro)
             self.assertTrue(resp_ro.is_failed)
             self.assertEqual(
@@ -408,7 +408,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.allow_multiple_parameter, True),
                 }
             )
-            # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
+            # Requirement: Editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
             resp_no_change = replace_tool.execute_tool(b_no_change)
             self.assertTrue(resp_no_change.is_failed)
             self.assertEqual(
@@ -678,7 +678,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.replacement_content_parameter, "Line 2"),
                 }
             )
-            # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
+            # Requirement: Editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
             resp3 = replace_tool.execute_tool(b_noop)
             self.assertTrue(resp3.is_failed)
             self.assertEqual(
@@ -903,7 +903,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
             edit_mgr.lock_file(self.rw_file)
 
-            # Requirement: Before modifying a file, editing tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
+            # Requirement: Editing tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
             bindings = ActualParameterBindings(
                 bindings={
                     (replace_tool.file_alias_parameter, self.rw_file),

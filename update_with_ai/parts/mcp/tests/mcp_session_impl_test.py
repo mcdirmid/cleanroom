@@ -91,7 +91,7 @@ class McpSessionImplTest(unittest.TestCase):
             self.assertEqual(session.unit_root, "//pkg:cleaner")
             self.assertIsInstance(session.status, Active)
 
-            # Requirement: [RoleSessionManager] Registering a session initiates an agent session phase scope, sets role on role config, configures unit root on dag subgraph, and records the session as active, loading reachable target manifests into dag storage when a manifest loader is available.
+            # Requirement: [RoleSessionManager] Registering a session initiates an agent session phase scope, sets role on role config, configures unit root on dag subgraph, and records the session as active.
             with scope.activate():
                 self.assertTrue(self.mock_agent_cfg.is_mcp_mode)
                 role_cfg = scope.get_singleton(RoleConfig)
@@ -120,7 +120,7 @@ class McpSessionImplTest(unittest.TestCase):
             mgr = sys_scope.get_singleton(RoleSessionManager)
             cid = ConversationId("subagent-manifest")
 
-            # Requirement: [RoleSessionManager] Registering a session initiates an agent session phase scope, sets role on role config, configures unit root on dag subgraph, and records the session as active, loading reachable target manifests into dag storage when a manifest loader is available.
+            # Requirement: [RoleSessionManager] Registering a session initiates an agent session phase scope, sets role on role config, configures unit root on dag subgraph, and records the session as active.
             scope = mgr.register_session(cid, "code_cleaner", "//pkg:cleaner")
             self.assertIsNotNone(scope)
             self.assertEqual(len(mock_manifest_loader.loaded), 1)
@@ -194,7 +194,7 @@ class McpSessionImplTest(unittest.TestCase):
             cid_test = ConversationId("test-worker")
 
             # Register downstream QA first
-            # Requirement: [RoleSessionManager] Registering a session initiates an agent session phase scope, sets role on role config, configures unit root on dag subgraph, and records the session as active, loading reachable target manifests into dag storage when a manifest loader is available.
+            # Requirement: [RoleSessionManager] Registering a session initiates an agent session phase scope, sets role on role config, configures unit root on dag subgraph, and records the session as active.
             mgr.register_session(cid_qa, "qa", "//pkg:target")
             self.assertEqual(self.mock_subgraph.target, Node(unit_address="//pkg:target", role_address="qa"))
 

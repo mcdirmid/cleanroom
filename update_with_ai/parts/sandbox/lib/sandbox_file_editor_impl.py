@@ -331,7 +331,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
             target_file = last_file
             is_implicit_path = True
         elif not isinstance(target_file, agent_file_alias.ReadWriteFile):
-            # Requirement: Before modifying a file, editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+            # Requirement: Editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
             # Requirement: Editing tool responses share a constant suppression key replace_file_content.
             return tool_provider.Response(
                 is_failed=True,
@@ -341,7 +341,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                 suppression_key="replace_file_content",
             )
 
-        # Requirement: Before modifying a file, editing tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
+        # Requirement: Editing tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
         if target_file in edit_mgr.locked_files:
             return tool_provider.Response(
                 is_failed=True,
@@ -489,7 +489,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
 
         new_content = prefix + new_region + suffix
 
-        # Requirement: Before modifying a file, editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
+        # Requirement: Editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
         if new_content == content:
             return tool_provider.Response(
                 is_failed=True,

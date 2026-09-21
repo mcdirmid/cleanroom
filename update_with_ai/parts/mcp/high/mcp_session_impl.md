@@ -21,12 +21,12 @@ Registering a session validates that no active session is currently registered f
 
 When registering a session:
 
-- An agent session phase scope is initiated using the lifecycle begin phase operation, establishing an open scope that persists across discrete turns without binding to a context manager.
+- An agent session phase scope is initiated, establishing an open scope that persists across discrete turns without binding to a context manager.
 
-- Within the initiated scope, mcp mode is activated on the agent config, the role of the session is configured on the role config, loading reachable target manifests into dag storage when a manifest loader is available, and configuring the target root node on the dag subgraph with a root node constructed for the unit address and role address in dag storage when no target is set or the root node is not an existing dependency in the target subgraph.
+- Within the initiated scope, mcp mode is activated on the agent config, the role of the session is configured on the role config, and the target root node is configured on the dag subgraph with a root node constructed for the unit address and role address in dag storage when no target is set or the root node is not an existing dependency in the target subgraph.
 
 - The created role agent session is recorded in the active sessions mapping with the current system timestamp and an active status.
 
-Deregistering a session resolves the role agent session for the conversation identifier, signaling an error if no session is registered. The session scope is closed using the scope close operation, executing singleton teardowns in reverse instantiation order and releasing all acquired locks. The session record is removed from the active sessions mapping.
+Deregistering a session resolves the role agent session for the conversation identifier, signaling an error if no session is registered. The session scope is closed, releasing held resources and file locks. The session record is removed from the active sessions mapping.
 
 Resolving a session scope retrieves the lifecycle scope when registered, or produces an empty outcome when absent. Touching a session updates the last active timestamp with the current time and ensures the session status is active. Transitioning session status updates the recorded status for the registered session.

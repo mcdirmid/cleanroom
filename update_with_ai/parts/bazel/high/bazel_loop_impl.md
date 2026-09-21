@@ -1,6 +1,6 @@
 # bazel_loop_impl implementation component
 
-imports: bazel_manifest_loader, dag_storage, loop, loop_cleaner, loop_node_cleaner, runner_logger
+imports: bazel_manifest_loader, dag_storage, loop_cleaner, loop_node_cleaner, runner_logger
 implements: loop
 
 ## Purpose
@@ -17,7 +17,7 @@ The loop service coordinates build graph execution and change propagation across
 
 When executing a cleaning pass:
 
-- Target labels are resolved against workspace directories or runfiles trees to populate graph storage before cleaning.
+- Target labels are resolved against workspace directories or runfiles trees to populate graph storage.
 
 - Cleaning halts immediately and produces a failing build result if node cleaning fails, if any reachable node in the target subgraph remains dirty after cleaning, or if an unexpected failure occurs during cleaning, capturing the failure reason in the build summary.
 

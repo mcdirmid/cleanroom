@@ -13,14 +13,12 @@ Executing complex multi-node workflows requires scheduling tasks in dependency o
 
 ## Types and Behavior
 
-The loop cleaner coordinates dependency-first topological cleaning across a dag storage using a node cleaner.
+The loop cleaner coordinates dependency-first topological cleaning across a dag storage.
 
 When cleaning a target node:
 
-- Target node initialization sets the target on the dag subgraph to collect reachable nodes and determine their topological order.
+- Target node scoping sets the target node on the dag subgraph to determine dependency-first topological order.
 
-- Cleaning loops while the dag subgraph is not complete, obtaining the next ready batch of dirty nodes from the dag subgraph, recording the visit on the dag subgraph, and delegating cleaning to the node cleaner.
-
-- If the node cleaner communicates that processing cannot continue, cleaning halts immediately.
+- Cleaning processes ready batches of dirty nodes in topological order, recording node visits for each cleaned batch, and halts immediately if the node cleaner communicates that processing cannot continue.
 
 - Cleaning concludes when the dag subgraph is complete, indicating all reachable nodes in the target subgraph are clean.

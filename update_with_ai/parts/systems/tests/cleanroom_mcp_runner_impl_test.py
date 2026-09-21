@@ -119,8 +119,8 @@ class CleanroomMcpRunnerImplTest(unittest.TestCase):
             runner = scope.get_singleton(cleanroom_mcp_runner.McpRunner)
             mock_server = scope.get_singleton(MockMcpServer)
 
-            # Requirement: Executing the runner validates runner options and starts the server using the configured transport.
-            # Requirement: When standard input/output transport is requested, the runner starts the server over standard input/output.
+            # Requirement: Executing the runner validates runner options and executes the server using the configured transport.
+            # Requirement: When standard input/output transport is requested, the runner executes the server over standard input/output.
             # Requirement: The runner sets the batch size in the execution environment.
             opts = cleanroom_mcp_runner.RunnerOptions(transport="stdio", batch_size=10)
             runner.run(opts)
@@ -133,7 +133,7 @@ class CleanroomMcpRunnerImplTest(unittest.TestCase):
             mock_server = scope.get_singleton(MockMcpServer)
             mock_logger = scope.get_singleton(MockRunnerLogger)
 
-            # Requirement: When Server-Sent Events transport is requested, the runner configures server host and port parameters, logs startup progress to the runner logger, and starts the server over Server-Sent Events.
+            # Requirement: When Server-Sent Events transport is requested, the runner configures server host and port parameters, logs startup progress, and executes the server over Server-Sent Events.
             # Requirement: The runner sets the batch size in the execution environment.
             opts = cleanroom_mcp_runner.RunnerOptions(
                 transport="sse",

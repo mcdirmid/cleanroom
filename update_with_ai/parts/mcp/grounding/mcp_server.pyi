@@ -9,12 +9,12 @@ PURPOSE:
 System service that coordinates tool exposure, session turn scope activation, and hook IPC hosting
 
 FRESH_REQUIREMENTS:
-- Exposes a register role agent tool that accepts a role address, a unit root, and an optional conversation identifier, registering the session with the role session manager.
-- Exposes a deregister role agent tool that accepts an optional conversation identifier, deregistering the session with the role session manager.
-- Exposes a shutdown tool that stops the server and removes the workspace sentinel.
-- Exposes domain tools from the session tool manager, accepting an optional conversation identifier and routing incoming tool calls to the active session scope for the caller conversation identifier.
-- Hosts hook validation and directory filter endpoints, delegating access authorization to the access gate.
-- Starting the server begins the transport loop and writes the workspace sentinel, updating registered subagents on registration and deregistration, and stopping cleanly terminates sessions, endpoints, and removes the sentinel.
+- Exposes a register role agent tool that accepts a role address, a unit root, and a conversation identifier, registering the subagent session.
+- Exposes a deregister role agent tool that accepts a conversation identifier, deregistering the subagent session.
+- Exposes a shutdown tool that terminates the server and removes the workspace sentinel.
+- Exposes domain tools accepting a conversation identifier, executing incoming tool calls within the active session scope for the caller conversation identifier.
+- Hosts hook validation and directory filter endpoints, producing access decisions and sanitized directory listings.
+- Server startup begins the transport loop and writes the workspace sentinel, updating registered subagents on registration and deregistration, and server termination cleanly closes active sessions, shuts down endpoints, and removes the sentinel.
 """
 
     @operation

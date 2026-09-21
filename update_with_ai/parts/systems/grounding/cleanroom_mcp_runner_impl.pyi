@@ -24,9 +24,9 @@ PURPOSE:
 Validates runner options and starts the server using the configured transport.
 
 FRESH_REQUIREMENTS:
-- Executing the runner validates runner options and starts the server using the configured transport.
-- When standard input/output transport is requested, the runner starts the server over standard input/output.
-- When Server-Sent Events transport is requested, the runner configures server host and port parameters, logs startup progress to the runner logger, and starts the server over Server-Sent Events.
+- Executing the runner validates runner options and executes the server using the configured transport.
+- When standard input/output transport is requested, the runner executes the server over standard input/output.
+- When Server-Sent Events transport is requested, the runner configures server host and port parameters, logs startup progress, and executes the server over Server-Sent Events.
 - The runner sets the batch size in the execution environment.
 
 GROUNDING_ARGUMENT:

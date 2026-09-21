@@ -291,14 +291,14 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             # Requirement: A manifest loader parses JSON manifests using the filesystem into json manifest records.
             self.assertEqual(len(results), 1)
             defn = results[0]
-            # Requirement: A manifest loader normalizes node references into canonical nodes using node identifier utilities.
+            # Requirement: A manifest loader normalizes node references into canonical nodes.
             self.assertEqual(
                 defn.node, Node(unit_address="//pkg:target_a", role_address="")
             )
             self.assertEqual(defn.task_prompt, "Clean target A")
 
             # Definitions recorded in storage
-            # Requirement: [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using a node identifier utility, populating the agent storage.
+            # Requirement: [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations, populating the agent storage.
             self.assertEqual(self.storage.get_node_definition(defn.node), defn)
 
             # Dependencies recorded in storage
@@ -338,13 +338,13 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             # Requirement: A manifest loader parses JSON manifests using the filesystem into json manifest records.
             self.assertEqual(len(results), 1)
             defn = results[0]
-            # Requirement: A manifest loader normalizes node references into canonical nodes using node identifier utilities.
+            # Requirement: A manifest loader normalizes node references into canonical nodes.
             self.assertEqual(
                 defn.node, Node(unit_address="//pkg:sample_node", role_address="")
             )
             self.assertEqual(defn.task_prompt, "Implement the requested feature")
 
-            # Requirement: [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using a node identifier utility, populating the agent storage.
+            # Requirement: [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations, populating the agent storage.
             self.assertEqual(self.storage.get_node_definition(defn.node), defn)
 
             # Dependencies recorded in storage
@@ -356,7 +356,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             self.assertTrue(silent_y.is_silent)
 
             # Source files recorded in storage
-            # Requirement: [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using a node identifier utility, populating the agent storage.
+            # Requirement: [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations, populating the agent storage.
             self.assertIn(defn.node, self.storage._source_files)
             self.assertEqual(
                 self.storage._source_files[defn.node],

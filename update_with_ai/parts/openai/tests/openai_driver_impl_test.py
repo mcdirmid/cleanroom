@@ -758,7 +758,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
-            # Requirement: Before executing each tool call, the loop driver records the tool execution in the loop guard, injecting a loop reminder into the conversation when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
+            # Requirement: Evaluating a tool invocation with the loop guard records the tool execution in the loop guard, injecting a loop reminder into the conversation when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
             # Requirement: [LoopDriver] The loop driver evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
             self.assertTrue(outcome.is_success)
             self.assertTrue(
@@ -793,7 +793,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             with self.assertRaises(RuntimeError) as ctx:
                 runner.run()
 
-            # Requirement: Before executing each tool call, the loop driver records the tool execution in the loop guard, injecting a loop reminder into the conversation when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
+            # Requirement: Evaluating a tool invocation with the loop guard records the tool execution in the loop guard, injecting a loop reminder into the conversation when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
             # Requirement: [LoopDriver] The loop driver evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
             self.assertIn(
                 "Fatal loop detected: tool executed 5 times.", str(ctx.exception)

@@ -512,15 +512,15 @@ class SandboxRunControlImplTest(unittest.TestCase):
             tool_names = {t.name for t in self.tool_mgr.installed_tools}
             # Requirement: The advance tool is named `advance`, accepts no parameters, and shares a constant suppression key `advance`.
             self.assertIn("advance", tool_names)
-            # Requirement: The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter using the string parameter converter, and shares a constant suppression key `submit`.
+            # Requirement: The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter, and shares a constant suppression key `submit`.
             self.assertIn("submit", tool_names)
-            # Requirement: The fail tool is named `fail`, accepting a resolve target parameter and a text explanation parameter using the string parameter converter.
+            # Requirement: The fail tool is named `fail`, accepting a resolve target parameter and a text explanation parameter.
             self.assertIn("fail", tool_names)
-            # Requirement: The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias) using the alias manager, and shares a constant suppression key `check_file`.
+            # Requirement: The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
             self.assertIn("check_file", tool_names)
-            # Requirement: The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter using the alias manager, and a text explanation parameter using the string parameter converter.
+            # Requirement: The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter, and a text explanation parameter.
             self.assertIn("blame", tool_names)
-            # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter using the integer parameter converter.
+            # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter.
             self.assertIn("get_work", tool_names)
 
     def test_run_controller_initialization_without_blame_and_step_mode(self) -> None:
@@ -621,7 +621,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(advance.parameters, set())
             self.assertIsInstance(advance.description, str)
 
-            # Requirement: On its first execution, the advance tool delivers the initial guide summary through guide delivery without updating verification results.
+            # Requirement: Executing the advance tool delivers the initial guide summary through guide delivery without updating verification results when guide delivery has not yet started.
             resp = advance.execute_tool(b)
             self.assertFalse(resp.is_failed)
             self.assertFalse(resp.is_terminated)
@@ -641,7 +641,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             b = ActualParameterBindings(bindings=set())
 
             _ = advance.execute_tool(b)
-            # Requirement: On subsequent executions, executing the advance tool updates verification results if outdated.
+            # Requirement: Executing the advance tool updates verification results if outdated when guide delivery has already started.
             # Requirement: Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool with reasoning text indicating that verification results must be inspected before advancing.
             resp = advance.execute_tool(b)
 
@@ -738,7 +738,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         """CUJ: SubmitTool declares target and change_summary parameters with converters."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             submit = scope.get_singleton(SubmitToolImpl)
-            # Requirement: The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter using the string parameter converter, and shares a constant suppression key `submit`.
+            # Requirement: The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter, and shares a constant suppression key `submit`.
             self.assertEqual(submit.name, "submit")
             self.assertIsInstance(submit.description, str)
             self.assertEqual(submit.parameters, {submit.resolve_target, submit.target, submit.change_summary})
@@ -774,7 +774,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
                 resp.follow_up_tool_call.reasoning_text,
                 "Remaining guide steps must be completed before finishing.",
             )
-            # Requirement: The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter using the string parameter converter, and shares a constant suppression key `submit`.
+            # Requirement: The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter, and shares a constant suppression key `submit`.
             self.assertEqual(resp.suppression_key, "submit")
 
     def test_submit_tool_fails_when_verification_failing_specifies_check_file_followup(
@@ -905,7 +905,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             fail_tool = scope.get_singleton(FailToolImpl)
             self.assertIsInstance(fail_tool.description, str)
             self.assertGreater(len(fail_tool.parameters), 0)
-            # Requirement: The fail tool is named `fail`, accepting a resolve target parameter and a text explanation parameter using the string parameter converter.
+            # Requirement: The fail tool is named `fail`, accepting a resolve target parameter and a text explanation parameter.
             self.assertEqual(fail_tool.name, "fail")
             self.assertIs(fail_tool.explanation.parameter_converter, self.str_conv)
 
@@ -928,7 +928,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             blame_tool = scope.get_singleton(BlameToolImpl)
             self.assertIsInstance(blame_tool.description, str)
             self.assertGreater(len(blame_tool.parameters), 0)
-            # Requirement: The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter using the alias manager, and a text explanation parameter using the string parameter converter.
+            # Requirement: The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter, and a text explanation parameter.
             self.assertEqual(blame_tool.name, "blame")
             self.assertIs(blame_tool.blame_target.parameter_converter, self.alias_mgr)
             self.assertIs(blame_tool.explanation.parameter_converter, self.str_conv)
@@ -1258,7 +1258,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertTrue(hasattr(submit, "resolve_target"))
             self.assertTrue(hasattr(fail_tool, "resolve_target"))
             self.assertTrue(hasattr(blame_tool, "resolve_target"))
-            # Requirement: A resolve tool defines a file alias resolve target parameter (with target accepted as an alias) using the alias manager, and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes.
+            # Requirement: A resolve tool defines a file alias resolve target parameter (with target accepted as an alias), and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes.
             self.assertEqual(submit.resolve_target.name, "resolve_target")
             self.assertEqual(submit.target.name, "target")
             self.assertEqual(fail_tool.resolve_target.name, "resolve_target")
@@ -1535,7 +1535,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             check_file = scope.get_singleton(CheckFileTool)
-            # Requirement: The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias) using the alias manager, and shares a constant suppression key `check_file`.
+            # Requirement: The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
             self.assertEqual(check_file.name, "check_file")
             self.assertEqual({p.name for p in check_file.parameters}, {"path", "src"})
             self.assertIn(check_file.path, check_file.parameters)
@@ -1554,7 +1554,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
                 "## Verification failure\nInspect diagnostics and fix workspace files.",
                 resp.content,
             )
-            # Requirement: The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias) using the alias manager, and shares a constant suppression key `check_file`.
+            # Requirement: The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
             self.assertEqual(resp.suppression_key, "check_file")
 
     def test_check_file_tool_passing_verification_presents_results(self) -> None:
@@ -1575,7 +1575,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertFalse(resp.is_terminated)
             self.assertIn("Verification passed", resp.content)
             self.assertIn("All tests pass in test.py", resp.content)
-            # Requirement: The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias) using the alias manager, and shares a constant suppression key `check_file`.
+            # Requirement: The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
             self.assertEqual(resp.suppression_key, "check_file")
 
             # Custom verification_success_message
@@ -1836,7 +1836,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             fail = scope.get_singleton(FailToolImpl)
             rc = scope.get_singleton(RunControllerImpl)
 
-            # Requirement: A resolve tool defines a file alias resolve target parameter (with target accepted as an alias) using the alias manager, and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes.
+            # Requirement: A resolve tool defines a file alias resolve target parameter (with target accepted as an alias), and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes.
             # 1. Look up by exact alias / relative path
             self.assertEqual(
                 rc.get_node_for_alias("testing/parts/pkg/logs/unit1_qa.log"), node1
@@ -1952,7 +1952,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
             param_names = {p.name for p in get_work.parameters}
             self.assertIn("max_batch_size", param_names)
-            # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter using the integer parameter converter.
+            # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter.
             self.assertEqual(get_work.max_batch_size.name, "max_batch_size")
             self.assertFalse(get_work.max_batch_size.is_required)
 
@@ -2031,7 +2031,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             # Call get_work with max_batch_size = 1
             # Requirement: [Tool] When a parameter is required, an argument must be supplied for tool execution.
-            # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter using the integer parameter converter.
+            # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter.
             # Requirement: Tool execution obtains dirty nodes from dag storage and dag subgraph, updating the active nodes and execution version on role config, when no open active nodes remain.
             # Requirement: Tool execution materializes startup templates on disk, constructs the task prompt from dirty node definitions, guide instructions, and incoming messages from dag storage formatted via the template formatter, and returns the rendered task prompt when ready dirty nodes are obtained.
             initial_version = self.role_cfg.execution_version

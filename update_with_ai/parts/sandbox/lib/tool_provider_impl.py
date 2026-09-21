@@ -63,7 +63,7 @@ class ToolManager(tool_provider.ToolManager, Singleton):
                 conv_val = p.parameter_type.convert(raw_val)
                 actual_bindings.add((p, conv_val))
 
-        # Requirement: When parameter mappings are successfully resolved, executing a tool by name delegates to the matching tool with the resolved actual parameter bindings and returns the tool's response.
+        # Requirement: When parameter mappings are successfully resolved, executing a tool by name executes the matching tool with the resolved actual parameter bindings and returns the tool's response.
         # Requirement: [ToolManager] Executing a tool by name with wire parameter bindings produces the tool response upon resolving parameter conversions.
         return tool.execute_tool(
             tool_provider.ActualParameterBindings(bindings=actual_bindings)
@@ -72,7 +72,7 @@ class ToolManager(tool_provider.ToolManager, Singleton):
     def execute_tool_with_arguments(
         self, name: str, arguments: Mapping[str, Any]
     ) -> tool_provider.Response:
-        # Requirement: Executing a tool with arguments converts raw argument mappings into wire parameter bindings and delegates to tool execution by name.
+        # Requirement: Executing a tool with arguments converts raw argument mappings into wire parameter bindings and executes the tool by name.
         wire_bindings = tool_provider.WireParameterBindings.from_dict(arguments)
         return self.execute_tool(name, wire_bindings)
 

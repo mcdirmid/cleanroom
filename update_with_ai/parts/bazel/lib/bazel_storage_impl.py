@@ -23,7 +23,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         self._source_files: Dict[dag_storage.Node, str] = {}
 
     def _get_store_path(self, node: dag_storage.Node) -> Path:
-        # Requirement: All nodes located within the same package directory resolved by the bazel target share a common package message file named `.update_with_ai.textproto`.
+        # Requirement: All nodes located within the same package directory share a common package message file named `.update_with_ai.textproto`.
         # Requirement: The agent storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
         node_util = get_singleton(bazel_target.BazelTarget)
         pkg_dir = node_util.extract_directory(node)
@@ -38,7 +38,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
             return {}
         content = path.read_text(encoding="utf-8")
 
-        # Requirement: The agent storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files using proto package store from update with ai proto ext.
+        # Requirement: The agent storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files.
         nodes: Dict[str, Dict[str, Any]] = {}
         current_node_id: Optional[str] = None
         current_messages: List[Dict[str, str]] = []
@@ -69,7 +69,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
     def _save_package_data(
         self, path: Path, node_records: Mapping[str, Mapping[str, Any]]
     ) -> bool:
-        # Requirement: The agent storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files using proto package store from update with ai proto ext.
+        # Requirement: The agent storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files.
         lines: List[str] = []
         for node_id in sorted(node_records.keys()):
             record = node_records[node_id]
@@ -116,7 +116,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         return node_util.normalize(node_id)
 
     def get_dependents(self, node: dag_storage.Node) -> Set[dag_storage.Node]:
-        # Requirement: All nodes located within the same package directory resolved by the bazel target share a common package message file named `.update_with_ai.textproto`.
+        # Requirement: All nodes located within the same package directory share a common package message file named `.update_with_ai.textproto`.
         path = self._get_store_path(node)
         data = self._load_package_data(path)
         record = data.get(self._node_to_id(node), {})
@@ -126,7 +126,7 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         return deps
 
     def get_messages(self, node: dag_storage.Node) -> Set[dag_storage.Message]:
-        # Requirement: All nodes located within the same package directory resolved by the bazel target share a common package message file named `.update_with_ai.textproto`.
+        # Requirement: All nodes located within the same package directory share a common package message file named `.update_with_ai.textproto`.
         path = self._get_store_path(node)
         data = self._load_package_data(path)
         record = data.get(self._node_to_id(node), {})

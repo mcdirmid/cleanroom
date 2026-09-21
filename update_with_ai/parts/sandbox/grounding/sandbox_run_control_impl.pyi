@@ -65,7 +65,7 @@ Installs submit, fail, check file, and get work tools unconditionally, advance t
 FRESH_REQUIREMENTS:
 - The run controller initializes by unconditionally installing the submit tool, fail tool, check file tool, and get work tool for the agent session, installing the advance tool only when guide step mode is active, obtaining configured blame targets and verification checks from the node config, and installing the blame tool only when blame targets are configured.
 - Verification checks exposed by the run controller include the session verification checks from node config.
-- A resolve tool defines a file alias resolve target parameter (with target accepted as an alias) using the alias manager, and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes.
+- A resolve tool defines a file alias resolve target parameter (with target accepted as an alias), and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes.
 - When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
 - When the resolve target parameter is omitted, it defaults to the last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
 - Tool execution fails when the resolve target parameter is omitted and cannot be defaulted, or when the specified resolve target parameter does not match an open active node, reminding the agent to specify an open target.
@@ -107,7 +107,7 @@ INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.
 
 FRESH_REQUIREMENTS:
-- The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias) using the alias manager, and shares a constant suppression key `check_file`.
+- The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
 
 GROUNDING_ARGUMENT:
 - As an agent_session singleton, CheckFileTool evaluates verification checks via RunController, presenting results with suppression key 'check_file' in the same session lifecycle tier.
@@ -245,8 +245,8 @@ PURPOSE:
 Implements execute_tool to advance guide steps and report progress or failure diagnostics
 
 FRESH_REQUIREMENTS:
-- On its first execution, the advance tool delivers the initial guide summary through guide delivery without updating verification results.
-- On subsequent executions, executing the advance tool updates verification results if outdated.
+- Executing the advance tool delivers the initial guide summary through guide delivery without updating verification results when guide delivery has not yet started.
+- Executing the advance tool updates verification results if outdated when guide delivery has already started.
 - Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool with reasoning text indicating that verification results must be inspected before advancing.
 - Tool execution advances guide delivery and delivers the next step section when verification is passing and guide steps remain.
 - Tool execution fails with a reminder to call the submit tool with a change summary describing modifications when verification is passing, no steps remain, and workspace files were modified.
@@ -271,7 +271,7 @@ INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.
 
 FRESH_REQUIREMENTS:
-- The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter using the string parameter converter, and shares a constant suppression key `submit`.
+- The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter, and shares a constant suppression key `submit`.
 
 GROUNDING_ARGUMENT:
 - As an agent_session singleton, SubmitTool validates session completion criteria, interacting with imported sandbox_guide_delivery.GuideDelivery, sandbox_file_editor.EditManager, agent_node_config.NodeConfig, template_format.TemplateFormatter, and RunController in the same session lifecycle tier.
@@ -371,7 +371,7 @@ INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.
 
 FRESH_REQUIREMENTS:
-- The fail tool is named `fail`, accepting a resolve target parameter and a text explanation parameter using the string parameter converter.
+- The fail tool is named `fail`, accepting a resolve target parameter and a text explanation parameter.
 
 GROUNDING_ARGUMENT:
 - As an agent_session singleton, FailTool terminates the session in failure, coordinating with RunController and template_format.TemplateFormatter in the same session lifecycle tier.
@@ -466,7 +466,7 @@ INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.
 
 FRESH_REQUIREMENTS:
-- The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter using the alias manager, and a text explanation parameter using the string parameter converter.
+- The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter, and a text explanation parameter.
 
 GROUNDING_ARGUMENT:
 - As an agent_session singleton, BlameTool attributes prerequisite defects to dependency nodes, coordinating with RunController, template_format.TemplateFormatter, and imported agent_file_alias.AliasManager in the same session lifecycle tier.
@@ -577,7 +577,7 @@ INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.
 
 FRESH_REQUIREMENTS:
-- The get work tool is named `get_work`, accepting an integer max batch size parameter using the integer parameter converter.
+- The get work tool is named `get_work`, accepting an integer max batch size parameter.
 
 GROUNDING_ARGUMENT:
 - As an agent_session singleton, GetWorkTool retrieves dirty nodes from dag_storage.DagStorage and dag_subgraph.DagSubgraph in the system tier, updates agent_node_config.RoleConfig in the session tier, materializes startup templates via sandbox.Sandbox in the session tier, formats the task prompt via template_format.TemplateFormatter and RunController, and returns the response.

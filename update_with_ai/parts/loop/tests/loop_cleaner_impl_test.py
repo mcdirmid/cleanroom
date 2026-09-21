@@ -65,9 +65,9 @@ class LoopCleanerImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=self.registry):
             loop_cleaner = get_singleton(LoopCleaner)
-            # Requirement: Target node initialization sets the target on the dag subgraph to collect reachable nodes and determine their topological order.
-            # Requirement: Cleaning loops while the dag subgraph is not complete, obtaining the next ready batch of dirty nodes from the dag subgraph, recording the visit on the dag subgraph, and delegating cleaning to the node cleaner.
-            # Requirement: [LoopCleaner] When cleaning a dirty node using the node cleaner, cleaning delegates to the node cleaner.
+            # Requirement: Target node scoping sets the target node on the dag subgraph to determine dependency-first topological order.
+            # Requirement: Cleaning processes ready batches of dirty nodes in topological order, recording node visits for each cleaned batch, and halts immediately if the node cleaner communicates that processing cannot continue.
+            # Requirement: [LoopCleaner] Cleaning dirty nodes halts if the node cleaner communicates that processing cannot continue.
             # Requirement: [LoopCleaner] Cleaning a node cleans dirty nodes in dependency-first topological order, ensuring all dependencies of a node are clean before that node is cleaned.
             # Requirement: Cleaning concludes when the dag subgraph is complete, indicating all reachable nodes in the target subgraph are clean.
             # Requirement: [LoopCleaner] Cleaning concludes when all nodes in the subgraph rooted at the node are clean.
@@ -89,8 +89,8 @@ class LoopCleanerImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=self.registry):
             loop_cleaner = get_singleton(LoopCleaner)
-            # Requirement: If the node cleaner communicates that processing cannot continue, cleaning halts immediately.
-            # Requirement: [LoopCleaner] If the node cleaner communicates that processing cannot continue, cleaning halts.
+            # Requirement: Cleaning processes ready batches of dirty nodes in topological order, recording node visits for each cleaned batch, and halts immediately if the node cleaner communicates that processing cannot continue.
+            # Requirement: [LoopCleaner] Cleaning dirty nodes halts if the node cleaner communicates that processing cannot continue.
             loop_cleaner.clean(root, cleaner)
 
             self.assertEqual(cleaner.cleaned_batches, [[node_b]])
@@ -106,7 +106,7 @@ class LoopCleanerImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=self.registry):
             loop_cleaner = get_singleton(LoopCleaner)
-            # Requirement: Target node initialization sets the target on the dag subgraph to collect reachable nodes and determine their topological order.
+            # Requirement: Target node scoping sets the target node on the dag subgraph to determine dependency-first topological order.
             # Requirement: Cleaning concludes when the dag subgraph is complete, indicating all reachable nodes in the target subgraph are clean.
             loop_cleaner.clean(root, cleaner)
 

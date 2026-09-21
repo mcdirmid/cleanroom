@@ -45,7 +45,7 @@ Resolves target manifests and populates node definitions, graph relationships, a
 
 FRESH_REQUIREMENTS:
 - A manifest loader parses JSON manifests using the filesystem into json manifest records.
-- A manifest loader normalizes node references into canonical nodes using node identifier utilities.
+- A manifest loader normalizes node references into canonical nodes.
 - A manifest loader resolves package-relative file paths against target package directories.
 - A manifest loader maps declared source files, templates, and silent source files into read-write files and template entries.
 - A manifest loader expands direct dependencies and star dependencies into read-only files.
@@ -59,7 +59,7 @@ FRESH_REQUIREMENTS:
 - A manifest loader synthesizes promptless pass-through node definitions that act as graph dependencies without propagating changes when a unit's component type is not active for a role.
 
 INHERITED_REQUIREMENTS:
-- [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations using a node identifier utility, populating the agent storage.
+- [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations, populating the agent storage.
 - [BazelManifestLoader] A manifest loader resolves declared source files and templates into read-write files and templates in node configurations.
 - [BazelManifestLoader] A manifest loader resolves declared silent source files into read-write files while excluding them from dependent read-only files.
 - [BazelManifestLoader] A manifest loader resolves declared direct dependencies into read-only files, and star dependencies into transitive read-only file closures.

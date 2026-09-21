@@ -13,9 +13,9 @@ Multi-turn agent execution within Bazel workspaces requires binding node-specifi
 
 ## Types and Behavior
 
-The node config and alias manager realize session configuration and file alias resolution for the target nodes presented by the role config using the bazel manifest loader.
+The node config and alias manager realize session configuration and file alias resolution for the target nodes presented by the role config.
 
-The node config caches per node info loaded for active nodes from the role config, checking the role config version to unload cached per node info when nodes are no longer being cleaned, and loading per node info for newly active nodes from target node manifests using the bazel manifest loader.
+The node config caches per node info loaded for active nodes from the role config, checking the role config version to unload cached per node info when nodes are no longer being cleaned, and loading per node info for newly active nodes from target node manifests.
 
 Loading per node info for a node resolves its declared source files and templates from the manifest as the node read-write files and templates, declared template parameters as the node template parameters, direct dependencies and transitive star dependencies resolved across dependency manifests as the node read-only files excluding declared silent dependencies and read-write files, whether the node allows step mode, declared guide targets as the guide file and task guide, declared feedback dependencies as blame targets mapped to their owning dependency nodes, declared verification commands as verification checks, declared source file alias relative path as the src file alias, declared verification success message, and feedback messages from graph storage as the feedback.
 
