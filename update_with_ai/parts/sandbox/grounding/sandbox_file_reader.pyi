@@ -1,4 +1,4 @@
-from typing import Optional, Protocol, Set
+from typing import Optional, Protocol, Set, Union
 from framework import operation, override, singleton_type
 import agent_file_alias
 import tool_provider
@@ -41,9 +41,7 @@ Configured with a guide file as an unbound file when step-mode is active
         ...
 
     @operation
-    def can_read(
-        self, path: Union[str, agent_file_alias.FileAlias]
-    ) -> tool_provider.Response:
+    def can_read(self, path: Union[str, agent_file_alias.FileAlias]) -> tool_provider.Response:
         """
 PURPOSE:
 Validates inspection access for a file path under role blindness and file boundaries

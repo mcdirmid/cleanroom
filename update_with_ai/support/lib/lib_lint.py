@@ -565,6 +565,8 @@ def main() -> int:
             lifecycle_label = "//update_python_with_ai/support/lib:lifecycle"
             lib_deps.append(lifecycle_label)
             allowed_deps.add("lifecycle")
+            lib_deps.append("//update_with_ai/parts/agent/lib:agent_session")
+            allowed_deps.add("agent_session")
 
         for stem_d in ext_stems:
             spec_file = f"{stem_d}.pyi"

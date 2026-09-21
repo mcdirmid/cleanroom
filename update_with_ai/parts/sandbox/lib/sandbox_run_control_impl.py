@@ -29,9 +29,11 @@ class RunController(sandbox_run_control.RunController, Singleton):
         self._cached_passed: Optional[bool] = None
         self._cached_diag: str = ""
         self._cached_revision: Optional[int] = None
+        self._cached_hash: Optional[str] = None
         self._cached_node_passed: Dict[dag_storage.Node, bool] = {}
         self._cached_node_diag: Dict[dag_storage.Node, str] = {}
         self._cached_node_revision: Dict[dag_storage.Node, int] = {}
+        self._cached_node_hash: Dict[dag_storage.Node, str] = {}
         self._nodes: List[dag_storage.Node] = []
         self._alias_to_node: Dict[str, dag_storage.Node] = {}
         self._node_to_alias: Dict[dag_storage.Node, str] = {}
@@ -42,11 +44,6 @@ class RunController(sandbox_run_control.RunController, Singleton):
     def _ensure_nodes(self) -> None:
         cfg = get_singleton(agent_node_config.NodeConfig)
         if cfg.src_file_alias_by_node:
-            if len(self._nodes) == 1 and self._nodes[0].unit_address == "//session:target":
-                self._nodes.clear()
-                self._alias_to_node.clear()
-                self._node_to_alias.clear()
-                self._node_states.clear()
             for node, alias in cfg.src_file_alias_by_node.items():
                 if node not in self._node_states:
                     self._nodes.append(node)
@@ -54,11 +51,6 @@ class RunController(sandbox_run_control.RunController, Singleton):
                     self._node_to_alias[node] = alias
                     self._node_states[node] = "OPEN"
         elif cfg.read_write_files:
-            if len(self._nodes) == 1 and self._nodes[0].unit_address == "//session:target":
-                self._nodes.clear()
-                self._alias_to_node.clear()
-                self._node_to_alias.clear()
-                self._node_states.clear()
             for f in sorted(cfg.read_write_files, key=lambda x: x.relative_path):
                 if hasattr(f, "owning_node") and f.owning_node is not None:
                     node = f.owning_node
@@ -71,8 +63,8 @@ class RunController(sandbox_run_control.RunController, Singleton):
             try:
                 role_cfg = get_singleton(agent_node_config.RoleConfig)
                 has_role = bool(role_cfg.role)
-            except (LifecycleResolutionError, KeyError):
-                has_role = False
+            except (LifecycleResolutionError, KeyError):  # pragma: no cover (assumption: RoleConfig registered in session)
+                has_role = False  # pragma: no cover (assumption: RoleConfig registered in session)
             if not has_role:
                 dummy_node = dag_storage.Node(
                     unit_address="//session:target", role_address=""
@@ -102,8 +94,10 @@ class RunController(sandbox_run_control.RunController, Singleton):
         matching = [
             node
             for node, alias in self._node_to_alias.items()
-            if os.path.basename(alias) == alias_or_name
+            if os.path.basename(alias) == os.path.basename(alias_or_name)
             or os.path.basename(node.unit_address) == alias_or_name
+            or alias.endswith("/" + alias_or_name.lstrip("/"))
+            or alias_or_name.endswith("/" + alias.lstrip("/"))
         ]
         if len(matching) == 1:
             return matching[0]
@@ -367,11 +361,27 @@ class RunController(sandbox_run_control.RunController, Singleton):
 
     def evaluate_verification(self) -> Tuple[bool, str]:
         # Requirement: Evaluation of verification checks is cached alongside the edit manager file update revision.
+        # Requirement: Evaluation of verification checks for an active node is cached alongside the edit manager file hash of the target node read-write file.
+        # Requirement: Verification checks are evaluated sequentially and results are cached whenever verification results are outdated, which occurs before initial evaluation and when the target read-write file hash has changed since the previous evaluation.
+        # Requirement: When the target read-write file hash has not changed since the previous evaluation, verification check execution is omitted and the cached verification outcome is reused.
         # Requirement: Verification checks are evaluated sequentially and results are cached whenever verification results are outdated, which occurs before initial evaluation and when workspace files have been updated since the previous evaluation.
         # Requirement: When workspace files have not been updated since the previous evaluation, verification check execution is omitted and the cached verification outcome is reused.
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
+        cfg = get_singleton(agent_node_config.NodeConfig)
         current_rev = edit_mgr.file_update_revision
-        if self._cached_revision is not None and current_rev == self._cached_revision:
+        if cfg.read_write_files:
+            current_hash = ":".join(
+                edit_mgr.file_hash(f)
+                for f in sorted(cfg.read_write_files, key=lambda x: x.relative_path)
+            )
+        else:
+            current_hash = str(current_rev)
+
+        if (
+            self._cached_revision is not None
+            and current_rev == self._cached_revision
+            and (self._cached_hash is None or current_hash == self._cached_hash)
+        ):
             return self._cached_passed or False, self._cached_diag
 
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
@@ -389,11 +399,15 @@ class RunController(sandbox_run_control.RunController, Singleton):
         self._cached_passed = passed
         self._cached_diag = diag_out
         self._cached_revision = current_rev
+        self._cached_hash = current_hash
         return passed, diag_out
 
     def evaluate_verification_for_node(
         self, node: dag_storage.Node
     ) -> Tuple[bool, str]:
+        # Requirement: Evaluation of verification checks for an active node is cached alongside the edit manager file hash of the target node read-write file.
+        # Requirement: Verification checks are evaluated sequentially and results are cached whenever verification results are outdated, which occurs before initial evaluation and when the target read-write file hash has changed since the previous evaluation.
+        # Requirement: When the target read-write file hash has not changed since the previous evaluation, verification check execution is omitted and the cached verification outcome is reused.
         cfg = get_singleton(agent_node_config.NodeConfig)
         checks = (
             cfg.verification_checks_by_node.get(node)
@@ -405,9 +419,30 @@ class RunController(sandbox_run_control.RunController, Singleton):
 
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
         current_rev = edit_mgr.file_update_revision
+        rw_file = None
+        for f in cfg.read_write_files:
+            if hasattr(f, "owning_node") and f.owning_node == node:
+                rw_file = f
+                break
+        if rw_file is None:
+            alias = self.get_alias_for_node(node)
+            for f in cfg.read_write_files:
+                if f.relative_path == alias:
+                    rw_file = f
+                    break
+
+        if rw_file is not None:
+            current_hash = edit_mgr.file_hash(rw_file)
+        else:
+            current_hash = str(current_rev)
+
         if (
             node in self._cached_node_revision
             and self._cached_node_revision[node] == current_rev
+            and (
+                node not in self._cached_node_hash
+                or self._cached_node_hash[node] == current_hash
+            )
         ):
             return self._cached_node_passed.get(
                 node, False
@@ -428,6 +463,7 @@ class RunController(sandbox_run_control.RunController, Singleton):
         self._cached_node_passed[node] = passed
         self._cached_node_diag[node] = diag_out
         self._cached_node_revision[node] = current_rev
+        self._cached_node_hash[node] = current_hash
         return passed, diag_out
 
     def format_open_targets_reminder(self) -> str:
@@ -527,6 +563,7 @@ class CheckFileTool(sandbox_run_control.CheckFileTool, Singleton):
 
     def __init__(self) -> None:
         self._last_tested_revision: Optional[int] = None
+        self._last_tested_hashes: Dict[Any, str] = {}
         self._last_tested_node_revision: Dict[dag_storage.Node, int] = {}
 
     @property
@@ -631,55 +668,71 @@ class CheckFileTool(sandbox_run_control.CheckFileTool, Singleton):
         else:
             passed, diag = rc.evaluate_verification()
 
+        rw_file = None
+        if raw_target is not None:
+            for f in cfg.read_write_files:
+                if f == raw_target or getattr(f, "relative_path", "") == getattr(
+                    raw_target, "relative_path", str(raw_target)
+                ):
+                    rw_file = f
+                    break
+        if rw_file is None and target_node is not None:
+            target_alias = rc.get_alias_for_node(target_node)
+            for f in cfg.read_write_files:
+                if (
+                    getattr(f, "owning_node", None) == target_node
+                    or getattr(f, "relative_path", "") == target_alias
+                ):
+                    rw_file = f
+                    break
+        if rw_file is None:
+            last_f = edit_mgr.last_read_or_edited_file
+            if last_f is not None:
+                for f in cfg.read_write_files:
+                    if f == last_f or getattr(f, "relative_path", "") == getattr(
+                        last_f, "relative_path", ""
+                    ):
+                        rw_file = f
+                        break
+        if rw_file is None and cfg.read_write_files:
+            rw_file = next(
+                iter(
+                    sorted(
+                        cfg.read_write_files,
+                        key=lambda f: getattr(
+                            f, "relative_path", getattr(f, "short_name", "")
+                        ),
+                    )
+                ),
+                None,
+            )
+
         current_rev = edit_mgr.file_update_revision
-        is_repeated = (
-            self._last_tested_revision is not None
-            and self._last_tested_revision == current_rev
+        current_hash = (
+            edit_mgr.file_hash(rw_file)
+            if rw_file is not None
+            else str(current_rev)
         )
+        cache_key = (
+            target_node
+            if target_node is not None
+            else (rw_file if rw_file is not None else "default")
+        )
+        is_repeated = (
+            cache_key in self._last_tested_hashes
+            and self._last_tested_hashes[cache_key] == current_hash
+            and (
+                self._last_tested_revision is not None
+                and self._last_tested_revision == current_rev
+            )
+        )
+        self._last_tested_hashes[cache_key] = current_hash
         self._last_tested_revision = current_rev
 
         reminder: Optional[str] = None
         follow_up: Optional[tool_provider.FollowUpToolCall] = None
 
         if is_repeated:
-            rw_file = None
-            if raw_target is not None:
-                for f in cfg.read_write_files:
-                    if f == raw_target or getattr(f, "relative_path", "") == getattr(
-                        raw_target, "relative_path", str(raw_target)
-                    ):
-                        rw_file = f
-                        break
-            if rw_file is None and target_node is not None:
-                target_alias = rc.get_alias_for_node(target_node)
-                for f in cfg.read_write_files:
-                    if (
-                        getattr(f, "owning_node", None) == target_node
-                        or getattr(f, "relative_path", "") == target_alias
-                    ):
-                        rw_file = f
-                        break
-            if rw_file is None:
-                last_f = edit_mgr.last_read_or_edited_file
-                if last_f is not None:
-                    for f in cfg.read_write_files:
-                        if f == last_f or getattr(f, "relative_path", "") == getattr(
-                            last_f, "relative_path", ""
-                        ):
-                            rw_file = f
-                            break
-            if rw_file is None and cfg.read_write_files:
-                rw_file = next(
-                    iter(
-                        sorted(
-                            cfg.read_write_files,
-                            key=lambda f: getattr(
-                                f, "relative_path", getattr(f, "short_name", "")
-                            ),
-                        )
-                    ),
-                    None,
-                )
             src_name = (
                 getattr(rw_file, "relative_path", getattr(rw_file, "short_name", ""))
                 if rw_file
@@ -687,7 +740,7 @@ class CheckFileTool(sandbox_run_control.CheckFileTool, Singleton):
             )
             status_word = "passes" if passed else "failed"
             action_word = "advance" if cfg.is_step_mode else "submit"
-            # Requirement: Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous check file tool execution.
+            # Requirement: Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when the target read-write file hash has not changed since the previous check file tool execution.
             reminder = f"Verification {status_word}, no new information will be revealed by this tool call until {src_name} is updated."
             if rw_file is not None:
                 rw_file_alias = getattr(
@@ -1290,12 +1343,28 @@ class BlameTool(_ResolveTool, sandbox_run_control.BlameTool, Singleton):
         def _match_node_blame_target(
             node: dag_storage.Node, val: Any, val_str: str
         ) -> Optional[agent_file_alias.BoundFile]:
-            for bt in rc.get_blame_targets_for_node(node):
+            targets = list(rc.get_blame_targets_for_node(node))
+            for bt in targets:
                 bt_name = getattr(bt, "relative_path", getattr(bt, "short_name", ""))
                 if val is not None and bt == val:
                     return bt
                 if val_str and bt_name == val_str:
                     return bt
+            if val_str:
+                norm_v = val_str.lstrip("/")
+                suffix_matches = [
+                    bt for bt in targets
+                    if getattr(bt, "relative_path", "").endswith("/" + norm_v)
+                    or norm_v.endswith("/" + getattr(bt, "relative_path", "").lstrip("/"))
+                ]
+                if len(suffix_matches) == 1:
+                    return suffix_matches[0]
+                base_matches = [
+                    bt for bt in targets
+                    if os.path.basename(getattr(bt, "relative_path", "")) == os.path.basename(norm_v)
+                ]
+                if len(base_matches) == 1:
+                    return base_matches[0]
             return None
 
         open_nodes = rc.open_nodes()

@@ -59,7 +59,7 @@ PURPOSE:
 Executes a domain tool within the activated session scope for the caller conversation
 
 GROUNDING_ARGUMENT:
-- Touches session in imported mcp_session.RoleSessionManager, resolves session scope, activates scope using scope.activate(), dispatches tool_name and arguments to imported tool_provider.ToolManager.execute_tool_with_arguments, updates session status to Idle if response is idle, synchronizes submitted nodes to imported dag_storage.DagStorage and records visits on imported dag_subgraph.DagSubgraph when submission succeeds, and returns response content.
+- Touches session in imported mcp_session.RoleSessionManager, resolves session scope, activates scope using scope.activate(), dispatches tool_name and arguments to imported tool_provider.ToolManager.execute_tool_with_arguments, exports newly installed tools from ToolManager, updates session status to Idle if response is idle, synchronizes submitted nodes to imported dag_storage.DagStorage and records visits on imported dag_subgraph.DagSubgraph when submission succeeds, attributes defect feedback to blame target owning node in dag_storage.DagStorage when blame succeeds, and returns response content.
 """
         ...
 

@@ -20,8 +20,8 @@ Implements run controller to install advance, submit, fail, and optional blame t
 
 INHERITED_REQUIREMENTS:
 - [RunController] The run controller exposes verification checks that validate session criteria.
-- [RunController] The run controller caches verification evaluation results alongside the edit manager file update revision, reusing the cached verification outcome as long as no workspace files have been updated since that evaluation.
-- [RunController] The run controller installs a check file tool that updates verification results if outdated, accepting a file alias path parameter, presenting verification outcomes to the agent and failing when verification failed.
+- [RunController] The run controller caches verification evaluation results alongside edit manager file hashes for target nodes, reusing the cached verification outcome as long as no workspace files have been updated since that evaluation.
+- [RunController] The run controller installs a check file tool that updates verification results if outdated, accepting a file alias path parameter, presenting verification outcomes to the agent, tracking last tested file hashes, and failing when verification failed.
 - [RunController] The run controller installs an advance tool when guide step mode is active, coordinating step progression through guide delivery upon passing verification.
 - [RunController] The run controller installs a submit tool which is a resolve tool that concludes active nodes upon passing verification, marks the resolve target clean in the current get work turn, accepting a text change summary parameter, and enforces change documentation.
 - [RunController] The run controller installs a fail tool which is a resolve tool that terminates the run in failure, accepting a text explanation parameter.
@@ -88,12 +88,12 @@ PURPOSE:
 Evaluates verification checks with file update revision caching
 
 FRESH_REQUIREMENTS:
-- Evaluation of verification checks is cached alongside the edit manager file update revision.
-- Verification checks are evaluated sequentially and results are cached whenever verification results are outdated, which occurs before initial evaluation and when workspace files have been updated since the previous evaluation.
-- When workspace files have not been updated since the previous evaluation, verification check execution is omitted and the cached verification outcome is reused.
+- Evaluation of verification checks for an active node is cached alongside the edit manager file hash of the target node read-write file.
+- Verification checks are evaluated sequentially and results are cached whenever verification results are outdated, which occurs before initial evaluation and when the target read-write file hash has changed since the previous evaluation.
+- When the target read-write file hash has not changed since the previous evaluation, verification check execution is omitted and the cached verification outcome is reused.
 
 GROUNDING_ARGUMENT:
-- Tracks cached verification outcome and revision on self, inspecting file_update_revision from imported sandbox_file_editor.EditManager, executing self.verification_checks and caching results when revision changes.
+- Tracks cached verification outcome and file hash on self, inspecting file_hash from imported sandbox_file_editor.EditManager, executing self.verification_checks and caching results when hash changes.
 """
         ...
 
@@ -171,7 +171,7 @@ Executes the check file tool, updating verification results and presenting them
 FRESH_REQUIREMENTS:
 - When the path parameter is omitted, the path parameter defaults using resolve target defaulting rules.
 - Executing the check file tool updates verification results if outdated and evaluates verification checks for that target.
-- Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous check file tool execution.
+- Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when the target read-write file hash has not changed since the previous check file tool execution.
 - Tool execution specifies a follow-up execution of the view file tool on the active node source file (resolving to the specified path target if a read-write file, the last accessed read-write file, or the primary session read-write file) and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check file tool execution.
 - Tool execution fails when verification fails, presenting diagnostic feedback sanitized through the alias manager alongside any configured verification failure instructions.
 - Tool execution produces a response presenting passing verification results using the session verification success message when configured or default passing verification results alongside sanitized check output when verification passes.

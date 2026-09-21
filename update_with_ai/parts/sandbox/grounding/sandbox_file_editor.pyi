@@ -1,4 +1,4 @@
-from typing import Optional, Protocol, Set
+from typing import Optional, Protocol, Set, Union
 from framework import data_type, operation, override, poly_type, singleton_type
 import agent_file_alias
 import tool_provider
@@ -166,9 +166,18 @@ Records that a file was edited by an editing tool
         ...
 
     @operation
-    def can_write(
-        self, path: Union[str, agent_file_alias.FileAlias]
-    ) -> tool_provider.Response:
+    def file_hash(self, file: agent_file_alias.FileAlias) -> str:
+        """
+PURPOSE:
+Computes a file hash for a read-write file from its content
+
+FRESH_REQUIREMENTS:
+- The edit manager computes a file hash for a read-write file from its content.
+"""
+        ...
+
+    @operation
+    def can_write(self, path: Union[str, agent_file_alias.FileAlias]) -> tool_provider.Response:
         """
 PURPOSE:
 Validates modification access for a read-write file under lock state and write permissions

@@ -78,12 +78,14 @@ def main() -> int:
 
     # blame
     p_blame = subparsers.add_parser("blame", parents=[parent_parser], help="Blame upstream dependency for contract failure")
-    p_blame.add_argument("--to", required=True, help="Target upstream node address")
-    p_blame.add_argument("--message", required=True, help="Feedback message")
+    p_blame.add_argument("--blame-target", "--to", dest="blame_target", required=False, default=None, help="Target upstream file or node to blame")
+    p_blame.add_argument("--target", required=False, default=None, help="Current session target experiencing the defect")
+    p_blame.add_argument("--explanation", "--message", dest="explanation", required=True, help="Feedback / defect explanation message")
 
     # fail
     p_fail = subparsers.add_parser("fail", parents=[parent_parser], help="Fail active task")
-    p_fail.add_argument("--message", required=True, help="Failure reason")
+    p_fail.add_argument("--target", required=False, default=None, help="Target node to fail")
+    p_fail.add_argument("--explanation", "--message", dest="explanation", required=True, help="Failure explanation message")
 
     # shutdown
     subparsers.add_parser("shutdown", parents=[parent_parser], help="Shut down Cleanroom FastMCP server")
@@ -122,10 +124,18 @@ def main() -> int:
             res = call_tool("submit", _with_session(payload), port=args.port)
             print(res)
         elif args.command == "blame":
-            res = call_tool("blame", _with_session({"target": args.to, "message": args.message}), port=args.port)
+            payload = {"explanation": args.explanation}
+            if getattr(args, "blame_target", None):
+                payload["blame_target"] = args.blame_target
+            if getattr(args, "target", None):
+                payload["target"] = args.target
+            res = call_tool("blame", _with_session(payload), port=args.port)
             print(res)
         elif args.command == "fail":
-            res = call_tool("fail", _with_session({"message": args.message}), port=args.port)
+            payload = {"explanation": args.explanation}
+            if getattr(args, "target", None):
+                payload["target"] = args.target
+            res = call_tool("fail", _with_session(payload), port=args.port)
             print(res)
         elif args.command == "shutdown":
             res = call_tool("shutdown", {}, port=args.port)

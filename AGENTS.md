@@ -2,7 +2,7 @@
 
 ## Workspace Boundaries & File Locations
 
-- **NEVER modify or rely on the `testing/` directory**: The `testing/` directory is an ephemeral test consumer directory that can be deleted or wiped at any time.
+- **NEVER modify or rely on the `testing/` directory**: The `testing/` directory is an ephemeral test consumer directory that can be deleted or wiped at any time. Running `bin/sync_testing.sh` counts as modifying the `testing/` directory.
 - **Canonical Codebase**: All production specifications, library implementations, and builds live exclusively in:
   - `update_with_ai/`
   - `update_python_with_ai/`

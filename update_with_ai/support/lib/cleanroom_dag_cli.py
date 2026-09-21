@@ -94,15 +94,27 @@ def resolve_define_node_target(target: str) -> tuple[str, str]:
     Falls back to `bazel query` for arbitrary define_node targets.
     """
     t = target.strip()
+    if t.startswith("/") and not t.startswith("//"):
+        t = "/" + t
     if ":" in t:
         pkg, target_name = t.split(":", 1)
     else:
         pkg, target_name = "", t
 
+    for action in ["_clean", "_dirty", "_change", "_feedback", "_prompt"]:
+        if target_name.endswith(action):
+            target_name = target_name[: -len(action)]
+            break
+
     for role_name in PYTHON_ROLES:
         suffix = f"_{role_name}"
         if target_name.endswith(suffix):
             unit_name = target_name[: -len(suffix)]
+            for prior_role in PYTHON_ROLES:
+                prior_suffix = f"_{prior_role}"
+                if unit_name.endswith(prior_suffix):
+                    unit_name = unit_name[: -len(prior_suffix)]
+                    break
             unit_label = f"{pkg}:{unit_name}" if pkg else f":{unit_name}"
             role_label = f"//update_python_with_ai:{role_name}"
             return role_label, unit_label

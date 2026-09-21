@@ -27,13 +27,13 @@ Lifecycle tools manage sub-agent session bounds:
 
 Domain tool execution dispatches turns into session scopes:
 
-- Registered domain tools are dynamically exported from installed session tools.
+- Registered domain tools are dynamically exported from installed session tools upon session registration, server start, and domain tool execution.
 
 - Domain tool execution requires an active session matching the caller conversation identifier, failing with an error response when no matching session is registered.
 
-- Domain tool execution executes within the active session scope for the caller conversation identifier, updating the session activity timestamp and returning the output content.
+- Domain tool execution executes within the active session scope for the caller conversation identifier, updating the session activity timestamp, exporting newly installed domain tools, and returning the output content.
 
-- Tool execution transitions session status to idle when get work produces an idle response, or active when tasks are retrieved, synchronizing submitted nodes to dag storage and recording visits on dag subgraph when submission succeeds.
+- Tool execution transitions session status to idle when get work produces an idle response, or active when tasks are retrieved, synchronizing submitted nodes to dag storage and recording visits on dag subgraph when submission succeeds, and attributing defect feedback to the blame target owning node in dag storage when blame succeeds.
 
 Hook IPC routes serve intercepted requests:
 

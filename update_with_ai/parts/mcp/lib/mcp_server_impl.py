@@ -156,6 +156,10 @@ class McpServer(mcp_server.McpServer, Singleton):
         if scope is not None and hasattr(scope, "activate"):
             with scope.activate():
                 try:
+                    _ = scope.get_singleton(sandbox_run_control.RunController)
+                except Exception:
+                    pass
+                try:
                     tool_mgr = scope.get_singleton(tool_provider.ToolManager)
                     if hasattr(tool_mgr, "installed_tools"):
                         self.export_domain_tools(tool_mgr.installed_tools)
@@ -186,7 +190,14 @@ class McpServer(mcp_server.McpServer, Singleton):
 
         with scope.activate():
             tool_mgr = scope.get_singleton(tool_provider.ToolManager)
-            resp = tool_mgr.execute_tool_with_arguments(tool_name, arguments)
+            norm_args = dict(arguments)
+            if "message" in norm_args and "explanation" not in norm_args:
+                norm_args["explanation"] = norm_args.pop("message")
+            if "to" in norm_args and "blame_target" not in norm_args:
+                norm_args["blame_target"] = norm_args.pop("to")
+            resp = tool_mgr.execute_tool_with_arguments(tool_name, norm_args)
+            if hasattr(tool_mgr, "installed_tools"):
+                self.export_domain_tools(tool_mgr.installed_tools)
             if tool_name == "get_work":
                 if "No dirty nodes are ready" in resp.content:
                     session_mgr.set_session_status(conversation_id, mcp_session.Idle())
@@ -203,7 +214,7 @@ class McpServer(mcp_server.McpServer, Singleton):
                             storage.register_dependent(n)
                             storage.clear_messages(n)
                             subgraph.record_visit([n])
-                            summary = str(arguments.get("change_summary", "") or "").strip()
+                            summary = str(norm_args.get("change_summary", "") or "").strip()
                             if summary:
                                 chg = dag_storage.Change(content=summary)
                                 for dep in storage.get_dependents(n):
@@ -214,19 +225,31 @@ class McpServer(mcp_server.McpServer, Singleton):
                 try:
                     storage = scope.get_singleton(dag_storage.DagStorage)
                     node_cfg = scope.get_singleton(agent_node_config.NodeConfig)
-                    blame_target_str = str(arguments.get("blame_target", "") or arguments.get("target", "") or "").strip()
-                    exp = str(arguments.get("explanation", "") or "").strip()
-                    for f in node_cfg.read_only_files:
-                        if getattr(f, "relative_path", "") == blame_target_str and getattr(f, "owning_node", None):
-                            storage.add_message(dag_storage.Feedback(content=exp, target=f.owning_node), to=f.owning_node)
-                            break
+                    blame_target_str = str(norm_args.get("blame_target", "") or norm_args.get("target", "") or "").strip()
+                    exp = str(norm_args.get("explanation", "") or "").strip()
+                    candidates = list(node_cfg.blame_targets) + list(node_cfg.read_only_files)
+                    for f in candidates:
+                        rel = getattr(f, "relative_path", "")
+                        short = getattr(f, "short_name", "")
+                        base = os.path.basename(rel)
+                        owner = getattr(f, "owning_node", None)
+                        if owner is not None:
+                            if (rel == blame_target_str
+                                or short == blame_target_str
+                                or base == os.path.basename(blame_target_str)
+                                or (rel and blame_target_str and rel.endswith("/" + blame_target_str.lstrip("/")))
+                                or (rel and blame_target_str and blame_target_str.endswith("/" + rel.lstrip("/")))
+                                or str(owner) == blame_target_str
+                                or getattr(owner, "unit_address", None) == blame_target_str):
+                                storage.add_message(dag_storage.Feedback(content=exp, target=owner), to=owner)
+                                break
                 except Exception:
                     pass
             elif tool_name == "fail" and not resp.is_failed:
                 try:
                     storage = scope.get_singleton(dag_storage.DagStorage)
                     role_cfg = scope.get_singleton(agent_node_config.RoleConfig)
-                    exp = str(arguments.get("explanation", "") or "").strip()
+                    exp = str(norm_args.get("explanation", "") or "").strip()
                     for n in role_cfg.nodes:
                         storage.add_message(dag_storage.Feedback(content=exp), to=n)
                 except Exception:

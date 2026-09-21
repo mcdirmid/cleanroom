@@ -18,7 +18,7 @@ from support.lib.lifecycle import (
     enter_phase,
     system,
 )
-from update_with_ai.parts.agent.lib.agent_node_config import RoleConfig
+from update_with_ai.parts.agent.lib.agent_node_config import NodeConfig, RoleConfig
 from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.dag.lib.dag_storage import Change, DagStorage, Feedback, Node
 from update_with_ai.parts.dag.lib.dag_subgraph import DagSubgraph
@@ -119,6 +119,23 @@ class MockSubgraph:
 class MockRoleConfig:
     def __init__(self, nodes: Sequence[Node]) -> None:
         self.nodes = tuple(nodes)
+
+
+class MockBoundFile:
+    def __init__(self, relative_path: str, owning_node: Optional[Node] = None) -> None:
+        self.relative_path = relative_path
+        self.short_name = os.path.basename(relative_path)
+        self.owning_node = owning_node
+
+
+class MockNodeConfig:
+    def __init__(
+        self,
+        blame_targets: Sequence[Any] = (),
+        read_only_files: Sequence[Any] = (),
+    ) -> None:
+        self.blame_targets = set(blame_targets)
+        self.read_only_files = set(read_only_files)
 
 
 class MockRunController:
@@ -290,6 +307,14 @@ class McpServerImplTest(unittest.TestCase):
         self.registry.register_instance(
             self.mock_rc, keys=[RunController], tier=agent_session
         )
+        upstream_node = Node(unit_address="//pkg:upstream", role_address="test")
+        blame_file = MockBoundFile("tests/foo_test.py", owning_node=upstream_node)
+        self.mock_node_cfg = MockNodeConfig(
+            blame_targets=[blame_file], read_only_files=[blame_file]
+        )
+        self.registry.register_instance(
+            self.mock_node_cfg, keys=[NodeConfig], tier=agent_session
+        )
         __initialize__(self.registry)
 
     def test_lifecycle_tools_delegation(self) -> None:
@@ -375,6 +400,29 @@ class McpServerImplTest(unittest.TestCase):
             self.assertIn("Session completed successfully.", sub_out)
             self.assertEqual(self.mock_storage.cleared_nodes, [test_node])
             self.assertEqual(self.mock_subgraph.visited, [test_node])
+
+            # Execute blame tool and verify DAG feedback attribution
+            self.mock_tool_mgr.responses["blame"] = Response(
+                is_failed=False,
+                is_terminated=False,
+                content="Target blamed.",
+            )
+            blame_out = server.execute_domain_tool(
+                cid, "blame", {"to": "tests/foo_test.py", "message": "Missing test case"}
+            )
+            self.assertIn("Target blamed.", blame_out)
+            upstream = Node(unit_address="//pkg:upstream", role_address="test")
+            self.assertIn(upstream, self.mock_storage.messages)
+            msgs = self.mock_storage.messages[upstream]
+            self.assertEqual(len(msgs), 1)
+            self.assertIsInstance(msgs[0], Feedback)
+            self.assertEqual(msgs[0].content, "Missing test case")
+
+            # Execute tool that installs a new tool dynamically and verify it gets exported
+            new_dyn_tool = DummyTool(name="dynamic_after_domain_tool")
+            self.mock_tool_mgr.installed_tools.append(new_dyn_tool)
+            server.execute_domain_tool(cid, "check_file", {"path": "bar.py"})
+            self.assertIn("dynamic_after_domain_tool", server._tools_to_export)
 
             # Unregistered session produces error
             err_out = server.execute_domain_tool(

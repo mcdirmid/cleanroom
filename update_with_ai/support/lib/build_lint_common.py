@@ -2442,6 +2442,7 @@ def check_undeclared_imports(
         "support",
         "framework",
         "lifecycle",
+        "agent_session",
         "typing_extensions",
         "pkg_resources",
         "pytest",

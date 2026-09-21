@@ -15,13 +15,13 @@ Autonomous agents reaching task completion require strict verification enforceme
 
 The run controller initializes by unconditionally installing the submit tool, fail tool, check file tool, and get work tool for the agent session, installing the advance tool only when guide step mode is active, obtaining configured blame targets and verification checks from the node config, and installing the blame tool only when blame targets are configured. Verification checks exposed by the run controller include the session verification checks from node config.
 
-Evaluation of verification checks is cached alongside the edit manager file update revision. Verification checks are evaluated sequentially and results are cached whenever verification results are outdated, which occurs before initial evaluation and when workspace files have been updated since the previous evaluation. When workspace files have not been updated since the previous evaluation, verification check execution is omitted and the cached verification outcome is reused.
+Evaluation of verification checks for an active node is cached alongside the edit manager file hash of the target node read-write file. Verification checks are evaluated sequentially and results are cached whenever verification results are outdated, which occurs before initial evaluation and when the target read-write file hash has changed since the previous evaluation. When the target read-write file hash has not changed since the previous evaluation, verification check execution is omitted and the cached verification outcome is reused.
 
 The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`. When the path parameter is omitted, the path parameter defaults using resolve target defaulting rules. Executing the check file tool updates verification results if outdated and evaluates verification checks for that target.
 
 The check file tool:
 
-- Reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous check file tool execution.
+- Reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when the target read-write file hash has not changed since the previous check file tool execution.
 
 - Specifies a follow-up execution of the view file tool on the active node source file (resolving to the specified path target if a read-write file, the last accessed read-write file, or the primary session read-write file) and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check file tool execution.
 

@@ -1,5 +1,6 @@
 # Requirements specified in sandbox_file_editor_impl.pyi
 import difflib
+import hashlib
 import os
 import subprocess
 from typing import Optional, Set, Union
@@ -53,6 +54,16 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
             is_mcp = False  # pragma: no cover (assumption: agent config bound in valid environment)
         if not is_mcp:
             tm.install_tool(get_singleton(ReplaceFileContentTool))
+        try:
+            n_cfg = get_singleton(agent_node_config.NodeConfig)
+            alias_mgr = get_singleton(agent_file_alias.AliasManager)
+            for rw_file in getattr(n_cfg, "read_write_files", []):
+                host_path = os.path.join(
+                    alias_mgr.workspace_root.path, rw_file.workspace_path.path
+                )
+                self.record_initial_content(host_path)
+        except (LookupError, KeyError):
+            pass
 
     def can_write(
         self, path: Union[str, agent_file_alias.FileAlias]
@@ -113,6 +124,19 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
     @property
     def has_modifications(self) -> bool:
         # Requirement: The edit manager exposes whether workspace file modifications occurred during the session by comparing current workspace file content against initial content before editing.
+        # Requirement: [EditManager] The edit manager exposes whether workspace file modifications occurred during the session, determined by whether workspace file contents differ from their initial state prior to editing.
+        try:
+            n_cfg = get_singleton(agent_node_config.NodeConfig)
+            alias_mgr = get_singleton(agent_file_alias.AliasManager)
+            for rw_file in getattr(n_cfg, "read_write_files", []):
+                host_path = os.path.join(
+                    alias_mgr.workspace_root.path, rw_file.workspace_path.path
+                )
+                if host_path not in self._initial_contents:
+                    self.record_initial_content(host_path)
+        except (LookupError, KeyError):
+            pass
+
         for host_path, initial in self._initial_contents.items():
             if not os.path.exists(host_path):
                 if initial is not None:
@@ -128,6 +152,28 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
                 except OSError:
                     return True
         return False
+
+    def file_hash(self, file: Union[str, agent_file_alias.FileAlias]) -> str:
+        # Requirement: The edit manager computes a file hash for a read-write file from its content.
+        # Requirement: [EditManager] The edit manager computes a file hash for a read-write file from its content.
+        try:
+            alias_mgr = get_singleton(agent_file_alias.AliasManager)
+            target_file = (
+                file
+                if isinstance(file, agent_file_alias.FileAlias)
+                else alias_mgr.convert(file)
+            )
+            if not isinstance(target_file, agent_file_alias.BoundFile):
+                return hashlib.md5(b"").hexdigest()
+            host_path = os.path.join(
+                alias_mgr.workspace_root.path, target_file.workspace_path.path
+            )
+            if not os.path.exists(host_path):
+                return hashlib.md5(b"").hexdigest()
+            with open(host_path, "rb") as f:
+                return hashlib.md5(f.read()).hexdigest()
+        except (LookupError, KeyError, OSError):
+            return hashlib.md5(b"").hexdigest()
 
     @property
     def file_update_revision(self) -> int:

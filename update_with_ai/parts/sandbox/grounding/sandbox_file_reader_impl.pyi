@@ -1,4 +1,4 @@
-from typing import Optional, Set, Type
+from typing import Optional, Set, Type, Union
 from framework import operation, override, singleton_type
 import agent_config
 import agent_file_alias
@@ -80,9 +80,7 @@ GROUNDING_ARGUMENT:
 
     @operation
     @override
-    def can_read(
-        self, path: Union[str, agent_file_alias.FileAlias]
-    ) -> tool_provider.Response:
+    def can_read(self, path: Union[str, agent_file_alias.FileAlias]) -> tool_provider.Response:
         """
 PURPOSE:
 Validates inspection access for a file path under role blindness and file boundaries

@@ -6,8 +6,8 @@ update_with_ai/lib/ when exercised by its corresponding *_impl_test.py
 test suite in update_with_ai/tests/.
 
 Evaluates one test at a time, strictly excluding lifecycle.py and non-implementation
-modules. Formats uncovered lines into contiguous spans, clamping presentation to at most
-3 non-continuous spans per cycle. Updates coverage logs with structured guidance for agents.
+modules. Formats uncovered lines into contiguous spans without throttling (or clamped
+if specified). Updates coverage logs with structured guidance for agents.
 """
 
 import argparse
@@ -320,14 +320,14 @@ def measure_single_target_coverage(impl_path: Path, test_path: Path) -> ModuleCo
     )
 
 
-def format_spans_report(cov: ModuleCoverage, max_spans: int = 3) -> str:
-    """Format uncovered spans clamping presentation to at most max_spans."""
+def format_spans_report(cov: ModuleCoverage, max_spans: Optional[int] = None) -> str:
+    """Format uncovered spans clamping presentation to at most max_spans if specified."""
     if not cov.missing_spans:
         return "All statements covered."
     with open(cov.file_path, "r", encoding="utf-8") as f:
         src_lines = f.readlines()
 
-    shown_spans = cov.missing_spans[:max_spans]
+    shown_spans = cov.missing_spans[:max_spans] if max_spans is not None else cov.missing_spans
     lines: List[str] = []
     lines.append(f"Uncovered statement spans in {cov.module_name}:")
     for idx, (start, end) in enumerate(shown_spans, 1):
@@ -340,16 +340,17 @@ def format_spans_report(cov: ModuleCoverage, max_spans: int = 3) -> str:
                 )
                 lines.append(f"    {ln:4d}: {text}")
 
-    omitted = len(cov.missing_spans) - len(shown_spans)
-    if omitted > 0:
-        lines.append(
-            f"\nNote: Clamped presentation to first {max_spans} non-continuous spans ({omitted} additional uncovered span{'s' if omitted > 1 else ''} omitted)."
-        )
+    if max_spans is not None:
+        omitted = len(cov.missing_spans) - len(shown_spans)
+        if omitted > 0:
+            lines.append(
+                f"\nNote: Clamped presentation to first {max_spans} non-continuous spans ({omitted} additional uncovered span{'s' if omitted > 1 else ''} omitted)."
+            )
     return "\n".join(lines)
 
 
 def format_coverage_report(
-    cov: ModuleCoverage, threshold: float, max_spans: int = 3
+    cov: ModuleCoverage, threshold: float, max_spans: Optional[int] = None
 ) -> str:
     """Format full structured report suitable for console and log file."""
     if not cov.test_passed:
@@ -427,6 +428,12 @@ def main() -> int:
         dest="json_output",
         help="Output coverage metrics in JSON format.",
     )
+    parser.add_argument(
+        "--max-spans",
+        type=int,
+        default=None,
+        help="Maximum non-continuous spans to present (default: unlimited).",
+    )
 
     args = parser.parse_args()
 
@@ -496,7 +503,7 @@ def main() -> int:
         print(json.dumps(asdict(cov), indent=2))
         return 0 if (cov.test_passed and cov.coverage_pct >= args.threshold) else 1
 
-    report = format_coverage_report(cov, args.threshold, max_spans=3)
+    report = format_coverage_report(cov, args.threshold, max_spans=args.max_spans)
 
     if args.update_log:
         log_path = Path(args.update_log)

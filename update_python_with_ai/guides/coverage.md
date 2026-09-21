@@ -15,7 +15,7 @@ The log documents active coverage deficits and the history of attempted resoluti
 - [ ] The log `<name>_coverage.log` holds only active, unresolved coverage deficits in the current cycle: when lines from previous turns become covered in subsequent runs, their entries are removed from `<name>_coverage.log`
 - [ ] All code files are strictly read-only: the agent never modifies `.py` files and modifies only `<name>_coverage.log`
 - [ ] Uncovered statements are inspected by reading the library implementation file with line numbers enabled
-- [ ] Coverage evaluation presents at most 3 non-continuous line spans per cycle to keep blame feedback focused; once the reported spans are addressed, subsequent evaluation cycles expose any remaining spans
+- [ ] Coverage evaluation presents all uncovered statement spans per cycle without throttling, enabling the arbiter to diagnose all active deficits together
 - [ ] Blame feedback delivered to the test module is strictly non-prescriptive: it identifies only which grounding requirements and behavioral aspects lack test coverage, leaving scenario design, fixture structure, graph topology, and assertion choices entirely to the test module
 - [ ] Blame feedback delivered to the test module never prescribes test implementations, mock configurations, fixture designs, graph shapes, node counts, variable values, or assertion code snippets
 - [ ] Anti-contamination: blame feedback delivered to the test module is formulated exclusively in the language, types, and operations of the grounding specification closure; it never mentions library file names, file paths, line numbers, internal variables, helper methods, or private execution branches

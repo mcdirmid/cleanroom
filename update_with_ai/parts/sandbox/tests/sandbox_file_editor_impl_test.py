@@ -1,5 +1,6 @@
 """Unit tests for sandbox_file_editor_impl aligned with grounding specifications."""
 
+import hashlib
 import os
 import shutil
 import tempfile
@@ -1013,6 +1014,25 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             edit_mgr.unlock_file(self.rw_file)
             resp_unlocked = edit_mgr.can_write(self.rw_file.relative_path)
             self.assertFalse(resp_unlocked.is_failed)
+
+    def test_file_hash(self) -> None:
+        """CUJ: EditManager computes an MD5 file hash for a read-write file from its content."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            edit_mgr = scope.get_singleton(EditManager)
+            # Requirement: [EditManager] The edit manager computes a file hash for a read-write file from its content.
+            hash1 = edit_mgr.file_hash(self.rw_file)
+            self.assertEqual(len(hash1), 32)
+
+            # Modifying content changes hash
+            with open(self.target_path, "w", encoding="utf-8") as f:
+                f.write("Altered content\n")
+            hash2 = edit_mgr.file_hash(self.rw_file)
+            self.assertEqual(len(hash2), 32)
+            self.assertNotEqual(hash1, hash2)
+
+            # Missing file produces deterministic empty hash
+            missing_hash = edit_mgr.file_hash(self.missing_bound)
+            self.assertEqual(missing_hash, hashlib.md5(b"").hexdigest())
 
 
 if __name__ == "__main__":

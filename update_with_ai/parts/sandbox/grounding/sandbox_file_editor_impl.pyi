@@ -1,4 +1,4 @@
-from typing import Optional, Set
+from typing import Optional, Set, Union
 from framework import operation, override, singleton_type
 import agent_config
 import agent_file_alias
@@ -109,9 +109,7 @@ GROUNDING_ARGUMENT:
 
     @operation
     @override
-    def can_write(
-        self, path: Union[str, agent_file_alias.FileAlias]
-    ) -> tool_provider.Response:
+    def can_write(self, path: Union[str, agent_file_alias.FileAlias]) -> tool_provider.Response:
         """
 PURPOSE:
 Validates modification access for a read-write file under lock state and write permissions
@@ -204,6 +202,21 @@ Records that a file was edited by an editing tool
 
 GROUNDING_ARGUMENT:
 - Sets internal attribute on self.
+"""
+        ...
+
+    @operation
+    @override
+    def file_hash(self, file: agent_file_alias.FileAlias) -> str:
+        """
+PURPOSE:
+Computes a file hash for a read-write file from its content
+
+INHERITED_REQUIREMENTS:
+- [EditManager] The edit manager computes a file hash for a read-write file from its content.
+
+GROUNDING_ARGUMENT:
+- Reads file content from filesystem_ext at resolved host path and returns MD5 digest.
 """
         ...
 

@@ -258,6 +258,15 @@ class MockEditManager:
         self.file_update_revision = file_update_revision
         self._locked_files: Set[Any] = set()
         self._last_read_or_edited_file: Optional[Any] = None
+        self._file_hashes: dict[Any, str] = {}
+
+    def file_hash(self, file: Any) -> str:
+        path_str = getattr(file, "relative_path", getattr(file, "short_name", str(file)))
+        if file in self._file_hashes:
+            return self._file_hashes[file]
+        if path_str in self._file_hashes:
+            return self._file_hashes[path_str]
+        return f"hash_{self.file_update_revision}_{path_str}"
 
     @property
     def last_read_or_edited_file(self) -> Optional[Any]:
@@ -1605,7 +1614,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIsNone(resp1.follow_up_tool_call)
 
             # Second execution without file updates reuses cache
-            # Requirement: Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous check file tool execution.
+            # Requirement: Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when the target read-write file hash has not changed since the previous check file tool execution.
             resp2 = check_file.execute_tool(b)
             self.assertTrue(resp2.is_failed)
             self.assertEqual(vcheck.call_count, 1)
@@ -1648,7 +1657,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIsNone(resp1.reminder)
             self.assertIsNone(resp1.follow_up_tool_call)
 
-            # Requirement: Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when workspace files have not been updated since the previous check file tool execution.
+            # Requirement: Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when the target read-write file hash has not changed since the previous check file tool execution.
             # Requirement: Tool execution specifies a follow-up execution of the view file tool on the active node source file (resolving to the specified path target if a read-write file, the last accessed read-write file, or the primary session read-write file) and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check file tool execution.
             # When is_step_mode is False (default for coverage / non-step nodes), reasoning directs to submit
             self.node_cfg.is_step_mode = False
@@ -1724,6 +1733,76 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
             assert resp_last.reminder is not None
             self.assertIn("until src2.py is updated.", resp_last.reminder)
+
+    def test_check_file_per_target_hash_tracking(self) -> None:
+        """CUJ: CheckFileTool tracks file hashes per target independently without cross-target invalidation."""
+        node1 = Node(unit_address="//pkg:t1", role_address="lib")
+        node2 = Node(unit_address="//pkg:t2", role_address="lib")
+        rw1 = ReadWriteFile(
+            relative_path="t1.py",
+            workspace_path=_make_workspace_path("/workspace/t1.py"),
+            owning_node=node1,
+        )
+        rw2 = ReadWriteFile(
+            relative_path="t2.py",
+            workspace_path=_make_workspace_path("/workspace/t2.py"),
+            owning_node=node2,
+        )
+        self.node_cfg._read_write_files = {rw1, rw2}
+        vcheck1 = MockVerificationCheck(passes=False, diagnostic="Error on t1")
+        vcheck2 = MockVerificationCheck(passes=False, diagnostic="Error on t2")
+        self.node_cfg.verification_checks_by_node = {
+            node1: [vcheck1],
+            node2: [vcheck2],
+        }
+        self.edit_mgr._file_hashes["t1.py"] = "hash_t1_v1"
+        self.edit_mgr._file_hashes["t2.py"] = "hash_t2_v1"
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            check_file = scope.get_singleton(CheckFileTool)
+            b1 = ActualParameterBindings(bindings={(check_file.path, rw1)})
+            b2 = ActualParameterBindings(bindings={(check_file.path, rw2)})
+
+            # Check t1: first time fails with error, no reminder
+            # Requirement: Executing the check file tool updates verification results if outdated and evaluates verification checks for that target.
+            resp1_t1 = check_file.execute_tool(b1)
+            self.assertTrue(resp1_t1.is_failed)
+            self.assertEqual(vcheck1.call_count, 1)
+            self.assertIsNone(resp1_t1.reminder)
+
+            # Check t1 again: same hash -> loop-breaker reminder
+            # Requirement: Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when the target read-write file hash has not changed since the previous check file tool execution.
+            resp2_t1 = check_file.execute_tool(b1)
+            self.assertEqual(vcheck1.call_count, 1)
+            self.assertIsNotNone(resp2_t1.reminder)
+            assert resp2_t1.reminder is not None
+            self.assertIn("until t1.py is updated.", resp2_t1.reminder)
+
+            # Check t2: first time for t2 evaluates independently
+            # Requirement: Executing the check file tool updates verification results if outdated and evaluates verification checks for that target.
+            resp1_t2 = check_file.execute_tool(b2)
+            self.assertTrue(resp1_t2.is_failed)
+            self.assertEqual(vcheck2.call_count, 1)
+            self.assertIsNone(resp1_t2.reminder)
+
+            # Modifying t1 only changes t1's hash
+            self.edit_mgr._file_hashes["t1.py"] = "hash_t1_v2"
+            vcheck1.passes = True
+
+            # Check t2 again: t2 hash did NOT change, so t2 is still repeated and cached
+            # Requirement: Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when the target read-write file hash has not changed since the previous check file tool execution.
+            resp2_t2 = check_file.execute_tool(b2)
+            self.assertEqual(vcheck2.call_count, 1)
+            self.assertIsNotNone(resp2_t2.reminder)
+            assert resp2_t2.reminder is not None
+            self.assertIn("until t2.py is updated.", resp2_t2.reminder)
+
+            # Check t1: hash changed, so t1 re-evaluates without loop-breaker reminder
+            # Requirement: Executing the check file tool updates verification results if outdated and evaluates verification checks for that target.
+            resp3_t1 = check_file.execute_tool(b1)
+            self.assertFalse(resp3_t1.is_failed)
+            self.assertEqual(vcheck1.call_count, 2)
+            self.assertIsNone(resp3_t1.reminder)
 
     def test_default_target_resolution_with_read_write_files(self) -> None:
         """CUJ: RunController resolves default targets across single, multiple unsubmitted, and locked files."""

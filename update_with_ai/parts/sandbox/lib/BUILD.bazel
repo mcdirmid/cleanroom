@@ -16,13 +16,12 @@ pyright_library(
 pyright_library(
     name = "sandbox_impl",
     srcs = ["sandbox_impl.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_config",
         "//update_with_ai/parts/agent/lib:agent_file_alias",
         "//update_with_ai/parts/agent/lib:agent_node_config",
-        "//update_with_ai/parts/agent/lib:agent_session",
-        "//update_with_ai/parts/bazel/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
         ":sandbox",
         ":sandbox_file_editor",
@@ -77,17 +76,14 @@ pyright_library(
 pyright_library(
     name = "sandbox_file_editor_impl",
     srcs = ["sandbox_file_editor_impl.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_config",
         "//update_with_ai/parts/agent/lib:agent_file_alias",
         "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/agent/lib:agent_session",
-        "//update_with_ai/parts/bazel/lib:file_paths",
-        "//update_with_ai/parts/dag/lib:dag_storage",
         ":sandbox_file_editor",
-        ":sandbox_guide_delivery",
-        ":sandbox_run_control",
         ":template_format",
         ":tool_provider",
     ],
@@ -160,13 +156,13 @@ pyright_library(
 pyright_library(
     name = "sandbox_run_control_impl",
     srcs = ["sandbox_run_control_impl.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_config",
         "//update_with_ai/parts/agent/lib:agent_file_alias",
         "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/agent/lib:agent_session",
-        "//update_with_ai/parts/bazel/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/dag/lib:dag_subgraph",
         ":sandbox",

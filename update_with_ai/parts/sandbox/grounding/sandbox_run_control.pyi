@@ -15,8 +15,8 @@ Defined as an agent session service that installs run control tools and exposes 
 
 FRESH_REQUIREMENTS:
 - The run controller exposes verification checks that validate session criteria.
-- The run controller caches verification evaluation results alongside the edit manager file update revision, reusing the cached verification outcome as long as no workspace files have been updated since that evaluation.
-- The run controller installs a check file tool that updates verification results if outdated, accepting a file alias path parameter, presenting verification outcomes to the agent and failing when verification failed.
+- The run controller caches verification evaluation results alongside edit manager file hashes for target nodes, reusing the cached verification outcome as long as no workspace files have been updated since that evaluation.
+- The run controller installs a check file tool that updates verification results if outdated, accepting a file alias path parameter, presenting verification outcomes to the agent, tracking last tested file hashes, and failing when verification failed.
 - The run controller installs an advance tool when guide step mode is active, coordinating step progression through guide delivery upon passing verification.
 - The run controller installs a submit tool which is a resolve tool that concludes active nodes upon passing verification, marks the resolve target clean in the current get work turn, accepting a text change summary parameter, and enforces change documentation.
 - The run controller installs a fail tool which is a resolve tool that terminates the run in failure, accepting a text explanation parameter.
