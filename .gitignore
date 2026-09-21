@@ -6,3 +6,5 @@ __pycache__/
 *$py.class
 .update_with_ai.textproto
 .update_with_ai.proto
+/.mcp.active*
+

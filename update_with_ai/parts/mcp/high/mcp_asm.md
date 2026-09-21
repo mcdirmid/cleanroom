@@ -1,8 +1,8 @@
 # mcp_asm assembly component
 
-assembles: mcp_cache_arbiter_impl, mcp_gate_impl, mcp_server_impl, mcp_session_impl
-imports: agent_config, agent_node_config, agent_session, dag_storage, dag_subgraph, fastmcp_ext, filesystem_ext, sandbox_file_editor, sandbox_file_reader, tool_provider
-implements: mcp_cache_arbiter, mcp_gate, mcp_server, mcp_session
+assembles: mcp_cache_arbiter_impl, mcp_config_impl, mcp_gate_impl, mcp_server_impl, mcp_session_impl
+imports: agent_node_config, agent_session, dag_storage, dag_subgraph, fastmcp_ext, filesystem_ext, sandbox_file_editor, sandbox_file_reader, tool_provider
+implements: agent_config, dag_config, mcp_cache_arbiter, mcp_gate, mcp_server, mcp_session
 
 ## Purpose
 
@@ -25,3 +25,5 @@ The mcp assembly aggregates the following implementation components:
 - The cache arbiter implementation from mcp_cache_arbiter_impl, closing the mcp cache arbiter interface to evaluate the fifteen-minute cache eviction window and route sampling directives.
 
 - The mcp server implementation from mcp_server_impl, closing the mcp server interface to host the FastMCP application, expose lifecycle and domain tools, and mount hook IPC endpoints.
+
+- The mcp config implementation from mcp_config_impl, closing the agent config and dag config interfaces to expose operational parameters and graph traversal bounds for Model Context Protocol execution.

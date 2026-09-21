@@ -1,7 +1,7 @@
 # Requirements specified in sandbox_file_reader_impl.pyi
 import os
 import re
-from typing import Any, Optional, Set, Type, cast
+from typing import Any, Optional, Set, Type, Union, cast
 from update_with_ai.parts.agent.lib import agent_config
 from update_with_ai.parts.agent.lib import agent_file_alias
 from update_with_ai.parts.agent.lib import agent_node_config
@@ -25,18 +25,114 @@ class ReadManager(sandbox_file_reader.ReadManager, Singleton):
         pass
 
     def initialize(self) -> None:
-        # Requirement: The read manager unconditionally installs the view file tool into the tool manager, installs the can read tool when mcp mode is active, and never installs the search tool.
-        # Requirement: [ReadManager] The read manager installs the view file tool and search tool.
-        # Requirement: [ReadManager] The read manager installs the can read tool when mcp mode is active.
+        # Requirement: The read manager installs the view file tool into the tool manager when mcp mode is inactive, installs no inspection tools when mcp mode is active, and never installs the search tool.
         tm = get_singleton(tool_provider.ToolManager)
-        tm.install_tool(get_singleton(ViewFileTool))
         try:
             cfg = get_singleton(agent_config.AgentConfig)
             is_mcp = cfg.is_mcp_mode
+        except (LookupError, KeyError):  # pragma: no cover (assumption: agent config bound in valid environment)
+            is_mcp = False  # pragma: no cover (assumption: agent config bound in valid environment)
+        if not is_mcp:
+            tm.install_tool(get_singleton(ViewFileTool))
+
+    def can_read(
+        self, path: Union[str, agent_file_alias.FileAlias]
+    ) -> tool_provider.Response:
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
+        target_file = (
+            path
+            if isinstance(path, agent_file_alias.FileAlias)
+            else alias_mgr.convert(path)
+        )
+
+        read_mgr = self
+        # Requirement: When an unbound file is supplied, tool execution fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead, otherwise.
+        if isinstance(target_file, agent_file_alias.UnboundFile):
+            if (
+                read_mgr.guide_file
+                and target_file.relative_path == read_mgr.guide_file.relative_path
+            ):
+                return tool_provider.Response(
+                    is_failed=True,
+                    is_terminated=False,
+                    content="To read the task guide, call 'advance' instead.",
+                )
+
+            # Check for transparent fallback resolution to a declared bound file:
+            raw_name = target_file.relative_path
+            base_cand = os.path.basename(raw_name)
+            if "." in base_cand:
+                parts = base_cand.split(".")
+                if len(parts) > 2 and parts[-1] in ("py", "pyi"):
+                    base_cand = f"{parts[-2]}.{parts[-1]}"
+                elif len(parts) >= 2 and parts[-1] not in ("py", "pyi", "md", "txt"):
+                    base_cand = parts[-1]
+
+            all_bound_files = list(read_mgr.read_only_files) + list(
+                read_mgr.read_write_files
+            )
+            matched_bound: Optional[agent_file_alias.BoundFile] = None
+
+            stem = (
+                base_cand[:-3]
+                if base_cand.endswith(".py")
+                else (base_cand[:-4] if base_cand.endswith(".pyi") else base_cand)
+            )
+            variations = [raw_name, base_cand]
+            if raw_name.endswith(".py"):
+                variations.append(raw_name[:-3] + ".pyi")
+            if base_cand.endswith(".py"):
+                variations.append(f"{stem}.pyi")
+            elif not base_cand.endswith(".pyi"):
+                variations.extend([f"{stem}.py", f"{stem}.pyi"])
+
+            # Requirement: When an unbound file is supplied, tool execution resolves to that grounding specification file alias if the relative path or qualified path addresses a module name or ends with `.py` and matches a declared read-only grounding specification ending with `.pyi`.
+            for var in variations:
+                for bf in all_bound_files:
+                    if (
+                        bf.relative_path == var
+                        or bf.relative_path.endswith("/" + var)
+                        or os.path.basename(bf.relative_path) == var
+                    ):
+                        matched_bound = bf
+                        break
+                if matched_bound is not None:
+                    break
+
+            if matched_bound is not None:
+                target_file = matched_bound
+            else:
+                readable = [f.relative_path for f in read_mgr.read_only_files] + [
+                    f.relative_path for f in read_mgr.read_write_files
+                ]
+                if (
+                    target_file.relative_path.endswith("_test.py")
+                    or "_test" in target_file.relative_path
+                ):
+                    # Requirement: When an unbound file is supplied, tool execution fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract if the unbound file addresses a test file ending with `_test.py`.
+                    guidance = f"Error: Unknown file '{target_file.relative_path}'. Test files are not inspectable by design; only declared grounding specifications (.pyi) and target library files (.py) are accessible. Available files: {', '.join(readable)}"
+                else:
+                    guidance = f"Error: Unknown file '{target_file.relative_path}'. Available files: {', '.join(readable)}"
+                return tool_provider.Response(
+                    is_failed=True,
+                    is_terminated=False,
+                    content=guidance,
+                    reminder="Only declared files can be inspected.",
+                )
+
+        # Requirement: When a bound file is supplied or resolved, tool execution records the read file in the edit manager and produces a successful response indicating that access is permitted.
+        assert isinstance(target_file, agent_file_alias.BoundFile)
+        try:
+            edit_mgr = get_singleton(sandbox_file_editor.EditManager)
+            edit_mgr.record_file_read(target_file)
         except (LookupError, KeyError):
-            is_mcp = False
-        if is_mcp:
-            tm.install_tool(get_singleton(CanReadTool))
+            pass
+
+        return tool_provider.Response(
+            is_failed=False,
+            is_terminated=False,
+            content=f"Access permitted for '{target_file.relative_path}'.",
+        )
 
     @property
     def read_only_files(self) -> Set[agent_file_alias.ReadOnlyFile]:
@@ -277,138 +373,6 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
         )
 
 
-class CanReadTool(tool_provider.Tool, Singleton):
-    tier = agent_session
-
-    def __init__(self) -> None:
-        pass
-
-    @property
-    def name(self) -> str:
-        # Requirement: The can read tool is named `can_read`.
-        return "can_read"
-
-    @property
-    def description(self) -> str:
-        return (
-            "Validates whether a workspace file can be inspected. "
-            "Accepts only the file alias short name (e.g., 'widget.pyi' or 'widget_impl.py') "
-            "via parameter 'path'. Parameter 'path' is the only accepted parameter."
-        )
-
-    @property
-    def path_parameter(
-        self,
-    ) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
-        # Requirement: The can read tool path parameter uses the alias manager to convert a file alias.
-        alias_mgr = get_singleton(agent_file_alias.AliasManager)
-        return tool_provider.Parameter(
-            name="path",
-            description="Target file alias",
-            parameter_type=alias_mgr,
-            is_required=True,
-        )
-
-    @property
-    def parameters(self) -> Set[tool_provider.Parameter]:
-        return {self.path_parameter}
-
-    def execute_tool(
-        self, actual_parameter_bindings: tool_provider.ActualParameterBindings
-    ) -> tool_provider.Response:
-        bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
-        target_file = cast(agent_file_alias.FileAlias, bindings_map.get("path"))
-
-        read_mgr = get_singleton(ReadManager)
-        # Requirement: When an unbound file is supplied, tool execution fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead, otherwise.
-        if isinstance(target_file, agent_file_alias.UnboundFile):
-            if (
-                read_mgr.guide_file
-                and target_file.relative_path == read_mgr.guide_file.relative_path
-            ):
-                return tool_provider.Response(
-                    is_failed=True,
-                    is_terminated=False,
-                    content="To read the task guide, call 'advance' instead.",
-                )
-
-            # Check for transparent fallback resolution to a declared bound file:
-            # Resolves foo.py -> foo.pyi, or module paths like testing.parts.pkg.foo.py -> foo.pyi
-            raw_name = target_file.relative_path
-            base_cand = os.path.basename(raw_name)
-            if "." in base_cand:
-                parts = base_cand.split(".")
-                if len(parts) > 2 and parts[-1] in ("py", "pyi"):
-                    base_cand = f"{parts[-2]}.{parts[-1]}"
-                elif len(parts) >= 2 and parts[-1] not in ("py", "pyi", "md", "txt"):
-                    base_cand = parts[-1]
-
-            all_bound_files = list(read_mgr.read_only_files) + list(
-                read_mgr.read_write_files
-            )
-            matched_bound: Optional[agent_file_alias.BoundFile] = None
-
-            stem = (
-                base_cand[:-3]
-                if base_cand.endswith(".py")
-                else (base_cand[:-4] if base_cand.endswith(".pyi") else base_cand)
-            )
-            variations = [raw_name, base_cand]
-            if raw_name.endswith(".py"):
-                variations.append(raw_name[:-3] + ".pyi")
-            if base_cand.endswith(".py"):
-                variations.append(f"{stem}.pyi")
-            elif not base_cand.endswith(".pyi"):
-                variations.extend([f"{stem}.py", f"{stem}.pyi"])
-
-            # Requirement: When an unbound file is supplied, tool execution resolves to that grounding specification file alias if the relative path or qualified path addresses a module name or ends with `.py` and matches a declared read-only grounding specification ending with `.pyi`.
-            for var in variations:
-                for bf in all_bound_files:
-                    if (
-                        bf.relative_path == var
-                        or bf.relative_path.endswith("/" + var)
-                        or os.path.basename(bf.relative_path) == var
-                    ):
-                        matched_bound = bf
-                        break
-                if matched_bound is not None:
-                    break
-
-            if matched_bound is not None:
-                target_file = matched_bound
-            else:
-                readable = [f.relative_path for f in read_mgr.read_only_files] + [
-                    f.relative_path for f in read_mgr.read_write_files
-                ]
-                if (
-                    target_file.relative_path.endswith("_test.py")
-                    or "_test" in target_file.relative_path
-                ):
-                    # Requirement: When an unbound file is supplied, tool execution fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract if the unbound file addresses a test file ending with `_test.py`.
-                    guidance = f"Error: Unknown file '{target_file.relative_path}'. Test files are not inspectable by design; only declared grounding specifications (.pyi) and target library files (.py) are accessible. Available files: {', '.join(readable)}"
-                else:
-                    # Requirement: When an unbound file is supplied, tool execution fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead, otherwise.
-                    guidance = f"Error: Unknown file '{target_file.relative_path}'. Available files: {', '.join(readable)}"
-                return tool_provider.Response(
-                    is_failed=True,
-                    is_terminated=False,
-                    content=guidance,
-                    reminder="Only declared files can be inspected.",
-                )
-
-        # Requirement: When a bound file is supplied or resolved, tool execution records the read file in the edit manager and produces a successful response indicating that access is permitted.
-        assert isinstance(target_file, agent_file_alias.BoundFile)
-        try:
-            edit_mgr = get_singleton(sandbox_file_editor.EditManager)
-            edit_mgr.record_file_read(target_file)
-        except (LookupError, KeyError):
-            pass
-
-        return tool_provider.Response(
-            is_failed=False,
-            is_terminated=False,
-            content=f"Access permitted for '{target_file.relative_path}'.",
-        )
 
 
 class RegexPatternParameterType(
@@ -533,11 +497,6 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_singleton(
         ViewFileTool,
         keys=[ViewFileTool, sandbox_file_reader.ViewFileTool, tool_provider.Tool],
-        tier=agent_session,
-    )
-    reg.register_singleton(
-        CanReadTool,
-        keys=[CanReadTool, tool_provider.Tool],
         tier=agent_session,
     )
     reg.register_singleton(

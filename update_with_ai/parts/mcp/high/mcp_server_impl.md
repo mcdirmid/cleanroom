@@ -1,6 +1,6 @@
 # mcp_server_impl implementation component
 
-imports: fastmcp_ext, mcp_cache_arbiter, mcp_gate, mcp_session, tool_provider
+imports: dag_storage, dag_subgraph, fastmcp_ext, mcp_cache_arbiter, mcp_gate, mcp_session, tool_provider
 implements: mcp_server
 
 ## Purpose
@@ -13,9 +13,9 @@ FastMCP tools must transparently bind incoming JSON-RPC calls to the caller sess
 
 ## Types and Behavior
 
-The mcp server initializes a FastMCP application instance and configures tool registrations.
+The mcp server initializes a FastMCP application instance configured with host and port parameters resolved from the execution environment for Server-Sent Events transport, and configures tool registrations.
 
-Conversation identifier extraction resolves the caller conversation identifier from the FastMCP request context session identifier or metadata attributes. When the request context does not supply a conversation identifier, the tool invocation accepts an explicit conversation identifier parameter.
+Conversation identifier extraction resolves the caller conversation identifier from the FastMCP request context session identifier or metadata attributes. When the request context does not supply a conversation identifier, the tool invocation accepts an explicit conversation identifier parameter. When no explicit conversation identifier is supplied and exactly one active session is registered, the invocation resolves to that active session.
 
 Lifecycle tools manage sub-agent session bounds:
 
@@ -23,9 +23,11 @@ Lifecycle tools manage sub-agent session bounds:
 
 - The deregister role agent tool resolves the conversation identifier and delegates to the role session manager to close and remove the session, returning structured deregistration confirmation.
 
+- The shutdown tool terminates the server, removes the workspace sentinel, and stops the process.
+
 Domain tool execution dispatches turns into session scopes:
 
-- Registered domain tools include the get work tool, check file tool, submit tool, blame tool, and fail tool.
+- Registered domain tools are dynamically exported from the installed tools of the session tool manager.
 
 - For each domain tool invocation, the mcp server resolves the caller conversation identifier, touches the session timestamp in the role session manager, and retrieves the session lifecycle scope.
 
@@ -33,7 +35,7 @@ Domain tool execution dispatches turns into session scopes:
 
 - The retrieved scope is activated using the scope activate context manager for the duration of the tool execution turn.
 
-- Inside the activated scope, the tool is executed on the session tool manager using the supplied argument mapping, transitioning session status to idle when get work produces an idle response, or active when tasks are retrieved, and returning the output content.
+- Inside the activated scope, the tool is executed on the session tool manager using the supplied argument mapping, transitioning session status to idle when get work produces an idle response, or active when tasks are retrieved, synchronizing submitted nodes to dag storage and recording visits on dag subgraph when submission succeeds, and returning the output content.
 
 Hook IPC routes serve intercepted requests:
 

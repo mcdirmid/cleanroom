@@ -19,46 +19,44 @@ from update_with_ai.parts.mcp.lib.mcp_gate_impl import (
     __initialize__,
 )
 from update_with_ai.parts.mcp.lib.mcp_session import ConversationId, RoleSessionManager
-from update_with_ai.parts.sandbox.lib.tool_provider import Response, ToolManager
+from update_with_ai.parts.sandbox.lib.sandbox_file_editor import EditManager
+from update_with_ai.parts.sandbox.lib.sandbox_file_reader import ReadManager
+from update_with_ai.parts.sandbox.lib.tool_provider import Response
 
 
-class MockToolManager:
+class MockEditManager:
     def __init__(self) -> None:
-        self.read_allowlist: set[str] = set()
         self.write_allowlist: set[str] = set()
 
-    def execute_tool_with_arguments(
-        self, name: str, arguments: Mapping[str, Any]
-    ) -> Response:
-        path = str(arguments.get("path", ""))
-        if name == "can_write":
-            if path in self.write_allowlist:
-                return Response(
-                    is_failed=False,
-                    is_terminated=False,
-                    content=f"Modification permitted for '{path}'.",
-                )
+    def can_write(self, path: str) -> Response:
+        if path in self.write_allowlist:
             return Response(
-                is_failed=True,
+                is_failed=False,
                 is_terminated=False,
-                content=f"File '{path}' is not writable.",
-            )
-        elif name == "can_read":
-            if path in self.read_allowlist:
-                return Response(
-                    is_failed=False,
-                    is_terminated=False,
-                    content=f"Access permitted for '{path}'.",
-                )
-            return Response(
-                is_failed=True,
-                is_terminated=False,
-                content=f"File '{path}' is not readable.",
+                content=f"Modification permitted for '{path}'.",
             )
         return Response(
             is_failed=True,
             is_terminated=False,
-            content=f"Unknown tool '{name}'.",
+            content=f"File '{path}' is not writable.",
+        )
+
+
+class MockReadManager:
+    def __init__(self) -> None:
+        self.read_allowlist: set[str] = set()
+
+    def can_read(self, path: str) -> Response:
+        if path in self.read_allowlist:
+            return Response(
+                is_failed=False,
+                is_terminated=False,
+                content=f"Access permitted for '{path}'.",
+            )
+        return Response(
+            is_failed=True,
+            is_terminated=False,
+            content=f"File '{path}' is not readable.",
         )
 
 
@@ -76,12 +74,16 @@ class McpGateImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
         self.mock_session_mgr = MockRoleSessionManager()
-        self.mock_tool_mgr = MockToolManager()
+        self.mock_edit_mgr = MockEditManager()
+        self.mock_read_mgr = MockReadManager()
         self.registry.register_instance(
             self.mock_session_mgr, keys=[RoleSessionManager], tier=system
         )
         self.registry.register_instance(
-            self.mock_tool_mgr, keys=[ToolManager], tier=agent_session
+            self.mock_edit_mgr, keys=[EditManager], tier=agent_session
+        )
+        self.registry.register_instance(
+            self.mock_read_mgr, keys=[ReadManager], tier=agent_session
         )
         __initialize__(self.registry)
 
@@ -93,8 +95,8 @@ class McpGateImplTest(unittest.TestCase):
             session_scope = begin_phase(agent_session, registry=self.registry)
             self.mock_session_mgr.scopes[cid] = session_scope
 
-            self.mock_tool_mgr.write_allowlist.add("src/target.py")
-            self.mock_tool_mgr.read_allowlist.add("src/target.pyi")
+            self.mock_edit_mgr.write_allowlist.add("src/target.py")
+            self.mock_read_mgr.read_allowlist.add("src/target.pyi")
 
             # Requirement: [AccessGate] Validating access resolves tool permissions for the conversation and target file path, producing an access decision.
             decision = gate.validate_access(cid, "replace_file_content", "src/target.py")
@@ -137,11 +139,25 @@ class McpGateImplTest(unittest.TestCase):
             self.assertFalse(decision_bad_tool.is_allowed)
             self.assertIn("not permitted under access gating", decision_bad_tool.reason)
 
-            # Path outside workspace
+            # Path outside workspace (relative)
             decision_traversal = gate.validate_access(
                 cid, "view_file", "../outside_workspace.txt"
             )
             self.assertFalse(decision_traversal.is_allowed)
+
+            # Path outside workspace (absolute)
+            decision_abs_outside = gate.validate_access(
+                cid, "view_file", "/var/outside_workspace.txt"
+            )
+            self.assertFalse(decision_abs_outside.is_allowed)
+
+            # Path inside workspace (absolute)
+            abs_inside = os.path.join(os.getcwd(), "src/target.py")
+            self.mock_edit_mgr.write_allowlist.add("src/target.py")
+            decision_abs_inside = gate.validate_access(
+                cid, "write_to_file", abs_inside
+            )
+            self.assertTrue(decision_abs_inside.is_allowed)
 
             session_scope.close()
 
@@ -153,10 +169,17 @@ class McpGateImplTest(unittest.TestCase):
             session_scope = begin_phase(agent_session, registry=self.registry)
             self.mock_session_mgr.scopes[cid] = session_scope
 
-            self.mock_tool_mgr.read_allowlist.add("src/visible.pyi")
-            self.mock_tool_mgr.read_allowlist.add("src/visible.py")
+            self.mock_read_mgr.read_allowlist.add("src/visible.pyi")
+            self.mock_read_mgr.read_allowlist.add("src/visible.py")
 
-            entries = ["visible.pyi", "visible.py", "secret.py", "hidden.py"]
+            entries = [
+                "visible.pyi",
+                "visible.py",
+                "secret.py",
+                "hidden.py",
+                "../../escape.py",
+                "/etc/outside.py",
+            ]
 
             # Requirement: [AccessGate] Filtering directory listings sanitizes child entries for the conversation and target directory path, preserving role blindness.
             filtered = gate.filter_directory_listing(cid, "src", entries)

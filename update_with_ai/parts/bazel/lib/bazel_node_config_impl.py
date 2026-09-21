@@ -30,6 +30,8 @@ class _CommandVerificationCheck(agent_node_config.VerificationCheck):
 
     def verify(self) -> Tuple[bool, str]:
         env = os.environ.copy()
+        if not env.get("BUILD_WORKSPACE_DIRECTORY"):
+            env["BUILD_WORKSPACE_DIRECTORY"] = self._cwd or os.getcwd()
         try:
             res = subprocess.run(
                 self._command,

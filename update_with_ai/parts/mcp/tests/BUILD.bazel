@@ -10,6 +10,7 @@ pyright_test(
         "//update_with_ai/parts/agent/lib:agent_config",
         "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/agent/lib:agent_session",
+        "//update_with_ai/parts/bazel/lib:bazel_manifest_loader",
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/dag/lib:dag_subgraph",
         "//update_with_ai/parts/mcp/lib:mcp_session",
@@ -53,12 +54,28 @@ pyright_test(
     deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/agent/lib:agent_session",
+        "//update_with_ai/parts/dag/lib:dag_storage",
+        "//update_with_ai/parts/dag/lib:dag_subgraph",
         "//update_with_ai/parts/mcp/lib:mcp_cache_arbiter",
         "//update_with_ai/parts/mcp/lib:mcp_gate",
         "//update_with_ai/parts/mcp/lib:mcp_server",
         "//update_with_ai/parts/mcp/lib:mcp_server_impl",
         "//update_with_ai/parts/mcp/lib:mcp_session",
+        "//update_with_ai/parts/sandbox/lib:sandbox_run_control",
         "//update_with_ai/parts/sandbox/lib:tool_provider",
+    ],
+)
+
+pyright_test(
+    name = "mcp_config_impl_test",
+    srcs = ["mcp_config_impl_test.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_config",
+        "//update_with_ai/parts/dag/lib:dag_config",
+        "//update_with_ai/parts/mcp/lib:mcp_config_impl",
     ],
 )

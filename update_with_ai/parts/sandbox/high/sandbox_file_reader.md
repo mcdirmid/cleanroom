@@ -20,4 +20,4 @@ The read manager provides:
 
 - A *search tool* that searches pattern matches across the session's read-only and read-write files, accepting a regex pattern *pattern parameter*.
 
-The read manager exposes the session *read-only files* and *read-write files*. When step mode is active, the read manager is configured with an unbound *guide file*.
+The read manager exposes the session *read-only files* and *read-write files*. When step mode is active, the read manager is configured with an unbound *guide file*. The read manager provides a *can read* operation validating inspection access for a file alias *path*.

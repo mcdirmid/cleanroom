@@ -4,3 +4,46 @@ load("//bin:pyright_library.bzl", "pyright_test")
 
 package(default_visibility = ["//visibility:public"])
 
+pyright_test(
+    name = "bazel_mcp_system_asm_test",
+    srcs = ["bazel_mcp_system_asm_test.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_config",
+        "//update_with_ai/parts/agent/lib:agent_node_config",
+        "//update_with_ai/parts/bazel/lib:bazel_asm",
+        "//update_with_ai/parts/core/lib:runner_logger",
+        "//update_with_ai/parts/core/lib:runner_logger_impl",
+        "//update_with_ai/parts/dag/lib:dag_asm",
+        "//update_with_ai/parts/dag/lib:dag_config",
+        "//update_with_ai/parts/dag/lib:dag_storage",
+        "//update_with_ai/parts/dag/lib:dag_subgraph",
+        "//update_with_ai/parts/mcp/lib:mcp_asm",
+        "//update_with_ai/parts/mcp/lib:mcp_cache_arbiter",
+        "//update_with_ai/parts/mcp/lib:mcp_gate",
+        "//update_with_ai/parts/mcp/lib:mcp_server",
+        "//update_with_ai/parts/mcp/lib:mcp_server_impl",
+        "//update_with_ai/parts/mcp/lib:mcp_session",
+        "//update_with_ai/parts/sandbox/lib:sandbox",
+        "//update_with_ai/parts/sandbox/lib:sandbox_asm",
+        "//update_with_ai/parts/sandbox/lib:sandbox_file_editor",
+        "//update_with_ai/parts/sandbox/lib:sandbox_file_reader",
+        "//update_with_ai/parts/sandbox/lib:tool_provider",
+        "//update_with_ai/parts/systems/lib:bazel_mcp_system_asm",
+        "//update_with_ai/parts/systems/lib:cleanroom_mcp_runner",
+        "//update_with_ai/parts/systems/lib:cleanroom_mcp_runner_impl",
+    ],
+)
+
+pyright_test(
+    name = "cleanroom_mcp_runner_impl_test",
+    srcs = ["cleanroom_mcp_runner_impl_test.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/core/lib:runner_logger",
+        "//update_with_ai/parts/mcp/lib:mcp_server",
+        "//update_with_ai/parts/systems/lib:cleanroom_mcp_runner",
+        "//update_with_ai/parts/systems/lib:cleanroom_mcp_runner_impl",
+    ],
+)

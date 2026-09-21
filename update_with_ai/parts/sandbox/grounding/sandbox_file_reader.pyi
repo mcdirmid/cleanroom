@@ -40,6 +40,19 @@ Configured with a guide file as an unbound file when step-mode is active
 """
         ...
 
+    @operation
+    def can_read(
+        self, path: Union[str, agent_file_alias.FileAlias]
+    ) -> tool_provider.Response:
+        """
+PURPOSE:
+Validates inspection access for a file path under role blindness and file boundaries
+
+FRESH_REQUIREMENTS:
+- The read manager provides a can read operation validating inspection access for a file path.
+"""
+        ...
+
 @singleton_type('agent_session')
 class ViewFileTool(tool_provider.Tool, Protocol):
     """

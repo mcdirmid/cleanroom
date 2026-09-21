@@ -15,13 +15,15 @@ Coordinating long-lived multi-turn sessions across external JSON-RPC boundaries 
 
 The role session manager maintains registered role agent sessions in an internal mapping keyed by conversation identifier.
 
+The role config operates as an agent session service that presents the active role, nodes, and version of the agent session. Setting nodes configures the nodes currently being cleaned in the agent session and increments the execution version. Setting the role sets the role of the agent session.
+
 Registering a session validates that no active session is currently registered for the specified conversation identifier, signaling an error if a session already exists.
 
 When registering a session:
 
 - An agent session phase scope is initiated using the lifecycle begin phase operation, establishing an open scope that persists across discrete turns without binding to a context manager.
 
-- Within the initiated scope, mcp mode is activated on the agent config, the role of the session is configured on the role config, and the target unit root is configured on the dag subgraph with a root node constructed for the unit address and role address in dag storage.
+- Within the initiated scope, mcp mode is activated on the agent config, the role of the session is configured on the role config, loading reachable target manifests into dag storage when a manifest loader is available, and configuring the target root node on the dag subgraph with a root node constructed for the unit address and role address in dag storage when no target is set or the root node is not an existing dependency in the target subgraph.
 
 - The created role agent session is recorded in the active sessions mapping with the current system timestamp and an active status.
 

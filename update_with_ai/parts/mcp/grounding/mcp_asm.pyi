@@ -8,5 +8,6 @@ def __initialize__() -> None:
     - mcp_gate_impl
     - mcp_cache_arbiter_impl
     - mcp_server_impl
+    - mcp_config_impl
     """
     ...

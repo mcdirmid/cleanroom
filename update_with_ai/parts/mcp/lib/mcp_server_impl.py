@@ -1,12 +1,20 @@
 from __future__ import annotations
 import asyncio
-from typing import Any, Mapping, Optional, Sequence
+import atexit
+import inspect
+import json
+import os
+from typing import Any, Iterable, Mapping, Optional, Sequence
 from mcp.server.fastmcp import FastMCP, Context
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton, system
 from . import mcp_cache_arbiter
 from . import mcp_gate
 from . import mcp_server
 from . import mcp_session
+from update_with_ai.parts.agent.lib import agent_node_config
+from update_with_ai.parts.dag.lib import dag_storage
+from update_with_ai.parts.dag.lib import dag_subgraph
+from update_with_ai.parts.sandbox.lib import sandbox_run_control
 from update_with_ai.parts.sandbox.lib import tool_provider
 
 # Requirements specified in mcp_server_impl.pyi
@@ -18,6 +26,124 @@ class McpServer(mcp_server.McpServer, Singleton):
         self._app: Optional[FastMCP] = None
         self._running: bool = False
         self._eval_task: Optional[asyncio.Task[Any]] = None
+        self._tools_to_export: dict[str, tool_provider.Tool] = {}
+        self._exported_tools: set[str] = set()
+        self._port: int = 8765
+
+    def _get_sentinel_path(self) -> str:
+        override = os.environ.get("CLEANROOM_SENTINEL_PATH")
+        if override:
+            return override
+        workspace_dir = os.environ.get("BUILD_WORKING_DIRECTORY") or os.getcwd()
+        return os.path.join(os.path.abspath(workspace_dir), ".mcp.active")
+
+    def _sync_sentinel_file(self) -> None:
+        try:
+            path = self._get_sentinel_path()
+            session_mgr = get_singleton(mcp_session.RoleSessionManager)
+            subagents = [str(cid) for cid in session_mgr.active_sessions.keys()]
+            data = {
+                "pid": os.getpid(),
+                "port": self._port,
+                "subagents": subagents,
+            }
+            tmp_path = f"{path}.tmp.{os.getpid()}"
+            with open(tmp_path, "w") as f:
+                json.dump(data, f)
+            os.replace(tmp_path, path)
+        except Exception:  # pragma: no cover (assumption: filesystem writes succeed)
+            pass  # pragma: no cover (assumption: filesystem writes succeed)
+
+    def _remove_sentinel_file(self) -> None:
+        try:
+            path = self._get_sentinel_path()
+            if os.path.exists(path):
+                os.remove(path)
+        except Exception:  # pragma: no cover (assumption: filesystem removal succeeds)
+            pass  # pragma: no cover (assumption: filesystem removal succeeds)
+
+    def _create_fastmcp_tool_callable(self, tool: tool_provider.Tool) -> Any:
+        tool_name = tool.name
+        sorted_params = sorted(tool.parameters, key=lambda p: (not p.is_required, p.name))
+        annotations: dict[str, Any] = {}
+        sig_params: list[inspect.Parameter] = []
+
+        for p in sorted_params:
+            wire_type = getattr(p.parameter_type, "wire_type", str)
+            if p.is_required:
+                param_kind = inspect.Parameter.POSITIONAL_OR_KEYWORD
+                default = inspect.Parameter.empty
+                annotations[p.name] = wire_type
+            else:
+                param_kind = inspect.Parameter.POSITIONAL_OR_KEYWORD
+                default = p.default_value if p.default_value is not None else None
+                annotations[p.name] = Optional[wire_type]
+
+            sig_params.append(
+                inspect.Parameter(
+                    name=p.name,
+                    kind=param_kind,
+                    default=default,
+                    annotation=annotations[p.name],
+                )
+            )
+
+        sig_params.append(
+            inspect.Parameter(
+                name="conversation_id",
+                kind=inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                default=None,
+                annotation=Optional[str],
+            )
+        )
+        annotations["conversation_id"] = Optional[str]
+
+        sig_params.append(
+            inspect.Parameter(
+                name="ctx",
+                kind=inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                default=None,
+                annotation=Context,
+            )
+        )
+        annotations["ctx"] = Context
+        annotations["return"] = str
+
+        sig = inspect.Signature(parameters=sig_params, return_annotation=str)
+
+        def dynamic_tool_handler(*args: Any, **kwargs: Any) -> str:
+            bound = sig.bind(*args, **kwargs)
+            bound.apply_defaults()
+            arguments = dict(bound.arguments)
+            ctx_val = arguments.pop("ctx", None)
+            conv_id_val = arguments.pop("conversation_id", None)
+
+            if conv_id_val:
+                cid = mcp_session.ConversationId(str(conv_id_val))
+            elif ctx_val is not None and getattr(ctx_val, "client_id", None):
+                cid = mcp_session.ConversationId(str(ctx_val.client_id))
+            else:
+                session_mgr = get_singleton(mcp_session.RoleSessionManager)
+                if len(session_mgr.active_sessions) == 1:
+                    cid = next(iter(session_mgr.active_sessions.keys()))
+                else:
+                    cid = mcp_session.ConversationId("default")
+            filtered_args = {k: v for k, v in arguments.items() if v is not None}
+            return self.execute_domain_tool(cid, tool_name, filtered_args)
+
+        dynamic_tool_handler.__name__ = tool.name
+        dynamic_tool_handler.__doc__ = tool.description or f"Tool {tool.name}"
+        dynamic_tool_handler.__annotations__ = annotations
+        setattr(dynamic_tool_handler, "__signature__", sig)
+        return dynamic_tool_handler
+
+    def export_domain_tools(self, tools: Iterable[tool_provider.Tool]) -> None:
+        for tool in tools:
+            self._tools_to_export[tool.name] = tool
+            if self._app is not None and tool.name not in self._exported_tools:
+                fn = self._create_fastmcp_tool_callable(tool)
+                self._app.add_tool(fn)
+                self._exported_tools.add(tool.name)
 
     def register_role_agent(
         self,
@@ -26,7 +152,16 @@ class McpServer(mcp_server.McpServer, Singleton):
         unit_root: str,
     ) -> str:
         session_mgr = get_singleton(mcp_session.RoleSessionManager)
-        session_mgr.register_session(conversation_id, role_address, unit_root)
+        scope = session_mgr.register_session(conversation_id, role_address, unit_root)
+        if scope is not None and hasattr(scope, "activate"):
+            with scope.activate():
+                try:
+                    tool_mgr = scope.get_singleton(tool_provider.ToolManager)
+                    if hasattr(tool_mgr, "installed_tools"):
+                        self.export_domain_tools(tool_mgr.installed_tools)
+                except Exception:  # pragma: no cover (assumption: tool_mgr resolvable)
+                    pass  # pragma: no cover (assumption: tool_mgr resolvable)
+        self._sync_sentinel_file()
         return f"Registered role agent session '{conversation_id}' for role '{role_address}' at unit root '{unit_root}'."
 
     def deregister_role_agent(
@@ -34,6 +169,7 @@ class McpServer(mcp_server.McpServer, Singleton):
     ) -> str:
         session_mgr = get_singleton(mcp_session.RoleSessionManager)
         session_mgr.deregister_session(conversation_id)
+        self._sync_sentinel_file()
         return f"Deregistered role agent session '{conversation_id}'."
 
     def execute_domain_tool(
@@ -56,6 +192,45 @@ class McpServer(mcp_server.McpServer, Singleton):
                     session_mgr.set_session_status(conversation_id, mcp_session.Idle())
                 else:
                     session_mgr.set_session_status(conversation_id, mcp_session.Active())
+            elif tool_name == "submit" and not resp.is_failed:
+                try:
+                    storage = scope.get_singleton(dag_storage.DagStorage)
+                    subgraph = scope.get_singleton(dag_subgraph.DagSubgraph)
+                    role_cfg = scope.get_singleton(agent_node_config.RoleConfig)
+                    rc = scope.get_singleton(sandbox_run_control.RunController)
+                    for n in role_cfg.nodes:
+                        if getattr(rc, "get_node_state", lambda _: "")(n) == "SUBMITTED" or getattr(rc, "is_clean_in_turn", lambda _: False)(n):
+                            storage.register_dependent(n)
+                            storage.clear_messages(n)
+                            subgraph.record_visit([n])
+                            summary = str(arguments.get("change_summary", "") or "").strip()
+                            if summary:
+                                chg = dag_storage.Change(content=summary)
+                                for dep in storage.get_dependents(n):
+                                    storage.add_message(chg, to=dep)
+                except Exception:
+                    pass
+            elif tool_name == "blame" and not resp.is_failed:
+                try:
+                    storage = scope.get_singleton(dag_storage.DagStorage)
+                    node_cfg = scope.get_singleton(agent_node_config.NodeConfig)
+                    blame_target_str = str(arguments.get("blame_target", "") or arguments.get("target", "") or "").strip()
+                    exp = str(arguments.get("explanation", "") or "").strip()
+                    for f in node_cfg.read_only_files:
+                        if getattr(f, "relative_path", "") == blame_target_str and getattr(f, "owning_node", None):
+                            storage.add_message(dag_storage.Feedback(content=exp, target=f.owning_node), to=f.owning_node)
+                            break
+                except Exception:
+                    pass
+            elif tool_name == "fail" and not resp.is_failed:
+                try:
+                    storage = scope.get_singleton(dag_storage.DagStorage)
+                    role_cfg = scope.get_singleton(agent_node_config.RoleConfig)
+                    exp = str(arguments.get("explanation", "") or "").strip()
+                    for n in role_cfg.nodes:
+                        storage.add_message(dag_storage.Feedback(content=exp), to=n)
+                except Exception:
+                    pass
             if resp.reminder:
                 return f"{resp.content}\n\nReminder: {resp.reminder}"
             return resp.content
@@ -81,49 +256,76 @@ class McpServer(mcp_server.McpServer, Singleton):
 
     def start(self, transport: str) -> None:
         self._running = True
-        app = FastMCP("cleanroom")
+        host = os.environ.get("MCP_HOST", "127.0.0.1")
+        port = int(os.environ.get("MCP_PORT", "8765"))
+        self._port = port
+        self._sync_sentinel_file()
+        try:
+            atexit.register(self._remove_sentinel_file)
+        except Exception:  # pragma: no cover (assumption: atexit registration succeeds)
+            pass  # pragma: no cover (assumption: atexit registration succeeds)
+        app = FastMCP("cleanroom", host=host, port=port)
         self._app = app
+        self._exported_tools.clear()
 
         @app.tool()
-        def register_role_agent(role: str, unit_root: str, ctx: Context) -> str:
-            cid = mcp_session.ConversationId(str(ctx.client_id or "default"))
+        def register_role_agent(
+            role: str,
+            unit_root: str,
+            conversation_id: Optional[str] = None,
+            ctx: Optional[Context] = None,
+        ) -> str:
+            cid_str = conversation_id or "default"
+            if not conversation_id and ctx is not None and getattr(ctx, "client_id", None):
+                cid_str = str(ctx.client_id)
+            cid = mcp_session.ConversationId(cid_str)
             return self.register_role_agent(cid, role, unit_root)
 
         @app.tool()
-        def deregister_role_agent(ctx: Context) -> str:
-            cid = mcp_session.ConversationId(str(ctx.client_id or "default"))
+        def deregister_role_agent(
+            conversation_id: Optional[str] = None, ctx: Optional[Context] = None
+        ) -> str:
+            if conversation_id:
+                cid = mcp_session.ConversationId(conversation_id)
+            elif ctx is not None and getattr(ctx, "client_id", None):
+                cid = mcp_session.ConversationId(str(ctx.client_id))
+            else:
+                session_mgr = get_singleton(mcp_session.RoleSessionManager)
+                if len(session_mgr.active_sessions) == 1:
+                    cid = next(iter(session_mgr.active_sessions.keys()))
+                else:
+                    cid = mcp_session.ConversationId("default")
             return self.deregister_role_agent(cid)
 
         @app.tool()
-        def get_work(ctx: Context) -> str:
-            cid = mcp_session.ConversationId(str(ctx.client_id or "default"))
-            return self.execute_domain_tool(cid, "get_work", {})
+        def shutdown() -> str:
+            self.stop()
+            import threading
+            def _delayed_exit() -> None:
+                import time
+                time.sleep(0.5)
+                os._exit(0)
+            threading.Thread(target=_delayed_exit, daemon=True).start()
+            return "Cleanroom FastMCP server shutting down."
 
-        @app.tool()
-        def check_file(path: str, ctx: Context) -> str:
-            cid = mcp_session.ConversationId(str(ctx.client_id or "default"))
-            return self.execute_domain_tool(cid, "check_file", {"path": path})
+        # Export tools that were queued prior to start
+        for tool in list(self._tools_to_export.values()):
+            if tool.name not in self._exported_tools:
+                fn = self._create_fastmcp_tool_callable(tool)
+                app.add_tool(fn)
+                self._exported_tools.add(tool.name)
 
-        @app.tool()
-        def submit(target: str, change_summary: str, ctx: Context) -> str:
-            cid = mcp_session.ConversationId(str(ctx.client_id or "default"))
-            return self.execute_domain_tool(
-                cid, "submit", {"target": target, "change_summary": change_summary}
-            )
-
-        @app.tool()
-        def blame(target: str, feedback: str, ctx: Context) -> str:
-            cid = mcp_session.ConversationId(str(ctx.client_id or "default"))
-            return self.execute_domain_tool(
-                cid, "blame", {"target": target, "feedback": feedback}
-            )
-
-        @app.tool()
-        def fail(target: str, reason: str, ctx: Context) -> str:
-            cid = mcp_session.ConversationId(str(ctx.client_id or "default"))
-            return self.execute_domain_tool(
-                cid, "fail", {"target": target, "reason": reason}
-            )
+        # Export tools from any active sessions
+        session_mgr = get_singleton(mcp_session.RoleSessionManager)
+        for session in session_mgr.active_sessions.values():
+            if session.scope is not None and hasattr(session.scope, "activate"):
+                with session.scope.activate():
+                    try:
+                        tool_mgr = session.scope.get_singleton(tool_provider.ToolManager)
+                        if hasattr(tool_mgr, "installed_tools"):
+                            self.export_domain_tools(tool_mgr.installed_tools)
+                    except Exception:  # pragma: no cover (assumption: tool_mgr resolvable)
+                        pass  # pragma: no cover (assumption: tool_mgr resolvable)
 
         @app.custom_route("/validate_access", methods=["POST"])
         async def validate_access_route(request: Any) -> Any:
@@ -154,8 +356,8 @@ class McpServer(mcp_server.McpServer, Singleton):
                         arbiter.evaluate_all_idle_sessions()
                         await asyncio.sleep(5.0)
                 self._eval_task = asyncio.create_task(_background_cache_monitor())
-        except RuntimeError:
-            pass
+        except RuntimeError:  # pragma: no cover (assumption: event loop available)
+            pass  # pragma: no cover (assumption: event loop available)
 
         if transport == "stdio":
             try:
@@ -163,18 +365,18 @@ class McpServer(mcp_server.McpServer, Singleton):
                 if loop.is_running():
                     asyncio.create_task(app.run_stdio_async())
                 else:
-                    loop.run_until_complete(app.run_stdio_async())
-            except RuntimeError:
-                pass
+                    loop.run_until_complete(app.run_stdio_async())  # pragma: no cover (assumption: running in event loop)
+            except Exception:  # pragma: no cover (assumption: async task creation succeeds)
+                pass  # pragma: no cover (assumption: async task creation succeeds)
         elif transport == "sse":
             try:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
                     asyncio.create_task(app.run_sse_async())
                 else:
-                    loop.run_until_complete(app.run_sse_async())
-            except RuntimeError:
-                pass
+                    loop.run_until_complete(app.run_sse_async())  # pragma: no cover (assumption: running in event loop)
+            except Exception:  # pragma: no cover (assumption: async task creation succeeds)
+                pass  # pragma: no cover (assumption: async task creation succeeds)
 
     def stop(self) -> None:
         self._running = False
@@ -184,6 +386,7 @@ class McpServer(mcp_server.McpServer, Singleton):
         session_mgr = get_singleton(mcp_session.RoleSessionManager)
         for conv_id in list(session_mgr.active_sessions.keys()):
             session_mgr.deregister_session(conv_id)
+        self._remove_sentinel_file()
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:

@@ -1583,6 +1583,19 @@ def define_role(
     return ":" + name
 
 def define_node(name, unit, role, src = "", config = None, visibility = None):
+    """Convenience macro defining command-line driver targets for a (unit, role) node.
+
+    NOTE: This macro is purely a convenience utility for generating CLI targets
+    (_clean, _feedback, _dirty, _change, _prompt) to exercise or inspect individual
+    nodes manually via `bazel run`.
+
+    Orchestration engines, sub-agents, and runtime MCP services must NEVER depend
+    on or compute define_node targets. Sub-agents are primed directly with a canonical
+    role address (e.g., '//update_python_with_ai:lib') and a root unit address
+    (e.g., '//update_with_ai/parts/systems'). A node in Cleanroom is strictly
+    identified by its canonical (unit_address, role_address) pair, independent of any
+    convenience targets defined by this macro.
+    """
     _rule_kwargs = {}
     if visibility != None:
         _rule_kwargs["visibility"] = visibility

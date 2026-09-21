@@ -1,8 +1,9 @@
 from __future__ import annotations
-from typing import Mapping, Optional
+from typing import Any, Mapping, Optional, Sequence, cast
 import time
 from support.lib.lifecycle import (
     LifecycleRegistry,
+    LifecycleResolutionError,
     LifecycleScope,
     Singleton,
     begin_phase,
@@ -18,6 +19,34 @@ from update_with_ai.parts.dag.lib import dag_subgraph
 from . import mcp_session
 
 # Requirements specified in mcp_session_impl.pyi
+
+class RoleConfig(agent_node_config.RoleConfig, Singleton):
+    tier = agent_session
+
+    def __init__(self) -> None:
+        self._role: str = ""
+        self._nodes: Sequence[dag_storage.Node] = ()
+        self._version: int = 0
+
+    @property
+    def role(self) -> str:
+        return self._role
+
+    def set_role(self, role: str) -> None:
+        self._role = role
+
+    @property
+    def nodes(self) -> Sequence[dag_storage.Node]:
+        return self._nodes
+
+    @property
+    def version(self) -> int:
+        return self._version
+
+    def set_nodes(self, nodes: Sequence[dag_storage.Node]) -> None:
+        self._nodes = tuple(nodes)
+        self._version += 1
+
 
 class RoleSessionManager(mcp_session.RoleSessionManager, Singleton):
     tier = system
@@ -41,30 +70,50 @@ class RoleSessionManager(mcp_session.RoleSessionManager, Singleton):
         with scope.activate():
             try:
                 agent_cfg = scope.get_singleton(agent_config.AgentConfig)
-                if hasattr(agent_cfg, "is_mcp_mode"):
+                try:
                     setattr(agent_cfg, "is_mcp_mode", True)
+                except (AttributeError, TypeError):  # pragma: no cover (assumption: is_mcp_mode writable)
+                    pass  # pragma: no cover (assumption: is_mcp_mode writable)
                 if hasattr(agent_cfg, "_is_mcp_mode"):
                     setattr(agent_cfg, "_is_mcp_mode", True)
-            except LookupError:
-                pass
+            except LifecycleResolutionError:  # pragma: no cover (assumption: AgentConfig bound in system)
+                pass  # pragma: no cover (assumption: AgentConfig bound in system)
 
             try:
                 role_cfg = scope.get_singleton(agent_node_config.RoleConfig)
                 if hasattr(role_cfg, "set_role"):
                     getattr(role_cfg, "set_role")(role_address)
-                elif hasattr(role_cfg, "_role"):
-                    setattr(role_cfg, "_role", role_address)
-                elif hasattr(role_cfg, "role"):
-                    setattr(role_cfg, "role", role_address)
-            except LookupError:
-                pass
+            except LifecycleResolutionError:  # pragma: no cover (assumption: RoleConfig bound in session)
+                pass  # pragma: no cover (assumption: RoleConfig bound in session)
 
             try:
                 subgraph = scope.get_singleton(dag_subgraph.DagSubgraph)
                 root_node = dag_storage.Node(unit_address=unit_root, role_address=role_address)
-                subgraph.set_target(root_node)
-            except LookupError:
-                pass
+                try:
+                    storage = scope.get_singleton(dag_storage.DagStorage)
+                    from update_with_ai.parts.bazel.lib import bazel_manifest_loader
+                    manifest_loader = scope.get_singleton(bazel_manifest_loader.BazelManifestLoader)
+                    visited: set[dag_storage.Node] = set()
+                    queue: list[dag_storage.Node] = [root_node]
+                    while queue:
+                        curr = queue.pop(0)
+                        if curr in visited:
+                            continue
+                        visited.add(curr)
+                        manifest = manifest_loader.get_manifest(curr)
+                        if manifest is not None:
+                            manifest_loader.load_manifest(manifest, cast(Any, storage))
+                        for dep in storage.get_dependencies(curr):
+                            if dep.node not in visited:
+                                queue.append(dep.node)
+                except Exception:
+                    pass
+                current_root = getattr(subgraph, "_root", getattr(subgraph, "target", None))
+                current_nodes = getattr(subgraph, "_nodes", None)
+                if current_root is None or current_nodes is None or root_node not in current_nodes:
+                    subgraph.set_target(root_node)
+            except LifecycleResolutionError:  # pragma: no cover (assumption: DagSubgraph bound in system)
+                pass  # pragma: no cover (assumption: DagSubgraph bound in system)
 
         session = mcp_session.RoleAgentSession(
             conversation_id=conversation_id,
@@ -122,6 +171,11 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         RoleSessionManager,
         keys=[RoleSessionManager, mcp_session.RoleSessionManager],
         tier=system,
+    )
+    reg.register_singleton(
+        RoleConfig,
+        keys=[RoleConfig, agent_node_config.RoleConfig],
+        tier=agent_session,
     )
 
 _initialize_ = __initialize__

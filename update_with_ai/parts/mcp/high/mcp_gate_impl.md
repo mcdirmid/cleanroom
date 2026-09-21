@@ -1,6 +1,6 @@
 # mcp_gate_impl implementation component
 
-imports: filesystem_ext, mcp_session, sandbox_file_editor, sandbox_file_reader, tool_provider
+imports: filesystem_ext, mcp_session, sandbox_file_editor, sandbox_file_reader
 implements: mcp_gate
 
 ## Purpose
@@ -19,10 +19,10 @@ Host absolute paths are normalized into repository-relative workspace paths by r
 
 Validating access resolves tool permissions inside the activated session scope:
 
-- For file write tools matching `replace_file_content` or `write_to_file`, the access gate executes the can write tool from the tool manager with the normalized path, producing an allowed access decision when the tool succeeds, or a denied access decision carrying the tool diagnostic content when denied.
+- For file write tools matching `replace_file_content` or `write_to_file`, the access gate executes can write on the edit manager with the normalized path, producing an allowed access decision when the operation succeeds, or a denied access decision carrying the diagnostic content when denied.
 
-- For file read tools matching `view_file`, the access gate executes the can read tool from the tool manager with the normalized path, producing an allowed access decision when the tool succeeds, or a denied access decision carrying the tool diagnostic content when denied.
+- For file read tools matching `view_file`, the access gate executes can read on the read manager with the normalized path, producing an allowed access decision when the operation succeeds, or a denied access decision carrying the diagnostic content when denied.
 
 - For unhandled tool names, the access gate produces a denied access decision indicating that the tool is not permitted under access gating.
 
-Filtering directory listings sanitizes entries inside the activated session scope using the can read tool from the tool manager. The access gate tests candidate child file entries against the can read tool, retaining entries that are readable and omitting entries that violate role blindness or target boundaries. If no session scope is registered for the conversation identifier, directory filtering returns an empty sequence of entries to fail closed.
+Filtering directory listings sanitizes entries inside the activated session scope using can read on the read manager. The access gate tests candidate child file entries against can read, retaining entries that are readable and omitting entries that violate role blindness or target boundaries. If no session scope is registered for the conversation identifier, directory filtering returns an empty sequence of entries to fail closed.

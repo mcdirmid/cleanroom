@@ -165,6 +165,19 @@ Records that a file was edited by an editing tool
 """
         ...
 
+    @operation
+    def can_write(
+        self, path: Union[str, agent_file_alias.FileAlias]
+    ) -> tool_provider.Response:
+        """
+PURPOSE:
+Validates modification access for a read-write file under lock state and write permissions
+
+FRESH_REQUIREMENTS:
+- The edit manager provides a can write operation validating modification access for a read-write file.
+"""
+        ...
+
 @singleton_type('agent_session')
 class ReplaceFileContentTool(EditingTool, Protocol):
     """

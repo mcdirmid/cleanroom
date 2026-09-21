@@ -66,7 +66,11 @@ def generate_asm_content(dir_name: str, raw_deps: list[str]) -> str:
         "from typing import Optional",
         "from support.lib.lifecycle import LifecycleRegistry",
     ]
-    dep_stems = [d.split(":")[-1] for d in raw_deps]
+    dep_stems = [
+        d.split(":")[-1]
+        for d in raw_deps
+        if d.split(":")[-1].endswith("_impl") or d.split(":")[-1].endswith("_asm")
+    ]
     for dep in sorted(dep_stems):
         if os.path.isfile(os.path.join(dir_name, f"{dep}.py")):
             lines.append(f"from . import {dep}")

@@ -13,7 +13,7 @@ Permissive or forgiving tool implementations allow agents to drift into ambiguou
 
 ## Types and Behavior
 
-The read manager provides the view file tool for the agent session, omits the search tool, and installs a *can read tool* that is an agent session tool validating inspection access for a file path when mcp mode is active, obtaining declared read-only files, read-write files, and the guide file, when configured, from the session node configuration.
+The read manager provides the view file tool for the agent session when mcp mode is inactive, omits the search tool, installs no inspection tools when mcp mode is active, and provides a can read operation validating inspection access for a file path, obtaining declared read-only files, read-write files, and the guide file, when configured, from the session node configuration.
 
 The view file tool is named `view_file`, accepting a file alias *path* parameter using the alias manager. Tool execution:
 
@@ -33,7 +33,7 @@ Executing the view file tool requires a bound file. When an unbound file is supp
 
 View file tool responses for read-write files carry a suppression key matching the file's relative path, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
 
-The can read tool is named `can_read`, accepting a file alias *path parameter* using the alias manager. Tool execution:
+The read manager executes can read to validate file inspection access. Executing can read:
 
 - Resolves to that grounding specification file alias if the relative path or qualified path addresses a module name or ends with `.py` and matches a declared read-only grounding specification ending with `.pyi`, when an unbound file is supplied.
 

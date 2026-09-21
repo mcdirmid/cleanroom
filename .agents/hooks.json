@@ -1,0 +1,17 @@
+{
+  "cleanroom-sandbox-guard": {
+    "enabled": true,
+    "PreToolUse": [
+      {
+        "matcher": "view_file|replace_file_content|write_to_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f update_with_ai/support/lib/cleanroom_sandbox_hook.py ]; then python3 update_with_ai/support/lib/cleanroom_sandbox_hook.py; elif [ -f ../update_with_ai/support/lib/cleanroom_sandbox_hook.py ]; then python3 ../update_with_ai/support/lib/cleanroom_sandbox_hook.py; else echo '{\"decision\": \"allow\"}'; fi",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

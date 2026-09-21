@@ -1,5 +1,5 @@
 # Requirements specified in sandbox_file_editor.pyi
-from typing import Optional, Protocol, Set
+from typing import Optional, Protocol, Set, Union
 from update_with_ai.parts.agent.lib import agent_file_alias
 from . import tool_provider
 
@@ -34,6 +34,10 @@ class EditManager(Protocol):
     def record_file_read(self, file: agent_file_alias.FileAlias) -> None: ...
 
     def record_file_edit(self, file: agent_file_alias.ReadWriteFile) -> None: ...
+
+    def can_write(
+        self, path: Union[str, agent_file_alias.FileAlias]
+    ) -> tool_provider.Response: ...
 
 
 class ReplaceFileContentTool(EditingTool, Protocol):

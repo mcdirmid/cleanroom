@@ -1,5 +1,5 @@
 # Requirements specified in sandbox_file_reader.pyi
-from typing import Optional, Protocol, Set
+from typing import Optional, Protocol, Set, Union
 from update_with_ai.parts.agent.lib import agent_file_alias
 from . import tool_provider
 
@@ -13,6 +13,10 @@ class ReadManager(Protocol):
 
     @property
     def guide_file(self) -> Optional[agent_file_alias.UnboundFile]: ...
+
+    def can_read(
+        self, path: Union[str, agent_file_alias.FileAlias]
+    ) -> tool_provider.Response: ...
 
 
 class ViewFileTool(tool_provider.Tool, Protocol):

@@ -28,3 +28,30 @@ update_python_with_ai(
         '//update_with_ai/parts/sandbox:sandbox_asm',
     ],
 )
+
+update_python_with_ai(
+    name = "cleanroom_mcp_runner",
+    module_deps = [],
+)
+
+update_python_with_ai(
+    name = "cleanroom_mcp_runner_impl",
+    module_deps = [
+        ":cleanroom_mcp_runner",
+        "//update_with_ai/parts/core:runner_logger",
+        "//update_with_ai/parts/mcp:mcp_server",
+    ],
+)
+
+update_python_with_ai(
+    name = "bazel_mcp_system_asm",
+    module_deps = [
+        ":cleanroom_mcp_runner",
+        ":cleanroom_mcp_runner_impl",
+        "//update_with_ai/parts/bazel:bazel_asm",
+        "//update_with_ai/parts/core:runner_logger_impl",
+        "//update_with_ai/parts/dag:dag_asm",
+        "//update_with_ai/parts/mcp:mcp_asm",
+        "//update_with_ai/parts/sandbox:sandbox_asm",
+    ],
+)

@@ -97,13 +97,35 @@ GROUNDING_ARGUMENT:
     def initialize(self) -> None:
         """
 PURPOSE:
-Unconditionally installs the replace file content tool into the tool manager, and installs the can write tool when mcp mode is active
+Installs the replace file content tool into the tool manager when mcp mode is inactive, and installs no editing tools when mcp mode is active
 
 FRESH_REQUIREMENTS:
-- The edit manager unconditionally installs the replace file content tool into the tool manager, and installs the can write tool when mcp mode is active.
+- The edit manager installs the replace file content tool into the tool manager when mcp mode is inactive, and installs no editing tools when mcp mode is active.
 
 GROUNDING_ARGUMENT:
-- Installs ReplaceFileContentTool directly into imported tool_provider.ToolManager, and installs CanWriteTool when imported agent_config.AgentConfig.is_mcp_mode is active in the same session lifecycle tier.
+- Installs ReplaceFileContentTool directly into imported tool_provider.ToolManager when imported collaborator agent_config.AgentConfig.is_mcp_mode is inactive, and installs no tools when is_mcp_mode is active in the same session lifecycle tier.
+"""
+        ...
+
+    @operation
+    @override
+    def can_write(
+        self, path: Union[str, agent_file_alias.FileAlias]
+    ) -> tool_provider.Response:
+        """
+PURPOSE:
+Validates modification access for a read-write file under lock state and write permissions
+
+FRESH_REQUIREMENTS:
+- Tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+- Tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
+- When an unlocked read-write file is supplied, tool execution records the file edit in the edit manager and produces a successful response indicating that modification is permitted.
+
+INHERITED_REQUIREMENTS:
+- [EditManager] The edit manager provides a can write operation validating modification access for a read-write file.
+
+GROUNDING_ARGUMENT:
+- Resolves target file from path parameter using imported agent_file_alias.AliasManager, checks if target file is a ReadWriteFile, verifies target file is not in EditManager.locked_files, records file edit in EditManager in the same session lifecycle tier, and produces Response indicating allowance or denial.
 """
         ...
 
@@ -347,90 +369,5 @@ INHERITED_REQUIREMENTS:
 
 GROUNDING_ARGUMENT:
 - Receives actual parameter bindings, resolves the target read-write file via path parameter or implicitly from EditManager.last_read_or_edited_file, informs with a warning in content when implicitly bound, inspects and updates file content using the filesystem, scans file content for out-of-bounds line occurrences when target content is missing from designated line ranges, specifies a view_file follow-up when target content is not found anywhere in the file, checks configuration via imported agent_config.AgentConfig, attaches a reminder to call check_file to verify syntax and type correctness before making further modifications on successful execution, attaches suppression key 'replace_file_content', and notifies EditManager in the same session lifecycle tier that workspace files were modified.
-"""
-        ...
-
-@singleton_type('agent_session')
-class CanWriteTool(tool_provider.Tool):
-    """
-PURPOSE:
-Realizes validation of modification access for read-write files
-
-INHERITED_ASSUMPTIONS:
-- [Tool] All parameters of a tool have unique names.
-
-FRESH_REQUIREMENTS:
-- The can write tool is named `can_write`.
-- The can write tool path parameter uses the alias manager to convert a file alias.
-
-GROUNDING_ARGUMENT:
-- As an agent_session singleton, CanWriteTool coordinates modification permission checks, interacting with imported sandbox_file_editor.EditManager, agent_file_alias.AliasManager, and tool_provider.ToolManager in the same session lifecycle tier.
-"""
-
-    @property
-    @override
-    def name(self) -> str:
-        """
-PURPOSE:
-Returns the name of the tool
-
-GROUNDING_ARGUMENT:
-- Constant tool name 'can_write'.
-"""
-        ...
-
-    @property
-    @override
-    def description(self) -> str:
-        """
-PURPOSE:
-Returns the description of the tool
-
-GROUNDING_ARGUMENT:
-- Constant description string for can write tool.
-"""
-        ...
-
-    @property
-    def path_parameter(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
-        """
-PURPOSE:
-Parameter identifying the target read-write file
-
-GROUNDING_ARGUMENT:
-- Configured with alias manager parameter converter.
-"""
-        ...
-
-    @property
-    @override
-    def parameters(self) -> Set[tool_provider.Parameter]:
-        """
-PURPOSE:
-Returns the parameter set for the tool
-
-GROUNDING_ARGUMENT:
-- Returns set containing path_parameter.
-"""
-        ...
-
-    @operation
-    @override
-    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
-        """
-PURPOSE:
-Executes the can write tool with actual parameter bindings to validate modification access
-
-FRESH_REQUIREMENTS:
-- Tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
-- Tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
-- When an unlocked read-write file is supplied, tool execution records the file edit in the edit manager and produces a successful response indicating that modification is permitted.
-
-INHERITED_REQUIREMENTS:
-- [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
-
-GROUNDING_ARGUMENT:
-- Resolves target file from actual parameter bindings using imported agent_file_alias.AliasManager, checks if target file is a ReadWriteFile, verifies target file is not in EditManager.locked_files, records file edit in EditManager in the same session lifecycle tier, and produces Response indicating allowance or denial.
 """
         ...

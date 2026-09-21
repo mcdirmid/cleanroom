@@ -2,7 +2,7 @@
 import difflib
 import os
 import subprocess
-from typing import Optional, Set
+from typing import Optional, Set, Union
 from update_with_ai.parts.agent.lib import agent_config
 from update_with_ai.parts.agent.lib import agent_file_alias
 from update_with_ai.parts.agent.lib import agent_node_config
@@ -44,18 +44,56 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
         self._locked_files.discard(file)
 
     def initialize(self) -> None:
-        # Requirement: The edit manager unconditionally installs the replace file content tool into the tool manager, and installs the can write tool when mcp mode is active.
-        # Requirement: [EditManager] The edit manager installs the replace file content tool.
-        # Requirement: [EditManager] The edit manager installs the can write tool when mcp mode is active.
+        # Requirement: The edit manager installs the replace file content tool into the tool manager when mcp mode is inactive, and installs no editing tools when mcp mode is active.
         tm = get_singleton(tool_provider.ToolManager)
-        tm.install_tool(get_singleton(ReplaceFileContentTool))
         try:
             cfg = get_singleton(agent_config.AgentConfig)
             is_mcp = cfg.is_mcp_mode
-        except (LookupError, KeyError):
-            is_mcp = False
-        if is_mcp:
-            tm.install_tool(get_singleton(CanWriteTool))
+        except (LookupError, KeyError):  # pragma: no cover (assumption: agent config bound in valid environment)
+            is_mcp = False  # pragma: no cover (assumption: agent config bound in valid environment)
+        if not is_mcp:
+            tm.install_tool(get_singleton(ReplaceFileContentTool))
+
+    def can_write(
+        self, path: Union[str, agent_file_alias.FileAlias]
+    ) -> tool_provider.Response:
+        alias_mgr = get_singleton(agent_file_alias.AliasManager)
+        target_file = (
+            path
+            if isinstance(path, agent_file_alias.FileAlias)
+            else alias_mgr.convert(path)
+        )
+
+        # Requirement: Tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+        if not isinstance(target_file, agent_file_alias.ReadWriteFile):
+            file_name = (
+                target_file.relative_path
+                if isinstance(target_file, agent_file_alias.FileAlias)
+                else str(target_file)
+            )
+            return tool_provider.Response(
+                is_failed=True,
+                is_terminated=False,
+                content=f"Error: File '{file_name}' is not a declared read-write file.",
+                reminder="Only declared read-write files can be modified.",
+            )
+
+        # Requirement: Tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
+        if target_file in self.locked_files:
+            return tool_provider.Response(
+                is_failed=True,
+                is_terminated=False,
+                content=f"Error: File '{target_file.relative_path}' is completed and locked against further modification for this session.",
+                reminder="Files that have been the target of a submit, fail, or blame cannot be modified.",
+            )
+
+        # Requirement: When an unlocked read-write file is supplied, tool execution records the file edit in the edit manager and produces a successful response indicating that modification is permitted.
+        self.record_file_edit(target_file)
+        return tool_provider.Response(
+            is_failed=False,
+            is_terminated=False,
+            content=f"Modification permitted for '{target_file.relative_path}'.",
+        )
 
     def record_initial_content(
         self, host_path: str, content: Optional[str] = None
@@ -510,78 +548,6 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         )
 
 
-class CanWriteTool(tool_provider.Tool, Singleton):
-    tier = agent_session
-
-    def __init__(self) -> None:
-        pass
-
-    @property
-    def name(self) -> str:
-        # Requirement: The can write tool is named `can_write`.
-        return "can_write"
-
-    @property
-    def description(self) -> str:
-        return (
-            "Validates whether a workspace file can be modified. "
-            "Accepts the file alias (e.g., 'widget.py') via parameter 'path'."
-        )
-
-    @property
-    def path_parameter(self) -> tool_provider.Parameter:
-        # Requirement: The can write tool path parameter uses the alias manager to convert a file alias.
-        alias_mgr = get_singleton(agent_file_alias.AliasManager)
-        return tool_provider.Parameter(
-            name="path",
-            description="Target file alias",
-            parameter_type=alias_mgr,
-            is_required=True,
-        )
-
-    @property
-    def parameters(self) -> Set[tool_provider.Parameter]:
-        return {self.path_parameter}
-
-    def execute_tool(
-        self, actual_parameter_bindings: tool_provider.ActualParameterBindings
-    ) -> tool_provider.Response:
-        bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
-        target_file = bindings_map.get("path")
-
-        # Requirement: Tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
-        if not isinstance(target_file, agent_file_alias.ReadWriteFile):
-            file_name = (
-                target_file.relative_path
-                if isinstance(target_file, agent_file_alias.FileAlias)
-                else str(target_file)
-            )
-            return tool_provider.Response(
-                is_failed=True,
-                is_terminated=False,
-                content=f"Error: File '{file_name}' is not a declared read-write file.",
-                reminder="Only declared read-write files can be modified.",
-            )
-
-        edit_mgr = get_singleton(EditManager)
-        # Requirement: Tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
-        if target_file in edit_mgr.locked_files:
-            return tool_provider.Response(
-                is_failed=True,
-                is_terminated=False,
-                content=f"Error: File '{target_file.relative_path}' is completed and locked against further modification for this session.",
-                reminder="Files that have been the target of a submit, fail, or blame cannot be modified.",
-            )
-
-        # Requirement: When an unlocked read-write file is supplied, tool execution records the file edit in the edit manager and produces a successful response indicating that modification is permitted.
-        edit_mgr.record_file_edit(target_file)
-        return tool_provider.Response(
-            is_failed=False,
-            is_terminated=False,
-            content=f"Modification permitted for '{target_file.relative_path}'.",
-        )
-
-
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
@@ -595,14 +561,6 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
             ReplaceFileContentTool,
             sandbox_file_editor.ReplaceFileContentTool,
             sandbox_file_editor.EditingTool,
-            tool_provider.Tool,
-        ],
-        tier=agent_session,
-    )
-    reg.register_singleton(
-        CanWriteTool,
-        keys=[
-            CanWriteTool,
             tool_provider.Tool,
         ],
         tier=agent_session,

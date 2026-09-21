@@ -5,7 +5,6 @@ import mcp_gate
 import mcp_session
 import sandbox_file_editor
 import sandbox_file_reader
-import tool_provider
 
 @singleton_type('system')
 class AccessGate(mcp_gate.AccessGate):
@@ -18,7 +17,7 @@ INHERITED_REQUIREMENTS:
 - [AccessGate] Filtering directory listings sanitizes child entries for the conversation and target directory path, preserving role blindness.
 
 GROUNDING_ARGUMENT:
-- As a system singleton, AccessGate coordinates with imported mcp_session.RoleSessionManager to retrieve session scopes, executing guard tools in imported tool_provider.ToolManager within the activated scope.
+- As a system singleton, AccessGate coordinates with imported mcp_session.RoleSessionManager to retrieve session scopes, querying sandbox_file_reader.ReadManager and sandbox_file_editor.EditManager within the activated scope.
 """
 
     @operation
@@ -29,7 +28,7 @@ PURPOSE:
 Validates access permissions for an intercepted file tool invocation
 
 GROUNDING_ARGUMENT:
-- Resolves the session scope via imported mcp_session.RoleSessionManager.get_session_scope, fails closed if absent, normalizes file_path against workspace root via imported filesystem_ext, activates scope via scope.activate(), and dispatches to can_write or can_read tool on imported tool_provider.ToolManager.
+- Resolves the session scope via imported mcp_session.RoleSessionManager.get_session_scope, fails closed if absent, normalizes file_path against workspace root via imported filesystem_ext, activates scope via scope.activate(), and dispatches to can_write on imported sandbox_file_editor.EditManager or can_read on imported sandbox_file_reader.ReadManager.
 """
         ...
 
@@ -41,6 +40,6 @@ PURPOSE:
 Sanitizes directory listing entries according to role read permissions
 
 GROUNDING_ARGUMENT:
-- Resolves the session scope via imported mcp_session.RoleSessionManager.get_session_scope, activates scope via scope.activate(), and tests candidate entries against can_read tool on imported tool_provider.ToolManager, returning only readable child entries.
+- Resolves the session scope via imported mcp_session.RoleSessionManager.get_session_scope, activates scope via scope.activate(), and tests candidate entries against can_read on imported sandbox_file_reader.ReadManager, returning only readable child entries.
 """
         ...

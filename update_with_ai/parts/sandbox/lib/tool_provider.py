@@ -229,6 +229,9 @@ class Response:
         return self.content
 
 
+ToolCallResult = Response
+
+
 class Tool(Protocol):
     @property
     def name(self) -> str: ...

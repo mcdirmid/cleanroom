@@ -1,4 +1,4 @@
-from typing import Mapping, Optional
+from typing import Mapping, Optional, Sequence
 from framework import LifecycleScope, operation, override, singleton_type
 import agent_config
 import agent_node_config
@@ -14,7 +14,7 @@ PURPOSE:
 Implements role session manager to govern multi-turn sub-agent session scopes and active session registries
 
 INHERITED_REQUIREMENTS:
-- [RoleSessionManager] Registering a session initiates an agent session phase scope, sets role on role config, configures unit root on dag subgraph, and records the session as active.
+- [RoleSessionManager] Registering a session initiates an agent session phase scope, sets role on role config, configures unit root on dag subgraph, and records the session as active, loading reachable target manifests into dag storage when a manifest loader is available.
 - [RoleSessionManager] Deregistering a session closes the session scope, releasing held resources and file locks, and removes the session from the active registry.
 - [RoleSessionManager] Exposes all currently registered sessions mapped by conversation identifier.
 
@@ -42,7 +42,7 @@ PURPOSE:
 Registers a role agent session, creating and opening an agent session phase scope
 
 GROUNDING_ARGUMENT:
-- Validates that conversation_id is absent from active_sessions, calls begin_phase for agent_session tier, configures imported agent_config.AgentConfig.is_mcp_mode to True, sets role on imported agent_node_config.RoleConfig, and sets target unit root on imported dag_subgraph.DagSubgraph with a root node constructed for the unit address and role address in imported dag_storage within the activated scope.
+- Validates that conversation_id is absent from active_sessions, calls begin_phase for agent_session tier, configures imported agent_config.AgentConfig.is_mcp_mode to True, sets role on imported agent_node_config.RoleConfig, and sets target unit root on imported dag_subgraph.DagSubgraph with a root node constructed for the unit address and role address in imported dag_storage within the activated scope when no target is set or the root node is not an existing dependency in the target subgraph, loading reachable target manifests into dag storage via imported bazel_manifest_loader when available.
 """
         ...
 
@@ -103,5 +103,86 @@ Retrieves the role agent session record for a conversation
 
 GROUNDING_ARGUMENT:
 - Looks up conversation_id in active_sessions, returning the RoleAgentSession record when present or None when absent.
+"""
+        ...
+
+@singleton_type('agent_session')
+class RoleConfig(agent_node_config.RoleConfig):
+    """
+PURPOSE:
+Implements role config presenting the active role, nodes, and version
+
+GROUNDING_ARGUMENT:
+- Maintains active node references, role, and version in self across the agent session execution phase, requiring no external singleton dependencies.
+"""
+
+    @property
+    @override
+    def role(self) -> str:
+        """
+PURPOSE:
+Role of the agent session
+
+INHERITED_REQUIREMENTS:
+- [RoleConfig] The role config provides the role of the session.
+
+GROUNDING_ARGUMENT:
+- Holds the active role configured via set_nodes or set_role when the agent session phase is initiated.
+"""
+        ...
+
+    @property
+    @override
+    def nodes(self) -> Sequence[dag_storage.Node]:
+        """
+PURPOSE:
+Sequence of nodes currently being cleaned in the agent session
+
+INHERITED_REQUIREMENTS:
+- [RoleConfig] The role config provides the sequence of nodes currently being cleaned in the agent session.
+
+GROUNDING_ARGUMENT:
+- Holds the active Node sequence configured via set_nodes when the agent session phase is initiated.
+"""
+        ...
+
+    @property
+    @override
+    def version(self) -> int:
+        """
+PURPOSE:
+Execution version that increments whenever the cleaned nodes change
+
+INHERITED_REQUIREMENTS:
+- [RoleConfig] The role config provides an execution version that increments whenever the cleaned nodes change.
+
+GROUNDING_ARGUMENT:
+- Holds the integer version incremented by set_nodes when the active nodes change.
+"""
+        ...
+
+    @operation
+    def set_role(self, role: str) -> None:
+        """
+PURPOSE:
+Sets the role of the agent session
+
+GROUNDING_ARGUMENT:
+- Receives role as an input parameter and sets the role on self.
+"""
+        ...
+
+    @operation
+    @override
+    def set_nodes(self, nodes: Sequence[dag_storage.Node]) -> None:
+        """
+PURPOSE:
+Sets the nodes currently being cleaned in the agent session
+
+INHERITED_REQUIREMENTS:
+- [RoleConfig] The role config can set nodes to configure the nodes currently being cleaned in the agent session and increment the execution version.
+
+GROUNDING_ARGUMENT:
+- Receives nodes directly as a positional parameter, sets nodes and role on self, and increments the integer version.
 """
         ...

@@ -70,3 +70,25 @@ sh_test(
         "manual",
     ],
 )
+
+py_test(
+    name = "cleanroom_sandbox_hook_test",
+    srcs = ["cleanroom_sandbox_hook_test.py"],
+    main = "cleanroom_sandbox_hook_test.py",
+    imports = ["../.."],
+    deps = [
+        "//update_with_ai/support/lib:cleanroom_sandbox_hook_lib",
+    ],
+)
+
+py_test(
+    name = "cleanroom_dag_cli_test",
+    srcs = ["cleanroom_dag_cli_test.py"],
+    main = "cleanroom_dag_cli_test.py",
+    imports = ["../.."],
+    deps = [
+        "//update_with_ai/support/lib:cleanroom_dag_cli_lib",
+    ],
+)
+
+

@@ -77,3 +77,54 @@ py_binary(
     deps = [":lifecycle"],
     visibility = ["//visibility:public"],
 )
+
+py_library(
+    name = "cleanroom_sandbox_hook_lib",
+    srcs = ["cleanroom_sandbox_hook.py"],
+    visibility = ["//visibility:public"],
+)
+
+py_binary(
+    name = "cleanroom_sandbox_hook",
+    srcs = ["cleanroom_sandbox_hook.py"],
+    main = "cleanroom_sandbox_hook.py",
+    deps = [":cleanroom_sandbox_hook_lib"],
+    visibility = ["//visibility:public"],
+)
+
+py_library(
+    name = "cleanroom_dag_cli_lib",
+    srcs = ["cleanroom_dag_cli.py"],
+    deps = [
+        ":lifecycle",
+        "//update_with_ai/parts/dag/lib:dag_storage",
+        "//update_with_ai/parts/dag/lib:dag_subgraph",
+        "//update_with_ai/parts/systems/lib:bazel_mcp_system_asm",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+py_binary(
+    name = "cleanroom_dag_cli",
+    srcs = ["cleanroom_dag_cli.py"],
+    main = "cleanroom_dag_cli.py",
+    deps = [":cleanroom_dag_cli_lib"],
+    visibility = ["//visibility:public"],
+)
+
+py_library(
+    name = "cleanroom_mcp_client_lib",
+    srcs = ["cleanroom_mcp_client.py"],
+    visibility = ["//visibility:public"],
+)
+
+py_binary(
+    name = "cleanroom_mcp_client",
+    srcs = ["cleanroom_mcp_client.py"],
+    main = "cleanroom_mcp_client.py",
+    deps = [":cleanroom_mcp_client_lib"],
+    visibility = ["//visibility:public"],
+)
+
+
+
