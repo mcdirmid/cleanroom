@@ -59,7 +59,7 @@ PURPOSE:
 Returns the next ready batch of dirty nodes for the given target as a JSON string
 
 GROUNDING_ARGUMENT:
-- Delegates to the get_next_batch helper imported from cleanroom_dag_cli, passing unit_address and role_address, and returns the JSON-serialized result dict.
+- Normalizes unit_address and role_address into canonical Bazel target addresses, accesses imported dag_storage.DagStorage and dag_subgraph.DagSubgraph in the system tier, traverses reachable dependency manifests into dag storage, sets the target root node on dag subgraph, queries next_ready_batch(), and returns the JSON-serialized result dict.
 """
         ...
 
@@ -71,7 +71,7 @@ PURPOSE:
 Executes a domain tool within the activated session scope for the caller conversation
 
 GROUNDING_ARGUMENT:
-- Touches session in imported mcp_session.RoleSessionManager, resolves session scope, activates scope using scope.activate(), dispatches tool_name and arguments to imported tool_provider.ToolManager.execute_tool_with_arguments, exports newly installed tools from ToolManager, updates session status to Idle if response is idle, synchronizes submitted nodes to imported dag_storage.DagStorage and records visits on imported dag_subgraph.DagSubgraph when submission succeeds, attributes defect feedback to blame target owning node in dag_storage.DagStorage when blame succeeds, and returns response content.
+- Touches session in imported mcp_session.RoleSessionManager, resolves session scope, activates scope using scope.activate(), dispatches tool_name and arguments to imported tool_provider.ToolManager.execute_tool_with_arguments, exports newly installed tools from ToolManager, updates session status to Idle if response is idle, synchronizes submitted nodes to imported dag_storage.DagStorage (annotating recorded change messages with the originating target filename or alias) and records visits on imported dag_subgraph.DagSubgraph when submission succeeds, attributes defect feedback to blame target owning node in dag_storage.DagStorage when blame succeeds, and returns response content.
 """
         ...
 

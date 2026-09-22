@@ -25,7 +25,7 @@ Lifecycle tools manage sub-agent session bounds:
 
 - The shutdown tool terminates the server, removes the workspace sentinel, and stops the process.
 
-- The next batch tool accepts a target unit address and a target role address, queries the DAG subgraph to determine the next ready batch of dirty nodes using the in-process system singletons, and returns a JSON string with the unit, role, is_complete flag, ready_role, batch list, and dirty_nodes list.
+- The next batch tool accepts a target unit address and a target role address, sets the target root node on the DAG subgraph using in-process system singletons without creating child registries, queries the DAG subgraph to determine the next ready batch of dirty nodes, and returns a JSON string with the unit, role, is_complete flag, ready_role, batch list, and dirty_nodes list.
 
 Domain tool execution dispatches turns into session scopes:
 
@@ -35,7 +35,7 @@ Domain tool execution dispatches turns into session scopes:
 
 - Domain tool execution executes within the active session scope for the caller conversation identifier, updating the session activity timestamp, exporting newly installed domain tools, and returning the output content.
 
-- Tool execution transitions session status to idle when get work produces an idle response, or active when tasks are retrieved, synchronizing submitted nodes to dag storage and recording visits on dag subgraph when submission succeeds, and attributing defect feedback to the blame target owning node in dag storage when blame succeeds.
+- Tool execution transitions session status to idle when get work produces an idle response, or active when tasks are retrieved, synchronizing submitted nodes to dag storage (annotating recorded change messages with the originating target filename or alias) and recording visits on dag subgraph when submission succeeds, and attributing defect feedback to the blame target owning node in dag storage when blame succeeds.
 
 Hook IPC routes serve intercepted requests:
 

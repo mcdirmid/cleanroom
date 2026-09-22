@@ -134,5 +134,16 @@ py_binary(
     visibility = ["//visibility:public"],
 )
 
+py_library(
+    name = "antigravity_token_stats_lib",
+    srcs = ["antigravity_token_stats.py"],
+    visibility = ["//visibility:public"],
+)
 
-
+py_binary(
+    name = "antigravity_token_stats",
+    srcs = ["antigravity_token_stats.py"],
+    main = "antigravity_token_stats.py",
+    deps = [":antigravity_token_stats_lib"],
+    visibility = ["//visibility:public"],
+)

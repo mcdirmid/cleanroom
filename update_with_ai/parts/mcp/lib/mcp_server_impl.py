@@ -177,8 +177,78 @@ class McpServer(mcp_server.McpServer, Singleton):
         return f"Deregistered role agent session '{conversation_id}'."
 
     def next_batch(self, unit_address: str, role_address: str) -> str:
-        from update_with_ai.support.lib.cleanroom_dag_cli import get_next_batch
-        result = get_next_batch(unit_address, role_address)
+        s_role = role_address.strip()
+        norm_role = (
+            s_role
+            if s_role.startswith("//")
+            else (
+                f"//update_python_with_ai{s_role}"
+                if s_role.startswith(":")
+                else f"//update_python_with_ai:{s_role}"
+            )
+        )
+        s_unit = unit_address.strip()
+        norm_unit = (
+            s_unit.rstrip("/")
+            if s_unit.startswith("//")
+            else (s_unit if s_unit.startswith(":") else f"//{s_unit.rstrip('/')}")
+        )
+
+        storage = get_singleton(dag_storage.DagStorage)
+        subgraph = get_singleton(dag_subgraph.DagSubgraph)
+        root = dag_storage.Node(unit_address=norm_unit, role_address=norm_role)
+
+        visited: set[dag_storage.Node] = set()
+        try:
+            import importlib
+
+            bml = importlib.import_module(
+                "update_with_ai.parts.bazel.lib.bazel_manifest_loader"
+            )
+            loader_cls = getattr(bml, "BazelManifestLoader", None)
+            if loader_cls is not None:
+                manifest_loader = get_singleton(loader_cls)
+                queue: list[dag_storage.Node] = [root]
+                while queue:
+                    curr = queue.pop(0)
+                    if curr in visited:
+                        continue
+                    visited.add(curr)
+                    manifest = manifest_loader.get_manifest(curr)
+                    if manifest is not None:
+                        manifest_loader.load_manifest(manifest, storage)
+                    for dep in storage.get_dependencies(curr):
+                        if dep.node not in visited:
+                            queue.append(dep.node)
+        except Exception:
+            visited = set()
+
+        subgraph.set_target(root)
+        batch = subgraph.next_ready_batch()
+        batch_nodes = [
+            {"unit": n.unit_address, "role": n.role_address} for n in batch
+        ]
+        ready_role = batch[0].role_address if batch else None
+
+        reachable_nodes = (
+            visited if visited else set(getattr(subgraph, "_nodes", [root]))
+        )
+        dirty_nodes = [
+            f"{n.unit_address}:{n.role_address}"
+            for n in sorted(
+                reachable_nodes, key=lambda x: (x.unit_address, x.role_address)
+            )
+            if storage.is_dirty(n)
+        ]
+
+        result = {
+            "unit": norm_unit,
+            "role": norm_role,
+            "is_complete": subgraph.is_complete,
+            "ready_role": ready_role,
+            "batch": batch_nodes,
+            "dirty_nodes": dirty_nodes,
+        }
         return json.dumps(result)
 
     def execute_domain_tool(
@@ -221,7 +291,17 @@ class McpServer(mcp_server.McpServer, Singleton):
                             subgraph.record_visit([n])
                             summary = str(norm_args.get("change_summary", "") or "").strip()
                             if summary:
-                                chg = dag_storage.Change(content=summary)
+                                target_val = str(norm_args.get("target", "") or "").strip()
+                                alias = ""
+                                try:
+                                    node_cfg = scope.get_singleton(agent_node_config.NodeConfig)
+                                    alias_map = getattr(node_cfg, "src_file_alias_by_node", {}) or {}
+                                    alias = alias_map.get(n, "")
+                                except Exception:
+                                    pass
+                                target_name = target_val or alias
+                                target_prefix = f"[{os.path.basename(target_name)}] " if target_name else ""
+                                chg = dag_storage.Change(content=f"{target_prefix}{summary}")
                                 for dep in storage.get_dependents(n):
                                     storage.add_message(chg, to=dep)
                 except Exception:

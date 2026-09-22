@@ -94,6 +94,7 @@ class MockStorage:
         self.registered_deps: list[Node] = []
         self.cleared_nodes: list[Node] = []
         self.messages: dict[Node, list[Any]] = {}
+        self.dependents: dict[Node, list[Node]] = {}
 
     def register_dependent(self, node: Node) -> None:
         self.registered_deps.append(node)
@@ -102,18 +103,39 @@ class MockStorage:
         self.cleared_nodes.append(node)
 
     def get_dependents(self, node: Node) -> list[Node]:
-        return []
+        return self.dependents.get(node, [])
 
     def add_message(self, msg: Any, to: Node) -> None:
         self.messages.setdefault(to, []).append(msg)
+
+    def is_dirty(self, node: Node) -> bool:
+        return bool(self.messages.get(node))
+
+    def get_dependencies(self, node: Node) -> list[Any]:
+        return []
 
 
 class MockSubgraph:
     def __init__(self) -> None:
         self.visited: list[Node] = []
+        self.target: Optional[Node] = None
+        self.ready_batch: list[Node] = []
+        self._complete: bool = False
+        self._nodes: set[Node] = set()
 
     def record_visit(self, nodes: Sequence[Node]) -> None:
         self.visited.extend(nodes)
+
+    def set_target(self, root: Node) -> None:
+        self.target = root
+        self._nodes = {root}
+
+    def next_ready_batch(self) -> list[Node]:
+        return self.ready_batch
+
+    @property
+    def is_complete(self) -> bool:
+        return self._complete
 
 
 class MockRoleConfig:
@@ -336,6 +358,27 @@ class McpServerImplTest(unittest.TestCase):
             self.assertTrue(dereg_msg)
             self.assertEqual(self.mock_session_mgr.deregistered, [cid])
 
+    def test_next_batch_in_process_singletons(self) -> None:
+        """CUJ: next_batch targets in-process DagSubgraph and queries next ready batch using system singletons."""
+        with enter_phase(system, registry=self.registry) as sys_scope:
+            server = sys_scope.get_singleton(McpServer)
+            ready_node = Node(unit_address="//pkg:unit", role_address="//update_python_with_ai:lib")
+            self.mock_subgraph.ready_batch = [ready_node]
+            self.mock_storage.messages[ready_node] = ["dirty"]
+
+            # Requirement: The next batch tool accepts a target unit address and a target role address, sets the target root node on the DAG subgraph using in-process system singletons without creating child registries, queries the DAG subgraph to determine the next ready batch of dirty nodes, and returns a JSON string with the unit, role, is_complete flag, ready_role, batch list, and dirty_nodes list.
+            res_str = server.next_batch("//pkg:asm", "qa")
+            data = json.loads(res_str)
+            self.assertEqual(data["unit"], "//pkg:asm")
+            self.assertEqual(data["role"], "//update_python_with_ai:qa")
+            self.assertEqual(data["ready_role"], "//update_python_with_ai:lib")
+            self.assertEqual(data["batch"], [{"unit": "//pkg:unit", "role": "//update_python_with_ai:lib"}])
+            self.assertFalse(data["is_complete"])
+            self.assertEqual(
+                self.mock_subgraph.target,
+                Node(unit_address="//pkg:asm", role_address="//update_python_with_ai:qa"),
+            )
+
     def test_domain_tool_execution_routing(self) -> None:
         """CUJ: Dispatch domain tools into caller session scope, tracking activity and idle transitions."""
         with enter_phase(system, registry=self.registry) as sys_scope:
@@ -386,8 +429,10 @@ class McpServerImplTest(unittest.TestCase):
 
             # Execute submit tool and verify DAG synchronization
             test_node = Node(unit_address="//pkg:unit", role_address="cleaner")
+            dep_node = Node(unit_address="//pkg:unit", role_address="tester")
             self.mock_role_cfg.nodes = (test_node,)
             self.mock_rc._submitted = {test_node}
+            self.mock_storage.dependents[test_node] = [dep_node]
 
             self.mock_tool_mgr.responses["submit"] = Response(
                 is_failed=False,
@@ -395,11 +440,16 @@ class McpServerImplTest(unittest.TestCase):
                 content="Session completed successfully.",
             )
             sub_out = server.execute_domain_tool(
-                cid, "submit", {"change_summary": "Cleaned up"}
+                cid, "submit", {"target": "pkg/file.py", "change_summary": "Cleaned up"}
             )
             self.assertIn("Session completed successfully.", sub_out)
             self.assertEqual(self.mock_storage.cleared_nodes, [test_node])
             self.assertEqual(self.mock_subgraph.visited, [test_node])
+            self.assertIn(dep_node, self.mock_storage.messages)
+            self.assertEqual(
+                self.mock_storage.messages[dep_node][0].content,
+                "[file.py] Cleaned up",
+            )
 
             # Execute blame tool and verify DAG feedback attribution
             self.mock_tool_mgr.responses["blame"] = Response(
