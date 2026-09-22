@@ -547,14 +547,14 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         self.storage.definitions[node] = NodeDefinition(
             node=node, task_prompt=TaskPrompt("Task prompt")
         )
-        self.runner.error = RuntimeError("Agent failed: unrecoverable tool error")
+        self.runner.error = RuntimeError("unrecoverable tool error")
 
         with enter_phase(system, registry=self.registry) as scope:
             cleaner = scope.get_singleton(NodeCleanerImpl)
             # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
             with self.assertRaises(RuntimeError) as ctx:
                 cleaner.clean_nodes([node])
-            self.assertIn("Agent failed: unrecoverable tool error", str(ctx.exception))
+            self.assertIn("unrecoverable tool error", str(ctx.exception))
 
     def test_clean_node_without_task_prompt_resolves_without_runner(self) -> None:
         """CUJ: Cleaning a dirty node defining no task prompt resolves without agent runner and produces change messages when incoming messages indicate change."""

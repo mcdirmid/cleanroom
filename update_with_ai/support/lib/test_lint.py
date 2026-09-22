@@ -322,14 +322,17 @@ def main() -> int:
                 lib_label = f"//{p_lib}:{t_part}"
             reachable_map[t_part] = lib_label
 
+        target_targets = _parse_build_targets(pkg_build_path)
+
         target_under_test = f"//{args.lib_pkg}:{impl_stem}"
         reachable_map[impl_stem] = target_under_test
         direct_deps_list.append(target_under_test)
         if impl_stem.endswith("_impl"):
             iface_stem = impl_stem[:-5]
-            iface_target = f"//{args.lib_pkg}:{iface_stem}"
-            reachable_map[iface_stem] = iface_target
-            direct_deps_list.append(iface_target)
+            if iface_stem in target_targets:
+                iface_target = f"//{args.lib_pkg}:{iface_stem}"
+                reachable_map[iface_stem] = iface_target
+                direct_deps_list.append(iface_target)
 
         allowed_deps: set[str] = {d for d in reachable_map.keys() if not d.endswith("_ext")}
         if uses_lifecycle:
@@ -340,7 +343,6 @@ def main() -> int:
                     allowed_deps.add(d)
 
         # Direct deps declared on impl_stem in parent BUILD.bazel
-        target_targets = _parse_build_targets(pkg_build_path)
         for d in target_targets.get(impl_stem, []):
             st = d.split(":")[-1]
             if st.endswith("_ext"):

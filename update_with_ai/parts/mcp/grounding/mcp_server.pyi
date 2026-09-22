@@ -34,6 +34,14 @@ Deregisters a role agent session and releases its held resources
         ...
 
     @operation
+    def next_batch(self, unit_address: str, role_address: str) -> str:
+        """
+PURPOSE:
+Returns the next ready batch of dirty nodes for the given target as a JSON string
+"""
+        ...
+
+    @operation
     def execute_domain_tool(self, conversation_id: mcp_session.ConversationId, tool_name: str, arguments: Mapping[str, Any]) -> str:
         """
 PURPOSE:

@@ -1,14 +1,19 @@
 # update_with_ai/parts/dag/lib/BUILD.bazel
 
 load("//bin:pyright_library.bzl", "pyright_library")
+load("//update_python_with_ai/support/lib:build_derived_test.bzl", "build_derived_test")
 
 package(default_visibility = ["//visibility:public"])
 
 pyright_library(
     name = "dag_asm",
     srcs = ["dag_asm.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        ":dag_config",
+        ":dag_storage",
         ":dag_subgraph",
         ":dag_subgraph_impl",
     ],
@@ -18,7 +23,10 @@ pyright_library(
 pyright_library(
     name = "dag_config",
     srcs = ["dag_config.py"],
+    deps = [],
     pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
     ],
     visibility = ["//visibility:public"],
 )
@@ -26,7 +34,10 @@ pyright_library(
 pyright_library(
     name = "dag_storage",
     srcs = ["dag_storage.py"],
+    deps = [],
     pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
     ],
     visibility = ["//visibility:public"],
 )
@@ -34,7 +45,10 @@ pyright_library(
 pyright_library(
     name = "dag_subgraph",
     srcs = ["dag_subgraph.py"],
+    deps = [],
     pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
         ":dag_storage",
     ],
     visibility = ["//visibility:public"],
@@ -43,11 +57,18 @@ pyright_library(
 pyright_library(
     name = "dag_subgraph_impl",
     srcs = ["dag_subgraph_impl.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
         ":dag_config",
         ":dag_storage",
         ":dag_subgraph",
     ],
     visibility = ["//visibility:public"],
 )
+
+build_derived_test(
+    name = "targets_derived_test",
+)
+

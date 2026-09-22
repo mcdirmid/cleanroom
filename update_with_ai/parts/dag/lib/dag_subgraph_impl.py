@@ -13,6 +13,27 @@ from support.lib.lifecycle import (
 )
 
 
+def _role_tier(role_address: str) -> int:
+    name = (
+        role_address.split(":")[-1].strip().lower()
+        if ":" in role_address
+        else role_address.strip().lower()
+    )
+    role_order = {
+        "high": 0,
+        "low": 1,
+        "lib": 2,
+        "test": 3,
+        "qa": 4,
+        "coverage": 5,
+    }
+    return role_order.get(name, 100)
+
+
+def _node_sort_key(n: dag_storage.Node) -> tuple[int, str, str]:
+    return (_role_tier(n.role_address), n.unit_address, n.role_address)
+
+
 class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
     tier = system
 
@@ -38,33 +59,36 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
     def _topological_sort(
         self, nodes: Set[dag_storage.Node], storage: dag_storage.DagStorage
     ) -> List[dag_storage.Node]:
-        in_degree: Dict[dag_storage.Node, int] = {n: 0 for n in nodes}
-        adj: Dict[dag_storage.Node, List[dag_storage.Node]] = {n: [] for n in nodes}
+        sorted_nodes = sorted(nodes, key=_node_sort_key)
+        in_degree: Dict[dag_storage.Node, int] = {n: 0 for n in sorted_nodes}
+        adj: Dict[dag_storage.Node, List[dag_storage.Node]] = {n: [] for n in sorted_nodes}
 
-        for n in nodes:
-            for dep in storage.get_dependencies(n):
+        for n in sorted_nodes:
+            for dep in sorted(storage.get_dependencies(n), key=lambda d: _node_sort_key(d.node)):
                 if dep.node in nodes:
                     adj[dep.node].append(n)
                     in_degree[n] += 1
 
-        queue: deque[dag_storage.Node] = deque(
-            [n for n, deg in in_degree.items() if deg == 0]
-        )
+        ready = sorted([n for n, deg in in_degree.items() if deg == 0], key=_node_sort_key)
         order: List[dag_storage.Node] = []
 
-        while queue:
-            curr = queue.popleft()
+        while ready:
+            curr = ready.pop(0)
             order.append(curr)
+            newly_ready = []
             for neighbor in adj[curr]:
                 in_degree[neighbor] -= 1
                 if in_degree[neighbor] == 0:
-                    queue.append(neighbor)
+                    newly_ready.append(neighbor)
+            for nr in newly_ready:
+                ready.append(nr)
+            ready.sort(key=_node_sort_key)
 
         return order
 
     def set_target(self, root: dag_storage.Node) -> None:
         # Requirement: [DagSubgraph] Setting a target collects all reachable dependency nodes from the target node in dag storage and computes their dependency-first topological order.
-        # Requirement: Setting a target node scopes the target subgraph to all reachable dependency nodes rooted at the target node in dag storage, arranged in dependency-first topological order.
+        # Requirement: Setting a target node scopes the target subgraph to all reachable dependency nodes rooted at the target node in dag storage, arranged in dependency-first topological order, breaking ties by role tier depth first, then by unit address.
         storage = get_singleton(dag_storage.DagStorage)
         self._root = root
         self._nodes = self._collect_subgraph(root, storage)
@@ -82,7 +106,8 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
         cfg = get_singleton(dag_config.DagConfig)
         batch_size = max(1, cfg.batch_size)
 
-        for i, curr in enumerate(self._order):
+        ready_candidates: List[dag_storage.Node] = []
+        for curr in self._order:
             if not storage.is_dirty(curr):
                 continue
 
@@ -91,35 +116,40 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
                 for d in storage.get_dependencies(curr)
                 if d.node in self._nodes
             )
-            if not deps_clean:
-                continue
+            if deps_clean:
+                ready_candidates.append(curr)
 
-            # Requirement: [DagSubgraph] When obtaining the next ready batch, uncleaned dirty nodes in topological order whose dependencies in the target subgraph are clean in dag storage are selected, grouped by role address up to a maximum batch size.
-            # Requirement: The next ready batch consists of contiguous dirty nodes in topological order that share the same role address and have all their dependencies in the target subgraph clean in dag storage, starting from the earliest ready dirty node and bounded by the batch size obtained from dag config.
-            batch: List[dag_storage.Node] = [curr]
-            batch_set: Set[dag_storage.Node] = {curr}
+        if not ready_candidates:
+            # Requirement: If no dirty node in the target subgraph has all its dependencies in the target subgraph clean in dag storage, the next ready batch is an empty sequence.
+            return []
 
-            if batch_size > 1:
-                for cand in self._order[i + 1 :]:
-                    if len(batch) >= batch_size:
-                        break
-                    if not storage.is_dirty(cand):
-                        continue
-                    if cand.role_address != curr.role_address:
-                        continue
-                    cand_deps_clean = all(
-                        d.node in batch_set or not storage.is_dirty(d.node)
-                        for d in storage.get_dependencies(cand)
-                        if d.node in self._nodes
-                    )
-                    if cand_deps_clean:
-                        batch.append(cand)
-                        batch_set.add(cand)
+        ready_candidates.sort(key=_node_sort_key)
+        curr = ready_candidates[0]
 
-            return batch
+        # Requirement: [DagSubgraph] When obtaining the next ready batch, uncleaned dirty nodes prioritized by role tier precedence (upstream roles before downstream roles) whose dependencies in the target subgraph are clean in dag storage or present in the same ready batch are selected, grouped by role address up to a maximum batch size.
+        # Requirement: The next ready batch consists of contiguous dirty nodes in topological order that share the same role address, prioritized by role tier precedence (prioritizing lib before test, and test before qa) and having all their dependencies in the target subgraph clean in dag storage or present in the same ready batch, starting from the earliest ready dirty node and bounded by the batch size obtained from dag config.
+        batch: List[dag_storage.Node] = [curr]
+        batch_set: Set[dag_storage.Node] = {curr}
 
-        # Requirement: If no dirty node in the target subgraph has all its dependencies in the target subgraph clean in dag storage, the next ready batch is an empty sequence.
-        return []
+        curr_idx = self._order.index(curr)
+        if batch_size > 1:
+            for cand in self._order[curr_idx + 1 :]:
+                if len(batch) >= batch_size:
+                    break
+                if not storage.is_dirty(cand):
+                    continue
+                if cand.role_address != curr.role_address:
+                    continue
+                cand_deps_clean = all(
+                    d.node in batch_set or not storage.is_dirty(d.node)
+                    for d in storage.get_dependencies(cand)
+                    if d.node in self._nodes
+                )
+                if cand_deps_clean:
+                    batch.append(cand)
+                    batch_set.add(cand)
+
+        return batch
 
     def record_visit(self, nodes: Sequence[dag_storage.Node]) -> None:
         cfg = get_singleton(dag_config.DagConfig)

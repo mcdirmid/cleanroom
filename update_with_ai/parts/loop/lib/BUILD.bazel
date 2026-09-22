@@ -1,13 +1,17 @@
 # update_with_ai/parts/loop/lib/BUILD.bazel
 
 load("//bin:pyright_library.bzl", "pyright_library")
+load("//update_python_with_ai/support/lib:build_derived_test.bzl", "build_derived_test")
 
 package(default_visibility = ["//visibility:public"])
 
 pyright_library(
     name = "loop",
     srcs = ["loop.py"],
+    deps = [],
     pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/dag/lib:dag_storage",
     ],
     visibility = ["//visibility:public"],
@@ -16,12 +20,28 @@ pyright_library(
 pyright_library(
     name = "loop_asm",
     srcs = ["loop_asm.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_config",
+        "//update_with_ai/parts/agent/lib:agent_node_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        "//update_with_ai/parts/agent/lib:agent_storage",
+        "//update_with_ai/parts/core/lib:runner_logger",
+        "//update_with_ai/parts/dag/lib:dag_storage",
+        "//update_with_ai/parts/dag/lib:dag_subgraph",
         "//update_with_ai/parts/openai/lib:openai_conversation_impl",
         "//update_with_ai/parts/openai/lib:openai_driver_impl",
+        "//update_with_ai/parts/sandbox/lib:sandbox",
+        "//update_with_ai/parts/sandbox/lib:template_format",
+        "//update_with_ai/parts/sandbox/lib:tool_provider",
+        ":loop_cleaner",
         ":loop_cleaner_impl",
+        ":loop_conversation",
+        ":loop_driver",
+        ":loop_guard",
         ":loop_guard_impl",
+        ":loop_node_cleaner",
         ":loop_node_cleaner_impl",
     ],
     visibility = ["//visibility:public"],
@@ -30,7 +50,10 @@ pyright_library(
 pyright_library(
     name = "loop_cleaner",
     srcs = ["loop_cleaner.py"],
+    deps = [],
     pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/dag/lib:dag_storage",
         ":loop_node_cleaner",
     ],
@@ -40,8 +63,10 @@ pyright_library(
 pyright_library(
     name = "loop_cleaner_impl",
     srcs = ["loop_cleaner_impl.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/dag/lib:dag_subgraph",
         ":loop_cleaner",
@@ -53,7 +78,10 @@ pyright_library(
 pyright_library(
     name = "loop_conversation",
     srcs = ["loop_conversation.py"],
+    deps = [],
     pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/sandbox/lib:tool_provider",
     ],
     visibility = ["//visibility:public"],
@@ -62,8 +90,11 @@ pyright_library(
 pyright_library(
     name = "loop_driver",
     srcs = ["loop_driver.py"],
+    deps = [],
     pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/core/lib:runner_logger",
         "//update_with_ai/parts/sandbox/lib:tool_provider",
         ":loop_conversation",
@@ -75,7 +106,10 @@ pyright_library(
 pyright_library(
     name = "loop_guard",
     srcs = ["loop_guard.py"],
+    deps = [],
     pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/sandbox/lib:tool_provider",
     ],
     visibility = ["//visibility:public"],
@@ -84,6 +118,7 @@ pyright_library(
 pyright_library(
     name = "loop_guard_impl",
     srcs = ["loop_guard_impl.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_session",
@@ -96,6 +131,7 @@ pyright_library(
 pyright_library(
     name = "loop_node_cleaner",
     srcs = ["loop_node_cleaner.py"],
+    deps = [],
     pyright_deps = [
         "//update_with_ai/parts/dag/lib:dag_storage",
     ],
@@ -105,16 +141,27 @@ pyright_library(
 pyright_library(
     name = "loop_node_cleaner_impl",
     srcs = ["loop_node_cleaner_impl.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_config",
         "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/agent/lib:agent_storage",
+        "//update_with_ai/parts/core/lib:runner_logger",
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/sandbox/lib:sandbox",
+        "//update_with_ai/parts/sandbox/lib:template_format",
+        "//update_with_ai/parts/sandbox/lib:tool_provider",
         ":loop_conversation",
         ":loop_driver",
+        ":loop_guard",
         ":loop_node_cleaner",
     ],
     visibility = ["//visibility:public"],
 )
+
+build_derived_test(
+    name = "targets_derived_test",
+)
+

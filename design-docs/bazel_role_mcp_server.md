@@ -18,26 +18,24 @@ Rather than building a disjoint MCP subsystem that duplicates verification cachi
    - `ToolManager` (`tool_provider.ToolManager`) in the `sandbox` subsystem is the **single source of truth** for all domain tools.
    - Any tool installed in `ToolManager` (`get_work`, `check_file`, `submit`, `blame`, `fail`) is **dynamically exported** into FastMCP by `McpServer`. No hardcoded domain tool lists or duplicated MCP tool classes exist. Adding a new tool to `ToolManager` automatically exposes it to MCP clients without server modifications.
    - FastMCP lifecycle tools (`register_role_agent`, `deregister_role_agent`) manage the agent session scope in `RoleSessionManager`.
-5. **Unified Push/Single-Batch Prompt Model**: 
-   - `get_work` generates a self-contained task prompt combining active source files, specifications, upstream changes, diagnostic feedback, and step-by-step tool instructions.
-   - The prompt instructs the agent to **finish upon submission** rather than recursively calling `get_work`.
-   - This resets the conversation context cleanly between nodes. Both the headless runner and the Antigravity desktop harness share this exact same push-style prompt model, completely preventing context contamination and transcript bloat.
-6. **Client-Safe Non-Blocking Idling & 15-Minute KV Cache-Aware Sampling**:
-   - Holding MCP tool calls open indefinitely triggers Antigravity's client-side safety timeouts (`Context deadline exceeded`). Therefore, `get_work` is **strictly non-blocking**: if no tasks are ready, it immediately returns `status: "IDLE"`, prompting the subagent to drop into an idle state.
-   - The server acts as a non-blocking timekeeper, monitoring Google's **15-minute KV cache eviction window**.
-   - **Path A (Warm Cache $\le 15$ min)**: Server pushes a tiny notification turn to the idle subagent via **MCP Sampling (`sampling/createMessage`)**, triggering an immediate warm-cache execution at heavy token discounts.
-   - **Path B (Stale Cache $> 15$ min)**: Server routes the task notification via MCP Sampling to the **Parent Coordinator**, which terminates the stale subagent using `manage_subagents(kill)` and spawns a fresh 0-token instance using `invoke_subagent`.
-7. **Native Antigravity File Tools Gated by Hooks & .mcp.active Sentinel**:
-   - File inspection and edits use Antigravity's native tools (`view_file`, `replace_file_content`, `write_to_file`).
-   - In MCP mode (`is_mcp_mode=True`), `ReadManager` and `EditManager` **do not install** `view_file` or `replace_file_content` into `ToolManager`.
-   - File access validation (`can_read` and `can_write`) is implemented as **internal operations** on `ReadManager` and `EditManager` rather than MCP tools.
-   - A root workspace sentinel (`.mcp.active`) tracks the server PID, port, and registered subagent conversation IDs.
-   - An Antigravity `PreToolUse` lifecycle hook implements a two-tier fail-safe:
-     - **Non-subagent sessions (pair programming / user)**: Fast-path bypass (`allow`) with zero network overhead.
-     - **Registered Cleanroom subagents**: Gated against the MCP server (`POST /validate_access`). If the server crashes or terminates, the hook **fails closed (`deny`)**, preventing the subagent from running wild.
-8. **Clean Tool Separation**:
+5. **Topological Wave Batching & Downstream Completion Gating**:
+   - The Main Chat coordinator inspects the DAG via `cleanroom_dag_cli next-batch` to discover ready dirty nodes.
+   - Execution proceeds in topological wave order: `high` $\to$ `low` $\to$ `lib` $\to$ `test` $\to$ `qa` $\to$ `coverage`.
+   - When defects or blame attributions occur, the Coordinator does not immediately restart the upstream role; instead, all downstream roles (`test`, `qa`, `coverage`) run to completion across the entire assembly, accumulating all blames into a single maximal batch before re-launching the upstream worker.
+6. **Ephemeral Single-Wave Subagent Lifecycle & Token Ceiling Guard (60k–80k Tokens)**:
+   - Subagents are task-scoped and ephemeral: they start with a 0-token baseline transcript, process a batch of ready files, submit, and terminate immediately (`finish your turn`).
+   - Reusing long-lived subagent threads indefinitely leads to quadratic transcript growth ($O(N^2)$ tokens). Ephemeral workers eliminate this by resetting intermediate scratchpads between waves.
+   - For large workloads with no natural gap, subagents checkpoint and exit after 2–3 modules or upon reaching a 60k–80k token budget, allowing the Coordinator to spawn a fresh worker with a clean context.
+7. **Minimal 3-Tool Native Manifest & Hook Shell Defense**:
+   - The worker subagent manifest ([`.agents/agents/cleanroom_role_worker/agent.md`](../.agents/agents/cleanroom_role_worker/agent.md)) strictly limits native tools to: `view_file`, `replace_file_content`, and `write_to_file`.
+   - Shell execution (`run_command`) and exploratory search tools (`find_by_name`, `grep_search`, `list_dir`) are completely eliminated, preventing runaway token expenditure on subagent-driven REPL commands or unstructured file hunts.
+   - Antigravity's `PreToolUse` lifecycle hook (`cleanroom_sandbox_hook.py`) includes `run_command` in its matcher to fail-close (`deny`) as defense-in-depth against unauthorized execution.
+8. **Deterministic Companion Path Injection & Tool Output Compaction**:
+   - `get_work` formats task prompts with explicit, deterministic companion paths (specification `.pyi`, implementation `.py`, test `_test.py`, and relevant guide), eliminating the need for directory searches.
+   - `check_file` produces a compacted single-line confirmation on pass and isolates relevant compilation or test failures without noisy Bazel build cache or banner text.
+9. **Clean Tool Separation**:
    - In **headless mode**, only `ReplaceFileContentTool` exists for file editing (Cleanroom has no `WriteToFileTool` in headless mode; missing files are materialized from startup templates).
-   - In **Antigravity desktop mode**, Antigravity provides both native `replace_file_content` and native `write_to_file`. The hook access gate validates both against `EditManager.can_write`.
+   - In **Antigravity desktop mode**, Antigravity provides native `view_file`, `replace_file_content`, and `write_to_file`. The hook access gate validates each against `EditManager.can_write` and `ReadManager.can_read`.
 
 ---
 
@@ -125,7 +123,18 @@ Because `ToolManager` manages domain tool definitions, and `is_mcp_mode` switche
 | `view_file` | **Installed in `ToolManager`** (`ViewFileTool`) | *Omitted from `ToolManager`* (uses Antigravity native) | **Gated by AccessGate (`PreToolUse`)** |
 | `replace_file_content` | **Installed in `ToolManager`** (`ReplaceFileContentTool`) | *Omitted from `ToolManager`* (uses Antigravity native) | **Gated by AccessGate (`PreToolUse`)** |
 | `write_to_file` | *Not Present* (uses template materialization) | *Not Present* (uses Antigravity native) | **Gated by AccessGate (`PreToolUse`)** |
-| `list_dir` | **Installed in `ToolManager`** (`ListDirTool`) | *Omitted from `ToolManager`* (uses Antigravity native) | **Filtered by Hook (`PostToolUse`)** |
+| `run_command` | *Not Present* (strictly internal) | **Excluded from Subagent Manifest** | **Denied by Hook (`PreToolUse`)** |
+| `find_by_name` / `grep_search` / `list_dir` | *Not Present* | **Excluded from Subagent Manifest** (companion paths injected) | **Bypassed / Not installed** |
+
+#### Subagent Native Tool Manifest:
+Role workers are governed by [`.agents/agents/cleanroom_role_worker/agent.md`](../.agents/agents/cleanroom_role_worker/agent.md), strictly pinning:
+```yaml
+tools:
+  - view_file
+  - replace_file_content
+  - write_to_file
+```
+All other platform tools (`run_command`, `find_by_name`, `grep_search`, `list_dir`, `search_web`, `read_url_content`, `generate_image`, `schedule`, `manage_task`) are omitted from the agent manifest. In addition, `run_command` is explicitly matched in `.agents/hooks.json` to fail closed if invoked.
 
 ---
 
@@ -247,81 +256,59 @@ FastMCP exposes two lifecycle tools directly to control session scopes:
 
 ---
 
-## 6. MCP Sampling & 15-Minute KV Cache Routing Architecture
+## 6. Topological Wave Batching, Downstream Completion Gating & Context Reset Architecture
 
-### 6.1 The Safety Timeout Problem
-In desktop environments like Google Antigravity, MCP tool calls are subject to hard client-side deadlines. If an MCP server handler suspends asynchronously on an event loop waiting for tasks for minutes, Antigravity's client wrapper severs the connection with:
-```
-Context deadline exceeded
-```
-This terminates the tool step in an error state and crashes the agent conversation loop.
+### 6.1 The Long-Lived Transcript Explosion Problem
+In early implementations, a fleet of role workers was spawned concurrently and maintained across the entire assembly convergence run. As workers completed turns, their Antigravity conversation transcripts accumulated every file inspection, test output, and intermediate thought.
+Because LLM prompt generation resends the entire conversation history on every turn, turn costs scaled quadratically ($O(N^2)$ prompt tokens). In an assembly with 5 modules and 9 defect cycles, reusing long-lived subagent threads generated **~478 Million prompt tokens**, with a single worker accumulating over 1,000 turns and 800k tokens per prompt.
 
-Furthermore, waking an idle agent back up after its context window has been evicted from Google's server-side memory requires an expensive "cold" re-read of the entire transcript.
+Furthermore, prefix caching provided diminishing returns: workers read files in differing orders and modified buffers, breaking prefix cache alignment, while the 20% uncached tail on an 800k token prompt cost 160k tokens per tool call.
 
-### 6.2 The Decoupled Idling & 15-Minute Cache Gate
-To resolve this, the server never holds an MCP tool call open. Instead, it decouples work discovery using **MCP Sampling (`sampling/createMessage`)** and **Native Antigravity Orchestration**, gated by Google's **15-minute KV cache eviction window**:
+### 6.2 Topological Wave Batching with Downstream Completion Gating
+To eliminate quadratic context bloat while maximizing batch efficiency, Cleanroom uses a **Topological Wave Batching** model orchestrated by the Main Chat coordinator:
 
 ```mermaid
 flowchart TD
-    SubAgentCall["Sub-Agent calls get_work()"] --> WorkCheck{"Work Ready?"}
-    WorkCheck -->|Yes| ReturnWork["Return task prompt & start work"]
-    WorkCheck -->|No| ReturnIdle["Return status='IDLE'<br/>(Non-blocking immediate response)"]
-
-    ReturnIdle --> SubAgentSleep["Sub-Agent outputs standby text<br/>and enters zero-token Idle state"]
-
-    ServerLoop["FastMCP Server Background Loop<br/>(detects ready dirty nodes in DAG)"] --> CheckTime{"Time since sub-agent<br/>last activity?"}
-
-    CheckTime -->|"<= 15 Minutes (Warm Cache)"| PathA["Path A: Sampling Wakeup"]
-    PathA --> SendSample["Server calls sampling/createMessage<br/>on Sub-Agent ('Call get_work()')"]
-    SendSample --> WarmResume["Sub-Agent wakes up immediately<br/>(Warm KV Cache hit at low token cost)"]
-    WarmResume --> SubAgentCall
-
-    CheckTime -->|"> 15 Minutes (Cold Cache)"| PathB["Path B: Main Chat Routing"]
-    PathB --> SampleCoord["Server routes work notification<br/>to Main Chat (Coordinator)"]
-    SampleCoord --> CoordAction["Main Chat executes:<br/>1. manage_subagents(kill stale agent)<br/>2. invoke_subagent(spawn fresh agent)"]
-    CoordAction --> FreshStart["Fresh Sub-Agent starts with 0-token history<br/>(No cold-cache penalty)"]
-    FreshStart --> SubAgentCall
+    Coord["Main Chat Coordinator<br/>(cleanroom_dag_cli next-batch)"] --> QueryDAG{"Any ready dirty batch?<br/>(is_complete?)"}
+    
+    QueryDAG -->|Yes| SpawnWorker["Spawn Fresh Role Worker<br/>(0-token baseline transcript)"]
+    QueryDAG -->|Complete| Done["Cleanroom Clean Complete<br/>(Shutdown FastMCP server)"]
+    
+    SpawnWorker --> WorkBatch["Worker calls get_work() &<br/>processes ready batch (up to batch_size)"]
+    WorkBatch --> SubmitBatch["Worker calls check_file() & submit()"]
+    SubmitBatch --> TerminateWorker["Worker outputs completion summary<br/>and terminates turn (clean exit)"]
+    TerminateWorker --> GatingCheck{"Downstream defects/blames<br/>attributed to upstream?"}
+    
+    GatingCheck -->|Yes: Gating Active| DownstreamWave["Run downstream roles (test, qa, coverage)<br/>to full assembly completion first"]
+    DownstreamWave --> Accumulate["Accumulate all blames across unit<br/>into a single maximal upstream batch"]
+    Accumulate --> Coord
+    
+    GatingCheck -->|No| Coord
 ```
 
-### 6.3 Operational Mechanics of the Cache Gate
+### 6.3 Operational Invariants of the Wave Batching Pipeline
 
-1. **Immediate Idling**:
-   When `get_work()` finds no ready nodes, it returns:
-   ```json
-   {
-     "status": "IDLE",
-     "prompt": "No tasks are currently ready. Upstream dependencies are in-flight. Output a short standby message and drop to idle without calling further tools."
-   }
-   ```
-   The subagent outputs `"Standing by for upstream tasks."` and cleanly finishes its turn, dropping to an idle state at zero token consumption.
+1. **Topological Wave Scheduling**:
+   - The coordinator executes roles in dependency order: `high` $\to$ `low` $\to$ `lib` $\to$ `test` $\to$ `qa` $\to$ `coverage`.
+   - At each stage, the coordinator queries `cleanroom_dag_cli next-batch`. If nodes are ready for a role, the worker is spawned.
+   - The worker executes its batch and **shuts down cleanly upon submission** (`finish your turn`), completely resetting transcript history.
 
-2. **Server Timekeeper & Last-Active Timestamp**:
-   The FastMCP server records `last_active_timestamp` for each registered `conversationId`. A background `asyncio` task continuously monitors `DagStorage` and `DagSubgraph` for unblocked dirty nodes.
+2. **Downstream Completion Gating**:
+   - When a downstream role (`qa` or `test`) blames an upstream dependency (`lib`), the coordinator does **not** immediately interrupt or re-launch the upstream role.
+   - Instead, all downstream roles (`test`, `qa`, `coverage`) continue their full pass across the assembly.
+   - All defects and blames across all files accumulate into `DagStorage`.
+   - Once downstream roles complete their passes, the upstream role is re-launched with a fresh context, allowing it to fix all blamed targets in a single maximal batch.
 
-3. **Path A: Warm Cache Push via MCP Sampling ($\le 15$ min)**:
-   - When an upstream node is submitted, dependent nodes become ready.
-   - If the idle role subagent's `current_time - last_active_timestamp <= 15 minutes`:
-     The subagent's server-side prompt and system prefix remain cached in Google's high-speed memory.
-   - The MCP server invokes `ctx.session.create_message(...)` (MCP Sampling) sending:
-     `"New tasks are ready for your role. Please call get_work()."`
-   - This triggers an immediate execution turn on the subagent. Because it hits the warm KV cache, the turn executes with minimal latency and high token savings.
+3. **Mid-Session Token Ceiling Reset Guard (60k–80k Tokens)**:
+   - For heavy refactoring workloads spanning many complex targets where no natural gap occurs:
+   - Workers are instructed to process files in chunks of 2–3 modules.
+   - If a worker's session approaches **60k–80k tokens** (monitored via transcript size $\approx 300\text{--}400\text{ KB}$ JSONL), the worker submits completed targets and exits.
+   - The coordinator detects remaining dirty nodes and spawns a fresh subagent with a 0-token baseline transcript.
 
-4. **Path B: Stale Cache Elimination via Main Chat ($> 15$ min)**:
-   - If work becomes ready after $> 15$ minutes of inactivity, Google has evicted the subagent's KV cache. Waking the subagent would force a full, expensive re-read of its entire history.
-   - The MCP server routes the task notification to the **Main Chat (Coordinator)**:
-     `"Role '//roles:lib' has new tasks ready, but subagent cache has expired. Please recycle worker."`
-   - The Main Chat executes:
-     ```python
-     manage_subagents(Action="kill", ConversationIds=[stale_conversation_id])
-     invoke_subagent(
-         Subagents=[{
-             "TypeName": "cleanroom_role_worker",
-             "Role": "Lib Worker",
-             "Prompt": "Call register_role_agent(role='//roles:lib', unit_root='//parts/agent:...'), then call get_work() to begin."
-         }]
-     )
-     ```
-   - The cold history is wiped from memory, and a fresh subagent starts with a 0-token baseline history.
+4. **Non-Blocking Idling Fallback & MCP Sampling**:
+   - If a worker calls `get_work` when no nodes are ready, `get_work` returns `status: "IDLE"`.
+   - The worker immediately outputs a short standby message and terminates its turn.
+   - For environments using long-polling, the FastMCP background task continues to monitor `DagStorage` and can dispatch `sampling/createMessage` notifications, but the primary orchestration pattern relies on coordinator-driven wave dispatch.
 
 ---
 
@@ -418,7 +405,7 @@ Inside `AccessGateImpl` (on the running server):
     "enabled": true,
     "PreToolUse": [
       {
-        "matcher": "view_file|replace_file_content|write_to_file",
+        "matcher": "view_file|replace_file_content|write_to_file|run_command",
         "hooks": [
           {
             "type": "command",
@@ -489,12 +476,27 @@ Inside `AccessGateImpl` (on the running server):
   if current_root is None or current_nodes is None or root_node not in current_nodes:
       subgraph.set_target(root_node)
   ```
-  If `root_node` is already in `subgraph._nodes` (an upstream dependency), the target is preserved, maintaining the full topological order across the entire 5-role pipeline.
-
 ### 10. Graceful Server Shutdown & Process Teardown (`shutdown` tool)
 - The server exposes a `shutdown()` tool callable over MCP.
 - Invoking `shutdown()` calls `self.stop()`, cancels background cache monitor tasks, removes `.mcp.active`, and triggers clean daemon process exit via a background timer thread (`time.sleep(0.5); os._exit(0)`).
 - The orchestrator invokes `shutdown` as soon as the DAG converges, ensuring zero dangling background processes.
+
+### 11. Deterministic Companion Path Injection in `get_work`
+- **The Problem**: Previously, `get_work` provided bare target addresses without companion paths, leading workers to call `find_by_name` (22 calls) and `grep_search` (72 calls) to locate relevant files or look for mock examples in forbidden directories (e.g. `testing/`).
+- **Resolution**: In `sandbox_run_control_impl.py` (`format_task_prompt`), each assigned target is formatted with its exact, deterministic companion paths:
+  - Unit specification: `grounding/<unit>.pyi`
+  - Unit implementation: `lib/<unit>.py`
+  - Unit tests: `tests/<unit>_test.py`
+  - Unit guide: `update_python_with_ai/guides/<role_guide>.md`
+- This completely eliminates the need for filesystem search tools and ensures strict compliance with workspace boundary rules.
+
+### 12. Compact Verification Check Diagnostics
+- **The Problem**: `check_file` previously returned voluminous Bazel build execution banners, cache notices, and toolchain logs even on successful checks, bloating the prompt context on every edit cycle.
+- **Resolution**: In `sandbox_run_control_impl.py` (`CheckFileTool.execute_tool`), `check_file` returns a clean 1-line confirmation on pass (`Verification passed: All checks succeeded.`). On failure, it strips execution progress banners and isolates only relevant syntax/type errors or unittest tracebacks.
+
+### 13. `DagStorage` & DAG CLI Topological Wave Integration (`next-batch`)
+- **The Problem**: Orchestrators needed a fast, authoritative way to query ready dirty nodes and topological order without maintaining stateful in-memory graph walkers in the coordinator.
+- **Resolution**: `cleanroom_dag_cli.py next-batch` uses `DagSubgraph.next_ready_batch()` and `DagStorage.is_dirty()` to inspect active subgraphs. Reverse dependencies and pending `Change`/`Feedback` messages persist in `.update_with_ai.textproto` via `BazelStorageImpl`, surviving ephemeral subagent shutdowns and enabling perfect coordination across successive wave launches.
 
 ---
 
@@ -548,9 +550,20 @@ Example:
 3. **Subgraph Initialization**:
    - Initializes `root = Node(unit_address, role_address)` in `DagSubgraph.set_target(root)`.
 
-### 9.3 Fleet Launch & Autonomous Idling Pipeline
-4. **Fleet Launch**:
-   The Main Chat invokes role workers concurrently via `invoke_subagent`:
+### 9.3 Topological Wave Batching & Ephemeral Worker Lifecycle
+Rather than launching a long-lived fleet of workers that idle concurrently, the Coordinator executes tasks in **topological waves**:
+
+#### The Wave Dispatch Loop:
+1. **Query Next Ready Batch**:
+   The Coordinator runs:
+   ```bash
+   python3 update_with_ai/support/lib/cleanroom_dag_cli.py next-batch <target>
+   ```
+   - If `"is_complete": true`: All nodes in the target subgraph are clean. Skip to **Teardown**.
+   - If `"batch"` is non-empty: Identify the `ready_role` and the assigned nodes.
+
+2. **Spawn Task-Scoped Ephemeral Worker**:
+   The Coordinator spawns a single worker for `ready_role` using `invoke_subagent`:
    ```python
    invoke_subagent(
        Subagents=[
@@ -560,33 +573,35 @@ Example:
                "Prompt": (
                    f"You are the Cleanroom role worker for role '{role_addr}' at unit '{unit_addr}'.\n"
                    f"1. Register your session:\n"
-                   f"   python3 update_with_ai/support/lib/cleanroom_mcp_client.py --session {role_short} register --role '{role_addr}' --unit '{unit_addr}'\n"
+                   f"   register_role_agent(role='{role_addr}', unit_root='{unit_addr}')\n"
                    f"2. Work loop:\n"
-                   f"   Call: python3 update_with_ai/support/lib/cleanroom_mcp_client.py --session {role_short} get-work\n"
-                   f"   - If 'No dirty nodes are ready for cleaning': output 'Standing by for upstream tasks.' and finish turn.\n"
-                   f"   - If work is assigned: inspect files, apply edits, run check-file, and call submit.\n"
-                   f"     Repeat get-work until no dirty nodes remain.\n"
-                   f"3. When no work remains: output completion summary and finish turn."
+                   f"   Call get_work() to receive your assigned batch of files.\n"
+                   f"   - For each file in the batch:\n"
+                   f"     Inspect using view_file, apply edits using replace_file_content or write_to_file.\n"
+                   f"     Verify using check_file(path='<file>').\n"
+                   f"     Submit using submit(target='<file>', change_summary='<summary>').\n"
+                   f"     If defects are found in upstream dependencies, attribute them using blame(target='<file>', blame_target='<dep_file>', explanation='<reason>').\n"
+                   f"3. When you have submitted all targets in your batch:\n"
+                   f"   Output a concise completion summary and finish your turn immediately."
                )
            }
-           for role_addr in discovered_roles
        ]
    )
    ```
-5. **Multi-Node Batching (`batch_size = 10`)**:
-   - `get_work` dispatches up to 10 ready dirty nodes to a worker in a single turn.
-   - For multi-node batches, the prompt formats all open targets (`Process the following files: ...`).
-   - The worker runs verification via `check-file --file <path>` and submits each target via `submit --target <path>`.
-6. **Immediate Work vs. Staged Idling**:
-   - Roles with ready dirty nodes immediately process their batch.
-   - Roles whose upstream dependencies are dirty receive `"No dirty nodes are ready for cleaning."` and standby in a zero-token idle state.
-7. **DAG Convergence & Complete Teardown**:
-   - When all nodes in the target subgraph transition to clean, `cleanroom_dag_cli status` reports `"is_complete": true`.
-   - The Main Chat terminates all worker subagents:
-     ```python
-     manage_subagents(Action="kill", ConversationIds=[...])
-     ```
-   - The Main Chat stops the server cleanly:
+
+3. **Autonomous Execution & Clean Shutdown**:
+   - The worker executes with a **0-token baseline history**.
+   - Native file operations (`view_file`, `replace_file_content`, `write_to_file`) are validated by `cleanroom_sandbox_hook.py`.
+   - Shell execution is denied by both the agent manifest and the lifecycle hook.
+   - Upon submitting its assigned batch, the worker **terminates its turn**. No long-lived idle state is maintained.
+
+4. **Downstream Completion Gating**:
+   - If a downstream role (`qa` or `test`) blames an upstream dependency (`lib`), the Coordinator continues executing all remaining downstream checks across the unit before re-dispatching `lib`.
+   - All blames accumulate in `DagStorage`. When `lib` is subsequently re-launched, it receives the complete batch of all blamed targets at once.
+
+5. **DAG Convergence & Complete Teardown**:
+   - When `next-batch` reports `"is_complete": true`, the Coordinator terminates any dangling subagents via `manage_subagents(Action="kill_all")`.
+   - The Coordinator shuts down the server:
      ```bash
      python3 update_with_ai/support/lib/cleanroom_mcp_client.py shutdown
      ```
@@ -599,6 +614,6 @@ To initiate work or trigger incremental refactors from the chat:
 /cleanroom change <unit-address> <role-address> "<change description>"
 ```
 - Attaches a `Change(content=...)` message to the target node in `DagStorage`.
-- Automatically marks the node and all its downstream dependents dirty.
-- When followed by `/cleanroom clean`, the fleet executes incremental updates strictly for the affected subgraph.
+- Persists to `.update_with_ai.textproto` in the target package directory.
+- When followed by `/cleanroom clean`, the wave batching loop incrementally cleans strictly the dirty node and its affected downstream dependents.
 

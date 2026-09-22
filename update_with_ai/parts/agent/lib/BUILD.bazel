@@ -1,23 +1,31 @@
 # update_with_ai/parts/agent/lib/BUILD.bazel
 
 load("//bin:pyright_library.bzl", "pyright_library")
+load("//update_python_with_ai/support/lib:build_derived_test.bzl", "build_derived_test")
 
 package(default_visibility = ["//visibility:public"])
 
 pyright_library(
     name = "agent_config",
     srcs = ["agent_config.py"],
-    pyright_deps = [],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        ":agent_session",
+    ],
     visibility = ["//visibility:public"],
 )
 
 pyright_library(
     name = "agent_file_alias",
     srcs = ["agent_file_alias.py"],
+    deps = [],
     pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/bazel/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/sandbox/lib:tool_provider",
+        ":agent_session",
     ],
     visibility = ["//visibility:public"],
 )
@@ -25,9 +33,15 @@ pyright_library(
 pyright_library(
     name = "agent_node_config",
     srcs = ["agent_node_config.py"],
+    deps = [],
     pyright_deps = [
-        ":agent_file_alias",
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/bazel/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
+        "//update_with_ai/parts/sandbox/lib:tool_provider",
+        ":agent_config",
+        ":agent_file_alias",
+        ":agent_session",
     ],
     visibility = ["//visibility:public"],
 )
@@ -35,6 +49,7 @@ pyright_library(
 pyright_library(
     name = "agent_session",
     srcs = ["agent_session.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
     ],
@@ -44,8 +59,16 @@ pyright_library(
 pyright_library(
     name = "agent_storage",
     srcs = ["agent_storage.py"],
+    deps = [],
     pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/dag/lib:dag_storage",
+        ":agent_session",
     ],
     visibility = ["//visibility:public"],
 )
+
+build_derived_test(
+    name = "targets_derived_test",
+)
+

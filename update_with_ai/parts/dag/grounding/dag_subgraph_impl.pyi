@@ -22,13 +22,13 @@ PURPOSE:
 Sets the target node, scoping the target subgraph and establishing dependency-first topological order
 
 FRESH_REQUIREMENTS:
-- Setting a target node scopes the target subgraph to all reachable dependency nodes rooted at the target node in dag storage, arranged in dependency-first topological order.
+- Setting a target node scopes the target subgraph to all reachable dependency nodes rooted at the target node in dag storage, arranged in dependency-first topological order, breaking ties by role tier depth first, then by unit address.
 
 INHERITED_REQUIREMENTS:
 - [DagSubgraph] Setting a target collects all reachable dependency nodes from the target node in dag storage and computes their dependency-first topological order.
 
 GROUNDING_ARGUMENT:
-- Receives root as a parameter, traverses reachable dependency relationships using imported dag_storage in the same system lifecycle tier, orders nodes topologically, and resets node visit counters.
+- Receives root as a parameter, traverses reachable dependency relationships using imported dag_storage in the same system lifecycle tier, orders nodes topologically breaking ties by role tier depth first, then by unit address, and resets node visit counters.
 """
         ...
 
@@ -55,14 +55,14 @@ PURPOSE:
 Provides the next batch of ready dirty nodes to clean
 
 FRESH_REQUIREMENTS:
-- The next ready batch consists of contiguous dirty nodes in topological order that share the same role address and have all their dependencies in the target subgraph clean in dag storage or present in the same ready batch, starting from the earliest ready dirty node and bounded by the batch size obtained from dag config.
+- The next ready batch consists of contiguous dirty nodes in topological order that share the same role address, prioritized by role tier precedence (prioritizing lib before test, and test before qa) and having all their dependencies in the target subgraph clean in dag storage or present in the same ready batch, starting from the earliest ready dirty node and bounded by the batch size obtained from dag config.
 - If no dirty node in the target subgraph has all its dependencies in the target subgraph clean in dag storage, the next ready batch is an empty sequence.
 
 INHERITED_REQUIREMENTS:
-- [DagSubgraph] When obtaining the next ready batch, uncleaned dirty nodes in topological order whose dependencies in the target subgraph are clean in dag storage or present in the same ready batch are selected, grouped by role address up to a maximum batch size.
+- [DagSubgraph] When obtaining the next ready batch, uncleaned dirty nodes prioritized by role tier precedence (upstream roles before downstream roles) whose dependencies in the target subgraph are clean in dag storage or present in the same ready batch are selected, grouped by role address up to a maximum batch size.
 
 GROUNDING_ARGUMENT:
-- Scans topologically ordered nodes for the target subgraph using imported dag_storage to evaluate dependency cleanliness, groups contiguous matching candidates by role up to batch_size from imported dag_config, and returns the batch.
+- Scans topologically ordered nodes for the target subgraph using imported dag_storage to evaluate dependency cleanliness, groups contiguous matching candidates by role up to batch_size from imported dag_config in role tier priority order, and returns the batch.
 """
         ...
 

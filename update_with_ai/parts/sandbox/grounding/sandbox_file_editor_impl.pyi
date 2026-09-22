@@ -132,16 +132,16 @@ GROUNDING_ARGUMENT:
     def materialize_templates(self) -> None:
         """
 PURPOSE:
-Materializes templates retrieved from node config to missing target files on disk while preserving existing files
+Materializes templates retrieved from node config to missing target files on disk while preserving existing files and recording baselines
 
 FRESH_REQUIREMENTS:
-- Materializing templates retrieves configured templates from the node config, formats initial template content using the template formatter with session template parameters, checks whether target files exist in the filesystem at the host path formed from the alias manager workspace root and the read-write file workspace path, and writes formatted template content for missing files while preserving existing files.
+- Materializing templates retrieves configured templates from the node config, formats initial template content using the template formatter with session template parameters, checks whether target files exist in the filesystem at the host path formed from the alias manager workspace root and the read-write file workspace path, writes formatted template content for missing files while preserving existing files, and records initial content baselines for active read-write files.
 
 INHERITED_REQUIREMENTS:
 - [EditManager] Materializing templates populates missing read-write files with initial template content without overwriting existing files.
 
 GROUNDING_ARGUMENT:
-- Obtains template mappings and template parameters from imported agent_node_config.NodeConfig, formats template content using imported template_format.TemplateFormatter, resolves host paths using imported agent_file_alias.AliasManager workspace root in the same session lifecycle tier, and writes missing files via the filesystem.
+- Obtains template mappings and template parameters from imported agent_node_config.NodeConfig, formats template content using imported template_format.TemplateFormatter, resolves host paths using imported agent_file_alias.AliasManager workspace root in the same session lifecycle tier, writes missing files via the filesystem, and records initial content baselines for active read-write files.
 """
         ...
 
@@ -283,10 +283,10 @@ GROUNDING_ARGUMENT:
     def target_content_parameter(self) -> tool_provider.Parameter:
         """
 PURPOSE:
-Parameter specifying the target content to replace
+Parameter specifying the target content to replace within the file or designated search window
 
 GROUNDING_ARGUMENT:
-- Constant parameter descriptor configured with string parameter converter and named 'target_content'.
+- Constant parameter descriptor configured with string parameter converter, named 'target_content', and configuring a missing message function that evaluates supplied parameter names to guide search window and append constraints.
 """
         ...
 
@@ -307,7 +307,7 @@ GROUNDING_ARGUMENT:
     def start_line_parameter(self) -> tool_provider.Parameter:
         """
 PURPOSE:
-Parameter specifying the starting line index
+Parameter specifying the starting line index of the search window
 
 GROUNDING_ARGUMENT:
 - Constant optional parameter descriptor configured with integer parameter converter and named 'start_line'.
@@ -319,7 +319,7 @@ GROUNDING_ARGUMENT:
     def end_line_parameter(self) -> tool_provider.Parameter:
         """
 PURPOSE:
-Parameter specifying the ending line index
+Parameter specifying the ending line index of the search window
 
 GROUNDING_ARGUMENT:
 - Constant optional parameter descriptor configured with integer parameter converter and named 'end_line'.
@@ -372,7 +372,6 @@ FRESH_REQUIREMENTS:
 - Tool execution fails if the target content is not found within the designated line range, and replaces all occurrences of the target content within the designated line range, when allow multiple is true.
 - Tool execution provides failure feedback indicating the first two matching line numbers to assist in narrowing the replacement region and instructs the agent to include more surrounding lines in target_content or specify start_line and end_line, when target content matches multiple locations in the file and allow multiple is false.
 - Tool execution provides failure feedback indicating the line numbers where the target content was located, when target content is not found within the designated line range but exists elsewhere in the file.
-- Tool execution specifies a follow-up execution of the view file tool on the target file with reasoning text indicating that the target content was not found, when target content is not found anywhere in the file.
 - Tool execution writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred on success.
 - Editing tool responses share a constant suppression key replace_file_content.
 
@@ -381,6 +380,6 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, resolves the target read-write file via path parameter or implicitly from EditManager.last_read_or_edited_file, informs with a warning in content when implicitly bound, inspects and updates file content using the filesystem, scans file content for out-of-bounds line occurrences when target content is missing from designated line ranges, specifies a view_file follow-up when target content is not found anywhere in the file, checks configuration via imported agent_config.AgentConfig, attaches a reminder to call check_file to verify syntax and type correctness before making further modifications on successful execution, attaches suppression key 'replace_file_content', and notifies EditManager in the same session lifecycle tier that workspace files were modified.
+- Receives actual parameter bindings, resolves the target read-write file via path parameter or implicitly from EditManager.last_read_or_edited_file, informs with a warning in content when implicitly bound, inspects and updates file content using the filesystem, scans file content for out-of-bounds line occurrences when target content is missing from designated line ranges, checks configuration via imported agent_config.AgentConfig, attaches a reminder to call check_files to verify syntax and type correctness on successful execution, attaches suppression key 'replace_file_content', and notifies EditManager in the same session lifecycle tier that workspace files were modified.
 """
         ...

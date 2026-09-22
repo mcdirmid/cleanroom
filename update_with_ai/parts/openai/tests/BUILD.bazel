@@ -1,6 +1,7 @@
 # update_with_ai/parts/openai/tests/BUILD.bazel
 
 load("//bin:pyright_library.bzl", "pyright_test")
+load("//update_python_with_ai/support/lib:build_derived_test.bzl", "build_derived_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -32,3 +33,8 @@ pyright_test(
         "//update_with_ai/parts/sandbox/lib:tool_provider",
     ],
 )
+
+build_derived_test(
+    name = "targets_derived_test",
+)
+

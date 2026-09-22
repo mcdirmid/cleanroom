@@ -49,7 +49,7 @@ Executes an installed tool with converted actual parameter bindings, failing if 
 FRESH_REQUIREMENTS:
 - Executing a tool by name fails if no installed tool matches the requested name.
 - Executing a tool by name fails if a parameter name does not match any parameter of the tool, and reminds the agent that only declared parameters of the tool can be provided.
-- Executing a tool by name fails if an argument is not supplied for a required parameter of the tool, and reminds the agent that required parameters of the tool must be supplied.
+- Executing a tool by name fails if an argument is not supplied for a required parameter of the tool, incorporating the parameter's missing message function evaluated with the set of supplied parameter names when configured, and reminds the agent that required parameters of the tool must be supplied.
 - When an argument is omitted for a parameter that is not required and has a default value, the tool manager binds the default value as the actual parameter value.
 - When parameter mappings are successfully resolved, executing a tool by name executes the matching tool with the resolved actual parameter bindings and returns the tool's response.
 
@@ -57,7 +57,7 @@ INHERITED_REQUIREMENTS:
 - [ToolManager] Executing a tool by name with wire parameter bindings produces the tool response upon resolving parameter conversions.
 
 GROUNDING_ARGUMENT:
-- Receives tool name and wire parameter bindings as arguments, looks up the tool in self.installed_tools, resolves and converts parameter values using the tool's parameter converters, and invokes the matching tool's execute_tool operation directly.
+- Receives tool name and wire parameter bindings as arguments, looks up the tool in self.installed_tools, evaluates missing_message with the set of supplied parameter names when an argument for a required parameter is omitted, resolves and converts parameter values using the tool's parameter converters, and invokes the matching tool's execute_tool operation directly.
 """
         ...
 

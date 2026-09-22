@@ -107,9 +107,12 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
         )
 
     def record_initial_content(
-        self, host_path: str, content: Optional[str] = None
+        self,
+        host_path: str,
+        content: Optional[str] = None,
+        force: bool = False,
     ) -> None:
-        if host_path not in self._initial_contents:
+        if force or host_path not in self._initial_contents:
             if content is not None:
                 self._initial_contents[host_path] = content
             elif os.path.exists(host_path):
@@ -198,7 +201,7 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
             self.record_initial_content(host_path)
 
     def materialize_templates(self) -> None:
-        # Requirement: Materializing templates retrieves configured templates from the node config, formats initial template content using the template formatter with session template parameters, checks whether target files exist in the filesystem at the host path formed from the alias manager workspace root and the read-write file workspace path, and writes formatted template content for missing files while preserving existing files.
+        # Requirement: Materializing templates retrieves configured templates from the node config, formats initial template content using the template formatter with session template parameters, checks whether target files exist in the filesystem at the host path formed from the alias manager workspace root and the read-write file workspace path, writes formatted template content for missing files while preserving existing files, and records initial content baselines for active read-write files.
         # Requirement: [EditManager] Materializing templates populates missing read-write files with initial template content without overwriting existing files.
         cfg = get_singleton(agent_node_config.NodeConfig)
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
@@ -231,7 +234,13 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
                     actual_content = f.read()
             except OSError:
                 actual_content = None
-            self.record_initial_content(host_path, actual_content)
+            self.record_initial_content(host_path, actual_content, force=True)
+
+        for rw_file in getattr(cfg, "read_write_files", []):
+            host_path = os.path.join(
+                alias_mgr.workspace_root.path, rw_file.workspace_path.path
+            )
+            self.record_initial_content(host_path, force=True)
 
 
 class _OrderedParameterSet(set[tool_provider.Parameter]):
@@ -241,6 +250,16 @@ class _OrderedParameterSet(set[tool_provider.Parameter]):
 
     def __iter__(self):
         return iter(self._items)
+
+
+def _target_content_missing_message(supplied_parameters: Set[str]) -> str:
+    if "start_line" in supplied_parameters or "end_line" in supplied_parameters:
+        return "start_line and end_line only restrict the search window; target_content is mandatory."
+    return (
+        "replace_file_content requires existing target_content to match against. "
+        "To append or insert text, provide the existing surrounding text in target_content "
+        "and include both the existing text and new content in replacement_content."
+    )
 
 
 class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singleton):
@@ -257,7 +276,8 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
     @property
     def description(self) -> str:
         return (
-            "Replaces target content in a read-write file within an optional line range. "
+            "Replaces target content in a read-write file within an optional line range "
+            "(start_line and end_line restrict the search window). "
             "Edits must be small and targeted (such as a single function, method, or class at a time); "
             "whole-file or monolithic replacements are prohibited."
         )
@@ -278,9 +298,10 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         # Requirement: The replace file content tool target content parameter uses a string parameter converter to accept text.
         return tool_provider.Parameter(
             name="target_content",
-            description="Exact text to replace",
+            description="Exact text to replace within the file (or within start_line and end_line search window if provided). This parameter is always required.",
             parameter_converter=tool_provider.STRING_PARAMETER_TYPE,
             is_required=True,
+            missing_message=_target_content_missing_message,
         )
 
     @property
@@ -298,7 +319,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         # Requirement: The replace file content tool start line parameter uses an integer parameter converter to accept an integer.
         return tool_provider.Parameter(
             name="start_line",
-            description="Optional 1-based starting line number (inclusive)",
+            description="Optional 1-based starting line number of the search window (inclusive). Note: target_content is still required and searched for within this range.",
             parameter_converter=tool_provider.INTEGER_PARAMETER_TYPE,
             is_required=False,
         )
@@ -308,7 +329,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         # Requirement: The replace file content tool end line parameter uses an integer parameter converter to accept an integer.
         return tool_provider.Parameter(
             name="end_line",
-            description="Optional 1-based ending line number (inclusive)",
+            description="Optional 1-based ending line number of the search window (inclusive). Note: target_content is still required and searched for within this range.",
             parameter_converter=tool_provider.INTEGER_PARAMETER_TYPE,
             is_required=False,
         )
@@ -481,26 +502,12 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                     is_terminated=False,
                     content=f"Error: target_content not found in specified line range [{s_idx + 1}, {e_idx}].",
                     suppression_key="replace_file_content",
-                    follow_up_tool_call=tool_provider.FollowUpToolCall(
-                        tool_name="view_file",
-                        wire_parameter_bindings=tool_provider.WireParameterBindings(
-                            bindings={("path", target_file.relative_path)}
-                        ),
-                        reasoning_text=f"Target content not found in '{target_file.relative_path}'. Let me view the current file content to see the exact lines to replace.",
-                    ),
                 )
             return tool_provider.Response(
                 is_failed=True,
                 is_terminated=False,
                 content="Error: target_content not found in file.",
                 suppression_key="replace_file_content",
-                follow_up_tool_call=tool_provider.FollowUpToolCall(
-                    tool_name="view_file",
-                    wire_parameter_bindings=tool_provider.WireParameterBindings(
-                        bindings={("path", target_file.relative_path)}
-                    ),
-                    reasoning_text=f"Target content not found in '{target_file.relative_path}'. Let me view the current file content to see the exact lines to replace.",
-                ),
             )
 
         if not allow_multiple and count > 1:
@@ -588,7 +595,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
             is_failed=False,
             is_terminated=False,
             content=content_msg,
-            reminder=f"Call check_file(path='{target_file.relative_path}') to verify syntax and type correctness before making further modifications.",
+            reminder="Call check_files() to verify syntax and type correctness after completing edits.",
             suppression_key="replace_file_content",
             follow_up_tool_call=None,
         )

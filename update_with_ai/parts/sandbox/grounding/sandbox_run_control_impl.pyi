@@ -21,7 +21,7 @@ Implements run controller to install advance, submit, fail, and optional blame t
 INHERITED_REQUIREMENTS:
 - [RunController] The run controller exposes verification checks that validate session criteria.
 - [RunController] The run controller caches verification evaluation results alongside edit manager file hashes for target nodes, reusing the cached verification outcome as long as no workspace files have been updated since that evaluation.
-- [RunController] The run controller installs a check file tool that updates verification results if outdated, accepting a file alias path parameter, presenting verification outcomes to the agent, tracking last tested file hashes, and failing when verification failed.
+- [RunController] The run controller installs an argument-free check files tool named `check_files` that updates verification results if outdated, evaluates verification checks across all open targets and modified workspace files, presents aggregated verification outcomes to the agent, tracks last tested file hashes, and fails when verification failed.
 - [RunController] The run controller installs an advance tool when guide step mode is active, coordinating step progression through guide delivery upon passing verification.
 - [RunController] The run controller installs a submit tool which is a resolve tool that concludes active nodes upon passing verification, marks the resolve target clean in the current get work turn, accepting a text change summary parameter, and enforces change documentation.
 - [RunController] The run controller installs a fail tool which is a resolve tool that terminates the run in failure, accepting a text explanation parameter.
@@ -63,7 +63,7 @@ PURPOSE:
 Installs submit, fail, check file, and get work tools unconditionally, advance tool when guide step mode is active, and blame tool when blame targets are configured
 
 FRESH_REQUIREMENTS:
-- The run controller initializes by unconditionally installing the submit tool, fail tool, check file tool, and get work tool for the agent session, installing the advance tool only when guide step mode is active, obtaining configured blame targets and verification checks from the node config, and installing the blame tool only when blame targets are configured.
+- The run controller initializes by unconditionally installing the submit tool, fail tool, check files tool, and get work tool for the agent session, installing the advance tool only when guide step mode is active, obtaining configured blame targets and verification checks from the node config, and installing the blame tool only when blame targets are configured.
 - Verification checks exposed by the run controller include the session verification checks from node config.
 - A resolve tool defines a file alias resolve target parameter (with target accepted as an alias), and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes.
 - When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
@@ -77,7 +77,7 @@ FRESH_REQUIREMENTS:
 - When all active nodes are resolved, resolving an active node produces a non-terminating response with a reminder to call the get work tool when mcp mode is active.
 
 GROUNDING_ARGUMENT:
-- Reads step mode, blame targets, and verification checks from imported agent_node_config.NodeConfig, and installs SubmitTool, FailTool, CheckFileTool, GetWorkTool, optionally AdvanceTool, and optionally BlameTool directly into imported tool_provider.ToolManager in the same session lifecycle tier.
+- Reads step mode, blame targets, and verification checks from imported agent_node_config.NodeConfig, and installs SubmitTool, FailTool, CheckFilesTool, GetWorkTool, optionally AdvanceTool, and optionally BlameTool directly into imported tool_provider.ToolManager in the same session lifecycle tier.
 """
         ...
 
@@ -98,19 +98,19 @@ GROUNDING_ARGUMENT:
         ...
 
 @singleton_type('agent_session')
-class CheckFileTool(sandbox_run_control.CheckFileTool):
+class CheckFilesTool(sandbox_run_control.CheckFilesTool):
     """
 PURPOSE:
-Implements check file tool to evaluate and present verification results
+Implements argument-free check files tool to evaluate and present verification results across all open targets and modified workspace files
 
 INHERITED_ASSUMPTIONS:
 - [Tool] All parameters of a tool have unique names.
 
 FRESH_REQUIREMENTS:
-- The check file tool is named `check_file`, accepting a file alias path parameter (with src accepted as an alias), and shares a constant suppression key `check_file`.
+- The check files tool is named `check_files`, accepts no parameters, and shares a constant suppression key `check_files`.
 
 GROUNDING_ARGUMENT:
-- As an agent_session singleton, CheckFileTool evaluates verification checks via RunController, presenting results with suppression key 'check_file' in the same session lifecycle tier.
+- As an agent_session singleton, CheckFilesTool evaluates verification checks via RunController, presenting results with suppression key 'check_files' in the same session lifecycle tier.
 """
 
     @property
@@ -121,19 +121,7 @@ PURPOSE:
 Name of the tool used by the agent
 
 GROUNDING_ARGUMENT:
-- Returns the literal string 'check_file'.
-"""
-        ...
-
-    @property
-    @override
-    def path(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
-        """
-PURPOSE:
-Parameter identifying the session file path to check
-
-GROUNDING_ARGUMENT:
-- Constant parameter descriptor configured with alias manager converter.
+- Returns the literal string 'check_files'.
 """
         ...
 
@@ -145,7 +133,7 @@ PURPOSE:
 Description of the tool informing the agent why and when to use it
 
 GROUNDING_ARGUMENT:
-- Returns a constant description informing the agent that checking files evaluates verification checks.
+- Returns a constant description informing the agent that checking files evaluates verification checks across all open targets and workspace files.
 """
         ...
 
@@ -157,7 +145,7 @@ PURPOSE:
 Parameters accepted by the tool
 
 GROUNDING_ARGUMENT:
-- Returns a set containing the optional path and src parameters.
+- Returns an empty set since the tool is argument-free.
 """
         ...
 
@@ -166,13 +154,12 @@ GROUNDING_ARGUMENT:
     def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
         """
 PURPOSE:
-Executes the check file tool, updating verification results and presenting them
+Executes the check files tool, updating verification results and presenting them
 
 FRESH_REQUIREMENTS:
-- When the path parameter is omitted, the path parameter defaults using resolve target defaulting rules.
-- Executing the check file tool updates verification results if outdated and evaluates verification checks for that target.
-- Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when the target read-write file hash has not changed since the previous check file tool execution.
-- Tool execution specifies a follow-up execution of the view file tool on the active node source file (resolving to the specified path target if a read-write file, the last accessed read-write file, or the primary session read-write file) and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check file tool execution.
+- Executing the check files tool updates verification results if outdated and evaluates verification checks across all open targets and modified workspace files.
+- Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when target read-write file hashes have not changed since the previous check files tool execution.
+- Tool execution specifies a follow-up execution of the view file tool on the active node source file (resolving to the last accessed read-write file or the primary session read-write file) and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check files tool execution.
 - Tool execution fails when verification fails, presenting diagnostic feedback sanitized through the alias manager alongside any configured verification failure instructions.
 - Tool execution produces a response presenting passing verification results using the session verification success message when configured or default passing verification results alongside sanitized check output when verification passes.
 
@@ -181,7 +168,7 @@ INHERITED_REQUIREMENTS:
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Evaluates verification via RunController.evaluate_verification in the same session lifecycle tier, resolves the active node source file against actual parameter bindings, the single session read-write file, remaining unsubmitted read-write file, or the last accessed file from imported sandbox_file_editor.EditManager, sanitizes diagnostics through imported agent_file_alias.AliasManager, formats failure instructions from imported sandbox_guide_delivery.GuideDelivery, attaches suppression key 'check_file', and constructs a tool_provider.Response presenting verification outcome alongside check output.
+- Evaluates verification via RunController.evaluate_verification in the same session lifecycle tier, resolves the active node source file from the single session read-write file, remaining unsubmitted read-write file, or the last accessed file from imported sandbox_file_editor.EditManager, sanitizes diagnostics through imported agent_file_alias.AliasManager, formats failure instructions from imported sandbox_guide_delivery.GuideDelivery, attaches suppression key 'check_files', and constructs a tool_provider.Response presenting verification outcome alongside check output.
 """
         ...
 
@@ -247,7 +234,7 @@ Implements execute_tool to advance guide steps and report progress or failure di
 FRESH_REQUIREMENTS:
 - Executing the advance tool delivers the initial guide summary through guide delivery without updating verification results when guide delivery has not yet started.
 - Executing the advance tool updates verification results if outdated when guide delivery has already started.
-- Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool with reasoning text indicating that verification results must be inspected before advancing.
+- Tool execution fails when verification is failing, reminding the agent that the check files tool should be called first and specifying a follow-up execution of the check files tool with reasoning text indicating that verification results must be inspected before advancing.
 - Tool execution advances guide delivery and delivers the next step section when verification is passing and guide steps remain.
 - Tool execution fails with a reminder to call the submit tool with a change summary describing modifications when verification is passing, no steps remain, and workspace files were modified.
 - Tool execution produces a response specifying a follow-up execution of the submit tool without a change summary and with reasoning text indicating that all guide steps are complete when verification is passing, no steps remain, and no workspace files were modified.
@@ -347,7 +334,7 @@ Implements execute_tool to evaluate completion criteria, in-session dependencies
 FRESH_REQUIREMENTS:
 - Executing the submit tool updates verification results if outdated.
 - Tool execution fails when guide step mode is active and guide steps remain in guide delivery, reminding the agent that the advance tool must be called while guide steps remain and specifying the advance tool as a follow-up tool call with reasoning text indicating that remaining guide steps must be completed before finishing.
-- Tool execution fails when verification is failing, reminding the agent that the check file tool should be called first and specifying a follow-up execution of the check file tool targeting the resolve target with reasoning text indicating that verification results must be inspected before submitting.
+- Tool execution fails when verification is failing, reminding the agent that the check files tool should be called first and specifying a follow-up execution of the check files tool targeting the resolve target with reasoning text indicating that verification results must be inspected before submitting.
 - Tool execution fails when session feedback is present and no workspace files were modified, reminding the agent that workspace files must be modified to address feedback or that the fail tool must be used.
 - Tool execution fails if workspace files were modified and the change summary is omitted, reminding the agent that a change summary must be provided when completing the session after modifying workspace files.
 - Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
@@ -642,13 +629,13 @@ FRESH_REQUIREMENTS:
 - Tool execution fails when open active nodes remain, reminding the agent that open nodes must be resolved before requesting new work.
 - Tool execution obtains dirty nodes from dag storage and dag subgraph, updating the active nodes and execution version on role config, when no open active nodes remain.
 - Tool execution produces an idle response indicating that no dirty nodes are ready if no dirty nodes are ready for cleaning.
-- Tool execution materializes startup templates on disk, constructs the task prompt from dirty node definitions, guide instructions, and incoming messages from dag storage formatted via the template formatter, and returns the rendered task prompt when ready dirty nodes are obtained.
+- Tool execution materializes startup templates on disk, constructs the task prompt from dirty node definitions (including associated grounding specification paths for qa nodes), guide instructions, and incoming messages from dag storage formatted via the template formatter, and returns the rendered task prompt when ready dirty nodes are obtained.
 
 INHERITED_REQUIREMENTS:
 - [Tool] When a parameter is required, an argument must be supplied for tool execution.
 - [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
 
 GROUNDING_ARGUMENT:
-- Coordinates with RunController, agent_node_config.RoleConfig, dag_subgraph.DagSubgraph, sandbox.Sandbox, and template_format.TemplateFormatter, validating open target state, updating nodes, materializing templates, and formatting task prompt.
+- Coordinates with RunController, agent_node_config.RoleConfig, dag_subgraph.DagSubgraph, sandbox.Sandbox, and template_format.TemplateFormatter, validating open target state, updating nodes, materializing templates, and formatting task prompt with companion specifications.
 """
         ...

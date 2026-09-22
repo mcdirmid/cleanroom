@@ -54,8 +54,9 @@ class LoopGuardImplTest(unittest.TestCase):
             res2 = guard.record_tool_execution("view_file", bindings)
             self.assertIsInstance(res2, LoopReminder)
             assert isinstance(res2, LoopReminder)
+            self.assertTrue(res2.feedback)
             self.assertIn(
-                "no new information will be revealed by this tool call", res2.feedback
+                "no new information", res2.feedback.lower()
             )
 
             # Call 3 & 4 -> LoopReminder

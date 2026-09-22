@@ -1,12 +1,14 @@
 # update_with_ai/parts/sandbox/tests/BUILD.bazel
 
 load("//bin:pyright_library.bzl", "pyright_test")
+load("//update_python_with_ai/support/lib:build_derived_test.bzl", "build_derived_test")
 
 package(default_visibility = ["//visibility:public"])
 
 pyright_test(
     name = "sandbox_impl_test",
     srcs = ["sandbox_impl_test.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_config",
@@ -34,6 +36,7 @@ pyright_test(
         "//update_with_ai/parts/agent/lib:agent_config",
         "//update_with_ai/parts/agent/lib:agent_file_alias",
         "//update_with_ai/parts/agent/lib:agent_node_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/sandbox/lib:sandbox_file_editor",
         "//update_with_ai/parts/sandbox/lib:sandbox_file_editor_impl",
         "//update_with_ai/parts/sandbox/lib:template_format",
@@ -44,19 +47,17 @@ pyright_test(
 pyright_test(
     name = "sandbox_file_reader_impl_test",
     srcs = ["sandbox_file_reader_impl_test.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_config",
         "//update_with_ai/parts/agent/lib:agent_file_alias",
         "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/agent/lib:agent_session",
-        "//update_with_ai/parts/bazel/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/sandbox/lib:sandbox_file_editor",
         "//update_with_ai/parts/sandbox/lib:sandbox_file_reader",
         "//update_with_ai/parts/sandbox/lib:sandbox_file_reader_impl",
-        "//update_with_ai/parts/sandbox/lib:sandbox_guide_delivery",
-        "//update_with_ai/parts/sandbox/lib:sandbox_run_control",
         "//update_with_ai/parts/sandbox/lib:template_format",
         "//update_with_ai/parts/sandbox/lib:tool_provider",
     ],
@@ -65,6 +66,7 @@ pyright_test(
 pyright_test(
     name = "sandbox_guide_delivery_impl_test",
     srcs = ["sandbox_guide_delivery_impl_test.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_file_alias",
@@ -85,6 +87,7 @@ pyright_test(
         "//update_with_ai/parts/agent/lib:agent_config",
         "//update_with_ai/parts/agent/lib:agent_file_alias",
         "//update_with_ai/parts/agent/lib:agent_node_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/dag/lib:dag_subgraph",
         "//update_with_ai/parts/sandbox/lib:sandbox",
@@ -100,6 +103,7 @@ pyright_test(
 pyright_test(
     name = "template_format_impl_test",
     srcs = ["template_format_impl_test.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_session",
@@ -114,7 +118,13 @@ pyright_test(
     deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/sandbox/lib:tool_provider",
         "//update_with_ai/parts/sandbox/lib:tool_provider_impl",
     ],
 )
+
+build_derived_test(
+    name = "targets_derived_test",
+)
+

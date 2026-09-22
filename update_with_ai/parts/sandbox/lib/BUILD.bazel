@@ -1,13 +1,18 @@
 # update_with_ai/parts/sandbox/lib/BUILD.bazel
 
 load("//bin:pyright_library.bzl", "pyright_library")
+load("//update_python_with_ai/support/lib:build_derived_test.bzl", "build_derived_test")
 
 package(default_visibility = ["//visibility:public"])
 
 pyright_library(
     name = "sandbox",
     srcs = ["sandbox.py"],
+    deps = [],
     pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
         ":tool_provider",
     ],
     visibility = ["//visibility:public"],
@@ -22,6 +27,7 @@ pyright_library(
         "//update_with_ai/parts/agent/lib:agent_config",
         "//update_with_ai/parts/agent/lib:agent_file_alias",
         "//update_with_ai/parts/agent/lib:agent_node_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/dag/lib:dag_storage",
         ":sandbox",
         ":sandbox_file_editor",
@@ -36,13 +42,15 @@ pyright_library(
 pyright_library(
     name = "sandbox_asm",
     srcs = ["sandbox_asm.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_config",
         "//update_with_ai/parts/agent/lib:agent_file_alias",
         "//update_with_ai/parts/agent/lib:agent_node_config",
-        "//update_with_ai/parts/bazel/lib:file_paths",
+        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/dag/lib:dag_storage",
+        "//update_with_ai/parts/dag/lib:dag_subgraph",
         ":sandbox",
         ":sandbox_file_editor",
         ":sandbox_file_editor_impl",
@@ -64,10 +72,11 @@ pyright_library(
 pyright_library(
     name = "sandbox_file_editor",
     srcs = ["sandbox_file_editor.py"],
+    deps = [],
     pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_file_alias",
-        "//update_with_ai/parts/bazel/lib:file_paths",
-        "//update_with_ai/parts/dag/lib:dag_storage",
+        "//update_with_ai/parts/agent/lib:agent_session",
         ":tool_provider",
     ],
     visibility = ["//visibility:public"],
@@ -93,8 +102,11 @@ pyright_library(
 pyright_library(
     name = "sandbox_file_reader",
     srcs = ["sandbox_file_reader.py"],
+    deps = [],
     pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_file_alias",
+        "//update_with_ai/parts/agent/lib:agent_session",
         ":tool_provider",
     ],
     visibility = ["//visibility:public"],
@@ -109,6 +121,7 @@ pyright_library(
         "//update_with_ai/parts/agent/lib:agent_config",
         "//update_with_ai/parts/agent/lib:agent_file_alias",
         "//update_with_ai/parts/agent/lib:agent_node_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
         ":sandbox_file_editor",
         ":sandbox_file_reader",
         ":template_format",
@@ -120,9 +133,12 @@ pyright_library(
 pyright_library(
     name = "sandbox_guide_delivery",
     srcs = ["sandbox_guide_delivery.py"],
+    deps = [],
     pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_file_alias",
         "//update_with_ai/parts/agent/lib:agent_node_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
         ":tool_provider",
     ],
     visibility = ["//visibility:public"],
@@ -131,6 +147,7 @@ pyright_library(
 pyright_library(
     name = "sandbox_guide_delivery_impl",
     srcs = ["sandbox_guide_delivery_impl.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_file_alias",
@@ -145,9 +162,15 @@ pyright_library(
 pyright_library(
     name = "sandbox_run_control",
     srcs = ["sandbox_run_control.py"],
+    deps = [],
     pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_file_alias",
         "//update_with_ai/parts/agent/lib:agent_node_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        "//update_with_ai/parts/dag/lib:dag_storage",
+        ":sandbox_file_editor",
+        ":sandbox_guide_delivery",
         ":tool_provider",
     ],
     visibility = ["//visibility:public"],
@@ -178,7 +201,10 @@ pyright_library(
 pyright_library(
     name = "template_format",
     srcs = ["template_format.py"],
+    deps = [],
     pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
     ],
     visibility = ["//visibility:public"],
 )
@@ -186,6 +212,7 @@ pyright_library(
 pyright_library(
     name = "template_format_impl",
     srcs = ["template_format_impl.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_session",
@@ -200,6 +227,7 @@ pyright_library(
     deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
     ],
     visibility = ["//visibility:public"],
 )
@@ -207,6 +235,7 @@ pyright_library(
 pyright_library(
     name = "tool_provider_impl",
     srcs = ["tool_provider_impl.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_session",
@@ -214,3 +243,8 @@ pyright_library(
     ],
     visibility = ["//visibility:public"],
 )
+
+build_derived_test(
+    name = "targets_derived_test",
+)
+

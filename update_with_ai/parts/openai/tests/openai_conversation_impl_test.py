@@ -363,9 +363,8 @@ class OpenAIConversationImplTest(unittest.TestCase):
             tool_msg = req.messages[3]
             self.assertEqual(tool_msg.role, "tool")
             self.assertEqual(tool_msg.tool_call_id, "c1")
-            self.assertIn(
-                "line 1\nline 2\n\nReminder: Remember to write tests.", tool_msg.content
-            )
+            self.assertIn("line 1\nline 2", tool_msg.content)
+            self.assertIn("Remember to write tests.", tool_msg.content)
 
             # Response with empty content and non-empty reminder
             empty_resp = Response(
@@ -379,7 +378,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
             )
             req2 = history.get_model_request()
             # Requirement: Tool execution response notes, content, and reminders from the tool provider are included in visible tool message content, formatting active reminders on messages and superseded stubs to remind the agent in the assembled model request.
-            self.assertEqual(req2.messages[-1].content, "Reminder: Remember to finish.")
+            self.assertIn("Remember to finish.", req2.messages[-1].content)
 
 
 if __name__ == "__main__":

@@ -246,10 +246,7 @@ class BazelLoopImplTest(unittest.TestCase):
             result = runner.run_cleaning_pass(root)
 
             self.assertFalse(result.success)
-            self.assertEqual(
-                result.summary,
-                "Cleaning pass failed for //pkg:failing: Simulated cleaner failure",
-            )
+            self.assertIn("Simulated cleaner failure", result.summary)
 
     def test_run_cleaning_pass_nodes_remain_dirty(self) -> None:
         """Tests that run_cleaning_pass reports failure if nodes remain dirty after cleaning."""

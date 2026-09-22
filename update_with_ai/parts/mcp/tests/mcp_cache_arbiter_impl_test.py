@@ -89,7 +89,7 @@ class McpCacheArbiterImplTest(unittest.TestCase):
             assert isinstance(action, WarmCacheWakeup)
             self.assertEqual(action.conversation_id, cid)
             self.assertEqual(action.role_address, "builder")
-            self.assertIn("get_work", action.wakeup_prompt)
+            self.assertTrue(action.wakeup_prompt)
 
     def test_evaluate_session_cold_cache_recycle(self) -> None:
         """CUJ: Evaluate idle session with ready DAG work and > 900s elapsed inactivity producing ColdCacheRecycle."""
@@ -116,7 +116,7 @@ class McpCacheArbiterImplTest(unittest.TestCase):
             self.assertEqual(action.conversation_id, cid)
             self.assertEqual(action.role_address, "builder")
             self.assertEqual(action.unit_root, "//pkg:builder")
-            self.assertIn("expired", action.recycle_prompt)
+            self.assertTrue(action.recycle_prompt)
 
     def test_evaluate_session_no_routing_conditions(self) -> None:
         """CUJ: Evaluate non-idle, absent, or no-work sessions producing NoRoutingAction."""

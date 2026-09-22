@@ -300,6 +300,80 @@ def get_subgraph_status(unit_address: str, role_address: str) -> dict[str, Any]:
         }
 
 
+def get_next_batch(unit_address: str, role_address: str, batch_size: Optional[int] = None) -> dict[str, Any]:
+    """Retrieves the next ready batch of dirty nodes to clean in topological order."""
+    norm_role = normalize_role_address(role_address)
+    norm_unit = normalize_unit_address(unit_address)
+
+    if batch_size is None:
+        env_bs = os.environ.get("BATCH_SIZE")
+        if env_bs and env_bs.strip().isdigit():
+            batch_size = int(env_bs.strip())
+
+    try:
+        from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
+        from update_with_ai.parts.dag.lib import dag_storage, dag_subgraph
+        from update_with_ai.parts.systems.lib import bazel_mcp_system_asm
+        from update_with_ai.parts.bazel.lib import bazel_manifest_loader
+
+        reg = LifecycleRegistry()
+        bazel_mcp_system_asm.__initialize__(reg)
+        with enter_phase(system, registry=reg) as scope:
+            storage = scope.get_singleton(dag_storage.DagStorage)
+            manifest_loader = scope.get_singleton(bazel_manifest_loader.BazelManifestLoader)
+            root = dag_storage.Node(unit_address=norm_unit, role_address=norm_role)
+            visited: set[dag_storage.Node] = set()
+            queue: list[dag_storage.Node] = [root]
+            while queue:
+                curr = queue.pop(0)
+                if curr in visited:
+                    continue
+                visited.add(curr)
+                manifest = manifest_loader.get_manifest(curr)
+                if manifest is not None:
+                    manifest_loader.load_manifest(manifest, storage)
+                for dep in storage.get_dependencies(curr):
+                    if dep.node not in visited:
+                        queue.append(dep.node)
+
+            subgraph = scope.get_singleton(dag_subgraph.DagSubgraph)
+            subgraph.set_target(root)
+
+            batch = subgraph.next_ready_batch()
+            if batch_size is not None and batch_size > 0:
+                batch = batch[:batch_size]
+            batch_nodes = [
+                {"unit": n.unit_address, "role": n.role_address}
+                for n in batch
+            ]
+            ready_role = batch[0].role_address if batch else None
+
+            dirty_nodes = [
+                f"{n.unit_address}:{n.role_address}"
+                for n in visited
+                if storage.is_dirty(n)
+            ]
+
+            return {
+                "unit": norm_unit,
+                "role": norm_role,
+                "is_complete": subgraph.is_complete,
+                "ready_role": ready_role,
+                "batch": batch_nodes,
+                "dirty_nodes": dirty_nodes,
+            }
+    except Exception as e:
+        return {
+            "unit": norm_unit,
+            "role": norm_role,
+            "is_complete": False,
+            "ready_role": None,
+            "batch": [],
+            "dirty_nodes": [],
+            "error": str(e),
+        }
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="cleanroom_dag_cli",
@@ -313,6 +387,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     p_resolve.add_argument("--target", help="define_node target shortcut (e.g. //testing/parts/sandbox:sandbox_asm_qa)")
     p_resolve.add_argument("--role", help="Target role address (e.g. //update_python_with_ai:test)")
     p_resolve.add_argument("--unit", help="Root unit address (e.g. //testing/parts/sandbox:sandbox_asm)")
+
+    # next-batch
+    p_batch = subparsers.add_parser("next-batch", help="Query next ready batch of dirty nodes")
+    p_batch.add_argument("positional", nargs="*", help="[target] or [role, unit]")
+    p_batch.add_argument("--target", help="define_node target shortcut")
+    p_batch.add_argument("--role", help="Target role address")
+    p_batch.add_argument("--unit", help="Root unit address")
+    p_batch.add_argument("--batch-size", type=int, default=None, help="Maximum units in batch (e.g. 1 for single-target mode)")
 
     # inject-change
     p_change = subparsers.add_parser("inject-change", help="Inject a change message")
@@ -380,6 +462,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             positional=args.positional,
         )
         res = get_subgraph_status(unit, role)
+        sys.stdout.write(json.dumps(res, indent=2) + "\n")
+        return 0
+    elif args.command == "next-batch":
+        role, unit, _ = parse_target_args(
+            target=args.target,
+            role=args.role,
+            unit=args.unit,
+            positional=args.positional,
+        )
+        res = get_next_batch(unit, role, batch_size=args.batch_size)
         sys.stdout.write(json.dumps(res, indent=2) + "\n")
         return 0
 

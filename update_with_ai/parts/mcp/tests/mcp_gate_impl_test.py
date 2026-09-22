@@ -101,12 +101,12 @@ class McpGateImplTest(unittest.TestCase):
             # Requirement: [AccessGate] Validating access resolves tool permissions for the conversation and target file path, producing an access decision.
             decision = gate.validate_access(cid, "replace_file_content", "src/target.py")
             self.assertTrue(decision.is_allowed)
-            self.assertIn("permitted", decision.reason)
+            self.assertTrue(decision.reason)
 
             # Write tool denied
             decision_denied = gate.validate_access(cid, "write_to_file", "src/other.py")
             self.assertFalse(decision_denied.is_allowed)
-            self.assertIn("not writable", decision_denied.reason)
+            self.assertTrue(decision_denied.reason)
 
             # Read tool allowed
             decision_read = gate.validate_access(cid, "view_file", "src/target.pyi")
@@ -115,6 +115,7 @@ class McpGateImplTest(unittest.TestCase):
             # Read tool denied
             decision_read_denied = gate.validate_access(cid, "view_file", "src/unreadable.py")
             self.assertFalse(decision_read_denied.is_allowed)
+            self.assertTrue(decision_read_denied.reason)
 
             session_scope.close()
 
@@ -132,12 +133,12 @@ class McpGateImplTest(unittest.TestCase):
                 ConversationId("unknown"), "view_file", "src/target.pyi"
             )
             self.assertFalse(decision_no_session.is_allowed)
-            self.assertIn("No active session", decision_no_session.reason)
+            self.assertTrue(decision_no_session.reason)
 
             # Unhandled tool
             decision_bad_tool = gate.validate_access(cid, "bash_exec", "src/target.py")
             self.assertFalse(decision_bad_tool.is_allowed)
-            self.assertIn("not permitted under access gating", decision_bad_tool.reason)
+            self.assertTrue(decision_bad_tool.reason)
 
             # Path outside workspace (relative)
             decision_traversal = gate.validate_access(

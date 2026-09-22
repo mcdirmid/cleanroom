@@ -20,7 +20,17 @@ A *dictionary parameter type* is a parameter type that converts a wire type dict
 
 A *tool* is a polymorphic service implemented by a component to define an executable action. A tool has a *name* (used to identify the tool), a *description* (which informs the model why and when to use the tool), and *parameters*.
 
-A *parameter* describes an input accepted by a tool, having a *name* and a *description* (guiding how arguments are supplied), a parameter type, a *default value* representing the value used when an argument is omitted during tool execution, and can be *required* to indicate that an argument must be supplied for tool execution. It is assumed that all parameters of a tool have unique names.
+A *parameter* describes an input accepted by a tool, identified by a *name* and a *description* guiding how arguments are supplied. It is assumed that all parameters of a tool have unique names.
+
+Parameters define argument validation and binding rules for tool execution. A parameter specifies:
+
+- A parameter type converting wire arguments to actual types.
+
+- A *default value* bound during tool execution when an argument is omitted for a parameter that is not required.
+
+- A *required* status indicating that an argument must be supplied for tool execution.
+
+- A *missing message* function producing diagnostic text from the set of supplied parameter names when an argument is omitted for a required parameter.
 
 A tool can be *executed* directly with a set of *actual parameter bindings*, which map parameters to resolved values of their actual types. Executing a tool produces a *response* communicating:
 

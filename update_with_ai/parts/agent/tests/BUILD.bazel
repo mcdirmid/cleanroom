@@ -1,3 +1,9 @@
 # update_with_ai/parts/agent/tests/BUILD.bazel
 
+load("//update_python_with_ai/support/lib:build_derived_test.bzl", "build_derived_test")
+
 package(default_visibility = ["//visibility:public"])
+
+build_derived_test(
+    name = "targets_derived_test",
+)

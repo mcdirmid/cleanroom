@@ -195,6 +195,30 @@ class CleanroomDagCliTest(unittest.TestCase):
             self.assertEqual(data["role"], "//update_python_with_ai:qa")
             self.assertEqual(data["unit"], "//testing/parts/sandbox:sandbox_asm")
 
+    def test_main_cli_next_batch(self) -> None:
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_stdout:
+            ret = cleanroom_dag_cli.main(["next-batch", "--role", "qa", "--unit", "//testing/parts/sandbox:sandbox_asm"])
+            self.assertEqual(ret, 0)
+            data = json.loads(mock_stdout.getvalue())
+            self.assertEqual(data["role"], "//update_python_with_ai:qa")
+            self.assertEqual(data["unit"], "//testing/parts/sandbox:sandbox_asm")
+            self.assertIn("is_complete", data)
+            self.assertIn("batch", data)
+
+    def test_main_cli_next_batch_with_batch_size(self) -> None:
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_stdout:
+            ret = cleanroom_dag_cli.main([
+                "next-batch",
+                "--role", "qa",
+                "--unit", "//testing/parts/sandbox:sandbox_asm",
+                "--batch-size", "1",
+            ])
+            self.assertEqual(ret, 0)
+            data = json.loads(mock_stdout.getvalue())
+            self.assertIn("batch", data)
+            if data["batch"]:
+                self.assertLessEqual(len(data["batch"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

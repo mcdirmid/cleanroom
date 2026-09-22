@@ -1,12 +1,14 @@
 # update_with_ai/parts/loop/tests/BUILD.bazel
 
 load("//bin:pyright_library.bzl", "pyright_test")
+load("//update_python_with_ai/support/lib:build_derived_test.bzl", "build_derived_test")
 
 package(default_visibility = ["//visibility:public"])
 
 pyright_test(
     name = "loop_cleaner_impl_test",
     srcs = ["loop_cleaner_impl_test.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/dag/lib:dag_storage",
@@ -20,6 +22,7 @@ pyright_test(
 pyright_test(
     name = "loop_guard_impl_test",
     srcs = ["loop_guard_impl_test.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_session",
@@ -32,22 +35,25 @@ pyright_test(
 pyright_test(
     name = "loop_node_cleaner_impl_test",
     srcs = ["loop_node_cleaner_impl_test.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/agent/lib:agent_file_alias",
         "//update_with_ai/parts/agent/lib:agent_node_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/agent/lib:agent_storage",
-        "//update_with_ai/parts/bazel/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/loop/lib:loop_conversation",
         "//update_with_ai/parts/loop/lib:loop_driver",
         "//update_with_ai/parts/loop/lib:loop_node_cleaner",
         "//update_with_ai/parts/loop/lib:loop_node_cleaner_impl",
         "//update_with_ai/parts/sandbox/lib:sandbox",
-        "//update_with_ai/parts/sandbox/lib:sandbox_guide_delivery",
-        "//update_with_ai/parts/sandbox/lib:sandbox_run_control",
         "//update_with_ai/parts/sandbox/lib:template_format",
         "//update_with_ai/parts/sandbox/lib:tool_provider",
     ],
 )
+
+build_derived_test(
+    name = "targets_derived_test",
+)
+

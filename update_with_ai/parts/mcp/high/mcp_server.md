@@ -22,6 +22,8 @@ The mcp server:
 
 - Exposes a *shutdown tool* that terminates the server and removes the workspace sentinel.
 
+- Exposes a *next batch tool* that accepts a target unit address and a target role address, returning the next ready batch of dirty nodes for the given target subgraph as a JSON string.
+
 - Exposes domain tools accepting a conversation identifier, executing incoming tool calls within the active session scope for the caller conversation identifier.
 
 - Hosts a *hook validation endpoint* that accepts access validation requests, producing access decisions.

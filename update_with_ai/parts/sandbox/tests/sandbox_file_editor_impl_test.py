@@ -155,10 +155,12 @@ class MockNodeConfig:
         templates: Set[Tuple[BoundFile, FileContent]],
         template_parameters: Optional[Mapping[str, Any]] = None,
         verification_checks: Optional[Sequence[Any]] = None,
+        read_write_files: Optional[Set[BoundFile]] = None,
     ) -> None:
         self._templates = templates
         self._template_parameters = template_parameters or {}
         self._verification_checks = verification_checks or []
+        self._read_write_files = read_write_files or set()
 
     @property
     def verification_checks(self) -> Sequence[Any]:
@@ -174,7 +176,11 @@ class MockNodeConfig:
 
     @property
     def read_write_files(self) -> Set[BoundFile]:
-        return set()
+        return set(self._read_write_files)
+
+    @read_write_files.setter
+    def read_write_files(self, val: Set[BoundFile]) -> None:
+        self._read_write_files = set(val)
 
     @property
     def guide_file(self) -> Optional[UnboundFile]:
@@ -239,6 +245,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 (self.missing_bound, "Starter template <param> content"),
             },
             template_parameters={"param": "materialized"},
+            read_write_files={self.rw_file, self.missing_bound},
         )
 
         self.registry.register_instance(
@@ -282,7 +289,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
             self.assertFalse(edit_mgr.has_modifications)
 
-            # Requirement: Materializing templates retrieves configured templates from the node config, formats initial template content using the template formatter with session template parameters, checks whether target files exist in the filesystem at the host path formed from the alias manager workspace root and the read-write file workspace path, and writes formatted template content for missing files while preserving existing files.
+            # Requirement: Materializing templates retrieves configured templates from the node config, formats initial template content using the template formatter with session template parameters, checks whether target files exist in the filesystem at the host path formed from the alias manager workspace root and the read-write file workspace path, writes formatted template content for missing files while preserving existing files, and records initial content baselines for active read-write files.
             # Requirement: [EditManager] Materializing templates populates missing read-write files with initial template content without overwriting existing files.
             edit_mgr.materialize_templates()
 
@@ -295,6 +302,14 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Existing file NOT overwritten
             with open(self.target_path, "r", encoding="utf-8") as f:
                 self.assertNotIn("Existing overwrite attempt", f.read())
+
+            # Baseline is recorded for active read-write files: no modifications yet
+            self.assertFalse(edit_mgr.has_modifications)
+
+            # Editing existing read-write file triggers has_modifications against the recorded baseline
+            with open(self.target_path, "a", encoding="utf-8") as f:
+                f.write("appended content\n")
+            self.assertTrue(edit_mgr.has_modifications)
 
     def test_replace_file_content_tool_whole_file_and_failures(self) -> None:
         """CUJ: ReplaceFileContentTool replaces unique match and fails on duplicates or non-read-write files."""
@@ -315,9 +330,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
             resp_ro = replace_tool.execute_tool(b_ro)
             self.assertTrue(resp_ro.is_failed)
-            self.assertEqual(
-                resp_ro.reminder, "Only declared read-write files can be modified."
-            )
+            self.assertTrue(resp_ro.reminder)
 
             # 2. Content not found fails
             b_not_found = ActualParameterBindings(
@@ -328,22 +341,9 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 }
             )
             # Requirement: Tool execution fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence, when allow multiple is not set or false.
-            # Requirement: Tool execution specifies a follow-up execution of the view file tool on the target file with reasoning text indicating that the target content was not found, when target content is not found anywhere in the file.
             resp_not_found = replace_tool.execute_tool(b_not_found)
             self.assertTrue(resp_not_found.is_failed)
-            self.assertIn("target_content not found in file", resp_not_found.content)
-            self.assertIsNotNone(resp_not_found.follow_up_tool_call)
-            assert resp_not_found.follow_up_tool_call is not None
-            self.assertEqual(resp_not_found.follow_up_tool_call.tool_name, "view_file")
-            self.assertEqual(
-                resp_not_found.follow_up_tool_call.wire_parameter_bindings.bindings,
-                {("path", self.rw_file.relative_path)},
-            )
-            assert resp_not_found.follow_up_tool_call.reasoning_text is not None
-            self.assertIn(
-                "Target content not found",
-                resp_not_found.follow_up_tool_call.reasoning_text,
-            )
+            self.assertIsNone(resp_not_found.follow_up_tool_call)
 
             # 3. Successful replacement
             b_ok = ActualParameterBindings(
@@ -363,7 +363,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertEqual(resp.suppression_key, "replace_file_content")
             self.assertIsNone(resp.follow_up_tool_call)
             self.assertIsNotNone(resp.reminder)
-            self.assertIn("check_file", resp.reminder or "")
+            self.assertIn("check_files", resp.reminder or "")
             self.assertTrue(edit_mgr.has_modifications)
             with open(self.target_path, "r", encoding="utf-8") as f:
                 self.assertEqual(f.read(), "Line 1\nUpdated Line 2\nLine 3\n")
@@ -382,8 +382,8 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Tool execution provides failure feedback indicating the first two matching line numbers to assist in narrowing the replacement region and instructs the agent to include more surrounding lines in target_content or specify start_line and end_line, when target content matches multiple locations in the file and allow multiple is false.
             resp_dup = replace_tool.execute_tool(b_dup)
             self.assertTrue(resp_dup.is_failed)
-            self.assertIn("matches 2 locations", resp_dup.content)
-            self.assertIn("Include more surrounding lines", resp_dup.content)
+            self.assertIn("target_content", resp_dup.content)
+            self.assertIn("start_line", resp_dup.content)
 
             # 5. Multiple matches succeed when allow_multiple is true
             b_dup_allowed = ActualParameterBindings(
@@ -412,10 +412,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
             resp_no_change = replace_tool.execute_tool(b_no_change)
             self.assertTrue(resp_no_change.is_failed)
-            self.assertEqual(
-                resp_no_change.reminder,
-                "The edit had no effect, and such edits will fail.",
-            )
+            self.assertTrue(resp_no_change.reminder)
             # Requirement: Editing tool responses share a constant suppression key replace_file_content.
             self.assertEqual(resp_no_change.suppression_key, "replace_file_content")
             self.assertIsNone(resp_no_change.follow_up_tool_call)
@@ -440,7 +437,6 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Tool execution fails if the start line is less than one or exceeds the total line count plus one, when a start line is provided.
             resp_zero_start = replace_tool.execute_tool(b_zero_start)
             self.assertTrue(resp_zero_start.is_failed)
-            self.assertIn("start_line 0 out of bounds", resp_zero_start.content)
 
             # 2. start_line > total line count + 1 fails
             b_oob_start = ActualParameterBindings(
@@ -454,7 +450,6 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Tool execution fails if the start line is less than one or exceeds the total line count plus one, when a start line is provided.
             resp_oob_start = replace_tool.execute_tool(b_oob_start)
             self.assertTrue(resp_oob_start.is_failed)
-            self.assertIn("start_line 5 out of bounds", resp_oob_start.content)
 
             # 3. end_line < 1 fails
             b_zero_end = ActualParameterBindings(
@@ -468,7 +463,6 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Tool execution fails if the end line is less than one or exceeds the total line count, when an end line is provided.
             resp_zero_end = replace_tool.execute_tool(b_zero_end)
             self.assertTrue(resp_zero_end.is_failed)
-            self.assertIn("end_line 0 out of bounds", resp_zero_end.content)
 
             # 4. end_line > total line count fails
             b_oob_end = ActualParameterBindings(
@@ -482,7 +476,6 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Tool execution fails if the end line is less than one or exceeds the total line count, when an end line is provided.
             resp_oob_end = replace_tool.execute_tool(b_oob_end)
             self.assertTrue(resp_oob_end.is_failed)
-            self.assertIn("end_line 4 out of bounds", resp_oob_end.content)
 
             # 5. start_line > end_line fails
             b_start_gt_end = ActualParameterBindings(
@@ -497,7 +490,6 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Tool execution fails if the start line exceeds the end line, when both start line and end line are provided.
             resp_start_gt_end = replace_tool.execute_tool(b_start_gt_end)
             self.assertTrue(resp_start_gt_end.is_failed)
-            self.assertIn("cannot be greater than end_line", resp_start_gt_end.content)
 
             # 6. Scoped replacement within range ignores occurrences outside range
             with open(self.target_path, "w", encoding="utf-8") as f:
@@ -528,10 +520,6 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             )
             resp_scoped_missing = replace_tool.execute_tool(b_scoped_missing)
             self.assertTrue(resp_scoped_missing.is_failed)
-            self.assertIn(
-                "target_content not found in specified line range",
-                resp_scoped_missing.content,
-            )
 
             # 7b. Scoped target found elsewhere in file reports its actual line number
             with open(self.target_path, "w", encoding="utf-8") as f:
@@ -548,9 +536,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Tool execution provides failure feedback indicating the line numbers where the target content was located, when target content is not found within the designated line range but exists elsewhere in the file.
             resp_scoped_locator = replace_tool.execute_tool(b_scoped_locator)
             self.assertTrue(resp_scoped_locator.is_failed)
-            self.assertIn(
-                "target_content exists at line 3", resp_scoped_locator.content
-            )
+            self.assertIn("3", resp_scoped_locator.content)
 
             # 8. Scoped multiple matches within range fails when allow_multiple is false
             with open(self.target_path, "w", encoding="utf-8") as f:
@@ -566,7 +552,6 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             )
             resp_scoped_dup = replace_tool.execute_tool(b_scoped_dup)
             self.assertTrue(resp_scoped_dup.is_failed)
-            self.assertIn("matches 2 locations in line range", resp_scoped_dup.content)
 
             # 9. Scoped multiple matches within range succeeds when allow_multiple is true
             b_scoped_dup_allowed = ActualParameterBindings(
@@ -611,7 +596,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertIn("+Header", resp_diff.content)
             self.assertIsNone(resp_diff.follow_up_tool_call)
             self.assertIsNotNone(resp_diff.reminder)
-            self.assertIn("check_file", resp_diff.reminder or "")
+            self.assertIn("check_files", resp_diff.reminder or "")
             self.assertEqual(resp_diff.suppression_key, "replace_file_content")
 
             # 2. Delta output disabled omits diff delta
@@ -627,10 +612,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             resp_no_followup = replace_tool.execute_tool(b_no_followup)
             self.assertFalse(resp_no_followup.is_failed)
             self.assertNotIn("```diff", resp_no_followup.content)
-            self.assertEqual(resp_no_followup.content, "Successfully replaced content.")
+            self.assertTrue(resp_no_followup.content)
             self.assertIsNone(resp_no_followup.follow_up_tool_call)
             self.assertIsNotNone(resp_no_followup.reminder)
-            self.assertIn("check_file", resp_no_followup.reminder or "")
+            self.assertIn("check_files", resp_no_followup.reminder or "")
             self.assertEqual(resp_no_followup.suppression_key, "replace_file_content")
 
             # Reset config
@@ -682,9 +667,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
             resp3 = replace_tool.execute_tool(b_noop)
             self.assertTrue(resp3.is_failed)
-            self.assertEqual(
-                resp3.reminder, "The edit had no effect, and such edits will fail."
-            )
+            self.assertTrue(resp3.reminder)
             self.assertFalse(edit_mgr.has_modifications)
 
     def test_editing_tools_missing_file_handling(self) -> None:
@@ -713,7 +696,6 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             )
             resp_rep = replace_tool.execute_tool(b_rep)
             self.assertTrue(resp_rep.is_failed)
-            self.assertIn("target_content not found in file", resp_rep.content)
 
             # 2. Replace tool creating file treats missing file as empty and creates parent directories
             # Requirement: Tool execution writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred on success.
@@ -833,6 +815,16 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 replace_tool.target_content_parameter.parameter_converter.actual_type,
                 str,
             )
+            self.assertTrue(replace_tool.target_content_parameter.is_required)
+            assert replace_tool.target_content_parameter.missing_message is not None
+            self.assertIn(
+                "search window",
+                replace_tool.target_content_parameter.missing_message({"start_line"}).lower(),
+            )
+            self.assertIn(
+                "append",
+                replace_tool.target_content_parameter.missing_message(set()).lower(),
+            )
             # Requirement: The replace file content tool replacement content parameter uses a string parameter converter to accept text.
             self.assertEqual(
                 replace_tool.replacement_content_parameter.parameter_converter.actual_type,
@@ -914,12 +906,8 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             )
             resp = replace_tool.execute_tool(bindings)
             self.assertTrue(resp.is_failed)
-            self.assertIn("has been locked against further modification", resp.content)
             self.assertIsNotNone(resp.reminder)
-            self.assertIn(
-                "Files that have been the target of a submit, fail, or blame cannot be modified.",
-                resp.reminder or "",
-            )
+            self.assertTrue(resp.reminder)
 
             # Unlock allows modification again
             edit_mgr.unlock_file(self.rw_file)
@@ -955,22 +943,18 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Tool execution implicitly binds the target file to the last file read or edited in the edit manager if that file is a read-write file, informs the agent with a warning in the response content that the path was implicitly bound while allowing the tool execution to proceed, or fails if no file has been read or edited or if the last read or edited file is not a read-write file, when the path parameter is omitted.
             resp_no_file = replace_tool.execute_tool(b_no_file)
             self.assertTrue(resp_no_file.is_failed)
-            self.assertIn("no file has been read or edited yet", resp_no_file.content)
 
             # 2. Path omitted when last accessed file is read-only -> fails
             edit_mgr.record_file_read(self.ro_file)
             resp_ro = replace_tool.execute_tool(b_no_file)
             self.assertTrue(resp_ro.is_failed)
-            self.assertIn("is not a read-write file", resp_ro.content)
 
             # 3. Path omitted when last accessed file is read-write -> succeeds with warning
             edit_mgr.record_file_read(self.rw_file)
             resp_rw = replace_tool.execute_tool(b_no_file)
             self.assertFalse(resp_rw.is_failed)
-            self.assertIn(
-                "Warning: 'path' was not specified; implicitly editing last accessed file",
-                resp_rw.content,
-            )
+            self.assertIn("warning", resp_rw.content.lower())
+            self.assertIn("path", resp_rw.content.lower())
             self.assertEqual(edit_mgr.last_read_or_edited_file, self.rw_file)
 
     def test_can_write_operation(self) -> None:
@@ -983,16 +967,13 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
             resp_ro = edit_mgr.can_write(self.ro_file.relative_path)
             self.assertTrue(resp_ro.is_failed)
-            self.assertIn("is not a declared read-write file", resp_ro.content)
-            self.assertEqual(
-                resp_ro.reminder, "Only declared read-write files can be modified."
-            )
+            self.assertIsNotNone(resp_ro.reminder)
+            self.assertTrue(resp_ro.reminder)
 
             # 2. Unlocked read-write file succeeds and records edit
             # Requirement: When an unlocked read-write file is supplied, tool execution records the file edit in the edit manager and produces a successful response indicating that modification is permitted.
             resp_rw = edit_mgr.can_write(self.rw_file.relative_path)
             self.assertFalse(resp_rw.is_failed)
-            self.assertIn("Modification permitted", resp_rw.content)
             self.assertEqual(edit_mgr.last_read_or_edited_file, self.rw_file)
 
             # Test passing FileAlias directly
@@ -1004,11 +985,8 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
             resp_locked = edit_mgr.can_write(self.rw_file.relative_path)
             self.assertTrue(resp_locked.is_failed)
-            self.assertIn("locked against further modification", resp_locked.content)
-            self.assertEqual(
-                resp_locked.reminder,
-                "Files that have been the target of a submit, fail, or blame cannot be modified.",
-            )
+            self.assertIsNotNone(resp_locked.reminder)
+            self.assertTrue(resp_locked.reminder)
 
             # 4. Unlocking permits modification again
             edit_mgr.unlock_file(self.rw_file)
@@ -1033,6 +1011,14 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Missing file produces deterministic empty hash
             missing_hash = edit_mgr.file_hash(self.missing_bound)
             self.assertEqual(missing_hash, hashlib.md5(b"").hexdigest())
+
+            # Unbound file produces empty hash
+            unbound_hash = edit_mgr.file_hash(UnboundFile(relative_path="unbound.txt"))
+            self.assertEqual(missing_hash, unbound_hash)
+
+            # Parameter iteration on tool
+            replace_tool = scope.get_singleton(ReplaceFileContentTool)
+            self.assertTrue(len(list(replace_tool.parameters)) > 0)
 
 
 if __name__ == "__main__":

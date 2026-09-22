@@ -1,6 +1,9 @@
 # update_with_ai/parts/mcp/lib/BUILD.bazel
 load("//bin:pyright_library.bzl", "pyright_library")
+load("//update_python_with_ai/support/lib:build_derived_test.bzl", "build_derived_test")
 load("@pip//:requirements.bzl", "requirement")
+
+package(default_visibility = ["//visibility:public"])
 
 pyright_library(
     name = "mcp_session",
@@ -144,6 +147,7 @@ pyright_library(
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_config",
+        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/dag/lib:dag_config",
     ],
     visibility = ["//visibility:public"],
@@ -161,11 +165,13 @@ pyright_library(
         "//update_with_ai/parts/agent/lib:agent_config",
         "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/agent/lib:agent_session",
+        "//update_with_ai/parts/bazel/lib:bazel_manifest_loader",
         "//update_with_ai/parts/dag/lib:dag_config",
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/dag/lib:dag_subgraph",
         "//update_with_ai/parts/sandbox/lib:sandbox_file_editor",
         "//update_with_ai/parts/sandbox/lib:sandbox_file_reader",
+        "//update_with_ai/parts/sandbox/lib:sandbox_run_control",
         "//update_with_ai/parts/sandbox/lib:tool_provider",
         ":mcp_cache_arbiter",
         ":mcp_cache_arbiter_impl",
@@ -179,3 +185,8 @@ pyright_library(
     ],
     visibility = ["//visibility:public"],
 )
+
+build_derived_test(
+    name = "targets_derived_test",
+)
+

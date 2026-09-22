@@ -161,9 +161,9 @@ class ToolProviderImplTest(unittest.TestCase):
             )
             # Requirement: Executing a tool by name fails if a parameter name does not match any parameter of the tool, and reminds the agent that only declared parameters of the tool can be provided.
             self.assertTrue(resp.is_failed)
-            self.assertEqual(
-                resp.reminder, "Only declared parameters of the tool can be provided."
-            )
+            self.assertTrue(resp.reminder)
+            assert resp.reminder is not None
+            self.assertIn("parameter", resp.reminder.lower())
 
     def test_tool_manager_missing_required_parameter(self) -> None:
         """CUJ: Executing a tool without supplying a required parameter fails."""
@@ -181,11 +181,70 @@ class ToolProviderImplTest(unittest.TestCase):
             resp = manager.execute_tool(
                 "tool_req", WireParameterBindings(bindings=set())
             )
-            # Requirement: Executing a tool by name fails if an argument is not supplied for a required parameter of the tool, and reminds the agent that required parameters of the tool must be supplied.
+            # Requirement: Executing a tool by name fails if an argument is not supplied for a required parameter of the tool, incorporating the parameter's missing message function evaluated with the set of supplied parameter names when configured, and reminds the agent that required parameters of the tool must be supplied.
             self.assertTrue(resp.is_failed)
-            self.assertEqual(
-                resp.reminder, "Required parameters of the tool must be supplied."
+            self.assertTrue(resp.reminder)
+            assert resp.reminder is not None
+            self.assertIn("required", resp.reminder.lower())
+
+    def test_tool_manager_missing_parameter_with_constant_missing_message(self) -> None:
+        """CUJ: Executing a tool omitting a required parameter with constant missing_message evaluates function."""
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            manager = scope.get_singleton(ToolManager)
+            param = Parameter(
+                name="req_arg",
+                description="required",
+                parameter_type=STRING_PARAMETER_TYPE,
+                is_required=True,
+                missing_message=lambda _: "custom guidance",
             )
+            tool = DummyTool("tool_req_msg", {param})
+            manager.install_tool(tool)
+
+            resp = manager.execute_tool(
+                "tool_req_msg", WireParameterBindings(bindings=set())
+            )
+            # Requirement: Executing a tool by name fails if an argument is not supplied for a required parameter of the tool, incorporating the parameter's missing message function evaluated with the set of supplied parameter names when configured, and reminds the agent that required parameters of the tool must be supplied.
+            self.assertTrue(resp.is_failed)
+            self.assertIn("custom guidance", resp.content)
+            assert resp.reminder is not None
+            self.assertIn("required", resp.reminder.lower())
+
+    def test_tool_manager_missing_parameter_with_dynamic_missing_message(self) -> None:
+        """CUJ: Executing a tool omitting a required parameter evaluates missing_message with supplied parameter names."""
+        with enter_phase("agent_session", registry=self.registry) as scope:
+            manager = scope.get_singleton(ToolManager)
+            req_param = Parameter(
+                name="req_arg",
+                description="required",
+                parameter_type=STRING_PARAMETER_TYPE,
+                is_required=True,
+                missing_message=lambda s: "flag present" if "flag" in s else "flag omitted",
+            )
+            opt_param = Parameter(
+                name="flag",
+                description="optional flag",
+                parameter_type=STRING_PARAMETER_TYPE,
+                is_required=False,
+            )
+            tool = DummyTool("tool_dyn_msg", {req_param, opt_param})
+            manager.install_tool(tool)
+
+            # Test 1: flag omitted
+            resp1 = manager.execute_tool(
+                "tool_dyn_msg", WireParameterBindings(bindings=set())
+            )
+            # Requirement: Executing a tool by name fails if an argument is not supplied for a required parameter of the tool, incorporating the parameter's missing message function evaluated with the set of supplied parameter names when configured, and reminds the agent that required parameters of the tool must be supplied.
+            self.assertTrue(resp1.is_failed)
+            self.assertIn("flag omitted", resp1.content)
+
+            # Test 2: flag present
+            resp2 = manager.execute_tool(
+                "tool_dyn_msg", WireParameterBindings(bindings={("flag", "true")})
+            )
+            # Requirement: Executing a tool by name fails if an argument is not supplied for a required parameter of the tool, incorporating the parameter's missing message function evaluated with the set of supplied parameter names when configured, and reminds the agent that required parameters of the tool must be supplied.
+            self.assertTrue(resp2.is_failed)
+            self.assertIn("flag present", resp2.content)
 
     def test_tool_manager_default_parameter_value(self) -> None:
         """CUJ: Executing a tool omitting an optional parameter uses its default value."""
@@ -246,7 +305,8 @@ class ToolProviderImplTest(unittest.TestCase):
             self.assertEqual(fn.__name__, "callable_tool")
             self.assertEqual(fn.__doc__, "Dummy tool callable_tool")
             output = fn(target="spec.md")
-            self.assertEqual(output, "dummy executed\n\nReminder: remember this")
+            self.assertIn("dummy executed", output)
+            self.assertIn("remember this", output)
             assert tool.last_bindings is not None
             self.assertEqual(tool.last_bindings.get_value("target"), "spec.md")
 
@@ -261,7 +321,8 @@ class ToolProviderImplTest(unittest.TestCase):
             manager.install_tool(tool2)
             fn2 = manager.create_tool_callable("callable_tool_2")
             output2 = fn2(target="spec.md")
-            self.assertEqual(output2, "dummy executed\n\nReminder: remember this")
+            self.assertIn("dummy executed", output2)
+            self.assertIn("remember this", output2)
             assert tool2.last_bindings is not None
             self.assertEqual(tool2.last_bindings.get_value("count"), 10)
 

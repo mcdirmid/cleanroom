@@ -209,7 +209,7 @@ Parameter identifying the target read-write file
     def target_content_parameter(self) -> tool_provider.Parameter:
         """
 PURPOSE:
-Parameter specifying the target content to replace
+Parameter specifying the target content to replace within the file or designated search window
 """
         ...
 
@@ -225,7 +225,7 @@ Parameter specifying the replacement content
     def start_line_parameter(self) -> tool_provider.Parameter:
         """
 PURPOSE:
-Parameter specifying the starting line index
+Parameter specifying the starting line index of the search window
 """
         ...
 
@@ -233,7 +233,7 @@ Parameter specifying the starting line index
     def end_line_parameter(self) -> tool_provider.Parameter:
         """
 PURPOSE:
-Parameter specifying the ending line index
+Parameter specifying the ending line index of the search window
 """
         ...
 

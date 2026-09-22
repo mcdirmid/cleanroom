@@ -59,7 +59,7 @@ class DagSubgraphImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=self.registry):
             subgraph = get_singleton(DagSubgraph)
-            # Requirement: Setting a target node scopes the target subgraph to all reachable dependency nodes rooted at the target node in dag storage, arranged in dependency-first topological order.
+            # Requirement: Setting a target node scopes the target subgraph to all reachable dependency nodes rooted at the target node in dag storage, arranged in dependency-first topological order, breaking ties by role tier depth first, then by unit address.
             # Requirement: [DagSubgraph] Setting a target collects all reachable dependency nodes from the target node in dag storage and computes their dependency-first topological order.
             subgraph.set_target(a)
 
@@ -67,8 +67,8 @@ class DagSubgraphImplTest(unittest.TestCase):
             self.assertFalse(subgraph.is_complete)
 
             # First ready node should be c (no dependencies)
-            # Requirement: The next ready batch consists of contiguous dirty nodes in topological order that share the same role address and have all their dependencies in the target subgraph clean in dag storage or present in the same ready batch, starting from the earliest ready dirty node and bounded by the batch size obtained from dag config.
-            # Requirement: [DagSubgraph] When obtaining the next ready batch, uncleaned dirty nodes in topological order whose dependencies in the target subgraph are clean in dag storage or present in the same ready batch are selected, grouped by role address up to a maximum batch size.
+            # Requirement: The next ready batch consists of contiguous dirty nodes in topological order that share the same role address, prioritized by role tier precedence (prioritizing lib before test, and test before qa) and having all their dependencies in the target subgraph clean in dag storage or present in the same ready batch, starting from the earliest ready dirty node and bounded by the batch size obtained from dag config.
+            # Requirement: [DagSubgraph] When obtaining the next ready batch, uncleaned dirty nodes prioritized by role tier precedence (upstream roles before downstream roles) whose dependencies in the target subgraph are clean in dag storage or present in the same ready batch are selected, grouped by role address up to a maximum batch size.
             batch1 = subgraph.next_ready_batch()
             self.assertEqual(batch1, [c])
 
@@ -103,12 +103,64 @@ class DagSubgraphImplTest(unittest.TestCase):
             subgraph = get_singleton(DagSubgraph)
             subgraph.set_target(root)
 
-            # Requirement: The next ready batch consists of contiguous dirty nodes in topological order that share the same role address and have all their dependencies in the target subgraph clean in dag storage or present in the same ready batch, starting from the earliest ready dirty node and bounded by the batch size obtained from dag config.
-            # Requirement: [DagSubgraph] When obtaining the next ready batch, uncleaned dirty nodes in topological order whose dependencies in the target subgraph are clean in dag storage or present in the same ready batch are selected, grouped by role address up to a maximum batch size.
+            # Requirement: The next ready batch consists of contiguous dirty nodes in topological order that share the same role address, prioritized by role tier precedence (prioritizing lib before test, and test before qa) and having all their dependencies in the target subgraph clean in dag storage or present in the same ready batch, starting from the earliest ready dirty node and bounded by the batch size obtained from dag config.
+            # Requirement: [DagSubgraph] When obtaining the next ready batch, uncleaned dirty nodes prioritized by role tier precedence (upstream roles before downstream roles) whose dependencies in the target subgraph are clean in dag storage or present in the same ready batch are selected, grouped by role address up to a maximum batch size.
             batch = subgraph.next_ready_batch()
             self.assertLessEqual(len(batch), 2)
             if len(batch) > 1:
                 self.assertEqual(batch[0].role_address, batch[1].role_address)
+
+    def test_role_tier_prioritization_in_next_ready_batch(self) -> None:
+        """CUJ: Prioritizes upstream roles over downstream roles (lib before test, test before qa)."""
+        root = Node(unit_address="//pkg:root", role_address="")
+        lib_a = Node(unit_address="//pkg:a", role_address="//update_python_with_ai:lib")
+        test_a = Node(unit_address="//pkg:a", role_address="//update_python_with_ai:test")
+        qa_a = Node(unit_address="//pkg:a", role_address="//update_python_with_ai:qa")
+
+        lib_b = Node(unit_address="//pkg:b", role_address="//update_python_with_ai:lib")
+        test_b = Node(unit_address="//pkg:b", role_address="//update_python_with_ai:test")
+        qa_b = Node(unit_address="//pkg:b", role_address="//update_python_with_ai:qa")
+
+        self.storage.dependencies[root] = {Dependency(node=qa_a), Dependency(node=qa_b)}
+        self.storage.dependencies[qa_a] = {Dependency(node=test_a)}
+        self.storage.dependencies[test_a] = {Dependency(node=lib_a)}
+        self.storage.dependencies[qa_b] = {Dependency(node=test_b)}
+        self.storage.dependencies[test_b] = {Dependency(node=lib_b)}
+
+        self.storage.dirty_nodes.update([root, qa_a, test_a, lib_a, qa_b, test_b, lib_b])
+        self.dag_cfg.batch_size = 2
+
+        with enter_phase("system", registry=self.registry):
+            subgraph = get_singleton(DagSubgraph)
+            subgraph.set_target(root)
+
+            # Both lib_a and lib_b are ready and share role "lib" -> batched together
+            # Requirement: The next ready batch consists of contiguous dirty nodes in topological order that share the same role address, prioritized by role tier precedence (prioritizing lib before test, and test before qa) and having all their dependencies in the target subgraph clean in dag storage or present in the same ready batch, starting from the earliest ready dirty node and bounded by the batch size obtained from dag config.
+            # Requirement: [DagSubgraph] When obtaining the next ready batch, uncleaned dirty nodes prioritized by role tier precedence (upstream roles before downstream roles) whose dependencies in the target subgraph are clean in dag storage or present in the same ready batch are selected, grouped by role address up to a maximum batch size.
+            batch1 = subgraph.next_ready_batch()
+            self.assertEqual(batch1, [lib_a, lib_b])
+
+            # Suppose lib_a was cleaned, but lib_b remains dirty
+            self.storage.dirty_nodes.discard(lib_a)
+            # test_a is now ready, but lib_b is also ready. lib tier must take precedence over test tier!
+            batch2 = subgraph.next_ready_batch()
+            self.assertEqual(batch2, [lib_b])
+
+            # Now clean lib_b; test_a and test_b are both ready
+            self.storage.dirty_nodes.discard(lib_b)
+            batch3 = subgraph.next_ready_batch()
+            self.assertEqual(batch3, [test_a, test_b])
+
+            # Clean test_a, but test_b remains dirty.
+            # qa_a is ready, but test_b is also ready. test tier must take precedence over qa tier!
+            self.storage.dirty_nodes.discard(test_a)
+            batch4 = subgraph.next_ready_batch()
+            self.assertEqual(batch4, [test_b])
+
+            # Now clean test_b; qa_a and qa_b are both ready
+            self.storage.dirty_nodes.discard(test_b)
+            batch5 = subgraph.next_ready_batch()
+            self.assertEqual(batch5, [qa_a, qa_b])
 
     def test_next_ready_batch_empty_when_no_ready_nodes(self) -> None:
         """CUJ: Returns empty list when no uncleaned node has all dependencies clean."""

@@ -110,7 +110,7 @@ class BazelMcpSystemAsmTest(unittest.TestCase):
                 # Verify registered domain tools are installed in ToolManager
                 self.assertIn("get_work", tool_names)
                 self.assertIn("submit", tool_names)
-                self.assertIn("check_file", tool_names)
+                self.assertIn("check_files", tool_names)
                 self.assertIn("fail", tool_names)
 
             # Deregister and verify cleanup
@@ -134,7 +134,7 @@ class BazelMcpSystemAsmTest(unittest.TestCase):
             self.assertIn("Registered role agent session", reg_resp)
 
             # Domain tools installed in ToolManager are dynamically exported to FastMCP
-            for t_name in ["get_work", "submit", "check_file", "fail"]:
+            for t_name in ["get_work", "submit", "check_files", "fail"]:
                 tool_obj = mcp_server._app._tool_manager.get_tool(t_name)
                 self.assertIsNotNone(tool_obj)
 

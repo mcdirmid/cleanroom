@@ -37,6 +37,8 @@ update_python_with_ai(
         "//update_with_ai/parts/agent:agent_config",
         "//update_with_ai/parts/agent:agent_node_config",
         "//update_with_ai/parts/agent:agent_session",
+        "//update_with_ai/parts/bazel:bazel_manifest_loader",
+        "//update_with_ai/parts/dag:dag_storage",
         "//update_with_ai/parts/dag:dag_subgraph",
     ],
 )
@@ -95,6 +97,8 @@ update_python_with_ai(
         ":mcp_gate",
         ":mcp_server",
         ":mcp_session",
+        "//update_with_ai/parts/agent:agent_node_config",
+        "//update_with_ai/parts/sandbox:sandbox_run_control",
         "//update_with_ai/parts/sandbox:tool_provider",
     ],
 )
@@ -103,6 +107,7 @@ update_python_with_ai(
     name = "mcp_config_impl",
     module_deps = [
         "//update_with_ai/parts/agent:agent_config",
+        "//update_with_ai/parts/agent:agent_session",
         "//update_with_ai/parts/dag:dag_config",
     ],
 )

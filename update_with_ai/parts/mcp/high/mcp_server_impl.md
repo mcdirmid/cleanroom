@@ -25,6 +25,8 @@ Lifecycle tools manage sub-agent session bounds:
 
 - The shutdown tool terminates the server, removes the workspace sentinel, and stops the process.
 
+- The next batch tool accepts a target unit address and a target role address, queries the DAG subgraph to determine the next ready batch of dirty nodes using the in-process system singletons, and returns a JSON string with the unit, role, is_complete flag, ready_role, batch list, and dirty_nodes list.
+
 Domain tool execution dispatches turns into session scopes:
 
 - Registered domain tools are dynamically exported from installed session tools upon session registration, server start, and domain tool execution.

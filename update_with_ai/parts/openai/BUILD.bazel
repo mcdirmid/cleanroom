@@ -23,12 +23,12 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "openai_conversation_impl",
-    module_deps = ['//update_with_ai/parts/loop:loop_conversation', ':openai_ext', '//update_with_ai/parts/sandbox:tool_provider'],
+    module_deps = ['//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/loop:loop_conversation', ':openai_ext', '//update_with_ai/parts/sandbox:tool_provider'],
 )
 
 update_python_with_ai(
     name = "openai_driver_impl",
-    module_deps = ['//update_with_ai/parts/agent:agent_config', '//update_with_ai/parts/core:runner_logger', '//update_with_ai/parts/loop:loop_conversation', '//update_with_ai/parts/loop:loop_driver', '//update_with_ai/parts/loop:loop_guard', ':openai_config', ':openai_ext', '//update_with_ai/parts/sandbox:tool_provider'],
+    module_deps = ['//update_with_ai/parts/agent:agent_config', '//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/core:runner_logger', '//update_with_ai/parts/loop:loop_conversation', '//update_with_ai/parts/loop:loop_driver', '//update_with_ai/parts/loop:loop_guard', ':openai_config', ':openai_ext', '//update_with_ai/parts/sandbox:tool_provider'],
 )
 
 update_python_with_ai(

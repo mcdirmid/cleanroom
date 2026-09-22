@@ -8,6 +8,8 @@ exports_files([
     "lifecycle.py",
     "lifecycle.pyi",
     "update_python_with_ai.bzl",
+    "check_build_derived.py",
+    "build_derived_test.bzl",
 ], visibility = ["//visibility:public"])
 
 pyright_library(

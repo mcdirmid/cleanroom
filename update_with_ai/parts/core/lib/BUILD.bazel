@@ -1,13 +1,17 @@
 # update_with_ai/parts/core/lib/BUILD.bazel
 
 load("//bin:pyright_library.bzl", "pyright_library")
+load("//update_python_with_ai/support/lib:build_derived_test.bzl", "build_derived_test")
 
 package(default_visibility = ["//visibility:public"])
 
 pyright_library(
     name = "runner_logger",
     srcs = ["runner_logger.py"],
+    deps = [],
     pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
     ],
     visibility = ["//visibility:public"],
 )
@@ -15,9 +19,16 @@ pyright_library(
 pyright_library(
     name = "runner_logger_impl",
     srcs = ["runner_logger_impl.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
         ":runner_logger",
     ],
     visibility = ["//visibility:public"],
 )
+
+build_derived_test(
+    name = "targets_derived_test",
+)
+

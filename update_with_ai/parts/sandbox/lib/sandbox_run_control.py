@@ -12,12 +12,12 @@ class RunController(Protocol):
     def blame_targets(self) -> Set[agent_file_alias.BoundFile]: ...
 
 
-class CheckFileTool(tool_provider.Tool, Protocol):
-    @property
-    def path(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]: ...
+class CheckFilesTool(tool_provider.Tool, Protocol):
+    pass
 
 
-RunTestsTool = CheckFileTool
+CheckFileTool = CheckFilesTool
+RunTestsTool = CheckFilesTool
 
 
 class AdvanceTool(tool_provider.Tool, Protocol):

@@ -22,7 +22,7 @@ The run controller:
 
 - Caches verification evaluation results alongside edit manager file hashes for target nodes, reusing the cached verification outcome as long as no workspace files have been updated since that evaluation.
 
-- Installs a *check file tool* that updates verification results if outdated, accepting a file alias *path* parameter, presenting verification outcomes to the agent, tracking last tested file hashes, and failing when verification failed.
+- Installs an argument-free *check files tool* named `check_files` that updates verification results if outdated, evaluates verification checks across all open targets and modified workspace files, presents aggregated verification outcomes to the agent, tracks last tested file hashes, and fails when verification failed.
 
 - Installs an *advance tool* when guide step mode is active, coordinating step progression through guide delivery upon passing verification.
 

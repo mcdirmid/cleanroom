@@ -53,6 +53,18 @@ GROUNDING_ARGUMENT:
 
     @operation
     @override
+    def next_batch(self, unit_address: str, role_address: str) -> str:
+        """
+PURPOSE:
+Returns the next ready batch of dirty nodes for the given target as a JSON string
+
+GROUNDING_ARGUMENT:
+- Delegates to the get_next_batch helper imported from cleanroom_dag_cli, passing unit_address and role_address, and returns the JSON-serialized result dict.
+"""
+        ...
+
+    @operation
+    @override
     def execute_domain_tool(self, conversation_id: mcp_session.ConversationId, tool_name: str, arguments: Mapping[str, Any]) -> str:
         """
 PURPOSE:

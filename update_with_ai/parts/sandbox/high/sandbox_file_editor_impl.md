@@ -13,7 +13,7 @@ Unchecked modifications to source code can introduce partial edits, exceed LLM w
 
 ## Types and Behavior
 
-The edit manager provides the replace file content tool for the agent session when mcp mode is inactive, installs no editing tools when mcp mode is active, and provides a can write operation validating modification access for a read-write file. Materializing templates retrieves configured templates from the node config, formats initial template content using the template formatter with session template parameters, checks whether target files exist in the filesystem at the host path formed from the alias manager workspace root and the read-write file workspace path, and writes formatted template content for missing files while preserving existing files.
+The edit manager provides the replace file content tool for the agent session when mcp mode is inactive, installs no editing tools when mcp mode is active, and provides a can write operation validating modification access for a read-write file. Materializing templates retrieves configured templates from the node config, formats initial template content using the template formatter with session template parameters, checks whether target files exist in the filesystem at the host path formed from the alias manager workspace root and the read-write file workspace path, writes formatted template content for missing files while preserving existing files, and records initial content baselines for active read-write files.
 
 The edit manager exposes whether workspace file modifications occurred during the session by comparing current workspace file content against initial content before editing, tracks a file update revision that increments whenever workspace files are updated, computes the file hash by reading file content from the filesystem at its resolved host path and returning an MD5 hexadecimal digest of the content, and exposes read-write files locked against modification, supporting locking and unlocking individual read-write files. The edit manager tracks the last read or edited file alias across the session, recording file reads from the file reader and file edits from editing tools.
 
@@ -29,7 +29,15 @@ Editing tool execution fails if:
 
 On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and reminds the agent to call the check file tool to verify syntax and type correctness before making further modifications. When configured to produce delta output, successful editing tool execution includes a diff delta representation in the response content. Editing tool responses share a constant suppression key replace_file_content.
 
-The replace file content tool is named `replace_file_content`, accepting in sequence a file alias *path* parameter, an integer *start_line* parameter, an integer *end_line* parameter, a boolean *allow_multiple* parameter, a text *target_content* parameter, and a text *replacement_content* parameter. Tool execution:
+The replace file content tool is named `replace_file_content`, accepting in sequence a file alias *path* parameter, an integer *start_line* parameter defining the starting line of the search window, an integer *end_line* parameter defining the ending line of the search window, a boolean *allow_multiple* parameter, a text *target_content* parameter specifying the exact text to replace within the search window, and a text *replacement_content* parameter.
+
+The target content parameter specifies a missing message function that produces diagnostic feedback based on supplied parameter names. Evaluating the missing message function:
+
+- Explains that start line and end line only restrict the search window when line range arguments are supplied.
+
+- Explains that target content must match existing text to append or insert content when line range arguments are omitted.
+
+Tool execution applies text replacements to designated read-write file content. Tool execution:
 
 - Implicitly binds the target file to the last file read or edited in the edit manager if that file is a read-write file, informs the agent with a warning in the response content that the path was implicitly bound while allowing the tool execution to proceed, or fails if no file has been read or edited or if the last read or edited file is not a read-write file, when the path parameter is omitted.
 
@@ -48,8 +56,6 @@ The replace file content tool is named `replace_file_content`, accepting in sequ
 - Provides failure feedback indicating the first two matching line numbers to assist in narrowing the replacement region and instructs the agent to include more surrounding lines in target_content or specify start_line and end_line, when target content matches multiple locations in the file and allow multiple is false.
 
 - Provides failure feedback indicating the line numbers where the target content was located, when target content is not found within the designated line range but exists elsewhere in the file.
-
-- Specifies a follow-up execution of the view file tool on the target file with reasoning text indicating that the target content was not found, when target content is not found anywhere in the file.
 
 - Writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred on success.
 

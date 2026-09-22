@@ -115,7 +115,13 @@ def is_uninitialized_module(content: str) -> bool:
             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
             and n.name != "__initialize__"
         ]
-        if not classes and not funcs:
+        variables = [
+            n
+            for n in tree.body
+            if isinstance(n, ast.Assign)
+            or (isinstance(n, ast.AnnAssign) and n.value is not None)
+        ]
+        if not classes and not funcs and not variables:
             return True
     except SyntaxError:
         if "<" in content and ">" in content:
@@ -174,7 +180,9 @@ def generate_lib_skeleton(pyi_path: str, stem: str) -> str:
         lines.append(f"from typing import {', '.join(sorted(typing_names))}")
     if has_dataclass:
         lines.append("from dataclasses import dataclass")
-    if is_impl:
+    if "LifecycleTier" in pyi_content:
+        lines.append("from support.lib.lifecycle import LifecycleTier, system")
+    elif is_impl:
         lines.append(
             "from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton, system"
         )
@@ -518,12 +526,13 @@ def main() -> int:
         uses_lifecycle = (
             "support.lib.lifecycle" in content
             or re.search(
-                r"\b(LifecycleRegistry|Singleton|get_singleton|get_default_registry)\b",
+                r"\b(LifecycleRegistry|LifecycleTier|Singleton|get_singleton|get_default_registry)\b",
                 content,
             )
             is not None
             or stem.endswith("_impl")
             or "@singleton_type" in pyi_content
+            or "LifecycleTier" in pyi_content
         )
 
         raw_deps = []
@@ -565,8 +574,9 @@ def main() -> int:
             lifecycle_label = "//update_python_with_ai/support/lib:lifecycle"
             lib_deps.append(lifecycle_label)
             allowed_deps.add("lifecycle")
-            lib_deps.append("//update_with_ai/parts/agent/lib:agent_session")
-            allowed_deps.add("agent_session")
+            if stem != "agent_session":
+                lib_deps.append("//update_with_ai/parts/agent/lib:agent_session")
+                allowed_deps.add("agent_session")
 
         for stem_d in ext_stems:
             spec_file = f"{stem_d}.pyi"

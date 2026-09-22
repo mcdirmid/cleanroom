@@ -1,14 +1,17 @@
 # update_with_ai/parts/systems/lib/BUILD.bazel
 
 load("//bin:pyright_library.bzl", "pyright_library")
+load("//update_python_with_ai/support/lib:build_derived_test.bzl", "build_derived_test")
 
 package(default_visibility = ["//visibility:public"])
 
 pyright_library(
     name = "bazel_openai_loop_asm",
     srcs = ["bazel_openai_loop_asm.py"],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/bazel/lib:bazel_asm",
         "//update_with_ai/parts/bazel/lib:bazel_loop_impl",
         "//update_with_ai/parts/bazel/lib:bazel_openai_config_impl",
@@ -23,17 +26,24 @@ pyright_library(
 pyright_library(
     name = "cleanroom_mcp_runner",
     srcs = ["cleanroom_mcp_runner.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
+    ],
     visibility = ["//visibility:public"],
 )
 
 pyright_library(
     name = "cleanroom_mcp_runner_impl",
     srcs = ["cleanroom_mcp_runner_impl.py"],
+    deps = [],
     pyright_deps = [
-        ":cleanroom_mcp_runner",
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/core/lib:runner_logger",
         "//update_with_ai/parts/mcp/lib:mcp_server",
+        ":cleanroom_mcp_runner",
     ],
     visibility = ["//visibility:public"],
 )
@@ -43,13 +53,17 @@ pyright_library(
     srcs = ["bazel_mcp_system_asm.py"],
     deps = [],
     pyright_deps = [
-        ":cleanroom_mcp_runner_impl",
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/bazel/lib:bazel_asm",
+        "//update_with_ai/parts/core/lib:runner_logger",
         "//update_with_ai/parts/core/lib:runner_logger_impl",
         "//update_with_ai/parts/dag/lib:dag_asm",
         "//update_with_ai/parts/mcp/lib:mcp_asm",
+        "//update_with_ai/parts/mcp/lib:mcp_server",
         "//update_with_ai/parts/sandbox/lib:sandbox_asm",
+        ":cleanroom_mcp_runner",
+        ":cleanroom_mcp_runner_impl",
     ],
     visibility = ["//visibility:public"],
 )
@@ -63,3 +77,8 @@ py_binary(
         ":cleanroom_mcp_runner_impl",
     ],
 )
+
+build_derived_test(
+    name = "targets_derived_test",
+)
+

@@ -149,6 +149,7 @@ class Parameter[ActualT, WireT]:
     parameter_type: ParameterType[ActualT, WireT]
     is_required: bool = True
     default_value: Optional[ActualT] = None
+    missing_message: Optional[Callable[[Set[str]], str]] = None
 
     def __init__(
         self,
@@ -158,6 +159,7 @@ class Parameter[ActualT, WireT]:
         parameter_converter: Optional[ParameterType[ActualT, WireT]] = None,
         is_required: bool = True,
         default_value: Optional[ActualT] = None,
+        missing_message: Optional[Callable[[Set[str]], str]] = None,
     ) -> None:
         pt = parameter_type if parameter_type is not None else parameter_converter
         if pt is None:
@@ -169,6 +171,7 @@ class Parameter[ActualT, WireT]:
         object.__setattr__(self, "parameter_type", pt)
         object.__setattr__(self, "is_required", is_required)
         object.__setattr__(self, "default_value", default_value)
+        object.__setattr__(self, "missing_message", missing_message)
 
     @property
     def parameter_converter(self) -> ParameterType[ActualT, WireT]:

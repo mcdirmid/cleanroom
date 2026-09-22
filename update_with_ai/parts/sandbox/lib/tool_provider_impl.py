@@ -44,15 +44,20 @@ class ToolManager(tool_provider.ToolManager, Singleton):
                     reminder="Only declared parameters of the tool can be provided.",
                 )
 
-        # Requirement: Executing a tool by name fails if an argument is not supplied for a required parameter of the tool, and reminds the agent that required parameters of the tool must be supplied.
+        # Requirement: Executing a tool by name fails if an argument is not supplied for a required parameter of the tool, incorporating the parameter's missing message function evaluated with the set of supplied parameter names when configured, and reminds the agent that required parameters of the tool must be supplied.
         actual_bindings: Set[Tuple[tool_provider.Parameter, object]] = set()
         for p_name, p in params_by_name.items():
             if p_name not in wire_dict:
                 if p.is_required:
+                    content = f"Error: Required parameter '{p_name}' missing for tool '{name}'."
+                    if p.missing_message is not None:
+                        note = p.missing_message(set(wire_dict.keys()))
+                        if note:
+                            content += f" Note: {note}"
                     return tool_provider.Response(
                         is_failed=True,
                         is_terminated=False,
-                        content=f"Error: Required parameter '{p_name}' missing for tool '{name}'.",
+                        content=content,
                         reminder="Required parameters of the tool must be supplied.",
                     )
                 # Requirement: When an argument is omitted for a parameter that is not required and has a default value, the tool manager binds the default value as the actual parameter value.

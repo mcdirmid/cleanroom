@@ -1,4 +1,4 @@
-from typing import Any, Mapping, Optional, Protocol, Sequence, Set, Tuple, Type, Union
+from typing import Any, Callable, Mapping, Optional, Protocol, Sequence, Set, Tuple, Type, Union
 from framework import data_type, operation, override, poly_type, singleton_type, variant
 from dataclasses import dataclass
 
@@ -359,7 +359,7 @@ PURPOSE:
 Describes an input accepted by a tool
 """
 
-    def __init__(self, name: str, description: str, parameter_type: ParameterType[ActualT, WireT], is_required: bool=..., default_value: Optional[ActualT]=...) -> None:
+    def __init__(self, name: str, description: str, parameter_type: ParameterType[ActualT, WireT], is_required: bool=..., default_value: Optional[ActualT]=..., missing_message: Optional[Callable[[Set[str]], str]]=...) -> None:
         ...
 
     @property
@@ -403,6 +403,14 @@ Indicates that an argument must be supplied for tool execution
         """
 PURPOSE:
 Represents the value used when an argument is omitted during tool execution
+"""
+        ...
+
+    @property
+    def missing_message(self) -> Optional[Callable[[Set[str]], str]]:
+        """
+PURPOSE:
+Optional function producing diagnostic guidance evaluated with the set of supplied parameter names when an argument for a required parameter is omitted
 """
         ...
 

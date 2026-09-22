@@ -41,3 +41,20 @@ test_suite(
     name = "low",
     tags = ["low_lint"],
 )
+
+filegroup(
+    name = "part_build_files",
+    srcs = [
+        "//update_with_ai/parts/agent:BUILD.bazel",
+        "//update_with_ai/parts/bazel:BUILD.bazel",
+        "//update_with_ai/parts/core:BUILD.bazel",
+        "//update_with_ai/parts/dag:BUILD.bazel",
+        "//update_with_ai/parts/loop:BUILD.bazel",
+        "//update_with_ai/parts/mcp:BUILD.bazel",
+        "//update_with_ai/parts/openai:BUILD.bazel",
+        "//update_with_ai/parts/sandbox:BUILD.bazel",
+        "//update_with_ai/parts/systems:BUILD.bazel",
+    ],
+    visibility = ["//visibility:public"],
+)
+

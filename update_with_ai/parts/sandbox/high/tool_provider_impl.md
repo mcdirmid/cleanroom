@@ -22,7 +22,7 @@ Execution fails if:
 
 - A name is supplied in parameter bindings that does not match known parameters of the tool, and reminds the agent that only declared parameters of the tool can be provided.
 
-- Any required parameter of the tool is omitted, and reminds the agent that required parameters of the tool must be supplied.
+- An argument is not supplied for a required parameter of the tool, incorporating the parameter's missing message function evaluated with the set of supplied parameter names when configured, and reminding the agent that required parameters of the tool must be supplied.
 
 On successful argument resolution, the tool manager executes the tool with the resolved actual parameter bindings and returns the response produced by the tool.
 

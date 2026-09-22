@@ -13,6 +13,11 @@ import os
 import sys
 from typing import Any, Optional
 
+_repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
+for _p in [_repo_root, os.path.join(_repo_root, "update_python_with_ai"), os.path.join(_repo_root, "update_with_ai")]:
+    if _p not in sys.path and os.path.isdir(_p):
+        sys.path.insert(0, _p)
+
 from mcp import ClientSession
 from mcp.client.sse import sse_client
 
@@ -67,9 +72,18 @@ def main() -> int:
     # get-work
     subparsers.add_parser("get-work", parents=[parent_parser], help="Request work prompt for active role session")
 
-    # check-file
-    p_check = subparsers.add_parser("check-file", parents=[parent_parser], help="Run verification checks on edited file")
-    p_check.add_argument("--file", required=True, help="Relative path to file")
+    # next-batch
+    p_next = subparsers.add_parser("next-batch", help="Query next ready batch of dirty nodes from the DAG")
+    p_next.add_argument("target", nargs="?", default=None, help="define_node target shortcut (e.g. //testing/parts/sandbox:sandbox_asm_qa)")
+    p_next.add_argument("--unit", default=None, help="Target unit address (e.g. //testing/parts/sandbox:sandbox_asm)")
+    p_next.add_argument("--role", default=None, help="Target role address (e.g. //update_python_with_ai:qa)")
+
+    # check-files
+    subparsers.add_parser("check-files", parents=[parent_parser], help="Run verification checks across all open targets")
+
+    # check-file (backward compatibility)
+    p_check = subparsers.add_parser("check-file", parents=[parent_parser], help="Run verification checks (alias for check-files)")
+    p_check.add_argument("--file", required=False, default=None, help="Optional relative path to file")
 
     # submit
     p_sub = subparsers.add_parser("submit", parents=[parent_parser], help="Submit completed task for verification")
@@ -112,8 +126,25 @@ def main() -> int:
         elif args.command == "get-work":
             res = call_tool("get_work", _with_session({}), port=args.port)
             print(res)
-        elif args.command == "check-file":
-            res = call_tool("check_file", _with_session({"path": args.file}), port=args.port)
+        elif args.command == "next-batch":
+            unit_addr = getattr(args, "unit", None)
+            role_addr = getattr(args, "role", None)
+            target_shortcut = getattr(args, "target", None)
+            if target_shortcut and (not unit_addr or not role_addr):
+                from update_with_ai.support.lib.cleanroom_dag_cli import resolve_define_node_target
+                resolved_role, resolved_unit = resolve_define_node_target(target_shortcut)
+                unit_addr = unit_addr or resolved_unit
+                role_addr = role_addr or resolved_role
+            if not unit_addr or not role_addr:
+                sys.stderr.write("Error: next-batch requires either a positional target or both --unit and --role\n")
+                return 1
+            res = call_tool("next_batch", {"unit_address": unit_addr, "role_address": role_addr}, port=args.port)
+            print(res)
+        elif args.command in ("check-files", "check-file"):
+            try:
+                res = call_tool("check_files", _with_session({}), port=args.port)
+            except Exception:
+                res = call_tool("check_file", _with_session({}), port=args.port)
             print(res)
         elif args.command == "submit":
             payload = {}

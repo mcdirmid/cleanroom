@@ -176,6 +176,11 @@ class McpServer(mcp_server.McpServer, Singleton):
         self._sync_sentinel_file()
         return f"Deregistered role agent session '{conversation_id}'."
 
+    def next_batch(self, unit_address: str, role_address: str) -> str:
+        from update_with_ai.support.lib.cleanroom_dag_cli import get_next_batch
+        result = get_next_batch(unit_address, role_address)
+        return json.dumps(result)
+
     def execute_domain_tool(
         self,
         conversation_id: mcp_session.ConversationId,
@@ -330,6 +335,10 @@ class McpServer(mcp_server.McpServer, Singleton):
                 os._exit(0)
             threading.Thread(target=_delayed_exit, daemon=True).start()
             return "Cleanroom FastMCP server shutting down."
+
+        @app.tool()
+        def next_batch(unit_address: str, role_address: str) -> str:
+            return self.next_batch(unit_address, role_address)
 
         # Export tools that were queued prior to start
         for tool in list(self._tools_to_export.values()):
