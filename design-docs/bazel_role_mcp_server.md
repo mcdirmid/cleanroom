@@ -22,10 +22,10 @@ Rather than building a disjoint MCP subsystem that duplicates verification cachi
    - The Main Chat coordinator inspects the DAG via `cleanroom_dag_cli next-batch` to discover ready dirty nodes.
    - Execution proceeds in topological wave order: `high` $\to$ `low` $\to$ `lib` $\to$ `test` $\to$ `qa` $\to$ `coverage`.
    - When defects or blame attributions occur, the Coordinator does not immediately restart the upstream role; instead, all downstream roles (`test`, `qa`, `coverage`) run to completion across the entire assembly, accumulating all blames into a single maximal batch before re-launching the upstream worker.
-6. **Ephemeral Single-Wave Subagent Lifecycle & Token Ceiling Guard (60k–80k Tokens)**:
-   - Subagents are task-scoped and ephemeral: they start with a 0-token baseline transcript, process a batch of ready files, submit, and terminate immediately (`finish your turn`).
+6. **Ephemeral Single-Wave Subagent Lifecycle & Idle Teardown**:
+   - Subagents are task-scoped and ephemeral: they start with a 0-token baseline transcript, process a batch of ready files, submit, and terminate their turn.
+   - Upon turn completion, Antigravity subagents transition to the `idle` lifecycle state (they do not self-destruct). The Coordinator explicitly deregisters the worker's session via `cleanroom_mcp_client.py deregister` and terminates the subagent process via `manage_subagents(Action="kill")` before launching the next wave.
    - Reusing long-lived subagent threads indefinitely leads to quadratic transcript growth ($O(N^2)$ tokens). Ephemeral workers eliminate this by resetting intermediate scratchpads between waves.
-   - For large workloads with no natural gap, subagents checkpoint and exit after 2–3 modules or upon reaching a 60k–80k token budget, allowing the Coordinator to spawn a fresh worker with a clean context.
 7. **Minimal 3-Tool Native Manifest & Hook Shell Defense**:
    - The worker subagent manifest ([`.agents/agents/cleanroom_role_worker/agent.md`](../.agents/agents/cleanroom_role_worker/agent.md)) strictly limits native tools to: `view_file`, `replace_file_content`, and `write_to_file`.
    - Shell execution (`run_command`) and exploratory search tools (`find_by_name`, `grep_search`, `list_dir`) are completely eliminated, preventing runaway token expenditure on subagent-driven REPL commands or unstructured file hunts.
@@ -36,6 +36,19 @@ Rather than building a disjoint MCP subsystem that duplicates verification cachi
 9. **Clean Tool Separation**:
    - In **headless mode**, only `ReplaceFileContentTool` exists for file editing (Cleanroom has no `WriteToFileTool` in headless mode; missing files are materialized from startup templates).
    - In **Antigravity desktop mode**, Antigravity provides native `view_file`, `replace_file_content`, and `write_to_file`. The hook access gate validates each against `EditManager.can_write` and `ReadManager.can_read`.
+10. **Subagent Discovery & PreToolUse Hook Security Gating**:
+    - Antigravity subagent discovery requires subagent definition files (`agent.md`) without `hidden: true`, as setting `hidden: true` removes the subagent from the platform runtime registry, causing `invoke_subagent` to fail with `subagent not found or not allowed to be invoked`.
+    - To prevent accidental direct invocations of low-level workers while keeping them discoverable, access control is enforced at runtime via `PreToolUse` on `invoke_subagent` in `cleanroom_sandbox_hook.py`. The hook validates the caller's metadata (`.system_generated/subagents/<conv_id>.json`) and strictly blocks any caller other than `cleanroom_coordinator` from spawning `cleanroom_role_worker`.
+11. **Out-of-Band Run Observability, Live Event Timeline (`timeline.md`), and Semantic Transcripts**:
+    - Cleanroom manages structured convergence runs under `.cleanroom/runs/<run_id>/`:
+      - `timeline.md`: Live markdown table updated in real time by lifecycle hooks and FastMCP CLI operations, capturing every spawn, file read, edit, verification, and submission with zero LLM prompt token consumption.
+      - `timeline.log`: Plain-text unbuffered event stream suitable for live console streaming (`tail -f`).
+      - `transcripts/`: Semantic symlinks (`00_coordinator.jsonl`, `01_wave1_lib_worker.jsonl`, `02_wave2_qa_worker.jsonl`) pointing to underlying Antigravity brain transcripts, eliminating anonymous UUID confusion.
+      - `summary.json`: Final turn counts, token metrics, wave timings, and convergence state.
+12. **Three-Tier Autonomous Execution Model**:
+    - **Tier 1 (Main Chat)**: User-facing assistant that receives `/cleanroom clean` or `/cleanroom change`, spawns the Cleanroom Coordinator, and displays high-level progress.
+    - **Tier 2 (Cleanroom Coordinator)**: Scoped DAG orchestrator (`cleanroom_coordinator`) that runs the wave loop, manages worker lifecycles, and reports convergence without editing code.
+    - **Tier 3 (Ephemeral Role Workers)**: Scoped macro-batching workers (`cleanroom_role_worker`) that implement or verify units in single passes and are killed upon wave completion.
 
 ---
 
@@ -616,4 +629,69 @@ To initiate work or trigger incremental refactors from the chat:
 - Attaches a `Change(content=...)` message to the target node in `DagStorage`.
 - Persists to `.update_with_ai.textproto` in the target package directory.
 - When followed by `/cleanroom clean`, the wave batching loop incrementally cleans strictly the dirty node and its affected downstream dependents.
+
+---
+
+## 10. Subagent Discovery, Access Gating, and Ephemeral Lifecycle Governance
+
+### 10.1 Discovery vs. Confinement (`hidden: true` Antigravity Gotcha)
+When integrating subagents into Antigravity via declarative manifests (`.agents/agents/<name>/agent.md`), setting `hidden: true` removes the agent from the platform's runtime subagent catalog. Consequently, `invoke_subagent(TypeName="cleanroom_role_worker")` fails unconditionally with:
+```
+subagent not found or not allowed to be invoked
+```
+To keep `cleanroom_role_worker` discoverable to the platform while strictly prohibiting developers, pair programmers, or unauthorized parent agents from bypassing the coordinator, Cleanroom employs **runtime hook gating**:
+1. **Discoverable Worker Manifest**: `cleanroom_role_worker/agent.md` declares its role and tools without `hidden: true`.
+2. **PreToolUse Hook Authorization**: In `cleanroom_sandbox_hook.py`, every `invoke_subagent` invocation is intercepted:
+   - If `TypeName == "cleanroom_role_worker"`, the hook checks the caller's conversation metadata (`.system_generated/subagents/<conv_id>.json`).
+   - If the caller's `typeName` is NOT `cleanroom_coordinator`, the hook issues `{"decision": "deny"}` with an explicit security violation message.
+   - This fail-safe operates before the subagent process is ever spawned.
+
+### 10.2 Idle State Management & Teardown
+In Antigravity's runtime model, subagents that finish executing a turn transition to `state: "idle"`; they do not terminate automatically. Leaving idle subagents running leads to zombie processes, resource contention, and memory leaks.
+The Cleanroom lifecycle mandates:
+1. **Explicit Session Deregistration**: Before terminating a worker, the coordinator executes:
+   ```bash
+   python3 update_with_ai/support/lib/cleanroom_mcp_client.py --session <session_id> deregister
+   ```
+2. **Subagent Process Termination**: The coordinator terminates the worker:
+   ```python
+   manage_subagents(Action="kill", ConversationIds=[worker_conv_id])
+   ```
+3. **Consolidated Turnaround**: The coordinator combines deregistration, subagent termination, next batch query, and worker dispatch into a single model turn, minimizing orchestration latency.
+
+---
+
+## 11. Out-of-Band Run Observability, Live Event Timeline (`timeline.md`), and Semantic Transcripts
+
+### 11.1 The Run Directory Layout (`.cleanroom/runs/<run_id>/`)
+Every Cleanroom convergence run automatically provisions an isolated, structured run directory:
+```text
+.cleanroom/
+├── active_run.json                 # Pointer to currently executing run
+└── runs/
+    ├── latest -> 20260922_120000_sandbox_asm_qa/
+    └── 20260922_120000_sandbox_asm_qa/
+        ├── timeline.md             # Formatted live Markdown table
+        ├── timeline.log            # Plain-text unbuffered stream for tail -f
+        ├── summary.json            # Final metrics: timings, turns, token savings
+        └── transcripts/            # Semantic symlinks to Antigravity brain transcripts
+            ├── 00_coordinator.jsonl        -> ~/.gemini/.../ebdea883.../transcript.jsonl
+            ├── 01_wave1_lib_worker.jsonl   -> ~/.gemini/.../b76a484d.../transcript.jsonl
+            └── 02_wave2_qa_worker.jsonl    -> ~/.gemini/.../f860b51b.../transcript.jsonl
+```
+
+### 11.2 Zero-Token Out-of-Band Event Logging
+Logging is populated entirely out-of-band via **Antigravity Lifecycle Hooks** (`cleanroom_sandbox_hook.py`) and **FastMCP CLI Handlers** (`cleanroom_mcp_client.py`), consuming zero LLM prompt tokens or output turns:
+- **FastMCP CLI Operations**: `cleanroom_mcp_client.py` logs high-level milestone events (`NEXT_BATCH`, `REGISTER`, `GET_WORK`, `CHECK_FILES`, `SUBMIT`, `BLAME`, `DEREGISTER`, `SHUTDOWN`).
+- **Platform Lifecycle Hooks**: `cleanroom_sandbox_hook.py` logs tool-level operations (`SPAWN`, `READ`, `EDIT`) and creates semantic transcript symlinks dynamically as conversation IDs are first observed.
+
+### 11.3 Live Monitoring
+Developers can monitor live convergence without querying subagent APIs or parsing JSON:
+```bash
+# Watch live Cleanroom progress:
+tail -f .cleanroom/runs/latest/timeline.log
+
+# Or view formatted Markdown in the IDE:
+# Open .cleanroom/runs/latest/timeline.md
+```
 

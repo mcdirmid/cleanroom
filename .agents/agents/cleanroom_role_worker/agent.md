@@ -7,8 +7,7 @@ tools:
   - write_to_file
   - run_command
   - send_message
-hidden: true
-inheritCustomizations: false
+inheritCustomizations: true
 inheritMcp: false
 ---
 

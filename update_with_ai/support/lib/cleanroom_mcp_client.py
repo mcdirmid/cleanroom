@@ -21,6 +21,14 @@ for _p in [_repo_root, os.path.join(_repo_root, "update_python_with_ai"), os.pat
 from mcp import ClientSession
 from mcp.client.sse import sse_client
 
+try:
+    from update_with_ai.support.lib import cleanroom_run_logger
+except ImportError:
+    try:
+        import cleanroom_run_logger  # type: ignore
+    except ImportError:
+        cleanroom_run_logger = None  # type: ignore
+
 
 async def _call_tool_async(
     port: int,
@@ -119,12 +127,30 @@ def main() -> int:
         if args.command == "register":
             payload = _with_session({"role": args.role, "unit_root": args.unit})
             res = call_tool("register_role_agent", payload, port=args.port)
+            if cleanroom_run_logger:
+                cleanroom_run_logger.log_event(
+                    "REGISTER",
+                    f"worker:{session_id}",
+                    f"Registered session for role `{args.role}` at unit `{args.unit}`",
+                )
             print(res)
         elif args.command == "deregister":
             res = call_tool("deregister_role_agent", _with_session({}), port=args.port)
+            if cleanroom_run_logger:
+                cleanroom_run_logger.log_event(
+                    "DEREGISTER",
+                    f"worker:{session_id}",
+                    f"Deregistered session `{session_id}`",
+                )
             print(res)
         elif args.command == "get-work":
             res = call_tool("get_work", _with_session({}), port=args.port)
+            if cleanroom_run_logger:
+                cleanroom_run_logger.log_event(
+                    "GET_WORK",
+                    f"worker:{session_id}",
+                    "Retrieved task prompt and instructions",
+                )
             print(res)
         elif args.command == "next-batch":
             unit_addr = getattr(args, "unit", None)
@@ -138,21 +164,42 @@ def main() -> int:
             if not unit_addr or not role_addr:
                 sys.stderr.write("Error: next-batch requires either a positional target or both --unit and --role\n")
                 return 1
+            if cleanroom_run_logger:
+                cleanroom_run_logger.get_or_create_active_run(target=target_shortcut or f"{unit_addr}_{role_addr}")
             res = call_tool("next_batch", {"unit_address": unit_addr, "role_address": role_addr}, port=args.port)
+            if cleanroom_run_logger:
+                try:
+                    data = json.loads(res)
+                    if data.get("is_complete"):
+                        cleanroom_run_logger.log_event("CONVERGED", "coordinator", "DAG convergence achieved (is_complete: true)")
+                    else:
+                        batch = data.get("batch", [])
+                        ready_role = data.get("ready_role", "")
+                        cleanroom_run_logger.log_event("NEXT_BATCH", "coordinator", f"Wave ready: `{ready_role}` with {len(batch)} unit(s)")
+                except Exception:
+                    cleanroom_run_logger.log_event("NEXT_BATCH", "coordinator", "Queried next batch")
             print(res)
         elif args.command in ("check-files", "check-file"):
             try:
                 res = call_tool("check_files", _with_session({}), port=args.port)
             except Exception:
                 res = call_tool("check_file", _with_session({}), port=args.port)
+            if cleanroom_run_logger:
+                status = "PASSED" if ("passed" in res.lower() or "0 errors" in res.lower()) else "FAILED"
+                summary_line = res.strip().split("\n")[0] if res else ""
+                cleanroom_run_logger.log_event("CHECK_FILES", f"worker:{session_id}", f"Verification {status}: {summary_line}")
             print(res)
         elif args.command == "submit":
             payload = {}
-            if getattr(args, "target", None):
-                payload["target"] = args.target
-            if getattr(args, "change_summary", None):
-                payload["change_summary"] = args.change_summary
+            target_val = getattr(args, "target", None)
+            summary_val = getattr(args, "change_summary", None) or ""
+            if target_val:
+                payload["target"] = target_val
+            if summary_val:
+                payload["change_summary"] = summary_val
             res = call_tool("submit", _with_session(payload), port=args.port)
+            if cleanroom_run_logger:
+                cleanroom_run_logger.log_event("SUBMIT", f"worker:{session_id}", f"Submitted `{target_val or 'batch'}`: {summary_val}")
             print(res)
         elif args.command == "blame":
             payload = {"explanation": args.explanation}
@@ -161,15 +208,22 @@ def main() -> int:
             if getattr(args, "target", None):
                 payload["target"] = args.target
             res = call_tool("blame", _with_session(payload), port=args.port)
+            if cleanroom_run_logger:
+                cleanroom_run_logger.log_event("BLAME", f"worker:{session_id}", f"Blamed `{args.blame_target}`: {args.explanation}")
             print(res)
         elif args.command == "fail":
             payload = {"explanation": args.explanation}
             if getattr(args, "target", None):
                 payload["target"] = args.target
             res = call_tool("fail", _with_session(payload), port=args.port)
+            if cleanroom_run_logger:
+                cleanroom_run_logger.log_event("FAIL", f"worker:{session_id}", f"Failed active task: {args.explanation}")
             print(res)
         elif args.command == "shutdown":
             res = call_tool("shutdown", {}, port=args.port)
+            if cleanroom_run_logger:
+                cleanroom_run_logger.log_event("SHUTDOWN", "coordinator", "Cleanroom FastMCP server shutdown")
+                cleanroom_run_logger.finish_run("COMPLETED")
             print(res)
         return 0
     except Exception as e:

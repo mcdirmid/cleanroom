@@ -75,7 +75,11 @@ flowchart TD
 > [!NOTE]
 > **Architectural Evolution**: For the updated and definitive FastMCP server and sandbox design, see [Cleanroom Bazel Role Sub-Agent FastMCP Server & Unified Sandbox Architecture](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/bazel_role_mcp_server.md).
 > 
-> Rather than disabling native write tools (`enable_write_tools=False`) and shadowing file operations with custom MCP tools, the production architecture allows native Antigravity file tools (`view_file`, `replace_file_content`, `write_to_file`, `list_dir`) and enforces Cleanroom confinement and role blindness externally via **Antigravity Lifecycle Hooks (`.agents/hooks.json`)** querying the sandbox's `AccessGate` over IPC. FastMCP exposes only Cleanroom workflow lifecycle tools (`get_work`, `check_file`, `submit`, `blame`, `fail`).
+> Key production evolutions:
+> 1. **Three-Tier Architecture**: Main Chat (Tier 1) orchestrates via Cleanroom Coordinator (`cleanroom_coordinator`, Tier 2), which spawns ephemeral role workers (`cleanroom_role_worker`, Tier 3) per wave batch.
+> 2. **Subagent Discovery & Hook Security Gating**: Setting `hidden: true` removes subagents from the Antigravity platform runtime catalog. Instead, workers remain discoverable, while `PreToolUse` on `invoke_subagent` in `cleanroom_sandbox_hook.py` validates caller metadata to ensure only `cleanroom_coordinator` can spawn `cleanroom_role_worker`.
+> 3. **Native File Tools & External Confinement**: Rather than shadowing file operations with custom MCP tools, native Antigravity file tools (`view_file`, `replace_file_content`, `write_to_file`) are allowed, and Cleanroom confinement and role blindness are enforced via **Antigravity Lifecycle Hooks (`.agents/hooks.json`)** querying the sandbox's `AccessGate` over IPC. FastMCP exposes only Cleanroom workflow lifecycle tools (`get_work`, `check_files`, `submit`, `blame`, `fail`).
+> 4. **Out-of-Band Run Observability**: Runs are tracked under `.cleanroom/runs/<run_id>/` featuring a live Markdown event timeline (`timeline.md`), a streaming event log (`timeline.log`), and semantic transcript symlinks (`transcripts/01_wave1_lib_worker.jsonl`) generated with zero LLM prompt token consumption.
 
 ```python
 define_subagent(

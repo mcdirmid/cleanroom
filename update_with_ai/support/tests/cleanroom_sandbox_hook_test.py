@@ -157,6 +157,74 @@ class CleanroomSandboxHookTest(unittest.TestCase):
                     out = json.loads(mock_stdout.getvalue())
                     self.assertEqual(out, {"decision": "allow"})
 
+    def test_invoke_subagent_role_worker_denied_for_non_coordinator(self) -> None:
+        brain_root = os.path.join(self.tmp_dir.name, "brain")
+        os.makedirs(os.path.join(brain_root, "conv-1", ".system_generated", "subagents"), exist_ok=True)
+        desc_path = os.path.join(brain_root, "conv-1", ".system_generated", "subagents", "caller-1.json")
+        with open(desc_path, "w") as f:
+            json.dump({"subagentDescriptor": {"typeName": "research"}}, f)
+
+        raw_input = json.dumps({
+            "conversationId": "caller-1",
+            "toolCall": {
+                "name": "invoke_subagent",
+                "args": {
+                    "Subagents": [{"TypeName": "cleanroom_role_worker", "Prompt": "do work"}]
+                },
+            },
+        })
+        decision = cleanroom_sandbox_hook.process_hook_input(raw_input, brain_roots=[brain_root])
+        self.assertEqual(decision["decision"], "deny")
+        self.assertIn("can only be spawned by 'cleanroom_coordinator'", decision["reason"])
+
+    def test_invoke_subagent_role_worker_denied_for_main_chat(self) -> None:
+        brain_root = os.path.join(self.tmp_dir.name, "brain")
+        raw_input = json.dumps({
+            "conversationId": "main-chat-conv",
+            "toolCall": {
+                "name": "invoke_subagent",
+                "args": {
+                    "Subagents": json.dumps([{"TypeName": "cleanroom_role_worker", "Prompt": "do work"}])
+                },
+            },
+        })
+        decision = cleanroom_sandbox_hook.process_hook_input(raw_input, brain_roots=[brain_root])
+        self.assertEqual(decision["decision"], "deny")
+        self.assertIn("can only be spawned by 'cleanroom_coordinator'", decision["reason"])
+
+    def test_invoke_subagent_role_worker_allowed_for_coordinator(self) -> None:
+        brain_root = os.path.join(self.tmp_dir.name, "brain")
+        os.makedirs(os.path.join(brain_root, "parent-conv", ".system_generated", "subagents"), exist_ok=True)
+        desc_path = os.path.join(brain_root, "parent-conv", ".system_generated", "subagents", "coordinator-1.json")
+        with open(desc_path, "w") as f:
+            json.dump({"subagentDescriptor": {"typeName": "cleanroom_coordinator"}}, f)
+
+        raw_input = json.dumps({
+            "conversationId": "coordinator-1",
+            "toolCall": {
+                "name": "invoke_subagent",
+                "args": {
+                    "Subagents": [{"TypeName": "cleanroom_role_worker", "Prompt": "clean"}]
+                },
+            },
+        })
+        decision = cleanroom_sandbox_hook.process_hook_input(raw_input, brain_roots=[brain_root])
+        self.assertEqual(decision, {"decision": "allow"})
+
+    def test_invoke_subagent_other_types_allowed(self) -> None:
+        brain_root = os.path.join(self.tmp_dir.name, "brain")
+        raw_input = json.dumps({
+            "conversationId": "main-chat-conv",
+            "toolCall": {
+                "name": "invoke_subagent",
+                "args": {
+                    "Subagents": [{"TypeName": "cleanroom_coordinator", "Prompt": "clean"}]
+                },
+            },
+        })
+        decision = cleanroom_sandbox_hook.process_hook_input(raw_input, brain_roots=[brain_root])
+        self.assertEqual(decision, {"decision": "allow"})
+
 
 if __name__ == "__main__":
     unittest.main()

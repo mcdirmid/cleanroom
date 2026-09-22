@@ -7,4 +7,5 @@ __pycache__/
 .update_with_ai.textproto
 .update_with_ai.proto
 /.mcp.active*
+/.cleanroom/
 

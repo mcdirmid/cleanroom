@@ -8,7 +8,7 @@ tools:
     - manage_subagents
 allowed_subagents:
     - cleanroom_role_worker
-inheritCustomizations: false
+inheritCustomizations: true
 inheritMcp: false
 ---
 

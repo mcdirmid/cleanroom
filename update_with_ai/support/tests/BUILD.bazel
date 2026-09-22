@@ -91,4 +91,14 @@ py_test(
     ],
 )
 
+py_test(
+    name = "cleanroom_run_logger_test",
+    srcs = ["cleanroom_run_logger_test.py"],
+    main = "cleanroom_run_logger_test.py",
+    imports = ["../.."],
+    deps = [
+        "//update_with_ai/support/lib:cleanroom_run_logger_lib",
+    ],
+)
+
 
