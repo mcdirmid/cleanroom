@@ -123,11 +123,11 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
             # Requirement: If no dirty node in the target subgraph has all its dependencies in the target subgraph clean in dag storage, the next ready batch is an empty sequence.
             return []
 
-        ready_candidates.sort(key=_node_sort_key)
-        curr = ready_candidates[0]
+        best_tier = min(_role_tier(c.role_address) for c in ready_candidates)
+        curr = next(c for c in ready_candidates if _role_tier(c.role_address) == best_tier)
 
         # Requirement: [DagSubgraph] When obtaining the next ready batch, uncleaned dirty nodes prioritized by role tier precedence (upstream roles before downstream roles) whose dependencies in the target subgraph are clean in dag storage or present in the same ready batch are selected, grouped by role address up to a maximum batch size.
-        # Requirement: The next ready batch consists of contiguous dirty nodes in topological order that share the same role address, prioritized by role tier precedence (prioritizing lib before test, and test before qa) and having all their dependencies in the target subgraph clean in dag storage or present in the same ready batch, starting from the earliest ready dirty node and bounded by the batch size obtained from dag config.
+        # Requirement: The next ready batch consists of contiguous dirty nodes in topological order that share the same role address, prioritized by role tier precedence (prioritizing lib before test, and test before qa) and having all their dependencies in the target subgraph clean in dag storage or present in the same ready batch, starting from the earliest ready dirty node in topological order and bounded by the batch size obtained from dag config.
         batch: List[dag_storage.Node] = [curr]
         batch_set: Set[dag_storage.Node] = {curr}
 

@@ -441,5 +441,63 @@ class CleanroomSandboxHookEmpiricalTest(unittest.TestCase):
                     self.assertEqual(out, {"decision": "allow"})
 
 
+    # --- Worker-ID Pre-Registration & Session Re-activation Tests ---
+
+    def test_coordinator_pre_registers_worker_id_for_warm_revival(self) -> None:
+        """Verifies that when coordinator registers a session with --worker-id, the worker is mapped and allowed."""
+        sessions_path = cleanroom_sandbox_hook.get_worker_sessions_path(sentinel_path=self.sentinel_path)
+
+        # Coordinator executes register with --worker-id
+        reg_input = self._make_payload(
+            self.coordinator_uuid,
+            "run_command",
+            {"CommandLine": f"python3 update_with_ai/support/lib/cleanroom_mcp_client.py --session s_warm register --role //update_python_with_ai:lib --unit //testing:unit --worker-id {self.worker_uuid}"},
+        )
+        # Verify coordinator command is allowed
+        coord_decision = cleanroom_sandbox_hook.process_hook_input(
+            reg_input,
+            sentinel_path=self.sentinel_path,
+            brain_roots=[self.brain_root],
+        )
+        self.assertEqual(coord_decision["decision"], "allow")
+
+        # Directly execute client logic mapping
+        cleanroom_sandbox_hook.save_worker_session(self.worker_uuid, "s_warm", sessions_path)
+        sessions_map = cleanroom_sandbox_hook.read_worker_sessions(sessions_path)
+        self.assertEqual(sessions_map.get(self.worker_uuid), "s_warm")
+
+        # Worker calls replace_file_content immediately without calling register itself
+        with open(self.sentinel_path, "w") as f:
+            json.dump({"pid": os.getpid(), "port": 8765, "subagents": ["s_warm"]}, f)
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"is_allowed": True, "reason": "OK"}).encode()
+        mock_resp.__enter__.return_value = mock_resp
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            raw_input = self._make_payload(
+                self.worker_uuid,
+                "replace_file_content",
+                {"TargetFile": "testing/parts/sandbox/lib/sandbox_asm.py"},
+            )
+            worker_decision = cleanroom_sandbox_hook.process_hook_input(
+                raw_input,
+                sentinel_path=self.sentinel_path,
+                brain_roots=[self.brain_root],
+            )
+            self.assertEqual(worker_decision, {"decision": "allow"})
+
+    def test_remove_worker_session_by_session_id(self) -> None:
+        """Verifies session cleanup by session_id."""
+        sessions_path = cleanroom_sandbox_hook.get_worker_sessions_path(sentinel_path=self.sentinel_path)
+        cleanroom_sandbox_hook.save_worker_session("worker-1", "s_target", sessions_path)
+        cleanroom_sandbox_hook.save_worker_session("worker-2", "s_other", sessions_path)
+
+        cleanroom_sandbox_hook.remove_worker_session_by_session_id("s_target", sessions_path)
+        remaining = cleanroom_sandbox_hook.read_worker_sessions(sessions_path)
+        self.assertNotIn("worker-1", remaining)
+        self.assertIn("worker-2", remaining)
+
+
 if __name__ == "__main__":
     unittest.main()

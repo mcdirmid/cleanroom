@@ -73,9 +73,25 @@ def main() -> int:
     p_reg = subparsers.add_parser("register", parents=[parent_parser], help="Register role agent session")
     p_reg.add_argument("--role", required=True, help="Role address (e.g. //update_python_with_ai:lib)")
     p_reg.add_argument("--unit", required=True, help="Unit root (e.g. //testing/parts/sandbox:sandbox_asm)")
+    p_reg.add_argument(
+        "--worker-id",
+        "--conv-id",
+        dest="worker_id",
+        required=False,
+        default=None,
+        help="Worker conversation UUID to bind to this session in .mcp.worker_sessions.json",
+    )
 
     # deregister
-    subparsers.add_parser("deregister", parents=[parent_parser], help="Deregister role agent session")
+    p_dereg = subparsers.add_parser("deregister", parents=[parent_parser], help="Deregister role agent session")
+    p_dereg.add_argument(
+        "--worker-id",
+        "--conv-id",
+        dest="worker_id",
+        required=False,
+        default=None,
+        help="Optional worker conversation UUID to deregister",
+    )
 
     # get-work
     subparsers.add_parser("get-work", parents=[parent_parser], help="Request work prompt for active role session")
@@ -127,15 +143,33 @@ def main() -> int:
         if args.command == "register":
             payload = _with_session({"role": args.role, "unit_root": args.unit})
             res = call_tool("register_role_agent", payload, port=args.port)
+            worker_id = getattr(args, "worker_id", None)
+            if worker_id and session_id:
+                try:
+                    from update_with_ai.support.lib import cleanroom_sandbox_hook
+                    sessions_path = cleanroom_sandbox_hook.get_worker_sessions_path()
+                    cleanroom_sandbox_hook.save_worker_session(str(worker_id), str(session_id), sessions_path)
+                except Exception:
+                    pass
             if cleanroom_run_logger:
                 cleanroom_run_logger.log_event(
                     "REGISTER",
                     f"worker:{session_id}",
-                    f"Registered session for role `{args.role}` at unit `{args.unit}`",
+                    f"Registered session for role `{args.role}` at unit `{args.unit}`" + (f" (worker: {worker_id})" if worker_id else ""),
                 )
             print(res)
         elif args.command == "deregister":
             res = call_tool("deregister_role_agent", _with_session({}), port=args.port)
+            try:
+                from update_with_ai.support.lib import cleanroom_sandbox_hook
+                sessions_path = cleanroom_sandbox_hook.get_worker_sessions_path()
+                if session_id:
+                    cleanroom_sandbox_hook.remove_worker_session_by_session_id(str(session_id), sessions_path)
+                worker_id = getattr(args, "worker_id", None)
+                if worker_id:
+                    cleanroom_sandbox_hook.remove_worker_session(str(worker_id), sessions_path)
+            except Exception:
+                pass
             if cleanroom_run_logger:
                 cleanroom_run_logger.log_event(
                     "DEREGISTER",

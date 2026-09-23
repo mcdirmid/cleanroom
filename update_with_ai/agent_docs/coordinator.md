@@ -19,28 +19,29 @@ python3 update_with_ai/support/lib/cleanroom_dag_cli.py next-batch <target> [--b
 - If `"batch"` is non-empty: Record `ready_role` and the batch units.
 - **Batch Sizing**: Default is inherited from the server (e.g. 10). For single-target / small-model mode, use `--batch-size 1`.
 
-### Step 2.2: Spawn Ephemeral Role Worker
-Generate a unique session ID for the worker (e.g. `s_<uuid_short>` or `s_<counter>`) to guarantee session isolation and avoid stale session state.
+### Step 2.2: Dispatch Worker (Warm Revival or Clean Spawn)
+The coordinator maintains a warm worker pool indexed by role:
+`warm_workers: dict[str, dict(conv_id: str, session_id: str, role: str, units: set[str], completed_at: float)]`.
 
-Call `invoke_subagent`:
-```json
-{
-  "TypeName": "cleanroom_role_worker",
-  "Role": "<ready_role_name> Worker",
-  "Prompt": "You are the Cleanroom role worker for role '<ready_role>' at unit '<root_unit>'.\nYour assigned session ID is '<session_id>'.\nYour assigned batch is: <batch_units>.\n\nExecution procedure:\n1. Register session:\n   python3 update_with_ai/support/lib/cleanroom_mcp_client.py --session <session_id> register --role \"<ready_role>\" --unit \"<root_unit>\"\n2. Retrieve task prompt:\n   python3 update_with_ai/support/lib/cleanroom_mcp_client.py --session <session_id> get-work\n   - If get-work returns 'No dirty nodes are ready for cleaning' or an error, report it and end turn immediately.\n3. Execute assigned files in batch:\n   - Inspect grounding specs (.pyi) and role guide (.md).\n   - Apply edits via replace_file_content or write_to_file across all files in cohesive passes.\n   - Verify:\n     python3 update_with_ai/support/lib/cleanroom_mcp_client.py --session <session_id> check-files\n   - Submit verified targets in topological dependency order (dependencies first):\n     python3 update_with_ai/support/lib/cleanroom_mcp_client.py --session <session_id> submit --target <path> --change-summary \"<summary>\"\n   - Blame upstream defect if contracts fail:\n     python3 update_with_ai/support/lib/cleanroom_mcp_client.py --session <session_id> blame --target <path> --blame-target <dep> --explanation \"<reason>\"\n4. When batch is complete:\n   Send 1-line completion report to coordinator via send_message ('status: complete') and finish turn immediately."
-}
-```
+For an incoming batch with `ready_role` and `incoming_units = set(item["unit"] for item in batch)`:
+1. **Check Warm Pool**: If `ready_role` in `warm_workers`:
+   - Compute `overlap = warm_workers[ready_role]["units"].intersection(incoming_units)`.
+   - If `len(overlap) > 0` and within 600s:
+     **REVIVE WARM WORKER**: Send `send_message` with task details and updated batch. Augment `units.update(incoming_units)`.
+   - Else (`len(overlap) == 0` or expired):
+     **ZERO OVERLAP ENFORCEMENT**: Deregister old session (`cleanroom_mcp_client.py --session <id> deregister`), terminate old subagent (`manage_subagents(kill)`), and delete from `warm_workers`. Proceed to spawn a fresh worker.
+2. **Spawn Fresh Worker**: If no matching warm worker:
+   - Generate unique session ID `s_<worker_seq>`.
+   - Formulate role worker prompt and call `invoke_subagent`.
 
-### Step 2.3: Teardown Worker & Deregister Session
-Upon receiving the worker's completion report:
-1. Deregister the worker's session from the server:
+### Step 2.3: Worker Completion & Size Check
+Upon receiving the worker's completion report (`status: complete`):
+1. Silently check worker context token size:
    ```bash
-   python3 update_with_ai/support/lib/cleanroom_mcp_client.py --session <session_id> deregister
+   python3 update_with_ai/support/lib/antigravity_token_stats.py --conv-id <worker_conv_id> --check-cap 100000
    ```
-2. Kill the ephemeral worker to free context:
-   ```python
-   manage_subagents(Action="kill", ConversationIds=[worker_conv_id])
-   ```
+   - If output is `EXCEEDED_CAP`: Context has exceeded 100k tokens. Terminate the worker (`manage_subagents(kill)`), deregister its session (`cleanroom_mcp_client.py --session <id> deregister`), and do not retain in `warm_workers`.
+   - Else (silent exit 0): Record/update `warm_workers[ready_role] = {conv_id, session_id, role, units: incoming_units, completed_at: now}`.
 
 ## 3. Teardown & Final Convergence Report
 1. Verify final status:

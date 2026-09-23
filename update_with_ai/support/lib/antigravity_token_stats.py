@@ -93,6 +93,9 @@ def get_conversation_stats(
     output = 0
     thinking = 0
 
+    last_context_tokens = 0
+    peak_context_tokens = 0
+
     for _idx, meta in rows:
         if not meta:
             continue
@@ -109,10 +112,16 @@ def get_conversation_stats(
                 # 9: thinking_tokens (reasoning tokens)
                 if 2 in ints or 5 in ints or 3 in ints:
                     turns += 1
-                    fresh_in += ints.get(2, 0)
-                    cached_in += ints.get(5, 0)
+                    step_fresh = ints.get(2, 0)
+                    step_cached = ints.get(5, 0)
+                    fresh_in += step_fresh
+                    cached_in += step_cached
                     output += ints.get(3, 0)
                     thinking += ints.get(9, 0)
+                    step_ctx = step_fresh + step_cached
+                    last_context_tokens = step_ctx
+                    if step_ctx > peak_context_tokens:
+                        peak_context_tokens = step_ctx
         except Exception:
             continue
 
@@ -125,6 +134,8 @@ def get_conversation_stats(
         "fresh_input_tokens": fresh_in,
         "cached_input_tokens": cached_in,
         "total_input_tokens": total_in,
+        "last_context_tokens": last_context_tokens,
+        "peak_context_tokens": peak_context_tokens,
         "output_tokens": output,
         "thinking_tokens": thinking,
         "cache_hit_pct": hit_pct,
@@ -299,21 +310,23 @@ def format_stats(
             f"(Saved ${tot_saved:.2f}, {tot_saved_pct:.1f}% off)"
         )
 
+    tot_max_ctx = max((s["last_context_tokens"] for s in stats_list), default=0)
+
     if format_type == "markdown":
         lines = [
-            f"| Agent / Worker | Turns | Fresh Input | Cached Input | Hit % | Output | Cost ({model_name}) | No-Cache | Saved |",
-            "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
+            f"| Agent / Worker | Turns | Context | Fresh Input | Cached Input | Hit % | Output | Cost ({model_name}) | No-Cache | Saved |",
+            "| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |",
         ]
         for s in stats_list:
             label = s.get("label", s["conv_id"][:8])
             lines.append(
-                f"| `{label}` | {s['turns']} | {s['fresh_input_tokens']:,} | "
+                f"| `{label}` | {s['turns']} | {s['last_context_tokens']:,} | {s['fresh_input_tokens']:,} | "
                 f"{s['cached_input_tokens']:,} | {s['cache_hit_pct']:.1f}% | "
                 f"{s['output_tokens']:,} | ${s['cost']:.2f} | "
                 f"${s['uncached_cost']:.2f} | **${s['saved']:.2f}** ({s['saved_pct']:.1f}%) |"
             )
         lines.append(
-            f"| **TOTAL** | **{tot_turns}** | **{tot_fresh:,}** | "
+            f"| **TOTAL** | **{tot_turns}** | **{tot_max_ctx:,}** | **{tot_fresh:,}** | "
             f"**{tot_cached:,}** | **{tot_hit:.1f}%** | "
             f"**{tot_out:,}** | **${tot_cost:.2f}** | "
             f"**${tot_uncached:.2f}** | **${tot_saved:.2f} ({tot_saved_pct:.1f}%)** |"
@@ -321,12 +334,12 @@ def format_stats(
         return "\n".join(lines)
 
     # Standard ASCII table format
-    col_w = [18, 5, 12, 12, 8, 10, 10, 10, 14]
+    col_w = [18, 5, 11, 12, 12, 8, 10, 10, 10, 14]
     header = (
-        f"| {'Worker / Agent':<{col_w[0]}} | {'Turns':<{col_w[1]}} | "
-        f"{'Fresh Input':<{col_w[2]}} | {'Cached Input':<{col_w[3]}} | "
-        f"{'Hit%':<{col_w[4]}} | {'Output':<{col_w[5]}} | "
-        f"{'Cost':<{col_w[6]}} | {'No-Cache':<{col_w[7]}} | {'Saved':<{col_w[8]}} |"
+        f"| {'Worker / Agent':<{col_w[0]}} | {'Turns':<{col_w[1]}} | {'Context':<{col_w[2]}} | "
+        f"{'Fresh Input':<{col_w[3]}} | {'Cached Input':<{col_w[4]}} | "
+        f"{'Hit%':<{col_w[5]}} | {'Output':<{col_w[6]}} | "
+        f"{'Cost':<{col_w[7]}} | {'No-Cache':<{col_w[8]}} | {'Saved':<{col_w[9]}} |"
     )
     sep = "|" + "|".join("-" * (w + 2) for w in col_w) + "|"
     total_sep = "|" + "|".join("=" * (w + 2) for w in col_w) + "|"
@@ -335,19 +348,19 @@ def format_stats(
     for s in stats_list:
         label = s.get("label", s["conv_id"][:8])
         out_lines.append(
-            f"| {label:<{col_w[0]}} | {s['turns']:<{col_w[1]}} | "
-            f"{s['fresh_input_tokens']:>{col_w[2]},} | {s['cached_input_tokens']:>{col_w[3]},} | "
-            f"{s['cache_hit_pct']:>{col_w[4]-1}.1f}% | {s['output_tokens']:>{col_w[5]},} | "
-            f"${s['cost']:>{col_w[6]-1}.2f} | ${s['uncached_cost']:>{col_w[7]-1}.2f} | "
-            f"${s['saved']:>{col_w[8]-8}.2f} ({s['saved_pct']:>4.1f}%) |"
+            f"| {label:<{col_w[0]}} | {s['turns']:<{col_w[1]}} | {s['last_context_tokens']:>{col_w[2]},} | "
+            f"{s['fresh_input_tokens']:>{col_w[3]},} | {s['cached_input_tokens']:>{col_w[4]},} | "
+            f"{s['cache_hit_pct']:>{col_w[5]-1}.1f}% | {s['output_tokens']:>{col_w[6]},} | "
+            f"${s['cost']:>{col_w[7]-1}.2f} | ${s['uncached_cost']:>{col_w[8]-1}.2f} | "
+            f"${s['saved']:>{col_w[9]-8}.2f} ({s['saved_pct']:>4.1f}%) |"
         )
     out_lines.append(total_sep)
     out_lines.append(
-        f"| {'TOTAL':<{col_w[0]}} | {tot_turns:<{col_w[1]}} | "
-        f"{tot_fresh:>{col_w[2]},} | {tot_cached:>{col_w[3]},} | "
-        f"{tot_hit:>{col_w[4]-1}.1f}% | {tot_out:>{col_w[5]},} | "
-        f"${tot_cost:>{col_w[6]-1}.2f} | ${tot_uncached:>{col_w[7]-1}.2f} | "
-        f"${tot_saved:>{col_w[8]-8}.2f} ({tot_saved_pct:>4.1f}%) |"
+        f"| {'TOTAL':<{col_w[0]}} | {tot_turns:<{col_w[1]}} | {tot_max_ctx:>{col_w[2]},} | "
+        f"{tot_fresh:>{col_w[3]},} | {tot_cached:>{col_w[4]},} | "
+        f"{tot_hit:>{col_w[5]-1}.1f}% | {tot_out:>{col_w[6]},} | "
+        f"${tot_cost:>{col_w[7]-1}.2f} | ${tot_uncached:>{col_w[8]-1}.2f} | "
+        f"${tot_saved:>{col_w[9]-8}.2f} ({tot_saved_pct:>4.1f}%) |"
     )
     return "\n".join(out_lines)
 
@@ -388,8 +401,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         default=_DEFAULT_BRAIN_DIR,
         help=f"Directory containing conversation brain artifacts (default: {_DEFAULT_BRAIN_DIR})",
     )
+    parser.add_argument(
+        "--check-cap",
+        type=int,
+        default=None,
+        metavar="TOKENS",
+        help="Checks if conversation context size exceeds the given token threshold. Prints EXCEEDED_CAP and exits 1 if exceeded; prints nothing and exits 0 if under cap.",
+    )
 
     args = parser.parse_args(argv)
+
+    if args.check_cap is not None:
+        if not args.conv_id:
+            sys.stderr.write("Error: --check-cap requires --conv-id <id>\n")
+            return 2
+        cid = args.conv_id[0]
+        st = get_conversation_stats(cid, db_dir=args.db_dir)
+        if not st:
+            return 0
+        if st["last_context_tokens"] >= args.check_cap:
+            sys.stdout.write("EXCEEDED_CAP\n")
+            return 1
+        return 0
 
     targets: List[Tuple[str, str]] = []
 

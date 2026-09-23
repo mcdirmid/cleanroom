@@ -147,3 +147,18 @@ py_binary(
     deps = [":antigravity_token_stats_lib"],
     visibility = ["//visibility:public"],
 )
+
+py_library(
+    name = "antigravity_run_monitor_lib",
+    srcs = ["antigravity_run_monitor.py"],
+    deps = [":antigravity_token_stats_lib"],
+    visibility = ["//visibility:public"],
+)
+
+py_binary(
+    name = "antigravity_run_monitor",
+    srcs = ["antigravity_run_monitor.py"],
+    main = "antigravity_run_monitor.py",
+    deps = [":antigravity_run_monitor_lib"],
+    visibility = ["//visibility:public"],
+)

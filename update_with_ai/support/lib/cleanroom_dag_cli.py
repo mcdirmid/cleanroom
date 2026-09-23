@@ -305,10 +305,10 @@ def get_next_batch(unit_address: str, role_address: str, batch_size: Optional[in
     norm_role = normalize_role_address(role_address)
     norm_unit = normalize_unit_address(unit_address)
 
-    if batch_size is None:
-        env_bs = os.environ.get("BATCH_SIZE")
-        if env_bs and env_bs.strip().isdigit():
-            batch_size = int(env_bs.strip())
+    if batch_size is not None:
+        os.environ["BATCH_SIZE"] = str(batch_size)
+    elif "BATCH_SIZE" in os.environ and os.environ["BATCH_SIZE"].strip().isdigit():
+        batch_size = int(os.environ["BATCH_SIZE"].strip())
 
     try:
         from support.lib.lifecycle import LifecycleRegistry, enter_phase, system

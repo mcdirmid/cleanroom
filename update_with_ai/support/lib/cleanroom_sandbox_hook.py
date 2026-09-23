@@ -137,6 +137,22 @@ def remove_worker_session(conversation_id: str, path: str) -> None:
         pass
 
 
+def remove_worker_session_by_session_id(session_id: str, path: str) -> None:
+    """Removes any worker mapping associated with the given session_id from disk."""
+    try:
+        sessions = read_worker_sessions(path)
+        keys_to_del = [k for k, v in sessions.items() if v == session_id]
+        if keys_to_del:
+            for k in keys_to_del:
+                del sessions[k]
+            tmp = f"{path}.tmp.{os.getpid()}"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(sessions, f)
+            os.replace(tmp, path)
+    except Exception:
+        pass
+
+
 def validate_via_http(
     host: str,
     port: int,
@@ -292,10 +308,10 @@ def validate_worker_command_line(cmd: str) -> Tuple[bool, str, Optional[list[str
     idx = 2
     while idx < len(tokens):
         tok = tokens[idx]
-        if tok in ("--session", "-s", "--port"):
+        if tok in ("--session", "-s", "--port", "--worker-id", "--conv-id"):
             idx += 2
             continue
-        if tok.startswith(("--session=", "-s=", "--port=")):
+        if tok.startswith(("--session=", "-s=", "--port=", "--worker-id=", "--conv-id=")):
             idx += 1
             continue
         if tok.startswith("-"):
@@ -322,6 +338,16 @@ def extract_session_id_from_register(tokens: list[str]) -> Optional[str]:
             return tokens[i + 1].split(":")[-1]
         if tok.startswith("--role="):
             return tok.split("=", 1)[1].split(":")[-1]
+    return None
+
+
+def extract_worker_id_from_tokens(tokens: list[str]) -> Optional[str]:
+    """Extracts the worker conversation ID from command tokens if present."""
+    for i, tok in enumerate(tokens):
+        if tok in ("--worker-id", "--conv-id") and i + 1 < len(tokens):
+            return tokens[i + 1]
+        if tok.startswith(("--worker-id=", "--conv-id=")):
+            return tok.split("=", 1)[1]
     return None
 
 
@@ -435,10 +461,15 @@ def process_hook_input(
                     break
             if subcmd == "register":
                 sess_id = extract_session_id_from_register(tokens)
-                if sess_id:
-                    save_worker_session(conversation_id, sess_id, sessions_path)
+                target_worker = extract_worker_id_from_tokens(tokens) or conversation_id
+                if sess_id and target_worker:
+                    save_worker_session(target_worker, sess_id, sessions_path)
             elif subcmd == "deregister":
-                remove_worker_session(conversation_id, sessions_path)
+                sess_id = extract_session_id_from_register(tokens)
+                if sess_id:
+                    remove_worker_session_by_session_id(sess_id, sessions_path)
+                target_worker = extract_worker_id_from_tokens(tokens) or conversation_id
+                remove_worker_session(target_worker, sessions_path)
 
         return {"decision": "allow"}
 
