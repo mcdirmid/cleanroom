@@ -1,0 +1,130 @@
+# update_with_ai/parts/antigravity/lib/BUILD.bazel
+
+load("//bin:pyright_library.bzl", "pyright_library")
+load("//update_python_with_ai/support/lib:build_derived_test.bzl", "build_derived_test")
+
+package(default_visibility = ["//visibility:public"])
+
+pyright_library(
+    name = "antigravity_run_logger",
+    srcs = ["antigravity_run_logger.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
+    ],
+)
+
+pyright_library(
+    name = "antigravity_run_logger_impl",
+    srcs = ["antigravity_run_logger_impl.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        ":antigravity_run_logger",
+    ],
+)
+
+pyright_library(
+    name = "antigravity_sandbox_gate",
+    srcs = ["antigravity_sandbox_gate.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        ":antigravity_run_logger",
+    ],
+)
+
+pyright_library(
+    name = "antigravity_sandbox_gate_impl",
+    srcs = ["antigravity_sandbox_gate_impl.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        ":antigravity_run_logger",
+        ":antigravity_sandbox_gate",
+    ],
+)
+
+pyright_library(
+    name = "antigravity_telemetry",
+    srcs = ["antigravity_telemetry.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
+    ],
+)
+
+pyright_library(
+    name = "antigravity_telemetry_impl",
+    srcs = ["antigravity_telemetry_impl.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        ":antigravity_telemetry",
+    ],
+)
+
+pyright_library(
+    name = "antigravity_mcp_client",
+    srcs = ["antigravity_mcp_client.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
+    ],
+)
+
+pyright_library(
+    name = "antigravity_mcp_client_impl",
+    srcs = ["antigravity_mcp_client_impl.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        ":antigravity_mcp_client",
+    ],
+)
+
+pyright_library(
+    name = "antigravity_coordinator",
+    srcs = ["antigravity_coordinator.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
+    ],
+)
+
+pyright_library(
+    name = "antigravity_coordinator_impl",
+    srcs = ["antigravity_coordinator_impl.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        ":antigravity_coordinator",
+        ":antigravity_mcp_client",
+        ":antigravity_run_logger",
+        ":antigravity_sandbox_gate",
+        ":antigravity_telemetry",
+    ],
+)
+
+pyright_library(
+    name = "antigravity_asm",
+    srcs = ["antigravity_asm.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        ":antigravity_coordinator",
+        ":antigravity_coordinator_impl",
+        ":antigravity_mcp_client",
+        ":antigravity_mcp_client_impl",
+        ":antigravity_run_logger",
+        ":antigravity_run_logger_impl",
+        ":antigravity_sandbox_gate",
+        ":antigravity_sandbox_gate_impl",
+        ":antigravity_telemetry",
+        ":antigravity_telemetry_impl",
+    ],
+)
+
+build_derived_test(
+    name = "targets_derived_test",
+)

@@ -1,5 +1,4 @@
 # Requirements specified in tool_provider_impl.pyi
-import inspect
 from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Set, Tuple, Type
 from . import tool_provider
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
@@ -80,46 +79,6 @@ class ToolManager(tool_provider.ToolManager, Singleton):
         # Requirement: Executing a tool with arguments converts raw argument mappings into wire parameter bindings and executes the tool by name.
         wire_bindings = tool_provider.WireParameterBindings.from_dict(arguments)
         return self.execute_tool(name, wire_bindings)
-
-    def create_tool_callable(self, name: str) -> Any:
-        # Requirement: Creating a tool callable constructs a callable function with parameter signatures derived from the tool parameters, executes the tool with supplied arguments upon invocation, and returns the response content combined with reminders when guidance is present.
-        tool = self._tools.get(name)
-        if tool is None:
-            raise ValueError(f"Unknown tool '{name}'")
-
-        sorted_params = sorted(
-            tool.parameters, key=lambda p: (not p.is_required, p.name)
-        )
-        params = []
-        for p in sorted_params:
-            param_kind = inspect.Parameter.POSITIONAL_OR_KEYWORD
-            annotation = p.parameter_type.wire_type
-            default = (
-                p.default_value
-                if not p.is_required and p.default_value is not None
-                else (None if not p.is_required else inspect.Parameter.empty)
-            )
-            params.append(
-                inspect.Parameter(
-                    name=p.name,
-                    kind=param_kind,
-                    default=default,
-                    annotation=annotation,
-                )
-            )
-
-        sig = inspect.Signature(parameters=params, return_annotation=str)
-
-        def callable_fn(*args: Any, **kwargs: Any) -> str:
-            bound = sig.bind(*args, **kwargs)
-            bound.apply_defaults()
-            resp = self.execute_tool_with_arguments(name, bound.arguments)
-            return resp.output_text
-
-        callable_fn.__name__ = tool.name
-        callable_fn.__doc__ = tool.description
-        setattr(callable_fn, "__signature__", sig)
-        return callable_fn
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:

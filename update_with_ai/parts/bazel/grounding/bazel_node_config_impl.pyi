@@ -345,30 +345,6 @@ GROUNDING_ARGUMENT:
 
     @operation
     @override
-    def to_actual(self, value: str) -> agent_file_alias.FileAlias:
-        """
-PURPOSE:
-Converts relative paths to matching file aliases
-
-GROUNDING_ARGUMENT:
-- Receives value string and delegates to convert.
-"""
-        ...
-
-    @operation
-    @override
-    def to_wire(self, value: agent_file_alias.FileAlias) -> str:
-        """
-PURPOSE:
-Converts file alias to relative path string
-
-GROUNDING_ARGUMENT:
-- Returns value.relative_path.
-"""
-        ...
-
-    @operation
-    @override
     def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
         """
 PURPOSE:

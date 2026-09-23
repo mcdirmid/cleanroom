@@ -26,22 +26,6 @@ Primitive wire type accepted by the converter
         ...
 
     @operation
-    def to_actual(self, value: WireT) -> ActualT:
-        """
-PURPOSE:
-Converts a wire type value to produce a value of that actual type
-"""
-        ...
-
-    @operation
-    def to_wire(self, value: ActualT) -> WireT:
-        """
-PURPOSE:
-Converts an actual type value to produce a value of that wire type
-"""
-        ...
-
-    @operation
     def convert(self, wire_value: WireT) -> ActualT:
         """
 PURPOSE:
@@ -159,24 +143,6 @@ Primitive wire type accepted by the converter
 
     @operation
     @override
-    def to_actual(self, value: T) -> T:
-        """
-PURPOSE:
-Converts a wire type value to produce a value of that actual type
-"""
-        ...
-
-    @operation
-    @override
-    def to_wire(self, value: T) -> T:
-        """
-PURPOSE:
-Converts an actual type value to produce a value of that wire type
-"""
-        ...
-
-    @operation
-    @override
     def convert(self, wire_value: T) -> T:
         """
 PURPOSE:
@@ -214,24 +180,6 @@ References the data type produced by the converter
         """
 PURPOSE:
 Primitive wire type accepted by the converter
-"""
-        ...
-
-    @operation
-    @override
-    def to_actual(self, value: Sequence[ItemWireT]) -> Sequence[ItemActualT]:
-        """
-PURPOSE:
-Converts a wire type value to produce a value of that actual type
-"""
-        ...
-
-    @operation
-    @override
-    def to_wire(self, value: Sequence[ItemActualT]) -> Sequence[ItemWireT]:
-        """
-PURPOSE:
-Converts an actual type value to produce a value of that wire type
 """
         ...
 
@@ -275,24 +223,6 @@ References the data type produced by the converter
         """
 PURPOSE:
 Primitive wire type accepted by the converter
-"""
-        ...
-
-    @operation
-    @override
-    def to_actual(self, value: Mapping[KeyWireT, ValWireT]) -> Mapping[KeyActualT, ValActualT]:
-        """
-PURPOSE:
-Converts a wire type value to produce a value of that actual type
-"""
-        ...
-
-    @operation
-    @override
-    def to_wire(self, value: Mapping[KeyActualT, ValActualT]) -> Mapping[KeyWireT, ValWireT]:
-        """
-PURPOSE:
-Converts an actual type value to produce a value of that wire type
 """
         ...
 
@@ -431,10 +361,6 @@ Maps parameters to resolved values of their actual types
 PURPOSE:
 Set mapping parameters to resolved values of their actual types
 """
-        ...
-
-    @operation
-    def get_value(self, name: str, default: Optional[Any]=...) -> Any:
         ...
 
 @dataclass(frozen=True)
@@ -592,14 +518,6 @@ FRESH_REQUIREMENTS:
         """
 PURPOSE:
 Executes tools with arguments by name with raw argument mappings from parameter names to arguments
-"""
-        ...
-
-    @operation
-    def create_tool_callable(self, name: str) -> Any:
-        """
-PURPOSE:
-Creates tool callables producing executable callable routines configured with parameter signatures and documentation for external server registration
 """
         ...
 ParameterConverter: Type[Any] = ...

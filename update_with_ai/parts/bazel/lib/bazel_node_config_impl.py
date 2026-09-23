@@ -40,6 +40,7 @@ class _CommandVerificationCheck(agent_node_config.VerificationCheck):
                 text=True,
                 cwd=self._cwd,
                 env=env,
+                stdin=subprocess.DEVNULL,
             )
             passed = res.returncode == 0
             output = res.stdout
@@ -296,7 +297,7 @@ def _load_per_node_info(n: dag_storage.Node) -> agent_node_config.PerNodeInfo:
         curr_node = (
             node_util.normalize(curr_label)
             if node_util is not None
-            else dag_storage.Node(unit_address=curr_label)
+            else dag_storage.Node(unit_address=curr_label)  # pragma: no cover (assumption: node_util is registered in system tier)
         )
         dep_manifest_raw = (
             loader.get_manifest(curr_node) if loader is not None else None
@@ -321,7 +322,7 @@ def _load_per_node_info(n: dag_storage.Node) -> agent_node_config.PerNodeInfo:
         dep_node = (
             node_util.normalize(dep_label)
             if node_util is not None
-            else dag_storage.Node(unit_address=dep_label)
+            else dag_storage.Node(unit_address=dep_label)  # pragma: no cover (assumption: node_util is registered in system tier)
         )
         is_blame = dep_label in feedback_deps
         dep_manifest_raw = (
@@ -331,7 +332,7 @@ def _load_per_node_info(n: dag_storage.Node) -> agent_node_config.PerNodeInfo:
         dep_pkg = (
             node_util.extract_directory(dep_node).path.lstrip("/")
             if node_util is not None
-            else ""
+            else ""  # pragma: no cover (assumption: node_util is registered in system tier)
         )
 
         if dep_manifest_raw:
@@ -734,12 +735,6 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
     @property
     def wire_type(self) -> Type[str]:
         return str
-
-    def to_actual(self, value: str) -> agent_file_alias.FileAlias:
-        return self.convert(value)
-
-    def to_wire(self, value: agent_file_alias.FileAlias) -> str:
-        return value.relative_path
 
     def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
         # Requirement: Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.

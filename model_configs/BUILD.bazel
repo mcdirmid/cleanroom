@@ -101,7 +101,7 @@ model_config(
     timeout_seconds = "100.0",
     api_key_env = "OPENAI_API_KEY",
     max_tokens = 4096,
-    batch_size = 2,
+    batch_size = 1,
 )
 
 model_config(

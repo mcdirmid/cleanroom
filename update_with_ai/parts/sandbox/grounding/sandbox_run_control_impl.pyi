@@ -21,7 +21,7 @@ Implements run controller to install advance, submit, fail, and optional blame t
 INHERITED_REQUIREMENTS:
 - [RunController] The run controller exposes verification checks that validate session criteria.
 - [RunController] The run controller caches verification evaluation results alongside edit manager file hashes for target nodes, reusing the cached verification outcome as long as no workspace files have been updated since that evaluation.
-- [RunController] The run controller installs an argument-free check files tool named `check_files` that updates verification results if outdated, evaluates verification checks across all open targets and modified workspace files, presents aggregated verification outcomes to the agent, tracks last tested file hashes, and fails when verification failed.
+- [RunController] The run controller installs an argument-free check files tool named check_files that updates verification results if outdated, evaluates verification checks across all open targets and modified workspace files, presents aggregated verification outcomes to the agent, tracks last tested file hashes, and fails when verification failed.
 - [RunController] The run controller installs an advance tool when guide step mode is active, coordinating step progression through guide delivery upon passing verification.
 - [RunController] The run controller installs a submit tool which is a resolve tool that concludes active nodes upon passing verification, marks the resolve target clean in the current get work turn, accepting a text change summary parameter, and enforces change documentation.
 - [RunController] The run controller installs a fail tool which is a resolve tool that terminates the run in failure, accepting a text explanation parameter.

@@ -67,7 +67,7 @@ class DagSubgraphImplTest(unittest.TestCase):
             self.assertFalse(subgraph.is_complete)
 
             # First ready node should be c (no dependencies)
-            # Requirement: The next ready batch consists of contiguous dirty nodes in topological order that share the same role address, prioritized by role tier precedence (prioritizing lib before test, and test before qa) and having all their dependencies in the target subgraph clean in dag storage or present in the same ready batch, starting from the earliest ready dirty node and bounded by the batch size obtained from dag config.
+            # Requirement: The next ready batch consists of contiguous dirty nodes in topological order that share the same role address, prioritized by role tier precedence (prioritizing lib before test, and test before qa) and having all their dependencies in the target subgraph clean in dag storage or present in the same ready batch, starting from the earliest ready dirty node in topological order and bounded by the batch size obtained from dag config.
             # Requirement: [DagSubgraph] When obtaining the next ready batch, uncleaned dirty nodes prioritized by role tier precedence (upstream roles before downstream roles) whose dependencies in the target subgraph are clean in dag storage or present in the same ready batch are selected, grouped by role address up to a maximum batch size.
             batch1 = subgraph.next_ready_batch()
             self.assertEqual(batch1, [c])

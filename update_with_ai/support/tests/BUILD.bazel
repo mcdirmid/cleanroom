@@ -101,4 +101,15 @@ py_test(
     ],
 )
 
+py_test(
+    name = "coordinator_engine_test",
+    srcs = ["coordinator_engine_test.py"],
+    main = "coordinator_engine_test.py",
+    imports = ["../.."],
+    deps = [
+        "//update_with_ai/support/lib:cleanroom_coordinator_engine_lib",
+        "//update_with_ai/support/lib:coordinator_config_lib",
+    ],
+)
+
 

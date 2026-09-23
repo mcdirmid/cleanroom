@@ -150,9 +150,19 @@ class CleanroomMcpRunnerImplTest(unittest.TestCase):
 
     def test_main(self) -> None:
         # Test main CLI entrypoint invocation
+        # Requirement: Executing the runner validates runner options and executes the server using the configured transport.
+        # Requirement: The batch size resolves from `--batch-size` as an integer, defaulting to 10.
         cleanroom_mcp_runner_impl.main(
             ["--transport", "stdio"], registry=self.registry
         )
+        cleanroom_mcp_runner_impl.main(
+            ["--batch-size", "3"], registry=self.registry
+        )
+        self.assertEqual(os.environ.get("BATCH_SIZE"), "3")
+        cleanroom_mcp_runner_impl.main(
+            ["--batch-size=7"], registry=self.registry
+        )
+        self.assertEqual(os.environ.get("BATCH_SIZE"), "7")
 
 
 if __name__ == "__main__":

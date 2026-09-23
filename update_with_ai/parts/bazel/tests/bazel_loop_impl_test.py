@@ -166,7 +166,7 @@ class BazelLoopImplTest(unittest.TestCase):
 
     def test_run_cleaning_pass_success(self) -> None:
         """Tests successful cleaning pass execution and telemetry logging."""
-        root = dag_storage.Node(unit_address="//pkg:target", role_address="")
+        root = dag_storage.Node(unit_address="//pkg:target", role_address="lib")
         self.manifest_loader.manifests["//pkg:target"] = bazel_manifest_loader.Manifest(
             "rule()"
         )

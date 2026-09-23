@@ -601,12 +601,8 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             # Requirement: The regex pattern parameter type converts a wire type string into a regex pattern.
             self.assertEqual(converter.actual_type, RegexPattern)
             self.assertEqual(converter.wire_type, str)
-            pattern = converter.to_actual("matched_.*")
+            pattern = converter.convert("matched_.*")
             self.assertEqual(pattern, "matched_.*")
-            wire = converter.to_wire(pattern)
-            self.assertEqual(wire, "matched_.*")
-            converted = converter.convert("another_pattern")
-            self.assertEqual(converted, "another_pattern")
 
     def test_read_manager_initialization_tool_installation(self) -> None:
         """CUJ: Verify ReadManager installs ViewFileTool when mcp mode is inactive and no inspection tools when active."""

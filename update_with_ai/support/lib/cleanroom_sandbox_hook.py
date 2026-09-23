@@ -297,15 +297,19 @@ def validate_worker_command_line(cmd: str) -> Tuple[bool, str, Optional[list[str
     if tokens[0] not in VALID_PYTHON_BINARIES and binary_base not in VALID_PYTHON_BINARIES:
         return False, DENY_REASON_COMMAND, None
 
-    # Script check
+    # Script or module check
     norm_script = os.path.normpath(tokens[1])
     target_script = "update_with_ai/support/lib/cleanroom_mcp_client.py"
-    if norm_script != target_script and not norm_script.endswith("/" + target_script):
+    is_valid_script = (norm_script == target_script or norm_script.endswith("/" + target_script))
+    is_valid_module = (tokens[1] == "-m" and len(tokens) >= 3 and (
+        "antigravity_mcp_client" in tokens[2] or "cleanroom_mcp_client" in tokens[2]
+    ))
+    if not is_valid_script and not is_valid_module:
         return False, DENY_REASON_COMMAND, None
 
-    # Subcommand check: find first non-option token after token 1
+    # Subcommand check: find first non-option token after token 1 / module
     subcommand: Optional[str] = None
-    idx = 2
+    idx = 3 if is_valid_module else 2
     while idx < len(tokens):
         tok = tokens[idx]
         if tok in ("--session", "-s", "--port", "--worker-id", "--conv-id"):

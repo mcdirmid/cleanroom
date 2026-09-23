@@ -122,7 +122,11 @@ py_binary(
 py_library(
     name = "cleanroom_mcp_client_lib",
     srcs = ["cleanroom_mcp_client.py"],
-    deps = [":cleanroom_run_logger_lib"],
+    deps = [
+        ":cleanroom_run_logger_lib",
+        "//update_with_ai/parts/antigravity/lib:antigravity_mcp_client",
+        "//update_with_ai/parts/antigravity/lib:antigravity_mcp_client_impl",
+    ],
     visibility = ["//visibility:public"],
 )
 
@@ -137,6 +141,10 @@ py_binary(
 py_library(
     name = "antigravity_token_stats_lib",
     srcs = ["antigravity_token_stats.py"],
+    deps = [
+        "//update_with_ai/parts/antigravity/lib:antigravity_telemetry",
+        "//update_with_ai/parts/antigravity/lib:antigravity_telemetry_impl",
+    ],
     visibility = ["//visibility:public"],
 )
 
@@ -160,5 +168,32 @@ py_binary(
     srcs = ["antigravity_run_monitor.py"],
     main = "antigravity_run_monitor.py",
     deps = [":antigravity_run_monitor_lib"],
+    visibility = ["//visibility:public"],
+)
+
+py_library(
+    name = "coordinator_config_lib",
+    srcs = ["coordinator_config.py"],
+    visibility = ["//visibility:public"],
+)
+
+py_library(
+    name = "cleanroom_coordinator_engine_lib",
+    srcs = ["cleanroom_coordinator_engine.py"],
+    deps = [
+        ":coordinator_config_lib",
+        ":antigravity_token_stats_lib",
+        ":cleanroom_sandbox_hook_lib",
+        ":cleanroom_mcp_client_lib",
+        ":cleanroom_dag_cli_lib",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+py_binary(
+    name = "cleanroom_coordinator_engine",
+    srcs = ["cleanroom_coordinator_engine.py"],
+    main = "cleanroom_coordinator_engine.py",
+    deps = [":cleanroom_coordinator_engine_lib"],
     visibility = ["//visibility:public"],
 )

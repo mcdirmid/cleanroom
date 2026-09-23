@@ -188,7 +188,7 @@ class BazelStorageImplTest(unittest.TestCase):
 
     def test_missing_source_file_dirty_state(self) -> None:
         """CUJ: A node is dirty when its declared source file is missing from the workspace root."""
-        node = Node(unit_address="//pkg/src:target", role_address="")
+        node = Node(unit_address="//pkg/src:target", role_address="lib")
         with enter_phase("system", registry=self.registry) as scope:
             storage = scope.get_singleton(AgentStorage)
             assert isinstance(storage, AgentStorageImpl)

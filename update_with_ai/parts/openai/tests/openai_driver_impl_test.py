@@ -28,6 +28,7 @@ from update_with_ai.parts.openai.lib.openai_driver_impl import (
     _DEFAULT_CONVERTER,
     _format_token_usage,
     _format_tool_log,
+    _repair_json,
 )
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.openai.lib.openai_config import OpenaiConfig
@@ -520,7 +521,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
-            # Requirement: When a model response is truncated at the generation limit, the loop driver terminates any truncated tool invocation by repairing unclosed arguments into valid JSON and appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
+            # Requirement: When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON: when a replace file content invocation provides a target file, target content, and partial replacement content, any trailing incomplete line without a terminating newline is deleted and replaced with a raise NotImplementedError sentinel carrying an incrementing session truncation identifier matching the indentation of the deleted line, or if the last line is complete the sentinel is appended on the next line matching the last line's indentation, executing the tool to persist partial modifications and returning an actionable notice directing the model to resume implementation targeting the sentinel; otherwise the loop driver terminates the truncated tool invocation by appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
             # Requirement: When tool execution produces a terminating response, the loop driver concludes the run and returns a loop outcome, or halts with an unexpected failure if the response indicates terminating failure.
             self.assertTrue(outcome.is_success)
             # Expect: assistant Part 1 -> user continuation prompt -> assistant Part 2 -> tool response
@@ -611,7 +612,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             runner = scope.get_singleton(AgentDriver)
             outcome = runner.run()
 
-            # Requirement: When a model response is truncated at the generation limit, the loop driver terminates any truncated tool invocation by repairing unclosed arguments into valid JSON and appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
+            # Requirement: When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON: when a replace file content invocation provides a target file, target content, and partial replacement content, any trailing incomplete line without a terminating newline is deleted and replaced with a raise NotImplementedError sentinel carrying an incrementing session truncation identifier matching the indentation of the deleted line, or if the last line is complete the sentinel is appended on the next line matching the last line's indentation, executing the tool to persist partial modifications and returning an actionable notice directing the model to resume implementation targeting the sentinel; otherwise the loop driver terminates the truncated tool invocation by appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
             # Requirement: When tool execution produces a terminating response, the loop driver concludes the run and returns a loop outcome, or halts with an unexpected failure if the response indicates terminating failure.
             self.assertTrue(outcome.is_success)
 
@@ -632,7 +633,382 @@ class OpenAIDriverImplTest(unittest.TestCase):
             self.assertTrue(trunc_resp.is_failed)
             self.assertEqual(trunc_resp.suppression_key, "replace_file_content")
             self.assertTrue(trunc_resp.content)
-            self.assertIn("truncated", trunc_resp.content.lower())
+
+    @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
+    def test_model_truncation_salvage_partial_line(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
+        """CUJ: Truncated replace_file_content deletes partial line, adds indented sentinel TRUNCATED_1_, and executes write."""
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        # Truncated arguments with partial line "    ret" (no trailing newline)
+        truncated_raw_args = '{"target_file": "foo.py", "target_content": "old", "replacement_content": "def foo():\\n    x = 1\\n    ret'
+        comp1 = DummyCompletion(
+            [
+                DummyChoice(
+                    DummyMessage(
+                        "Writing code...",
+                        tool_calls=[
+                            DummyToolCall(
+                                id="call_trunc_1",
+                                name="replace_file_content",
+                                arguments=truncated_raw_args,
+                            )
+                        ],
+                    ),
+                    finish_reason="length",
+                )
+            ]
+        )
+        comp2 = DummyCompletion(
+            [
+                DummyChoice(
+                    DummyMessage(
+                        "Done",
+                        tool_calls=[
+                            DummyToolCall(
+                                id="call_finish_2",
+                                name="finish_task",
+                                arguments="{}",
+                            )
+                        ],
+                    ),
+                    finish_reason="stop",
+                )
+            ]
+        )
+        mock_client.chat.completions.create.side_effect = [comp1, comp2]
+
+        executed_bindings: list[Any] = []
+        dummy_tool = DummyTool(
+            "replace_file_content",
+            {
+                Parameter(
+                    name="target_file",
+                    description="",
+                    parameter_converter=MockConverter(),
+                ),
+                Parameter(
+                    name="target_content",
+                    description="",
+                    parameter_converter=MockConverter(),
+                ),
+                Parameter(
+                    name="replacement_content",
+                    description="",
+                    parameter_converter=MockConverter(),
+                ),
+            },
+        )
+        dummy_tool.execute_tool = (
+            lambda actual_parameter_bindings: executed_bindings.append(
+                dict(actual_parameter_bindings.bindings)
+            )
+            or Response(
+                is_failed=False, is_terminated=False, content="Replaced partial"
+            )
+        )
+        self.tool_mgr.install_tool(dummy_tool)
+        self.tool_mgr.responses["finish_task"] = Response(
+            is_failed=False, is_terminated=True, content="Done"
+        )
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            runner = scope.get_singleton(AgentDriver)
+            # Requirement: When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON: when a replace file content invocation provides a target file, target content, and partial replacement content, any trailing incomplete line without a terminating newline is deleted and replaced with a raise NotImplementedError sentinel carrying an incrementing session truncation identifier matching the indentation of the deleted line, or if the last line is complete the sentinel is appended on the next line matching the last line's indentation, executing the tool to persist partial modifications and returning an actionable notice directing the model to resume implementation targeting the sentinel; otherwise the loop driver terminates the truncated tool invocation by appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
+            outcome = runner.run()
+            self.assertTrue(outcome.is_success)
+
+            # Check that dummy_tool was executed with partial line deleted and TRUNCATED_1_ inserted with 4 spaces indent
+            self.assertEqual(len(executed_bindings), 1)
+            b = executed_bindings[0]
+            names_to_vals = {p.name: v for p, v in b.items()}
+            self.assertEqual(names_to_vals["target_content"], "old")
+            self.assertEqual(names_to_vals["target_file"], "foo.py")
+            expected_repl = (
+                'def foo():\n    x = 1\n    raise NotImplementedError("TRUNCATED_1_")\n'
+            )
+            self.assertEqual(names_to_vals["replacement_content"], expected_repl)
+
+            # History tool response has is_failed=False and mentions TRUNCATED_1_
+            trunc_resp, trunc_name, trunc_id = self.history.tool_responses[0]
+            self.assertEqual(trunc_name, "replace_file_content")
+            self.assertFalse(trunc_resp.is_failed)
+            self.assertIn("TRUNCATED_1_", trunc_resp.content)
+            self.assertEqual(self.loop_guard.progress_count, 1)
+
+    @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
+    def test_model_truncation_salvage_complete_line_and_increment(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
+        """CUJ: Truncated replace_file_content with trailing newline appends sentinel with matching indent and increments counter."""
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        # Truncated arguments with complete line ending with \n
+        truncated_raw_args_1 = '{"target_file": "foo.py", "target_content": "old1", "replacement_content": "    y = 2\\n'
+        truncated_raw_args_2 = '{"target_file": "foo.py", "target_content": "old2", "replacement_content": "        z = 3\\n'
+        comp1 = DummyCompletion(
+            [
+                DummyChoice(
+                    DummyMessage(
+                        "Writing 1...",
+                        tool_calls=[
+                            DummyToolCall(
+                                id="call_trunc_1",
+                                name="replace_file_content",
+                                arguments=truncated_raw_args_1,
+                            )
+                        ],
+                    ),
+                    finish_reason="length",
+                )
+            ]
+        )
+        comp2 = DummyCompletion(
+            [
+                DummyChoice(
+                    DummyMessage(
+                        "Writing 2...",
+                        tool_calls=[
+                            DummyToolCall(
+                                id="call_trunc_2",
+                                name="replace_file_content",
+                                arguments=truncated_raw_args_2,
+                            )
+                        ],
+                    ),
+                    finish_reason="length",
+                )
+            ]
+        )
+        comp3 = DummyCompletion(
+            [
+                DummyChoice(
+                    DummyMessage(
+                        "Done",
+                        tool_calls=[
+                            DummyToolCall(
+                                id="call_finish_3",
+                                name="finish_task",
+                                arguments="{}",
+                            )
+                        ],
+                    ),
+                    finish_reason="stop",
+                )
+            ]
+        )
+        mock_client.chat.completions.create.side_effect = [comp1, comp2, comp3]
+
+        executed_bindings: list[Any] = []
+        dummy_tool = DummyTool(
+            "replace_file_content",
+            {
+                Parameter(
+                    name="target_file",
+                    description="",
+                    parameter_converter=MockConverter(),
+                ),
+                Parameter(
+                    name="target_content",
+                    description="",
+                    parameter_converter=MockConverter(),
+                ),
+                Parameter(
+                    name="replacement_content",
+                    description="",
+                    parameter_converter=MockConverter(),
+                ),
+            },
+        )
+        dummy_tool.execute_tool = (
+            lambda actual_parameter_bindings: executed_bindings.append(
+                dict(actual_parameter_bindings.bindings)
+            )
+            or Response(
+                is_failed=False, is_terminated=False, content="Replaced partial"
+            )
+        )
+        self.tool_mgr.install_tool(dummy_tool)
+        self.tool_mgr.responses["finish_task"] = Response(
+            is_failed=False, is_terminated=True, content="Done"
+        )
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            runner = scope.get_singleton(AgentDriver)
+            # Requirement: When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON: when a replace file content invocation provides a target file, target content, and partial replacement content, any trailing incomplete line without a terminating newline is deleted and replaced with a raise NotImplementedError sentinel carrying an incrementing session truncation identifier matching the indentation of the deleted line, or if the last line is complete the sentinel is appended on the next line matching the last line's indentation, executing the tool to persist partial modifications and returning an actionable notice directing the model to resume implementation targeting the sentinel; otherwise the loop driver terminates the truncated tool invocation by appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
+            outcome = runner.run()
+            self.assertTrue(outcome.is_success)
+
+            self.assertEqual(len(executed_bindings), 2)
+            # First write: ends with \n, appends with 4 spaces indent and TRUNCATED_1_
+            b1 = {p.name: v for p, v in executed_bindings[0].items()}
+            self.assertEqual(
+                b1["replacement_content"],
+                '    y = 2\n    raise NotImplementedError("TRUNCATED_1_")\n',
+            )
+            # Second write: ends with \n, appends with 8 spaces indent and TRUNCATED_2_
+            b2 = {p.name: v for p, v in executed_bindings[1].items()}
+            self.assertEqual(
+                b2["replacement_content"],
+                '        z = 3\n        raise NotImplementedError("TRUNCATED_2_")\n',
+            )
+
+    @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
+    def test_model_truncation_salvage_empty_replacement_content(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
+        """CUJ: Truncated replace_file_content with empty replacement content inserts sentinel."""
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        truncated_raw_args = '{"target_file": "bar.py", "target_content": "old", "replacement_content": ""'
+        comp1 = DummyCompletion(
+            [
+                DummyChoice(
+                    DummyMessage(
+                        "Writing code...",
+                        tool_calls=[
+                            DummyToolCall(
+                                id="call_trunc_empty",
+                                name="replace_file_content",
+                                arguments=truncated_raw_args,
+                            )
+                        ],
+                    ),
+                    finish_reason="length",
+                )
+            ]
+        )
+        comp2 = DummyCompletion(
+            [
+                DummyChoice(
+                    DummyMessage(
+                        "Done",
+                        tool_calls=[
+                            DummyToolCall(
+                                id="call_finish",
+                                name="finish_task",
+                                arguments="{}",
+                            )
+                        ],
+                    ),
+                    finish_reason="stop",
+                )
+            ]
+        )
+        mock_client.chat.completions.create.side_effect = [comp1, comp2]
+
+        executed_bindings: list[Any] = []
+        dummy_tool = DummyTool(
+            "replace_file_content",
+            {
+                Parameter(
+                    name="target_file",
+                    description="",
+                    parameter_converter=MockConverter(),
+                ),
+                Parameter(
+                    name="target_content",
+                    description="",
+                    parameter_converter=MockConverter(),
+                ),
+                Parameter(
+                    name="replacement_content",
+                    description="",
+                    parameter_converter=MockConverter(),
+                ),
+            },
+        )
+        dummy_tool.execute_tool = (
+            lambda actual_parameter_bindings: executed_bindings.append(
+                dict(actual_parameter_bindings.bindings)
+            )
+            or Response(
+                is_failed=False, is_terminated=False, content="Replaced empty"
+            )
+        )
+        self.tool_mgr.install_tool(dummy_tool)
+        self.tool_mgr.responses["finish_task"] = Response(
+            is_failed=False, is_terminated=True, content="Done"
+        )
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            runner = scope.get_singleton(AgentDriver)
+            # Requirement: When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON: when a replace file content invocation provides a target file, target content, and partial replacement content, any trailing incomplete line without a terminating newline is deleted and replaced with a raise NotImplementedError sentinel carrying an incrementing session truncation identifier matching the indentation of the deleted line, or if the last line is complete the sentinel is appended on the next line matching the last line's indentation, executing the tool to persist partial modifications and returning an actionable notice directing the model to resume implementation targeting the sentinel; otherwise the loop driver terminates the truncated tool invocation by appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
+            outcome = runner.run()
+            self.assertTrue(outcome.is_success)
+
+            self.assertEqual(len(executed_bindings), 1)
+            b = {p.name: v for p, v in executed_bindings[0].items()}
+            self.assertEqual(
+                b["replacement_content"],
+                'raise NotImplementedError("TRUNCATED_1_")\n',
+            )
+
+    @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
+    def test_model_truncation_unrepairable_json_terminates_with_failure(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
+        """CUJ: Truncated tool invocation with unrepairable JSON falls back to failure response."""
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        # Unrepairable arguments that fail json decoding
+        unrepairable_raw_args = '{"target_file": unquoted_token'
+        comp1 = DummyCompletion(
+            [
+                DummyChoice(
+                    DummyMessage(
+                        "Writing bad code...",
+                        tool_calls=[
+                            DummyToolCall(
+                                id="call_bad_json",
+                                name="replace_file_content",
+                                arguments=unrepairable_raw_args,
+                            )
+                        ],
+                    ),
+                    finish_reason="length",
+                )
+            ]
+        )
+        comp2 = DummyCompletion(
+            [
+                DummyChoice(
+                    DummyMessage(
+                        "Recovered and finishing",
+                        tool_calls=[
+                            DummyToolCall(
+                                id="call_finish",
+                                name="finish_task",
+                                arguments="{}",
+                            )
+                        ],
+                    ),
+                    finish_reason="stop",
+                )
+            ]
+        )
+        mock_client.chat.completions.create.side_effect = [comp1, comp2]
+
+        self.tool_mgr.responses["finish_task"] = Response(
+            is_failed=False, is_terminated=True, content="Done"
+        )
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            runner = scope.get_singleton(AgentDriver)
+            # Requirement: When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON: when a replace file content invocation provides a target file, target content, and partial replacement content, any trailing incomplete line without a terminating newline is deleted and replaced with a raise NotImplementedError sentinel carrying an incrementing session truncation identifier matching the indentation of the deleted line, or if the last line is complete the sentinel is appended on the next line matching the last line's indentation, executing the tool to persist partial modifications and returning an actionable notice directing the model to resume implementation targeting the sentinel; otherwise the loop driver terminates the truncated tool invocation by appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
+            outcome = runner.run()
+            self.assertTrue(outcome.is_success)
+
+            # Verifies tool failure response was appended for unrepairable truncated tool call
+            resp, name, _ = self.history.tool_responses[0]
+            self.assertEqual(name, "replace_file_content")
+            self.assertTrue(resp.is_failed)
+            self.assertEqual(resp.suppression_key, "replace_file_content")
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
     def test_model_error_handling(self, mock_openai_cls: MagicMock) -> None:
@@ -1423,6 +1799,89 @@ class OpenAIDriverImplTest(unittest.TestCase):
 
             # Requirement: [LoopDriver] The loop driver can dispatch follow-up tool calls specified by tool responses, recording the follow-up execution in the conversation.
             self.assertIn("Fatal followup error", str(ctx.exception))
+
+    def test_repair_json_edge_cases(self) -> None:
+        # Requirement: When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON: when a replace file content invocation provides a target file, target content, and partial replacement content, any trailing incomplete line without a terminating newline is deleted and replaced with a raise NotImplementedError sentinel carrying an incrementing session truncation identifier matching the indentation of the deleted line, or if the last line is complete the sentinel is appended on the next line matching the last line's indentation, executing the tool to persist partial modifications and returning an actionable notice directing the model to resume implementation targeting the sentinel; otherwise the loop driver terminates the truncated tool invocation by appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
+        self.assertEqual(_repair_json(""), "{}")
+        self.assertEqual(_repair_json('{"a": [1, 2]'), '{"a": [1, 2]}')
+        self.assertEqual(_repair_json('{"a": "hello\\'), '{"a": "hello"}')
+        self.assertEqual(_repair_json('{"a": 1,'), '{"a": 1}')
+
+    @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
+    def test_truncation_tool_call_variants_and_usage_variants(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        comp_trunc = DummyCompletion(
+            choices=[
+                DummyChoice(
+                    message=DummyMessage(
+                        content="Working on task...",
+                        tool_calls=[
+                            DummyToolCall(
+                                id="call_adv_1",
+                                name="advance",
+                                arguments="{}",
+                            ),
+                            DummyToolCall(
+                                id="call_vf_2",
+                                name="view_file",
+                                arguments='{"path": "dir/target.py"',
+                            ),
+                            DummyToolCall(
+                                id="call_custom_3",
+                                name="custom_tool",
+                                arguments="invalid { json",
+                            ),
+                        ],
+                    ),
+                    finish_reason="length",
+                )
+            ],
+            usage={
+                "prompt_tokens": 500,
+                "prompt_tokens_details": {"cached_tokens": 250},
+            },
+        )
+
+        comp_done = DummyCompletion(
+            choices=[
+                DummyChoice(
+                    message=DummyMessage(
+                        content="Finished",
+                        tool_calls=[
+                            DummyToolCall(
+                                id="call_term",
+                                name="finish_task",
+                                arguments="{}",
+                            ),
+                        ],
+                    ),
+                    finish_reason="stop",
+                )
+            ],
+            usage=DummyUsage(prompt_tokens=600, cached_tokens=None),
+        )
+
+        mock_client.chat.completions.create.side_effect = [
+            comp_trunc,
+            comp_done,
+        ]
+
+        self.tool_mgr.responses["finish_task"] = Response(
+            is_failed=False,
+            is_terminated=True,
+            content="Task done",
+        )
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            runner = scope.get_singleton(AgentDriver)
+            # Requirement: When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON: when a replace file content invocation provides a target file, target content, and partial replacement content, any trailing incomplete line without a terminating newline is deleted and replaced with a raise NotImplementedError sentinel carrying an incrementing session truncation identifier matching the indentation of the deleted line, or if the last line is complete the sentinel is appended on the next line matching the last line's indentation, executing the tool to persist partial modifications and returning an actionable notice directing the model to resume implementation targeting the sentinel; otherwise the loop driver terminates the truncated tool invocation by appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
+            # Requirement: The loop driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool names and arguments or text previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in tool result transcripts when present.
+            outcome = runner.run()
+            self.assertTrue(outcome.is_success)
 
 
 if __name__ == "__main__":

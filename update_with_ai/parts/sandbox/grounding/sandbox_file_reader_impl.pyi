@@ -227,30 +227,6 @@ GROUNDING_ARGUMENT:
 
     @operation
     @override
-    def to_actual(self, value: str) -> agent_file_alias.RegexPattern:
-        """
-PURPOSE:
-Converts a wire type string to a regex pattern
-
-GROUNDING_ARGUMENT:
-- Receives value directly as a parameter and constructs an agent_file_alias.RegexPattern record.
-"""
-        ...
-
-    @operation
-    @override
-    def to_wire(self, value: agent_file_alias.RegexPattern) -> str:
-        """
-PURPOSE:
-Converts a regex pattern to produce its string representation
-
-GROUNDING_ARGUMENT:
-- Extracts the string value from the agent_file_alias.RegexPattern record.
-"""
-        ...
-
-    @operation
-    @override
     def convert(self, wire_value: str) -> agent_file_alias.RegexPattern:
         """
 PURPOSE:

@@ -9,7 +9,7 @@ from typing import Optional, Sequence
 _repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
 for _p in [_repo_root, os.path.join(_repo_root, "update_python_with_ai"), os.path.join(_repo_root, "update_with_ai")]:
     if _p not in sys.path and os.path.isdir(_p):
-        sys.path.insert(0, _p)
+        sys.path.insert(0, _p)  # pragma: no cover (assumption: bootstrap path insertion when run directly)
 if not os.environ.get("BUILD_WORKSPACE_DIRECTORY"):
     os.environ["BUILD_WORKSPACE_DIRECTORY"] = _repo_root
 

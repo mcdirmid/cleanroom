@@ -31,6 +31,9 @@ def build_derived_test(name = "targets_derived_test", kind = None, tags = ["lint
     ] + src_py_glob
 
 
+    kwargs_test = dict(kwargs)
+    kwargs_test.setdefault("size", "small")
+
     py_test(
         name = name,
         srcs = ["//update_python_with_ai/support/lib:check_build_derived.py"],
@@ -42,5 +45,5 @@ def build_derived_test(name = "targets_derived_test", kind = None, tags = ["lint
         ],
         data = data,
         tags = tags,
-        **kwargs
+        **kwargs_test
     )

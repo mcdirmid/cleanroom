@@ -254,13 +254,16 @@ def pyright_test(name, srcs, deps = [], pyright_deps = [], imports = [".."], **k
     """Create a Python test with type checking."""
     _ensure_type_check_suite()
     
+    kwargs_py_test = dict(kwargs)
+    kwargs_py_test.setdefault("size", "small")
+
     # Create the actual py_test
     py_test(
         name = name,
         srcs = srcs,
         deps = deps + pyright_deps,
         imports = imports,
-        **kwargs
+        **kwargs_py_test
     )
     
     # Create type check test
@@ -270,6 +273,7 @@ def pyright_test(name, srcs, deps = [], pyright_deps = [], imports = [".."], **k
         deps = deps,
         pyright_deps = pyright_deps,
         imports = imports,
+        size = kwargs_py_test.get("size", "small"),
         tags = ["type_check"],
         visibility = kwargs.get("visibility"),
     )

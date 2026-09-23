@@ -46,10 +46,6 @@ class ParameterType[ActualT, WireT](Protocol):
     @property
     def wire_type(self) -> Type[WireT]: ...
 
-    def to_actual(self, value: WireT) -> ActualT: ...
-
-    def to_wire(self, value: ActualT) -> WireT: ...
-
     def convert(self, wire_value: WireT) -> ActualT: ...
 
 
@@ -64,12 +60,6 @@ class IdentityParameterType[T](ParameterType[T, T]):
     @property
     def wire_type(self) -> Type[T]:
         return self.target_type
-
-    def to_actual(self, value: T) -> T:
-        return value
-
-    def to_wire(self, value: T) -> T:
-        return value
 
     def convert(self, wire_value: T) -> T:
         return wire_value
@@ -89,14 +79,8 @@ class ListParameterType[ItemActualT, ItemWireT](
     def wire_type(self) -> Any:
         return list
 
-    def to_actual(self, value: Sequence[ItemWireT]) -> Sequence[ItemActualT]:
-        return [self.item_type.to_actual(v) for v in value]
-
-    def to_wire(self, value: Sequence[ItemActualT]) -> Sequence[ItemWireT]:
-        return [self.item_type.to_wire(v) for v in value]
-
     def convert(self, wire_value: Sequence[ItemWireT]) -> Sequence[ItemActualT]:
-        return self.to_actual(wire_value)
+        return [self.item_type.convert(v) for v in wire_value]
 
 
 STRING_PARAMETER_TYPE: IdentityParameterType[str] = IdentityParameterType(str)
@@ -120,26 +104,13 @@ class DictionaryParameterType[KeyActualT, KeyWireT, ValActualT, ValWireT](
     def wire_type(self) -> Any:
         return dict
 
-    def to_actual(
-        self, value: Mapping[KeyWireT, ValWireT]
-    ) -> Mapping[KeyActualT, ValActualT]:
-        return {
-            self.key_type.to_actual(k): self.value_type.to_actual(v)
-            for k, v in value.items()
-        }
-
-    def to_wire(
-        self, value: Mapping[KeyActualT, ValActualT]
-    ) -> Mapping[KeyWireT, ValWireT]:
-        return {
-            self.key_type.to_wire(k): self.value_type.to_wire(v)
-            for k, v in value.items()
-        }
-
     def convert(
         self, wire_value: Mapping[KeyWireT, ValWireT]
     ) -> Mapping[KeyActualT, ValActualT]:
-        return self.to_actual(wire_value)
+        return {
+            self.key_type.convert(k): self.value_type.convert(v)
+            for k, v in wire_value.items()
+        }
 
 
 @dataclass(frozen=True)
@@ -182,27 +153,10 @@ class Parameter[ActualT, WireT]:
 class ActualParameterBindings:
     bindings: Set[Tuple[Parameter, Any]]
 
-    @property
-    def bindings_by_name(self) -> Dict[str, Any]:
-        return {p.name: v for p, v in self.bindings}
-
-    def get_value(self, name: str, default: Any = None) -> Any:
-        for p, v in self.bindings:
-            if p.name == name:
-                return v
-        return default
-
 
 @dataclass(frozen=True)
 class WireParameterBindings:
     bindings: Set[Tuple[str, Any]]
-
-    @property
-    def bindings_by_name(self) -> Dict[str, Any]:
-        return dict(self.bindings)
-
-    def to_dict(self) -> Dict[str, Any]:
-        return dict(self.bindings)
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "WireParameterBindings":
@@ -224,12 +178,6 @@ class Response:
     reminder: Optional[str] = None
     suppression_key: Optional[str] = None
     follow_up_tool_call: Optional[FollowUpToolCall] = None
-
-    @property
-    def output_text(self) -> str:
-        if self.reminder:
-            return f"{self.content}\n\nReminder: {self.reminder}"
-        return self.content
 
 
 ToolCallResult = Response
@@ -263,8 +211,6 @@ class ToolManager(Protocol):
     def execute_tool_with_arguments(
         self, name: str, arguments: Mapping[str, Any]
     ) -> Response: ...
-
-    def create_tool_callable(self, name: str) -> Any: ...
 
 
 ParameterConverter: Type[Any] = ParameterType

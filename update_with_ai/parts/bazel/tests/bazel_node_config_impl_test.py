@@ -248,8 +248,6 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             converted = alias_mgr.convert("module.py")
             # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
             self.assertEqual(converted, bound)
-            self.assertEqual(alias_mgr.to_actual("module.py"), bound)
-            self.assertEqual(alias_mgr.to_wire(bound), "module.py")
 
             # Courtesy short-name resolution
             bound_nested = ReadWriteFile(
@@ -1528,6 +1526,84 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         # Requirement: The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its relative path, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking, stripping workspace root path prefixes, and stripping execution root path prefixes.
         # Requirement: [AliasManager] Sanitizing text masks occurrences of relative workspace paths and preceding path prefixes with the corresponding file alias relative paths.
         self.assertEqual(sanitized, "Path without word boundary: [custom_path.py]")
+
+        # 4. sanitize_text workspace_root exact match without trailing slash
+        ws_root = alias_mgr.workspace_root
+        if ws_root and ws_root.path:
+            raw_ws_text = f"prefix {ws_root.path} suffix"
+            sanitized_ws = alias_mgr.sanitize_text(raw_ws_text)
+            self.assertEqual(sanitized_ws, "prefix  suffix")
+
+    def test_step_mode_guide_filtering_and_multi_node_guide_none(self) -> None:
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            cfg = scope.get_singleton(NodeConfig)
+            assert isinstance(cfg, NodeConfigImpl)
+            role_cfg = scope.get_singleton(RoleConfig)
+
+            node1 = Node(unit_address="//pkg:t1")
+            node2 = Node(unit_address="//pkg:t2")
+            role_cfg.set_nodes((node1, node2))
+
+            guide_unbound = UnboundFile(relative_path="docs/guide.md")
+            guide_ro = ReadOnlyFile(
+                relative_path="docs/guide.md",
+                workspace_path=_make_workspace_path("pkg/docs/guide.md"),
+                owning_node=node1,
+            )
+            other_ro = ReadOnlyFile(
+                relative_path="other.txt",
+                workspace_path=_make_workspace_path("pkg/other.txt"),
+                owning_node=node1,
+            )
+            guide = Guide(sections=[], summary="Guide summary")
+
+            info1 = PerNodeInfo(
+                node=node1,
+                read_only_files={guide_ro, other_ro},
+                read_write_files=set(),
+                templates=set(),
+                template_parameters={},
+                allows_step_mode=True,
+                guide_file=guide_unbound,
+                guide=guide,
+                blame_targets=set(),
+                verification_checks=[],
+                src_file_alias=None,
+                verification_success_message=None,
+                feedback=(),
+            )
+            info2 = PerNodeInfo(
+                node=node2,
+                read_only_files=set(),
+                read_write_files=set(),
+                templates=set(),
+                template_parameters={},
+                allows_step_mode=True,
+                guide_file=None,
+                guide=None,
+                blame_targets=set(),
+                verification_checks=[],
+                src_file_alias=None,
+                verification_success_message=None,
+                feedback=(),
+            )
+            cfg._per_node_cache[node1] = info1
+            cfg._per_node_cache[node2] = info2
+            cfg._cached_version = role_cfg.version
+
+            # Test multi-node in step mode returns None for guide and guide_file
+            cfg._is_step_mode_override = True
+            # Requirement: The session guide file and task guide from the single active node when guide step mode is active.
+            self.assertIsNone(cfg.guide_file)
+            self.assertIsNone(cfg.guide)
+
+            # Test single node filters out guide_file from read_only_files in step mode
+            role_cfg.set_nodes((node1,))
+            cfg._cached_version = role_cfg.version
+            # Requirement: The session read-only files aggregating read-only files across the active nodes excluding files mapped to read-write files, and read-only files by node mapping each active node to its declared read-only files.
+            ro_files = cfg.read_only_files
+            self.assertIn(other_ro, ro_files)
+            self.assertNotIn(guide_ro, ro_files)
 
 
 if __name__ == "__main__":

@@ -1,12 +1,10 @@
-# Requirements specified in cleanroom_mcp_runner_impl.md
-from support.lib.framework import operation, override, singleton_type
+from framework import operation, override, singleton_type
 from typing import Sequence
 import cleanroom_mcp_runner
-from update_with_ai.parts.core.grounding import runner_logger
-from update_with_ai.parts.mcp.grounding import mcp_server
+import runner_logger
+import mcp_server
 
-
-@singleton_type("system")
+@singleton_type('system')
 class McpRunner(cleanroom_mcp_runner.McpRunner):
     """
 PURPOSE:
@@ -29,6 +27,9 @@ FRESH_REQUIREMENTS:
 - When Server-Sent Events transport is requested, the runner configures server host and port parameters, logs startup progress, and executes the server over Server-Sent Events.
 - The runner sets the batch size in the execution environment.
 
+INHERITED_REQUIREMENTS:
+- [McpRunner] The cleanroom mcp runner executes the server using runner options.
+
 GROUNDING_ARGUMENT:
 - Resolves imported mcp_server.McpServer, sets environment or parameters for host, port, and batch size, logs startup via imported runner_logger.RunnerLogger, and dispatches start with transport.
 """
@@ -47,6 +48,9 @@ FRESH_REQUIREMENTS:
 - The port resolves from `--port` as an integer, defaulting to 8765.
 - The batch size resolves from `--batch-size` as an integer, defaulting to 10.
 - Parsing arguments signals an error when invalid or unknown options are provided.
+
+INHERITED_REQUIREMENTS:
+- [McpRunner] The cleanroom mcp runner parses command-line arguments into runner options.
 
 GROUNDING_ARGUMENT:
 - Uses an argument parser to validate flag parameters, converting to cleanroom_mcp_runner.RunnerOptions and raising ValueError on unhandled arguments.

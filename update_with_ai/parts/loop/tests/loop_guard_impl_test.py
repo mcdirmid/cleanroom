@@ -194,6 +194,18 @@ class LoopGuardImplTest(unittest.TestCase):
             # Again with bindings2
             self.assertIsNone(guard.record_tool_execution("view_file", bindings2))
 
+    def test_edit_tool_without_file_name(self) -> None:
+        """CUJ: Edit tool execution with omitted file parameter falls back to general parameter tracking."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            guard = scope.get_singleton(LoopGuard)
+            empty_bindings = ActualParameterBindings(bindings=set())
+            # Requirement: [LoopGuard] A loop guard evaluates consecutive executions of identical tools and edits.
+            self.assertIsNone(
+                guard.record_tool_execution("replace_file_content", empty_bindings)
+            )
+            res = guard.record_tool_execution("replace_file_content", empty_bindings)
+            self.assertIsInstance(res, LoopReminder)
+
 
 if __name__ == "__main__":
     unittest.main()

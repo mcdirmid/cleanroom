@@ -56,7 +56,7 @@ def inspect_run(
     coordinator_id: str,
     brain_dir: str = _DEFAULT_BRAIN_DIR,
     db_dir: str = _DEFAULT_DB_DIR,
-    pricing: str = "deepseek",
+    pricing: str = "gemini-flash",
 ) -> Dict[str, Any]:
     """Extracts structured telemetry and lifecycle state for a coordinator and its workers."""
     coord_trans = os.path.join(brain_dir, coordinator_id, ".system_generated", "logs", "transcript.jsonl")
@@ -234,7 +234,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Cleanroom run monitor")
     parser.add_argument("--coordinator", default=None, help="Coordinator conversation ID (default: latest)")
     parser.add_argument("--format", choices=["table", "json"], default="table")
-    parser.add_argument("--pricing", default="deepseek", choices=list(PRICING_MODELS.keys()))
+    parser.add_argument("--pricing", default="gemini-flash", choices=list(PRICING_MODELS.keys()))
     args = parser.parse_args(argv)
 
     coord_id = args.coordinator or get_latest_coordinator()

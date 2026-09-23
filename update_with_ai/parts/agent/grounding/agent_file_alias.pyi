@@ -59,24 +59,6 @@ Sets the converter wire type for the alias manager to string
 
     @operation
     @override
-    def to_actual(self, value: str) -> 'FileAlias':
-        """
-PURPOSE:
-Converts a wire type string to a file alias, producing an unbound file if the relative path is not found or is ambiguous
-"""
-        ...
-
-    @operation
-    @override
-    def to_wire(self, value: 'FileAlias') -> str:
-        """
-PURPOSE:
-Converts a file alias to produce its relative path string
-"""
-        ...
-
-    @operation
-    @override
     def convert(self, wire_value: str) -> 'FileAlias':
         """
 PURPOSE:

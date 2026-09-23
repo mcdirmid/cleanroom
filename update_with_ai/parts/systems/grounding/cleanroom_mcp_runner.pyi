@@ -1,8 +1,6 @@
-# Requirements specified in cleanroom_mcp_runner.md
 from dataclasses import dataclass
-from support.lib.framework import data_type, operation, property, singleton_type
+from framework import data_type, operation, singleton_type
 from typing import Sequence
-
 
 @data_type
 @dataclass(frozen=True)
@@ -15,13 +13,7 @@ FRESH_REQUIREMENTS:
 - A runner options record provides execution parameters for running the server, exposing a transport, a host, a port, and a batch size.
 """
 
-    def __init__(
-        self,
-        transport: str = "stdio",
-        host: str = "127.0.0.1",
-        port: int = 8765,
-        batch_size: int = 10,
-    ) -> None:
+    def __init__(self, transport: str='stdio', host: str='127.0.0.1', port: int=8765, batch_size: int=10) -> None:
         ...
 
     @property
@@ -56,8 +48,7 @@ Exposes batch size limit for dirty node processing
 """
         ...
 
-
-@singleton_type("system")
+@singleton_type('system')
 class McpRunner:
     """
 PURPOSE:

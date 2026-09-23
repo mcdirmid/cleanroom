@@ -441,13 +441,18 @@ def main() -> int:
 
     # Configure sys.path so update_python_with_ai and update_with_ai are resolvable
     for p in [
-        repo_root / "update_python_with_ai",
-        repo_root / "update_with_ai",
         repo_root,
+        repo_root / "update_with_ai",
+        repo_root / "update_python_with_ai",
     ]:
         ps = str(p)
         if ps not in sys.path:
             sys.path.insert(0, ps)
+
+    support_dir = str((repo_root / "update_python_with_ai" / "support").resolve())
+    if "support" in sys.modules and getattr(sys.modules["support"], "__path__", None):
+        if support_dir not in sys.modules["support"].__path__:
+            sys.modules["support"].__path__.append(support_dir)
 
     if args.impl and args.test:
         impl_path = Path(args.impl)

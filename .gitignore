@@ -8,4 +8,7 @@ __pycache__/
 .update_with_ai.proto
 /.mcp.active*
 /.cleanroom/
+.pytest_cache/
+.ruff_cache/
+.mcp.worker_sessions.json
 

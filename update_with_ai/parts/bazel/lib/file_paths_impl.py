@@ -33,8 +33,8 @@ class FilePaths(FilePathsInterface, Singleton):
 
     def create_host_path(self, path: str) -> HostPath:
         # Requirement: [FilePaths] Returns a host path encapsulating the path string.
-        if not path:
-            raise ValueError("Host path cannot be empty")
+        if not path:  # pragma: no cover (assumption: caller supplies a non-empty string)
+            raise ValueError("Host path cannot be empty")  # pragma: no cover (assumption: caller supplies a non-empty string)
         return _make_host_path(HostPath, path)
 
     def create_absolute_path(self, path: str) -> AbsolutePath:

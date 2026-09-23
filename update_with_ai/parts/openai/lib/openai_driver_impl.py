@@ -153,11 +153,48 @@ def _format_tool_log(
     return summary, transcript
 
 
+def _build_actual_bindings(
+    tool: Optional[tool_provider.Tool],
+    args_dict: dict[str, Any],
+) -> tool_provider.ActualParameterBindings:
+    actual_bindings_set: Set[Tuple[tool_provider.Parameter, Any]] = set()
+    if tool is not None:
+        params_by_name = {p.name: p for p in tool.parameters}
+        for k, v in args_dict.items():
+            if k in params_by_name:
+                p = params_by_name[k]
+                if p.parameter_converter is not None:
+                    try:
+                        conv_val = p.parameter_converter.convert(v)
+                    except (ValueError, TypeError, KeyError):
+                        conv_val = v
+                else:
+                    conv_val = v  # pragma: no cover (assumption: parameter_converter is non-null under tool_provider.Parameter grounding contract)
+                actual_bindings_set.add((p, conv_val))
+            else:
+                dummy_p = tool_provider.Parameter(
+                    name=k,
+                    description="",
+                    parameter_converter=_DEFAULT_CONVERTER,
+                )
+                actual_bindings_set.add((dummy_p, v))
+    else:
+        for k, v in args_dict.items():
+            dummy_p = tool_provider.Parameter(
+                name=k,
+                description="",
+                parameter_converter=_DEFAULT_CONVERTER,
+            )
+            actual_bindings_set.add((dummy_p, v))
+
+    return tool_provider.ActualParameterBindings(bindings=actual_bindings_set)
+
+
 class LoopDriver(loop_driver.LoopDriver, Singleton):
     tier = agent_session
 
     def __init__(self) -> None:
-        pass
+        self._truncation_counter: int = 0
 
     def run(self) -> loop_driver.AgentOutcome:
         openai_cfg = get_singleton(openai_config.OpenaiConfig)
@@ -360,44 +397,144 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                 )
             )
 
-            # Requirement: When a model response is truncated at the generation limit, the loop driver terminates any truncated tool invocation by repairing unclosed arguments into valid JSON and appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
+            # Requirement: When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON: when a replace file content invocation provides a target file, target content, and partial replacement content, any trailing incomplete line without a terminating newline is deleted and replaced with a raise NotImplementedError sentinel carrying an incrementing session truncation identifier matching the indentation of the deleted line, or if the last line is complete the sentinel is appended on the next line matching the last line's indentation, executing the tool to persist partial modifications and returning an actionable notice directing the model to resume implementation targeting the sentinel; otherwise the loop driver terminates the truncated tool invocation by appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
             if finish_reason == "length":
                 if tool_calls:
                     for tc in tool_calls:
                         fn_name = tc.function.name
-                        supp_key: Optional[str] = None
-                        if fn_name == "replace_file_content":
-                            supp_key = "replace_file_content"
-                        elif fn_name in ("advance", "submit", "check_file", "run_tests"):
-                            supp_key = fn_name
-                        else:
-                            repaired_raw = _repair_json(tc.function.arguments or "")
-                            try:
-                                parsed = json.loads(repaired_raw)
-                                if isinstance(parsed, dict) and "path" in parsed:
-                                    supp_key = str(parsed["path"]).split("/")[-1]
-                            except Exception:
-                                pass
-                            if supp_key is None:
-                                supp_key = fn_name
-
-                        history.append_tool_response(
-                            response=tool_provider.Response(
-                                is_failed=True,
-                                is_terminated=False,
-                                content=(
-                                    f"Tool execution for '{fn_name}' was truncated at the generation limit before completion. "
-                                    "The tool was not executed."
-                                ),
-                                reminder=(
-                                    "Whole-file, multi-class, or monolithic replacements that exceed output token limits are prohibited. "
-                                    "Make strictly small edits containing at most a single test method or fixture (at most 30–50 lines of code) using replace_file_content."
-                                ),
-                                suppression_key=supp_key,
-                            ),
-                            tool_name=fn_name,
-                            tool_call_id=tc.id or f"truncated_{turns}",
+                        repaired_raw = _repair_json(tc.function.arguments or "")
+                        salvaged = json.loads(repaired_raw)
+                        salvaged_args: Optional[dict[str, Any]] = (
+                            salvaged if isinstance(salvaged, dict) else None
                         )
+
+                        handled_truncation = False
+                        if (
+                            fn_name == "replace_file_content"
+                            and salvaged_args is not None
+                            and "replacement_content" in salvaged_args
+                            and "target_file" in salvaged_args
+                            and "target_content" in salvaged_args
+                        ):
+                            self._truncation_counter += 1
+                            sentinel = f'raise NotImplementedError("TRUNCATED_{self._truncation_counter}_")'
+                            raw_repl = str(salvaged_args["replacement_content"])
+                            if raw_repl.endswith("\n"):
+                                non_empty_lines = [
+                                    l for l in raw_repl.splitlines() if l.strip()
+                                ]
+                                last_line = (
+                                    non_empty_lines[-1] if non_empty_lines else ""
+                                )
+                                indent = len(last_line) - len(last_line.lstrip())
+                                salvaged_repl = (
+                                    raw_repl + f"{' ' * indent}{sentinel}\n"
+                                )
+                            else:
+                                repl_lines = raw_repl.splitlines(keepends=True)
+                                if repl_lines:
+                                    last_line = repl_lines[-1]
+                                    indent = len(last_line) - len(
+                                        last_line.lstrip()
+                                    )
+                                    repl_lines[-1] = (
+                                        f"{' ' * indent}{sentinel}\n"
+                                    )
+                                    salvaged_repl = "".join(repl_lines)
+                                else:
+                                    salvaged_repl = f"{sentinel}\n"
+
+                            salvaged_args["replacement_content"] = salvaged_repl
+
+                            tools_by_name = {
+                                t.name: t for t in tool_mgr.installed_tools
+                            }
+                            tool = tools_by_name.get(fn_name)
+                            if tool is not None:
+                                actual_bindings = _build_actual_bindings(
+                                    tool, salvaged_args
+                                )
+                                tool_resp = tool.execute_tool(actual_bindings)
+                                if not tool_resp.is_failed:
+                                    guard.record_progress()
+                                    target_path = str(
+                                        salvaged_args.get("target_file", "")
+                                    )
+                                    notice_content = (
+                                        f"Notice: Tool execution for '{fn_name}' was truncated at the generation limit. "
+                                        f"Partial content was written to '{target_path}', and incomplete code was replaced with '{sentinel}'. "
+                                        f"Use replace_file_content targeting '{sentinel}' to continue implementation."
+                                    )
+                                    history.append_tool_response(
+                                        response=tool_provider.Response(
+                                            is_failed=False,
+                                            is_terminated=False,
+                                            content=notice_content,
+                                            reminder=f"Use replace_file_content targeting '{sentinel}' to resume.",
+                                            suppression_key="replace_file_content",
+                                        ),
+                                        tool_name=fn_name,
+                                        tool_call_id=tc.id or f"truncated_{turns}",
+                                    )
+                                    status_sum, t_rep = _format_tool_log(
+                                        fn_name,
+                                        salvaged_args,
+                                        tool_provider.Response(
+                                            is_failed=False,
+                                            is_terminated=False,
+                                            content=notice_content,
+                                            reminder=f"Use replace_file_content targeting '{sentinel}' to resume.",
+                                        ),
+                                        turns,
+                                    )
+                                    logger.consume(
+                                        runner_logger.LogEvent(
+                                            event_name="tool_execution",
+                                            summary=status_sum,
+                                            transcript_representation=t_rep,
+                                        )
+                                    )
+                                    handled_truncation = True
+
+                        if not handled_truncation:
+                            supp_key: Optional[str] = None
+                            if fn_name == "replace_file_content":
+                                supp_key = "replace_file_content"
+                            elif fn_name in (
+                                "advance",
+                                "submit",
+                                "check_file",
+                                "run_tests",
+                            ):
+                                supp_key = fn_name
+                            else:
+                                if (
+                                    salvaged_args is not None
+                                    and "path" in salvaged_args
+                                ):
+                                    supp_key = str(salvaged_args["path"]).split(
+                                        "/"
+                                    )[-1]
+                                if supp_key is None:
+                                    supp_key = fn_name
+
+                            history.append_tool_response(
+                                response=tool_provider.Response(
+                                    is_failed=True,
+                                    is_terminated=False,
+                                    content=(
+                                        f"Tool execution for '{fn_name}' was truncated at the generation limit before completion. "
+                                        "The tool was not executed."
+                                    ),
+                                    reminder=(
+                                        "Whole-file, multi-class, or monolithic replacements that exceed output token limits are prohibited. "
+                                        "Make strictly small edits containing at most a single test method or fixture (at most 30–50 lines of code) using replace_file_content."
+                                    ),
+                                    suppression_key=supp_key,
+                                ),
+                                tool_name=fn_name,
+                                tool_call_id=tc.id or f"truncated_{turns}",
+                            )
                 else:
                     history.append_message(
                         loop_conversation.Message(
@@ -431,39 +568,7 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
 
                 tools_by_name = {t.name: t for t in tool_mgr.installed_tools}
                 tool = tools_by_name.get(fn_name)
-                actual_bindings_set: Set[Tuple[tool_provider.Parameter, Any]] = set()
-                if tool is not None:
-                    params_by_name = {p.name: p for p in tool.parameters}
-                    for k, v in args_dict.items():
-                        if k in params_by_name:
-                            p = params_by_name[k]
-                            if p.parameter_converter is not None:
-                                try:
-                                    conv_val = p.parameter_converter.convert(v)
-                                except (ValueError, TypeError, KeyError):
-                                    conv_val = v
-                            else:
-                                conv_val = v  # pragma: no cover (assumption: parameter_converter is non-null under tool_provider.Parameter grounding contract)
-                            actual_bindings_set.add((p, conv_val))
-                        else:
-                            dummy_p = tool_provider.Parameter(
-                                name=k,
-                                description="",
-                                parameter_converter=_DEFAULT_CONVERTER,
-                            )
-                            actual_bindings_set.add((dummy_p, v))
-                else:
-                    for k, v in args_dict.items():
-                        dummy_p = tool_provider.Parameter(
-                            name=k,
-                            description="",
-                            parameter_converter=_DEFAULT_CONVERTER,
-                        )
-                        actual_bindings_set.add((dummy_p, v))
-
-                actual_bindings = tool_provider.ActualParameterBindings(
-                    bindings=actual_bindings_set
-                )
+                actual_bindings = _build_actual_bindings(tool, args_dict)
 
                 # Requirement: Evaluating a tool invocation with the loop guard records the tool execution in the loop guard, injecting a loop reminder into the conversation when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
                 # Requirement: [AgentDriver] The agent driver evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.

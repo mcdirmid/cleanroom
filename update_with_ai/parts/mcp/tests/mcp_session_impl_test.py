@@ -109,6 +109,12 @@ class McpSessionImplTest(unittest.TestCase):
         """CUJ: Register a session when manifest loader and dag storage are present and verify manifest loading."""
         mock_manifest_loader = MockManifestLoader()
         mock_storage = MockDagStorage()
+        root_node = Node(unit_address="//pkg:cleaner", role_address="code_cleaner")
+        dep_node = Node(unit_address="//pkg:dep", role_address="code_cleaner")
+        mock_storage.deps[root_node] = [
+            Dependency(node=dep_node),
+            Dependency(node=dep_node),
+        ]
         self.registry.register_instance(
             mock_manifest_loader, keys=[BazelManifestLoader], tier=system
         )

@@ -32,8 +32,8 @@ class LoopCleaner(loop_cleaner.LoopCleaner, Singleton):
         while not subgraph.is_complete:
             # Requirement: [LoopCleaner] Cleaning a node cleans dirty nodes in dependency-first topological order, ensuring all dependencies of a node are clean before that node is cleaned.
             batch = subgraph.next_ready_batch()
-            if not batch:
-                break
+            if not batch:  # pragma: no cover (assumption: acyclic subgraph guarantees non-empty batch when incomplete)
+                break  # pragma: no cover (assumption: acyclic subgraph guarantees non-empty batch when incomplete)
             subgraph.record_visit(batch)
             should_continue = cleaner.clean(batch)
             # Requirement: [LoopCleaner] Cleaning dirty nodes halts if the node cleaner communicates that processing cannot continue.

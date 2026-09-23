@@ -49,7 +49,7 @@ Tool execution applies text replacements to designated read-write file content. 
 
 - Fails if the start line exceeds the end line, when both start line and end line are provided.
 
-- Fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence, when allow multiple is not set or false.
+- Matches target content using exact matching, or falls back to line-by-line whitespace-stripped matching across the search window when exact matching finds zero occurrences and allow multiple is false or not set, succeeding if and only if exactly one unique line window matches after stripping leading and trailing whitespace from each line; fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence, when allow multiple is not set or false.
 
 - Fails if the target content is not found within the designated line range, and replaces all occurrences of the target content within the designated line range, when allow multiple is true.
 

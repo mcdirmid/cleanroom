@@ -1,0 +1,99 @@
+# update_with_ai/parts/antigravity/BUILD.bazel
+
+load("//update_python_with_ai/support/lib:update_python_with_ai.bzl", "update_python_with_ai")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "high_specs",
+    srcs = glob(["high/*.md"]),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "grounding_specs",
+    srcs = glob(["grounding/*.pyi"]),
+    visibility = ["//visibility:public"],
+)
+
+update_python_with_ai(
+    name = "antigravity_run_logger",
+    module_deps = [],
+)
+
+update_python_with_ai(
+    name = "antigravity_run_logger_impl",
+    module_deps = [
+        ":antigravity_run_logger",
+    ],
+)
+
+update_python_with_ai(
+    name = "antigravity_sandbox_gate",
+    module_deps = [
+        ":antigravity_run_logger",
+    ],
+)
+
+update_python_with_ai(
+    name = "antigravity_sandbox_gate_impl",
+    module_deps = [
+        ":antigravity_run_logger",
+        ":antigravity_sandbox_gate",
+    ],
+)
+
+update_python_with_ai(
+    name = "antigravity_telemetry",
+    module_deps = [],
+)
+
+update_python_with_ai(
+    name = "antigravity_telemetry_impl",
+    module_deps = [
+        ":antigravity_telemetry",
+    ],
+)
+
+update_python_with_ai(
+    name = "antigravity_mcp_client",
+    module_deps = [],
+)
+
+update_python_with_ai(
+    name = "antigravity_mcp_client_impl",
+    module_deps = [
+        ":antigravity_mcp_client",
+    ],
+)
+
+update_python_with_ai(
+    name = "antigravity_coordinator",
+    module_deps = [],
+)
+
+update_python_with_ai(
+    name = "antigravity_coordinator_impl",
+    module_deps = [
+        ":antigravity_coordinator",
+        ":antigravity_mcp_client",
+        ":antigravity_sandbox_gate",
+        ":antigravity_telemetry",
+    ],
+)
+
+update_python_with_ai(
+    name = "antigravity_asm",
+    module_deps = [
+        ":antigravity_coordinator",
+        ":antigravity_coordinator_impl",
+        ":antigravity_mcp_client",
+        ":antigravity_mcp_client_impl",
+        ":antigravity_run_logger",
+        ":antigravity_run_logger_impl",
+        ":antigravity_sandbox_gate",
+        ":antigravity_sandbox_gate_impl",
+        ":antigravity_telemetry",
+        ":antigravity_telemetry_impl",
+    ],
+)

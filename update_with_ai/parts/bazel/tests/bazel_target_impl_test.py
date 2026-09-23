@@ -55,6 +55,10 @@ class TestBazelTargetImpl(unittest.TestCase):
                 utils.normalize("//pkg/sub:target#//roles:lib"),
                 Node(unit_address="//pkg/sub:target", role_address="//roles:lib"),
             )
+            self.assertEqual(
+                utils.normalize(""),
+                Node(unit_address="", role_address=""),
+            )
 
     def test_extract_directory(self) -> None:
         """Tests CUJ for extracting package directory from canonical Node.

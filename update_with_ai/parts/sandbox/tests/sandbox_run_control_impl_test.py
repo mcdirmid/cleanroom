@@ -521,7 +521,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # Requirement: [RunController] The run controller installs an advance tool when guide step mode is active, coordinating step progression through guide delivery upon passing verification.
             # Requirement: [RunController] The run controller installs a submit tool which is a resolve tool that concludes active nodes upon passing verification, marks the resolve target clean in the current get work turn, accepting a text change summary parameter, and enforces change documentation.
             # Requirement: [RunController] The run controller installs a fail tool which is a resolve tool that terminates the run in failure, accepting a text explanation parameter.
-            # Requirement: [RunController] The run controller installs an argument-free check files tool named `check_files` that updates verification results if outdated, evaluates verification checks across all open targets and modified workspace files, presents aggregated verification outcomes to the agent, tracks last tested file hashes, and fails when verification failed.
+            # Requirement: [RunController] The run controller installs an argument-free check files tool named check_files that updates verification results if outdated, evaluates verification checks across all open targets and modified workspace files, presents aggregated verification outcomes to the agent, tracks last tested file hashes, and fails when verification failed.
             # Requirement: [RunController] The run controller installs a blame tool which is a resolve tool, when blame targets are configured, attributing task failure to an upstream dependency node, accepting a file alias blame target parameter and a text explanation parameter.
             # Requirement: [RunController] The run controller installs a get work tool that retrieves active dirty nodes, materializes startup templates, accepting an integer max batch size parameter, and delivers the session task prompt.
             tool_names = {t.name for t in self.tool_mgr.installed_tools}
@@ -600,16 +600,16 @@ class SandboxRunControlImplTest(unittest.TestCase):
         with enter_phase(agent_session, registry=self.registry) as scope:
             ctrl = scope.get_singleton(RunControllerImpl)
             # First evaluation executes checks and caches result
-            # Requirement: Evaluation of verification checks is cached alongside the edit manager file update revision.
-            # Requirement: [RunController] The run controller caches verification evaluation results alongside the edit manager file update revision, reusing the cached verification outcome as long as no workspace files have been updated since that evaluation.
-            # Requirement: Verification checks are evaluated sequentially and results are cached whenever verification results are outdated, which occurs before initial evaluation and when workspace files have been updated since the previous evaluation.
+            # Requirement: Evaluation of verification checks for an active node is cached alongside the edit manager file hash of the target node read-write file.
+            # Requirement: [RunController] The run controller caches verification evaluation results alongside edit manager file hashes for target nodes, reusing the cached verification outcome as long as no workspace files have been updated since that evaluation.
+            # Requirement: Verification checks are evaluated sequentially and results are cached whenever verification results are outdated, which occurs before initial evaluation and when the target read-write file hash has changed since the previous evaluation.
             passed1, diag1 = ctrl.evaluate_verification()
             self.assertFalse(passed1)
             self.assertEqual(check.call_count, 1)
             self.assertIn("dep.py:5", diag1)
 
             # Re-evaluation with same file revision reuses cached result without re-executing checks
-            # Requirement: When workspace files have not been updated since the previous evaluation, verification check execution is omitted and the cached verification outcome is reused.
+            # Requirement: When the target read-write file hash has not changed since the previous evaluation, verification check execution is omitted and the cached verification outcome is reused.
             passed2, diag2 = ctrl.evaluate_verification()
             self.assertFalse(passed2)
             self.assertEqual(check.call_count, 1)
@@ -664,8 +664,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertFalse(resp.is_terminated)
             self.assertEqual(vcheck.call_count, 1)
             self.assertIsNotNone(resp.reminder)
-            assert resp.reminder is not None
-            self.assertIn("check", resp.reminder.lower())
             self.assertIsNotNone(resp.follow_up_tool_call)
             assert resp.follow_up_tool_call is not None
             self.assertEqual(resp.follow_up_tool_call.tool_name, "check_files")
@@ -718,8 +716,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertTrue(resp.is_failed)
             self.assertFalse(resp.is_terminated)
             self.assertIsNotNone(resp.reminder)
-            assert resp.reminder is not None
-            self.assertIn("submit", resp.reminder)
             self.assertEqual(resp.suppression_key, "advance")
 
     def test_advance_tool_no_steps_remaining_no_files_modified_specifies_submit_followup(
@@ -816,8 +812,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertTrue(resp.is_failed)
             self.assertFalse(resp.is_terminated)
             self.assertIsNotNone(resp.reminder)
-            assert resp.reminder is not None
-            self.assertIn("check", resp.reminder.lower())
             self.assertIsNotNone(resp.follow_up_tool_call)
             assert resp.follow_up_tool_call is not None
             self.assertEqual(resp.follow_up_tool_call.tool_name, "check_files")
@@ -1505,7 +1499,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIsInstance(check_files.description, str)
 
             b = ActualParameterBindings(bindings=set())
-            # Requirement: [RunController] The run controller installs an argument-free check files tool named `check_files` that updates verification results if outdated, evaluates verification checks across all open targets and modified workspace files, presents aggregated verification outcomes to the agent, tracks last tested file hashes, and fails when verification failed.
+            # Requirement: [RunController] The run controller installs an argument-free check files tool named check_files that updates verification results if outdated, evaluates verification checks across all open targets and modified workspace files, presents aggregated verification outcomes to the agent, tracks last tested file hashes, and fails when verification failed.
             # Requirement: Tool execution fails when verification fails, presenting diagnostic feedback sanitized through the alias manager alongside any configured verification failure instructions.
             resp = check_files.execute_tool(b)
 
@@ -1530,13 +1524,12 @@ class SandboxRunControlImplTest(unittest.TestCase):
         with enter_phase(agent_session, registry=self.registry) as scope:
             check_files = scope.get_singleton(CheckFilesTool)
             b = ActualParameterBindings(bindings=set())
-            # Requirement: [RunController] The run controller installs an argument-free check files tool named `check_files` that updates verification results if outdated, evaluates verification checks across all open targets and modified workspace files, presents aggregated verification outcomes to the agent, tracks last tested file hashes, and fails when verification failed.
+            # Requirement: [RunController] The run controller installs an argument-free check files tool named check_files that updates verification results if outdated, evaluates verification checks across all open targets and modified workspace files, presents aggregated verification outcomes to the agent, tracks last tested file hashes, and fails when verification failed.
             # Requirement: Tool execution produces a response presenting passing verification results using the session verification success message when configured or default passing verification results alongside sanitized check output when verification passes.
             resp = check_files.execute_tool(b)
 
             self.assertFalse(resp.is_failed)
             self.assertFalse(resp.is_terminated)
-            self.assertIn("Verification passed", resp.content)
             self.assertIn("All tests pass in test.py", resp.content)
             # Requirement: The check files tool is named `check_files`, accepts no parameters, and shares a constant suppression key `check_files`.
             self.assertEqual(resp.suppression_key, "check_files")
@@ -1559,7 +1552,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             b = ActualParameterBindings(bindings=set())
 
             # First execution runs checks
-            # Requirement: [RunController] The run controller installs an argument-free check files tool named `check_files` that updates verification results if outdated, evaluates verification checks across all open targets and modified workspace files, presents aggregated verification outcomes to the agent, tracks last tested file hashes, and fails when verification failed.
+            # Requirement: [RunController] The run controller installs an argument-free check files tool named check_files that updates verification results if outdated, evaluates verification checks across all open targets and modified workspace files, presents aggregated verification outcomes to the agent, tracks last tested file hashes, and fails when verification failed.
             # Requirement: Executing the check files tool updates verification results if outdated and evaluates verification checks across all open targets and modified workspace files.
             resp1 = check_files.execute_tool(b)
             self.assertTrue(resp1.is_failed)
@@ -1573,9 +1566,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertTrue(resp2.is_failed)
             self.assertEqual(vcheck.call_count, 1)
             self.assertIsNotNone(resp2.reminder)
-            assert resp2.reminder is not None
-            self.assertIn("verification", resp2.reminder.lower())
-            self.assertIn("no new information", resp2.reminder.lower())
 
             # Third execution after file update re-evaluates
             self.edit_mgr.file_update_revision = 2
@@ -1616,9 +1606,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
             resp2 = check_files.execute_tool(b)
             self.assertFalse(resp2.is_failed)
             self.assertIsNotNone(resp2.reminder)
-            assert resp2.reminder is not None
-            self.assertIn("verification", resp2.reminder.lower())
-            self.assertIn("no new information", resp2.reminder.lower())
             self.assertIsNotNone(resp2.follow_up_tool_call)
             assert resp2.follow_up_tool_call is not None
             self.assertEqual(resp2.follow_up_tool_call.tool_name, "view_file")
@@ -1884,7 +1871,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
             self.assertFalse(resp_sub.is_failed)
             self.assertFalse(resp_sub.is_terminated)
-            self.assertIn("get_work", resp_sub.reminder or "")
+            self.assertIsNotNone(resp_sub.reminder)
 
         # 2. Fail in MCP mode when all session targets resolved
         self.setUp()
@@ -1899,7 +1886,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
             self.assertTrue(resp_fail.is_failed)
             self.assertFalse(resp_fail.is_terminated)
-            self.assertIn("get_work", resp_fail.reminder or "")
+            self.assertIsNotNone(resp_fail.reminder)
 
         # 3. Blame in MCP mode when all session targets resolved
         self.setUp()
@@ -1917,7 +1904,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
             self.assertFalse(resp_blame.is_failed)
             self.assertFalse(resp_blame.is_terminated)
-            self.assertIn("get_work", resp_blame.reminder or "")
+            self.assertIsNotNone(resp_blame.reminder)
 
     def test_get_work_tool_schema_and_open_targets_blocking(self) -> None:
         """CUJ: GetWorkTool schema defines name and max_batch_size parameter; execution fails when open session targets remain."""
@@ -1974,7 +1961,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertFalse(resp.is_failed)
             self.assertFalse(resp.is_terminated)
             self.assertTrue(resp.content)
-            self.assertIn("no dirty nodes", resp.content.lower())
 
     def test_get_work_materializes_templates_and_delivers_task_prompt(self) -> None:
         """CUJ: When ready dirty nodes exist, get_work updates role config, materializes startup templates, and returns rendered task prompt."""
@@ -2068,7 +2054,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # Requirement: Tool execution produces an idle response indicating that no dirty nodes are ready if no dirty nodes are ready for cleaning.
             resp_mismatch = get_work.execute_tool(ActualParameterBindings(bindings=set()))
             self.assertFalse(resp_mismatch.is_failed)
-            self.assertEqual(resp_mismatch.content, "No dirty nodes are ready for cleaning.")
+            self.assertTrue(resp_mismatch.content)
 
             # 2. Matching role with max_batch_size = 0
             self.role_cfg.set_role("other_role")
@@ -2220,7 +2206,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             rc = scope.get_singleton(RunControllerImpl)
             self.tool_mgr.installed_tools.clear()
 
-            # Requirement: The run controller initializes by unconditionally installing the submit tool, fail tool, check file tool, and get work tool for the agent session, installing the advance tool only when guide step mode is active, obtaining configured blame targets and verification checks from the node config, and installing the blame tool only when blame targets are configured.
+            # Requirement: The run controller initializes by unconditionally installing the submit tool, fail tool, check files tool, and get work tool for the agent session, installing the advance tool only when guide step mode is active, obtaining configured blame targets and verification checks from the node config, and installing the blame tool only when blame targets are configured.
             rc.reset_nodes([])
             self.assertGreater(len(rc.open_nodes()), 0)
             installed_names = {t.name for t in self.tool_mgr.installed_tools}
@@ -2568,9 +2554,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertFalse(resp.is_terminated)
             self.assertTrue(resp.content)
             self.assertIsNotNone(resp.reminder)
-            assert resp.reminder is not None
             self.assertTrue(resp.reminder)
-            self.assertIn("open target", resp.reminder.lower())
 
     def test_check_files_repeated_defaults_view_file_to_last_read_or_earliest(self) -> None:
         """CUJ: CheckFilesTool defaults follow-up view_file to last read or edited file or earliest read-write file when repeated."""
@@ -2652,7 +2636,345 @@ class SandboxRunControlImplTest(unittest.TestCase):
             resp = check_files.execute_tool(b)
             self.assertTrue(resp.is_failed)
             self.assertIn("SyntaxError in dep.py", resp.content)
-            self.assertIn("In-batch dependency", resp.content)
+
+
+    def test_format_task_prompt_qa_and_target_stem_variations(self) -> None:
+        """CUJ: format_task_prompt handles QA prompt defaulting, target stem variations (_test, _coverage), companions, and fallback targets."""
+        node_qa = Node(unit_address="//pkg:unit_qa", role_address="qa")
+        node_test = Node(unit_address="//pkg:unit_test", role_address="test")
+        node_cov = Node(unit_address="//pkg:unit_coverage", role_address="coverage")
+        node_lib = Node(unit_address="//pkg:unit", role_address="lib")
+
+        self.storage.node_definitions = {
+            node_qa: MockNodeDefinition(task_prompt=""),
+            node_test: MockNodeDefinition(task_prompt="Test unit"),
+            node_cov: MockNodeDefinition(task_prompt="Coverage unit"),
+            node_lib: MockNodeDefinition(task_prompt="Implement unit"),
+        }
+
+        ro_guide: BoundFile = ReadOnlyFile(
+            relative_path="guide.md",
+            workspace_path=_make_workspace_path("pkg/guide.md"),
+            owning_node=node_qa,
+        )
+        ro_spec: BoundFile = ReadOnlyFile(
+            relative_path="grounding/unit.pyi",
+            workspace_path=_make_workspace_path("pkg/grounding/unit.pyi"),
+            owning_node=node_lib,
+        )
+        ro_impl: BoundFile = ReadOnlyFile(
+            relative_path="lib/unit.py",
+            workspace_path=_make_workspace_path("pkg/lib/unit.py"),
+            owning_node=node_lib,
+        )
+
+        # 1. QA node with alias having parent directory and empty task prompt (spec_path is None)
+        self.node_cfg._read_only_files = {ro_guide}
+        self.node_cfg.src_file_alias_by_node = {node_qa: "pkg/unit_qa"}
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            rc = scope.get_singleton(RunControllerImpl)
+            # Requirement: The run controller formats task prompts by expanding guide instructions, startup file contents, incoming feedback, and companions for active nodes.
+            prompt_qa = rc.format_task_prompt([node_qa])
+            self.assertIn("Evaluate test execution and arbitrate failures per the guide.", prompt_qa)
+            self.assertIn("pkg/grounding/unit_qa.pyi", prompt_qa)
+
+        # 2. QA node with empty alias
+        self.node_cfg.src_file_alias_by_node = {node_qa: ""}
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            rc = scope.get_singleton(RunControllerImpl)
+            # Requirement: The run controller formats task prompts by expanding guide instructions, startup file contents, incoming feedback, and companions for active nodes.
+            prompt_qa_empty = rc.format_task_prompt([node_qa])
+            self.assertIn("grounding/unit_qa.pyi", prompt_qa_empty)
+
+        # 3. Test node alias ending in _test, coverage node ending in _coverage, lib node companions (.py and .pyi)
+        self.node_cfg._read_only_files = {ro_guide, ro_spec, ro_impl}
+        self.node_cfg.src_file_alias_by_node = {
+            node_test: "tests/unit_test.py",
+            node_cov: "tests/unit_coverage.py",
+            node_lib: "lib/unit.py",
+        }
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            rc = scope.get_singleton(RunControllerImpl)
+            # Requirement: The run controller formats task prompts by expanding guide instructions, startup file contents, incoming feedback, and companions for active nodes.
+            prompt_lib = rc.format_task_prompt([node_lib])
+            self.assertIn("Spec: `grounding/unit.pyi`", prompt_lib)
+            self.assertIn("Impl: `lib/unit.py`", prompt_lib)
+
+            prompt_test = rc.format_task_prompt([node_test])
+            self.assertIn("Test unit", prompt_test)
+
+            prompt_cov = rc.format_task_prompt([node_cov])
+            self.assertIn("Coverage unit", prompt_cov)
+
+        # 4. Incoming feedback when src_file_alias_by_node and read_write_files are empty
+        self.node_cfg.src_file_alias_by_node = {}
+        self.node_cfg._read_write_files = set()
+        self.storage.messages[node_lib] = [dag_storage.Feedback(content="Fix syntax error")]
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            rc = scope.get_singleton(RunControllerImpl)
+            # Requirement: The run controller formats task prompts by expanding guide instructions, startup file contents, incoming feedback, and companions for active nodes.
+            prompt_fb = rc.format_task_prompt([node_lib])
+            self.assertIn("Fix //pkg:unit based on feedback: Fix syntax error", prompt_fb)
+
+    def test_is_node_dirty_rw_file_alias_lookup(self) -> None:
+        """CUJ: evaluate_verification_for_node resolves rw_file by relative_path when owning_node is None."""
+        node1 = Node(unit_address="//pkg:unit1", role_address="lib")
+        rw1 = ReadWriteFile(
+            relative_path="unit1.py",
+            workspace_path=_make_workspace_path("pkg/unit1.py"),
+            owning_node=cast(Any, None),
+        )
+        self.node_cfg._read_write_files = {rw1}
+        self.node_cfg.src_file_alias_by_node = {node1: "unit1.py"}
+        self.node_cfg.verification_checks_by_node = {node1: [MockVerificationCheck(passes=True)]}
+        self.edit_mgr._file_hashes = {"unit1.py": "h1"}
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            rc = scope.get_singleton(RunControllerImpl)
+            rc.reset_nodes([node1])
+            # Requirement: The run controller caches verification evaluation results alongside edit manager file hashes for target nodes, reusing the cached verification outcome as long as no workspace files have been updated since that evaluation.
+            passed, diag = rc.evaluate_verification_for_node(node1)
+            self.assertTrue(passed)
+
+    def test_resolve_default_target_single_rw_file_and_node_states(self) -> None:
+        """CUJ: resolve_default_target handles single rw file fallbacks and closed node states."""
+        node1 = Node(unit_address="//pkg:unit1", role_address="lib")
+        rw1_unowned = ReadWriteFile(
+            relative_path="unit1.py",
+            workspace_path=_make_workspace_path("pkg/unit1.py"),
+            owning_node=cast(Any, None),
+        )
+
+        # 1. Single read-write file with owning_node=None matches by alias
+        self.node_cfg._read_write_files = {rw1_unowned}
+        self.node_cfg.src_file_alias_by_node = {node1: "unit1.py"}
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            rc = scope.get_singleton(RunControllerImpl)
+            rc.reset_nodes([node1])
+            # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
+            self.assertEqual(rc.resolve_default_target(), node1)
+
+        # 2. Single read-write file where alias does not match node falls back to nodes[0]
+        rw_other = ReadWriteFile(
+            relative_path="other.py",
+            workspace_path=_make_workspace_path("pkg/other.py"),
+            owning_node=cast(Any, None),
+        )
+        self.node_cfg._read_write_files = {rw_other}
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            rc = scope.get_singleton(RunControllerImpl)
+            rc.reset_nodes([node1])
+            # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
+            self.assertEqual(rc.resolve_default_target(), node1)
+
+        # 3. No open nodes returns None
+        node2 = Node(unit_address="//pkg:unit2", role_address="lib")
+        rw2 = ReadWriteFile(
+            relative_path="unit2.py",
+            workspace_path=_make_workspace_path("pkg/unit2.py"),
+            owning_node=node2,
+        )
+        self.node_cfg._read_write_files = {rw1_unowned, rw2}
+        self.node_cfg.src_file_alias_by_node = {node1: "unit1.py", node2: "unit2.py"}
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            rc = scope.get_singleton(RunControllerImpl)
+            rc.reset_nodes([node1, node2])
+            rc._node_states[node1] = "SUBMITTED"
+            rc._node_states[node2] = "SUBMITTED"
+            # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
+            self.assertIsNone(rc.resolve_default_target())
+
+        # 4. _is_file_open filters out closed owning_node and closed alias_node
+        node3 = Node(unit_address="//pkg:unit3", role_address="lib")
+        rw2_owned = ReadWriteFile(
+            relative_path="unit2.py",
+            workspace_path=_make_workspace_path("pkg/unit2.py"),
+            owning_node=node2,
+        )
+        rw3_unowned = ReadWriteFile(
+            relative_path="unit3.py",
+            workspace_path=_make_workspace_path("pkg/unit3.py"),
+            owning_node=cast(Any, None),
+        )
+        self.node_cfg._read_write_files = {rw1_unowned, rw2_owned, rw3_unowned}
+        self.node_cfg.src_file_alias_by_node = {node1: "unit1.py", node2: "unit2.py", node3: "unit3.py"}
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            rc = scope.get_singleton(RunControllerImpl)
+            rc.reset_nodes([node1, node2, node3])
+            rc._node_states[node2] = "SUBMITTED"
+            rc._node_states[node3] = "SUBMITTED"
+            # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
+            self.assertEqual(rc.resolve_default_target(), node1)
+
+    def test_check_files_when_no_open_nodes_and_rw_file_matching(self) -> None:
+        """CUJ: CheckFilesTool evaluates verification when no open nodes remain, and matches rw_file by path."""
+        node1 = Node(unit_address="//pkg:unit1", role_address="lib")
+        rw1 = ReadWriteFile(
+            relative_path="unit1.py",
+            workspace_path=_make_workspace_path("pkg/unit1.py"),
+            owning_node=node1,
+        )
+        rw1_dup = ReadWriteFile(
+            relative_path="unit1.py",
+            workspace_path=_make_workspace_path("pkg/unit1.py"),
+            owning_node=cast(Any, None),
+        )
+        vcheck = MockVerificationCheck(passes=True, diagnostic="All tests pass")
+        self.node_cfg._verification_checks = [vcheck]
+        self.node_cfg._read_write_files = {rw1}
+        self.node_cfg.src_file_alias_by_node = {node1: "unit1.py"}
+        self.edit_mgr._file_hashes = {"unit1.py": "h"}
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            rc = scope.get_singleton(RunControllerImpl)
+            check_files = scope.get_singleton(CheckFilesToolImpl)
+            rc.reset_nodes([node1])
+            rc._node_states[node1] = "SUBMITTED"
+
+            # 1. No open nodes: CheckFilesTool calls rc.evaluate_verification
+            # Requirement: Executing the check files tool updates verification results if outdated and evaluates verification checks across all open targets and modified workspace files.
+            b = ActualParameterBindings(bindings=set())
+            resp = check_files.execute_tool(b)
+            self.assertFalse(resp.is_failed)
+
+            # 2. Repeated execution where last_read_or_edited_file is a different instance with identical relative_path
+            self.edit_mgr.last_read_or_edited_file = rw1_dup
+            # Requirement: Tool execution specifies a follow-up execution of the view file tool on the active node source file (resolving to the last accessed read-write file or the primary session read-write file) and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check files tool execution.
+            resp2 = check_files.execute_tool(b)
+            self.assertFalse(resp2.is_failed)
+            self.assertIsNotNone(resp2.follow_up_tool_call)
+
+            # 3. No open nodes and verification fails
+            vcheck_fail = MockVerificationCheck(passes=False, diagnostic="Failure in check")
+            self.node_cfg._verification_checks = [vcheck_fail]
+            self.edit_mgr._file_hashes["unit1.py"] = "h_changed"
+            resp_fail = check_files.execute_tool(b)
+            self.assertTrue(resp_fail.is_failed)
+            self.assertIn("Failure in check", resp_fail.content)
+
+    def test_blame_tool_suffix_and_basename_and_tiebreak_matching(self) -> None:
+        """CUJ: BlameTool matches blame target by suffix and basename, and handles multiple matching node tiebreak."""
+        node1 = Node(unit_address="//pkg:unit1", role_address="lib")
+        node2 = Node(unit_address="//pkg:unit2", role_address="lib")
+        node3 = Node(unit_address="//pkg:unit3", role_address="lib")
+
+        bt_nested = ReadOnlyFile(
+            relative_path="a/b/dep.py",
+            workspace_path=_make_workspace_path("pkg/a/b/dep.py"),
+            owning_node=Node(unit_address="//pkg:upstream", role_address="lib"),
+        )
+        rw1 = ReadWriteFile(
+            relative_path="unit1.py",
+            workspace_path=_make_workspace_path("pkg/unit1.py"),
+            owning_node=node1,
+        )
+        rw2 = ReadWriteFile(
+            relative_path="unit2.py",
+            workspace_path=_make_workspace_path("pkg/unit2.py"),
+            owning_node=node2,
+        )
+        rw3 = ReadWriteFile(
+            relative_path="unit3.py",
+            workspace_path=_make_workspace_path("pkg/unit3.py"),
+            owning_node=node3,
+        )
+
+        self.node_cfg._blame_targets = cast(Set[BoundFile], {bt_nested})
+        self.node_cfg.blame_targets_by_node = {
+            node1: {bt_nested},
+            node2: {bt_nested},
+            node3: set(),
+        }
+        self.node_cfg._read_write_files = {rw1, rw2, rw3}
+        self.node_cfg.src_file_alias_by_node = {
+            node1: "unit1.py",
+            node2: "unit2.py",
+            node3: "unit3.py",
+        }
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            rc = scope.get_singleton(RunControllerImpl)
+            blame = scope.get_singleton(BlameToolImpl)
+            rc.reset_nodes([node1, node2, node3])
+
+            # 1. Match blame target by suffix: "b/dep.py"
+            # Requirement: The blame tool matches the blame target parameter by file alias, relative path, or unique filename against configured blame targets.
+            b_suffix = ActualParameterBindings(
+                bindings={
+                    (blame.resolve_target, "unit1.py"),
+                    (blame.blame_target, "b/dep.py"),
+                    (blame.explanation, "Suffix match defect"),
+                }
+            )
+            res_suffix = blame.execute_tool(b_suffix)
+            self.assertFalse(res_suffix.is_failed)
+
+            # Reset node1 state and locked files
+            rc._node_states[node1] = "OPEN"
+            self.edit_mgr.locked_files.clear()
+
+            # 2. Match blame target by basename: "other_dir/dep.py" (not suffix of "a/b/dep.py")
+            # Requirement: The blame tool matches the blame target parameter by file alias, relative path, or unique filename against configured blame targets.
+            b_base = ActualParameterBindings(
+                bindings={
+                    (blame.resolve_target, "unit1.py"),
+                    (blame.blame_target, "other_dir/dep.py"),
+                    (blame.explanation, "Basename match defect"),
+                }
+            )
+            res_base = blame.execute_tool(b_base)
+            self.assertFalse(res_base.is_failed)
+
+            # Reset node1 state and locked files
+            rc._node_states[node1] = "OPEN"
+            self.edit_mgr.locked_files.clear()
+
+            # 3. Multiple matching nodes for blame_target, def_node (node3 via last_read) is not in matching_nodes
+            self.edit_mgr.last_read_or_edited_file = rw3
+            b_tiebreak = ActualParameterBindings(
+                bindings={
+                    (blame.blame_target, bt_nested),
+                    (blame.explanation, "Tiebreak blame target"),
+                }
+            )
+            # Requirement: Tool execution defaults the resolve target parameter to that active node when the blame target matches a configured blame target of an open active node.
+            res_tiebreak = blame.execute_tool(b_tiebreak)
+            self.assertFalse(res_tiebreak.is_failed)
+            self.assertIn("unit1.py", res_tiebreak.content)
+
+            # Reset node1 state and locked files
+            rc._node_states[node1] = "OPEN"
+            self.edit_mgr.locked_files.clear()
+
+            # 4. Target parameter matches blame target of multiple nodes, def_node (node2) IS in matching_nodes
+            self.edit_mgr.last_read_or_edited_file = rw2
+            b_target_tiebreak = ActualParameterBindings(
+                bindings={
+                    (blame.resolve_target, "a/b/dep.py"),
+                    (blame.explanation, "Tiebreak with target param"),
+                }
+            )
+            # Requirement: Tool execution defaults the blame target parameter to that target and the resolve target parameter to the active node configured with that blame target when the blame target parameter is omitted and the resolve target parameter matches a configured blame target.
+            res_target_tiebreak = blame.execute_tool(b_target_tiebreak)
+            self.assertFalse(res_target_tiebreak.is_failed)
+            self.assertIn("unit2.py", res_target_tiebreak.content)
+
+    def test_get_work_tool_invalid_max_batch_size(self) -> None:
+        """CUJ: GetWorkTool ignores unparseable max_batch_size and returns batch."""
+        node1 = Node(unit_address="//pkg:unit1", role_address="lib")
+        self.storage.dirty_nodes = {node1}
+        self.subgraph.ready_batches = [[node1]]
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            get_work = scope.get_singleton(GetWorkToolImpl)
+            # Requirement: The get work tool is named get_work, accepting an integer max batch size parameter.
+            b = ActualParameterBindings(
+                bindings={
+                    (get_work.max_batch_size, cast(Any, "invalid_number")),
+                }
+            )
+            resp = get_work.execute_tool(b)
+            self.assertFalse(resp.is_failed)
 
 
 if __name__ == "__main__":

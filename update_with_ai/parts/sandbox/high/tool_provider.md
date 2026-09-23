@@ -57,5 +57,3 @@ The tool manager:
 - *Executes* tools by name with *wire parameter bindings* mapping parameter names to wire type values, producing the tool response upon resolving parameter conversions.
 
 - *Executes tools with arguments* by name with raw argument mappings from parameter names to arguments, producing the tool response upon resolving parameter conversions.
-
-- *Creates tool callables* producing executable callable routines configured with parameter signatures and documentation for external server registration, returning the tool response content combined with reminders when present.

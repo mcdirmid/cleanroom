@@ -19,23 +19,27 @@ To completely eliminate Main Chat context contamination and role drift:
 1. **Tier 1: Main Chat (User Interface & Supervisor)**:
    - Receives `/cleanroom clean` or `/cleanroom change` from the user.
    - Spawns the **Cleanroom Coordinator** subagent (`cleanroom_coordinator`) via `invoke_subagent`.
-   - Never runs internal wave loops, never calls `cleanroom_mcp_client.py`, and never edits code files.
+   - Never runs internal wave loops, never calls `antigravity_mcp_client`, and never edits code files.
    - Awaits completion from the Coordinator.
-   - Runs `python3 update_with_ai/support/lib/antigravity_token_stats.py --coordinator <coordinator_id> --format markdown` to extract prompt-cache hit rates and dollar cost savings.
+   - Runs `python3 -m update_with_ai.parts.antigravity.lib.antigravity_telemetry_impl --format markdown` to extract prompt-cache hit rates and dollar cost savings.
    - Presents the final convergence summary along with the Token & Cost Telemetry table to the user.
 
 2. **Tier 2: Cleanroom Coordinator (`cleanroom_coordinator`)**:
-   - Manages the FastMCP server and queries `cleanroom_mcp_client.py next-batch` via the running MCP server (preserving `batch_size` configuration).
-   - Manages an active **10-Minute Warm Worker Pool with Strict Unit Overlap & 100k Token Cap**: retains idle role workers for up to 10 minutes after batch completion. If a subsequent wave targets the same role within 10 minutes AND has unit overlap with units the worker previously touched (via QA contract blame or change propagation), the Coordinator allocates a new session ID, pre-registers it on the server, and binds it to the worker UUID (`cleanroom_mcp_client.py --session <new_id> register ... --worker-id <worker_conv_id>`), then revives the existing worker subagent via `send_message` rather than spawning a cold worker, preserving warm KV cache and context without encountering write-lock or security hook delays.
-   - If an incoming wave targets a role but has ZERO unit overlap with the idle worker's units, or if the worker's context reaches/exceeds 100k tokens (`--check-cap 100000`), or if the 10-minute TTL expires, the Coordinator terminates the idle worker via `manage_subagents(kill)`, deregisters its session, and spawns a fresh worker with a clean context.
-   - Upon full DAG convergence (`is_complete: true`), kills all warm workers and deregisters their sessions.
-   - Structurally constrained: has NO file editing tools (`replace_file_content` and `write_to_file` are omitted).
+   - Executes deterministically via `python3 -m update_with_ai.parts.antigravity.lib.antigravity_coordinator_impl step "<target>"`.
+   - Manages a **Tiered Warm Worker Pool with Unit Overlap & Idle Pruning**:
+     - Worker $< 5$ minutes old: reusable if context $< 200\text{k}$ tokens.
+     - Worker $5$–$10$ minutes old: reusable if context $< 100\text{k}$ tokens.
+     - Pruned if idle $> 10$ minutes, or $> 100\text{k}$ tokens and idle $> 5$ minutes.
+     - Multiple workers per role can exist concurrently; non-overlapping workers are preserved warm rather than killed immediately.
+     - Large batches ($> 10$ units) are partitioned into parallel workers.
+   - Upon full DAG convergence (`is_complete: true`), kills all workers, deregisters sessions, and shuts down the MCP server.
+   - Structurally constrained: has NO file editing tools.
 
 3. **Tier 3: Role Workers (`cleanroom_role_worker`)**:
    - Executes for a specific role batch (`lib`, `test`, `qa`, etc.).
    - Inspects grounding specs in large contiguous blocks (avoiding 50-line micro-slicing), applies edits via `replace_file_content` or `write_to_file`.
-   - Verifies and submits via `python3 update_with_ai/support/lib/cleanroom_mcp_client.py`.
-   - Concludes turn immediately upon batch submission (does not call `get-work` a second time). If revived within 10 minutes for overlapping units, calls `get-work` to receive fresh feedback and applies targeted fixes in warm context.
+   - Verifies and submits via `python3 -m update_with_ai.parts.antigravity.lib.antigravity_mcp_client_impl`.
+   - Concludes turn immediately upon batch submission (does not call `get-work` a second time). If revived within retention limits for overlapping units, calls `get-work` to receive fresh feedback and applies targeted fixes in warm context.
 
 ---
 
@@ -58,12 +62,15 @@ Cleans a target node and all its transitive dependencies until verified clean.
            {
                "TypeName": "cleanroom_coordinator",
                "Role": "Cleanroom Coordinator",
+               "Model": "flash",
                "Prompt": (
                    f"Orchestrate cleanroom convergence for target '{target}'.\n"
-                   f"Run the topological wave loop using cleanroom_mcp_client.py next-batch (via the running FastMCP server) until is_complete: true.\n"
-                   f"Maintain a 10-minute warm worker pool with strict unit overlap and a 100k context token cap: when a worker finishes, check size with 'python3 update_with_ai/support/lib/antigravity_token_stats.py --conv-id <id> --check-cap 100000'. If exceeded or if a subsequent wave has ZERO unit overlap, terminate the worker, deregister its session, and spawn a fresh worker. Otherwise, retain warm, pre-register its new session with --worker-id, and revive via send_message.\n"
-                   f"Ensure role workers macro-batch files and avoid micro-slicing.\n"
-                   f"When the subgraph is clean, terminate all workers, deregister sessions, shut down the server, extract run token telemetry with antigravity_token_stats.py, and send a completion report back to the main chat."
+                   f"Execute the deterministic engine loop:\n"
+                   f"1. Run 'python3 -m update_with_ai.parts.antigravity.lib.antigravity_coordinator_impl step \"{target}\" --reset'\n"
+                   f"2. Execute returned kill, spawns, and revives actions.\n"
+                   f"3. Register newly spawned workers with 'register-spawned'.\n"
+                   f"4. Sleep (call zero tools) until awakened by an incoming worker message, then repeat step 1 (without --reset) until complete.\n"
+                   f"5. Output final telemetry and report completion."
                )
            }
        ]
@@ -74,7 +81,7 @@ Cleans a target node and all its transitive dependencies until verified clean.
 3. **Extract Telemetry & Teardown Coordinator**:
    - Extract prompt-cache hit rates and dollar cost metrics:
      ```bash
-     python3 update_with_ai/support/lib/antigravity_token_stats.py --coordinator <coordinator_id> --format markdown
+     python3 -m update_with_ai.parts.antigravity.lib.antigravity_telemetry_impl --format markdown
      ```
    - Terminate the coordinator subagent: `manage_subagents(Action="kill", ConversationIds=[coordinator_id])`.
    - Present the final completion report to the user, including the full Token & Cost Telemetry table.

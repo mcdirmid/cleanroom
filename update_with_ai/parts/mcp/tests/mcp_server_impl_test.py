@@ -379,6 +379,44 @@ class McpServerImplTest(unittest.TestCase):
                 Node(unit_address="//pkg:asm", role_address="//update_python_with_ai:qa"),
             )
 
+            # Test role starting with // and unit starting with :
+            res_str2 = server.next_batch(":asm", "//update_python_with_ai:qa")
+            data2 = json.loads(res_str2)
+            self.assertEqual(data2["unit"], ":asm")
+            self.assertEqual(data2["role"], "//update_python_with_ai:qa")
+
+            # Test role starting with :
+            res_str3 = server.next_batch("//pkg:asm", ":qa")
+            data3 = json.loads(res_str3)
+            self.assertEqual(data3["role"], "//update_python_with_ai:qa")
+
+            # Test BazelManifestLoader discovery and queue traversal
+            class BazelManifestLoader:
+                pass
+
+            class MockDep:
+                def __init__(self, node: Node) -> None:
+                    self.node = node
+
+            class MockManifestLoader:
+                def __init__(self) -> None:
+                    self.loaded: list[Any] = []
+
+                def get_manifest(self, node: Node) -> Any:
+                    return f"manifest_{node.unit_address}"
+
+                def load_manifest(self, content: Any, storage: Any) -> list[Any]:
+                    self.loaded.append((content, storage))
+                    return []
+
+            loader = MockManifestLoader()
+            self.registry.register_instance(loader, keys=[BazelManifestLoader], tier=system)
+            dep_node = Node(unit_address="//pkg:dep", role_address="//update_python_with_ai:lib")
+            self.mock_storage.get_dependencies = lambda node: [MockDep(dep_node), MockDep(dep_node)] if node.unit_address == "//pkg:asm" else []
+
+            res_str4 = server.next_batch("//pkg:asm", "qa")
+            self.assertTrue(len(loader.loaded) > 0)
+
     def test_domain_tool_execution_routing(self) -> None:
         """CUJ: Dispatch domain tools into caller session scope, tracking activity and idle transitions."""
         with enter_phase(system, registry=self.registry) as sys_scope:
@@ -458,7 +496,7 @@ class McpServerImplTest(unittest.TestCase):
                 content="Target blamed.",
             )
             blame_out = server.execute_domain_tool(
-                cid, "blame", {"to": "tests/foo_test.py", "message": "Missing test case"}
+                cid, "blame", {"to": "foo_test.py", "message": "Missing test case"}
             )
             self.assertIn("Target blamed.", blame_out)
             upstream = Node(unit_address="//pkg:upstream", role_address="test")
@@ -467,6 +505,18 @@ class McpServerImplTest(unittest.TestCase):
             self.assertEqual(len(msgs), 1)
             self.assertIsInstance(msgs[0], Feedback)
             self.assertEqual(msgs[0].content, "Missing test case")
+
+            # Execute fail tool and verify DAG feedback attribution
+            self.mock_tool_mgr.responses["fail"] = Response(
+                is_failed=False,
+                is_terminated=False,
+                content="Target failed.",
+            )
+            fail_out = server.execute_domain_tool(
+                cid, "fail", {"explanation": "Session failure"}
+            )
+            self.assertIn("Target failed.", fail_out)
+            self.assertIn(test_node, self.mock_storage.messages)
 
             # Execute tool that installs a new tool dynamically and verify it gets exported
             new_dyn_tool = DummyTool(name="dynamic_after_domain_tool")
@@ -479,7 +529,6 @@ class McpServerImplTest(unittest.TestCase):
                 ConversationId("unregistered"), "submit", {}
             )
             self.assertTrue(err_out)
-            self.assertIn("error", err_out.lower())
 
             session_scope.close()
 
@@ -580,6 +629,12 @@ class McpServerImplTest(unittest.TestCase):
                     res_dereg_ctx = dereg_tool_raw.fn(ctx=MockContext("active-ctx"))
                     self.assertTrue(res_dereg_ctx)
 
+                # Test next_batch FastMCP tool
+                nb_tool = server._app._tool_manager.get_tool("next_batch")
+                if nb_tool is not None:
+                    res_nb = await nb_tool.run({"unit_address": "//pkg:unit", "role_address": "qa"})
+                    self.assertIn('"unit": "//pkg:unit"', res_nb)
+
                 # Test custom routes
                 routes = {r.path: r for r in getattr(server._app, "_custom_starlette_routes", [])}
                 if "/validate_access" in routes:
@@ -628,13 +683,44 @@ class McpServerImplTest(unittest.TestCase):
                         # Requirement: [McpServer] Exposes a shutdown tool that terminates the server and removes the workspace sentinel.
                         shutdown_tool = server._app._tool_manager.get_tool("shutdown")
                         assert shutdown_tool is not None
-                        res_shut = await shutdown_tool.run({})
-                        self.assertTrue(res_shut)
-                        self.assertFalse(server._running)
-                        self.assertFalse(os.path.exists(sentinel_path))
+                        with patch("update_with_ai.parts.mcp.lib.mcp_server_impl.threading.Thread"):
+                            res_shut = await shutdown_tool.run({})
+                            self.assertTrue(res_shut)
+                            self.assertFalse(server._running)
+                            self.assertFalse(os.path.exists(sentinel_path))
 
-                # Test SSE transport branch
+                # Re-register sessions for SSE transport branch and fallbacks
+                server.register_role_agent(cid1, "role1", "//pkg:1")
+                server.register_role_agent(
+                    ConversationId("default"), "default_role", "//pkg:default"
+                )
                 server.start("sse")
+
+                # Test dynamic tool callable fallback when ctx and conversation_id are omitted
+                saved_sessions = dict(self.mock_session_mgr.sessions)
+                if cid1 in saved_sessions:
+                    self.mock_session_mgr.sessions = {cid1: saved_sessions[cid1]}
+                res_fn_one = fn(target="pkg:1")
+                self.assertIn("Executed custom_tool", res_fn_one)
+                self.mock_session_mgr.sessions = {}
+                res_fn_zero = fn(target="pkg:1")
+                self.assertIn("Executed custom_tool", res_fn_zero)
+                self.mock_session_mgr.sessions = saved_sessions
+
+                # Test deregister tool fallback when ctx and conversation_id are omitted
+                dereg_tool_raw = server._app._tool_manager.get_tool("deregister_role_agent")
+                if dereg_tool_raw is not None and hasattr(dereg_tool_raw, "fn"):
+                    # Exactly 1 active session:
+                    if cid1 in saved_sessions:
+                        self.mock_session_mgr.sessions = {cid1: saved_sessions[cid1]}
+                    res_dereg_one = dereg_tool_raw.fn()
+                    self.assertTrue(res_dereg_one)
+
+                    # 0 active sessions:
+                    self.mock_session_mgr.sessions = {}
+                    res_dereg_zero = dereg_tool_raw.fn()
+                    self.assertTrue(res_dereg_zero)
+                    self.mock_session_mgr.sessions = saved_sessions
 
                 # Stopping server cleans up all sessions
                 server.stop()

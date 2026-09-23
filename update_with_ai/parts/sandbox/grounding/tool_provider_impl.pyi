@@ -75,18 +75,3 @@ GROUNDING_ARGUMENT:
 - Receives tool name and argument mappings, constructs WireParameterBindings, and delegates to execute_tool.
 """
         ...
-
-    @operation
-    @override
-    def create_tool_callable(self, name: str) -> Any:
-        """
-PURPOSE:
-Constructs an executable callable function with parameter signatures derived from the tool parameters
-
-FRESH_REQUIREMENTS:
-- Creating a tool callable constructs a callable function with parameter signatures derived from the tool parameters, executes the tool with supplied arguments upon invocation, and returns the response content combined with reminders when guidance is present.
-
-GROUNDING_ARGUMENT:
-- Looks up tool in installed_tools, builds an inspect.Signature from tool parameters, and creates a wrapper calling execute_tool_with_arguments returning output text.
-"""
-        ...

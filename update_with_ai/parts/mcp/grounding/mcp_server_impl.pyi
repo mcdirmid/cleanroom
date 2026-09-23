@@ -58,6 +58,9 @@ GROUNDING_ARGUMENT:
 PURPOSE:
 Returns the next ready batch of dirty nodes for the given target as a JSON string
 
+FRESH_REQUIREMENTS:
+- The next batch tool accepts a target unit address and a target role address, sets the target root node on the DAG subgraph using in-process system singletons without creating child registries, queries the DAG subgraph to determine the next ready batch of dirty nodes, and returns a JSON string with the unit, role, is_complete flag, ready_role, batch list, and dirty_nodes list.
+
 GROUNDING_ARGUMENT:
 - Normalizes unit_address and role_address into canonical Bazel target addresses, accesses imported dag_storage.DagStorage and dag_subgraph.DagSubgraph in the system tier, traverses reachable dependency manifests into dag storage, sets the target root node on dag subgraph, queries next_ready_batch(), and returns the JSON-serialized result dict.
 """

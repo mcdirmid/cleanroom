@@ -177,7 +177,7 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
             except Exception:
                 if attempt == 1:
                     raise
-        return set()
+        return set()  # pragma: no cover (unreachable: retry loop always returns or raises)
 
     def clean(self, nodes: Sequence[dag_storage.Node]) -> bool:
         storage = get_singleton(agent_storage.AgentStorage)

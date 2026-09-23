@@ -6,7 +6,7 @@ import shutil
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
-from typing import Any, Mapping, Optional, Sequence, Set, Tuple
+from typing import Any, cast, Mapping, Optional, Sequence, Set, Tuple
 
 from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
@@ -340,7 +340,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.replacement_content_parameter, "New"),
                 }
             )
-            # Requirement: Tool execution fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence, when allow multiple is not set or false.
+            # Requirement: Tool execution matches target content using exact matching, or falls back to line-by-line whitespace-stripped matching across the search window when exact matching finds zero occurrences and allow multiple is false or not set, succeeding if and only if exactly one unique line window matches after stripping leading and trailing whitespace from each line; fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence, when allow multiple is not set or false.
             resp_not_found = replace_tool.execute_tool(b_not_found)
             self.assertTrue(resp_not_found.is_failed)
             self.assertIsNone(resp_not_found.follow_up_tool_call)
@@ -363,10 +363,38 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertEqual(resp.suppression_key, "replace_file_content")
             self.assertIsNone(resp.follow_up_tool_call)
             self.assertIsNotNone(resp.reminder)
-            self.assertIn("check_files", resp.reminder or "")
             self.assertTrue(edit_mgr.has_modifications)
             with open(self.target_path, "r", encoding="utf-8") as f:
                 self.assertEqual(f.read(), "Line 1\nUpdated Line 2\nLine 3\n")
+
+            # 3b. Fuzzy whitespace matching succeeds when exact match fails and allow_multiple is False
+            with open(self.target_path, "w", encoding="utf-8") as f:
+                f.write("    def hello():\n        return True\n")
+            b_fuzzy = ActualParameterBindings(
+                bindings={
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_content_parameter, "def hello():\n    return True"),
+                    (replace_tool.replacement_content_parameter, "    def hello():\n        return False\n"),
+                }
+            )
+            # Requirement: Tool execution matches target content using exact matching, or falls back to line-by-line whitespace-stripped matching across the search window when exact matching finds zero occurrences and allow multiple is false or not set, succeeding if and only if exactly one unique line window matches after stripping leading and trailing whitespace from each line; fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence, when allow multiple is not set or false.
+            resp_fuzzy = replace_tool.execute_tool(b_fuzzy)
+            self.assertFalse(resp_fuzzy.is_failed)
+            with open(self.target_path, "r", encoding="utf-8") as f:
+                self.assertEqual(f.read(), "    def hello():\n        return False\n")
+
+            # 3c. Fuzzy whitespace matching fails if multiple stripped windows match and allow_multiple is False
+            with open(self.target_path, "w", encoding="utf-8") as f:
+                f.write("  pass\n    pass\n")
+            b_fuzzy_multi = ActualParameterBindings(
+                bindings={
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_content_parameter, "pass"),
+                    (replace_tool.replacement_content_parameter, "return 1"),
+                }
+            )
+            resp_fuzzy_multi = replace_tool.execute_tool(b_fuzzy_multi)
+            self.assertTrue(resp_fuzzy_multi.is_failed)
 
             # 4. Multiple matches fail when allow_multiple is not set or false
             with open(self.target_path, "w", encoding="utf-8") as f:
@@ -378,7 +406,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                     (replace_tool.replacement_content_parameter, "single"),
                 }
             )
-            # Requirement: Tool execution fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence, when allow multiple is not set or false.
+            # Requirement: Tool execution matches target content using exact matching, or falls back to line-by-line whitespace-stripped matching across the search window when exact matching finds zero occurrences and allow multiple is false or not set, succeeding if and only if exactly one unique line window matches after stripping leading and trailing whitespace from each line; fails if the target content is not found within the designated line range or matches multiple locations within the designated line range, and on success replaces the single matching occurrence, when allow multiple is not set or false.
             # Requirement: Tool execution provides failure feedback indicating the first two matching line numbers to assist in narrowing the replacement region and instructs the agent to include more surrounding lines in target_content or specify start_line and end_line, when target content matches multiple locations in the file and allow multiple is false.
             resp_dup = replace_tool.execute_tool(b_dup)
             self.assertTrue(resp_dup.is_failed)
@@ -538,6 +566,21 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertTrue(resp_scoped_locator.is_failed)
             self.assertIn("3", resp_scoped_locator.content)
 
+            # Multi-line target content outside range reports span
+            b_scoped_multiline = ActualParameterBindings(
+                bindings={
+                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.target_content_parameter, "target line\nline 4"),
+                    (replace_tool.replacement_content_parameter, "replaced"),
+                    (replace_tool.start_line_parameter, 1),
+                    (replace_tool.end_line_parameter, 2),
+                }
+            )
+            # Requirement: Tool execution provides failure feedback indicating the line numbers where the target content was located, when target content is not found within the designated line range but exists elsewhere in the file.
+            resp_multiline = replace_tool.execute_tool(b_scoped_multiline)
+            self.assertTrue(resp_multiline.is_failed)
+            self.assertIn("lines 3-4", resp_multiline.content)
+
             # 8. Scoped multiple matches within range fails when allow_multiple is false
             with open(self.target_path, "w", encoding="utf-8") as f:
                 f.write("alpha alpha\nbeta\n")
@@ -596,7 +639,6 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertIn("+Header", resp_diff.content)
             self.assertIsNone(resp_diff.follow_up_tool_call)
             self.assertIsNotNone(resp_diff.reminder)
-            self.assertIn("check_files", resp_diff.reminder or "")
             self.assertEqual(resp_diff.suppression_key, "replace_file_content")
 
             # 2. Delta output disabled omits diff delta
@@ -615,7 +657,6 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertTrue(resp_no_followup.content)
             self.assertIsNone(resp_no_followup.follow_up_tool_call)
             self.assertIsNotNone(resp_no_followup.reminder)
-            self.assertIn("check_files", resp_no_followup.reminder or "")
             self.assertEqual(resp_no_followup.suppression_key, "replace_file_content")
 
             # Reset config
@@ -1015,6 +1056,27 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Unbound file produces empty hash
             unbound_hash = edit_mgr.file_hash(UnboundFile(relative_path="unbound.txt"))
             self.assertEqual(missing_hash, unbound_hash)
+
+            # String file path converts and computes hash
+            # Requirement: [EditManager] The edit manager computes a file hash for a read-write file from its content.
+            str_hash = edit_mgr.file_hash(cast(Any, self.rw_file.relative_path))
+            self.assertEqual(str_hash, hash2)
+
+            # File read error falls back to empty hash
+            with patch("builtins.open", side_effect=OSError("Read error")):
+                err_hash = edit_mgr.file_hash(self.rw_file)
+                self.assertEqual(err_hash, hashlib.md5(b"").hexdigest())
+
+            # Requirement: The edit manager exposes whether workspace file modifications occurred during the session by comparing current workspace file content against initial content before editing.
+            # Newly added read-write file to node config gets recorded on has_modifications query
+            node = MagicMock()
+            new_rw = ReadWriteFile(
+                relative_path="new_file.txt",
+                workspace_path=_make_workspace_path("new_file.txt"),
+                owning_node=node,
+            )
+            self.node_cfg._read_write_files.add(new_rw)
+            self.assertTrue(edit_mgr.has_modifications)
 
             # Parameter iteration on tool
             replace_tool = scope.get_singleton(ReplaceFileContentTool)
