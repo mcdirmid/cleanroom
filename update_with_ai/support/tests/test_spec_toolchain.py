@@ -303,7 +303,7 @@ class ServiceLegacyHeader:
         """
         PURPOSE:
         Method
-        REQUIREMENTS:
+        INHERITED FROM BaseWorker:
         - Obsolete requirement header
         """
         ...
@@ -313,7 +313,7 @@ class ServiceLegacyHeader:
         v.visit(tree)
         self.assertTrue(
             any(
-                "Obsolete docstring section 'REQUIREMENTS:'" in d.message
+                "Obsolete docstring section 'INHERITED FROM BaseWorker:'" in d.message
                 for d in v.diagnostics
             )
         )
@@ -780,6 +780,50 @@ class ServiceB:
                 for d in linker.diagnostics
             )
         )
+
+    def test_missing_attribute_symbol_rejected(self):
+        linker = ClosedWorldLinker()
+        mod_a = ast.parse('''
+from framework import data_type
+
+@data_type
+class DataItem:
+    """
+    PURPOSE:
+    Data
+    """
+    ...
+''')
+        mod_b = ast.parse('''
+from framework import singleton_type
+import mod_a
+
+@singleton_type("agent_session")
+class ServiceB:
+    """
+    PURPOSE:
+    Service B
+    """
+    def do_work(self) -> mod_a.NonExistentItem:
+        ...
+''')
+        linker.modules["mod_a"] = mod_a
+        linker.module_paths["mod_a"] = Path("mod_a.pyi")
+        linker.module_exports["mod_a"] = {"DataItem"}
+
+        linker.modules["mod_b"] = mod_b
+        linker.module_paths["mod_b"] = Path("mod_b.pyi")
+        linker.module_exports["mod_b"] = {"ServiceB"}
+        linker.registry.imports["mod_b"] = {"mod_a": "mod_a"}
+
+        linker.check_all()
+        self.assertTrue(
+            any(
+                "Symbol 'NonExistentItem' is not exported by specification 'mod_a'" in d.message
+                for d in linker.diagnostics
+            )
+        )
+
 
     def test_tier_isolation_violation_rejected(self):
         linker = ClosedWorldLinker()

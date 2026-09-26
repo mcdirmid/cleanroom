@@ -13,7 +13,7 @@ Autonomous agents reaching task completion require strict verification enforceme
 
 ## Types and Behavior
 
-The run controller initializes by unconditionally installing the submit tool, fail tool, check files tool, and get work tool for the agent session, installing the advance tool only when guide step mode is active, obtaining configured blame targets and verification checks from the node config, and installing the blame tool only when blame targets are configured. Verification checks exposed by the run controller include the session verification checks from node config.
+Tools cannot be configured against non-role/agent-specific state. The run controller initializes by unconditionally installing the submit tool, fail tool, check files tool, get work tool, and blame tool for the agent session, installing the advance tool only when guide step mode is active, and obtaining verification checks and per-node blame targets from node config. Verification checks exposed by the run controller include the session verification checks from node config.
 
 Evaluation of verification checks for an active node is cached alongside the edit manager file hash of the target node read-write file. Verification checks are evaluated sequentially and results are cached whenever verification results are outdated, which occurs before initial evaluation and when the target read-write file hash has changed since the previous evaluation. When the target read-write file hash has not changed since the previous evaluation, verification check execution is omitted and the cached verification outcome is reused.
 
@@ -23,17 +23,15 @@ The check files tool:
 
 - Reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when target read-write file hashes have not changed since the previous check files tool execution.
 
-- Specifies a follow-up execution of the view file tool on the active node source file (resolving to the last accessed read-write file or the primary session read-write file) and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check files tool execution.
-
 - Fails when verification fails, presenting diagnostic feedback sanitized through the alias manager alongside any configured verification failure instructions.
 
 - Produces a response presenting passing verification results using the session verification success message when configured or default passing verification results alongside sanitized check output when verification passes.
 
-The advance tool is named `advance`, accepts no parameters, and shares a constant suppression key `advance`. Executing the advance tool delivers the initial guide summary through guide delivery without updating verification results when guide delivery has not yet started, and updates verification results if outdated when guide delivery has already started.
+The advance tool is named `advance`, accepts no parameters, and shares a constant suppression key `advance`.
 
 The advance tool:
 
-- Fails when verification is failing, reminding the agent that the check files tool should be called first and specifying a follow-up execution of the check files tool with reasoning text indicating that verification results must be inspected before advancing.
+- Fails when verification has not been evaluated for the current workspace files or is failing, evaluating verification results and repeating the primer and summary content alongside failure diagnostics through guide delivery on the first step, reminding the agent that the check files tool should be called first, and specifying a follow-up execution of the check files tool with reasoning text indicating that verification results must be inspected before advancing.
 
 - Advances guide delivery and delivers the next step section when verification is passing and guide steps remain.
 
@@ -71,6 +69,8 @@ The submit tool:
 
 - Fails when verification is failing, reminding the agent that the check files tool should be called first and specifying a follow-up execution of the check files tool with reasoning text indicating that verification results must be inspected before submitting.
 
+- Fails when an initial implementation change is assigned to the target node and no workspace files were modified, reminding the agent that workspace files must be modified to implement the change before submitting.
+
 - Fails when session feedback is present and no workspace files were modified, reminding the agent that workspace files must be modified to address feedback or that the fail tool must be used.
 
 - Fails if workspace files were modified and the change summary is omitted, reminding the agent that a change summary must be provided when completing the session after modifying workspace files.
@@ -107,4 +107,6 @@ The get work tool:
 
 - Produces an idle response indicating that no dirty nodes are ready if no dirty nodes are ready for cleaning.
 
-- Materializes startup templates on disk, constructs the task prompt from dirty node definitions (including associated grounding specification paths for qa nodes), guide instructions, and incoming messages from dag storage formatted via the template formatter, and returns the rendered task prompt when ready dirty nodes are obtained.
+- Materializes startup templates on disk, initializes guide delivery and resets guide advance state for the assigned batch, and returns the rendered task primer mapping source files to grounding files with guide file attribution, incoming messages, and instructions to read the guide file for alignment guidance when ready dirty nodes are obtained and guide step mode is inactive.
+
+- Materializes startup templates on disk, initializes guide delivery, records the task primer in guide delivery, and returns the task primer mapping source files to grounding files, guide summary, incoming messages, and instructions to call the advance tool when done making edits without guide file citation and without specifying a follow-up execution of the advance tool when ready dirty nodes are obtained and guide step mode is active.

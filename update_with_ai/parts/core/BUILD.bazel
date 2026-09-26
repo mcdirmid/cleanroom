@@ -27,6 +27,16 @@ update_python_with_ai(
 )
 
 update_python_with_ai(
+    name = "file_paths",
+    module_deps = [],
+)
+
+update_python_with_ai(
+    name = "file_paths_impl",
+    module_deps = [':file_paths', ':filesystem_ext'],
+)
+
+update_python_with_ai(
     name = "commonmark_ext",
     module_deps = [],
 )

@@ -10,11 +10,11 @@ class TaskPrompt(str):
 
 @dataclass(frozen=True)
 class NodeDefinition:
-    node: dag_storage.Node
+    node: dag_storage.DagNode
     task_prompt: TaskPrompt
 
 
 class AgentStorage(dag_storage.DagStorage, Protocol):
     def get_node_definition(
-        self, node: dag_storage.Node
+        self, node: dag_storage.DagNode
     ) -> Optional[NodeDefinition]: ...

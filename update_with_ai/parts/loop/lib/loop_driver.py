@@ -10,13 +10,13 @@ from update_with_ai.parts.sandbox.lib import tool_provider
 @dataclass(frozen=True)
 class LoopOutcome:
     is_success: bool
-    response: tool_provider.Response
+    response: tool_provider.ToolResponse
     conversation: loop_conversation.Conversation
 
     def __init__(
         self,
         is_success: bool,
-        response: tool_provider.Response,
+        response: tool_provider.ToolResponse,
         conversation: Optional[loop_conversation.Conversation] = None,
         conversation_history: Optional[loop_conversation.Conversation] = None,
     ) -> None:
@@ -32,11 +32,5 @@ class LoopOutcome:
         return self.conversation
 
 
-AgentOutcome = LoopOutcome
-
-
 class LoopDriver(Protocol):
     def run(self) -> LoopOutcome: ...
-
-
-AgentDriver = LoopDriver

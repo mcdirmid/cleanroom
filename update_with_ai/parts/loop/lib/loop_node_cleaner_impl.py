@@ -1,5 +1,6 @@
 # Requirements specified in loop_node_cleaner_impl.pyi
 
+import traceback
 from typing import Optional, Sequence, Set
 from . import loop_conversation
 from . import loop_driver
@@ -7,6 +8,7 @@ from . import loop_node_cleaner
 from update_with_ai.parts.agent.lib import agent_node_config
 from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.agent.lib import agent_storage
+from update_with_ai.parts.core.lib import runner_logger
 from update_with_ai.parts.dag.lib import dag_storage
 from update_with_ai.parts.sandbox.lib import sandbox
 from support.lib.lifecycle import (
@@ -25,7 +27,7 @@ class RoleConfig(agent_node_config.RoleConfig, Singleton):
 
     def __init__(self) -> None:
         self._role: str = ""
-        self._nodes: Sequence[dag_storage.Node] = ()
+        self._nodes: Sequence[dag_storage.DagNode] = ()
         self._version: int = 0
 
     @property
@@ -34,7 +36,7 @@ class RoleConfig(agent_node_config.RoleConfig, Singleton):
         return self._role
 
     @property
-    def nodes(self) -> Sequence[dag_storage.Node]:
+    def nodes(self) -> Sequence[dag_storage.DagNode]:
         # Requirement: [RoleConfig] The role config provides the sequence of nodes currently being cleaned in the agent session.
         return self._nodes
 
@@ -47,7 +49,7 @@ class RoleConfig(agent_node_config.RoleConfig, Singleton):
         # Requirement: [RoleConfig] The role config can set role to configure the role of the agent session.
         self._role = role
 
-    def set_nodes(self, nodes: Sequence[dag_storage.Node]) -> None:
+    def set_nodes(self, nodes: Sequence[dag_storage.DagNode]) -> None:
         # Requirement: [RoleConfig] The role config can set nodes to configure the nodes currently being cleaned in the agent session and increment the execution version.
         self._nodes = tuple(nodes)
         if nodes:
@@ -62,8 +64,8 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
         self._last_outcome: Optional[loop_driver.LoopOutcome] = None
 
     def clean_nodes(
-        self, nodes: Sequence[dag_storage.Node]
-    ) -> Set[dag_storage.Message]:
+        self, nodes: Sequence[dag_storage.DagNode]
+    ) -> Set[dag_storage.DagMessage]:
         dirty_nodes = list(nodes)
         storage = get_singleton(agent_storage.AgentStorage)
         defns = [storage.get_node_definition(n) for n in dirty_nodes]
@@ -73,11 +75,11 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
         if not has_prompt:
             self._last_outcome = None
             has_changes = any(
-                any(isinstance(m, dag_storage.Change) for m in storage.get_messages(n))
+                any(isinstance(m, dag_storage.ChangeMessage) for m in storage.get_messages(n))
                 for n in dirty_nodes
             )
             if has_changes:
-                return {dag_storage.Change()}
+                return {dag_storage.ChangeMessage()}
             return set()
 
         role = dirty_nodes[0].role_address if dirty_nodes else ""
@@ -87,14 +89,14 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
             role_config = session.get_singleton(RoleConfig)
             role_config.set_role(role)
 
-        def _execute_session() -> Set[dag_storage.Message]:
+        def _execute_session() -> Set[dag_storage.DagMessage]:
             # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
             with enter_phase(agent_session, setup=setup_session) as session:
                 hist = session.get_singleton(loop_conversation.Conversation)
 
                 # Requirement: The conversation is initialized with instructions directing the agent to call the get work tool.
                 hist.append_message(
-                    loop_conversation.Message(
+                    loop_conversation.ConversationMessage(
                         role="user",
                         content="Call get_work to retrieve your work.",
                     )
@@ -104,7 +106,7 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
                 outcome = runner.run()
                 self._last_outcome = outcome
 
-                messages: Set[dag_storage.Message] = set()
+                messages: Set[dag_storage.DagMessage] = set()
                 # Requirement: Resolving dirty nodes produces no propagating messages when the outcome signals run failure, leaving the nodes dirty and communicating that processing cannot continue.
                 if not outcome.is_success:
                     return messages
@@ -123,8 +125,13 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
                         blame_target_str = after_blamed.strip()
 
                     n_cfg = session.get_singleton(agent_node_config.NodeConfig)
-                    blamed_node: Optional[dag_storage.Node] = None
-                    for bt in n_cfg.blame_targets:
+                    blamed_node: Optional[dag_storage.DagNode] = None
+                    all_blame_targets = [
+                        bt
+                        for bts in n_cfg.blame_targets_by_node.values()
+                        for bt in bts
+                    ]
+                    for bt in all_blame_targets:
                         bt_alias = getattr(
                             bt, "relative_path", getattr(bt, "short_name", str(bt))
                         )
@@ -149,16 +156,16 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
                     if blamed_node is None:
                         if "#" in blame_target_str:
                             u, r = blame_target_str.split("#", 1)
-                            blamed_node = dag_storage.Node(
+                            blamed_node = dag_storage.DagNode(
                                 unit_address=u, role_address=r
                             )
                         else:
-                            blamed_node = dag_storage.Node(
+                            blamed_node = dag_storage.DagNode(
                                 unit_address=blame_target_str, role_address=""
                             )
 
                     messages.add(
-                        dag_storage.Feedback(
+                        dag_storage.FeedbackMessage(
                             content=blame_exp or content, target=blamed_node
                         )
                     )
@@ -166,20 +173,29 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
                     sb = session.get_singleton(sandbox.Sandbox)
                     # Requirement: Resolving dirty nodes produces change messages for downstream dependent nodes when the outcome signals successful advancement with workspace file modifications, and no change messages or change summaries when no workspace files were modified.
                     if sb.has_modifications:
-                        messages.add(dag_storage.Change())
+                        messages.add(dag_storage.ChangeMessage())
 
                 return messages
 
-        # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
+        # Requirement: The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes to session services, logging unexpected execution failures to the runner logger and retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
+        logger = get_singleton(runner_logger.RunnerLogger)
         for attempt in range(2):
             try:
                 return _execute_session()
-            except Exception:
+            except Exception as e:
+                node_addrs = [n.unit_address for n in dirty_nodes]
+                logger.consume(
+                    runner_logger.RunnerLogEvent(
+                        event_name="session_execution_failure",
+                        summary=f"Unexpected execution failure cleaning nodes {node_addrs} (attempt {attempt + 1}/2): {e}",
+                        transcript_representation=f"=== Unexpected Execution Failure (attempt {attempt + 1}/2) ===\n{traceback.format_exc().strip()}",
+                    )
+                )
                 if attempt == 1:
                     raise
         return set()  # pragma: no cover (unreachable: retry loop always returns or raises)
 
-    def clean(self, nodes: Sequence[dag_storage.Node]) -> bool:
+    def clean(self, nodes: Sequence[dag_storage.DagNode]) -> bool:
         storage = get_singleton(agent_storage.AgentStorage)
         msgs = self.clean_nodes(nodes)
         if self._last_outcome is not None and not self._last_outcome.is_success:
@@ -187,7 +203,7 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
             # Requirement: [NodeCleaner] Processing cannot continue only if a failure occurs while cleaning the nodes that cannot be handled by cleaning any other node.
             for node in nodes:
                 if not storage.is_dirty(node):
-                    storage.add_message(dag_storage.Feedback(), to=node)
+                    storage.add_message(dag_storage.FeedbackMessage(), to=node)
             return False
 
         # Requirement: Cleaning dirty nodes registers the nodes as dependents to their non-silent dependencies in graph storage, delivering resulting change messages to downstream dependents and feedback messages to their addressed dependency node.
@@ -197,11 +213,11 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
 
         # Requirement: Cleaning dirty nodes registers the nodes as dependents to their non-silent dependencies in graph storage, delivering resulting change messages to downstream dependents and feedback messages to their addressed dependency node.
         for m in msgs:
-            if isinstance(m, dag_storage.Change):
+            if isinstance(m, dag_storage.ChangeMessage):
                 for node in nodes:
                     for dependent in storage.get_dependents(node):
                         storage.add_message(m, to=dependent)
-            elif isinstance(m, dag_storage.Feedback):
+            elif isinstance(m, dag_storage.FeedbackMessage):
                 if m.target is not None:
                     storage.add_message(m, to=m.target)
                 else:

@@ -4,11 +4,11 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class LogEvent:
+class RunnerLogEvent:
     event_name: str
     summary: str
     transcript_representation: str
 
 
 class RunnerLogger(Protocol):
-    def consume(self, event: LogEvent) -> None: ...
+    def consume(self, event: RunnerLogEvent) -> None: ...

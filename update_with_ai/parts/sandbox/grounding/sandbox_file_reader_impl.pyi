@@ -1,332 +1,318 @@
-from typing import Optional, Set, Type, Union
+from typing import Any, Mapping, Optional, Sequence, Set, Tuple, Type, Union
 from framework import operation, override, singleton_type
 import agent_config
 import agent_file_alias
-import filesystem_ext
 import agent_node_config
+import file_paths
 import sandbox_file_editor
 import sandbox_file_reader
 import template_format
 import tool_provider
 
-@singleton_type('agent_session')
+
+@singleton_type("agent_session")
 class ReadManager(sandbox_file_reader.ReadManager):
+    """Regulates file reading across session files.
+
+    GROUNDING_ARGUMENT:
+    - As an agent_session singleton, ReadManager implements sandbox_file_reader.ReadManager, accessing singletons agent_node_config.NodeConfig, agent_file_alias.AliasManager, sandbox_file_editor.EditManager, and tool_provider.ToolManager in agent_session.
     """
-PURPOSE:
-Implements the read manager to install inspection tools, obtaining declared files and guide file from node config
-
-FRESH_REQUIREMENTS:
-- The read manager exposes declared read-only files, read-write files, and optional guide file obtained from the node config.
-
-INHERITED_REQUIREMENTS:
-- [ReadManager] The read manager installs the view file tool and search tool.
-- [ReadManager] The read manager exposes the session's set of read-only files.
-- [ReadManager] The read manager exposes the session's set of read-write files.
-- [ReadManager] When step-mode is active, the read manager is configured with a guide file that is an unbound file.
-
-GROUNDING_ARGUMENT:
-- As an agent_session singleton, ReadManager coordinates file inspection tools and declared file sets, interacting with imported agent_node_config.NodeConfig and tool_provider.ToolManager in the same session lifecycle tier.
-"""
 
     @property
     @override
     def read_only_files(self) -> Set[agent_file_alias.ReadOnlyFile]:
-        """
-PURPOSE:
-Obtains declared read-only files from node config
+        """Exposes the session read-only files.
 
-GROUNDING_ARGUMENT:
-- Delegated from imported collaborator agent_node_config.NodeConfig.read_only_files in the same session lifecycle tier.
-"""
+        GROUNDING_PROVISIONS:
+        - knows("agent_session", Set[agent_file_alias.ReadOnlyFile]): Exposes session read-only files to satisfy requirement 2.
+
+        GROUNDING_ARGUMENT:
+        - knows("agent_session", Self) :- knows("read_only_files", agent_node_config.NodeConfig).
+        """
         ...
 
     @property
     @override
     def read_write_files(self) -> Set[agent_file_alias.ReadWriteFile]:
-        """
-PURPOSE:
-Obtains declared read-write files from node config
+        """Exposes the session read-write files.
 
-GROUNDING_ARGUMENT:
-- Delegated from imported collaborator agent_node_config.NodeConfig.read_write_files in the same session lifecycle tier.
-"""
+        GROUNDING_PROVISIONS:
+        - knows("agent_session", Set[agent_file_alias.ReadWriteFile]): Exposes session read-write files to satisfy requirement 2.
+
+        GROUNDING_ARGUMENT:
+        - knows("agent_session", Self) :- knows("read_write_files", agent_node_config.NodeConfig).
+        """
         ...
 
     @property
     @override
     def guide_file(self) -> Optional[agent_file_alias.UnboundFile]:
-        """
-PURPOSE:
-Obtains configured guide file from node config
+        """Exposes the session guide file when configured.
 
-GROUNDING_ARGUMENT:
-- Delegated from imported collaborator agent_node_config.NodeConfig.guide_file in the same session lifecycle tier.
-"""
+        GROUNDING_PROVISIONS:
+        - knows("guide_file", Optional[agent_file_alias.UnboundFile]): Exposes guide file.
+
+        GROUNDING_ARGUMENT:
+        - knows("guide_file", Self) :- knows("guide_file", agent_node_config.NodeConfig).
+        """
         ...
+
+    @operation
+    @override
+    def can_read(
+        self, path: Union[str, agent_file_alias.FileAlias]
+    ) -> tool_provider.ToolResponse:
+        """Validates read access for external file access or file alias.
+
+        Args:
+            path: The file path string or FileAlias to validate.
+
+        Returns:
+            Response indicating whether reading is permitted or providing recovery feedback.
+
+        REQUIREMENTS:
+        - WHEN path does not match any declared file workspace path, MUST produce a Response with failed set to True reminding the agent that only declared files can be read and listing readable file aliases.
+        - WHEN path matches a declared file workspace path, MUST produce a successful Response indicating access is permitted.
+
+        GROUNDING_PROVISIONS:
+        - action("can_read", tool_provider.ToolResponse): Checks read access for a workspace path to satisfy requirement 4.
+
+        GROUNDING_ARGUMENT:
+        - action("can_read", Self) :- knows("agent_session", Self).
+        """
+        ...
+
+
+@singleton_type("agent_session")
+class ViewFileTool(sandbox_file_reader.ViewFileTool):
+    """Executes file read across declared session files.
+
+    GROUNDING_ARGUMENT:
+    - As an agent_session singleton, ViewFileTool implements tool_provider.Tool, accessing singletons agent_config.AgentConfig in SystemTier, and agent_file_alias.AliasManager, agent_node_config.NodeConfig, sandbox_file_editor.EditManager, template_format.TemplateFormatter, and tool_provider.ToolManager in agent_session.
+    """
 
     @operation
     def initialize(self) -> None:
+        """Installs the view file tool into tool manager when mcp mode is inactive and omits search tool.
+
+        REQUIREMENTS:
+        - WHEN agent config mcp mode is inactive, MUST install the view file tool for the agent session.
+        - WHEN agent config mcp mode is active, MUST install no read tools.
+        - MUST omit the search tool.
+
+        GROUNDING_REQUIREMENTS:
+        - action("install", Self): Installs view file tool to satisfy requirement 1.
+        - knows("mcp_mode", bool): Evaluates mcp mode branch condition to satisfy requirement 1.
+
+        GROUNDING_ARGUMENT:
+        - action("install", Self) :- action("install_tool", tool_provider.ToolManager), knows("is_mcp_mode", agent_config.AgentConfig).
         """
-PURPOSE:
-Provides that initialization installs the view file tool when mcp mode is inactive, installs no inspection tools when mcp mode is active, and never installs the search tool
-
-FRESH_REQUIREMENTS:
-- The read manager installs the view file tool into the tool manager when mcp mode is inactive, installs no inspection tools when mcp mode is active, and never installs the search tool.
-
-GROUNDING_ARGUMENT:
-- Installs ViewFileTool directly into imported tool_provider.ToolManager when imported collaborator agent_config.AgentConfig.is_mcp_mode is inactive, installs no tools when is_mcp_mode is active in the same session lifecycle tier, and never installs SearchTool.
-"""
         ...
-
-    @operation
-    @override
-    def can_read(self, path: Union[str, agent_file_alias.FileAlias]) -> tool_provider.Response:
-        """
-PURPOSE:
-Validates inspection access for a file path under role blindness and file boundaries
-
-FRESH_REQUIREMENTS:
-- When an unbound file is supplied, tool execution resolves to that grounding specification file alias if the relative path or qualified path addresses a module name or ends with `.py` and matches a declared read-only grounding specification ending with `.pyi`.
-- When an unbound file is supplied, tool execution fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract if the unbound file addresses a test file ending with `_test.py`.
-- When an unbound file is supplied, tool execution fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead, otherwise.
-- When a bound file is supplied or resolved, tool execution records the read file in the edit manager and produces a successful response indicating that access is permitted.
-
-INHERITED_REQUIREMENTS:
-- [ReadManager] The read manager provides a can read operation validating inspection access for a file path.
-
-GROUNDING_ARGUMENT:
-- Receives path parameter, resolves unbound .py and module requests to matching declared .pyi grounding specifications via imported agent_node_config.NodeConfig in the same session lifecycle tier, rejects test file requests with contract-directed guidance, records the read file in imported sandbox_file_editor.EditManager in the same session lifecycle tier, and produces a successful response indicating access is permitted for bound files.
-"""
-        ...
-
-@singleton_type('agent_session')
-class ViewFileTool(sandbox_file_reader.ViewFileTool):
-    """
-PURPOSE:
-Implements the view file tool to perform workspace file inspection
-
-INHERITED_ASSUMPTIONS:
-- [Tool] All parameters of a tool have unique names.
-
-FRESH_REQUIREMENTS:
-- The view file tool is named `view_file`.
-- The view file tool path parameter uses the alias manager to convert a file alias.
-
-GROUNDING_ARGUMENT:
-- As an agent_session singleton, ViewFileTool executes file inspection across declared session files, interacting with imported agent_file_alias.AliasManager, agent_node_config.NodeConfig, template_format.TemplateFormatter, and tool_provider in the same session lifecycle tier.
-"""
 
     @property
     @override
     def name(self) -> str:
+        """Tool name identifier view_file.
+
+        GROUNDING_IMPLEMENTS:
+        - knows("tool_name", str): Constant tool name identifier.
         """
-PURPOSE:
-Establishes that the view file tool is named view_file
-
-GROUNDING_ARGUMENT:
-- Constant tool schema identifier ('view_file').
-"""
-        ...
-
-    @property
-    @override
-    def path_parameter(self) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
-        """
-PURPOSE:
-Parameter accepting the target file alias
-
-GROUNDING_ARGUMENT:
-- Constant parameter descriptor configured with alias manager converter.
-"""
-        ...
-
-    @operation
-    @override
-    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
-        """
-PURPOSE:
-Implements execute_tool on the view file tool to inspect file content with line number formatting and alias validation
-
-FRESH_REQUIREMENTS:
-- Tool execution records the read file in the edit manager on successful execution.
-- Tool execution reads file content from the filesystem at the host path formed from the alias manager workspace root and the bound file workspace path, returning the content formatted with one-indexed right-aligned line numbers followed by a colon and space, and formatting read-only markdown files ending with `.md` using the template formatter with session template parameters after filtering out paragraphs beginning with `> META:`.
-- Tool execution treats a read-write file as having empty content when the target file does not exist on disk, and fails with a response guiding agent recovery when inspecting a missing read-only file.
-- When an unbound file is supplied, tool execution resolves to that grounding specification file alias if the relative path or qualified path addresses a module name or ends with `.py` and matches a declared read-only grounding specification ending with `.pyi`.
-- When an unbound file is supplied, tool execution fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract if the unbound file addresses a test file ending with `_test.py`.
-- When an unbound file is supplied, tool execution fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead, otherwise.
-- View file tool responses for read-write files carry a suppression key matching the file's relative path, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
-- When reading markdown files ending with .md, paragraphs beginning with > META: are filtered out from the returned content.
-- When reading read-only markdown files ending with .md, content is formatted using the template formatter with session template parameters after filtering out paragraphs beginning with > META:.
-
-INHERITED_REQUIREMENTS:
-- [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
-
-GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, resolves host paths using imported agent_file_alias.AliasManager workspace root in the same session lifecycle tier, resolves unbound .py and module requests to matching declared .pyi grounding specifications, rejects test file requests with contract-directed guidance, reads file content via the filesystem, formats lines with one-indexed right-aligned line numbers followed by a colon and space, filters > META: paragraphs for markdown files, formats read-only markdown content using imported template_format.TemplateFormatter and agent_node_config.NodeConfig.template_parameters in the same session lifecycle tier, attaches the file's relative path as a suppression key on responses for read-write files while omitting it for read-only files, masks host paths in read-only output, and records the read file in imported sandbox_file_editor.EditManager in the same session lifecycle tier.
-"""
         ...
 
     @property
     @override
     def description(self) -> str:
-        """
-PURPOSE:
-Established that each tool has a description which informs the agent why and when to use the tool
+        """Tool description informing why and when to call view_file.
 
-GROUNDING_ARGUMENT:
-- Constant tool description string.
-"""
+        GROUNDING_IMPLEMENTS:
+        - knows("tool_description", str): Constant tool description string.
+        """
         ...
 
     @property
     @override
-    def parameters(self) -> Set[tool_provider.Parameter]:
+    def path_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, tool_provider.WireString]:
+        """Parameter accepting the target file alias.
+
+        GROUNDING_PROVISIONS:
+        - knows("path_parameter", tool_provider.ToolParameter[agent_file_alias.FileAlias, tool_provider.WireString]): Parameter accepting the target file alias.
+
+        GROUNDING_ARGUMENT:
+        - knows("path_parameter", Self) :- action("convert", agent_file_alias.AliasManager).
         """
-PURPOSE:
-Established that each tool defines input parameters accepted for its invocation
-
-GROUNDING_ARGUMENT:
-- Set composed of self's constant parameter descriptors (path_parameter).
-"""
-        ...
-
-@singleton_type('agent_session')
-class RegexPatternParameterType(tool_provider.ParameterType[agent_file_alias.RegexPattern, str]):
-    """
-PURPOSE:
-Defined as a parameter type for regex patterns that converts a wire type string into a regex pattern
-
-GROUNDING_ARGUMENT:
-- As an agent_session singleton, RegexPatternParameterType converts wire strings to regex patterns without requiring external singleton dependencies.
-"""
-
-    @property
-    @override
-    def actual_type(self) -> Type:
-        """
-PURPOSE:
-Sets the converter actual type to regex pattern
-
-GROUNDING_ARGUMENT:
-- Constant type descriptor identifying RegexPattern.
-"""
         ...
 
     @property
     @override
-    def wire_type(self) -> Type[str]:
-        """
-PURPOSE:
-Sets the converter wire type to string
+    def parameters(self) -> Set[tool_provider.ToolParameter]:
+        """Set of parameter descriptors accepted by view_file.
 
-GROUNDING_ARGUMENT:
-- Constant wire type descriptor identifying str.
-"""
+        GROUNDING_IMPLEMENTS:
+        - knows("tool_parameters", Set[tool_provider.ToolParameter]): Set composed of self's parameter descriptors.
+        """
         ...
 
     @operation
     @override
-    def convert(self, wire_value: str) -> agent_file_alias.RegexPattern:
+    def execute_tool(
+        self, actual_parameter_bindings: tool_provider.ActualParameterBindings
+    ) -> tool_provider.ToolResponse:
+        """Reads file content with line number formatting and alias validation.
+
+        Args:
+            actual_parameter_bindings: Bindings for tool invocation.
+
+        Returns:
+            Response providing output to the agent and indicating whether the conversation should terminate.
+
+        REQUIREMENTS:
+        - WHEN reading a missing read-only file, MUST produce a Response with failed set to True guiding agent recovery.
+        - WHEN reading an existing file, MUST format file content with one-indexed right-aligned line numbers followed by a colon and space.
+        - WHEN reading a markdown file ending with .md, MUST filter out paragraphs beginning with '> META:'.
+        - WHEN reading a read-only markdown file ending with .md, MUST format content with session template parameters.
+        - WHEN reading a read-write file that does not exist on disk, MUST treat file content as empty.
+        - WHEN reading a read-write file, MUST set suppression key matching the file relative path.
+        - WHEN reading a read-only file, MUST omit suppression key and sanitize host paths.
+        - WHEN reading a file succeeds, MUST record the read file to establish the session's last read or written file.
+
+        GROUNDING_PROVISIONS:
+        - action("execute_tool", tool_provider.ToolResponse): Reads file content to satisfy requirement 3.
+
+        GROUNDING_REQUIREMENTS:
+        - action("record_last_read_write", agent_file_alias.FileAlias): Records file read to establish the session's last read or written file to satisfy requirement 3.
+        - action("format_template", str): Formats markdown templates with session template parameters to satisfy requirement 3.
+        - knows("template_bindings", Mapping[str, Any]): Supplies session template parameters to satisfy requirement 3.
+        - action("sanitize", str): Masks host paths in output responses to satisfy requirement 3.
+
+        GROUNDING_ARGUMENT:
+        - action("execute_tool", Self) :- action("record_file_read", sandbox_file_editor.EditManager), action("format_template", template_format.TemplateFormatter), knows("template_parameters", agent_node_config.NodeConfig), action("sanitize_text", agent_file_alias.AliasManager).
         """
-PURPOSE:
-Converts a wire type string to a regex pattern
-
-FRESH_REQUIREMENTS:
-- The regex pattern parameter type converts a wire type string into a regex pattern.
-
-GROUNDING_ARGUMENT:
-- Receives wire_value directly as a parameter and constructs a agent_file_alias.RegexPattern record.
-"""
         ...
 
-@singleton_type('agent_session')
+
+@singleton_type("agent_session")
+class RegexPatternParameterType(tool_provider.ParameterType[agent_file_alias.RegexPattern, tool_provider.WireString]):
+    """Converts wire type string into regex pattern.
+
+    GROUNDING_ARGUMENT:
+    - As an agent_session singleton, RegexPatternParameterType implements tool_provider.ParameterType[agent_file_alias.RegexPattern, tool_provider.WireString] to convert wire strings to RegexPattern values without requiring external singleton dependencies.
+    """
+
+    @property
+    @override
+    def actual_type(self) -> Type[agent_file_alias.RegexPattern]:
+        """Type descriptor identifying RegexPattern.
+
+        GROUNDING_IMPLEMENTS:
+        - knows("actual_type", Type[agent_file_alias.RegexPattern]): Constant type descriptor identifying RegexPattern.
+        """
+        ...
+
+    @property
+    @override
+    def wire_type(self) -> Type[tool_provider.WireString]:
+        """Wire type descriptor identifying String.
+
+        GROUNDING_IMPLEMENTS:
+        - knows("wire_type", Type[tool_provider.WireString]): Constant wire type descriptor identifying String.
+        """
+        ...
+
+    @operation
+    @override
+    def convert(self, wire_value: tool_provider.WireString) -> agent_file_alias.RegexPattern:
+        """Converts wire string to regex pattern.
+
+        Args:
+            wire_value: The wire string to convert into a regex pattern.
+
+        Returns:
+            The constructed RegexPattern.
+
+        GROUNDING_IMPLEMENTS:
+        - action("convert", tool_provider.WireString): Converts wire type string into regex pattern to satisfy requirement 5.
+        """
+        ...
+
+
+@singleton_type("agent_session")
 class SearchTool(sandbox_file_reader.SearchTool):
+    """Searches regex patterns across workspace files.
+
+    GROUNDING_ARGUMENT:
+    - As an agent_session singleton, SearchTool implements tool_provider.Tool in agent_session, coordinating with imported ReadManager, agent_file_alias.AliasManager, and filesystem_ext in the same session lifecycle tier.
     """
-PURPOSE:
-Implements the search tool to search pattern matches across workspace files
-
-INHERITED_ASSUMPTIONS:
-- [Tool] All parameters of a tool have unique names.
-
-FRESH_REQUIREMENTS:
-- The search tool is named `search_files`.
-- The search tool regex pattern parameter uses the regex pattern parameter type.
-
-INHERITED_REQUIREMENTS:
-- [SearchTool] The search tool accepts a regex pattern parameter.
-
-GROUNDING_ARGUMENT:
-- As an agent_session singleton, SearchTool searches regex patterns across workspace files, coordinating with imported ReadManager, agent_file_alias.AliasManager, and tool_provider in the same session lifecycle tier.
-"""
 
     @property
     @override
     def name(self) -> str:
+        """Tool name identifier search_files.
+
+        GROUNDING_IMPLEMENTS:
+        - knows("tool_name", str): Constant tool name identifier.
         """
-PURPOSE:
-Establishes that the search tool is named search_files
-
-GROUNDING_ARGUMENT:
-- Constant tool schema identifier ('search_files').
-"""
-        ...
-
-    @property
-    @override
-    def regex_pattern_parameter(self) -> tool_provider.Parameter[agent_file_alias.RegexPattern, str]:
-        """
-PURPOSE:
-Parameter accepting the regex pattern to search
-
-GROUNDING_ARGUMENT:
-- Constant parameter descriptor configured with regex pattern converter.
-"""
-        ...
-
-    @operation
-    @override
-    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
-        """
-PURPOSE:
-Implements execute_tool on the search tool to search regex pattern matches across session files
-
-FRESH_REQUIREMENTS:
-- Tool execution searches for regex pattern matches across the read-only files and read-write files in the filesystem.
-- Tool execution fails when given an invalid regex pattern.
-- Tool execution provides matched line contents and line numbers for read-only files, sanitized by the alias manager to mask host paths, on successful execution.
-- Tool execution states that matches were found but cannot be displayed to prevent unanchored edits, for read-write files.
-
-INHERITED_REQUIREMENTS:
-- [SearchTool] Executing the search tool searches pattern matches across the session's read-only and read-write files.
-- [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
-
-GROUNDING_ARGUMENT:
-- Receives actual parameter bindings, queries readable file sets from ReadManager, searches file contents via filesystem, and sanitizes matched paths using imported agent_file_alias.AliasManager in the same session lifecycle tier.
-"""
         ...
 
     @property
     @override
     def description(self) -> str:
-        """
-PURPOSE:
-Established that each tool has a description which informs the agent why and when to use the tool
+        """Tool description informing why and when to call search_files.
 
-GROUNDING_ARGUMENT:
-- Constant tool description string.
-"""
+        GROUNDING_IMPLEMENTS:
+        - knows("tool_description", str): Constant tool description string.
+        """
         ...
 
     @property
     @override
-    def parameters(self) -> Set[tool_provider.Parameter]:
-        """
-PURPOSE:
-Established that each tool defines input parameters accepted for its invocation
+    def regex_pattern_parameter(self) -> tool_provider.ToolParameter[agent_file_alias.RegexPattern, tool_provider.WireString]:
+        """Parameter accepting the regex pattern to search.
 
-GROUNDING_ARGUMENT:
-- Set composed of self's constant parameter descriptor (regex_pattern_parameter).
-"""
+        GROUNDING_PROVISIONS:
+        - knows("regex_pattern_parameter", tool_provider.ToolParameter[agent_file_alias.RegexPattern, tool_provider.WireString]): Parameter accepting the regex pattern to search.
+
+        GROUNDING_ARGUMENT:
+        - knows("regex_pattern_parameter", Self) :- action("convert", sandbox_file_reader.RegexPatternParameterType).
+        """
+        ...
+
+    @property
+    @override
+    def parameters(self) -> Set[tool_provider.ToolParameter]:
+        """Set of parameter descriptors accepted by search_files.
+
+        GROUNDING_IMPLEMENTS:
+        - knows("tool_parameters", Set[tool_provider.ToolParameter]): Set composed of self's parameter descriptor.
+        """
+        ...
+
+    @operation
+    @override
+    def execute_tool(
+        self, actual_parameter_bindings: tool_provider.ActualParameterBindings
+    ) -> tool_provider.ToolResponse:
+        """Searches regex pattern matches across session files.
+
+        Args:
+            actual_parameter_bindings: Bindings for tool invocation.
+
+        Returns:
+            Response providing output to the agent and indicating whether the conversation should terminate.
+
+        REQUIREMENTS:
+        - WHEN regex pattern is invalid, MUST return a Response with failed set to True.
+        - WHEN matches are found for read-only files, MUST return matched line contents and line numbers sanitized to mask host paths.
+        - WHEN matches are found for read-write files, MUST state that matches were found but cannot be displayed to prevent unanchored edits.
+
+        GROUNDING_PROVISIONS:
+        - action("execute_tool", tool_provider.ToolResponse): Searches pattern matches across files to satisfy requirement 6.
+
+        GROUNDING_REQUIREMENTS:
+        - knows("agent_session", Set[agent_file_alias.ReadOnlyFile]): Discovers read-only files to satisfy requirement 6.
+        - knows("agent_session", Set[agent_file_alias.ReadWriteFile]): Discovers read-write files to satisfy requirement 6.
+        - action("sanitize", str): Masks host paths in output responses to satisfy requirement 6.
+
+        GROUNDING_ARGUMENT:
+        - action("execute_tool", Self) :- knows("agent_session", sandbox_file_reader.ReadManager), action("sanitize_text", agent_file_alias.AliasManager).
+        """
         ...

@@ -44,7 +44,7 @@ class McpRunner(cleanroom_mcp_runner.McpRunner, Singleton):
             os.environ["MCP_PORT"] = str(options.port)
             logger = get_singleton(runner_logger.RunnerLogger)
             logger.consume(
-                runner_logger.LogEvent(
+                runner_logger.RunnerLogEvent(
                     event_name="runner_start",
                     summary=f"Starting Cleanroom FastMCP server on SSE at http://{options.host}:{options.port}/sse",
                     transcript_representation=f"Cleanroom FastMCP SSE server listening on http://{options.host}:{options.port}/sse",

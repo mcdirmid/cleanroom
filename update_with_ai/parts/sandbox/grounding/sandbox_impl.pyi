@@ -1,77 +1,45 @@
-from typing import List
+from typing import Self
 from framework import operation, override, singleton_type
-import agent_config
-import agent_node_config
 import sandbox
 import sandbox_file_editor
-import sandbox_file_reader
-import sandbox_run_control
-import tool_provider
 
-@singleton_type('agent_session')
+
+@singleton_type("agent_session")
 class Sandbox(sandbox.Sandbox):
+    """Implements sandbox to coordinate starter template materialization and file modification tracking.
+
+    GROUNDING_ARGUMENT:
+    - As an agent_session singleton, Sandbox coordinates template materialization and file modification queries, accessing collaborator singleton sandbox_file_editor.EditManager in the same session lifecycle tier.
     """
-PURPOSE:
-Implements sandbox to coordinate startup context and file management
-
-FRESH_REQUIREMENTS:
-- Querying file modifications delegates to the edit manager.
-
-INHERITED_REQUIREMENTS:
-- [Sandbox] The sandbox exposes whether workspace file modifications occurred during the session.
-
-GROUNDING_ARGUMENT:
-- As an agent_session singleton, Sandbox coordinates startup tool execution sequences and template materialization, accessing collaborator singletons in the same session lifecycle tier (agent_node_config.NodeConfig, sandbox_file_editor.EditManager, sandbox_file_reader.ViewFileTool, sandbox_run_control.AdvanceTool) and agent_config.AgentConfig in the more general system lifecycle tier.
-"""
 
     @property
     @override
     def has_modifications(self) -> bool:
+        """Queries the edit manager to determine if workspace files were modified.
+
+        REQUIREMENTS:
+        - Querying file modifications delegates to the edit manager.
+
+        GROUNDING_PROVISIONS:
+        - knows("has_modifications", bool): Reports file modifications to satisfy requirement 1.
+
+        GROUNDING_ARGUMENT:
+        - knows("has_modifications", Self) :- knows("has_modifications", sandbox_file_editor.EditManager).
         """
-PURPOSE:
-Queries the edit manager to determine if workspace files were modified
-
-GROUNDING_ARGUMENT:
-- Delegated directly to imported collaborator sandbox_file_editor.EditManager.has_modifications in the same session lifecycle tier.
-"""
-        ...
-
-    @operation
-    @override
-    def get_startup_tool_executions(self) -> List[sandbox.StartupToolExecution]:
-        """
-PURPOSE:
-Realizes startup tool execution sequence assembly based on active session configuration
-
-FRESH_REQUIREMENTS:
-- When using step mode to communicate a guide progressively, startup tool executions include an initial advance tool execution with the name of the advance tool, empty wire parameter bindings, and the response produced by executing the advance tool.
-- When performing startup reads to inspect declared files at session start and the session has at most one read-write file, startup tool executions include file read executions for all declared read-only files from node config ordered deterministically by file alias relative path, positioned after any advance tool execution.
-- Each file read execution uses the name of the view file tool, specifies wire parameter bindings mapping the path parameter of the view file tool to the read-only file alias relative path, and captures the response produced by executing the view file tool.
-- When step mode is not used, startup tool executions contain no advance tool execution.
-- When startup reads are not performed or the session has multiple read-write files, startup tool executions contain no file read executions.
-
-INHERITED_REQUIREMENTS:
-- [Sandbox] The sandbox exposes startup tool executions as an ordered sequence of initial tool executions based on active configuration.
-
-GROUNDING_ARGUMENT:
-- Reads step mode and startup reads from imported agent_config.AgentConfig (system tier), retrieves declared read-only files and read-write files from imported agent_node_config.NodeConfig (session tier), includes file read executions only when performing startup reads and the session contains at most one read-write file, orders read-only files deterministically by file alias relative path, executes imported sandbox_run_control.AdvanceTool and sandbox_file_reader.ViewFileTool (session tier), and pairs tool requests with responses into StartupToolExecution records.
-"""
         ...
 
     @operation
     @override
     def materialize_startup_templates(self) -> None:
+        """Materializes startup templates by delegating to the edit manager.
+
+        REQUIREMENTS:
+        - Materializing startup templates delegates to the edit manager to write template content to missing read-write files without overwriting existing files.
+
+        GROUNDING_PROVISIONS:
+        - action("materialize_startup_templates", None): Delegates template materialization to satisfy requirement 2.
+
+        GROUNDING_ARGUMENT:
+        - action("materialize_startup_templates", Self) :- action("materialize_templates", sandbox_file_editor.EditManager).
         """
-PURPOSE:
-Implements materialize_startup_templates by delegating to the edit manager
-
-FRESH_REQUIREMENTS:
-- Materializing startup templates delegates to the edit manager to write template content to missing read-write files without overwriting existing files.
-
-INHERITED_REQUIREMENTS:
-- [Sandbox] Materializing startup templates populates missing read-write files without overwriting existing files.
-
-GROUNDING_ARGUMENT:
-- Delegates template materialization directly to imported sandbox_file_editor.EditManager in the same session lifecycle tier.
-"""
         ...

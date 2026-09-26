@@ -4,7 +4,7 @@
 import os
 from typing import Optional
 from .file_paths import (
-    FilePaths as FilePathsInterface,
+    FilePathManager as FilePathManagerInterface,
     HostPath,
     AbsolutePath,
     WorkspacePath,
@@ -25,7 +25,7 @@ def _make_host_path(cls, path: str):
     return obj
 
 
-class FilePaths(FilePathsInterface, Singleton):
+class FilePathManager(FilePathManagerInterface, Singleton):
     tier = system
 
     def __init__(self) -> None:
@@ -76,7 +76,7 @@ class FilePaths(FilePathsInterface, Singleton):
         return _make_host_path(DirectoryPath, os.path.normpath(joined))
 
     def resolve_path(
-        self, root: WorkspaceRoot, relative: WorkspacePath
+        self, root: AbsolutePath, relative: WorkspacePath
     ) -> AbsolutePath:
         # Requirement: [FilePaths] Returns an absolute path formed by joining the workspace root and the workspace path.
         joined = os.path.join(root.path, relative.path)
@@ -86,7 +86,7 @@ class FilePaths(FilePathsInterface, Singleton):
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
-        FilePaths,
-        keys=[FilePaths, FilePathsInterface],
+        FilePathManager,
+        keys=[FilePathManager, FilePathManagerInterface],
         tier=system,
     )

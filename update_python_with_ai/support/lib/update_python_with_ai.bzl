@@ -16,7 +16,7 @@ load(
     "define_unit",
 )
 
-PYTHON_ROLES = ["high", "low", "lib", "test", "qa", "coverage"]
+PYTHON_ROLES = ["high", "requirements", "grounding", "low", "lib", "test", "qa", "coverage"]
 
 def update_python_with_ai(name, module_deps = [], template_parameters = None, visibility = None):
     """Create a unit and convenience node targets for each role.

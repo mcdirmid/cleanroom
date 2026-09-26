@@ -14,21 +14,21 @@ from update_with_ai.parts.bazel.lib.bazel_storage_impl import (
     AgentStorage as AgentStorageImpl,
     __initialize__,
 )
-from update_with_ai.parts.bazel.lib.file_paths import (
+from update_with_ai.parts.core.lib.file_paths import (
     AbsolutePath,
     DirectoryPath,
-    FilePaths,
+    FilePathManager,
     HostPath,
     WorkspacePath,
     WorkspaceRoot,
 )
 from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget, NodeDirectory
 from update_with_ai.parts.dag.lib.dag_storage import (
-    Change,
+    ChangeMessage,
     DagStorage,
-    Dependency,
-    Feedback,
-    Node,
+    DagDependency,
+    FeedbackMessage,
+    DagNode,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 
@@ -42,13 +42,13 @@ def _make_node_dir(path: str) -> NodeDirectory:
 class MockNodeIdUtils:
     tier = "system"
 
-    def normalize(self, raw_label: str, role_label: str = "") -> Node:
+    def normalize(self, raw_label: str, role_label: str = "") -> DagNode:
         if "#" in raw_label:
             u, r = raw_label.split("#", 1)
-            return Node(unit_address=u, role_address=r)
-        return Node(unit_address=raw_label, role_address=role_label)
+            return DagNode(unit_address=u, role_address=r)
+        return DagNode(unit_address=raw_label, role_address=role_label)
 
-    def extract_directory(self, node: Node) -> NodeDirectory:
+    def extract_directory(self, node: DagNode) -> NodeDirectory:
         pkg = node.unit_address.split(":")[0].lstrip("/")
         return _make_node_dir(pkg)
 
@@ -109,7 +109,7 @@ class BazelStorageImplTest(unittest.TestCase):
         self.registry = LifecycleRegistry()
         self.file_paths_service = MockFilePaths(self.test_dir)
         self.registry.register_instance(
-            self.file_paths_service, keys=[FilePaths], tier="system"
+            self.file_paths_service, keys=[FilePathManager], tier="system"
         )
         __initialize__(self.registry)
         self.node_utils = MockNodeIdUtils()
@@ -126,8 +126,8 @@ class BazelStorageImplTest(unittest.TestCase):
 
     def test_node_definition_and_dependencies(self) -> None:
         """CUJ: Storing and querying node definitions and direct graph dependencies."""
-        node = Node(unit_address="//pkg:target", role_address="")
-        dep_node = Node(unit_address="//pkg:dep", role_address="")
+        node = DagNode(unit_address="//pkg:target", role_address="")
+        dep_node = DagNode(unit_address="//pkg:dep", role_address="")
         defn = NodeDefinition(node=node, task_prompt=TaskPrompt("Clean prompt"))
 
         with enter_phase("system", registry=self.registry) as scope:
@@ -135,21 +135,21 @@ class BazelStorageImplTest(unittest.TestCase):
             self.assertIsInstance(storage, AgentStorageImpl)
             assert isinstance(storage, AgentStorageImpl)
 
-            # Node definition
+            # DagNode definition
             storage._definitions[node] = defn
             # Requirement: [AgentStorage] The agent storage provides task prompts and node definitions for declared nodes.
             # Requirement: The agent storage maintains node definitions and task prompts mapped to nodes in dag storage.
             self.assertEqual(storage.get_node_definition(node), defn)
 
             # Dependencies
-            dep = Dependency(node=dep_node, is_silent=False)
+            dep = DagDependency(node=dep_node, is_silent=False)
             storage._dependencies[node] = {dep}
             # Requirement: [AgentStorage] The agent storage maintains nodes, dependencies, reverse dependencies, and pending messages from workspace targets.
             self.assertEqual(storage.get_dependencies(node), {dep})
 
     def test_messages_persistence_and_dirty_state(self) -> None:
         """CUJ: Adding messages serializes to package textproto and controls dirty state."""
-        node = Node(unit_address="//pkg/sub:target", role_address="")
+        node = DagNode(unit_address="//pkg/sub:target", role_address="")
 
         with enter_phase("system", registry=self.registry) as scope:
             storage = scope.get_singleton(AgentStorage)
@@ -157,20 +157,20 @@ class BazelStorageImplTest(unittest.TestCase):
             self.assertFalse(storage.is_dirty(node))
             self.assertEqual(storage.get_messages(node), set())
 
-            # Add Change and Feedback messages
+            # Add ChangeMessage and FeedbackMessage messages
             # Requirement: Adding a message to a node records the message explaining why the node requires cleaning.
             # Requirement: [DagStorage] Adding a message to a node records the message for that node.
             # Requirement: The agent storage serializes pending messages and reverse dependencies for nodes from dag storage into protobuf text format files.
-            storage.add_message(Change(), to=node)
-            storage.add_message(Feedback(), to=node)
+            storage.add_message(ChangeMessage(), to=node)
+            storage.add_message(FeedbackMessage(), to=node)
 
             # Requirement: A node in dag storage is dirty if it has messages explaining why it requires cleaning, or if its declared source file is missing from the workspace root, recording a change message to implement the source file for the node.
             # Requirement: [DagStorage] A node is dirty if, but not only if, it has messages.
             self.assertTrue(storage.is_dirty(node))
             msgs = storage.get_messages(node)
             self.assertEqual(len(msgs), 2)
-            self.assertTrue(any(isinstance(m, Change) for m in msgs))
-            self.assertTrue(any(isinstance(m, Feedback) for m in msgs))
+            self.assertTrue(any(isinstance(m, ChangeMessage) for m in msgs))
+            self.assertTrue(any(isinstance(m, FeedbackMessage) for m in msgs))
 
             # Verify textproto file was written to package directory
             # Requirement: All nodes located within the same package directory share a common package message file named `.update_with_ai.textproto`.
@@ -188,12 +188,12 @@ class BazelStorageImplTest(unittest.TestCase):
 
     def test_missing_source_file_dirty_state(self) -> None:
         """CUJ: A node is dirty when its declared source file is missing from the workspace root."""
-        node = Node(unit_address="//pkg/src:target", role_address="lib")
+        node = DagNode(unit_address="//pkg/src:target", role_address="lib")
         with enter_phase("system", registry=self.registry) as scope:
             storage = scope.get_singleton(AgentStorage)
             assert isinstance(storage, AgentStorageImpl)
 
-            # Node with declared source file that does not exist yet
+            # DagNode with declared source file that does not exist yet
             rel_path = "pkg/src/target.py"
             storage._source_files[node] = rel_path
             # Requirement: A node in dag storage is dirty if it has messages explaining why it requires cleaning, or if its declared source file is missing from the workspace root, recording a change message to implement the source file for the node.
@@ -204,7 +204,7 @@ class BazelStorageImplTest(unittest.TestCase):
             msgs = storage.get_messages(node)
             self.assertEqual(len(msgs), 1)
             msg = next(iter(msgs))
-            self.assertIsInstance(msg, Change)
+            self.assertIsInstance(msg, ChangeMessage)
             self.assertEqual(msg.content, f"implement {rel_path}")
 
             # Even after creating the declared source file on disk, the node remains dirty because the recorded change message persists
@@ -222,9 +222,9 @@ class BazelStorageImplTest(unittest.TestCase):
 
     def test_reverse_dependencies_registration_and_clearing(self) -> None:
         """CUJ: Registering dependent writes reverse dependency to non-silent dependencies."""
-        upstream = Node(unit_address="//pkg/lib:core", role_address="")
-        downstream = Node(unit_address="//pkg/app:main", role_address="")
-        silent_upstream = Node(unit_address="//pkg/silent:tool", role_address="")
+        upstream = DagNode(unit_address="//pkg/lib:core", role_address="")
+        downstream = DagNode(unit_address="//pkg/app:main", role_address="")
+        silent_upstream = DagNode(unit_address="//pkg/silent:tool", role_address="")
 
         with enter_phase("system", registry=self.registry) as scope:
             storage = scope.get_singleton(AgentStorage)
@@ -232,8 +232,8 @@ class BazelStorageImplTest(unittest.TestCase):
 
             # Set dependencies: one normal, one silent
             storage._dependencies[downstream] = {
-                Dependency(node=upstream, is_silent=False),
-                Dependency(node=silent_upstream, is_silent=True),
+                DagDependency(node=upstream, is_silent=False),
+                DagDependency(node=silent_upstream, is_silent=True),
             }
 
             # Register dependent
@@ -262,7 +262,7 @@ class BazelStorageImplTest(unittest.TestCase):
 
     def test_save_package_data_os_error_handled(self) -> None:
         """CUJ: Handling filesystem write errors during package data persistence."""
-        node = Node(unit_address="//pkg/err:target", role_address="")
+        node = DagNode(unit_address="//pkg/err:target", role_address="")
         with enter_phase("system", registry=self.registry) as scope:
             storage = scope.get_singleton(AgentStorage)
             assert isinstance(storage, AgentStorageImpl)
@@ -272,7 +272,7 @@ class BazelStorageImplTest(unittest.TestCase):
             ):
                 # Requirement: The agent storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
                 # Requirement: [DagStorage] Adding a message to a node records the message for that node.
-                storage.add_message(Change(), to=node)
+                storage.add_message(ChangeMessage(), to=node)
                 self.assertEqual(storage.get_messages(node), set())
 
 

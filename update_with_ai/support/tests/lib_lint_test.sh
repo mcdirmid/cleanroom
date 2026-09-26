@@ -238,7 +238,7 @@ else
     fi
 fi
 
-# Case 13: Framework decorators used without importing framework -> rejected with error.
+# Case 13: Specification decorators used without importing framework -> rejected with error.
 mkdir -p "$tmp/c13/lib"
 cat > "$tmp/c13/lib/main.py" <<'EOF'
 @singleton_type("system")
@@ -248,14 +248,72 @@ class Service:
         pass
 EOF
 if ( cd "$tmp/c13" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/main.py 2>"$tmp/c13/err.log" ); then
-    echo "FAIL: c13 expected failure when framework decorators used" >&2
+    echo "FAIL: c13 expected failure when @singleton_type used" >&2
     fail=1
 else
     if grep -q "specification framework decorator '@singleton_type' must not be used" "$tmp/c13/err.log" && \
-       grep -q "specification framework decorator '@operation' must not be used" "$tmp/c13/err.log"; then
-        echo "PASS: c13 rejected framework decorators used without framework import"
+       ! grep -q "specification framework decorator '@operation' must not be used" "$tmp/c13/err.log"; then
+        echo "PASS: c13 rejected @singleton_type and allowed @operation"
     else
         echo "FAIL: c13 did not report expected framework decorator errors" >&2
+        fail=1
+    fi
+fi
+
+# Case 13b: Framework operation and override imported from framework -> accepted.
+mkdir -p "$tmp/c13b/lib"
+cat > "$tmp/c13b/lib/main.py" <<'EOF'
+from framework import operation, override
+
+class Service:
+    @operation
+    def run(self) -> None:
+        pass
+
+    @override
+    def close(self) -> None:
+        pass
+EOF
+if ( cd "$tmp/c13b" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/main.py 2>"$tmp/c13b/err.log" ); then
+    echo "PASS: c13b accepted operation and override imported from framework"
+else
+    echo "FAIL: c13b expected success when operation and override imported from framework" >&2
+    fail=1
+fi
+
+# Case 13c: Standard typing.override decorator -> accepted.
+mkdir -p "$tmp/c13c/lib"
+cat > "$tmp/c13c/lib/main.py" <<'EOF'
+from typing import override
+
+class Service:
+    @override
+    def run(self) -> None:
+        pass
+EOF
+if ( cd "$tmp/c13c" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/main.py 2>"$tmp/c13c/err.log" ); then
+    echo "PASS: c13c accepted standard typing.override"
+else
+    echo "FAIL: c13c expected success with typing.override" >&2
+    fail=1
+fi
+
+# Case 13d: Specification decorator imported from framework -> rejected.
+mkdir -p "$tmp/c13d/lib"
+cat > "$tmp/c13d/lib/main.py" <<'EOF'
+from framework import singleton_type, operation
+
+class Service:
+    pass
+EOF
+if ( cd "$tmp/c13d" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/main.py 2>"$tmp/c13d/err.log" ); then
+    echo "FAIL: c13d expected failure when specification decorator imported from framework" >&2
+    fail=1
+else
+    if grep -q "library module must not import specification decorators (singleton_type) from 'framework'" "$tmp/c13d/err.log"; then
+        echo "PASS: c13d rejected singleton_type import from framework"
+    else
+        echo "FAIL: c13d did not report specification decorator import error" >&2
         fail=1
     fi
 fi
@@ -461,7 +519,7 @@ else
 fi
 check "c22 undeclared error diagnostic" "$tmp/c22/err.log" "undeclared dependency 'unauthorized_lib'. Allowed dependencies: tool_provider"
 
-# Case 23: empty module with .pyi spec -> scaffolded with valid skeleton and TODO bodies.
+# Case 23: empty module with .pyi spec -> scaffolded with valid skeleton and rejected until implemented.
 mkdir -p "$tmp/c23/lib" "$tmp/c23/grounding"
 cat > "$tmp/c23/grounding/worker_impl.pyi" <<'EOF'
 from framework import operation, singleton_type
@@ -473,12 +531,13 @@ class Worker:
         ...
 EOF
 touch "$tmp/c23/lib/worker_impl.py"
-if ( cd "$tmp/c23" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/worker_impl.py --pyi "$tmp/c23/grounding/worker_impl.pyi" ); then
-    echo "PASS: c23 auto-generated skeleton from .pyi"
-else
-    echo "FAIL: c23 failed to generate skeleton from .pyi" >&2
+if ( cd "$tmp/c23" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/worker_impl.py --pyi "$tmp/c23/grounding/worker_impl.pyi" 2>"$tmp/c23/err.log" ); then
+    echo "FAIL: c23 expected rejection due to stubs in generated skeleton" >&2
     fail=1
+else
+    echo "PASS: c23 auto-generated skeleton from .pyi and rejected stubs"
 fi
+check "c23 stub error" "$tmp/c23/err.log" "contains stub 'raise NotImplementedError'"
 check "c23 spec reference header" "$tmp/c23/lib/worker_impl.py" '# Requirements specified in worker_impl.pyi'
 check "c23 class skeleton" "$tmp/c23/lib/worker_impl.py" 'class Worker(Singleton):'
 check "c23 tier" "$tmp/c23/lib/worker_impl.py" 'tier = agent_session'
@@ -512,4 +571,121 @@ check "c24 spec reference header" "$tmp/c24/lib/service.py" '# Requirements spec
 check "c24 protocol class" "$tmp/c24/lib/service.py" 'class Service(Protocol):'
 check "c24 method todo" "$tmp/c24/lib/service.py" '# TODO_serve_body'
 
+# Case 25: grounding specification containing a type alias is rejected.
+mkdir -p "$tmp/c25/lib" "$tmp/c25/grounding"
+cat > "$tmp/c25/grounding/aliased.pyi" <<'EOF'
+from framework import poly_type
+
+WireTypeString = str
+
+@poly_type
+class Aliased:
+    def get_val(self) -> str:
+        ...
+EOF
+cat > "$tmp/c25/lib/aliased.py" <<'EOF'
+class Aliased:
+    def get_val(self) -> str:
+        return "val"
+EOF
+if ( cd "$tmp/c25" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/aliased.py --pyi "$tmp/c25/grounding/aliased.pyi" 2>"$tmp/c25/err.log" ); then
+    echo "FAIL: c25 expected failure on .pyi type alias" >&2
+    fail=1
+else
+    echo "PASS: c25 rejected .pyi type alias"
+fi
+check "c25 type alias error diagnostic" "$tmp/c25/err.log" "type aliasing is not permitted in grounding specifications ('WireTypeString')"
+
+# Case 26: library method return type mismatch against .pyi is rejected.
+mkdir -p "$tmp/c26/lib" "$tmp/c26/grounding"
+cat > "$tmp/c26/grounding/converter.pyi" <<'EOF'
+from framework import poly_type
+
+@poly_type
+class Converter:
+    def convert(self, raw: str) -> int:
+        ...
+EOF
+cat > "$tmp/c26/lib/converter.py" <<'EOF'
+class Converter:
+    def convert(self, raw: str) -> str:
+        return raw
+EOF
+if ( cd "$tmp/c26" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/converter.py --pyi "$tmp/c26/grounding/converter.pyi" 2>"$tmp/c26/err.log" ); then
+    echo "FAIL: c26 expected failure on return type mismatch" >&2
+    fail=1
+else
+    echo "PASS: c26 rejected return type mismatch"
+fi
+check "c26 return type mismatch diagnostic" "$tmp/c26/err.log" "return type mismatch in 'Converter.convert': specification 'converter.pyi' declares 'int', implementation defines 'str'"
+
+# Case 27: library method parameter type mismatch against .pyi is rejected.
+mkdir -p "$tmp/c27/lib" "$tmp/c27/grounding"
+cat > "$tmp/c27/grounding/handler.pyi" <<'EOF'
+from framework import poly_type
+
+@poly_type
+class Handler:
+    def handle(self, code: int) -> bool:
+        ...
+EOF
+cat > "$tmp/c27/lib/handler.py" <<'EOF'
+class Handler:
+    def handle(self, code: str) -> bool:
+        return True
+EOF
+if ( cd "$tmp/c27" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/handler.py --pyi "$tmp/c27/grounding/handler.pyi" 2>"$tmp/c27/err.log" ); then
+    echo "FAIL: c27 expected failure on parameter type mismatch" >&2
+    fail=1
+else
+    echo "PASS: c27 rejected parameter type mismatch"
+fi
+check "c27 parameter type mismatch diagnostic" "$tmp/c27/err.log" "parameter 'code' type mismatch in 'Handler.handle': specification 'handler.pyi' declares 'int', implementation defines 'str'"
+
+# Case 28: fully implemented module with no stubs -> lib_lint succeeds with code 0.
+mkdir -p "$tmp/c28/lib" "$tmp/c28/grounding"
+cat > "$tmp/c28/grounding/worker_impl.pyi" <<'EOF'
+from framework import operation, singleton_type
+
+@singleton_type('agent_session')
+class Worker:
+    @operation
+    def process_item(self, item: str) -> bool:
+        ...
+EOF
+cat > "$tmp/c28/lib/worker_impl.py" <<'EOF'
+from __future__ import annotations
+from typing import Optional
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, system
+from update_with_ai.parts.agent.lib.agent_session import agent_session
+
+# Requirements specified in worker_impl.pyi
+
+class Worker(Singleton):
+    tier = agent_session
+
+    def __init__(self) -> None:
+        pass
+
+    def process_item(self, item: str) -> bool:
+        return True
+
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        Worker,
+        keys=[Worker],
+        tier=agent_session,
+    )
+
+_initialize_ = __initialize__
+EOF
+if ( cd "$tmp/c28" && python3 "$bin/lib_lint.py" lib/BUILD.bazel lib/worker_impl.py --pyi "$tmp/c28/grounding/worker_impl.pyi" ); then
+    echo "PASS: c28 fully implemented module passed verification"
+else
+    echo "FAIL: c28 expected pass on fully implemented module" >&2
+    fail=1
+fi
+
 exit "$fail"
+

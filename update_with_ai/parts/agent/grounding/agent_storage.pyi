@@ -1,149 +1,148 @@
+from dataclasses import dataclass
 from typing import Optional, Protocol, Set
 from framework import data_type, operation, override, singleton_type
-from dataclasses import dataclass
 import dag_storage
+
 
 @data_type
 class TaskPrompt(str):
-    """
-PURPOSE:
-Instruction describing the work required to clean a node
-"""
+    """Instruction describing the work required to clean a node."""
     ...
+
 
 @dataclass(frozen=True)
 @data_type
 class NodeDefinition:
+    """Metadata describing task prompts for a node.
+
+    Args:
+        node: Target node in the graph.
+        task_prompt: Instructions for cleaning the node.
     """
-PURPOSE:
-Metadata describing task prompts for a node
-"""
+    node: dag_storage.DagNode
+    task_prompt: TaskPrompt
 
-    def __init__(self, node: dag_storage.Node, task_prompt: TaskPrompt) -> None:
-        ...
 
-    @property
-    def node(self) -> dag_storage.Node:
-        """
-PURPOSE:
-Target node in the graph
-"""
-        ...
-
-    @property
-    def task_prompt(self) -> TaskPrompt:
-        """
-PURPOSE:
-Instructions for cleaning the node
-"""
-        ...
-
-@singleton_type('system')
+@singleton_type("system")
 class AgentStorage(dag_storage.DagStorage, Protocol):
-    """
-PURPOSE:
-Defined as a system service backed by target manifests
-
-INHERITANCE:
-- dag_storage.DagStorage: Extends dag storage with target manifest metadata
-
-FRESH_REQUIREMENTS:
-- The agent storage maintains nodes, dependencies, reverse dependencies, and pending messages from workspace targets.
-- The agent storage provides task prompts and node definitions for declared nodes.
-- Declared dependencies marked propagating mark dependent nodes dirty when changed.
-"""
+    """System service backed by target manifests."""
 
     @operation
-    def get_node_definition(self, node: dag_storage.Node) -> Optional[NodeDefinition]:
+    def get_node_definition(self, node: dag_storage.DagNode) -> Optional[NodeDefinition]:
+        """Retrieves metadata definition for a node.
+
+        Args:
+            node: Target node in the graph.
+
+        REQUIREMENTS:
+        - The agent storage provides task prompts and node definitions for declared nodes.
+
+        GROUNDING_PROVISIONS:
+        - action("get_node_definition", Optional[NodeDefinition]): Retrieves node definition to satisfy requirement 4.
         """
-PURPOSE:
-Retrieves metadata definition for a node
-"""
         ...
 
     @operation
     @override
-    def get_dependencies(self, node: dag_storage.Node) -> Set[dag_storage.Dependency]:
+    def get_dependencies(self, node: dag_storage.DagNode) -> Set[dag_storage.DagDependency]:
+        """Establishes dependencies that refer to the node's upstream nodes in the graph.
+
+        Args:
+            node: Target node in the graph.
+
+        GROUNDING_PROVISIONS:
+        - action("get_dependencies", Set[dag_storage.DagDependency]): Retrieves dependencies to satisfy requirement 3.
         """
-PURPOSE:
-Establishes dependencies that refer to the node's upstream nodes in the graph
-"""
         ...
 
     @operation
     @override
-    def get_dependents(self, node: dag_storage.Node) -> Set[dag_storage.Node]:
+    def get_dependents(self, node: dag_storage.DagNode) -> Set[dag_storage.DagNode]:
+        """Establishes dependents that refer to downstream nodes depending on it.
+
+        Args:
+            node: Target node in the graph.
+
+        GROUNDING_PROVISIONS:
+        - action("get_dependents", Set[dag_storage.DagNode]): Retrieves dependents to satisfy requirement 3.
         """
-PURPOSE:
-Establishes dependents that refer to downstream nodes depending on it
-"""
         ...
 
     @operation
     @override
-    def get_messages(self, node: dag_storage.Node) -> Set[dag_storage.Message]:
+    def get_messages(self, node: dag_storage.DagNode) -> Set[dag_storage.DagMessage]:
+        """Establishes messages explaining why the node requires cleaning.
+
+        Args:
+            node: Target node in the graph.
+
+        GROUNDING_PROVISIONS:
+        - action("get_messages", Set[dag_storage.DagMessage]): Retrieves messages to satisfy requirement 3.
         """
-PURPOSE:
-Establishes messages explaining why the node requires cleaning
-"""
         ...
 
     @operation
     @override
-    def is_dirty(self, node: dag_storage.Node) -> bool:
-        """
-PURPOSE:
-Defines dirty state on a node to indicate that it needs to be cleaned
+    def is_dirty(self, node: dag_storage.DagNode) -> bool:
+        """Defines dirty state on a node to indicate that it needs to be cleaned.
 
-INHERITED_REQUIREMENTS:
-- [DagStorage] A node is dirty if, but not only if, it has messages.
-"""
+        Args:
+            node: Target node in the graph.
+
+        GROUNDING_PROVISIONS:
+        - action("is_dirty", bool): Returns whether node is dirty to satisfy requirement 3.
+        """
         ...
 
     @operation
     @override
-    def register_dependent(self, node: dag_storage.Node) -> None:
-        """
-PURPOSE:
-Provides that a node can be registered as a dependent to all of its non-silent dependencies
+    def register_dependent(self, node: dag_storage.DagNode) -> None:
+        """Registers a node as a dependent to all of its non-silent dependencies.
 
-INHERITED_REQUIREMENTS:
-- [DagStorage] Registering a node as a dependent adds the node to the dependents of all of its non-silent dependencies.
-"""
+        Args:
+            node: Target node to register.
+
+        GROUNDING_PROVISIONS:
+        - action("register_dependent", None): Registers dependent relationships to satisfy requirement 3.
+        """
         ...
 
     @operation
     @override
-    def clear_dependents(self, node: dag_storage.Node) -> None:
-        """
-PURPOSE:
-Provides that the dependents of a node can be cleared to avoid stale dependent relationships
+    def clear_dependents(self, node: dag_storage.DagNode) -> None:
+        """Clears dependents of a node to avoid stale dependent relationships.
 
-INHERITED_REQUIREMENTS:
-- [DagStorage] Clearing the dependents of a node empties all recorded dependents for that node.
-"""
+        Args:
+            node: Target node to clear dependents for.
+
+        GROUNDING_PROVISIONS:
+        - action("clear_dependents", None): Clears dependent relationships to satisfy requirement 3.
+        """
         ...
 
     @operation
     @override
-    def add_message(self, message: dag_storage.Message, to: dag_storage.Node) -> None:
-        """
-PURPOSE:
-Provides that messages can be added to a node to inform on why it needs to be cleaned
+    def add_message(self, message: dag_storage.DagMessage, to: dag_storage.DagNode) -> None:
+        """Adds a message to a node explaining why it needs cleaning.
 
-INHERITED_REQUIREMENTS:
-- [DagStorage] Adding a message to a node records the message for that node.
-"""
+        Args:
+            message: Cleaning reason message.
+            to: Target node receiving the message.
+
+        GROUNDING_PROVISIONS:
+        - action("add_message", None): Adds message to node to satisfy requirement 3.
+        """
         ...
 
     @operation
     @override
-    def clear_messages(self, node: dag_storage.Node) -> None:
-        """
-PURPOSE:
-Provides that messages of a node can be cleared to inform that it no longer needs to be cleaned
+    def clear_messages(self, node: dag_storage.DagNode) -> None:
+        """Clears messages for a node when it no longer needs cleaning.
 
-INHERITED_REQUIREMENTS:
-- [DagStorage] Clearing messages for a node removes all recorded messages for that node.
-"""
+        Args:
+            node: Target node to clear messages for.
+
+        GROUNDING_PROVISIONS:
+        - action("clear_messages", None): Clears messages to satisfy requirement 3.
+        """
         ...

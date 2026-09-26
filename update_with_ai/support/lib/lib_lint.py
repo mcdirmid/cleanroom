@@ -26,6 +26,7 @@ from pathlib import Path
 from build_lint_common import (
     build_module_resolution_map,
     check_dataclass_stubs,
+    check_no_stubs,
     check_dead_code,
     check_exception_eating,
     check_framework_imports,
@@ -33,6 +34,7 @@ from build_lint_common import (
     check_lib_structure,
     check_public_types,
     check_sibling_imports,
+    check_signature_alignment,
     check_syntax,
     check_type_ignore,
     check_undeclared_imports,
@@ -802,8 +804,15 @@ def main() -> int:
     exception_errors = check_exception_eating(args.module_path)
     framework_errors = check_framework_imports(args.module_path)
     dataclass_errors = check_dataclass_stubs(args.module_path)
+    stub_errors = check_no_stubs(args.module_path)
     type_ignore_errors = check_type_ignore(args.module_path)
     type_errors = check_public_types(
+        args.module_path,
+        pyi_path=args.pyi or None,
+        pyi_deps=pyi_paths,
+        build_path=args.build_path,
+    )
+    sig_errors = check_signature_alignment(
         args.module_path,
         pyi_path=args.pyi or None,
         pyi_deps=pyi_paths,
@@ -822,8 +831,10 @@ def main() -> int:
         + exception_errors
         + framework_errors
         + dataclass_errors
+        + stub_errors
         + type_ignore_errors
         + type_errors
+        + sig_errors
         + dead_code_errors
         + undeclared_errors
     )

@@ -5,7 +5,7 @@ from . import bazel_manifest_loader_impl
 from . import bazel_node_config_impl
 from . import bazel_storage_impl
 from . import bazel_target_impl
-from . import file_paths_impl
+from update_with_ai.parts.core.lib import file_paths_impl
 
 CONSTITUENTS = (
     bazel_manifest_loader_impl,

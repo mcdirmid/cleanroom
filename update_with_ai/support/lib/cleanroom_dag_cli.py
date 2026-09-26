@@ -26,29 +26,44 @@ for _p in [_repo_root, os.path.join(_repo_root, "update_python_with_ai"), os.pat
 # Canonical Python role dependency graph
 PYTHON_ROLE_DEPENDENCIES: dict[str, list[str]] = {
     "//update_python_with_ai:high": [],
-    "//update_python_with_ai:low": ["//update_python_with_ai:high"],
-    "//update_python_with_ai:lib": ["//update_python_with_ai:low", "//update_python_with_ai:high"],
+    "//update_python_with_ai:requirements": ["//update_python_with_ai:high"],
+    "//update_python_with_ai:grounding": [
+        "//update_python_with_ai:requirements",
+        "//update_python_with_ai:high",
+    ],
+    "//update_python_with_ai:low": [
+        "//update_python_with_ai:requirements",
+        "//update_python_with_ai:high",
+    ],
+    "//update_python_with_ai:lib": [
+        "//update_python_with_ai:grounding",
+        "//update_python_with_ai:requirements",
+        "//update_python_with_ai:high",
+    ],
     "//update_python_with_ai:test": [
         "//update_python_with_ai:lib",
-        "//update_python_with_ai:low",
+        "//update_python_with_ai:grounding",
+        "//update_python_with_ai:requirements",
         "//update_python_with_ai:high",
     ],
     "//update_python_with_ai:qa": [
         "//update_python_with_ai:test",
         "//update_python_with_ai:lib",
-        "//update_python_with_ai:low",
+        "//update_python_with_ai:grounding",
+        "//update_python_with_ai:requirements",
         "//update_python_with_ai:high",
     ],
     "//update_python_with_ai:coverage": [
         "//update_python_with_ai:qa",
         "//update_python_with_ai:test",
         "//update_python_with_ai:lib",
-        "//update_python_with_ai:low",
+        "//update_python_with_ai:grounding",
+        "//update_python_with_ai:requirements",
         "//update_python_with_ai:high",
     ],
 }
 
-PYTHON_ROLES = ["high", "low", "lib", "test", "qa", "coverage"]
+PYTHON_ROLES = ["high", "requirements", "grounding", "low", "lib", "test", "qa", "coverage"]
 
 
 def normalize_role_address(role: str) -> str:
@@ -222,8 +237,8 @@ def inject_change(
         bazel_mcp_system_asm.__initialize__(reg)
         with enter_phase(system, registry=reg) as scope:
             storage = scope.get_singleton(dag_storage.DagStorage)
-            node = dag_storage.Node(unit_address=norm_unit, role_address=norm_role)
-            storage.add_message(dag_storage.Change(content=message), to=node)
+            node = dag_storage.DagNode(unit_address=norm_unit, role_address=norm_role)
+            storage.add_message(dag_storage.ChangeMessage(content=message), to=node)
             is_dirty = storage.is_dirty(node)
             return {
                 "status": "injected",
@@ -259,9 +274,9 @@ def get_subgraph_status(unit_address: str, role_address: str) -> dict[str, Any]:
         with enter_phase(system, registry=reg) as scope:
             storage = scope.get_singleton(dag_storage.DagStorage)
             manifest_loader = scope.get_singleton(bazel_manifest_loader.BazelManifestLoader)
-            root = dag_storage.Node(unit_address=norm_unit, role_address=norm_role)
-            visited: set[dag_storage.Node] = set()
-            queue: list[dag_storage.Node] = [root]
+            root = dag_storage.DagNode(unit_address=norm_unit, role_address=norm_role)
+            visited: set[dag_storage.DagNode] = set()
+            queue: list[dag_storage.DagNode] = [root]
             while queue:
                 curr = queue.pop(0)
                 if curr in visited:
@@ -321,9 +336,9 @@ def get_next_batch(unit_address: str, role_address: str, batch_size: Optional[in
         with enter_phase(system, registry=reg) as scope:
             storage = scope.get_singleton(dag_storage.DagStorage)
             manifest_loader = scope.get_singleton(bazel_manifest_loader.BazelManifestLoader)
-            root = dag_storage.Node(unit_address=norm_unit, role_address=norm_role)
-            visited: set[dag_storage.Node] = set()
-            queue: list[dag_storage.Node] = [root]
+            root = dag_storage.DagNode(unit_address=norm_unit, role_address=norm_role)
+            visited: set[dag_storage.DagNode] = set()
+            queue: list[dag_storage.DagNode] = [root]
             while queue:
                 curr = queue.pop(0)
                 if curr in visited:

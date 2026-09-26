@@ -10,6 +10,7 @@ pyright_test(
     srcs = ["openai_conversation_impl_test.py"],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_config",
         "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/loop/lib:loop_conversation",
         "//update_with_ai/parts/openai/lib:openai_conversation_impl",

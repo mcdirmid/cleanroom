@@ -20,9 +20,9 @@ class MockRunnerLogger:
     """Mock implementation of RunnerLogger protocol."""
 
     def __init__(self) -> None:
-        self.events: list[runner_logger.LogEvent] = []
+        self.events: list[runner_logger.RunnerLogEvent] = []
 
-    def consume(self, event: runner_logger.LogEvent) -> None:
+    def consume(self, event: runner_logger.RunnerLogEvent) -> None:
         self.events.append(event)
 
 
@@ -30,17 +30,17 @@ class MockManifestLoader:
     """Mock implementation of BazelManifestLoader protocol."""
 
     def __init__(self) -> None:
-        self.manifests: dict[str, bazel_manifest_loader.Manifest] = {}
-        self.loaded: list[bazel_manifest_loader.Manifest] = []
+        self.manifests: dict[str, bazel_manifest_loader.TargetManifest] = {}
+        self.loaded: list[bazel_manifest_loader.TargetManifest] = []
 
     def get_manifest(
-        self, node: dag_storage.Node
-    ) -> Optional[bazel_manifest_loader.Manifest]:
+        self, node: dag_storage.DagNode
+    ) -> Optional[bazel_manifest_loader.TargetManifest]:
         return self.manifests.get(node.unit_address)
 
     def load_manifest(
         self,
-        content: bazel_manifest_loader.Manifest,
+        content: bazel_manifest_loader.TargetManifest,
         storage: agent_storage.AgentStorage,
     ) -> Sequence[agent_storage.NodeDefinition]:
         self.loaded.append(content)
@@ -51,36 +51,36 @@ class MockDagStorage:
     """Mock implementation of DagStorage protocol."""
 
     def __init__(self) -> None:
-        self.dirty_nodes: Set[dag_storage.Node] = set()
-        self.messages: dict[dag_storage.Node, list[dag_storage.Message]] = {}
-        self.dependents_map: dict[dag_storage.Node, Set[dag_storage.Node]] = {}
-        self.dependencies_map: dict[dag_storage.Node, Set[dag_storage.Dependency]] = {}
+        self.dirty_nodes: Set[dag_storage.DagNode] = set()
+        self.messages: dict[dag_storage.DagNode, list[dag_storage.DagMessage]] = {}
+        self.dependents_map: dict[dag_storage.DagNode, Set[dag_storage.DagNode]] = {}
+        self.dependencies_map: dict[dag_storage.DagNode, Set[dag_storage.DagDependency]] = {}
 
-    def get_dependencies(self, node: dag_storage.Node) -> Set[dag_storage.Dependency]:
+    def get_dependencies(self, node: dag_storage.DagNode) -> Set[dag_storage.DagDependency]:
         return self.dependencies_map.get(node, set())
 
-    def get_dependents(self, node: dag_storage.Node) -> Set[dag_storage.Node]:
+    def get_dependents(self, node: dag_storage.DagNode) -> Set[dag_storage.DagNode]:
         return self.dependents_map.get(node, set())
 
-    def get_messages(self, node: dag_storage.Node) -> Set[dag_storage.Message]:
+    def get_messages(self, node: dag_storage.DagNode) -> Set[dag_storage.DagMessage]:
         return set(self.messages.get(node, []))
 
-    def is_dirty(self, node: dag_storage.Node) -> bool:
+    def is_dirty(self, node: dag_storage.DagNode) -> bool:
         return node in self.dirty_nodes
 
-    def register_dependent(self, node: dag_storage.Node) -> None:
+    def register_dependent(self, node: dag_storage.DagNode) -> None:
         pass
 
-    def clear_dependents(self, node: dag_storage.Node) -> None:
+    def clear_dependents(self, node: dag_storage.DagNode) -> None:
         self.dependents_map.pop(node, None)
 
-    def add_message(self, message: dag_storage.Message, to: dag_storage.Node) -> None:
+    def add_message(self, message: dag_storage.DagMessage, to: dag_storage.DagNode) -> None:
         if to not in self.messages:
             self.messages[to] = []
         self.messages[to].append(message)
         self.dirty_nodes.add(to)
 
-    def clear_messages(self, node: dag_storage.Node) -> None:
+    def clear_messages(self, node: dag_storage.DagNode) -> None:
         self.messages.pop(node, None)
         self.dirty_nodes.discard(node)
 
@@ -89,12 +89,12 @@ class MockLoopCleaner:
     """Mock implementation of LoopCleaner protocol."""
 
     def __init__(self, storage: MockDagStorage, should_fail: bool = False) -> None:
-        self.cleaned_nodes: list[dag_storage.Node] = []
+        self.cleaned_nodes: list[dag_storage.DagNode] = []
         self.storage = storage
         self.should_fail = should_fail
 
     def clean(
-        self, node: dag_storage.Node, cleaner: loop_node_cleaner.NodeCleaner
+        self, node: dag_storage.DagNode, cleaner: loop_node_cleaner.NodeCleaner
     ) -> None:
         if self.should_fail:
             raise RuntimeError("Simulated cleaner failure")
@@ -107,9 +107,9 @@ class MockNodeCleaner:
     """Mock implementation of NodeCleaner protocol."""
 
     def __init__(self) -> None:
-        self.cleaned_targets: list[dag_storage.Node] = []
+        self.cleaned_targets: list[dag_storage.DagNode] = []
 
-    def clean(self, nodes: Sequence[dag_storage.Node]) -> bool:
+    def clean(self, nodes: Sequence[dag_storage.DagNode]) -> bool:
         self.cleaned_targets.extend(nodes)
         return True
 
@@ -166,8 +166,8 @@ class BazelLoopImplTest(unittest.TestCase):
 
     def test_run_cleaning_pass_success(self) -> None:
         """Tests successful cleaning pass execution and telemetry logging."""
-        root = dag_storage.Node(unit_address="//pkg:target", role_address="lib")
-        self.manifest_loader.manifests["//pkg:target"] = bazel_manifest_loader.Manifest(
+        root = dag_storage.DagNode(unit_address="//pkg:target", role_address="lib")
+        self.manifest_loader.manifests["//pkg:target"] = bazel_manifest_loader.TargetManifest(
             "rule()"
         )
         self.storage.dirty_nodes.add(root)
@@ -199,15 +199,15 @@ class BazelLoopImplTest(unittest.TestCase):
 
     def test_run_cleaning_pass_loads_dependency_graph(self) -> None:
         """Tests that run_cleaning_pass transitively loads manifests for all dependencies in the graph."""
-        root = dag_storage.Node(unit_address="//pkg:root", role_address="")
-        dep1 = dag_storage.Node(unit_address="//pkg:dep1", role_address="")
-        dep2 = dag_storage.Node(unit_address="//pkg:dep2", role_address="")
-        dep3 = dag_storage.Node(unit_address="//pkg:dep3", role_address="")
+        root = dag_storage.DagNode(unit_address="//pkg:root", role_address="")
+        dep1 = dag_storage.DagNode(unit_address="//pkg:dep1", role_address="")
+        dep2 = dag_storage.DagNode(unit_address="//pkg:dep2", role_address="")
+        dep3 = dag_storage.DagNode(unit_address="//pkg:dep3", role_address="")
 
-        root_m = bazel_manifest_loader.Manifest('{"name": "root"}')
-        dep1_m = bazel_manifest_loader.Manifest('{"name": "dep1"}')
-        dep2_m = bazel_manifest_loader.Manifest('{"name": "dep2"}')
-        dep3_m = bazel_manifest_loader.Manifest('{"name": "dep3"}')
+        root_m = bazel_manifest_loader.TargetManifest('{"name": "root"}')
+        dep1_m = bazel_manifest_loader.TargetManifest('{"name": "dep1"}')
+        dep2_m = bazel_manifest_loader.TargetManifest('{"name": "dep2"}')
+        dep3_m = bazel_manifest_loader.TargetManifest('{"name": "dep3"}')
 
         self.manifest_loader.manifests["//pkg:root"] = root_m
         self.manifest_loader.manifests["//pkg:dep1"] = dep1_m
@@ -215,11 +215,11 @@ class BazelLoopImplTest(unittest.TestCase):
         self.manifest_loader.manifests["//pkg:dep3"] = dep3_m
 
         self.storage.dependencies_map[root] = {
-            dag_storage.Dependency(node=dep1),
-            dag_storage.Dependency(node=dep2),
+            dag_storage.DagDependency(node=dep1),
+            dag_storage.DagDependency(node=dep2),
         }
-        self.storage.dependencies_map[dep1] = {dag_storage.Dependency(node=dep3)}
-        self.storage.dependencies_map[dep2] = {dag_storage.Dependency(node=dep3)}
+        self.storage.dependencies_map[dep1] = {dag_storage.DagDependency(node=dep3)}
+        self.storage.dependencies_map[dep2] = {dag_storage.DagDependency(node=dep3)}
 
         with enter_phase("system", registry=self.registry):
             runner = get_singleton(loop.Loop)
@@ -236,7 +236,7 @@ class BazelLoopImplTest(unittest.TestCase):
 
     def test_run_cleaning_pass_runtime_error(self) -> None:
         """Tests cleaning pass failure handling when cleaner raises RuntimeError."""
-        root = dag_storage.Node(unit_address="//pkg:failing", role_address="")
+        root = dag_storage.DagNode(unit_address="//pkg:failing", role_address="")
         self.cleaner.should_fail = True
 
         with enter_phase("system", registry=self.registry):
@@ -250,11 +250,11 @@ class BazelLoopImplTest(unittest.TestCase):
 
     def test_run_cleaning_pass_nodes_remain_dirty(self) -> None:
         """Tests that run_cleaning_pass reports failure if nodes remain dirty after cleaning."""
-        root = dag_storage.Node(unit_address="//pkg:stay_dirty", role_address="")
+        root = dag_storage.DagNode(unit_address="//pkg:stay_dirty", role_address="")
 
         class PersistentDirtyCleaner:
             def clean(
-                self, node: dag_storage.Node, cleaner: loop_node_cleaner.NodeCleaner
+                self, node: dag_storage.DagNode, cleaner: loop_node_cleaner.NodeCleaner
             ) -> None:
                 pass
 
@@ -276,8 +276,8 @@ class BazelLoopImplTest(unittest.TestCase):
 
     def test_mark_node_dirty(self) -> None:
         """Tests marking a target node dirty by injecting a change message."""
-        target = dag_storage.Node(unit_address="//pkg:lib", role_address="")
-        change = dag_storage.Change()
+        target = dag_storage.DagNode(unit_address="//pkg:lib", role_address="")
+        change = dag_storage.ChangeMessage()
 
         with enter_phase("system", registry=self.registry):
             runner = get_singleton(loop.Loop)
@@ -289,8 +289,8 @@ class BazelLoopImplTest(unittest.TestCase):
 
     def test_inject_node_feedback(self) -> None:
         """Tests injecting caller-supplied feedback message to mark a node dirty."""
-        target = dag_storage.Node(unit_address="//pkg:dep", role_address="")
-        feedback = dag_storage.Feedback()
+        target = dag_storage.DagNode(unit_address="//pkg:dep", role_address="")
+        feedback = dag_storage.FeedbackMessage()
 
         with enter_phase("system", registry=self.registry):
             runner = get_singleton(loop.Loop)
@@ -302,11 +302,11 @@ class BazelLoopImplTest(unittest.TestCase):
 
     def test_broadcast_node_change(self) -> None:
         """Tests broadcasting a change message to all downstream reverse dependencies."""
-        origin = dag_storage.Node(unit_address="//pkg:origin", role_address="")
-        dep1 = dag_storage.Node(unit_address="//pkg:dep1", role_address="")
-        dep2 = dag_storage.Node(unit_address="//pkg:dep2", role_address="")
+        origin = dag_storage.DagNode(unit_address="//pkg:origin", role_address="")
+        dep1 = dag_storage.DagNode(unit_address="//pkg:dep1", role_address="")
+        dep2 = dag_storage.DagNode(unit_address="//pkg:dep2", role_address="")
         self.storage.dependents_map[origin] = {dep1, dep2}
-        change = dag_storage.Change()
+        change = dag_storage.ChangeMessage()
 
         with enter_phase("system", registry=self.registry):
             runner = get_singleton(loop.Loop)

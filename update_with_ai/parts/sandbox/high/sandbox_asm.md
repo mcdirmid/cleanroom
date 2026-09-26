@@ -18,7 +18,7 @@ The *sandbox assembly* unites the concrete implementation components that realiz
 
 The sandbox assembly aggregates the following implementation components:
 
-- The sandbox implementation from sandbox_impl, closing the sandbox interface to assemble startup tool executions, materialize templates, and expose session modification state.
+- The sandbox implementation from sandbox_impl, closing the sandbox interface to materialize templates and expose session modification state.
 
 - The sandbox file reader implementation from sandbox_file_reader_impl, closing the sandbox file reader interface to provide guarded file reading and regular expression pattern searching.
 

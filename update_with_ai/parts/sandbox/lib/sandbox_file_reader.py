@@ -16,14 +16,18 @@ class ReadManager(Protocol):
 
     def can_read(
         self, path: Union[str, agent_file_alias.FileAlias]
-    ) -> tool_provider.Response: ...
+    ) -> tool_provider.ToolResponse: ...
 
 
 class ViewFileTool(tool_provider.Tool, Protocol):
     @property
-    def path_parameter(self) -> tool_provider.Parameter: ...
+    def path_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, tool_provider.WireString]: ...
 
 
 class SearchTool(tool_provider.Tool, Protocol):
     @property
-    def regex_pattern_parameter(self) -> tool_provider.Parameter: ...
+    def regex_pattern_parameter(
+        self,
+    ) -> tool_provider.ToolParameter[agent_file_alias.RegexPattern, tool_provider.WireString]: ...

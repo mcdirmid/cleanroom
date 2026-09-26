@@ -3,284 +3,236 @@ from framework import data_type, operation, override, poly_type, singleton_type
 import agent_file_alias
 import tool_provider
 
+
 @data_type
-class Template(agent_file_alias.FileContent):
+class FileTemplate(agent_file_alias.FileContent):
+    """Introduces file template as initial file content for a read-write file.
+
+    REQUIREMENTS:
+    - A file template is file content representing initial boilerplate for a read-write file.
     """
-PURPOSE:
-Introduces template as initial file content for a read-write file
-"""
     ...
+
 
 @poly_type
 class EditingTool(tool_provider.Tool, Protocol):
-    """
-PURPOSE:
-Polymorphic tool that modifies a read-write file
-
-INHERITED_ASSUMPTIONS:
-- [Tool] All parameters of a tool have unique names.
-"""
+    """Polymorphic tool that modifies a read-write file."""
 
     @property
     @override
     def name(self) -> str:
-        """
-PURPOSE:
-Established that each tool has a name which the agent uses to execute the tool
-"""
+        """Tool name used to execute the tool."""
         ...
 
     @property
     @override
     def description(self) -> str:
-        """
-PURPOSE:
-Established that each tool has a description which informs the agent why and when to use the tool
-"""
+        """Tool description informing why and when to use the tool."""
         ...
 
     @property
     @override
-    def parameters(self) -> Set[tool_provider.Parameter]:
-        """
-PURPOSE:
-Established that each tool defines input parameters accepted for its invocation
-"""
+    def parameters(self) -> Set[tool_provider.ToolParameter]:
+        """Input parameters accepted by the editing tool."""
         ...
 
     @operation
     @override
-    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
-        """
-PURPOSE:
-Executed with a set of actual parameter bindings to produce a response
-
-INHERITED_REQUIREMENTS:
-- [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
-"""
+    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.ToolResponse:
+        """Executed with actual parameter bindings to produce a tool response."""
         ...
+
 
 @singleton_type('agent_session')
 class EditManager(Protocol):
-    """
-PURPOSE:
-Defined as an agent session service that installs editing tools and tracks session modifications
+    """Agent session service that installs editing tools and tracks session modifications.
 
-FRESH_REQUIREMENTS:
-- The edit manager installs the replace file content tool.
-- Modifying a file records that workspace file modifications occurred during the session.
-"""
+    REQUIREMENTS:
+    - The edit manager installs the replace file content tool.
+    - Modifying a file records that workspace file modifications occurred during the session.
+    """
 
     @property
     def has_modifications(self) -> bool:
-        """
-PURPOSE:
-Exposes whether workspace file modifications occurred during the session
+        """Exposes whether workspace file modifications occurred during the session.
 
-FRESH_REQUIREMENTS:
-- The edit manager exposes whether workspace file modifications occurred during the session, determined by whether workspace file contents differ from their initial state prior to editing.
-"""
+        REQUIREMENTS:
+        - The edit manager exposes whether workspace file modifications occurred during the session, determined by whether workspace file contents differ from their initial state prior to editing.
+
+        GROUNDING_PROVISIONS:
+        - knows("has_modifications", bool): Exposes whether file modifications occurred.
+        """
         ...
 
     @property
     def file_update_revision(self) -> int:
-        """
-PURPOSE:
-Exposes a file update revision that tracks sequential updates made to workspace files
+        """Exposes a file update revision that tracks sequential updates made to workspace files.
 
-FRESH_REQUIREMENTS:
-- The edit manager exposes a file update revision that tracks sequential updates made to workspace files.
-"""
+        REQUIREMENTS:
+        - The edit manager exposes a file update revision that tracks sequential updates made to workspace files.
+
+        GROUNDING_PROVISIONS:
+        - knows("file_update_revision", int): Exposes sequential file update revision count.
+        """
         ...
 
     @property
     def locked_files(self) -> Set[agent_file_alias.ReadWriteFile]:
-        """
-PURPOSE:
-Exposes read-write files locked against modification
+        """Exposes read-write files locked against modification.
 
-FRESH_REQUIREMENTS:
-- The edit manager exposes read-write files locked against modification.
-"""
+        REQUIREMENTS:
+        - The edit manager exposes read-write files locked against modification.
+
+        GROUNDING_PROVISIONS:
+        - knows("locked_files", Set[agent_file_alias.ReadWriteFile]): Exposes locked read-write files.
+        """
         ...
 
     @operation
     def lock_file(self, file: agent_file_alias.ReadWriteFile) -> None:
-        """
-PURPOSE:
-Locks a read-write file against modification
+        """Locks a read-write file against modification.
 
-FRESH_REQUIREMENTS:
-- The edit manager supports locking individual read-write files against modification.
-"""
+        REQUIREMENTS:
+        - The edit manager supports locking individual read-write files against modification.
+
+        GROUNDING_PROVISIONS:
+        - action("lock_file", None): Locks a read-write file.
+        """
         ...
 
     @operation
     def unlock_file(self, file: agent_file_alias.ReadWriteFile) -> None:
-        """
-PURPOSE:
-Unlocks a read-write file to allow modification
+        """Unlocks a read-write file to allow modification.
 
-FRESH_REQUIREMENTS:
-- The edit manager supports unlocking individual read-write files.
-"""
+        REQUIREMENTS:
+        - The edit manager supports unlocking individual read-write files.
+
+        GROUNDING_PROVISIONS:
+        - action("unlock_file", None): Unlocks a read-write file.
+        """
         ...
 
     @operation
     def materialize_templates(self) -> None:
-        """
-PURPOSE:
-Materializes templates into missing read-write files at session start without overwriting existing files
+        """Materializes templates into missing read-write files at session start.
 
-FRESH_REQUIREMENTS:
-- Materializing templates populates missing read-write files with initial template content without overwriting existing files.
-"""
+        REQUIREMENTS:
+        - Materializing templates populates missing read-write files with initial template content without overwriting existing files.
+
+        GROUNDING_PROVISIONS:
+        - action("materialize_templates", None): Materializes missing files with template content.
+        """
         ...
 
     @property
     def last_read_or_edited_file(self) -> Optional[agent_file_alias.FileAlias]:
-        """
-PURPOSE:
-Tracks the last file read or edited across the session
+        """Tracks the last file read or edited across the session.
 
-FRESH_REQUIREMENTS:
-- The edit manager tracks the last read or edited file across the session, recording file reads from file readers and file edits from editing tools.
-"""
+        REQUIREMENTS:
+        - The edit manager tracks the last read or edited file across the session, recording file reads from file readers and file edits from editing tools.
+
+        GROUNDING_PROVISIONS:
+        - knows("last_read_or_edited_file", Optional[agent_file_alias.FileAlias]): Tracks last read or edited file.
+        """
         ...
 
     @operation
     def record_file_read(self, file: agent_file_alias.FileAlias) -> None:
+        """Records that a file was read by a file reader.
+
+        GROUNDING_PROVISIONS:
+        - action("record_file_read", None): Records file read.
         """
-PURPOSE:
-Records that a file was read by a file reader
-"""
         ...
 
     @operation
     def record_file_edit(self, file: agent_file_alias.ReadWriteFile) -> None:
+        """Records that a file was edited by an editing tool.
+
+        GROUNDING_PROVISIONS:
+        - action("record_file_edit", None): Records file edit.
         """
-PURPOSE:
-Records that a file was edited by an editing tool
-"""
         ...
 
     @operation
     def file_hash(self, file: agent_file_alias.FileAlias) -> str:
-        """
-PURPOSE:
-Computes a file hash for a read-write file from its content
+        """Computes a file hash for a read-write file from its content.
 
-FRESH_REQUIREMENTS:
-- The edit manager computes a file hash for a read-write file from its content.
-"""
+        REQUIREMENTS:
+        - The edit manager computes a file hash for a read-write file from its content.
+
+        GROUNDING_PROVISIONS:
+        - action("file_hash", str): Computes file content hash.
+        """
         ...
 
     @operation
-    def can_write(self, path: Union[str, agent_file_alias.FileAlias]) -> tool_provider.Response:
-        """
-PURPOSE:
-Validates modification access for a read-write file under lock state and write permissions
+    def can_write(self, path: Union[str, agent_file_alias.FileAlias]) -> tool_provider.ToolResponse:
+        """Validates modification access for a read-write file.
 
-FRESH_REQUIREMENTS:
-- The edit manager provides a can write operation validating modification access for a read-write file.
-"""
+        REQUIREMENTS:
+        - The edit manager provides a can write operation validating modification access for a read-write file.
+
+        GROUNDING_PROVISIONS:
+        - action("can_write", tool_provider.ToolResponse): Validates file write permission and lock state.
+        """
         ...
+
 
 @singleton_type('agent_session')
 class ReplaceFileContentTool(EditingTool, Protocol):
-    """
-PURPOSE:
-Defined as an editing tool that replaces target content in a read-write file within an optional line range
-
-INHERITED_ASSUMPTIONS:
-- [Tool] All parameters of a tool have unique names.
-"""
+    """Editing tool that replaces target content in a read-write file."""
 
     @property
-    def file_alias_parameter(self) -> tool_provider.Parameter:
-        """
-PURPOSE:
-Parameter identifying the target read-write file
-"""
+    def file_alias_parameter(self) -> tool_provider.ToolParameter:
+        """Parameter identifying the target read-write file."""
         ...
 
     @property
-    def target_content_parameter(self) -> tool_provider.Parameter:
-        """
-PURPOSE:
-Parameter specifying the target content to replace within the file or designated search window
-"""
+    def target_content_parameter(self) -> tool_provider.ToolParameter:
+        """Parameter specifying the target content to replace."""
         ...
 
     @property
-    def replacement_content_parameter(self) -> tool_provider.Parameter:
-        """
-PURPOSE:
-Parameter specifying the replacement content
-"""
+    def replacement_content_parameter(self) -> tool_provider.ToolParameter:
+        """Parameter specifying the replacement content."""
         ...
 
     @property
-    def start_line_parameter(self) -> tool_provider.Parameter:
-        """
-PURPOSE:
-Parameter specifying the starting line index of the search window
-"""
+    def start_line_parameter(self) -> tool_provider.ToolParameter:
+        """Parameter specifying the starting line index of the search window."""
         ...
 
     @property
-    def end_line_parameter(self) -> tool_provider.Parameter:
-        """
-PURPOSE:
-Parameter specifying the ending line index of the search window
-"""
+    def end_line_parameter(self) -> tool_provider.ToolParameter:
+        """Parameter specifying the ending line index of the search window."""
         ...
 
     @property
-    def allow_multiple_parameter(self) -> tool_provider.Parameter:
-        """
-PURPOSE:
-Parameter specifying whether to allow replacing multiple occurrences
-"""
+    def allow_multiple_parameter(self) -> tool_provider.ToolParameter:
+        """Parameter specifying whether to allow replacing multiple occurrences."""
         ...
 
     @property
     @override
     def name(self) -> str:
-        """
-PURPOSE:
-Established that each tool has a name which the agent uses to execute the tool
-"""
+        """Name of the tool."""
         ...
 
     @property
     @override
     def description(self) -> str:
-        """
-PURPOSE:
-Established that each tool has a description which informs the agent why and when to use the tool
-"""
+        """Description of the tool."""
         ...
 
     @property
     @override
-    def parameters(self) -> Set[tool_provider.Parameter]:
-        """
-PURPOSE:
-Established that each tool defines input parameters accepted for its invocation
-"""
+    def parameters(self) -> Set[tool_provider.ToolParameter]:
+        """Parameters accepted by the tool."""
         ...
 
     @operation
     @override
-    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
-        """
-PURPOSE:
-Executed with a set of actual parameter bindings to produce a response
-
-INHERITED_REQUIREMENTS:
-- [Tool] When a parameter is required, an argument must be supplied for tool execution.
-- [Tool] When tool execution fails, the content includes declarative error and diagnostic messages along with impersonal guidance on executing the tool correctly without second-person pronouns.
-"""
+    def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.ToolResponse:
+        """Executes tool with actual parameter bindings."""
         ...

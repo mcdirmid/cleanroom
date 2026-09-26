@@ -9,34 +9,39 @@ class WireType:
     pass
 
 
+@dataclass(frozen=True, init=False)
+class WireString(str, WireType):
+    def __new__(cls, value: str = "") -> "WireString":
+        return super().__new__(cls, value)
+
+    def __init__(self, value: str = "") -> None:
+        pass
+
+
 @dataclass(frozen=True)
-class String(WireType):
+class WireInteger(WireType):
     pass
 
 
 @dataclass(frozen=True)
-class Integer(WireType):
+class WireBoolean(WireType):
     pass
 
 
 @dataclass(frozen=True)
-class Boolean(WireType):
+class WireFloat(WireType):
     pass
 
 
 @dataclass(frozen=True)
-class Float(WireType):
+class WireList(WireType):
     pass
 
 
 @dataclass(frozen=True)
-class List(WireType):
+class WireDictionary(WireType):
     pass
 
-
-@dataclass(frozen=True)
-class Dictionary(WireType):
-    pass
 
 
 class ParameterType[ActualT, WireT](Protocol):
@@ -72,11 +77,11 @@ class ListParameterType[ItemActualT, ItemWireT](
     item_type: ParameterType[ItemActualT, ItemWireT]
 
     @property
-    def actual_type(self) -> Any:
+    def actual_type(self) -> Type[Sequence[ItemActualT]]:
         return list
 
     @property
-    def wire_type(self) -> Any:
+    def wire_type(self) -> Type[Sequence[ItemWireT]]:
         return list
 
     def convert(self, wire_value: Sequence[ItemWireT]) -> Sequence[ItemActualT]:
@@ -97,11 +102,11 @@ class DictionaryParameterType[KeyActualT, KeyWireT, ValActualT, ValWireT](
     key_type: Any = STRING_PARAMETER_TYPE
 
     @property
-    def actual_type(self) -> Any:
+    def actual_type(self) -> Type[Mapping[KeyActualT, ValActualT]]:
         return dict
 
     @property
-    def wire_type(self) -> Any:
+    def wire_type(self) -> Type[Mapping[KeyWireT, ValWireT]]:
         return dict
 
     def convert(
@@ -114,7 +119,7 @@ class DictionaryParameterType[KeyActualT, KeyWireT, ValActualT, ValWireT](
 
 
 @dataclass(frozen=True)
-class Parameter[ActualT, WireT]:
+class ToolParameter[ActualT, WireT]:
     name: str
     description: str
     parameter_type: ParameterType[ActualT, WireT]
@@ -149,9 +154,10 @@ class Parameter[ActualT, WireT]:
         return self.parameter_type
 
 
+
 @dataclass(frozen=True)
 class ActualParameterBindings:
-    bindings: Set[Tuple[Parameter, Any]]
+    bindings: Set[Tuple[ToolParameter, Any]]
 
 
 @dataclass(frozen=True)
@@ -171,7 +177,7 @@ class FollowUpToolCall:
 
 
 @dataclass(frozen=True)
-class Response:
+class ToolResponse:
     is_failed: bool
     is_terminated: bool
     content: str
@@ -179,8 +185,6 @@ class Response:
     suppression_key: Optional[str] = None
     follow_up_tool_call: Optional[FollowUpToolCall] = None
 
-
-ToolCallResult = Response
 
 
 class Tool(Protocol):
@@ -191,11 +195,11 @@ class Tool(Protocol):
     def description(self) -> str: ...
 
     @property
-    def parameters(self) -> Set[Parameter]: ...
+    def parameters(self) -> Set[ToolParameter]: ...
 
     def execute_tool(
         self, actual_parameter_bindings: ActualParameterBindings
-    ) -> Response: ...
+    ) -> ToolResponse: ...
 
 
 class ToolManager(Protocol):
@@ -206,46 +210,9 @@ class ToolManager(Protocol):
 
     def execute_tool(
         self, name: str, wire_parameter_bindings: WireParameterBindings
-    ) -> Response: ...
+    ) -> ToolResponse: ...
 
     def execute_tool_with_arguments(
         self, name: str, arguments: Mapping[str, Any]
-    ) -> Response: ...
+    ) -> ToolResponse: ...
 
-
-ParameterConverter: Type[Any] = ParameterType
-IdentityParameterConverter: Type[Any] = IdentityParameterType
-
-
-class StringParameterConverter(IdentityParameterType[str]):
-    def __init__(self) -> None:
-        super().__init__(str)
-
-
-StringParameterType: Type[Any] = StringParameterConverter
-
-
-class IntegerParameterConverter(IdentityParameterType[int]):
-    def __init__(self) -> None:
-        super().__init__(int)
-
-
-IntegerParameterType: Type[Any] = IntegerParameterConverter
-
-
-class BooleanParameterConverter(IdentityParameterType[bool]):
-    def __init__(self) -> None:
-        super().__init__(bool)
-
-
-BooleanParameterType: Type[Any] = BooleanParameterConverter
-
-
-class FloatParameterConverter(IdentityParameterType[float]):
-    def __init__(self) -> None:
-        super().__init__(float)
-
-
-FloatParameterType: Type[Any] = FloatParameterConverter
-ListParameterConverter: Type[Any] = ListParameterType
-DictionaryParameterConverter: Type[Any] = DictionaryParameterType

@@ -3,7 +3,7 @@
 import unittest
 from typing import Any, cast, List, Mapping, Optional, Sequence, Set, Tuple
 
-from update_with_ai.parts.dag.lib.dag_storage import Dependency, Node
+from update_with_ai.parts.dag.lib.dag_storage import DagDependency, DagNode
 from update_with_ai.parts.dag.lib import dag_storage
 from update_with_ai.parts.agent.lib.agent_file_alias import (
     AliasManager,
@@ -19,8 +19,8 @@ from update_with_ai.parts.agent.lib.agent_file_alias import (
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.agent.lib.agent_node_config import (
-    Guide,
     NodeConfig,
+    NodeGuide,
     RoleConfig,
     VerificationCheck,
 )
@@ -31,19 +31,16 @@ from update_with_ai.parts.sandbox.lib.sandbox_guide_delivery import GuideDeliver
 from update_with_ai.parts.sandbox.lib.sandbox_run_control import (
     AdvanceTool,
     BlameTool,
-    CheckFileTool,
     CheckFilesTool,
     FailTool,
     GetWorkTool,
     ResolveTool,
     RunController,
-    RunTestsTool,
     SubmitTool,
 )
 from update_with_ai.parts.sandbox.lib.sandbox_run_control_impl import (
     AdvanceTool as AdvanceToolImpl,
     BlameTool as BlameToolImpl,
-    CheckFileTool as CheckFileToolImpl,
     CheckFilesTool as CheckFilesToolImpl,
     FailTool as FailToolImpl,
     GetWorkTool as GetWorkToolImpl,
@@ -55,15 +52,15 @@ from update_with_ai.parts.sandbox.lib.sandbox_run_control_impl import (
 agent_session = RunControllerImpl.tier
 from update_with_ai.parts.sandbox.lib import template_format
 from update_with_ai.parts.sandbox.lib.tool_provider import (
+    STRING_PARAMETER_TYPE,
     ActualParameterBindings,
-    Integer,
-    IntegerParameterConverter,
-    Response,
-    String,
-    StringParameterConverter,
     Tool,
     ToolManager,
+    ToolParameter,
+    ToolResponse,
     WireParameterBindings,
+    WireString,
+    WireInteger,
 )
 
 
@@ -78,14 +75,14 @@ class MockToolManager:
 
     def execute_tool(
         self, name: str, wire_parameter_bindings: WireParameterBindings
-    ) -> Response:
-        return Response(is_failed=False, is_terminated=False, content="")
+    ) -> ToolResponse:
+        return ToolResponse(is_failed=False, is_terminated=False, content="")
 
 
 class MockStringConverter:
     tier = agent_session
     actual_type = str
-    wire_type = String()
+    wire_type = WireString()
 
     def convert(self, wire_value: Any) -> str:
         return str(wire_value)
@@ -94,7 +91,7 @@ class MockStringConverter:
 class MockIntegerConverter:
     tier = agent_session
     actual_type = int
-    wire_type = Integer()
+    wire_type = WireInteger()
 
     def convert(self, wire_value: Any) -> int:
         return int(wire_value)
@@ -118,7 +115,7 @@ class MockAliasManager:
     def __init__(self) -> None:
         self.workspace_root = _make_directory_path("/workspace")
         self.actual_type = FileAlias
-        self.wire_type = String()
+        self.wire_type = WireString()
 
     def convert(self, wire_value: Any) -> Any:
         return wire_value
@@ -130,34 +127,59 @@ class MockAliasManager:
         pass
 
 
+class _MockBlameTargetsDict(dict):
+    def __init__(self, initial: dict, default_targets: Set[BoundFile]):
+        super().__init__(initial)
+        self._default_targets = default_targets
+
+    def __contains__(self, key: Any) -> bool:
+        if super().__contains__(key):
+            return True
+        return bool(self._default_targets)
+
+    def __getitem__(self, key: Any) -> Set[BoundFile]:
+        if super().__contains__(key):
+            return super().__getitem__(key)
+        if self._default_targets:
+            return set(self._default_targets)
+        return super().__getitem__(key)
+
+    def get(self, key: Any, default: Any = None) -> Any:
+        if super().__contains__(key):
+            return super().get(key, default)
+        if self._default_targets:
+            return set(self._default_targets)
+        return default
+
+
 class MockNodeConfig:
     tier = agent_session
 
     def __init__(
         self,
         blame_targets: Optional[Set[BoundFile]] = None,
-        blame_targets_by_node: Optional[Mapping[Node, Set[BoundFile]]] = None,
+        blame_targets_by_node: Optional[Mapping[DagNode, Set[BoundFile]]] = None,
         verification_checks: Optional[Sequence[VerificationCheck]] = None,
         verification_checks_by_node: Optional[
-            Mapping[Node, Sequence[VerificationCheck]]
+            Mapping[DagNode, Sequence[VerificationCheck]]
         ] = None,
-        guide: Optional[Guide] = None,
+        guide: Optional[NodeGuide] = None,
         is_step_mode: bool = True,
         feedback: Optional[Sequence[str]] = None,
         read_write_files: Optional[Set[BoundFile]] = None,
         verification_success_message: Optional[str] = None,
-        src_file_alias_by_node: Optional[Mapping[Node, str]] = None,
+        src_file_alias_by_node: Optional[Mapping[DagNode, str]] = None,
         guide_file: Optional[UnboundFile] = None,
         read_only_files: Optional[Set[BoundFile]] = None,
     ) -> None:
         self._blame_targets = blame_targets or set()
-        self.blame_targets_by_node: Mapping[Node, Set[BoundFile]] = (
-            blame_targets_by_node or {}
+        self.blame_targets_by_node: Mapping[DagNode, Set[BoundFile]] = (
+            _MockBlameTargetsDict(dict(blame_targets_by_node or {}), self._blame_targets)
         )
         self._verification_checks: Sequence[VerificationCheck] = (
             verification_checks or []
         )
-        self.verification_checks_by_node: Mapping[Node, Sequence[VerificationCheck]] = (
+        self.verification_checks_by_node: Mapping[DagNode, Sequence[VerificationCheck]] = (
             verification_checks_by_node or {}
         )
         self._guide = guide
@@ -166,7 +188,7 @@ class MockNodeConfig:
         self._read_write_files: Set[BoundFile] = read_write_files or set()
         self._read_only_files: Set[BoundFile] = read_only_files or set()
         self._verification_success_message = verification_success_message
-        self.src_file_alias_by_node: Mapping[Node, str] = src_file_alias_by_node or {}
+        self.src_file_alias_by_node: Mapping[DagNode, str] = src_file_alias_by_node or {}
         self._guide_file = guide_file
 
     @property
@@ -186,12 +208,8 @@ class MockNodeConfig:
         return set()
 
     @property
-    def guide(self) -> Optional[Guide]:
+    def guide(self) -> Optional[NodeGuide]:
         return self._guide
-
-    @property
-    def blame_targets(self) -> Set[BoundFile]:
-        return self._blame_targets
 
     @property
     def verification_checks(self) -> Sequence[VerificationCheck]:
@@ -213,45 +231,49 @@ class MockGuideDelivery:
         self,
         has_steps: bool = False,
         next_step_content: Optional[str] = None,
-        guide: Optional[Guide] = None,
+        guide: Optional[NodeGuide] = None,
     ) -> None:
         self.has_steps_remaining = has_steps
         self.next_step_content = next_step_content
         self.advance_step_called = False
+        self.initialize_called = True
         self.last_verification_passed: Optional[bool] = None
         self.last_failure_diagnostics: Optional[str] = None
-        self._guide: Optional[Guide] = guide
-        self.initial_delivered = False
+        self._guide: Optional[NodeGuide] = guide
+        self.initial_primer: Optional[str] = None
+
+    def initialize(self) -> None:
+        self.initialize_called = True
+
+    def set_initial_primer(self, primer: str) -> None:
+        self.initial_primer = primer
 
     @property
-    def guide(self) -> Optional[Guide]:
+    def guide(self) -> Optional[NodeGuide]:
         return self._guide
 
     def advance_step(
         self, verification_passed: bool, failure_diagnostics: Optional[str] = None
-    ) -> Optional[Response]:
+    ) -> Optional[ToolResponse]:
         self.advance_step_called = True
         self.last_verification_passed = verification_passed
         self.last_failure_diagnostics = failure_diagnostics
-        if not self.initial_delivered:
-            self.initial_delivered = True
-            summary = self._guide.summary if self._guide else "Guide Summary"
-            return Response(is_failed=False, is_terminated=False, content=summary)
+        if not verification_passed:
+            summary = self.initial_primer or (self._guide.summary if self._guide else "NodeGuide Summary")
+            return ToolResponse(
+                is_failed=True,
+                is_terminated=False,
+                content=f"{summary}\n\nVerification failed:\n{failure_diagnostics}",
+            )
         if self.has_steps_remaining:
-            if not verification_passed:
-                return Response(
-                    is_failed=True,
-                    is_terminated=False,
-                    content=f"Step failed with: {failure_diagnostics}",
-                )
             if self.next_step_content:
-                return Response(
+                return ToolResponse(
                     is_failed=False, is_terminated=False, content=self.next_step_content
                 )
         return None
 
-    def parse_guide(self, content: FileContent) -> Guide:
-        return Guide(summary="", sections=[])
+    def parse_guide(self, content: FileContent) -> NodeGuide:
+        return NodeGuide(summary="", sections=[])
 
 
 class MockEditManager:
@@ -324,32 +346,32 @@ class MockDagStorage:
     tier = system
 
     def __init__(self) -> None:
-        self.dependencies: dict[Node, Set[Dependency]] = {}
-        self.messages: dict[Node, Sequence[Any]] = {}
-        self.node_definitions: dict[Node, Any] = {}
-        self.dirty_nodes: Set[Node] = set()
+        self.dependencies: dict[DagNode, Set[DagDependency]] = {}
+        self.messages: dict[DagNode, Sequence[Any]] = {}
+        self.node_definitions: dict[DagNode, Any] = {}
+        self.dirty_nodes: Set[DagNode] = set()
 
-    def get_dependencies(self, node: Node) -> Set[Dependency]:
+    def get_dependencies(self, node: DagNode) -> Set[DagDependency]:
         return self.dependencies.get(node, set())
 
-    def get_messages(self, node: Node) -> Sequence[Any]:
+    def get_messages(self, node: DagNode) -> Sequence[Any]:
         return self.messages.get(node, [])
 
-    def get_node_definition(self, node: Node) -> Any:
+    def get_node_definition(self, node: DagNode) -> Any:
         return self.node_definitions.get(node)
 
-    def is_dirty(self, node: Node) -> bool:
+    def is_dirty(self, node: DagNode) -> bool:
         return node in self.dirty_nodes
 
 
 class MockDagSubgraph:
     tier = system
 
-    def __init__(self, ready_batches: Optional[List[Sequence[Node]]] = None) -> None:
-        self.ready_batches: List[Sequence[Node]] = ready_batches or []
+    def __init__(self, ready_batches: Optional[List[Sequence[DagNode]]] = None) -> None:
+        self.ready_batches: List[Sequence[DagNode]] = ready_batches or []
         self.batch_index: int = 0
 
-    def next_ready_batch(self) -> Sequence[Node]:
+    def next_ready_batch(self) -> Sequence[DagNode]:
         if self.batch_index < len(self.ready_batches):
             batch = self.ready_batches[self.batch_index]
             self.batch_index += 1
@@ -363,7 +385,7 @@ class MockRoleConfig:
     def __init__(self, node_cfg: Optional["MockNodeConfig"] = None) -> None:
         self.node_cfg = node_cfg
         self._role: str = ""
-        self.active_nodes: Sequence[Node] = []
+        self.active_nodes: Sequence[DagNode] = []
         self.execution_version: int = 1
 
     @property
@@ -371,7 +393,7 @@ class MockRoleConfig:
         return self._role
 
     @property
-    def nodes(self) -> Sequence[Node]:
+    def nodes(self) -> Sequence[DagNode]:
         return self.active_nodes
 
     @property
@@ -381,7 +403,7 @@ class MockRoleConfig:
     def set_role(self, role: str) -> None:
         self._role = role
 
-    def set_nodes(self, nodes: Sequence[Node]) -> None:
+    def set_nodes(self, nodes: Sequence[DagNode]) -> None:
         self.active_nodes = list(nodes)
         if nodes:
             self._role = nodes[0].role_address
@@ -437,7 +459,7 @@ class MockTemplateFormatter:
 
 class SandboxRunControlImplTest(unittest.TestCase):
     def setUp(self) -> None:
-        node = Node(unit_address="//pkg:upstream", role_address="lib")
+        node = DagNode(unit_address="//pkg:upstream", role_address="lib")
         self.blame_target_file = ReadOnlyFile(
             relative_path="dep.py",
             workspace_path=_make_workspace_path("pkg/dep.py"),
@@ -464,10 +486,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
         self.node_cfg = MockNodeConfig(
             blame_targets={self.blame_target_file},
             is_step_mode=True,
-            guide=Guide(summary="Guide Summary", sections=[]),
+            guide=NodeGuide(summary="NodeGuide Summary", sections=[]),
         )
         self.guide_del = MockGuideDelivery(
-            guide=Guide(summary="Guide Summary", sections=[])
+            guide=NodeGuide(summary="NodeGuide Summary", sections=[])
         )
         self.edit_mgr = MockEditManager()
         self.role_cfg = MockRoleConfig(node_cfg=self.node_cfg)
@@ -476,12 +498,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
         self.registry.register_instance(
             self.tool_mgr, keys=[ToolManager], tier=agent_session
-        )
-        self.registry.register_instance(
-            self.str_conv, keys=[StringParameterConverter], tier=agent_session
-        )
-        self.registry.register_instance(
-            self.int_conv, keys=[IntegerParameterConverter], tier=agent_session
         )
         self.registry.register_instance(
             self.alias_mgr, keys=[AliasManager], tier=agent_session
@@ -517,12 +533,12 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # Requirement: Verification checks exposed by the run controller include the session verification checks from node config.
             # Requirement: [RunController] The run controller exposes verification checks that validate session criteria.
             self.assertEqual(ctrl.verification_checks, [])
-            # Requirement: The run controller initializes by unconditionally installing the submit tool, fail tool, check files tool, and get work tool for the agent session, installing the advance tool only when guide step mode is active, obtaining configured blame targets and verification checks from the node config, and installing the blame tool only when blame targets are configured.
+            # Requirement: Tools cannot be configured against non-role/agent-specific state; the run controller installs submit, fail, check files, get work, and blame tools unconditionally, and installs advance tool when guide step mode is active.
             # Requirement: [RunController] The run controller installs an advance tool when guide step mode is active, coordinating step progression through guide delivery upon passing verification.
             # Requirement: [RunController] The run controller installs a submit tool which is a resolve tool that concludes active nodes upon passing verification, marks the resolve target clean in the current get work turn, accepting a text change summary parameter, and enforces change documentation.
             # Requirement: [RunController] The run controller installs a fail tool which is a resolve tool that terminates the run in failure, accepting a text explanation parameter.
             # Requirement: [RunController] The run controller installs an argument-free check files tool named check_files that updates verification results if outdated, evaluates verification checks across all open targets and modified workspace files, presents aggregated verification outcomes to the agent, tracks last tested file hashes, and fails when verification failed.
-            # Requirement: [RunController] The run controller installs a blame tool which is a resolve tool, when blame targets are configured, attributing task failure to an upstream dependency node, accepting a file alias blame target parameter and a text explanation parameter.
+            # Requirement: [RunController] The run controller installs a blame tool which is a resolve tool, attributing task failure to an upstream dependency node, accepting a file alias blame target parameter and a text explanation parameter.
             # Requirement: [RunController] The run controller installs a get work tool that retrieves active dirty nodes, materializes startup templates, accepting an integer max batch size parameter, and delivers the session task prompt.
             tool_names = {t.name for t in self.tool_mgr.installed_tools}
             # Requirement: The advance tool is named `advance`, accepts no parameters, and shares a constant suppression key `advance`.
@@ -538,8 +554,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter.
             self.assertIn("get_work", tool_names)
 
-    def test_run_controller_initialization_without_blame_and_step_mode(self) -> None:
-        """CUJ: RunController omits advance and blame tools when step mode is inactive and blame targets are empty."""
+    def test_run_controller_initialization_without_step_mode(self) -> None:
+        """CUJ: RunController omits advance tool when step mode is inactive, and installs blame tool unconditionally."""
         reg = LifecycleRegistry()
         __initialize__(reg)
         tool_mgr = MockToolManager()
@@ -551,12 +567,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.subgraph, keys=[DagSubgraph], tier=system
         )
         reg.register_instance(tool_mgr, keys=[ToolManager], tier=agent_session)
-        reg.register_instance(
-            self.str_conv, keys=[StringParameterConverter], tier=agent_session
-        )
-        reg.register_instance(
-            self.int_conv, keys=[IntegerParameterConverter], tier=agent_session
-        )
         reg.register_instance(self.alias_mgr, keys=[AliasManager], tier=agent_session)
         reg.register_instance(
             self.tmpl_formatter,
@@ -580,14 +590,14 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
         with enter_phase(agent_session, registry=reg) as scope:
             ctrl = scope.get_singleton(RunController)
-            # Requirement: The run controller initializes by unconditionally installing the submit tool, fail tool, check files tool, and get work tool for the agent session, installing the advance tool only when guide step mode is active, obtaining configured blame targets and verification checks from the node config, and installing the blame tool only when blame targets are configured.
+            # Requirement: Tools cannot be configured against non-role/agent-specific state; the run controller installs submit, fail, check files, get work, and blame tools unconditionally, and installs advance tool when guide step mode is active.
             tool_names = {t.name for t in tool_mgr.installed_tools}
             self.assertIn("submit", tool_names)
             self.assertIn("fail", tool_names)
             self.assertIn("check_files", tool_names)
             self.assertIn("get_work", tool_names)
+            self.assertIn("blame", tool_names)
             self.assertNotIn("advance", tool_names)
-            self.assertNotIn("blame", tool_names)
 
     def test_run_controller_evaluate_verification_caching(self) -> None:
         """CUJ: RunController caches verification results and reuses them when file revision unchanged."""
@@ -623,9 +633,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(check.call_count, 2)
 
     def test_advance_tool_initial_delivery_omits_verification_update(self) -> None:
-        """CUJ: AdvanceTool delivers initial guide summary on first execution without evaluating verification checks."""
+        """CUJ: AdvanceTool evaluates verification on first execution and repeats primer/summary and diagnostics on failure."""
         vcheck = MockVerificationCheck(passes=False, diagnostic="Failing initial check")
         self.node_cfg._verification_checks = [vcheck]
+        self.guide_del.set_initial_primer("Task Primer Content")
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             advance = scope.get_singleton(AdvanceToolImpl)
@@ -636,13 +647,80 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(advance.parameters, set())
             self.assertIsInstance(advance.description, str)
 
-            # Requirement: Executing the advance tool delivers the initial guide summary through guide delivery without updating verification results when guide delivery has not yet started.
+            # Requirement: Tool execution fails when verification has not been evaluated for the current workspace files or is failing, evaluating verification results and repeating the primer and summary content alongside failure diagnostics through guide delivery on the first step, reminding the agent that the check files tool should be called first, and specifying a follow-up execution of the check files tool with reasoning text indicating that verification results must be inspected before advancing.
+            resp = advance.execute_tool(b)
+            self.assertTrue(resp.is_failed)
+            self.assertFalse(resp.is_terminated)
+            self.assertIn("Task Primer Content", resp.content)
+            self.assertIn("Failing initial check", resp.content)
+            self.assertEqual(vcheck.call_count, 1)
+            self.assertEqual(resp.suppression_key, "advance")
+            self.assertIsNotNone(resp.follow_up_tool_call)
+            assert resp.follow_up_tool_call is not None
+            self.assertEqual(resp.follow_up_tool_call.tool_name, "check_files")
+
+    def test_advance_tool_subsequent_execution_fails_when_check_files_not_run(
+        self,
+    ) -> None:
+        """CUJ: Advance call fails when check_files has not been run."""
+        vcheck = MockVerificationCheck(passes=True)
+        self.node_cfg._verification_checks = [vcheck]
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            advance = scope.get_singleton(AdvanceToolImpl)
+            b = ActualParameterBindings(bindings=set())
+
+            # Requirement: Tool execution fails when verification has not been evaluated for the current workspace files or is failing, evaluating verification results and repeating the primer and summary content alongside failure diagnostics through guide delivery on the first step, reminding the agent that the check files tool should be called first, and specifying a follow-up execution of the check files tool with reasoning text indicating that verification results must be inspected before advancing.
+            resp = advance.execute_tool(b)
+
+            self.assertTrue(resp.is_failed)
+            self.assertFalse(resp.is_terminated)
+            self.assertEqual(vcheck.call_count, 1)
+            self.assertIn("NodeGuide Summary", resp.content)
+            self.assertIsNotNone(resp.reminder)
+            self.assertIsNotNone(resp.follow_up_tool_call)
+            assert resp.follow_up_tool_call is not None
+            self.assertEqual(resp.follow_up_tool_call.tool_name, "check_files")
+
+    def test_advance_tool_file_edit_invalidates_verification_for_advance(
+        self,
+    ) -> None:
+        """CUJ: File modification invalidates verification, requiring check_files before advance."""
+        vcheck = MockVerificationCheck(passes=True)
+        self.node_cfg._verification_checks = [vcheck]
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            advance = scope.get_singleton(AdvanceToolImpl)
+            check_files = scope.get_singleton(CheckFilesTool)
+            b = ActualParameterBindings(bindings=set())
+
+            # 1. check_files runs and passes
+            _ = check_files.execute_tool(b)
+            self.assertEqual(vcheck.call_count, 1)
+
+            # 2. Advance succeeds
+            self.guide_del.has_steps_remaining = True
+            self.guide_del.next_step_content = "Step 1: Write initial test case"
             resp = advance.execute_tool(b)
             self.assertFalse(resp.is_failed)
-            self.assertFalse(resp.is_terminated)
-            self.assertEqual(resp.content, "Guide Summary")
-            self.assertEqual(vcheck.call_count, 0)
-            self.assertEqual(resp.suppression_key, "advance")
+
+            # 3. Agent edits workspace file -> file_update_revision increments
+            self.edit_mgr.file_update_revision += 1
+
+            # 4. Subsequent advance fails because verification is outdated
+            # Requirement: Tool execution fails when verification has not been evaluated for the current workspace files or is failing, evaluating verification results and repeating the primer and summary content alongside failure diagnostics through guide delivery on the first step, reminding the agent that the check files tool should be called first, and specifying a follow-up execution of the check files tool with reasoning text indicating that verification results must be inspected before advancing.
+            resp = advance.execute_tool(b)
+            self.assertTrue(resp.is_failed)
+            assert resp.follow_up_tool_call is not None
+            self.assertEqual(resp.follow_up_tool_call.tool_name, "check_files")
+
+            # 5. check_files runs again on new revision
+            _ = check_files.execute_tool(b)
+            self.assertEqual(vcheck.call_count, 2)
+
+            # 6. Advance succeeds again
+            resp = advance.execute_tool(b)
+            self.assertFalse(resp.is_failed)
 
     def test_advance_tool_subsequent_execution_fails_when_verification_failing(
         self,
@@ -653,11 +731,11 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             advance = scope.get_singleton(AdvanceToolImpl)
+            check_files = scope.get_singleton(CheckFilesTool)
             b = ActualParameterBindings(bindings=set())
 
-            _ = advance.execute_tool(b)
-            # Requirement: Executing the advance tool updates verification results if outdated when guide delivery has already started.
-            # Requirement: Tool execution fails when verification is failing, reminding the agent that the check files tool should be called first and specifying a follow-up execution of the check files tool with reasoning text indicating that verification results must be inspected before advancing.
+            _ = check_files.execute_tool(b)
+            # Requirement: Tool execution fails when verification has not been evaluated for the current workspace files or is failing, evaluating verification results and repeating the primer and summary content alongside failure diagnostics through guide delivery on the first step, reminding the agent that the check files tool should be called first, and specifying a follow-up execution of the check files tool with reasoning text indicating that verification results must be inspected before advancing.
             resp = advance.execute_tool(b)
 
             self.assertTrue(resp.is_failed)
@@ -685,9 +763,11 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             advance = scope.get_singleton(AdvanceToolImpl)
+            check_files = scope.get_singleton(CheckFilesTool)
             b = ActualParameterBindings(bindings=set())
 
             _ = advance.execute_tool(b)
+            _ = check_files.execute_tool(b)
             # Requirement: Tool execution advances guide delivery and delivers the next step section when verification is passing and guide steps remain.
             resp = advance.execute_tool(b)
 
@@ -707,9 +787,11 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             advance = scope.get_singleton(AdvanceToolImpl)
+            check_files = scope.get_singleton(CheckFilesTool)
             b = ActualParameterBindings(bindings=set())
 
             _ = advance.execute_tool(b)
+            _ = check_files.execute_tool(b)
             # Requirement: Tool execution fails with a reminder to call the submit tool with a change summary describing modifications when verification is passing, no steps remain, and workspace files were modified.
             resp = advance.execute_tool(b)
 
@@ -729,9 +811,11 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             advance = scope.get_singleton(AdvanceToolImpl)
+            check_files = scope.get_singleton(CheckFilesTool)
             b = ActualParameterBindings(bindings=set())
 
             _ = advance.execute_tool(b)
+            _ = check_files.execute_tool(b)
             # Requirement: Tool execution produces a response specifying a follow-up execution of the submit tool without a change summary and with reasoning text indicating that all guide steps are complete when verification is passing, no steps remain, and no workspace files were modified.
             resp = advance.execute_tool(b)
 
@@ -756,7 +840,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(submit.name, "submit")
             self.assertIsInstance(submit.description, str)
             self.assertEqual(submit.parameters, {submit.resolve_target, submit.target, submit.change_summary})
-            self.assertIs(submit.change_summary.parameter_converter, self.str_conv)
+            self.assertIs(submit.change_summary.parameter_converter, STRING_PARAMETER_TYPE)
             self.assertIs(submit.resolve_target.parameter_converter, self.alias_mgr)
             self.assertIs(submit.target.parameter_converter, self.alias_mgr)
 
@@ -850,6 +934,32 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIsNotNone(resp.reminder)
             self.assertEqual(resp.suppression_key, "submit")
 
+    def test_submit_tool_fails_when_initial_implementation_and_no_files_modified(
+        self,
+    ) -> None:
+        """CUJ: SubmitTool fails when initial implementation change message is present and no workspace files were modified."""
+        self.guide_del.has_steps_remaining = False
+        self.edit_mgr.has_modifications = False
+        vcheck = MockVerificationCheck(passes=True)
+        self.node_cfg._verification_checks = [vcheck]
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            submit = scope.get_singleton(SubmitToolImpl)
+            rc = scope.get_singleton(RunControllerImpl)
+            open_node = rc.open_nodes()[0]
+            self.storage.messages[open_node] = [
+                dag_storage.ChangeMessage(content="implement lib/target.py")
+            ]
+            b = ActualParameterBindings(bindings=set())
+            # Requirement: Tool execution fails when an initial implementation change is assigned to the target node and no workspace files were modified, reminding the agent that workspace files must be modified to implement the change before submitting.
+            resp = submit.execute_tool(b)
+
+            self.assertTrue(resp.is_failed)
+            self.assertFalse(resp.is_terminated)
+            self.assertIn("Initial implementation task requires workspace file modifications", resp.content)
+            self.assertIsNotNone(resp.reminder)
+            self.assertEqual(resp.suppression_key, "submit")
+
     def test_submit_tool_fails_when_files_modified_and_summary_omitted(self) -> None:
         """CUJ: SubmitTool fails when workspace files modified but change summary omitted."""
         self.guide_del.has_steps_remaining = False
@@ -922,7 +1032,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertGreater(len(fail_tool.parameters), 0)
             # Requirement: The fail tool is named `fail`, accepting a resolve target parameter and a text explanation parameter.
             self.assertEqual(fail_tool.name, "fail")
-            self.assertIs(fail_tool.explanation.parameter_converter, self.str_conv)
+            self.assertIs(fail_tool.explanation.parameter_converter, STRING_PARAMETER_TYPE)
 
             b = ActualParameterBindings(
                 bindings={(fail_tool.explanation, "Cannot solve bug")}
@@ -946,13 +1056,13 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # Requirement: The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter, and a text explanation parameter.
             self.assertEqual(blame_tool.name, "blame")
             self.assertIs(blame_tool.blame_target.parameter_converter, self.alias_mgr)
-            self.assertIs(blame_tool.explanation.parameter_converter, self.str_conv)
+            self.assertIs(blame_tool.explanation.parameter_converter, STRING_PARAMETER_TYPE)
 
             # Invalid target fails
             unrecognized = ReadOnlyFile(
                 relative_path="unknown.py",
                 workspace_path=_make_workspace_path("unknown.py"),
-                owning_node=Node(unit_address="//pkg:unknown", role_address="lib"),
+                owning_node=DagNode(unit_address="//pkg:unknown", role_address="lib"),
             )
             b_invalid = ActualParameterBindings(
                 bindings={
@@ -1000,10 +1110,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_multi_node_submit_and_in_session_dependencies(self) -> None:
         """CUJ: Multi-node session enforces in-session dependency order, validates targets, and marks completion."""
-        node1 = Node(unit_address="//pkg:unit1", role_address="lib")
-        node2 = Node(unit_address="//pkg:unit2", role_address="lib")
+        node1 = DagNode(unit_address="//pkg:unit1", role_address="lib")
+        node2 = DagNode(unit_address="//pkg:unit2", role_address="lib")
         self.node_cfg.src_file_alias_by_node = {node1: "unit1.py", node2: "unit2.py"}
-        self.storage.dependencies[node2] = {Dependency(node=node1)}
+        self.storage.dependencies[node2] = {DagDependency(node=node1)}
 
         vcheck1 = MockVerificationCheck(passes=True)
         vcheck2 = MockVerificationCheck(passes=True)
@@ -1082,15 +1192,15 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_multi_node_fail_blocks_dependents_and_terminates(self) -> None:
         """CUJ: Multi-node fail marks target FAILED, in-batch dependents FAILED, and terminates when no open nodes remain."""
-        node1 = Node(unit_address="//pkg:f_unit1", role_address="lib")
-        node2 = Node(unit_address="//pkg:f_unit2", role_address="lib")
-        node3 = Node(unit_address="//pkg:f_unit3", role_address="lib")
+        node1 = DagNode(unit_address="//pkg:f_unit1", role_address="lib")
+        node2 = DagNode(unit_address="//pkg:f_unit2", role_address="lib")
+        node3 = DagNode(unit_address="//pkg:f_unit3", role_address="lib")
         self.node_cfg.src_file_alias_by_node = {
             node1: "f_unit1.py",
             node2: "f_unit2.py",
             node3: "f_unit3.py",
         }
-        self.storage.dependencies[node2] = {Dependency(node=node1)}
+        self.storage.dependencies[node2] = {DagDependency(node=node1)}
         f_rw1 = ReadWriteFile(
             relative_path="f_unit1.py",
             workspace_path=_make_workspace_path("pkg/f_unit1.py"),
@@ -1164,15 +1274,15 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_multi_node_blame_blocks_dependents_and_terminates(self) -> None:
         """CUJ: Multi-node blame marks target BLAME, in-batch dependents FAILED, and terminates when no open nodes remain."""
-        node1 = Node(unit_address="//pkg:b_unit1", role_address="lib")
-        node2 = Node(unit_address="//pkg:b_unit2", role_address="lib")
-        node3 = Node(unit_address="//pkg:b_unit3", role_address="lib")
+        node1 = DagNode(unit_address="//pkg:b_unit1", role_address="lib")
+        node2 = DagNode(unit_address="//pkg:b_unit2", role_address="lib")
+        node3 = DagNode(unit_address="//pkg:b_unit3", role_address="lib")
         self.node_cfg.src_file_alias_by_node = {
             node1: "b_unit1.py",
             node2: "b_unit2.py",
             node3: "b_unit3.py",
         }
-        self.storage.dependencies[node2] = {Dependency(node=node1)}
+        self.storage.dependencies[node2] = {DagDependency(node=node1)}
         b_rw1 = ReadWriteFile(
             relative_path="b_unit1.py",
             workspace_path=_make_workspace_path("pkg/b_unit1.py"),
@@ -1192,12 +1302,12 @@ class SandboxRunControlImplTest(unittest.TestCase):
         bt1 = ReadOnlyFile(
             relative_path="upstream_spec1.md",
             workspace_path=_make_workspace_path("pkg/upstream_spec1.md"),
-            owning_node=Node(unit_address="//pkg:upstream_unit1", role_address="spec"),
+            owning_node=DagNode(unit_address="//pkg:upstream_unit1", role_address="spec"),
         )
         bt3 = ReadOnlyFile(
             relative_path="upstream_spec3.md",
             workspace_path=_make_workspace_path("pkg/upstream_spec3.md"),
-            owning_node=Node(unit_address="//pkg:upstream_unit3", role_address="spec"),
+            owning_node=DagNode(unit_address="//pkg:upstream_unit3", role_address="spec"),
         )
         self.node_cfg.blame_targets_by_node = {node1: {bt1}, node3: {bt3}}
 
@@ -1283,10 +1393,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_in_batch_dependency_clean_in_turn_enforcement(self) -> None:
         """CUJ: Submit, fail, and blame fail when in-batch dependency is not clean in the current turn."""
-        node1 = Node(unit_address="//pkg:dep_u1", role_address="lib")
-        node2 = Node(unit_address="//pkg:dep_u2", role_address="lib")
+        node1 = DagNode(unit_address="//pkg:dep_u1", role_address="lib")
+        node2 = DagNode(unit_address="//pkg:dep_u2", role_address="lib")
         self.node_cfg.src_file_alias_by_node = {node1: "dep_u1.py", node2: "dep_u2.py"}
-        self.storage.dependencies[node2] = {Dependency(node=node1)}
+        self.storage.dependencies[node2] = {DagDependency(node=node1)}
         rw1 = ReadWriteFile(
             relative_path="dep_u1.py",
             workspace_path=_make_workspace_path("pkg/dep_u1.py"),
@@ -1301,7 +1411,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         bt = ReadOnlyFile(
             relative_path="upstream_dep.md",
             workspace_path=_make_workspace_path("pkg/upstream_dep.md"),
-            owning_node=Node(unit_address="//pkg:up", role_address="spec"),
+            owning_node=DagNode(unit_address="//pkg:up", role_address="spec"),
         )
         self.node_cfg.blame_targets_by_node = {node2: {bt}}
         vcheck = MockVerificationCheck(passes=True)
@@ -1372,18 +1482,18 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_cascading_failure_to_in_batch_dependents_and_file_locking(self) -> None:
         """CUJ: Failing an active node whose in-batch dependencies are clean cascades failure to in-batch dependents and locks files."""
-        node1 = Node(unit_address="//pkg:casc1", role_address="lib")
-        node2 = Node(unit_address="//pkg:casc2", role_address="lib")
-        node3 = Node(unit_address="//pkg:casc3", role_address="lib")
-        node4 = Node(unit_address="//pkg:casc4", role_address="lib")
+        node1 = DagNode(unit_address="//pkg:casc1", role_address="lib")
+        node2 = DagNode(unit_address="//pkg:casc2", role_address="lib")
+        node3 = DagNode(unit_address="//pkg:casc3", role_address="lib")
+        node4 = DagNode(unit_address="//pkg:casc4", role_address="lib")
         self.node_cfg.src_file_alias_by_node = {
             node1: "casc1.py",
             node2: "casc2.py",
             node3: "casc3.py",
             node4: "casc4.py",
         }
-        self.storage.dependencies[node2] = {Dependency(node=node1)}
-        self.storage.dependencies[node3] = {Dependency(node=node2)}
+        self.storage.dependencies[node2] = {DagDependency(node=node1)}
+        self.storage.dependencies[node3] = {DagDependency(node=node2)}
         rw1 = ReadWriteFile(
             relative_path="casc1.py",
             workspace_path=_make_workspace_path("pkg/casc1.py"),
@@ -1435,8 +1545,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_check_files_evaluates_all_open_targets_and_caches(self) -> None:
         """CUJ: CheckFilesTool evaluates verification checks across all open targets and caches results."""
-        node1 = Node(unit_address="//pkg:rt_unit1", role_address="lib")
-        node2 = Node(unit_address="//pkg:rt_unit2", role_address="lib")
+        node1 = DagNode(unit_address="//pkg:rt_unit1", role_address="lib")
+        node2 = DagNode(unit_address="//pkg:rt_unit2", role_address="lib")
         self.node_cfg.src_file_alias_by_node = {
             node1: "rt_unit1.py",
             node2: "rt_unit2.py",
@@ -1481,7 +1591,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         self,
     ) -> None:
         """CUJ: CheckFilesTool fails when verification fails, presenting sanitized diagnostics and failure instructions."""
-        self.guide_del._guide = Guide(
+        self.guide_del._guide = NodeGuide(
             summary="Summary",
             sections=[],
             verification_failure="Inspect diagnostics and fix workspace files.",
@@ -1585,7 +1695,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         rw_file = ReadWriteFile(
             relative_path="src.py",
             workspace_path=_make_workspace_path("/workspace/src.py"),
-            owning_node=Node(unit_address="//pkg:target", role_address="lib"),
+            owning_node=DagNode(unit_address="//pkg:target", role_address="lib"),
         )
         self.node_cfg._read_write_files = {rw_file}
         self.edit_mgr.file_update_revision = 1
@@ -1600,79 +1710,55 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIsNone(resp1.follow_up_tool_call)
 
             # Requirement: Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when target read-write file hashes have not changed since the previous check files tool execution.
-            # Requirement: Tool execution specifies a follow-up execution of the view file tool on the active node source file (resolving to the last accessed read-write file or the primary session read-write file) and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check files tool execution.
-            # When is_step_mode is False (default for coverage / non-step nodes), reasoning directs to submit
             self.node_cfg.is_step_mode = False
             resp2 = check_files.execute_tool(b)
             self.assertFalse(resp2.is_failed)
             self.assertIsNotNone(resp2.reminder)
-            self.assertIsNotNone(resp2.follow_up_tool_call)
-            assert resp2.follow_up_tool_call is not None
-            self.assertEqual(resp2.follow_up_tool_call.tool_name, "view_file")
-            self.assertEqual(
-                resp2.follow_up_tool_call.wire_parameter_bindings.bindings,
-                {("path", "src.py")},
-            )
-            self.assertTrue(resp2.follow_up_tool_call.reasoning_text)
-            assert resp2.follow_up_tool_call.reasoning_text is not None
-            self.assertIn("verification", resp2.follow_up_tool_call.reasoning_text.lower())
-            self.assertIn("submit", resp2.follow_up_tool_call.reasoning_text.lower())
+            self.assertIsNone(resp2.follow_up_tool_call)
 
-            # In step mode, reasoning directs the agent to advance rather than submit
+            # In step mode, repeated execution sets reminder with no follow-up tool call
             self.node_cfg.is_step_mode = True
             resp_step = check_files.execute_tool(b)
-            assert resp_step.follow_up_tool_call is not None
-            self.assertTrue(resp_step.follow_up_tool_call.reasoning_text)
-            assert resp_step.follow_up_tool_call.reasoning_text is not None
-            self.assertIn("verification", resp_step.follow_up_tool_call.reasoning_text.lower())
-            self.assertIn("advance", resp_step.follow_up_tool_call.reasoning_text.lower())
+            self.assertIsNotNone(resp_step.reminder)
+            self.assertIsNone(resp_step.follow_up_tool_call)
 
-            # When verification fails, reasoning indicates no more tests until files are updated
+            # When verification fails, repeated execution sets reminder with no follow-up tool call
             vcheck.passes = False
             self.edit_mgr.file_update_revision = 2
             _ = check_files.execute_tool(b)
             resp_fail = check_files.execute_tool(b)
-            assert resp_fail.follow_up_tool_call is not None
-            self.assertTrue(resp_fail.follow_up_tool_call.reasoning_text)
-            assert resp_fail.follow_up_tool_call.reasoning_text is not None
-            self.assertIn("verification", resp_fail.follow_up_tool_call.reasoning_text.lower())
+            self.assertIsNotNone(resp_fail.reminder)
+            self.assertIsNone(resp_fail.follow_up_tool_call)
 
             # Multi-target session source file resolution:
             rw2 = ReadWriteFile(
                 relative_path="src2.py",
                 workspace_path=_make_workspace_path("/workspace/src2.py"),
-                owning_node=Node(unit_address="//pkg:target2", role_address="lib"),
+                owning_node=DagNode(unit_address="//pkg:target2", role_address="lib"),
             )
             self.node_cfg._read_write_files = {rw_file, rw2}
             self.edit_mgr.file_update_revision = 3
 
-            # 1. Resolves to last accessed read-write file when set
+            # 1. Repeated execution with last accessed read-write file set
             self.edit_mgr.last_read_or_edited_file = rw2
             _ = check_files.execute_tool(b)
             resp_last = check_files.execute_tool(b)
-            assert resp_last.follow_up_tool_call is not None
-            self.assertEqual(
-                resp_last.follow_up_tool_call.wire_parameter_bindings.bindings,
-                {("path", "src2.py")},
-            )
+            self.assertIsNone(resp_last.follow_up_tool_call)
             assert resp_last.reminder is not None
             self.assertTrue(resp_last.reminder)
 
-            # 2. Resolves to earliest read-write file when last accessed is None
+            # 2. Repeated execution when last accessed is None
             self.edit_mgr.last_read_or_edited_file = None
             self.edit_mgr.file_update_revision = 4
             _ = check_files.execute_tool(b)
             resp_earliest = check_files.execute_tool(b)
-            assert resp_earliest.follow_up_tool_call is not None
-            self.assertEqual(
-                resp_earliest.follow_up_tool_call.wire_parameter_bindings.bindings,
-                {("path", "src.py")},
-            )
+            self.assertIsNone(resp_earliest.follow_up_tool_call)
+            self.assertIsNotNone(resp_earliest.reminder)
 
     def test_check_files_hash_tracking(self) -> None:
         """CUJ: CheckFilesTool tracks file hashes and triggers loop-breaker when unchanged."""
-        node1 = Node(unit_address="//pkg:t1", role_address="lib")
-        node2 = Node(unit_address="//pkg:t2", role_address="lib")
+        node1 = DagNode(unit_address="//pkg:t1", role_address="lib")
+        node2 = DagNode(unit_address="//pkg:t2", role_address="lib")
         rw1 = ReadWriteFile(
             relative_path="t1.py",
             workspace_path=_make_workspace_path("/workspace/t1.py"),
@@ -1724,8 +1810,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_default_target_resolution_with_read_write_files(self) -> None:
         """CUJ: RunController resolves default targets across single, multiple unsubmitted, and locked files."""
-        node1 = Node(unit_address="//pkg:t1", role_address="lib")
-        node2 = Node(unit_address="//pkg:t2", role_address="lib")
+        node1 = DagNode(unit_address="//pkg:t1", role_address="lib")
+        node2 = DagNode(unit_address="//pkg:t2", role_address="lib")
         rw1 = ReadWriteFile(
             relative_path="t1.py",
             workspace_path=_make_workspace_path("/workspace/t1.py"),
@@ -1739,7 +1825,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         ro_file = ReadOnlyFile(
             relative_path="readme.md",
             workspace_path=_make_workspace_path("/workspace/readme.md"),
-            owning_node=Node(unit_address="//pkg:ro", role_address="doc"),
+            owning_node=DagNode(unit_address="//pkg:ro", role_address="doc"),
         )
         self.node_cfg._read_write_files = {rw1, rw2}
         vcheck1 = MockVerificationCheck(passes=True)
@@ -1790,9 +1876,9 @@ class SandboxRunControlImplTest(unittest.TestCase):
         self,
     ) -> None:
         """CUJ: Run controller matches session targets by alias, relative path, or unique filename across submit, fail, and blame."""
-        node1 = Node(unit_address="//pkg:unit1", role_address="lib")
-        node2 = Node(unit_address="//pkg:unit2", role_address="lib")
-        node3 = Node(unit_address="//pkg2:unit2", role_address="lib")
+        node1 = DagNode(unit_address="//pkg:unit1", role_address="lib")
+        node2 = DagNode(unit_address="//pkg:unit2", role_address="lib")
+        node3 = DagNode(unit_address="//pkg2:unit2", role_address="lib")
         self.node_cfg.src_file_alias_by_node = {
             node1: "testing/parts/pkg/logs/unit1_qa.log",
             node2: "testing/parts/pkg/logs/unit2_qa.log",
@@ -1910,7 +1996,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         """CUJ: GetWorkTool schema defines name and max_batch_size parameter; execution fails when open session targets remain."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             rc = scope.get_singleton(RunControllerImpl)
-            open_target = Node(unit_address="//pkg:open_target")
+            open_target = DagNode(unit_address="//pkg:open_target")
             rc.reset_nodes([open_target])
             get_work = scope.get_singleton(GetWorkToolImpl)
             self.assertEqual(get_work.name, "get_work")
@@ -1964,13 +2050,14 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_get_work_materializes_templates_and_delivers_task_prompt(self) -> None:
         """CUJ: When ready dirty nodes exist, get_work updates role config, materializes startup templates, and returns rendered task prompt."""
+        self.node_cfg.is_step_mode = False
         self.guide_del.has_steps_remaining = False
         self.edit_mgr.has_modifications = True
         vcheck = MockVerificationCheck(passes=True)
         self.node_cfg._verification_checks = [vcheck]
 
-        node_a = Node(unit_address="//pkg:unit_a", role_address="lib")
-        node_b = Node(unit_address="//pkg:unit_b", role_address="lib")
+        node_a = DagNode(unit_address="//pkg:unit_a", role_address="lib")
+        node_b = DagNode(unit_address="//pkg:unit_b", role_address="lib")
         self.subgraph.ready_batches = [[node_a, node_b]]
         self.subgraph.batch_index = 0
 
@@ -1980,7 +2067,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             node_b: MockNodeDefinition(task_prompt="Clean unit B"),
         }
         self.storage.messages = {
-            node_a: [dag_storage.Feedback(content="Fix linter in unit A")],
+            node_a: [dag_storage.FeedbackMessage(content="Fix linter in unit A")],
             node_b: [],
         }
 
@@ -2001,7 +2088,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # Requirement: [Tool] When a parameter is required, an argument must be supplied for tool execution.
             # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter.
             # Requirement: Tool execution obtains dirty nodes from dag storage and dag subgraph, updating the active nodes and execution version on role config, when no open active nodes remain.
-            # Requirement: Tool execution materializes startup templates on disk, constructs the task prompt from dirty node definitions (including associated grounding specification paths for qa nodes), guide instructions, and incoming messages from dag storage formatted via the template formatter, and returns the rendered task prompt when ready dirty nodes are obtained.
+            # Requirement: Tool execution materializes startup templates on disk, initializes guide delivery and resets guide advance state for the assigned batch, and returns the rendered task primer mapping source files to grounding files with guide file attribution, incoming messages, and instructions to read the guide file for alignment guidance when ready dirty nodes are obtained and guide step mode is inactive.
             initial_version = self.role_cfg.execution_version
             resp = get_work.execute_tool(
                 ActualParameterBindings(
@@ -2010,12 +2097,51 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
             self.assertFalse(resp.is_failed)
             self.assertFalse(resp.is_terminated)
+            self.assertIsNone(resp.follow_up_tool_call)
             self.assertTrue(self.sb.materialize_startup_templates_called)
+            self.assertTrue(self.guide_del.initialize_called)
             self.assertEqual(self.role_cfg.active_nodes, [node_a])
             self.assertEqual(self.role_cfg.execution_version, initial_version + 1)
-            self.assertIn("Clean unit A", resp.content)
-            self.assertIn("Fix linter in unit A", resp.content)
+            self.assertIn("unit_a.py with grounding/unit_a.pyi", resp.content)
+            self.assertIn("Fix unit_a.py based on feedback: Fix linter in unit A", resp.content)
             self.assertEqual(rc.open_nodes(), [node_a])
+
+    def test_get_work_step_mode_specifies_advance_followup(self) -> None:
+        """CUJ: When guide is in step mode, get_work records initial primer and omits advance follow-up."""
+        self.node_cfg.is_step_mode = True
+        node = DagNode(unit_address="//pkg:unit_a", role_address="lib")
+        self.subgraph.ready_batches = [[node]]
+        self.subgraph.batch_index = 0
+        self.storage.dirty_nodes = {node}
+        self.storage.node_definitions = {
+            node: MockNodeDefinition(task_prompt="Clean unit A"),
+        }
+        self.storage.messages = {node: []}
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            rc = scope.get_singleton(RunControllerImpl)
+            submit = scope.get_singleton(SubmitToolImpl)
+            get_work = scope.get_singleton(GetWorkToolImpl)
+
+            # Resolve existing open target
+            submit.execute_tool(
+                ActualParameterBindings(
+                    bindings={(submit.change_summary, "Done")}
+                )
+            )
+
+            # Requirement: Tool execution materializes startup templates on disk, initializes guide delivery, records the task primer in guide delivery, and returns the task primer mapping source files to grounding files, guide summary, incoming messages, and instructions to call the advance tool when done making edits without guide file citation and without specifying a follow-up execution of the advance tool when ready dirty nodes are obtained and guide step mode is active.
+            resp = get_work.execute_tool(
+                ActualParameterBindings(
+                    bindings={(get_work.max_batch_size, 1)}
+                )
+            )
+            self.assertFalse(resp.is_failed)
+            self.assertIsNone(resp.follow_up_tool_call)
+            self.assertIn("unit_a.py with grounding/unit_a.pyi", resp.content)
+            self.assertIn("NodeGuide Summary", resp.content)
+            self.assertIn("Call advance() when done making edits.", resp.content)
+            self.assertEqual(self.guide_del.initial_primer, resp.content)
 
 
     def test_check_files_tool_properties(self) -> None:
@@ -2035,7 +2161,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         vcheck = MockVerificationCheck(passes=True)
         self.node_cfg._verification_checks = [vcheck]
 
-        node_diff = Node(unit_address="//pkg:diff", role_address="other_role")
+        node_diff = DagNode(unit_address="//pkg:diff", role_address="other_role")
         self.subgraph.ready_batches = [[node_diff]]
         self.subgraph.batch_index = 0
         self.storage.dirty_nodes = {node_diff}
@@ -2070,15 +2196,15 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_multi_node_in_session_dependencies_and_block_dependents(self) -> None:
         """CUJ: Verify is_multi_node, in-session dependency tracking, and block_dependents cascading."""
-        node1 = Node(unit_address="//pkg:dep1", role_address="lib")
-        node2 = Node(unit_address="//pkg:dep2", role_address="lib")
+        node1 = DagNode(unit_address="//pkg:dep1", role_address="lib")
+        node2 = DagNode(unit_address="//pkg:dep2", role_address="lib")
         rw2 = ReadWriteFile(
             relative_path="dep2.py",
             workspace_path=_make_workspace_path("pkg/dep2.py"),
             owning_node=node2,
         )
         self.node_cfg._read_write_files = {rw2}
-        self.storage.dependencies[node2] = {Dependency(node=node1)}
+        self.storage.dependencies[node2] = {DagDependency(node=node1)}
         self.node_cfg.src_file_alias_by_node = {node1: "dep1.py", node2: "dep2.py"}
         self.role_cfg.active_nodes = [node1, node2]
 
@@ -2099,8 +2225,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_format_task_prompt_with_guide_file_and_messages(self) -> None:
         """CUJ: format_task_prompt formats guide instructions, node definitions, and incoming messages."""
-        node_a = Node(unit_address="//pkg:unit_a", role_address="lib")
-        node_b = Node(unit_address="//pkg:unit_b", role_address="lib")
+        node_a = DagNode(unit_address="//pkg:unit_a", role_address="lib")
+        node_b = DagNode(unit_address="//pkg:unit_b", role_address="lib")
         guide_file = UnboundFile(relative_path="guide.md")
         self.node_cfg._guide_file = guide_file
         self.node_cfg.src_file_alias_by_node = {node_a: "unit_a.py", node_b: "unit_b.py"}
@@ -2109,28 +2235,34 @@ class SandboxRunControlImplTest(unittest.TestCase):
             node_b: MockNodeDefinition(task_prompt="Implement unit B"),
         }
         self.storage.messages = {
-            node_a: [dag_storage.Change(content="Updated types in upstream")],
-            node_b: [dag_storage.Change(content="Renamed method in dependency")],
+            node_a: [dag_storage.ChangeMessage(content="Updated types in upstream")],
+            node_b: [dag_storage.ChangeMessage(content="Renamed method in dependency")],
         }
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             rc = scope.get_singleton(RunControllerImpl)
 
             # 1. Single-node with step mode and guide file
-            # Requirement: Tool execution materializes startup templates on disk, constructs the task prompt from dirty node definitions (including associated grounding specification paths for qa nodes), guide instructions, and incoming messages from dag storage formatted via the template formatter, and returns the rendered task prompt when ready dirty nodes are obtained.
+            # Requirement: Tool execution materializes startup templates on disk, initializes guide delivery, records the task primer in guide delivery, and returns the task primer mapping source files to grounding files, guide summary, incoming messages, and instructions to call the advance tool when done making edits without guide file citation and without specifying a follow-up execution of the advance tool when ready dirty nodes are obtained and guide step mode is active.
             prompt_single = rc.format_task_prompt([node_a])
-            self.assertIn("Implement unit A", prompt_single)
-            self.assertIn("Call advance() without arguments to view each guide step", prompt_single)
+            self.assertIn("unit_a.py with grounding/unit_a.pyi", prompt_single)
+            self.assertIn("NodeGuide Summary", prompt_single)
             self.assertIn("Incoming change: Updated types in upstream", prompt_single)
+            self.assertIn("Call advance() when done making edits.", prompt_single)
+            self.assertNotIn("guide.md", prompt_single)
 
             # 2. Multi-node with non-step mode
             self.node_cfg.is_step_mode = False
+            # Requirement: Tool execution materializes startup templates on disk, initializes guide delivery and resets guide advance state for the assigned batch, and returns the rendered task primer mapping source files to grounding files with guide file attribution, incoming messages, and instructions to read the guide file for alignment guidance when ready dirty nodes are obtained and guide step mode is inactive.
             prompt_multi = rc.format_task_prompt([node_a, node_b])
-            self.assertIn("The guide is in file guide.md", prompt_multi)
+            self.assertIn("The following files are supposed to be aligned according to guide guide.md:", prompt_multi)
+            self.assertIn("unit_a.py with grounding/unit_a.pyi", prompt_multi)
+            self.assertIn("unit_b.py with grounding/unit_b.pyi", prompt_multi)
             self.assertIn("Incoming change for unit_a.py: Updated types in upstream", prompt_multi)
             self.assertIn("Incoming change for unit_b.py: Renamed method in dependency", prompt_multi)
+            self.assertIn("Read guide.md for alignment guidance.", prompt_multi)
 
-            # 3. Guide file resolved via read_only_files markdown fallback
+            # 3. NodeGuide file resolved via read_only_files markdown fallback
             self.node_cfg._guide_file = None
             md_guide = ReadOnlyFile(
                 relative_path="spec_guide.md",
@@ -2139,17 +2271,18 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
             self.node_cfg._read_only_files = {md_guide}
             prompt_fallback = rc.format_task_prompt([node_a])
-            self.assertIn("The guide is in file spec_guide.md", prompt_fallback)
+            self.assertIn("The following files are supposed to be aligned according to guide spec_guide.md:", prompt_fallback)
+            self.assertIn("Read spec_guide.md for alignment guidance.", prompt_fallback)
 
-            # 4. Node with empty definition and fallback alias from read_write_files
-            node_c = Node(unit_address="//pkg:unit_c", role_address="lib")
+            # 4. DagNode with empty definition and fallback alias from read_write_files
+            node_c = DagNode(unit_address="//pkg:unit_c", role_address="lib")
             rw_c = ReadWriteFile(
                 relative_path="unit_c.py",
                 workspace_path=_make_workspace_path("pkg/unit_c.py"),
                 owning_node=node_c,
             )
             self.node_cfg._read_write_files = {rw_c}
-            self.storage.messages[node_c] = [dag_storage.Change(content="")]
+            self.storage.messages[node_c] = [dag_storage.ChangeMessage(content="")]
             prompt_c_single = rc.format_task_prompt([node_c])
             self.assertIn("Incoming change", prompt_c_single)
             prompt_c_multi = rc.format_task_prompt([node_a, node_c])
@@ -2157,8 +2290,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_format_task_prompt_qa_node_with_spec(self) -> None:
         """CUJ: format_task_prompt includes associated grounding specification path for qa nodes."""
-        node_qa1 = Node(unit_address="//parts/pkg:unit1_impl", role_address="//update_python_with_ai:qa")
-        node_qa2 = Node(unit_address="//parts/pkg:unit2_impl", role_address="//update_python_with_ai:qa")
+        node_qa1 = DagNode(unit_address="//parts/pkg:unit1_impl", role_address="//update_python_with_ai:qa")
+        node_qa2 = DagNode(unit_address="//parts/pkg:unit2_impl", role_address="//update_python_with_ai:qa")
         self.node_cfg.src_file_alias_by_node = {
             node_qa1: "logs/unit1_impl_qa.log",
             node_qa2: "logs/unit2_impl_qa.log",
@@ -2183,20 +2316,19 @@ class SandboxRunControlImplTest(unittest.TestCase):
             rc = scope.get_singleton(RunControllerImpl)
 
             # Single QA node
-            # Requirement: Tool execution materializes startup templates on disk, constructs the task prompt from dirty node definitions (including associated grounding specification paths for qa nodes), guide instructions, and incoming messages from dag storage formatted via the template formatter, and returns the rendered task prompt when ready dirty nodes are obtained.
             prompt_single = rc.format_task_prompt([node_qa1])
-            self.assertIn("Evaluate test execution and arbitrate failures per the guide. (Spec: `grounding/unit1_impl.pyi`)", prompt_single)
+            self.assertIn("logs/unit1_impl_qa.log with grounding/unit1_impl.pyi", prompt_single)
 
             # Multi QA nodes
             self.node_cfg.is_step_mode = False
             prompt_multi = rc.format_task_prompt([node_qa1, node_qa2])
-            self.assertIn("- `logs/unit1_impl_qa.log`: Evaluate test execution and arbitrate failures per the guide. (Spec: `grounding/unit1_impl.pyi`)", prompt_multi)
-            self.assertIn("- `logs/unit2_impl_qa.log`: Evaluate test execution and arbitrate failures per the guide. (Spec: `grounding/unit2_impl.pyi`)", prompt_multi)
+            self.assertIn("logs/unit1_impl_qa.log with grounding/unit1_impl.pyi", prompt_multi)
+            self.assertIn("logs/unit2_impl_qa.log with grounding/unit2_impl.pyi", prompt_multi)
 
             # Fallback spec resolution without read_only_files
             self.node_cfg._read_only_files = set()
             prompt_fallback = rc.format_task_prompt([node_qa1])
-            self.assertIn("Evaluate test execution and arbitrate failures per the guide. (Spec: `grounding/unit1_impl.pyi`)", prompt_fallback)
+            self.assertIn("logs/unit1_impl_qa.log with grounding/unit1_impl.pyi", prompt_fallback)
 
     def test_reset_nodes_empty_list_triggers_ensure_nodes_and_tool_installation(
         self,
@@ -2206,17 +2338,16 @@ class SandboxRunControlImplTest(unittest.TestCase):
             rc = scope.get_singleton(RunControllerImpl)
             self.tool_mgr.installed_tools.clear()
 
-            # Requirement: The run controller initializes by unconditionally installing the submit tool, fail tool, check files tool, and get work tool for the agent session, installing the advance tool only when guide step mode is active, obtaining configured blame targets and verification checks from the node config, and installing the blame tool only when blame targets are configured.
+            # Requirement: Tools cannot be configured against non-role/agent-specific state; the run controller installs submit, fail, check files, get work, and blame tools unconditionally, and installs advance tool when guide step mode is active.
             rc.reset_nodes([])
             self.assertGreater(len(rc.open_nodes()), 0)
             installed_names = {t.name for t in self.tool_mgr.installed_tools}
             self.assertIn("advance", installed_names)
-            self.assertIn("blame", installed_names)
 
     def test_resolve_default_target_selection(self) -> None:
         """CUJ: Resolving default target selects matching active node or defaults when unambiguous."""
-        node1 = Node(unit_address="//pkg:unit1", role_address="lib")
-        node2 = Node(unit_address="//pkg:unit2", role_address="lib")
+        node1 = DagNode(unit_address="//pkg:unit1", role_address="lib")
+        node2 = DagNode(unit_address="//pkg:unit2", role_address="lib")
         rw1 = ReadWriteFile(
             relative_path="unit1.py",
             workspace_path=_make_workspace_path("pkg/unit1.py"),
@@ -2275,8 +2406,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_resolve_default_target_lexicographically_earliest_node(self) -> None:
         """CUJ: Resolving default target orders nodes by lexicographically earliest read-write file path when discovered."""
-        node_z = Node(unit_address="//pkg:node_z", role_address="lib")
-        node_a = Node(unit_address="//pkg:node_a", role_address="lib")
+        node_z = DagNode(unit_address="//pkg:node_z", role_address="lib")
+        node_a = DagNode(unit_address="//pkg:node_a", role_address="lib")
         rw_z = ReadWriteFile(
             relative_path="z_file.py",
             workspace_path=_make_workspace_path("pkg/z_file.py"),
@@ -2319,8 +2450,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_blame_tool_target_defaulting_from_blame_targets(self) -> None:
         """CUJ: BlameTool defaults resolve target when blame target matches configured node blame target."""
-        node1 = Node(unit_address="//pkg:unit1", role_address="lib")
-        node2 = Node(unit_address="//pkg:unit2", role_address="lib")
+        node1 = DagNode(unit_address="//pkg:unit1", role_address="lib")
+        node2 = DagNode(unit_address="//pkg:unit2", role_address="lib")
         rw1 = ReadWriteFile(
             relative_path="unit1.py",
             workspace_path=_make_workspace_path("pkg/unit1.py"),
@@ -2337,12 +2468,12 @@ class SandboxRunControlImplTest(unittest.TestCase):
         bt1: BoundFile = ReadOnlyFile(
             relative_path="dep1.py",
             workspace_path=_make_workspace_path("pkg/dep1.py"),
-            owning_node=Node(unit_address="//pkg:upstream1", role_address="lib"),
+            owning_node=DagNode(unit_address="//pkg:upstream1", role_address="lib"),
         )
         bt_shared: BoundFile = ReadOnlyFile(
             relative_path="shared_dep.py",
             workspace_path=_make_workspace_path("pkg/shared_dep.py"),
-            owning_node=Node(unit_address="//pkg:upstream_shared", role_address="lib"),
+            owning_node=DagNode(unit_address="//pkg:upstream_shared", role_address="lib"),
         )
         blame_targets: Set[BoundFile] = {bt1, bt_shared}
         self.node_cfg._blame_targets = blame_targets
@@ -2413,7 +2544,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertFalse(resp_inv.is_failed)
 
             # 5. def_node not in matching_nodes defaults to first matching node
-            node3 = Node(unit_address="//pkg:unit3", role_address="lib")
+            node3 = DagNode(unit_address="//pkg:unit3", role_address="lib")
             rw3 = ReadWriteFile(
                 relative_path="unit3.py",
                 workspace_path=_make_workspace_path("pkg/unit3.py"),
@@ -2467,8 +2598,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_blame_tool_resolve_target_defaulting_when_uninferrable_from_blame_target(self) -> None:
         """CUJ: BlameTool defaults resolve target using resolve target defaulting rules when uninferrable from blame target."""
-        node1 = Node(unit_address="//pkg:unit1", role_address="lib")
-        node2 = Node(unit_address="//pkg:unit2", role_address="lib")
+        node1 = DagNode(unit_address="//pkg:unit1", role_address="lib")
+        node2 = DagNode(unit_address="//pkg:unit2", role_address="lib")
         rw1 = ReadWriteFile(
             relative_path="unit1.py",
             workspace_path=_make_workspace_path("pkg/unit1.py"),
@@ -2482,13 +2613,16 @@ class SandboxRunControlImplTest(unittest.TestCase):
         bt_unmapped: BoundFile = ReadOnlyFile(
             relative_path="unmapped_dep.py",
             workspace_path=_make_workspace_path("pkg/unmapped_dep.py"),
-            owning_node=Node(unit_address="//pkg:upstream", role_address="lib"),
+            owning_node=DagNode(unit_address="//pkg:upstream", role_address="lib"),
         )
         self.node_cfg._read_write_files = {rw1, rw2}
         self.node_cfg.src_file_alias_by_node = {node1: "unit1.py", node2: "unit2.py"}
         blame_targets: Set[BoundFile] = {bt_unmapped}
         self.node_cfg._blame_targets = blame_targets
-        self.node_cfg.blame_targets_by_node = {}
+        self.node_cfg.blame_targets_by_node = {
+            node1: {bt_unmapped},
+            node2: {bt_unmapped},
+        }
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             rc = scope.get_singleton(RunControllerImpl)
@@ -2527,7 +2661,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         bt: BoundFile = ReadOnlyFile(
             relative_path="dep.py",
             workspace_path=_make_workspace_path("pkg/dep.py"),
-            owning_node=Node(unit_address="//pkg:upstream", role_address="lib"),
+            owning_node=DagNode(unit_address="//pkg:upstream", role_address="lib"),
         )
         bt_targets: Set[BoundFile] = {bt}
         self.node_cfg._blame_targets = bt_targets
@@ -2558,16 +2692,16 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_check_files_repeated_defaults_view_file_to_last_read_or_earliest(self) -> None:
         """CUJ: CheckFilesTool defaults follow-up view_file to last read or edited file or earliest read-write file when repeated."""
-        node1 = Node(unit_address="//pkg:unit1", role_address="lib")
+        node1 = DagNode(unit_address="//pkg:unit1", role_address="lib")
         rw_b = ReadWriteFile(
             relative_path="b.py",
             workspace_path=_make_workspace_path("pkg/b.py"),
-            owning_node=Node(unit_address="//pkg:other", role_address="lib"),
+            owning_node=DagNode(unit_address="//pkg:other", role_address="lib"),
         )
         rw_a = ReadWriteFile(
             relative_path="a.py",
             workspace_path=_make_workspace_path("pkg/a.py"),
-            owning_node=Node(unit_address="//pkg:other2", role_address="lib"),
+            owning_node=DagNode(unit_address="//pkg:other2", role_address="lib"),
         )
         self.node_cfg._read_write_files = {rw_b, rw_a}
         self.node_cfg.src_file_alias_by_node = {node1: "unit1.py"}
@@ -2586,33 +2720,25 @@ class SandboxRunControlImplTest(unittest.TestCase):
             res1 = check_files.execute_tool(b)
             self.assertFalse(res1.is_failed)
 
-            # Repeated execution with last_read_or_edited_file defaults follow-up to last read file
-            # Requirement: Tool execution specifies a follow-up execution of the view file tool on the active node source file (resolving to the last accessed read-write file or the primary session read-write file) and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check files tool execution.
+            # Repeated execution with last_read_or_edited_file sets reminder and no follow-up tool call
+            # Requirement: Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when target read-write file hashes have not changed since the previous check files tool execution.
             self.edit_mgr.last_read_or_edited_file = rw_b
             res2 = check_files.execute_tool(b)
             self.assertFalse(res2.is_failed)
-            self.assertIsNotNone(res2.follow_up_tool_call)
-            assert res2.follow_up_tool_call is not None
-            self.assertEqual(
-                res2.follow_up_tool_call.wire_parameter_bindings.bindings,
-                {("path", "b.py")},
-            )
+            self.assertIsNone(res2.follow_up_tool_call)
+            self.assertIsNotNone(res2.reminder)
 
-            # Repeated execution with no last_read defaults follow-up to lexicographically earliest read-write file
+            # Repeated execution with no last_read sets reminder and no follow-up tool call
             self.edit_mgr.last_read_or_edited_file = None
             res3 = check_files.execute_tool(b)
             self.assertFalse(res3.is_failed)
-            self.assertIsNotNone(res3.follow_up_tool_call)
-            assert res3.follow_up_tool_call is not None
-            self.assertEqual(
-                res3.follow_up_tool_call.wire_parameter_bindings.bindings,
-                {("path", "a.py")},
-            )
+            self.assertIsNone(res3.follow_up_tool_call)
+            self.assertIsNotNone(res3.reminder)
 
     def test_check_files_evaluates_open_in_batch_dependencies(self) -> None:
         """CUJ: Executing check_files tool evaluates open in-batch dependencies and surfaces failures."""
-        node_dep = Node(unit_address="//pkg:dep", role_address="lib")
-        node_tgt = Node(unit_address="//pkg:target", role_address="lib")
+        node_dep = DagNode(unit_address="//pkg:dep", role_address="lib")
+        node_tgt = DagNode(unit_address="//pkg:target", role_address="lib")
         vcheck_dep = MockVerificationCheck(passes=False, diagnostic="SyntaxError in dep.py")
         vcheck_tgt = MockVerificationCheck(passes=True, diagnostic="target.py OK")
 
@@ -2627,7 +2753,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             rc = scope.get_singleton(RunControllerImpl)
-            self.storage.dependencies[node_tgt] = {dag_storage.Dependency(node=node_dep)}
+            self.storage.dependencies[node_tgt] = {dag_storage.DagDependency(node=node_dep)}
             rc.reset_nodes([node_dep, node_tgt])
 
             check_files = scope.get_singleton(CheckFilesToolImpl)
@@ -2640,10 +2766,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_format_task_prompt_qa_and_target_stem_variations(self) -> None:
         """CUJ: format_task_prompt handles QA prompt defaulting, target stem variations (_test, _coverage), companions, and fallback targets."""
-        node_qa = Node(unit_address="//pkg:unit_qa", role_address="qa")
-        node_test = Node(unit_address="//pkg:unit_test", role_address="test")
-        node_cov = Node(unit_address="//pkg:unit_coverage", role_address="coverage")
-        node_lib = Node(unit_address="//pkg:unit", role_address="lib")
+        node_qa = DagNode(unit_address="//pkg:unit_qa", role_address="qa")
+        node_test = DagNode(unit_address="//pkg:unit_test", role_address="test")
+        node_cov = DagNode(unit_address="//pkg:unit_coverage", role_address="coverage")
+        node_lib = DagNode(unit_address="//pkg:unit", role_address="lib")
 
         self.storage.node_definitions = {
             node_qa: MockNodeDefinition(task_prompt=""),
@@ -2673,16 +2799,13 @@ class SandboxRunControlImplTest(unittest.TestCase):
         self.node_cfg.src_file_alias_by_node = {node_qa: "pkg/unit_qa"}
         with enter_phase(agent_session, registry=self.registry) as scope:
             rc = scope.get_singleton(RunControllerImpl)
-            # Requirement: The run controller formats task prompts by expanding guide instructions, startup file contents, incoming feedback, and companions for active nodes.
             prompt_qa = rc.format_task_prompt([node_qa])
-            self.assertIn("Evaluate test execution and arbitrate failures per the guide.", prompt_qa)
-            self.assertIn("pkg/grounding/unit_qa.pyi", prompt_qa)
+            self.assertIn("pkg/unit_qa with grounding/unit_qa.pyi", prompt_qa)
 
         # 2. QA node with empty alias
         self.node_cfg.src_file_alias_by_node = {node_qa: ""}
         with enter_phase(agent_session, registry=self.registry) as scope:
             rc = scope.get_singleton(RunControllerImpl)
-            # Requirement: The run controller formats task prompts by expanding guide instructions, startup file contents, incoming feedback, and companions for active nodes.
             prompt_qa_empty = rc.format_task_prompt([node_qa])
             self.assertIn("grounding/unit_qa.pyi", prompt_qa_empty)
 
@@ -2695,30 +2818,27 @@ class SandboxRunControlImplTest(unittest.TestCase):
         }
         with enter_phase(agent_session, registry=self.registry) as scope:
             rc = scope.get_singleton(RunControllerImpl)
-            # Requirement: The run controller formats task prompts by expanding guide instructions, startup file contents, incoming feedback, and companions for active nodes.
             prompt_lib = rc.format_task_prompt([node_lib])
-            self.assertIn("Spec: `grounding/unit.pyi`", prompt_lib)
-            self.assertIn("Impl: `lib/unit.py`", prompt_lib)
+            self.assertIn("lib/unit.py with grounding/unit.pyi", prompt_lib)
 
             prompt_test = rc.format_task_prompt([node_test])
-            self.assertIn("Test unit", prompt_test)
+            self.assertIn("tests/unit_test.py with grounding/unit.pyi", prompt_test)
 
             prompt_cov = rc.format_task_prompt([node_cov])
-            self.assertIn("Coverage unit", prompt_cov)
+            self.assertIn("tests/unit_coverage.py with grounding/unit.pyi", prompt_cov)
 
         # 4. Incoming feedback when src_file_alias_by_node and read_write_files are empty
         self.node_cfg.src_file_alias_by_node = {}
         self.node_cfg._read_write_files = set()
-        self.storage.messages[node_lib] = [dag_storage.Feedback(content="Fix syntax error")]
+        self.storage.messages[node_lib] = [dag_storage.FeedbackMessage(content="Fix syntax error")]
         with enter_phase(agent_session, registry=self.registry) as scope:
             rc = scope.get_singleton(RunControllerImpl)
-            # Requirement: The run controller formats task prompts by expanding guide instructions, startup file contents, incoming feedback, and companions for active nodes.
             prompt_fb = rc.format_task_prompt([node_lib])
             self.assertIn("Fix //pkg:unit based on feedback: Fix syntax error", prompt_fb)
 
     def test_is_node_dirty_rw_file_alias_lookup(self) -> None:
         """CUJ: evaluate_verification_for_node resolves rw_file by relative_path when owning_node is None."""
-        node1 = Node(unit_address="//pkg:unit1", role_address="lib")
+        node1 = DagNode(unit_address="//pkg:unit1", role_address="lib")
         rw1 = ReadWriteFile(
             relative_path="unit1.py",
             workspace_path=_make_workspace_path("pkg/unit1.py"),
@@ -2738,7 +2858,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_resolve_default_target_single_rw_file_and_node_states(self) -> None:
         """CUJ: resolve_default_target handles single rw file fallbacks and closed node states."""
-        node1 = Node(unit_address="//pkg:unit1", role_address="lib")
+        node1 = DagNode(unit_address="//pkg:unit1", role_address="lib")
         rw1_unowned = ReadWriteFile(
             relative_path="unit1.py",
             workspace_path=_make_workspace_path("pkg/unit1.py"),
@@ -2768,7 +2888,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(rc.resolve_default_target(), node1)
 
         # 3. No open nodes returns None
-        node2 = Node(unit_address="//pkg:unit2", role_address="lib")
+        node2 = DagNode(unit_address="//pkg:unit2", role_address="lib")
         rw2 = ReadWriteFile(
             relative_path="unit2.py",
             workspace_path=_make_workspace_path("pkg/unit2.py"),
@@ -2785,7 +2905,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertIsNone(rc.resolve_default_target())
 
         # 4. _is_file_open filters out closed owning_node and closed alias_node
-        node3 = Node(unit_address="//pkg:unit3", role_address="lib")
+        node3 = DagNode(unit_address="//pkg:unit3", role_address="lib")
         rw2_owned = ReadWriteFile(
             relative_path="unit2.py",
             workspace_path=_make_workspace_path("pkg/unit2.py"),
@@ -2808,7 +2928,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_check_files_when_no_open_nodes_and_rw_file_matching(self) -> None:
         """CUJ: CheckFilesTool evaluates verification when no open nodes remain, and matches rw_file by path."""
-        node1 = Node(unit_address="//pkg:unit1", role_address="lib")
+        node1 = DagNode(unit_address="//pkg:unit1", role_address="lib")
         rw1 = ReadWriteFile(
             relative_path="unit1.py",
             workspace_path=_make_workspace_path("pkg/unit1.py"),
@@ -2839,10 +2959,11 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             # 2. Repeated execution where last_read_or_edited_file is a different instance with identical relative_path
             self.edit_mgr.last_read_or_edited_file = rw1_dup
-            # Requirement: Tool execution specifies a follow-up execution of the view file tool on the active node source file (resolving to the last accessed read-write file or the primary session read-write file) and reasoning text noting that verification passed and to advance or submit the session if correct, or noting that verification failed until files are updated, when workspace files have not been updated since the previous check files tool execution.
+            # Requirement: Tool execution reminds the agent that verification passed or failed and that no new information will be revealed by the tool call until session read-write files are updated when target read-write file hashes have not changed since the previous check files tool execution.
             resp2 = check_files.execute_tool(b)
             self.assertFalse(resp2.is_failed)
-            self.assertIsNotNone(resp2.follow_up_tool_call)
+            self.assertIsNone(resp2.follow_up_tool_call)
+            self.assertIsNotNone(resp2.reminder)
 
             # 3. No open nodes and verification fails
             vcheck_fail = MockVerificationCheck(passes=False, diagnostic="Failure in check")
@@ -2854,14 +2975,14 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_blame_tool_suffix_and_basename_and_tiebreak_matching(self) -> None:
         """CUJ: BlameTool matches blame target by suffix and basename, and handles multiple matching node tiebreak."""
-        node1 = Node(unit_address="//pkg:unit1", role_address="lib")
-        node2 = Node(unit_address="//pkg:unit2", role_address="lib")
-        node3 = Node(unit_address="//pkg:unit3", role_address="lib")
+        node1 = DagNode(unit_address="//pkg:unit1", role_address="lib")
+        node2 = DagNode(unit_address="//pkg:unit2", role_address="lib")
+        node3 = DagNode(unit_address="//pkg:unit3", role_address="lib")
 
         bt_nested = ReadOnlyFile(
             relative_path="a/b/dep.py",
             workspace_path=_make_workspace_path("pkg/a/b/dep.py"),
-            owning_node=Node(unit_address="//pkg:upstream", role_address="lib"),
+            owning_node=DagNode(unit_address="//pkg:upstream", role_address="lib"),
         )
         rw1 = ReadWriteFile(
             relative_path="unit1.py",
@@ -2961,7 +3082,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
     def test_get_work_tool_invalid_max_batch_size(self) -> None:
         """CUJ: GetWorkTool ignores unparseable max_batch_size and returns batch."""
-        node1 = Node(unit_address="//pkg:unit1", role_address="lib")
+        node1 = DagNode(unit_address="//pkg:unit1", role_address="lib")
         self.storage.dirty_nodes = {node1}
         self.subgraph.ready_batches = [[node1]]
 

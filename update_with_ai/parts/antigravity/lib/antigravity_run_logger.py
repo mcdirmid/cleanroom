@@ -6,7 +6,7 @@ from typing import Optional
 
 
 @dataclass(frozen=True)
-class LogEvent:
+class AntigravityLogEvent:
     event_name: str
     source: str
     summary: str

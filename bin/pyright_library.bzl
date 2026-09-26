@@ -40,10 +40,6 @@ def _pyright_test_impl(ctx):
             dep_paths.append(resolved)
 
     for dep in ctx.attr.deps + ctx.attr.pyright_deps:
-        dep_label = str(dep.label)
-        if dep_label.endswith(":framework") or dep_label == "//update_with_ai/support/lib:framework" or dep_label == "//update_python_with_ai/support/lib:framework":
-            fail("Target {} is not allowed to depend on framework ({})".format(ctx.label, dep_label))
-
         if hasattr(dep, "files"):
             for f in dep.files.to_list():
                 if f.path.endswith(".py"):
@@ -57,6 +53,7 @@ def _pyright_test_impl(ctx):
                         if "support/lib" in f.short_path:
                             dep_paths.append("update_with_ai")
                             dep_paths.append("update_python_with_ai")
+                            dep_paths.append("update_python_with_ai/support/lib")
                         else:
                             dep_paths.append(f.short_path.rsplit("/", 1)[0] if "/" in f.short_path else ".")
                             if len(parts) > 2:

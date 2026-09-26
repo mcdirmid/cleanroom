@@ -732,6 +732,9 @@ FRAMEWORK_DECORATORS = {
     "poly_type",
     "data_type",
     "variant",
+}
+
+ALLOWED_FRAMEWORK_IMPORTS = {
     "operation",
     "override",
 }
@@ -748,8 +751,9 @@ def _extract_decorator_name(dec: ast.expr) -> Optional[str]:
 
 
 def check_framework_imports(file_path: str) -> list[str]:
-    """Check that library modules do not import from 'framework' or use specification framework decorators.
-    Specification framework decorators belong in .pyi grounding specifications only."""
+    """Check that library modules do not import specification framework decorators.
+    Specification framework decorators belong in .pyi grounding specifications only.
+    Implementation-friendly annotations ('operation', 'override') may be safely used."""
     errors: list[str] = []
     if not os.path.exists(file_path):
         return errors
@@ -759,22 +763,29 @@ def check_framework_imports(file_path: str) -> list[str]:
     except OSError:
         return errors
 
+    framework_module_aliases: dict[str, int] = {}
+    used_allowed_framework_attr = False
+
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 if alias.name == "framework" or alias.name.endswith(".framework"):
-                    errors.append(
-                        f"{file_path}:{node.lineno}: error: library module must not import from 'framework'; "
-                        f"specification decorators belong in .pyi grounding specifications only"
-                    )
+                    framework_module_aliases[alias.asname or alias.name.split(".")[-1]] = node.lineno
         elif isinstance(node, ast.ImportFrom):
             if node.module == "framework" or (
                 node.module and node.module.endswith(".framework")
             ):
-                errors.append(
-                    f"{file_path}:{node.lineno}: error: library module must not import from 'framework'; "
-                    f"specification decorators belong in .pyi grounding specifications only"
-                )
+                disallowed = [
+                    a.name
+                    for a in node.names
+                    if a.name not in ALLOWED_FRAMEWORK_IMPORTS
+                ]
+                if disallowed:
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: library module must not import specification decorators "
+                        f"({', '.join(sorted(disallowed))}) from 'framework'; "
+                        f"specification decorators belong in .pyi grounding specifications only"
+                    )
         elif isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
             for dec in node.decorator_list:
                 dec_name = _extract_decorator_name(dec)
@@ -783,6 +794,26 @@ def check_framework_imports(file_path: str) -> list[str]:
                         f"{file_path}:{dec.lineno}: error: specification framework decorator '@{dec_name}' must not be used in library code; "
                         f"specification decorators belong in .pyi grounding specifications only and must be omitted from library implementations"
                     )
+        elif isinstance(node, ast.Attribute):
+            if (
+                isinstance(node.value, ast.Name)
+                and node.value.id in framework_module_aliases
+            ):
+                if node.attr in ALLOWED_FRAMEWORK_IMPORTS:
+                    used_allowed_framework_attr = True
+                elif node.attr in FRAMEWORK_DECORATORS:
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: specification framework decorator '@{node.attr}' must not be used in library code; "
+                        f"specification decorators belong in .pyi grounding specifications only and must be omitted from library implementations"
+                    )
+
+    if framework_module_aliases and not used_allowed_framework_attr:
+        for alias, lineno in framework_module_aliases.items():
+            errors.append(
+                f"{file_path}:{lineno}: error: library module must not import from 'framework'; "
+                f"specification decorators belong in .pyi grounding specifications only"
+            )
+
     return errors
 
 
@@ -840,6 +871,120 @@ def check_dataclass_stubs(file_path: str) -> list[str]:
                                 f"{file_path}:{item.lineno}: error: dataclass '{node.name}' must declare fields as class attributes, "
                                 f"not stub '@property' methods"
                             )
+    return errors
+
+
+def check_no_stubs(file_path: str) -> list[str]:
+    """Check that library modules do not contain unfinished implementation stubs.
+
+    Rejects:
+      - 'raise NotImplementedError' in any method or function of concrete implementation classes
+        (and all methods/functions in '_impl.py' files).
+      - '...' (Ellipsis) as a method or function body in concrete implementation classes (non-Protocol classes).
+      - '# TODO_' markers or '# TODO' comments in implementation modules.
+    """
+    errors: list[str] = []
+    if not os.path.exists(file_path):
+        return errors
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        tree = ast.parse(content, filename=file_path)
+    except (OSError, SyntaxError):
+        return errors
+
+    is_impl = file_path.endswith("_impl.py")
+
+    # Check for TODO stub comments in implementation modules
+    if is_impl:
+        import io
+        try:
+            tokens = tokenize.tokenize(io.BytesIO(content.encode("utf-8")).readline)
+            for tok in tokens:
+                if tok.type == tokenize.COMMENT:
+                    comment_text = tok.string
+                    if "TODO_" in comment_text or re.search(r"#\s*TODO\b", comment_text, re.IGNORECASE):
+                        errors.append(
+                            f"{file_path}:{tok.start[0]}: error: unfinished stub comment found: '{comment_text.strip()}'"
+                        )
+        except (tokenize.TokenError, IndentationError):
+            pass
+
+    def _is_protocol(cls_node: ast.ClassDef) -> bool:
+        for b in cls_node.bases:
+            if isinstance(b, ast.Name) and b.id == "Protocol":
+                return True
+            if isinstance(b, ast.Attribute) and b.attr == "Protocol":
+                return True
+        return False
+
+    def _is_ellipsis_body(body: list[ast.stmt]) -> bool:
+        stmts = [
+            s
+            for s in body
+            if not (
+                isinstance(s, ast.Expr)
+                and isinstance(s.value, ast.Constant)
+                and isinstance(s.value.value, str)
+            )
+        ]
+        if len(stmts) == 1 and isinstance(stmts[0], ast.Expr):
+            val = stmts[0].value
+            if isinstance(val, ast.Constant) and val.value is Ellipsis:
+                return True
+        return False
+
+    def _find_not_implemented_raise(body: list[ast.stmt]) -> Optional[int]:
+        for s in body:
+            for node in ast.walk(s):
+                if isinstance(node, ast.Raise):
+                    exc = node.exc
+                    if exc is None:
+                        continue
+                    if isinstance(exc, ast.Name) and exc.id == "NotImplementedError":
+                        return node.lineno
+                    if isinstance(exc, ast.Call):
+                        func = exc.func
+                        if isinstance(func, ast.Name) and func.id == "NotImplementedError":
+                            return node.lineno
+                        if isinstance(func, ast.Attribute) and func.attr == "NotImplementedError":
+                            return node.lineno
+        return None
+
+    # Check top-level functions in implementation modules
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.name == "__initialize__":
+                continue
+            if is_impl:
+                if _is_ellipsis_body(node.body):
+                    errors.append(
+                        f"{file_path}:{node.lineno}: error: function '{node.name}' contains stub '...'; concrete implementation required"
+                    )
+                raise_line = _find_not_implemented_raise(node.body)
+                if raise_line is not None:
+                    errors.append(
+                        f"{file_path}:{raise_line}: error: function '{node.name}' contains stub 'raise NotImplementedError'; concrete implementation required"
+                    )
+
+    # Check class methods
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            is_proto = _is_protocol(node)
+            # In an _impl.py module, or for any non-Protocol class in a library module:
+            if is_impl or not is_proto:
+                for item in node.body:
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        if _is_ellipsis_body(item.body):
+                            errors.append(
+                                f"{file_path}:{item.lineno}: error: method '{item.name}' contains stub '...'; concrete implementation required"
+                            )
+                        raise_line = _find_not_implemented_raise(item.body)
+                        if raise_line is not None:
+                            errors.append(
+                                f"{file_path}:{raise_line}: error: method '{item.name}' contains stub 'raise NotImplementedError'; concrete implementation required"
+                            )
+
     return errors
 
 
@@ -1352,6 +1497,275 @@ def check_public_types(
                 f"{module_path}: error: type '{name}' declared in grounding specification "
                 f"'{spec_display}' is not defined in library code"
             )
+
+    return errors
+
+
+def check_pyi_no_aliases(pyi_path: str) -> list[str]:
+    """Check that grounding specification (.pyi) files contain no module-level type aliases or assignments."""
+    errors: list[str] = []
+    if not os.path.exists(pyi_path):
+        return errors
+    try:
+        with open(pyi_path, "r", encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename=pyi_path)
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        return errors
+
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for t in node.targets:
+                target_name = (
+                    t.id if isinstance(t, ast.Name) else ast.unparse(t)
+                )
+                errors.append(
+                    f"{pyi_path}:{node.lineno}: error: type aliasing is not permitted in "
+                    f"grounding specifications ('{target_name}'); use canonical domain types directly"
+                )
+        elif isinstance(node, ast.AnnAssign):
+            target_name = (
+                node.target.id
+                if isinstance(node.target, ast.Name)
+                else ast.unparse(node.target)
+            )
+            errors.append(
+                f"{pyi_path}:{node.lineno}: error: type aliasing is not permitted in "
+                f"grounding specifications ('{target_name}'); use canonical domain types directly"
+            )
+        elif hasattr(ast, "TypeAlias") and isinstance(node, ast.TypeAlias):
+            alias_name = (
+                node.name.id if isinstance(node.name, ast.Name) else str(node.name)
+            )
+            errors.append(
+                f"{pyi_path}:{node.lineno}: error: type aliasing is not permitted in "
+                f"grounding specifications ('{alias_name}'); use canonical domain types directly"
+            )
+    return errors
+
+
+def _get_unqualified_name(node: Optional[ast.AST]) -> Optional[str]:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    return None
+
+
+def _flatten_bitor(node: ast.BinOp) -> list[ast.AST]:
+    parts: list[ast.AST] = []
+    if isinstance(node.left, ast.BinOp) and isinstance(node.left.op, ast.BitOr):
+        parts.extend(_flatten_bitor(node.left))
+    else:
+        parts.append(node.left)
+    if isinstance(node.right, ast.BinOp) and isinstance(node.right.op, ast.BitOr):
+        parts.extend(_flatten_bitor(node.right))
+    else:
+        parts.append(node.right)
+    return parts
+
+
+def _extract_elements(node: ast.AST) -> list[ast.AST]:
+    if isinstance(node, ast.Tuple):
+        return list(node.elts)
+    return [node]
+
+
+def _normalize_union(parts: list[str]) -> str:
+    flattened: list[str] = []
+    for p in parts:
+        if p.startswith("Union[") and p.endswith("]"):
+            flattened.extend([x.strip() for x in p[6:-1].split(",")])
+        else:
+            flattened.append(p)
+    return f"Union[{', '.join(sorted(set(flattened)))}]"
+
+
+def normalize_ast_type(node: Optional[ast.AST]) -> str:
+    """Normalize a type annotation AST node to a canonical representation for alignment comparison."""
+    if node is None:
+        return ""
+    if isinstance(node, ast.Constant):
+        if node.value is None:
+            return "None"
+        if node.value is Ellipsis:
+            return "..."
+        if isinstance(node.value, str):
+            try:
+                sub = ast.parse(node.value, mode="eval")
+                return normalize_ast_type(sub.body)
+            except Exception:
+                return node.value
+        return str(node.value)
+    if isinstance(node, ast.Name):
+        name = node.id
+        builtin_map = {
+            "List": "list",
+            "Dict": "dict",
+            "Set": "set",
+            "Tuple": "tuple",
+            "FrozenSet": "frozenset",
+            "Type": "type",
+        }
+        return builtin_map.get(name, name)
+    if isinstance(node, ast.Attribute):
+        attr = node.attr
+        builtin_map = {
+            "List": "list",
+            "Dict": "dict",
+            "Set": "set",
+            "Tuple": "tuple",
+            "FrozenSet": "frozenset",
+            "Type": "type",
+        }
+        return builtin_map.get(attr, attr)
+    if isinstance(node, ast.List):
+        return f"[{', '.join(normalize_ast_type(e) for e in node.elts)}]"
+    if isinstance(node, ast.Tuple):
+        return f"({', '.join(normalize_ast_type(e) for e in node.elts)})"
+    if isinstance(node, ast.Subscript):
+        val_name = _get_unqualified_name(node.value)
+        if val_name == "Optional":
+            inner = normalize_ast_type(node.slice)
+            return _normalize_union([inner, "None"])
+        if val_name == "Union":
+            inners = _extract_elements(node.slice)
+            return _normalize_union([normalize_ast_type(i) for i in inners])
+        val_norm = normalize_ast_type(node.value)
+        slice_elems = _extract_elements(node.slice)
+        norm_elems = [normalize_ast_type(e) for e in slice_elems]
+        return f"{val_norm}[{', '.join(norm_elems)}]"
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        parts = _flatten_bitor(node)
+        return _normalize_union([normalize_ast_type(p) for p in parts])
+    return ast.unparse(node)
+
+
+def _is_property_setter(node: ast.AST) -> bool:
+    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return False
+    for d in node.decorator_list:
+        if isinstance(d, ast.Attribute) and d.attr == "setter":
+            return True
+    return False
+
+
+def check_signature_alignment(
+    module_path: str,
+    pyi_path: Optional[str] = None,
+    pyi_deps: Sequence[str] = (),
+    build_path: Optional[str] = None,
+) -> list[str]:
+    """Check that methods, properties, and dataclass fields in library code (.py)
+    have type signatures aligned with the corresponding grounding specification (.pyi)."""
+    errors: list[str] = []
+    base = os.path.basename(module_path)
+    if not base.endswith(".py") or base.endswith("_asm.py"):
+        return errors
+    if not os.path.exists(module_path):
+        return errors
+
+    spec_file = find_spec_pyi(
+        module_path, pyi_path=pyi_path, pyi_deps=pyi_deps, build_path=build_path
+    )
+    if not spec_file or not os.path.exists(spec_file):
+        return errors
+
+    errors.extend(check_pyi_no_aliases(spec_file))
+
+    try:
+        with open(module_path, "r", encoding="utf-8") as f:
+            py_tree = ast.parse(f.read(), filename=module_path)
+        with open(spec_file, "r", encoding="utf-8") as f:
+            pyi_tree = ast.parse(f.read(), filename=spec_file)
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        return errors
+
+    spec_display = os.path.basename(spec_file)
+    spec_classes = {
+        n.name: n
+        for n in pyi_tree.body
+        if isinstance(n, ast.ClassDef) and not n.name.startswith("_")
+    }
+    py_classes = {
+        n.name: n
+        for n in py_tree.body
+        if isinstance(n, ast.ClassDef) and not n.name.startswith("_")
+    }
+
+    for cname, s_cls in spec_classes.items():
+        if cname not in py_classes:
+            continue
+        p_cls = py_classes[cname]
+
+        s_methods: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
+        for n in s_cls.body:
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if not _is_property_setter(n):
+                    s_methods[n.name] = n
+
+        p_methods: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
+        for n in p_cls.body:
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if not _is_property_setter(n):
+                    p_methods[n.name] = n
+
+        for mname, s_meth in s_methods.items():
+            if mname.startswith("_") and not mname.startswith("__init__"):
+                continue
+            if mname not in p_methods:
+                continue
+            p_meth = p_methods[mname]
+
+            s_ret = normalize_ast_type(s_meth.returns)
+            p_ret = normalize_ast_type(p_meth.returns)
+            if s_ret and p_ret and s_ret != p_ret:
+                errors.append(
+                    f"{module_path}:{p_meth.lineno}: error: return type mismatch in '{cname}.{mname}': "
+                    f"specification '{spec_display}' declares '{s_ret}', implementation defines '{p_ret}'"
+                )
+
+            s_args = [a for a in s_meth.args.args if a.arg not in ("self", "cls")]
+            p_args = [a for a in p_meth.args.args if a.arg not in ("self", "cls")]
+            if len(s_args) == len(p_args):
+                for sa, pa in zip(s_args, p_args):
+                    if sa.arg != pa.arg:
+                        errors.append(
+                            f"{module_path}:{p_meth.lineno}: error: parameter name mismatch in '{cname}.{mname}': "
+                            f"specification '{spec_display}' declares '{sa.arg}', implementation defines '{pa.arg}'"
+                        )
+                    sa_ann = normalize_ast_type(sa.annotation)
+                    pa_ann = normalize_ast_type(pa.annotation)
+                    if sa_ann and pa_ann and sa_ann != pa_ann:
+                        errors.append(
+                            f"{module_path}:{p_meth.lineno}: error: parameter '{sa.arg}' type mismatch in '{cname}.{mname}': "
+                            f"specification '{spec_display}' declares '{sa_ann}', implementation defines '{pa_ann}'"
+                        )
+
+        s_fields = {
+            n.target.id: n
+            for n in s_cls.body
+            if isinstance(n, ast.AnnAssign)
+            and isinstance(n.target, ast.Name)
+            and not n.target.id.startswith("_")
+        }
+        p_fields = {
+            n.target.id: n
+            for n in p_cls.body
+            if isinstance(n, ast.AnnAssign)
+            and isinstance(n.target, ast.Name)
+            and not n.target.id.startswith("_")
+        }
+        for fname, s_f in s_fields.items():
+            if fname not in p_fields:
+                continue
+            p_f = p_fields[fname]
+            s_ann = normalize_ast_type(s_f.annotation)
+            p_ann = normalize_ast_type(p_f.annotation)
+            if s_ann and p_ann and s_ann != p_ann:
+                errors.append(
+                    f"{module_path}:{p_f.lineno}: error: field '{fname}' type mismatch in '{cname}': "
+                    f"specification '{spec_display}' declares '{s_ann}', implementation defines '{p_ann}'"
+                )
 
     return errors
 

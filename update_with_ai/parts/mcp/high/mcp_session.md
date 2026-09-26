@@ -14,7 +14,7 @@ Desktop agent environments invoke tools across discrete asynchronous turns where
 
 A *conversation identifier* is data identifying a sub-agent conversation, wrapping a string value.
 
-A *session status* is the operational state of a role sub-agent session, distinguishing between an *active* session currently executing or ready for turns, an *idle* session waiting for upstream tasks, and a *terminated* session that has concluded.
+A *session status* is the operational state of a role sub-agent session, distinguishing between an *active session* currently executing or ready for turns, an *idle session* waiting for upstream tasks, and a *terminated session* that has concluded.
 
 A *role agent session* is data recording the runtime state of a sub-agent session.
 

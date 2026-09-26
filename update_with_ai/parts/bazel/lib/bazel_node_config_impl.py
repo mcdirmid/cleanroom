@@ -9,7 +9,7 @@ from . import bazel_manifest_loader
 from . import bazel_target
 from update_with_ai.parts.dag.lib import dag_storage
 from update_with_ai.parts.agent.lib import agent_file_alias
-from . import file_paths
+from update_with_ai.parts.core.lib import file_paths
 from update_with_ai.parts.agent.lib import agent_config
 from update_with_ai.parts.agent.lib import agent_node_config
 from update_with_ai.parts.agent.lib.agent_session import agent_session
@@ -59,7 +59,7 @@ def _make_host_path(cls: Any, path: str) -> Any:
     return obj
 
 
-def _parse_guide_markdown(content: str) -> agent_node_config.Guide:
+def _parse_guide_markdown(content: str) -> agent_node_config.NodeGuide:
     lines = content.splitlines()
     summary_lines: List[str] = []
     sections: List[agent_node_config.StepSection] = []
@@ -73,7 +73,9 @@ def _parse_guide_markdown(content: str) -> agent_node_config.Guide:
             if current_title is None:
                 summary_lines = list(current_section_lines)
             else:
-                if current_title.startswith("Verification failure"):
+                if current_title.startswith("Summary"):
+                    summary_lines.extend(current_section_lines)
+                elif current_title.startswith("Verification failure"):
                     verification_failure_lines = list(current_section_lines)
                 elif not current_title.startswith("Lint checks"):
                     sections.append(
@@ -89,7 +91,9 @@ def _parse_guide_markdown(content: str) -> agent_node_config.Guide:
             current_section_lines.append(line)
 
     if current_title is not None:
-        if current_title.startswith("Verification failure"):
+        if current_title.startswith("Summary"):
+            summary_lines.extend(current_section_lines)
+        elif current_title.startswith("Verification failure"):
             verification_failure_lines = list(current_section_lines)
         elif not current_title.startswith("Lint checks"):
             sections.append(
@@ -99,6 +103,8 @@ def _parse_guide_markdown(content: str) -> agent_node_config.Guide:
                     content="\n".join(current_section_lines).strip(),
                 )
             )
+    elif not summary_lines:
+        summary_lines = current_section_lines
 
     summary = "\n".join(summary_lines).strip()
     vf_text = (
@@ -106,14 +112,14 @@ def _parse_guide_markdown(content: str) -> agent_node_config.Guide:
         if verification_failure_lines is not None
         else None
     )
-    return agent_node_config.Guide(
+    return agent_node_config.NodeGuide(
         summary=summary,
         sections=sections,
         verification_failure=vf_text,
     )
 
 
-def _load_per_node_info(n: dag_storage.Node) -> agent_node_config.PerNodeInfo:
+def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo:
     all_feedback: List[str] = []
     try:
         storage = get_singleton(dag_storage.DagStorage)
@@ -121,7 +127,7 @@ def _load_per_node_info(n: dag_storage.Node) -> agent_node_config.PerNodeInfo:
         all_feedback.extend(
             m.content
             for m in msgs
-            if isinstance(m, dag_storage.Feedback) and m.content
+            if isinstance(m, dag_storage.FeedbackMessage) and m.content
         )
     except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
         pass
@@ -234,7 +240,7 @@ def _load_per_node_info(n: dag_storage.Node) -> agent_node_config.PerNodeInfo:
 
     guide_target = data.get("guide")
     guide_file: Optional[agent_file_alias.UnboundFile] = None
-    guide: Optional[agent_node_config.Guide] = None
+    guide: Optional[agent_node_config.NodeGuide] = None
     if guide_target:
         guide_filename = (
             guide_target.split(":")[-1]
@@ -297,7 +303,7 @@ def _load_per_node_info(n: dag_storage.Node) -> agent_node_config.PerNodeInfo:
         curr_node = (
             node_util.normalize(curr_label)
             if node_util is not None
-            else dag_storage.Node(unit_address=curr_label)  # pragma: no cover (assumption: node_util is registered in system tier)
+            else dag_storage.DagNode(unit_address=curr_label)  # pragma: no cover (assumption: node_util is registered in system tier)
         )
         dep_manifest_raw = (
             loader.get_manifest(curr_node) if loader is not None else None
@@ -322,7 +328,7 @@ def _load_per_node_info(n: dag_storage.Node) -> agent_node_config.PerNodeInfo:
         dep_node = (
             node_util.normalize(dep_label)
             if node_util is not None
-            else dag_storage.Node(unit_address=dep_label)  # pragma: no cover (assumption: node_util is registered in system tier)
+            else dag_storage.DagNode(unit_address=dep_label)  # pragma: no cover (assumption: node_util is registered in system tier)
         )
         is_blame = dep_label in feedback_deps
         dep_manifest_raw = (
@@ -420,7 +426,7 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
     tier = agent_session
 
     def __init__(self) -> None:
-        self._per_node_cache: Dict[dag_storage.Node, agent_node_config.PerNodeInfo] = {}
+        self._per_node_cache: Dict[dag_storage.DagNode, agent_node_config.PerNodeInfo] = {}
         self._cached_version: int = -1
         self._allows_step_mode_override: Optional[bool] = None
         self._is_step_mode_override: Optional[bool] = None
@@ -463,7 +469,7 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
     @property
     def per_node_info_by_node(
         self,
-    ) -> Mapping[dag_storage.Node, agent_node_config.PerNodeInfo]:
+    ) -> Mapping[dag_storage.DagNode, agent_node_config.PerNodeInfo]:
         # Requirement: The session per node info by node mapping each active node to its per node info.
         # Requirement: [NodeConfig] The node config provides the session per node info by node, mapping each active node to its per node info.
         self._sync_cache()
@@ -569,7 +575,7 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
         return res
 
     @property
-    def guide(self) -> Optional[agent_node_config.Guide]:
+    def guide(self) -> Optional[agent_node_config.NodeGuide]:
         # Requirement: The session guide file and task guide from the single active node when guide step mode is active.
         # Requirement: [NodeConfig] The node config provides the session guide, providing structured instructional text when step mode is active.
         self._sync_cache()
@@ -581,20 +587,10 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
         return None
 
     @property
-    def blame_targets(self) -> Set[agent_file_alias.BoundFile]:
-        # Requirement: The session blame targets aggregating blame targets across the active nodes, and blame targets by node mapping each active node to its declared blame targets.
-        # Requirement: [NodeConfig] The node config provides the session blame targets, which are bound files owned by upstream dependency nodes eligible for defect attribution.
-        self._sync_cache()
-        res: Set[agent_file_alias.BoundFile] = set()
-        for pni in self._active_per_node_infos():
-            res.update(pni.blame_targets)
-        return res
-
-    @property
     def blame_targets_by_node(
         self,
-    ) -> Mapping[dag_storage.Node, Set[agent_file_alias.BoundFile]]:
-        # Requirement: The session blame targets aggregating blame targets across the active nodes, and blame targets by node mapping each active node to its declared blame targets.
+    ) -> Mapping[dag_storage.DagNode, Set[agent_file_alias.BoundFile]]:
+        # Requirement: The session blame targets by node mapping each active node to its declared blame targets.
         # Requirement: [NodeConfig] The node config provides the session blame targets by node, which are bound files eligible for defect attribution mapped by session node.
         self._sync_cache()
         return {
@@ -614,7 +610,7 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
     @property
     def verification_checks_by_node(
         self,
-    ) -> Mapping[dag_storage.Node, Sequence[agent_node_config.VerificationCheck]]:
+    ) -> Mapping[dag_storage.DagNode, Sequence[agent_node_config.VerificationCheck]]:
         # Requirement: The session verification checks aggregating verification checks across the active nodes, and verification checks by node mapping each active node to its verification checks.
         # Requirement: [NodeConfig] The node config provides the session verification checks by node evaluated for each session node.
         self._sync_cache()
@@ -624,11 +620,11 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
         }
 
     @property
-    def src_file_alias_by_node(self) -> Mapping[dag_storage.Node, str]:
+    def src_file_alias_by_node(self) -> Mapping[dag_storage.DagNode, str]:
         # Requirement: The session src file alias by node mapping each active node to the relative path of its declared source file alias.
         # Requirement: [NodeConfig] The node config provides the session src file alias by node, mapping each session node to the relative path of its declared source file alias.
         self._sync_cache()
-        res: Dict[dag_storage.Node, str] = {}
+        res: Dict[dag_storage.DagNode, str] = {}
         for pni in self._active_per_node_infos():
             if pni.src_file_alias is not None:
                 res[pni.node] = pni.src_file_alias
@@ -733,18 +729,19 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
         return agent_file_alias.FileAlias
 
     @property
-    def wire_type(self) -> Type[str]:
-        return str
+    def wire_type(self) -> Type[tool_provider.WireString]:
+        return tool_provider.WireString
 
-    def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
+    def convert(self, wire_value: tool_provider.WireString) -> agent_file_alias.FileAlias:
         # Requirement: Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
         self._sync_cache()
-        if wire_value in self._aliases:
-            return self._aliases[wire_value]
-        matches = self._short_name_to_aliases.get(wire_value)
+        str_val = str(wire_value)
+        if str_val in self._aliases:
+            return self._aliases[str_val]
+        matches = self._short_name_to_aliases.get(str_val)
         if matches is not None and len(matches) == 1:
             return matches[0]
-        return agent_file_alias.UnboundFile(relative_path=wire_value)
+        return agent_file_alias.UnboundFile(relative_path=str_val)
 
     def sanitize_text(self, text: str) -> str:
         # Requirement: The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its relative path, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking, stripping workspace root path prefixes, and stripping execution root path prefixes.
@@ -782,7 +779,6 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
             AliasManager,
             agent_file_alias.AliasManager,
             tool_provider.ParameterType,
-            tool_provider.ParameterConverter,
         ],
         tier=agent_session,
     )

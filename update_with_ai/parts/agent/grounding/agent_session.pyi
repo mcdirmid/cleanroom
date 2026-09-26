@@ -1,12 +1,8 @@
-from framework import LifecycleTier
-agent_session: LifecycleTier
+from support.lib.lifecycle import ChildTierOf, SystemTier
+from framework import singleton_type
 
-def __orphan__() -> None:
-    """
-    PURPOSE:
-    Lifecycle tier declaration for the agent session.
 
-    FRESH_REQUIREMENTS:
-    - The agent session is a lifecycle tier defined under the system lifecycle tier.
-    """
+@singleton_type("system")
+class AgentSessionTier(ChildTierOf[SystemTier]):
+    """Lifecycle tier governing per-session agent execution subordinate to the system tier."""
     ...

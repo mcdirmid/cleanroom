@@ -18,6 +18,8 @@ A guide delivery:
 
 - Can *parse* file content into a guide.
 
+- Can record an *initial primer*.
+
 - Can *advance step* with a boolean *verification passed* indicator and text *failure diagnostics*, delivering instructional text when verification passes, or retaining the current milestone and reporting failure diagnostics alongside verification failure instructions when verification fails.
 
 - Exposes whether progressive *steps remain* to be completed, and exposes its configured guide.

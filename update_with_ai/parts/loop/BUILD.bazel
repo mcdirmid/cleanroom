@@ -63,5 +63,5 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "loop_node_cleaner_impl",
-    module_deps = ['//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/agent:agent_storage', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/sandbox:sandbox', '//update_with_ai/parts/sandbox:template_format', ':loop_conversation', ':loop_driver', ':loop_node_cleaner'],
+    module_deps = ['//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', '//update_with_ai/parts/agent:agent_storage', '//update_with_ai/parts/core:runner_logger', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/sandbox:sandbox', '//update_with_ai/parts/sandbox:template_format', ':loop_conversation', ':loop_driver', ':loop_node_cleaner'],
 )

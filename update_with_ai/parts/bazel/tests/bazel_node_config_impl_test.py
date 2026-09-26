@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 from update_with_ai.parts.agent.lib.agent_storage import NodeDefinition
 from update_with_ai.parts.bazel.lib.bazel_manifest_loader import (
     BazelManifestLoader,
-    Manifest,
+    TargetManifest,
 )
 from update_with_ai.parts.bazel.lib.bazel_node_config_impl import (
     AliasManager as AliasManagerImpl,
@@ -21,7 +21,7 @@ from update_with_ai.parts.bazel.lib.bazel_node_config_impl import (
 )
 from update_with_ai.parts.agent.lib.agent_node_config import PerNodeInfo, RoleConfig
 from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget, NodeDirectory
-from update_with_ai.parts.dag.lib.dag_storage import DagStorage, Feedback, Message, Node
+from update_with_ai.parts.dag.lib.dag_storage import DagStorage, FeedbackMessage, DagMessage, DagNode
 from update_with_ai.parts.agent.lib.agent_file_alias import (
     AliasManager,
     BoundFile,
@@ -35,13 +35,13 @@ from support.lib.lifecycle import LifecycleRegistry, Singleton, enter_phase, sys
 from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.agent.lib.agent_node_config import (
-    Guide,
+    NodeGuide,
     NodeConfig,
     StepSection,
 )
 from update_with_ai.parts.sandbox.lib.tool_provider import (
     ParameterType,
-    String,
+    WireString,
 )
 
 
@@ -62,7 +62,7 @@ class MockRoleConfig(RoleConfig, Singleton):
 
     def __init__(self) -> None:
         self._role: str = "coder"
-        self._nodes: Sequence[Node] = (Node(unit_address="//test/pkg:my_target"),)
+        self._nodes: Sequence[DagNode] = (DagNode(unit_address="//test/pkg:my_target"),)
         self._version: int = 1
 
     @property
@@ -70,18 +70,18 @@ class MockRoleConfig(RoleConfig, Singleton):
         return self._role
 
     @property
-    def nodes(self) -> Sequence[Node]:
+    def nodes(self) -> Sequence[DagNode]:
         return self._nodes
 
     @property
     def version(self) -> int:
         return self._version
 
-    def set_node(self, node: Node) -> None:
+    def set_node(self, node: DagNode) -> None:
         self._nodes = (node,)
         self._version += 1
 
-    def set_nodes(self, nodes: Sequence[Node]) -> None:
+    def set_nodes(self, nodes: Sequence[DagNode]) -> None:
         self._nodes = tuple(nodes)
         self._version += 1
 
@@ -111,7 +111,6 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             self.assertFalse(cfg.is_step_mode)
             self.assertIsNone(cfg.guide_file)
             self.assertIsNone(cfg.guide)
-            self.assertEqual(cfg.blame_targets, set())
             self.assertEqual(cfg.blame_targets_by_node, {})
             self.assertEqual(cfg.verification_checks, [])
             self.assertEqual(cfg.verification_checks_by_node, {})
@@ -119,7 +118,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             self.assertEqual(cfg.per_node_info_by_node, {})
 
             # Configure properties
-            node = Node(unit_address="//pkg:target")
+            node = DagNode(unit_address="//pkg:target")
             ro = ReadOnlyFile(
                 relative_path="ro.txt",
                 workspace_path=_make_workspace_path("pkg/ro.txt"),
@@ -131,7 +130,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 owning_node=node,
             )
             unbound = UnboundFile(relative_path="guide.md")
-            guide = Guide(summary="Guide", sections=[StepSection(0, "S1", "C1")])
+            guide = NodeGuide(summary="Guide", sections=[StepSection(0, "S1", "C1")])
 
             class DummyCheck:
                 def verify(self):
@@ -154,7 +153,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 verification_checks=[dummy_check],
                 src_file_alias="rw.txt",
                 verification_success_message="All tests passed",
-                feedback=("Feedback msg 1",),
+                feedback=("FeedbackMessage msg 1",),
             )
 
             cfg._per_node_cache[node] = info
@@ -183,11 +182,8 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             # Requirement: The session feedback combining feedback messages retrieved from graph storage across the active nodes.
             # Requirement: [NodeConfig] The node config provides the session feedback, exposing incoming feedback delivered to the node when present.
-            self.assertEqual(cfg.feedback, ("Feedback msg 1",))
-            # Requirement: The session blame targets aggregating blame targets across the active nodes, and blame targets by node mapping each active node to its declared blame targets.
-            # Requirement: [NodeConfig] The node config provides blame targets eligible for defect attribution.
-            self.assertIn(ro, cfg.blame_targets)
-            # Requirement: The session blame targets aggregating blame targets across the active nodes, and blame targets by node mapping each active node to its declared blame targets.
+            self.assertEqual(cfg.feedback, ("FeedbackMessage msg 1",))
+            # Requirement: The session blame targets by node mapping each active node to its declared blame targets.
             # Requirement: [NodeConfig] The node config provides the session blame targets mapped by session node.
             self.assertEqual(cfg.blame_targets_by_node[node], {ro})
             # Requirement: The session src file alias by node mapping each active node to the relative path of its declared source file alias.
@@ -230,12 +226,12 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             # Parameter converter interface
             self.assertEqual(alias_mgr.actual_type, FileAlias)
-            self.assertEqual(alias_mgr.wire_type, str)
+            self.assertEqual(alias_mgr.wire_type, WireString)
             self.assertIs(scope.get_singleton(ParameterType), alias_mgr)
             self.assertIsNotNone(alias_mgr.workspace_root)
 
             # Map an alias
-            node = Node(unit_address="//pkg:target")
+            node = DagNode(unit_address="//pkg:target")
             bound = ReadWriteFile(
                 relative_path="module.py",
                 workspace_path=_make_workspace_path("pkg/module.py"),
@@ -245,7 +241,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             alias_mgr._paths["/workspace/pkg/module.py"] = "module.py"
 
             # Convert mapped relative path
-            converted = alias_mgr.convert("module.py")
+            converted = alias_mgr.convert(WireString("module.py"))
             # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
             self.assertEqual(converted, bound)
 
@@ -260,7 +256,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
             # Unambiguous short name resolves to bound file
             # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
-            resolved = alias_mgr.convert("nested.py")
+            resolved = alias_mgr.convert(WireString("nested.py"))
             self.assertEqual(resolved, bound_nested)
 
             # Ambiguous short name falls back to UnboundFile
@@ -270,13 +266,13 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 owning_node=node,
             )
             alias_mgr._short_name_to_aliases["nested.py"].append(bound_dup)
-            ambiguous = alias_mgr.convert("nested.py")
+            ambiguous = alias_mgr.convert(WireString("nested.py"))
             # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
             self.assertIsInstance(ambiguous, UnboundFile)
             self.assertEqual(ambiguous.relative_path, "nested.py")
 
             # Convert unmapped relative path produces UnboundFile
-            unmapped = alias_mgr.convert("unknown.py")
+            unmapped = alias_mgr.convert(WireString("unknown.py"))
             # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
             self.assertIsInstance(unmapped, UnboundFile)
             self.assertEqual(unmapped.relative_path, "unknown.py")
@@ -319,9 +315,9 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         class MockManifestLoader(BazelManifestLoader, Singleton):
             tier = agent_session
 
-            def get_manifest(self, node: Node) -> Optional[Manifest]:
+            def get_manifest(self, node: DagNode) -> Optional[TargetManifest]:
                 if node.unit_address == "//test/pkg:my_target":
-                    return Manifest(
+                    return TargetManifest(
                         json.dumps(
                             {
                                 "src": "impl.py",
@@ -339,7 +335,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                         )
                     )
                 if node.unit_address == "//test/pkg:dep_target":
-                    return Manifest(
+                    return TargetManifest(
                         json.dumps(
                             {
                                 "src": "dep_target.py",
@@ -347,7 +343,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                         )
                     )
                 if node.unit_address == "//test/pkg:star_parent":
-                    return Manifest(
+                    return TargetManifest(
                         json.dumps(
                             {
                                 "src": "star_parent.py",
@@ -356,7 +352,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                         )
                     )
                 if node.unit_address == "//test/pkg:star_transitive":
-                    return Manifest(
+                    return TargetManifest(
                         json.dumps(
                             {
                                 "src": "star_transitive.py",
@@ -366,24 +362,24 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 return None
 
             def load_manifest(
-                self, content: Manifest, storage: object
+                self, content: TargetManifest, storage: object
             ) -> Sequence[NodeDefinition]:
                 return []
 
         class MockNodeIdentifierUtility(BazelTarget, Singleton):
             tier = agent_session
 
-            def normalize(self, raw_label: str) -> Node:
-                return Node(unit_address=raw_label)
+            def normalize(self, raw_label: str) -> DagNode:
+                return DagNode(unit_address=raw_label)
 
-            def extract_directory(self, node: Node) -> NodeDirectory:
+            def extract_directory(self, node: DagNode) -> NodeDirectory:
                 return _make_node_directory("test/pkg")
 
         class MockDagStorage(DagStorage, Singleton):
             tier = system
 
-            def get_messages(self, node: Node) -> Set[Message]:
-                msgs: Set[Message] = {Feedback(content="Fix type error")}
+            def get_messages(self, node: DagNode) -> Set[DagMessage]:
+                msgs: Set[DagMessage] = {FeedbackMessage(content="Fix type error")}
                 return msgs
 
         reg = LifecycleRegistry()
@@ -421,9 +417,13 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 self.assertIn("test/pkg/star_parent.py", ro_names)
                 self.assertIn("test/pkg/star_transitive.py", ro_names)
 
-                # Requirement: The session blame targets aggregating blame targets across the active nodes, and blame targets by node mapping each active node to its declared blame targets.
-                # Requirement: [NodeConfig] The node config provides blame targets eligible for defect attribution.
-                blame_names = {f.relative_path for f in cfg.blame_targets}
+                # Requirement: The session blame targets by node mapping each active node to its declared blame targets.
+                # Requirement: [NodeConfig] The node config provides the session blame targets mapped by session node.
+                blame_names = {
+                    f.relative_path
+                    for bts in cfg.blame_targets_by_node.values()
+                    for f in bts
+                }
                 self.assertIn("test/pkg/dep_target.py", blame_names)
 
                 # Requirement: The session verification checks aggregating verification checks across the active nodes, and verification checks by node mapping each active node to its verification checks.
@@ -435,11 +435,11 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
                 # Requirement: The alias manager converts relative paths to matching file aliases, producing unbound files when unmapped or ambiguous.
                 # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
-                alias_impl = alias_mgr.convert("test/pkg/impl.py")
+                alias_impl = alias_mgr.convert(WireString("test/pkg/impl.py"))
                 self.assertIsInstance(alias_impl, ReadWriteFile)
                 self.assertEqual(alias_impl.relative_path, "test/pkg/impl.py")
 
-                alias_dep = alias_mgr.convert("test/pkg/dep_target.py")
+                alias_dep = alias_mgr.convert(WireString("test/pkg/dep_target.py"))
                 self.assertIsInstance(alias_dep, ReadOnlyFile)
                 self.assertEqual(alias_dep.relative_path, "test/pkg/dep_target.py")
 
@@ -468,9 +468,9 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         class MockManifestLoader(BazelManifestLoader, Singleton):
             tier = agent_session
 
-            def get_manifest(self, node: Node) -> Optional[Manifest]:
+            def get_manifest(self, node: DagNode) -> Optional[TargetManifest]:
                 if node.unit_address == "//test/pkg:my_target":
-                    return Manifest(
+                    return TargetManifest(
                         json.dumps(
                             {
                                 "src": "impl.py",
@@ -483,23 +483,23 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 return None
 
             def load_manifest(
-                self, content: Manifest, storage: object
+                self, content: TargetManifest, storage: object
             ) -> Sequence[NodeDefinition]:
                 return []
 
         class MockNodeIdentifierUtility(BazelTarget, Singleton):
             tier = agent_session
 
-            def normalize(self, raw_label: str) -> Node:
-                return Node(unit_address=raw_label)
+            def normalize(self, raw_label: str) -> DagNode:
+                return DagNode(unit_address=raw_label)
 
-            def extract_directory(self, node: Node) -> NodeDirectory:
+            def extract_directory(self, node: DagNode) -> NodeDirectory:
                 return _make_node_directory("test/pkg")
 
         class MockDagStorage(DagStorage, Singleton):
             tier = system
 
-            def get_messages(self, node: Node) -> Set[Message]:
+            def get_messages(self, node: DagNode) -> Set[DagMessage]:
                 return set()
 
         class MockAgentConfig(AgentConfig, Singleton):
@@ -547,7 +547,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 ro_names = {f.relative_path for f in cfg.read_only_files}
                 self.assertIn("test/pkg/qa.md", ro_names)
 
-                alias = alias_mgr.convert("test/pkg/qa.md")
+                alias = alias_mgr.convert(WireString("test/pkg/qa.md"))
                 self.assertIsInstance(alias, ReadOnlyFile)
 
     def test_lifecycle_initialization_step_mode_disabled_when_feedback_present(
@@ -558,9 +558,9 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         class MockManifestLoader(BazelManifestLoader, Singleton):
             tier = agent_session
 
-            def get_manifest(self, node: Node) -> Optional[Manifest]:
+            def get_manifest(self, node: DagNode) -> Optional[TargetManifest]:
                 if node.unit_address == "//test/pkg:my_target":
-                    return Manifest(
+                    return TargetManifest(
                         json.dumps(
                             {
                                 "src": "impl.py",
@@ -573,24 +573,24 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 return None
 
             def load_manifest(
-                self, content: Manifest, storage: object
+                self, content: TargetManifest, storage: object
             ) -> Sequence[NodeDefinition]:
                 return []
 
         class MockNodeIdentifierUtility(BazelTarget, Singleton):
             tier = agent_session
 
-            def normalize(self, raw_label: str) -> Node:
-                return Node(unit_address=raw_label)
+            def normalize(self, raw_label: str) -> DagNode:
+                return DagNode(unit_address=raw_label)
 
-            def extract_directory(self, node: Node) -> NodeDirectory:
+            def extract_directory(self, node: DagNode) -> NodeDirectory:
                 return _make_node_directory("test/pkg")
 
         class MockDagStorage(DagStorage, Singleton):
             tier = system
 
-            def get_messages(self, node: Node) -> Set[Message]:
-                return {Feedback(content="Fix failing mock test")}
+            def get_messages(self, node: DagNode) -> Set[DagMessage]:
+                return {FeedbackMessage(content="Fix failing mock test")}
 
         class MockAgentConfig(AgentConfig, Singleton):
             tier = system
@@ -638,7 +638,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 ro_names = {f.relative_path for f in cfg.read_only_files}
                 self.assertIn("test/pkg/qa.md", ro_names)
 
-                alias = alias_mgr.convert("test/pkg/qa.md")
+                alias = alias_mgr.convert(WireString("test/pkg/qa.md"))
                 self.assertIsInstance(alias, ReadOnlyFile)
 
     @patch("update_with_ai.parts.bazel.lib.bazel_node_config_impl.subprocess.run")
@@ -696,7 +696,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 return "coder"
 
             @property
-            def nodes(self) -> Sequence[Node]:
+            def nodes(self) -> Sequence[DagNode]:
                 return ()
 
             @property
@@ -719,8 +719,8 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 return "coder"
 
             @property
-            def nodes(self) -> Sequence[Node]:
-                return (Node(unit_address="//pkg:tgt"),)
+            def nodes(self) -> Sequence[DagNode]:
+                return (DagNode(unit_address="//pkg:tgt"),)
 
             @property
             def version(self) -> int:
@@ -729,21 +729,21 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         class MockManifestLoaderNone(BazelManifestLoader, Singleton):
             tier = agent_session
 
-            def get_manifest(self, node: Node) -> Optional[Manifest]:
+            def get_manifest(self, node: DagNode) -> Optional[TargetManifest]:
                 return None
 
             def load_manifest(
-                self, content: Manifest, storage: object
+                self, content: TargetManifest, storage: object
             ) -> Sequence[NodeDefinition]:
                 return []
 
         class MockNodeIdentifierUtility(BazelTarget, Singleton):
             tier = agent_session
 
-            def normalize(self, raw_label: str) -> Node:
-                return Node(unit_address=raw_label)
+            def normalize(self, raw_label: str) -> DagNode:
+                return DagNode(unit_address=raw_label)
 
-            def extract_directory(self, node: Node) -> NodeDirectory:
+            def extract_directory(self, node: DagNode) -> NodeDirectory:
                 return _make_node_directory("pkg")
 
         reg2 = LifecycleRegistry()
@@ -757,18 +757,18 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             # Requirement: The session feedback combining feedback messages retrieved from graph storage across the active nodes.
             # Requirement: [NodeConfig] The node config provides the session feedback, exposing incoming feedback delivered to the node when present.
             self.assertEqual(cfg.feedback, ())
-            # Manifest is None -> returns early
+            # TargetManifest is None -> returns early
             self.assertEqual(cfg.read_write_files, set())
 
-        # 3. Manifest is invalid JSON -> returns early
+        # 3. TargetManifest is invalid JSON -> returns early
         class MockManifestLoaderBadJson(BazelManifestLoader, Singleton):
             tier = agent_session
 
-            def get_manifest(self, node: Node) -> Optional[Manifest]:
-                return Manifest("invalid JSON {")
+            def get_manifest(self, node: DagNode) -> Optional[TargetManifest]:
+                return TargetManifest("invalid JSON {")
 
             def load_manifest(
-                self, content: Manifest, storage: object
+                self, content: TargetManifest, storage: object
             ) -> Sequence[NodeDefinition]:
                 return []
 
@@ -797,8 +797,8 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                     return "coder"
 
                 @property
-                def nodes(self) -> Sequence[Node]:
-                    return (Node(unit_address="//pkg:my_target"),)
+                def nodes(self) -> Sequence[DagNode]:
+                    return (DagNode(unit_address="//pkg:my_target"),)
 
                 @property
                 def version(self) -> int:
@@ -807,8 +807,8 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             class MockManifestLoader(BazelManifestLoader, Singleton):
                 tier = agent_session
 
-                def get_manifest(self, node: Node) -> Optional[Manifest]:
-                    return Manifest(
+                def get_manifest(self, node: DagNode) -> Optional[TargetManifest]:
+                    return TargetManifest(
                         json.dumps(
                             {
                                 "src": "impl.py",
@@ -820,17 +820,17 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                     )
 
                 def load_manifest(
-                    self, content: Manifest, storage: object
+                    self, content: TargetManifest, storage: object
                 ) -> Sequence[NodeDefinition]:
                     return []
 
             class MockNodeIdentifierUtility(BazelTarget, Singleton):
                 tier = agent_session
 
-                def normalize(self, raw_label: str) -> Node:
-                    return Node(unit_address=raw_label)
+                def normalize(self, raw_label: str) -> DagNode:
+                    return DagNode(unit_address=raw_label)
 
-                def extract_directory(self, node: Node) -> NodeDirectory:
+                def extract_directory(self, node: DagNode) -> NodeDirectory:
                     return _make_node_directory("pkg")
 
             reg = LifecycleRegistry()
@@ -880,8 +880,8 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                     return "coder"
 
                 @property
-                def nodes(self) -> Sequence[Node]:
-                    return (Node(unit_address="//pkg:my_target"),)
+                def nodes(self) -> Sequence[DagNode]:
+                    return (DagNode(unit_address="//pkg:my_target"),)
 
                 @property
                 def version(self) -> int:
@@ -890,8 +890,8 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             class MockManifestLoader(BazelManifestLoader, Singleton):
                 tier = agent_session
 
-                def get_manifest(self, node: Node) -> Optional[Manifest]:
-                    return Manifest(
+                def get_manifest(self, node: DagNode) -> Optional[TargetManifest]:
+                    return TargetManifest(
                         json.dumps(
                             {
                                 "src": "impl.py",
@@ -904,17 +904,17 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                     )
 
                 def load_manifest(
-                    self, content: Manifest, storage: object
+                    self, content: TargetManifest, storage: object
                 ) -> Sequence[NodeDefinition]:
                     return []
 
             class MockNodeIdentifierUtility(BazelTarget, Singleton):
                 tier = agent_session
 
-                def normalize(self, raw_label: str) -> Node:
-                    return Node(unit_address=raw_label)
+                def normalize(self, raw_label: str) -> DagNode:
+                    return DagNode(unit_address=raw_label)
 
-                def extract_directory(self, node: Node) -> NodeDirectory:
+                def extract_directory(self, node: DagNode) -> NodeDirectory:
                     return _make_node_directory("pkg")
 
             class MockAgentConfig(AgentConfig, Singleton):
@@ -1013,6 +1013,23 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         self.assertEqual(len(parsed2.sections), 1)
         self.assertEqual(parsed2.sections[0].title, "Final Step")
 
+        # Test guide with # Header and ## Summary section
+        g_with_summary_section = (
+            "# Guide: My Task Guide\n\n"
+            "## Summary\n\n"
+            "This is the summary content with instructions.\n\n"
+            "## Step 1: Execute\n"
+            "Execution instructions.\n\n"
+            "## Verification failure\n"
+            "VF instructions.\n"
+        )
+        parsed3 = _parse_guide_markdown(g_with_summary_section)
+        self.assertIn("# Guide: My Task Guide", parsed3.summary)
+        self.assertIn("This is the summary content with instructions.", parsed3.summary)
+        self.assertEqual(len(parsed3.sections), 1)
+        self.assertEqual(parsed3.sections[0].title, "Step 1: Execute")
+        self.assertEqual(parsed3.verification_failure, "VF instructions.")
+
         guide_content = (
             "This is the summary of the task.\n\n"
             "## Step 1: Write code\n"
@@ -1048,8 +1065,8 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                     return "coder"
 
                 @property
-                def nodes(self) -> Sequence[Node]:
-                    return (Node(unit_address="//pkg:my_target"),)
+                def nodes(self) -> Sequence[DagNode]:
+                    return (DagNode(unit_address="//pkg:my_target"),)
 
                 @property
                 def version(self) -> int:
@@ -1058,8 +1075,8 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             class MockManifestLoader(BazelManifestLoader, Singleton):
                 tier = agent_session
 
-                def get_manifest(self, node: Node) -> Optional[Manifest]:
-                    return Manifest(
+                def get_manifest(self, node: DagNode) -> Optional[TargetManifest]:
+                    return TargetManifest(
                         json.dumps(
                             {
                                 "src": "impl.py",
@@ -1071,17 +1088,17 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                     )
 
                 def load_manifest(
-                    self, content: Manifest, storage: object
+                    self, content: TargetManifest, storage: object
                 ) -> Sequence[NodeDefinition]:
                     return []
 
             class MockNodeIdentifierUtility(BazelTarget, Singleton):
                 tier = agent_session
 
-                def normalize(self, raw_label: str) -> Node:
-                    return Node(unit_address=raw_label)
+                def normalize(self, raw_label: str) -> DagNode:
+                    return DagNode(unit_address=raw_label)
 
-                def extract_directory(self, node: Node) -> NodeDirectory:
+                def extract_directory(self, node: DagNode) -> NodeDirectory:
                     return _make_node_directory("pkg")
 
             class MockAgentConfig(AgentConfig, Singleton):
@@ -1150,7 +1167,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                         # Guide file is registered in AliasManager
                         # Requirement: The alias manager converts relative paths to matching file aliases, producing unbound files when unmapped or ambiguous.
                         # Requirement: [AliasManager] Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
-                        converted_guide = alias_mgr.convert("my_guide.md")
+                        converted_guide = alias_mgr.convert(WireString("my_guide.md"))
                         self.assertEqual(converted_guide, cfg.guide_file)
             finally:
                 if old_env is not None:
@@ -1169,8 +1186,8 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 return "coder"
 
             @property
-            def nodes(self) -> Sequence[Node]:
-                return (Node(unit_address="//pkg:root"),)
+            def nodes(self) -> Sequence[DagNode]:
+                return (DagNode(unit_address="//pkg:root"),)
 
             @property
             def version(self) -> int:
@@ -1179,9 +1196,9 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         class MockManifestLoader(BazelManifestLoader, Singleton):
             tier = agent_session
 
-            def get_manifest(self, node: Node) -> Optional[Manifest]:
+            def get_manifest(self, node: DagNode) -> Optional[TargetManifest]:
                 if node.unit_address == "//pkg:root":
-                    return Manifest(
+                    return TargetManifest(
                         json.dumps(
                             {
                                 "src": "root.py",
@@ -1199,7 +1216,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                         )
                     )
                 if node.unit_address == "//pkg:star_a":
-                    return Manifest(
+                    return TargetManifest(
                         json.dumps(
                             {
                                 "src": "star_a.py",
@@ -1211,7 +1228,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                         )
                     )
                 if node.unit_address == "//pkg:star_b":
-                    return Manifest(
+                    return TargetManifest(
                         json.dumps(
                             {
                                 "src": "star_b.py",
@@ -1220,7 +1237,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                         )
                     )
                 if node.unit_address == "//pkg:star_diamond":
-                    return Manifest(
+                    return TargetManifest(
                         json.dumps(
                             {
                                 "src": "star_diamond.py",
@@ -1228,23 +1245,23 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                         )
                     )
                 if node.unit_address == "//pkg:star_bad_json":
-                    return Manifest("not valid json {")
+                    return TargetManifest("not valid json {")
                 if node.unit_address == "//pkg:bad_json_dep":
-                    return Manifest("not valid json {")
+                    return TargetManifest("not valid json {")
                 return None
 
             def load_manifest(
-                self, content: Manifest, storage: object
+                self, content: TargetManifest, storage: object
             ) -> Sequence[NodeDefinition]:
                 return []
 
         class MockNodeIdentifierUtility(BazelTarget, Singleton):
             tier = agent_session
 
-            def normalize(self, raw_label: str) -> Node:
-                return Node(unit_address=raw_label)
+            def normalize(self, raw_label: str) -> DagNode:
+                return DagNode(unit_address=raw_label)
 
-            def extract_directory(self, node: Node) -> NodeDirectory:
+            def extract_directory(self, node: DagNode) -> NodeDirectory:
                 return _make_node_directory("pkg")
 
         reg = LifecycleRegistry()
@@ -1270,9 +1287,9 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
     def test_lifecycle_initialization_multi_node_batch(self) -> None:
         """CUJ: Multi-node batch initialization unifies read-write files, excludes in-batch read-write files from read-only files, per-node blame targets, disables step mode, and per-node verification checks."""
-        node_a = Node(unit_address="//pkg:node_a")
-        node_b = Node(unit_address="//pkg:node_b")
-        node_c = Node(unit_address="//pkg:node_c")
+        node_a = DagNode(unit_address="//pkg:node_a")
+        node_b = DagNode(unit_address="//pkg:node_b")
+        node_c = DagNode(unit_address="//pkg:node_c")
 
         class MockMultiRoleConfig(RoleConfig, Singleton):
             tier = agent_session
@@ -1282,7 +1299,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 return "coder"
 
             @property
-            def nodes(self) -> Sequence[Node]:
+            def nodes(self) -> Sequence[DagNode]:
                 return (node_a, node_b, node_c)
 
             @property
@@ -1292,9 +1309,9 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         class MockManifestLoader(BazelManifestLoader, Singleton):
             tier = agent_session
 
-            def get_manifest(self, node: Node) -> Optional[Manifest]:
+            def get_manifest(self, node: DagNode) -> Optional[TargetManifest]:
                 if node.unit_address == "//pkg:node_a":
-                    return Manifest(
+                    return TargetManifest(
                         json.dumps(
                             {
                                 "src": "pkg/a.py",
@@ -1305,7 +1322,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                         )
                     )
                 if node.unit_address == "//pkg:node_b":
-                    return Manifest(
+                    return TargetManifest(
                         json.dumps(
                             {
                                 "src": "b.py",
@@ -1316,7 +1333,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                         )
                     )
                 if node.unit_address == "//pkg:ext_dep":
-                    return Manifest(
+                    return TargetManifest(
                         json.dumps(
                             {
                                 "src": "pkg/ext.py",
@@ -1326,17 +1343,17 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 return None
 
             def load_manifest(
-                self, content: Manifest, storage: object
+                self, content: TargetManifest, storage: object
             ) -> Sequence[NodeDefinition]:
                 return []
 
         class MockNodeIdentifierUtility(BazelTarget, Singleton):
             tier = agent_session
 
-            def normalize(self, raw_label: str) -> Node:
-                return Node(unit_address=raw_label)
+            def normalize(self, raw_label: str) -> DagNode:
+                return DagNode(unit_address=raw_label)
 
-            def extract_directory(self, node: Node) -> NodeDirectory:
+            def extract_directory(self, node: DagNode) -> NodeDirectory:
                 return _make_node_directory("pkg")
 
         class MockAgentConfig(AgentConfig, Singleton):
@@ -1387,18 +1404,12 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 self.assertFalse(cfg.allows_step_mode)
                 self.assertIsNone(cfg.verification_success_message)
 
-                # Requirement: The session blame targets aggregating blame targets across the active nodes, and blame targets by node mapping each active node to its declared blame targets.
+                # Requirement: The session blame targets by node mapping each active node to its declared blame targets.
                 # Requirement: [NodeConfig] The node config provides the session blame targets mapped by session node.
                 blame_by_node = cfg.blame_targets_by_node
                 self.assertEqual(blame_by_node[node_a], set())
                 node_b_blames = {f.relative_path for f in blame_by_node[node_b]}
                 self.assertEqual(node_b_blames, {"pkg/a.py", "pkg/ext.py"})
-
-                # Requirement: The session blame targets aggregating blame targets across the active nodes, and blame targets by node mapping each active node to its declared blame targets.
-                # Requirement: [NodeConfig] The node config provides blame targets eligible for defect attribution.
-                self.assertEqual(
-                    {f.relative_path for f in cfg.blame_targets}, {"pkg/a.py", "pkg/ext.py"}
-                )
 
                 # Requirement: The session src file alias by node mapping each active node to the relative path of its declared source file alias.
                 # Requirement: [NodeConfig] The node config provides the source file alias relative path mapped by session node.
@@ -1416,14 +1427,14 @@ class BazelNodeConfigImplTest(unittest.TestCase):
 
     def test_node_config_per_node_info_cache_and_eviction(self) -> None:
         """CUJ: NodeConfig caches PerNodeInfo, unloads on version increment when nodes leave, and aggregates dynamically."""
-        node_1 = Node(unit_address="//pkg:node_1")
-        node_2 = Node(unit_address="//pkg:node_2")
-        node_3 = Node(unit_address="//pkg:node_3")
+        node_1 = DagNode(unit_address="//pkg:node_1")
+        node_2 = DagNode(unit_address="//pkg:node_2")
+        node_3 = DagNode(unit_address="//pkg:node_3")
 
         manifests = {
-            "//pkg:node_1": Manifest(json.dumps({"src": "pkg/one.py"})),
-            "//pkg:node_2": Manifest(json.dumps({"src": "pkg/two.py"})),
-            "//pkg:node_3": Manifest(json.dumps({"src": "pkg/three.py"})),
+            "//pkg:node_1": TargetManifest(json.dumps({"src": "pkg/one.py"})),
+            "//pkg:node_2": TargetManifest(json.dumps({"src": "pkg/two.py"})),
+            "//pkg:node_3": TargetManifest(json.dumps({"src": "pkg/three.py"})),
         }
 
         call_counts = {"//pkg:node_1": 0, "//pkg:node_2": 0, "//pkg:node_3": 0}
@@ -1431,24 +1442,24 @@ class BazelNodeConfigImplTest(unittest.TestCase):
         class MockManifestLoaderCounting(BazelManifestLoader, Singleton):
             tier = agent_session
 
-            def get_manifest(self, node: Node) -> Optional[Manifest]:
+            def get_manifest(self, node: DagNode) -> Optional[TargetManifest]:
                 addr = node.unit_address
                 if addr in call_counts:
                     call_counts[addr] += 1
                 return manifests.get(addr)
 
             def load_manifest(
-                self, content: Manifest, storage: object
+                self, content: TargetManifest, storage: object
             ) -> Sequence[NodeDefinition]:
                 return []
 
         class MockNodeIdentifierUtility(BazelTarget, Singleton):
             tier = agent_session
 
-            def normalize(self, raw_label: str) -> Node:
-                return Node(unit_address=raw_label)
+            def normalize(self, raw_label: str) -> DagNode:
+                return DagNode(unit_address=raw_label)
 
-            def extract_directory(self, node: Node) -> NodeDirectory:
+            def extract_directory(self, node: DagNode) -> NodeDirectory:
                 return _make_node_directory("pkg")
 
         reg = LifecycleRegistry()
@@ -1540,8 +1551,8 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             assert isinstance(cfg, NodeConfigImpl)
             role_cfg = scope.get_singleton(RoleConfig)
 
-            node1 = Node(unit_address="//pkg:t1")
-            node2 = Node(unit_address="//pkg:t2")
+            node1 = DagNode(unit_address="//pkg:t1")
+            node2 = DagNode(unit_address="//pkg:t2")
             role_cfg.set_nodes((node1, node2))
 
             guide_unbound = UnboundFile(relative_path="docs/guide.md")
@@ -1555,7 +1566,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
                 workspace_path=_make_workspace_path("pkg/other.txt"),
                 owning_node=node1,
             )
-            guide = Guide(sections=[], summary="Guide summary")
+            guide = NodeGuide(sections=[], summary="Guide summary")
 
             info1 = PerNodeInfo(
                 node=node1,

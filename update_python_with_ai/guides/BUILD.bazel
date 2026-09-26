@@ -8,6 +8,13 @@ update_guide_with_ai(
 )
 
 update_guide_with_ai(
+    name = "high_to_requirements",
+    src = "high_to_requirements.md",
+    display_name = "high-level to requirements specification guide",
+    deps = [],
+)
+
+update_guide_with_ai(
     name = "high_to_grounding",
     src = "high_to_grounding.md",
     display_name = "high-level to grounding specification guide",

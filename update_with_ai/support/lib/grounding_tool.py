@@ -166,6 +166,16 @@ class DocstringContract:
             elif stripped == "GROUNDING_ARGUMENT:":
                 current_section = "GROUNDING_ARGUMENT"
                 continue
+            elif stripped in (
+                "GROUNDING_PROVISIONS:",
+                "GROUNDING_REQUIREMENTS:",
+                "GROUNDING_ASSUMPTIONS:",
+                "GROUNDING_IMPLEMENTS:",
+                "Args:",
+                "Returns:",
+            ):
+                current_section = stripped.rstrip(":")
+                continue
             elif stripped.startswith("INHERITED FROM "):
                 current_section = "LEGACY_INHERITED_FROM"
                 current_ancestor = stripped[len("INHERITED FROM ") :].rstrip(":")
@@ -339,7 +349,13 @@ class SpecLintVisitor(ast.NodeVisitor):
                 and str(self.filename).endswith("_asm.pyi")
             ):
                 continue
-            elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
+            elif (
+                isinstance(stmt, ast.Assign)
+                and all(isinstance(t, ast.Name) for t in stmt.targets)
+            ) or (
+                isinstance(stmt, ast.AnnAssign)
+                and isinstance(stmt.target, ast.Name)
+            ):
                 continue
             else:
                 self.add_error(
@@ -507,10 +523,12 @@ class SpecLintVisitor(ast.NodeVisitor):
             if isinstance(item, ast.FunctionDef):
                 self.visit_FunctionDef(item)
 
+        has_bases = len(node.bases) > 0
+
         # No empty data types invariant
         if self.current_class_kind == "data_type":
-            total_members = self.current_class_properties + self.current_class_methods
-            has_bases = len(node.bases) > 0
+            dataclass_fields = sum(1 for s in node.body if isinstance(s, ast.AnnAssign))
+            total_members = self.current_class_properties + self.current_class_methods + dataclass_fields
             is_variant_root = any(
                 isinstance(stmt, ast.ClassDef)
                 and any(
@@ -532,6 +550,7 @@ class SpecLintVisitor(ast.NodeVisitor):
             self.current_class_kind in ("data_type", "variant")
             and node.name in self.class_dataclass_init
         ):
+            has_fields = any(isinstance(stmt, ast.AnnAssign) for stmt in node.body)
             is_variant_root = any(
                 isinstance(stmt, ast.ClassDef)
                 and any(
@@ -555,9 +574,12 @@ class SpecLintVisitor(ast.NodeVisitor):
                         f"Base data type '{node.name}' has variants and must not declare constructor '__init__'.",
                     )
             else:
-                if self.class_dataclass_init.get(
-                    node.name
-                ) is True and not self.class_has_init.get(node.name):
+                if (
+                    self.class_dataclass_init.get(node.name) is True
+                    and not self.class_has_init.get(node.name)
+                    and not has_fields
+                    and not has_bases
+                ):
                     self.add_error(
                         node,
                         f"Data type '{node.name}' specifies 'init=True' (or default init) but does not declare constructor '__init__'. Either declare '__init__' or specify '@dataclass(frozen=True, init=False)'.",
@@ -629,7 +651,7 @@ class SpecLintVisitor(ast.NodeVisitor):
             else:
                 self.add_error(
                     node,
-                    "'__orphan__' must have a docstring containing 'PURPOSE:' and 'FRESH_REQUIREMENTS:'.",
+                    "'__orphan__' must have a docstring containing 'REQUIREMENTS:'.",
                 )
 
             remaining = body[1:] if has_docstring else body
@@ -723,7 +745,7 @@ class SpecLintVisitor(ast.NodeVisitor):
             else:
                 self.add_error(
                     node,
-                    f"'{node.name}' must have a docstring containing 'PURPOSE:' and 'CONSTITUENTS:'.",
+                    f"'{node.name}' must have a docstring containing 'CONSTITUENTS:'.",
                 )
 
             remaining = body[1:] if has_docstring else body
@@ -988,13 +1010,11 @@ class SpecLintVisitor(ast.NodeVisitor):
             return
 
         upper_text = doc.upper()
-        if "PURPOSE:" not in upper_text:
-            self.add_error(node, "Docstring must start with 'PURPOSE:' section.")
 
-        if is_orphan and "FRESH_REQUIREMENTS:" not in upper_text:
+        if is_orphan and "FRESH_REQUIREMENTS:" not in upper_text and "REQUIREMENTS:" not in upper_text:
             self.add_error(
                 node,
-                "'__orphan__' docstring must contain a 'FRESH_REQUIREMENTS:' section.",
+                "'__orphan__' docstring must contain a 'REQUIREMENTS:' or 'FRESH_REQUIREMENTS:' section.",
             )
 
         if is_asm and "CONSTITUENTS:" not in upper_text:
@@ -1002,41 +1022,46 @@ class SpecLintVisitor(ast.NodeVisitor):
                 node, "Assembly docstring must contain a 'CONSTITUENTS:' section."
             )
 
-        if is_asm:
-            ALLOWED_SECTIONS = {
-                "PURPOSE:",
-                "CONSTITUENTS:",
-            }
-            BULLETED_SECTIONS = {
-                "CONSTITUENTS:",
-            }
-        else:
-            ALLOWED_SECTIONS = {
-                "PURPOSE:",
-                "INHERITANCE:",
-                "FRESH_ASSUMPTIONS:",
-                "INHERITED_ASSUMPTIONS:",
-                "FRESH_REQUIREMENTS:",
-                "INHERITED_REQUIREMENTS:",
-                "GROUNDING_ARGUMENT:",
-            }
-            BULLETED_SECTIONS = {
-                "INHERITANCE:",
-                "FRESH_ASSUMPTIONS:",
-                "INHERITED_ASSUMPTIONS:",
-                "FRESH_REQUIREMENTS:",
-                "INHERITED_REQUIREMENTS:",
-            }
+        ALLOWED_SECTIONS = {
+            "PURPOSE:",
+            "CONSTITUENTS:",
+            "Args:",
+            "Returns:",
+            "INHERITANCE:",
+            "FRESH_ASSUMPTIONS:",
+            "ASSUMPTIONS:",
+            "INHERITED_ASSUMPTIONS:",
+            "FRESH_REQUIREMENTS:",
+            "REQUIREMENTS:",
+            "INHERITED_REQUIREMENTS:",
+            "GROUNDING_PROVISIONS:",
+            "GROUNDING_REQUIREMENTS:",
+            "GROUNDING_ASSUMPTIONS:",
+            "GROUNDING_IMPLEMENTS:",
+            "GROUNDING_ARGUMENT:",
+        }
+        BULLETED_SECTIONS = {
+            "CONSTITUENTS:",
+            "INHERITANCE:",
+            "FRESH_ASSUMPTIONS:",
+            "ASSUMPTIONS:",
+            "INHERITED_ASSUMPTIONS:",
+            "FRESH_REQUIREMENTS:",
+            "REQUIREMENTS:",
+            "INHERITED_REQUIREMENTS:",
+            "GROUNDING_PROVISIONS:",
+            "GROUNDING_REQUIREMENTS:",
+            "GROUNDING_ASSUMPTIONS:",
+            "GROUNDING_IMPLEMENTS:",
+        }
         current_section = None
         for line in lines:
             if not line:
                 continue
-            if line in ("REQUIREMENTS:", "ASSUMPTIONS:") or line.startswith(
-                "INHERITED FROM"
-            ):
+            if line.startswith("INHERITED FROM"):
                 self.add_error(
                     node,
-                    f"Obsolete docstring section '{line}'. Use 'FRESH_REQUIREMENTS:' / 'INHERITED_REQUIREMENTS:' or 'FRESH_ASSUMPTIONS:' / 'INHERITED_ASSUMPTIONS:'.",
+                    f"Obsolete docstring section '{line}'. Use 'REQUIREMENTS:' or 'ASSUMPTIONS:'.",
                 )
                 continue
             if line in ALLOWED_SECTIONS:
@@ -1264,7 +1289,12 @@ class SpecRegistry:
                         isinstance(item, ast.FunctionDef) and item.name == "__init__"
                         for item in node.body
                     )
-
+            elif isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        self.module_exports[mod_name].add(target.id)
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                self.module_exports[mod_name].add(node.target.id)
             elif isinstance(node, ast.ImportFrom):
                 origin = node.module or ""
                 for alias in node.names:
@@ -1485,7 +1515,7 @@ class ClosedWorldLinker:
             for node in tree.body:
                 if isinstance(node, ast.ImportFrom):
                     origin = node.module or ""
-                    if origin in ("framework", "typing", "dataclasses"):
+                    if origin in ("framework", "typing", "dataclasses", "support.lib.lifecycle"):
                         continue
                     if origin not in self.registry.module_exports:
                         self.diagnostics.append(
@@ -1508,6 +1538,24 @@ class ClosedWorldLinker:
                                     f"Symbol '{sym}' is not exported by specification '{origin}'.",
                                 )
                             )
+
+            imports_for_mod = self.registry.imports.get(mod_name, {})
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+                    prefix = node.value.id
+                    attr = node.attr
+                    if prefix in imports_for_mod:
+                        target_mod = imports_for_mod[prefix].split(".")[-1]
+                        if target_mod in self.registry.module_exports:
+                            if attr not in self.registry.module_exports[target_mod]:
+                                self.diagnostics.append(
+                                    Diagnostic(
+                                        path_str,
+                                        getattr(node, "lineno", 1),
+                                        getattr(node, "col_offset", 0),
+                                        f"Symbol '{attr}' is not exported by specification '{target_mod}'.",
+                                    )
+                                )
 
                 elif isinstance(node, ast.ClassDef):
                     cls_tier = self.registry.class_tiers.get(node.name, "unknown")
@@ -1576,7 +1624,9 @@ class ClosedWorldLinker:
                                     )
                                 )
                         else:
-                            if d_init is True and not has_init:
+                            has_fields = any(isinstance(stmt, ast.AnnAssign) for stmt in node.body)
+                            has_bases = len(node.bases) > 0
+                            if d_init is True and not has_init and not has_fields and not has_bases:
                                 self.diagnostics.append(
                                     Diagnostic(
                                         path_str,
@@ -1968,8 +2018,19 @@ def compile_module_inheritance(
     registry: SpecRegistry, mod_name: str
 ) -> Tuple[str, List[Diagnostic]]:
     orig_tree = registry.modules[mod_name]
+    orig_code = registry.module_sources.get(mod_name, ast.unparse(orig_tree) + "\n")
     if mod_name.endswith(("_ext", "_asm")):
-        return registry.module_sources.get(mod_name, ast.unparse(orig_tree) + "\n"), []
+        return orig_code, []
+
+    is_new_format = (
+        "GROUNDING_PROVISIONS:" in orig_code
+        or "GROUNDING_REQUIREMENTS:" in orig_code
+        or "GROUNDING_IMPLEMENTS:" in orig_code
+        or ("REQUIREMENTS:" in orig_code and "FRESH_REQUIREMENTS:" not in orig_code)
+        or ("PURPOSE:" not in orig_code and "FRESH_REQUIREMENTS:" not in orig_code)
+    )
+    if is_new_format:
+        return orig_code, []
 
     new_tree = copy.deepcopy(orig_tree)
     diagnostics: List[Diagnostic] = []

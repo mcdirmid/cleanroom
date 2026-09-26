@@ -21,6 +21,12 @@ filegroup(
 )
 
 filegroup(
+    name = "requirements",
+    srcs = ["requirements_template.md"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
     name = "lib",
     srcs = ["lib_template.py"],
     visibility = ["//visibility:public"],
@@ -35,5 +41,17 @@ filegroup(
 filegroup(
     name = "empty",
     srcs = ["empty_template.txt"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "qa",
+    srcs = ["qa_template.txt"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "coverage",
+    srcs = ["coverage_template.txt"],
     visibility = ["//visibility:public"],
 )

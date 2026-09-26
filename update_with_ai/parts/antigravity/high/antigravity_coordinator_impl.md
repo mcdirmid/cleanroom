@@ -31,8 +31,11 @@ Planning the next step updates worker completion reports, refreshes token usage 
 
 - When the subgraph is clean or no dirty nodes remain, all remaining workers are terminated, the server is shut down, and a completed action plan is returned.
 
-- When a ready batch is returned, the batch is partitioned by batch size. For each partition, eligible warm workers matching the ready role are evaluated, preferring workers with unit footprint overlap and selecting the worker with the least conversation context tokens, falling back to eligible non-overlapping workers with least conversation context tokens. Assigned units are additively merged into the revived worker's unit footprint. If no eligible warm worker is found, a fresh worker is spawned.
+- When a ready batch is returned, the batch is partitioned by batch size. For each partition, eligible warm workers matching the ready role are evaluated, preferring workers with unit footprint overlap and selecting the worker with the least conversation context tokens, falling back to eligible non-overlapping workers with least conversation context tokens. Assigned units are additively merged into the revived worker's unit footprint. Reviving a warm worker registers the new session on the Model Context Protocol server and records the session association in the sandbox gate. If no eligible warm worker is found, a fresh worker is spawned and its session is registered on the Model Context Protocol server.
 
 Registering spawned workers associates newly spawned conversation identifiers with their assigned sessions, copying role and unit footprint from pending spawns into active worker state records with busy status.
 
 Recording worker status transitions a worker matching the session identifier to failed status upon failure or idle status upon completion, updates last active timestamp, and records unit failure counts or clears failure counts based on completion or failure status.
+
+The antigravity coordinator ensures server availability on a configured port and batch size by checking active sentinel file presence and process liveness in the workspace root, removing stale sentinels, launching the cleanroom Model Context Protocol runner subprocess when inactive, and polling until the active sentinel file confirms process liveness.
+

@@ -1,13 +1,8 @@
 # Requirements specified in sandbox_impl.pyi
-from typing import List, Optional, Set, Tuple, Union
-from update_with_ai.parts.agent.lib import agent_config
-from update_with_ai.parts.agent.lib import agent_node_config
+from typing import Optional
 from update_with_ai.parts.agent.lib.agent_session import agent_session
 from . import sandbox
 from . import sandbox_file_editor
-from . import sandbox_file_reader
-from . import sandbox_run_control
-from . import tool_provider
 from support.lib.lifecycle import (
     LifecycleRegistry,
     Singleton,
@@ -27,52 +22,6 @@ class Sandbox(sandbox.Sandbox, Singleton):
         # Requirement: Querying file modifications delegates to the edit manager.
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
         return edit_mgr.has_modifications
-
-    def get_startup_tool_executions(self) -> List[sandbox.StartupToolExecution]:
-        executions: List[sandbox.StartupToolExecution] = []
-        a_cfg = get_singleton(agent_config.AgentConfig)
-        n_cfg = get_singleton(agent_node_config.NodeConfig)
-
-        # Requirement: When using step mode to communicate a guide progressively, startup tool executions include an initial advance tool execution with the name of the advance tool, empty wire parameter bindings, and the response produced by executing the advance tool.
-        if n_cfg.is_step_mode:
-            adv_tool = get_singleton(sandbox_run_control.AdvanceTool)
-            resp = adv_tool.execute_tool(
-                tool_provider.ActualParameterBindings(bindings=set())
-            )
-            executions.append(
-                sandbox.StartupToolExecution(
-                    tool_name=adv_tool.name,
-                    wire_parameter_bindings=tool_provider.WireParameterBindings(
-                        bindings=set()
-                    ),
-                    response=resp,
-                )
-            )
-
-        # Requirement: When performing startup reads to inspect declared files at session start and the session has at most one read-write file, startup tool executions include file read executions for all declared read-only files from node config ordered deterministically by file alias relative path, positioned after any advance tool execution.
-        rw_files = getattr(n_cfg, "read_write_files", set())
-        if a_cfg.is_startup_reads and len(rw_files) <= 1:
-            view_file_tool = get_singleton(sandbox_file_reader.ViewFileTool)
-            for ro in sorted(n_cfg.read_only_files, key=lambda x: x.relative_path):
-                # Requirement: Each file read execution uses the name of the view file tool, specifies wire parameter bindings mapping the path parameter of the view file tool to the read-only file alias relative path, and captures the response produced by executing the view file tool.
-                bindings = {(view_file_tool.path_parameter, ro)}
-                wire_bindings: Set[Tuple[str, Union[str, int, bool]]] = {
-                    (view_file_tool.path_parameter.name, ro.relative_path)
-                }
-                resp = view_file_tool.execute_tool(
-                    tool_provider.ActualParameterBindings(bindings=bindings)
-                )
-                executions.append(
-                    sandbox.StartupToolExecution(
-                        tool_name=view_file_tool.name,
-                        wire_parameter_bindings=tool_provider.WireParameterBindings(
-                            bindings=wire_bindings
-                        ),
-                        response=resp,
-                    )
-                )
-
-        return executions
 
     def materialize_startup_templates(self) -> None:
         # Requirement: Materializing startup templates delegates to the edit manager to write template content to missing read-write files without overwriting existing files.

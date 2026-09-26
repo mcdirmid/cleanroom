@@ -21,21 +21,21 @@ from update_with_ai.parts.mcp.lib.mcp_gate_impl import (
 from update_with_ai.parts.mcp.lib.mcp_session import ConversationId, RoleSessionManager
 from update_with_ai.parts.sandbox.lib.sandbox_file_editor import EditManager
 from update_with_ai.parts.sandbox.lib.sandbox_file_reader import ReadManager
-from update_with_ai.parts.sandbox.lib.tool_provider import Response
+from update_with_ai.parts.sandbox.lib.tool_provider import ToolResponse
 
 
 class MockEditManager:
     def __init__(self) -> None:
         self.write_allowlist: set[str] = set()
 
-    def can_write(self, path: str) -> Response:
+    def can_write(self, path: str) -> ToolResponse:
         if path in self.write_allowlist:
-            return Response(
+            return ToolResponse(
                 is_failed=False,
                 is_terminated=False,
                 content=f"Modification permitted for '{path}'.",
             )
-        return Response(
+        return ToolResponse(
             is_failed=True,
             is_terminated=False,
             content=f"File '{path}' is not writable.",
@@ -46,14 +46,14 @@ class MockReadManager:
     def __init__(self) -> None:
         self.read_allowlist: set[str] = set()
 
-    def can_read(self, path: str) -> Response:
+    def can_read(self, path: str) -> ToolResponse:
         if path in self.read_allowlist:
-            return Response(
+            return ToolResponse(
                 is_failed=False,
                 is_terminated=False,
                 content=f"Access permitted for '{path}'.",
             )
-        return Response(
+        return ToolResponse(
             is_failed=True,
             is_terminated=False,
             content=f"File '{path}' is not readable.",

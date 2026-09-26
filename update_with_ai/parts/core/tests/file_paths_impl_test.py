@@ -2,16 +2,18 @@
 
 import os
 import unittest
-from update_with_ai.parts.bazel.lib.file_paths import (
-    FilePaths,
+from update_with_ai.parts.core.lib.file_paths import (
+    FilePathManager,
+
     HostPath,
     AbsolutePath,
     WorkspacePath,
     DirectoryPath,
     WorkspaceRoot,
 )
-from update_with_ai.parts.bazel.lib.file_paths_impl import (
-    FilePaths as FilePathsImpl,
+from update_with_ai.parts.core.lib.file_paths_impl import (
+    FilePathManager as FilePathManagerImpl,
+
     __initialize__,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
@@ -24,7 +26,7 @@ class TestFilePathsImpl(unittest.TestCase):
 
     def test_create_host_path(self) -> None:
         with enter_phase("system", registry=self.registry) as scope:
-            service = scope.get_singleton(FilePaths)
+            service = scope.get_singleton(FilePathManager)
             hp = service.create_host_path("/any/path/file.txt")
             # Requirement: [FilePaths] Returns a host path encapsulating the path string.
             self.assertIsInstance(hp, HostPath)
@@ -32,7 +34,7 @@ class TestFilePathsImpl(unittest.TestCase):
 
     def test_create_absolute_path(self) -> None:
         with enter_phase("system", registry=self.registry) as scope:
-            service = scope.get_singleton(FilePaths)
+            service = scope.get_singleton(FilePathManager)
             ap = service.create_absolute_path("/var/log/app.log")
             # Requirement: [FilePaths] If the path string is absolute, returns an absolute path encapsulating the path string.
             self.assertIsInstance(ap, AbsolutePath)
@@ -45,7 +47,7 @@ class TestFilePathsImpl(unittest.TestCase):
 
     def test_create_workspace_path(self) -> None:
         with enter_phase("system", registry=self.registry) as scope:
-            service = scope.get_singleton(FilePaths)
+            service = scope.get_singleton(FilePathManager)
             wp = service.create_workspace_path("src/lib/app.py")
             # Requirement: [FilePaths] If the path string is relative, returns a workspace path encapsulating the path string.
             self.assertIsInstance(wp, WorkspacePath)
@@ -58,7 +60,7 @@ class TestFilePathsImpl(unittest.TestCase):
 
     def test_create_directory_path(self) -> None:
         with enter_phase("system", registry=self.registry) as scope:
-            service = scope.get_singleton(FilePaths)
+            service = scope.get_singleton(FilePathManager)
             dp = service.create_directory_path("/tmp/output")
             # Requirement: [FilePaths] If the path string is absolute, returns a directory path encapsulating the path string.
             self.assertIsInstance(dp, DirectoryPath)
@@ -71,7 +73,7 @@ class TestFilePathsImpl(unittest.TestCase):
 
     def test_get_workspace_root_with_env(self) -> None:
         with enter_phase("system", registry=self.registry) as scope:
-            service = scope.get_singleton(FilePaths)
+            service = scope.get_singleton(FilePathManager)
             old_env = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
             try:
                 os.environ["BUILD_WORKSPACE_DIRECTORY"] = "/custom/workspace"
@@ -88,7 +90,7 @@ class TestFilePathsImpl(unittest.TestCase):
 
     def test_get_workspace_root_fallback(self) -> None:
         with enter_phase("system", registry=self.registry) as scope:
-            service = scope.get_singleton(FilePaths)
+            service = scope.get_singleton(FilePathManager)
             old_env = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
             try:
                 os.environ.pop("BUILD_WORKSPACE_DIRECTORY", None)
@@ -102,7 +104,7 @@ class TestFilePathsImpl(unittest.TestCase):
 
     def test_resolve_directory_and_path(self) -> None:
         with enter_phase("system", registry=self.registry) as scope:
-            service = scope.get_singleton(FilePaths)
+            service = scope.get_singleton(FilePathManager)
             old_env = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
             try:
                 os.environ["BUILD_WORKSPACE_DIRECTORY"] = "/workspace/root"

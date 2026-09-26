@@ -1,6 +1,17 @@
 """Cleanroom Specification Framework: Structural markers for pure .pyi groundings."""
 
-from typing import Any, Callable, Literal, TypeVar
+from typing import Any, Callable, Literal, TypeVar, override
+
+__all__ = [
+    "LifecycleScope",
+    "LifecycleTier",
+    "singleton_type",
+    "poly_type",
+    "data_type",
+    "variant",
+    "operation",
+    "override",
+]
 
 T = TypeVar("T")
 LifecycleTier = Literal["system", "agent_session"]
@@ -39,9 +50,4 @@ def variant(cls: type[T]) -> type[T]:
 
 def operation(func: Callable[..., Any]) -> Callable[..., Any]:
     """Marks a member as an active operation on a service or data type."""
-    return func
-
-
-def override(func: Callable[..., Any]) -> Callable[..., Any]:
-    """Marks an operation or property as overriding an inherited contract."""
     return func

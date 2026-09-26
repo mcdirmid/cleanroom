@@ -19,7 +19,7 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
     tier = system
 
     def __init__(self) -> None:
-        self._manifests: Dict[dag_storage.Node, bazel_manifest_loader.Manifest] = {}
+        self._manifests: Dict[dag_storage.DagNode, bazel_manifest_loader.TargetManifest] = {}
 
     def _find_file(self, pkg_path: str, filename: str) -> Optional[str]:
         candidates = [
@@ -48,8 +48,8 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
         return None
 
     def get_manifest(
-        self, node: dag_storage.Node
-    ) -> Optional[bazel_manifest_loader.Manifest]:
+        self, node: dag_storage.DagNode
+    ) -> Optional[bazel_manifest_loader.TargetManifest]:
         # Check in-memory cache first
         if node in self._manifests:
             return self._manifests[node]
@@ -81,7 +81,7 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                         raw_str = f.read()
                         raw_data = json.loads(raw_str)
                         if "unit_data" in raw_data and "role_data" in raw_data:
-                            m = bazel_manifest_loader.Manifest(raw_str)
+                            m = bazel_manifest_loader.TargetManifest(raw_str)
                             self._manifests[node] = m
                             return m
                 except (OSError, UnicodeDecodeError, json.JSONDecodeError):  # pragma: no cover (defensive: unreadable manifest file)
@@ -98,7 +98,7 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
             if not unit_file:
                 unit_file = self._find_file(pkg_dir.path, f".{unit_name}_manifest.json")
 
-            role_node = dag_storage.Node(
+            role_node = dag_storage.DagNode(
                 unit_address=node.role_address, role_address=""
             )
             role_pkg = node_util.extract_directory(role_node).path
@@ -267,7 +267,7 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                         "silent_deps": silent_deps_list,
                         "star_deps": star_deps_list,
                     }
-                    m = bazel_manifest_loader.Manifest(json.dumps(synthesized))
+                    m = bazel_manifest_loader.TargetManifest(json.dumps(synthesized))
                     self._manifests[node] = m
                     return m
                 except (OSError, UnicodeDecodeError, json.JSONDecodeError):  # pragma: no cover (defensive: unreadable manifest file)
@@ -281,7 +281,7 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
         if path:
             try:
                 with open(path, "r", encoding="utf-8") as f:
-                    m = bazel_manifest_loader.Manifest(f.read())
+                    m = bazel_manifest_loader.TargetManifest(f.read())
                     self._manifests[node] = m
                     return m
             except (OSError, UnicodeDecodeError):
@@ -291,7 +291,7 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
 
     def load_manifest(
         self,
-        content: bazel_manifest_loader.Manifest,
+        content: bazel_manifest_loader.TargetManifest,
         storage: agent_storage.AgentStorage,
     ) -> Sequence[agent_storage.NodeDefinition]:
         # Requirement: A manifest loader parses JSON manifests using the filesystem into json manifest records.
@@ -311,7 +311,7 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                 data.get("role")
                 or node_util.normalize(role_data.get("label", "")).unit_address
             )
-            node = dag_storage.Node(unit_address=unit_addr, role_address=role_addr)
+            node = dag_storage.DagNode(unit_address=unit_addr, role_address=role_addr)
 
             unit_name = (
                 unit_data.get("name")
@@ -359,13 +359,13 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                 storage_any = cast(Any, storage)
                 if hasattr(storage_any, "_definitions"):
                     storage_any._definitions[node] = defn
-                deps: Set[dag_storage.Dependency] = set()
+                deps: Set[dag_storage.DagDependency] = set()
                 raw_unit_deps = unit_data.get("unit_deps", unit_data.get("deps", []))
                 for u_dep in raw_unit_deps:
                     u_norm = node_util.normalize(u_dep).unit_address
                     deps.add(
-                        dag_storage.Dependency(
-                            node=dag_storage.Node(
+                        dag_storage.DagDependency(
+                            node=dag_storage.DagNode(
                                 unit_address=u_norm, role_address=role_addr
                             ),
                             is_silent=False,
@@ -383,8 +383,8 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                 for r_dep in implied_role_deps:
                     dep_role = _resolve_role(r_dep)
                     deps.add(
-                        dag_storage.Dependency(
-                            node=dag_storage.Node(
+                        dag_storage.DagDependency(
+                            node=dag_storage.DagNode(
                                 unit_address=unit_addr, role_address=dep_role
                             ),
                             is_silent=False,
@@ -393,8 +393,8 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                 for r_dep in role_data.get("silent_role_deps", []):
                     dep_role = _resolve_role(r_dep)
                     deps.add(
-                        dag_storage.Dependency(
-                            node=dag_storage.Node(
+                        dag_storage.DagDependency(
+                            node=dag_storage.DagNode(
                                 unit_address=unit_addr, role_address=dep_role
                             ),
                             is_silent=True,
@@ -438,7 +438,7 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                 if hasattr(storage_any, "_source_files"):
                     storage_any._source_files[node] = os.path.normpath(src_file)
 
-            deps: Set[dag_storage.Dependency] = set()
+            deps: Set[dag_storage.DagDependency] = set()
 
             # 1. Intra-unit role dependencies (including implied from feedback_role_deps and star_role_deps)
             implied_role_deps: List[str] = list(role_data.get("role_deps", []))
@@ -453,8 +453,8 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
             for r_dep in implied_role_deps:
                 dep_role = _resolve_role(r_dep)
                 deps.add(
-                    dag_storage.Dependency(
-                        node=dag_storage.Node(
+                    dag_storage.DagDependency(
+                        node=dag_storage.DagNode(
                             unit_address=unit_addr, role_address=dep_role
                         ),
                         is_silent=False,
@@ -465,8 +465,8 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
             for r_dep in role_data.get("silent_role_deps", []):
                 dep_role = _resolve_role(r_dep)
                 deps.add(
-                    dag_storage.Dependency(
-                        node=dag_storage.Node(
+                    dag_storage.DagDependency(
+                        node=dag_storage.DagNode(
                             unit_address=unit_addr, role_address=dep_role
                         ),
                         is_silent=True,
@@ -483,8 +483,8 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                 for sr in star_roles:
                     sr_norm = _resolve_role(sr)
                     deps.add(
-                        dag_storage.Dependency(
-                            node=dag_storage.Node(
+                        dag_storage.DagDependency(
+                            node=dag_storage.DagNode(
                                 unit_address=u_norm, role_address=sr_norm
                             ),
                             is_silent=False,
@@ -495,8 +495,8 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                     if scr_norm.endswith("lib") and u_norm.endswith("_ext"):
                         continue
                     deps.add(
-                        dag_storage.Dependency(
-                            node=dag_storage.Node(
+                        dag_storage.DagDependency(
+                            node=dag_storage.DagNode(
                                 unit_address=u_norm, role_address=scr_norm
                             ),
                             is_silent=True,
@@ -514,7 +514,7 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
             # Requirement: A manifest loader normalizes node references into canonical nodes.
             node = node_util.normalize(label)
             # Cache the manifest for this node
-            self._manifests[node] = bazel_manifest_loader.Manifest(
+            self._manifests[node] = bazel_manifest_loader.TargetManifest(
                 json.dumps(t) if "targets" in data else str(content)
             )
 
@@ -538,10 +538,10 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
             deps = set()
             for dep_label in t.get("deps", []):
                 dep_node = node_util.normalize(dep_label)
-                deps.add(dag_storage.Dependency(node=dep_node, is_silent=False))
+                deps.add(dag_storage.DagDependency(node=dep_node, is_silent=False))
             for dep_label in t.get("silent_deps", []):
                 dep_node = node_util.normalize(dep_label)
-                deps.add(dag_storage.Dependency(node=dep_node, is_silent=True))
+                deps.add(dag_storage.DagDependency(node=dep_node, is_silent=True))
 
             if hasattr(storage_any, "_dependencies"):
                 storage_any._dependencies[node] = deps

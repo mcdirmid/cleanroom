@@ -11,16 +11,16 @@ class BuildResult:
 
 
 class Loop(Protocol):
-    def run_cleaning_pass(self, root: dag_storage.Node) -> BuildResult: ...
+    def run_cleaning_pass(self, root: dag_storage.DagNode) -> BuildResult: ...
 
     def mark_node_dirty(
-        self, target: dag_storage.Node, change: dag_storage.Change
+        self, target: dag_storage.DagNode, change: dag_storage.ChangeMessage
     ) -> None: ...
 
     def inject_node_feedback(
-        self, target: dag_storage.Node, feedback: dag_storage.Feedback
+        self, target: dag_storage.DagNode, feedback: dag_storage.FeedbackMessage
     ) -> None: ...
 
     def broadcast_node_change(
-        self, origin: dag_storage.Node, change: dag_storage.Change
+        self, origin: dag_storage.DagNode, change: dag_storage.ChangeMessage
     ) -> None: ...

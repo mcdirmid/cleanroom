@@ -10,30 +10,16 @@ Multi-step agent workflows require coordinated incremental execution to avoid re
 
 ## Types and Behavior
 
-A *node* identifies a discrete unit of work in the graph, having a *unit address* and a *role address*.
+A *unit* is an end-artifact that is being worked on, while a *role* describes a phase of work being done to an artifact.
 
-A *message* explains why a node requires cleaning, carrying text *content*. A message is either:
+A *dag node* identifies a discrete unit of work in the graph, having a unit address and a role address.
 
-- A *change* message, informing of modifications made to upstream dependencies.
+A system's *dag storage* stores node graph structure, status, and messages.
 
-- A *feedback* message, informing of defects detected by downstream dependents and addressed to a specific dependency node.
+A dag storage provides access to a node's *dag dependencies* that refer to its direct upstream nodes in the graph, identifying whether a dependency is *silent* to preclude change message propagation from that dependency.
 
-A node is *dirty*, meaning it requires cleaning, if, but not only if, it has messages.
+A dag storage can register a node as a dependent to all of its non-silent dependencies, can access dependents registered to a node, and can clear the dependents registered to a node.
 
-A *dag storage* is a system service that stores graph structure, node status, and message propagation across nodes.
+A *dag message* is text content explaining to the agent why a node requires cleaning, and is either a *change message* informing of changes made to upstream dependencies, or a *feedback message* blaming a specific dependency target node for defects detected by downstream dependents.
 
-A dag storage:
-
-- Stores node *dependencies* referring to upstream nodes in the graph, identifying whether a dependency is *silent* to preclude change propagation from that dependency.
-
-- Stores node *dependents* referring to downstream nodes depending on that node.
-
-- Can *register* a node as a dependent to all of its non-silent dependencies.
-
-- Can *clear* the dependents of a node.
-
-- Exposes whether a node is dirty.
-
-- Can *add* messages to a node.
-
-- Can *clear* messages from a node.
+A dag storage can add messages to, access messages for, and clear messages from a node. A dag storage exposes whether a node is dirty, meaning it requires cleaning. A node is considered dirty if it has messages.

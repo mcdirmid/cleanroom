@@ -15,6 +15,16 @@ pyright_test(
     ],
 )
 
+pyright_test(
+    name = "file_paths_impl_test",
+    srcs = ["file_paths_impl_test.py"],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/core/lib:file_paths",
+        "//update_with_ai/parts/core/lib:file_paths_impl",
+    ],
+)
+
 build_derived_test(
     name = "targets_derived_test",
 )

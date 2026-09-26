@@ -8,10 +8,16 @@ from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.agent.lib.agent_node_config import RoleConfig
 from update_with_ai.parts.agent.lib.agent_session import agent_session
-from update_with_ai.parts.bazel.lib.bazel_manifest_loader import BazelManifestLoader, Manifest
-from update_with_ai.parts.dag.lib.dag_storage import DagStorage, Dependency, Node
+from update_with_ai.parts.bazel.lib.bazel_manifest_loader import BazelManifestLoader, TargetManifest
+from update_with_ai.parts.dag.lib.dag_storage import DagStorage, DagDependency, DagNode
 from update_with_ai.parts.dag.lib.dag_subgraph import DagSubgraph
-from update_with_ai.parts.mcp.lib.mcp_session import Active, ConversationId, Idle
+from update_with_ai.parts.mcp.lib.mcp_session import (
+    ActiveSession,
+    ActiveSession,
+    ConversationId,
+    IdleSession,
+    IdleSession,
+)
 from update_with_ai.parts.mcp.lib.mcp_session_impl import (
     RoleSessionManager,
     __initialize__,
@@ -26,37 +32,37 @@ class MockAgentConfig:
 
 class MockDagSubgraph:
     def __init__(self) -> None:
-        self._root: Optional[Node] = None
-        self._nodes: set[Node] = set()
+        self._root: Optional[DagNode] = None
+        self._nodes: set[DagNode] = set()
 
     @property
-    def target(self) -> Optional[Node]:
+    def target(self) -> Optional[DagNode]:
         return self._root
 
-    def set_target(self, root: Node) -> None:
+    def set_target(self, root: DagNode) -> None:
         self._root = root
         self._nodes = {root}
 
 
 class MockManifestLoader:
     def __init__(self) -> None:
-        self.loaded: list[tuple[Manifest, Any]] = []
+        self.loaded: list[tuple[TargetManifest, Any]] = []
 
-    def get_manifest(self, node: Node) -> Optional[Manifest]:
+    def get_manifest(self, node: DagNode) -> Optional[TargetManifest]:
         if node.unit_address == "//pkg:cleaner":
-            return Manifest("cleaner_manifest")
+            return TargetManifest("cleaner_manifest")
         return None
 
-    def load_manifest(self, content: Manifest, storage: Any) -> Sequence[Any]:
+    def load_manifest(self, content: TargetManifest, storage: Any) -> Sequence[Any]:
         self.loaded.append((content, storage))
         return []
 
 
 class MockDagStorage:
     def __init__(self) -> None:
-        self.deps: dict[Node, list[Dependency]] = {}
+        self.deps: dict[DagNode, list[DagDependency]] = {}
 
-    def get_dependencies(self, node: Node) -> list[Dependency]:
+    def get_dependencies(self, node: DagNode) -> list[DagDependency]:
         return self.deps.get(node, [])
 
 
@@ -89,7 +95,7 @@ class McpSessionImplTest(unittest.TestCase):
             self.assertEqual(session.conversation_id, cid)
             self.assertEqual(session.role_address, "code_cleaner")
             self.assertEqual(session.unit_root, "//pkg:cleaner")
-            self.assertIsInstance(session.status, Active)
+            self.assertIsInstance(session.status, ActiveSession)
 
             # Requirement: [RoleSessionManager] Registering a session initiates an agent session phase scope, sets role on role config, configures unit root on dag subgraph, and records the session as active.
             with scope.activate():
@@ -109,11 +115,11 @@ class McpSessionImplTest(unittest.TestCase):
         """CUJ: Register a session when manifest loader and dag storage are present and verify manifest loading."""
         mock_manifest_loader = MockManifestLoader()
         mock_storage = MockDagStorage()
-        root_node = Node(unit_address="//pkg:cleaner", role_address="code_cleaner")
-        dep_node = Node(unit_address="//pkg:dep", role_address="code_cleaner")
+        root_node = DagNode(unit_address="//pkg:cleaner", role_address="code_cleaner")
+        dep_node = DagNode(unit_address="//pkg:dep", role_address="code_cleaner")
         mock_storage.deps[root_node] = [
-            Dependency(node=dep_node),
-            Dependency(node=dep_node),
+            DagDependency(node=dep_node),
+            DagDependency(node=dep_node),
         ]
         self.registry.register_instance(
             mock_manifest_loader, keys=[BazelManifestLoader], tier=system
@@ -156,17 +162,17 @@ class McpSessionImplTest(unittest.TestCase):
             cid = ConversationId("subagent-3")
             mgr.register_session(cid, "reviewer", "//pkg:reviewer")
 
-            mgr.set_session_status(cid, Idle())
+            mgr.set_session_status(cid, IdleSession())
             session = mgr.get_session(cid)
             self.assertIsNotNone(session)
             assert session is not None
-            self.assertIsInstance(session.status, Idle)
+            self.assertIsInstance(session.status, IdleSession)
 
             mgr.touch_session(cid)
             touched = mgr.get_session(cid)
             self.assertIsNotNone(touched)
             assert touched is not None
-            self.assertIsInstance(touched.status, Active)
+            self.assertIsInstance(touched.status, ActiveSession)
 
     def test_role_config_operations(self) -> None:
         """CUJ: RoleConfig operations within agent session scope."""
@@ -187,7 +193,7 @@ class McpSessionImplTest(unittest.TestCase):
                 self.assertEqual(role_cfg.version, 0)
 
                 # Requirement: [RoleConfig] The role config can set nodes to configure the nodes currently being cleaned in the agent session and increment the execution version.
-                test_node = Node(unit_address="//pkg:designer", role_address="designer")
+                test_node = DagNode(unit_address="//pkg:designer", role_address="designer")
                 role_cfg.set_nodes([test_node])
                 self.assertEqual(role_cfg.nodes, (test_node,))
                 self.assertEqual(role_cfg.version, 1)
@@ -202,17 +208,17 @@ class McpSessionImplTest(unittest.TestCase):
             # Register downstream QA first
             # Requirement: [RoleSessionManager] Registering a session initiates an agent session phase scope, sets role on role config, configures unit root on dag subgraph, and records the session as active.
             mgr.register_session(cid_qa, "qa", "//pkg:target")
-            self.assertEqual(self.mock_subgraph.target, Node(unit_address="//pkg:target", role_address="qa"))
+            self.assertEqual(self.mock_subgraph.target, DagNode(unit_address="//pkg:target", role_address="qa"))
 
             # Simulate subgraph containing both qa and test nodes
             self.mock_subgraph._nodes = {
-                Node(unit_address="//pkg:target", role_address="qa"),
-                Node(unit_address="//pkg:target", role_address="test"),
+                DagNode(unit_address="//pkg:target", role_address="qa"),
+                DagNode(unit_address="//pkg:target", role_address="test"),
             }
 
             # Register upstream test worker; its root is already in subgraph._nodes, so target shouldn't be overwritten
             mgr.register_session(cid_test, "test", "//pkg:target")
-            self.assertEqual(self.mock_subgraph.target, Node(unit_address="//pkg:target", role_address="qa"))
+            self.assertEqual(self.mock_subgraph.target, DagNode(unit_address="//pkg:target", role_address="qa"))
 
 
 if __name__ == "__main__":

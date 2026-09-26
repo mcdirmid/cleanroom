@@ -6,7 +6,7 @@ from update_with_ai.parts.bazel.lib.bazel_target_impl import (
     BazelTarget as BazelTargetImpl,
     __initialize__,
 )
-from update_with_ai.parts.dag.lib.dag_storage import Node
+from update_with_ai.parts.dag.lib.dag_storage import DagNode
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 
 
@@ -16,7 +16,7 @@ class TestBazelTargetImpl(unittest.TestCase):
         __initialize__(self.registry)
 
     def test_normalize(self) -> None:
-        """Tests CUJ for normalizing various Bazel target label formats into canonical Node.
+        """Tests CUJ for normalizing various Bazel target label formats into canonical DagNode.
 
         Checks postconditions & invariants:
         - Labels starting with // are preserved.
@@ -29,39 +29,39 @@ class TestBazelTargetImpl(unittest.TestCase):
             # Requirement: [BazelTarget] The bazel target normalizes an arbitrary Bazel target identifier string into a canonical node.
             self.assertEqual(
                 utils.normalize("//pkg/sub:target"),
-                Node(unit_address="//pkg/sub:target", role_address=""),
+                DagNode(unit_address="//pkg/sub:target", role_address=""),
             )
             self.assertEqual(
                 utils.normalize("@@//pkg:target"),
-                Node(unit_address="//pkg:target", role_address=""),
+                DagNode(unit_address="//pkg:target", role_address=""),
             )
             self.assertEqual(
                 utils.normalize("@//pkg:target"),
-                Node(unit_address="//pkg:target", role_address=""),
+                DagNode(unit_address="//pkg:target", role_address=""),
             )
             self.assertEqual(
                 utils.normalize("//pkg"),
-                Node(unit_address="//pkg:pkg", role_address=""),
+                DagNode(unit_address="//pkg:pkg", role_address=""),
             )
             self.assertEqual(
                 utils.normalize("//foo/bar"),
-                Node(unit_address="//foo/bar:bar", role_address=""),
+                DagNode(unit_address="//foo/bar:bar", role_address=""),
             )
             self.assertEqual(
                 utils.normalize("pkg:target"),
-                Node(unit_address="//pkg:target", role_address=""),
+                DagNode(unit_address="//pkg:target", role_address=""),
             )
             self.assertEqual(
                 utils.normalize("//pkg/sub:target#//roles:lib"),
-                Node(unit_address="//pkg/sub:target", role_address="//roles:lib"),
+                DagNode(unit_address="//pkg/sub:target", role_address="//roles:lib"),
             )
             self.assertEqual(
                 utils.normalize(""),
-                Node(unit_address="", role_address=""),
+                DagNode(unit_address="", role_address=""),
             )
 
     def test_extract_directory(self) -> None:
-        """Tests CUJ for extracting package directory from canonical Node.
+        """Tests CUJ for extracting package directory from canonical DagNode.
 
         Checks postconditions & invariants:
         - Extracts package directory relative to workspace.
@@ -79,13 +79,13 @@ class TestBazelTargetImpl(unittest.TestCase):
             # Requirement: [BazelTarget] The bazel target extracts a node directory from a node.
             self.assertEqual(
                 utils.extract_directory(
-                    Node(unit_address="//pkg/sub:target", role_address="")
+                    DagNode(unit_address="//pkg/sub:target", role_address="")
                 ),
                 _make_node_dir("pkg/sub"),
             )
             self.assertEqual(
                 utils.extract_directory(
-                    Node(unit_address="//:root_target", role_address="")
+                    DagNode(unit_address="//:root_target", role_address="")
                 ),
                 _make_node_dir(""),
             )

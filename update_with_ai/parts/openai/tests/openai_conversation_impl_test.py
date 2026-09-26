@@ -1,31 +1,42 @@
 """Unit tests for openai_conversation_impl aligned with grounding specifications."""
 
+import json
 import unittest
+from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.loop.lib.loop_conversation import (
     Conversation,
-    Message,
+    ConversationMessage,
     ModelRequest,
 )
 from update_with_ai.parts.openai.lib.openai_conversation_impl import (
     Conversation as ConversationImpl,
     __initialize__,
 )
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
 from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.sandbox.lib.tool_provider import (
-    Response,
+    ToolResponse,
     WireParameterBindings,
 )
+
+
+class MockAgentConfig:
+    def __init__(self, supersede_arg_keep: int = 20) -> None:
+        self.supersede_arg_keep = supersede_arg_keep
 
 
 class OpenAIConversationImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
+        self.agent_cfg = MockAgentConfig()
+        self.registry.register_instance(
+            self.agent_cfg, keys=[AgentConfig], tier=system
+        )
 
     def test_dataclasses(self) -> None:
-        """CUJ: Instantiating Message and ModelRequest records."""
-        msg = Message(
+        """CUJ: Instantiating ConversationMessage and ModelRequest records."""
+        msg = ConversationMessage(
             role="user",
             content="hello",
             reminder="Remember this",
@@ -39,7 +50,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
         self.assertEqual(msg.tool_arguments, '{"a": "b"}')
         self.assertFalse(msg.is_stub)
 
-        stub_msg = Message(
+        stub_msg = ConversationMessage(
             role="tool",
             content="[Superseded]",
             tool_call_id="c1",
@@ -65,9 +76,9 @@ class OpenAIConversationImplTest(unittest.TestCase):
             history = scope.get_singleton(Conversation)
             # Requirement: [Conversation] Initial messages can seed the conversation at session start.
             # Requirement: [Conversation] Appending messages and tool responses adds them in chronological order.
-            history.append_message(Message(role="system", content="System instruction"))
-            history.append_message(Message(role="user", content="User prompt"))
-            history.append_message(Message(role="assistant", content="Assistant reply"))
+            history.append_message(ConversationMessage(role="system", content="System instruction"))
+            history.append_message(ConversationMessage(role="user", content="User prompt"))
+            history.append_message(ConversationMessage(role="assistant", content="Assistant reply"))
 
             msgs = history.messages
             self.assertEqual(len(msgs), 3)
@@ -81,9 +92,9 @@ class OpenAIConversationImplTest(unittest.TestCase):
         """CUJ: Appending unprompted tool response adds synthetic assistant invocation correlating with tool_call_id and sorted arguments."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             history = scope.get_singleton(Conversation)
-            history.append_message(Message(role="user", content="Execute tool"))
+            history.append_message(ConversationMessage(role="user", content="Execute tool"))
 
-            resp1 = Response(
+            resp1 = ToolResponse(
                 is_failed=False, is_terminated=False, content="tool output 1"
             )
             # Requirement: Each unprompted tool response presented at session start is preceded in the conversation by a synthetic assistant tool invocation message formatted according to OpenAI tool calling conventions, correlating with the response tool call identifier and ordering serialized argument parameters deterministically by parameter name, presenting the tool execution as if initiated by the model.
@@ -98,7 +109,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
             )
 
             # A second unprompted tool response with the SAME tool name must also get its own synthetic assistant message paired by tool_call_id
-            resp2 = Response(
+            resp2 = ToolResponse(
                 is_failed=False, is_terminated=False, content="tool output 2"
             )
             bindings2 = WireParameterBindings(bindings={("path", "second.py")})
@@ -140,7 +151,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
             history = scope.get_singleton(Conversation)
 
             # 1. Responses without suppression key are never superseded
-            ro_resp1 = Response(
+            ro_resp1 = ToolResponse(
                 is_failed=False,
                 is_terminated=False,
                 content="spec v1",
@@ -150,7 +161,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
                 ro_resp1, tool_name="view_file", tool_call_id="call_ro1"
             )
 
-            ro_resp2 = Response(
+            ro_resp2 = ToolResponse(
                 is_failed=False,
                 is_terminated=False,
                 content="spec v2",
@@ -161,7 +172,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
             )
 
             # 2. Distinct suppression keys do not supersede each other
-            rw_other = Response(
+            rw_other = ToolResponse(
                 is_failed=False,
                 is_terminated=False,
                 content="other code",
@@ -171,8 +182,8 @@ class OpenAIConversationImplTest(unittest.TestCase):
                 rw_other, tool_name="view_file", tool_call_id="call_other"
             )
 
-            # 3. Response with matching suppression key supersedes earlier response with that key
-            rw_widget1 = Response(
+            # 3. ToolResponse with matching suppression key supersedes earlier response with that key
+            rw_widget1 = ToolResponse(
                 is_failed=False,
                 is_terminated=False,
                 content="widget v1",
@@ -184,7 +195,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
 
             # Requirement: A tool response's suppression key identifies the latest preceding response with the same key in the conversation for replacement with a stub, while responses with unmatched keys are preserved intact.
             # Requirement: [Conversation] Stubs previous responses and correlating tool arguments identified by a suppression key.
-            rw_widget2 = Response(
+            rw_widget2 = ToolResponse(
                 is_failed=False,
                 is_terminated=False,
                 content="widget v2",
@@ -195,14 +206,14 @@ class OpenAIConversationImplTest(unittest.TestCase):
             )
 
             # 4. Responses sharing suppression key 'advance', retaining and inheriting reminder
-            adv1 = Response(
+            adv1 = ToolResponse(
                 is_failed=True,
                 is_terminated=False,
                 content="advance step 1 failed",
                 reminder="Only provide change summary when completing.",
                 suppression_key="advance",
             )
-            adv2 = Response(
+            adv2 = ToolResponse(
                 is_failed=False,
                 is_terminated=False,
                 content="advance step 2",
@@ -218,15 +229,20 @@ class OpenAIConversationImplTest(unittest.TestCase):
 
             # 5. replace_file_content calls across any files supersede previous replace_file_content call pairs
             history.append_message(
-                Message(
+                ConversationMessage(
                     role="assistant",
                     content="",
                     tool_call_id="call_edit1",
                     tool_name="replace_file_content",
-                    tool_arguments='{"path": "file_a.py", "target_content": "old_a", "replacement_content": "new_a"}',
+                    tool_arguments=json.dumps({
+                        "path": "file_a.py",
+                        "count": 42,
+                        "target_content": "old_a",
+                        "replacement_content": "prefix_01234567890123456789",
+                    }),
                 )
             )
-            edit1_resp = Response(
+            edit1_resp = ToolResponse(
                 is_failed=False,
                 is_terminated=False,
                 content="diff a",
@@ -245,7 +261,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
 
             # Now Edit 2 on a completely different file (file_b.py) which fails
             history.append_message(
-                Message(
+                ConversationMessage(
                     role="assistant",
                     content="",
                     tool_call_id="call_edit2",
@@ -253,7 +269,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
                     tool_arguments='{"path": "file_b.py", "target_content": "old_b", "replacement_content": "new_b"}',
                 )
             )
-            edit2_resp = Response(
+            edit2_resp = ToolResponse(
                 is_failed=True,
                 is_terminated=False,
                 content="Error: target_content not found in file_b.py.",
@@ -281,7 +297,7 @@ class OpenAIConversationImplTest(unittest.TestCase):
             self.assertFalse(tool_msgs[4].is_stub)
             self.assertEqual(tool_msgs[4].content, "widget v2")
 
-            # Requirement: When a response is replaced with a stub, tool arguments in the correlating assistant invocation message are also replaced with an empty JSON object stub.
+            # Requirement: When a response is replaced with a stub, tool arguments in the correlating assistant invocation message retain their parameter keys, preserving non-string values and eliding string values longer than the supersede arg keep limit configured by the agent config to their trailing characters prefixed with a stub marker and ellipsis.
             w1_asst = next(
                 m for m in history.messages if m.tool_call_id == "call_w1" and m.role == "assistant"
             )
@@ -305,12 +321,20 @@ class OpenAIConversationImplTest(unittest.TestCase):
                 tool_msgs[6].reminder, "Only provide change summary when completing."
             )
 
-            # Verify Edit 1 was superseded across different files: response is stubbed AND assistant arguments are stubbed
+            # Verify Edit 1 was superseded across different files: response is stubbed AND assistant arguments are elided
+            # Requirement: When a response is replaced with a stub, tool arguments in the correlating assistant invocation message retain their parameter keys, preserving non-string values and eliding string values longer than the supersede arg keep limit configured by the agent config to their trailing characters prefixed with a stub marker and ellipsis.
             edit1_asst_after = next(
                 m for m in history.messages if m.tool_call_id == "call_edit1" and m.role == "assistant"
             )
             self.assertTrue(edit1_asst_after.is_stub)
-            self.assertEqual(edit1_asst_after.tool_arguments, "{}")
+            parsed_args = json.loads(edit1_asst_after.tool_arguments or "{}")
+            self.assertEqual(parsed_args["path"], "file_a.py")
+            self.assertEqual(parsed_args["count"], 42)
+            self.assertEqual(parsed_args["target_content"], "old_a")
+            self.assertEqual(
+                parsed_args["replacement_content"],
+                "[STUB]...01234567890123456789",
+            )
             self.assertTrue(tool_msgs[7].is_stub)
             self.assertEqual(tool_msgs[7].content, "[Superseded]")
 
@@ -328,18 +352,18 @@ class OpenAIConversationImplTest(unittest.TestCase):
         with enter_phase(agent_session, registry=self.registry) as scope:
             history = scope.get_singleton(Conversation)
             history.append_message(
-                Message(
+                ConversationMessage(
                     role="system",
                     content="System instruction",
                 )
             )
             history.append_message(
-                Message(
+                ConversationMessage(
                     role="user",
                     content="Hello world",
                 )
             )
-            resp = Response(
+            resp = ToolResponse(
                 is_failed=False,
                 is_terminated=False,
                 content="line 1\nline 2",
@@ -366,8 +390,8 @@ class OpenAIConversationImplTest(unittest.TestCase):
             self.assertIn("line 1\nline 2", tool_msg.content)
             self.assertIn("Remember to write tests.", tool_msg.content)
 
-            # Response with empty content and non-empty reminder
-            empty_resp = Response(
+            # ToolResponse with empty content and non-empty reminder
+            empty_resp = ToolResponse(
                 is_failed=False,
                 is_terminated=False,
                 content="",
@@ -379,6 +403,94 @@ class OpenAIConversationImplTest(unittest.TestCase):
             req2 = history.get_model_request()
             # Requirement: Tool execution response notes, content, and reminders from the tool provider are included in visible tool message content, formatting active reminders on messages and superseded stubs to remind the agent in the assembled model request.
             self.assertIn("Remember to finish.", req2.messages[-1].content)
+
+    def test_supersede_arg_keep_edge_cases(self) -> None:
+        """CUJ: Exercising boundary cases for supersede_arg_keep: zero limit, exact length, and non-strings."""
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            history = scope.get_singleton(Conversation)
+            # Test with supersede_arg_keep = 0
+            self.agent_cfg.supersede_arg_keep = 0
+            history.append_message(
+                ConversationMessage(
+                    role="assistant",
+                    content="",
+                    tool_call_id="call_zero_1",
+                    tool_name="tool_zero",
+                    tool_arguments=json.dumps({
+                        "name": "short",
+                        "active": True,
+                        "count": 100,
+                    }),
+                )
+            )
+            resp_zero1 = ToolResponse(
+                is_failed=False,
+                is_terminated=False,
+                content="result 1",
+                suppression_key="key_zero",
+            )
+            history.append_tool_response(
+                resp_zero1, tool_name="tool_zero", tool_call_id="call_zero_1"
+            )
+            resp_zero2 = ToolResponse(
+                is_failed=False,
+                is_terminated=False,
+                content="result 2",
+                suppression_key="key_zero",
+            )
+            # Requirement: When a response is replaced with a stub, tool arguments in the correlating assistant invocation message retain their parameter keys, preserving non-string values and eliding string values longer than the supersede arg keep limit configured by the agent config to their trailing characters prefixed with a stub marker and ellipsis.
+            history.append_tool_response(
+                resp_zero2, tool_name="tool_zero", tool_call_id="call_zero_2"
+            )
+
+            asst_zero_stub = next(
+                m for m in history.messages if m.tool_call_id == "call_zero_1" and m.role == "assistant"
+            )
+            parsed_zero = json.loads(asst_zero_stub.tool_arguments or "{}")
+            self.assertEqual(parsed_zero["name"], "[STUB]")
+            self.assertEqual(parsed_zero["active"], True)
+            self.assertEqual(parsed_zero["count"], 100)
+
+            # Test with supersede_arg_keep = 5: exact match (len 5) vs longer (len 6)
+            self.agent_cfg.supersede_arg_keep = 5
+            history.append_message(
+                ConversationMessage(
+                    role="assistant",
+                    content="",
+                    tool_call_id="call_exact_1",
+                    tool_name="tool_exact",
+                    tool_arguments=json.dumps({
+                        "exact": "12345",
+                        "longer": "123456",
+                    }),
+                )
+            )
+            resp_exact1 = ToolResponse(
+                is_failed=False,
+                is_terminated=False,
+                content="exact 1",
+                suppression_key="key_exact",
+            )
+            history.append_tool_response(
+                resp_exact1, tool_name="tool_exact", tool_call_id="call_exact_1"
+            )
+            resp_exact2 = ToolResponse(
+                is_failed=False,
+                is_terminated=False,
+                content="exact 2",
+                suppression_key="key_exact",
+            )
+            # Requirement: When a response is replaced with a stub, tool arguments in the correlating assistant invocation message retain their parameter keys, preserving non-string values and eliding string values longer than the supersede arg keep limit configured by the agent config to their trailing characters prefixed with a stub marker and ellipsis.
+            history.append_tool_response(
+                resp_exact2, tool_name="tool_exact", tool_call_id="call_exact_2"
+            )
+
+            asst_exact_stub = next(
+                m for m in history.messages if m.tool_call_id == "call_exact_1" and m.role == "assistant"
+            )
+            parsed_exact = json.loads(asst_exact_stub.tool_arguments or "{}")
+            self.assertEqual(parsed_exact["exact"], "12345")
+            self.assertEqual(parsed_exact["longer"], "[STUB]...23456")
 
 
 if __name__ == "__main__":

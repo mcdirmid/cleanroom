@@ -7,7 +7,7 @@ from update_with_ai.parts.sandbox.lib import tool_provider
 
 
 @dataclass(frozen=True)
-class Message:
+class ConversationMessage:
     role: str
     content: str
     tool_call_id: Optional[str] = None
@@ -19,18 +19,18 @@ class Message:
 
 @dataclass(frozen=True)
 class ModelRequest:
-    messages: List[Message]
+    messages: List[ConversationMessage]
 
 
 class Conversation(Protocol):
     @property
-    def messages(self) -> List[Message]: ...
+    def messages(self) -> List[ConversationMessage]: ...
 
-    def append_message(self, message: Message) -> None: ...
+    def append_message(self, message: ConversationMessage) -> None: ...
 
     def append_tool_response(
         self,
-        response: tool_provider.Response,
+        response: tool_provider.ToolResponse,
         tool_name: str,
         tool_call_id: str,
         wire_parameter_bindings: Optional[tool_provider.WireParameterBindings] = None,

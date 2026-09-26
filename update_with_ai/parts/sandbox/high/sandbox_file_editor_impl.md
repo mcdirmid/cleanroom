@@ -7,27 +7,27 @@ implements: sandbox_file_editor
 
 The sandbox_file_editor_impl implementation component realizes targeted in-place text replacement for writable workspace files.
 
-Unchecked modifications to source code can introduce partial edits, exceed LLM window constraints, or write to invalid file coordinates. The sandbox_file_editor_impl implementation component provides guarded in-memory and disk operations that validate string uniqueness, check line boundary conditions, and perform atomic template initialization for newly configured tasks.
+Unchecked writes to source code can introduce partial edits, exceed LLM window constraints, or write to invalid file coordinates. The sandbox_file_editor_impl implementation component provides guarded in-memory and disk operations that validate string uniqueness, check line boundary conditions, and perform atomic template initialization for newly configured tasks.
 
 **Out of scope:** The sandbox_file_editor_impl implementation component does not enforce git version control, execute code formatters, or resolve task dependencies; these are handled by other components.
 
 ## Types and Behavior
 
-The edit manager provides the replace file content tool for the agent session when mcp mode is inactive, installs no editing tools when mcp mode is active, and provides a can write operation validating modification access for a read-write file. Materializing templates retrieves configured templates from the node config, formats initial template content using the template formatter with session template parameters, checks whether target files exist in the filesystem at the host path formed from the alias manager workspace root and the read-write file workspace path, writes formatted template content for missing files while preserving existing files, and records initial content baselines for active read-write files.
+The edit manager provides the replace file content tool for the agent session when mcp mode is inactive, installs no editing tools when mcp mode is active, and provides a can write operation validating write access for a read-write file. Materializing templates retrieves configured templates from the node config, formats initial template content using the template formatter with session template parameters, checks whether target files exist in the filesystem at the host path formed from the alias manager workspace root and the read-write file workspace path, writes formatted template content for missing files while preserving existing files, and records initial content baselines for active read-write files.
 
-The edit manager exposes whether workspace file modifications occurred during the session by comparing current workspace file content against initial content before editing, tracks a file update revision that increments whenever workspace files are updated, computes the file hash by reading file content from the filesystem at its resolved host path and returning an MD5 hexadecimal digest of the content, and exposes read-write files locked against modification, supporting locking and unlocking individual read-write files. The edit manager tracks the last read or edited file alias across the session, recording file reads from the file reader and file edits from editing tools.
+The edit manager exposes whether workspace file writes occurred during the session by comparing current workspace file content against initial content before editing, tracks a file update revision that increments whenever workspace files are updated, computes the file hash by reading file content from the filesystem at its resolved host path and returning an MD5 hexadecimal digest of the content, and exposes read-write files locked against write, supporting locking and unlocking individual read-write files. The edit manager tracks the last read or edited file alias across the session, recording file reads from the file reader and file edits from editing tools.
 
-Editing tools modify read-write files in the workspace.
+Editing tools write to read-write files in the workspace.
 
 Editing tool execution fails if:
 
-- The file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+- The file alias is not a read-write file, reminding the agent that only declared read-write files can be written.
 
-- The file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
+- The file alias is locked against write, reminding the agent that files that have been the target of a submit, fail, or blame cannot be written.
 
 - The edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
 
-On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file modifications occurred, and reminds the agent to call the check file tool to verify syntax and type correctness before making further modifications. When configured to produce delta output, successful editing tool execution includes a diff delta representation in the response content. Editing tool responses share a constant suppression key replace_file_content.
+On successful execution, an editing tool writes the updated file content to the filesystem, records that workspace file writes occurred, and reminds the agent to call the check file tool to verify syntax and type correctness before making further writes. When configured to produce delta output, successful editing tool execution includes a diff delta representation in the response content. Editing tool responses share a constant suppression key replace_file_content.
 
 The replace file content tool is named `replace_file_content`, accepting in sequence a file alias *path* parameter, an integer *start_line* parameter defining the starting line of the search window, an integer *end_line* parameter defining the ending line of the search window, a boolean *allow_multiple* parameter, a text *target_content* parameter specifying the exact text to replace within the search window, and a text *replacement_content* parameter.
 
@@ -57,12 +57,12 @@ Tool execution applies text replacements to designated read-write file content. 
 
 - Provides failure feedback indicating the line numbers where the target content was located, when target content is not found within the designated line range but exists elsewhere in the file.
 
-- Writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred on success.
+- Writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file writes occurred on success.
 
-The edit manager executes can write to validate file modification access. Executing can write:
+The edit manager executes can write to validate file write access. Executing can write:
 
-- Fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
+- Fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be written.
 
-- Fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
+- Fails if the file alias is locked against write, reminding the agent that files that have been the target of a submit, fail, or blame cannot be written.
 
-- Records the file edit in the edit manager and produces a successful response indicating that modification is permitted, when an unlocked read-write file is supplied.
+- Records the file edit in the edit manager and produces a successful response indicating that write access is permitted, when an unlocked read-write file is supplied.

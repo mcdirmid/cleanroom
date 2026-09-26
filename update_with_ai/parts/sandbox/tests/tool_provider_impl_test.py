@@ -9,17 +9,17 @@ from update_with_ai.parts.sandbox.lib.tool_provider import (
     INTEGER_PARAMETER_TYPE,
     STRING_PARAMETER_TYPE,
     ActualParameterBindings,
-    Boolean,
-    Dictionary,
+    WireBoolean,
+    WireDictionary,
     DictionaryParameterType,
-    Float,
+    WireFloat,
     IdentityParameterType,
-    Integer,
-    List,
+    WireInteger,
+    WireList,
     ListParameterType,
-    Parameter,
-    Response,
-    String,
+    ToolParameter,
+    ToolResponse,
+    WireString,
     Tool,
     ToolManager,
     WireParameterBindings,
@@ -31,7 +31,7 @@ from update_with_ai.parts.sandbox.lib.tool_provider_impl import (
 
 
 class DummyTool:
-    def __init__(self, name: str, parameters: Set[Parameter]) -> None:
+    def __init__(self, name: str, parameters: Set[ToolParameter]) -> None:
         self._name = name
         self._parameters = parameters
         self.last_bindings: ActualParameterBindings | None = None
@@ -45,14 +45,14 @@ class DummyTool:
         return f"Dummy tool {self._name}"
 
     @property
-    def parameters(self) -> Set[Parameter]:
+    def parameters(self) -> Set[ToolParameter]:
         return self._parameters
 
     def execute_tool(
         self, actual_parameter_bindings: ActualParameterBindings
-    ) -> Response:
+    ) -> ToolResponse:
         self.last_bindings = actual_parameter_bindings
-        return Response(
+        return ToolResponse(
             is_failed=False,
             is_terminated=False,
             content="dummy executed",
@@ -109,7 +109,7 @@ class ToolProviderImplTest(unittest.TestCase):
         with enter_phase("agent_session", registry=self.registry) as scope:
             manager = scope.get_singleton(ToolManager)
 
-            param = Parameter(
+            param = ToolParameter(
                 name="arg1",
                 description="an argument",
                 parameter_type=STRING_PARAMETER_TYPE,
@@ -160,7 +160,7 @@ class ToolProviderImplTest(unittest.TestCase):
         """CUJ: Executing a tool without supplying a required parameter fails."""
         with enter_phase("agent_session", registry=self.registry) as scope:
             manager = scope.get_singleton(ToolManager)
-            param = Parameter(
+            param = ToolParameter(
                 name="req_arg",
                 description="required",
                 parameter_type=STRING_PARAMETER_TYPE,
@@ -180,7 +180,7 @@ class ToolProviderImplTest(unittest.TestCase):
         """CUJ: Executing a tool omitting a required parameter with constant missing_message evaluates function."""
         with enter_phase("agent_session", registry=self.registry) as scope:
             manager = scope.get_singleton(ToolManager)
-            param = Parameter(
+            param = ToolParameter(
                 name="req_arg",
                 description="required",
                 parameter_type=STRING_PARAMETER_TYPE,
@@ -202,14 +202,14 @@ class ToolProviderImplTest(unittest.TestCase):
         """CUJ: Executing a tool omitting a required parameter evaluates missing_message with supplied parameter names."""
         with enter_phase("agent_session", registry=self.registry) as scope:
             manager = scope.get_singleton(ToolManager)
-            req_param = Parameter(
+            req_param = ToolParameter(
                 name="req_arg",
                 description="required",
                 parameter_type=STRING_PARAMETER_TYPE,
                 is_required=True,
                 missing_message=lambda s: "flag present" if "flag" in s else "flag omitted",
             )
-            opt_param = Parameter(
+            opt_param = ToolParameter(
                 name="flag",
                 description="optional flag",
                 parameter_type=STRING_PARAMETER_TYPE,
@@ -238,7 +238,7 @@ class ToolProviderImplTest(unittest.TestCase):
         """CUJ: Executing a tool omitting an optional parameter uses its default value."""
         with enter_phase("agent_session", registry=self.registry) as scope:
             manager = scope.get_singleton(ToolManager)
-            param = Parameter(
+            param = ToolParameter(
                 name="batch_size",
                 description="batch size",
                 parameter_type=INTEGER_PARAMETER_TYPE,
@@ -261,7 +261,7 @@ class ToolProviderImplTest(unittest.TestCase):
         """CUJ: Executing a tool directly with argument dictionary."""
         with enter_phase("agent_session", registry=self.registry) as scope:
             manager = scope.get_singleton(ToolManager)
-            param = Parameter(
+            param = ToolParameter(
                 name="target",
                 description="target",
                 parameter_type=STRING_PARAMETER_TYPE,

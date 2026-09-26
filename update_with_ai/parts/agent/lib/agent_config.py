@@ -24,3 +24,7 @@ class AgentConfig(Protocol):
 
     @property
     def is_mcp_mode(self) -> bool: ...
+
+    @property
+    def supersede_arg_keep(self) -> int: ...
+

@@ -1,23 +1,19 @@
 # sandbox_file_reader interface component
 
-imports: tool_provider, agent_file_alias
+imports: agent_session, agent_file_alias, tool_provider, file_paths
 
 ## Purpose
 
-The sandbox_file_reader interface component provides safe workspace file inspection tools while preventing premature instruction exposure and unanchored edits.
+The sandbox_file_reader interface component provides safe workspace file read tools while preventing premature instruction exposure and unanchored edits.
 
-Autonomous agents require structured access to workspace files, but naive whole-file reads risk flooding prompt context and enabling unanchored edits across writable targets. Furthermore, when workflows enforce guided step-by-step progression, unconstrained file access risks bypassing phase pacing. The sandbox_file_reader interface component establishes a governed inspection layer that balances external context injection with safety guardrails, ensuring file inspection remains scoped to the agent's immediate operational phase.
+Autonomous agents require structured access to workspace files, but naive whole-file reads risk flooding prompt context and enabling unanchored edits across writable targets. Furthermore, when workflows enforce guided step-by-step progression, unconstrained file access risks bypassing phase pacing. The sandbox_file_reader interface component establishes a governed read layer that balances external context injection with safety guardrails, ensuring file read remains scoped to the agent's immediate operational phase.
 
 **Out of scope:** The sandbox_file_reader interface component does not inject session startup context, deliver progressive workflow instructions, or advance workflow steps; these are handled by other components.
 
 ## Types and Behavior
 
-The *read manager* is an agent session service that manages inspection of workspace files.
+An agent session's *read manager* regulates file reading. The read manager exposes the session read-only files and read-write files. To validate external file access, the read manager can also *check read access* for a workspace path, confirming access for declared files while failing with guidance listing readable file aliases when access is disallowed.
 
-The read manager provides:
+An agent session's *view file tool* reads the content of a file specified by its file alias path parameter.
 
-- A *view file tool* that inspects file content, accepting a file alias *path parameter*.
-
-- A *search tool* that searches pattern matches across the session's read-only and read-write files, accepting a regex pattern *pattern parameter*.
-
-The read manager exposes the session *read-only files* and *read-write files*. When step mode is active, the read manager is configured with an unbound *guide file*. The read manager provides a *can read* operation validating inspection access for a file alias *path*.
+An agent session's *search tool* searches pattern matches across the session's read-only and read-write files according to its regex pattern parameter.

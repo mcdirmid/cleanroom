@@ -15,7 +15,7 @@ from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.sandbox.lib.tool_provider import (
     STRING_PARAMETER_TYPE,
     ActualParameterBindings,
-    Parameter,
+    ToolParameter,
 )
 
 
@@ -23,7 +23,7 @@ class LoopGuardImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
-        self.param = Parameter(
+        self.param = ToolParameter(
             name="file_name",
             description="file name",
             parameter_converter=STRING_PARAMETER_TYPE,
@@ -99,25 +99,25 @@ class LoopGuardImplTest(unittest.TestCase):
         """CUJ: Consecutive edits to the same file and line range with different content trigger loop guard."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             guard = scope.get_singleton(LoopGuard)
-            path_param = Parameter(
+            path_param = ToolParameter(
                 name="path",
                 description="path",
                 parameter_converter=STRING_PARAMETER_TYPE,
                 is_required=True,
             )
-            start_param = Parameter(
+            start_param = ToolParameter(
                 name="start_line",
                 description="start",
                 parameter_converter=STRING_PARAMETER_TYPE,
                 is_required=True,
             )
-            end_param = Parameter(
+            end_param = ToolParameter(
                 name="end_line",
                 description="end",
                 parameter_converter=STRING_PARAMETER_TYPE,
                 is_required=True,
             )
-            content_param = Parameter(
+            content_param = ToolParameter(
                 name="target_content",
                 description="content",
                 parameter_converter=STRING_PARAMETER_TYPE,

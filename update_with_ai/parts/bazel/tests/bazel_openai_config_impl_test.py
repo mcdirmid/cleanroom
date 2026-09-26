@@ -11,7 +11,7 @@ from update_with_ai.parts.dag.lib.dag_config import DagConfig
 from update_with_ai.parts.openai.lib.openai_config import OpenaiConfig
 from update_with_ai.parts.bazel.lib.bazel_openai_config_impl import (
     OpenaiConfig as OpenaiConfigImpl,
-    ModelConfig as ModelConfigImpl,
+    OpenaiConfig as ModelConfigImpl,
     __initialize__,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
@@ -89,6 +89,9 @@ class BazelOpenaiConfigImplTest(unittest.TestCase):
             # Requirement: [AgentConfig] The agent config provides whether the agent should operate in mcp mode.
             self.assertFalse(agent_cfg.is_mcp_mode)
             self.assertFalse(cfg.is_mcp_mode)
+            # Requirement: [AgentConfig] The agent config provides the character retention limit bounding preserved string argument tails when tool responses are superseded.
+            self.assertEqual(agent_cfg.supersede_arg_keep, 20)
+            self.assertEqual(cfg.supersede_arg_keep, 20)
             # Requirement: [OpenaiConfig] The openai config provides a temperature specifying the sampling temperature for model requests.
             self.assertEqual(openai_cfg.temperature, 0.0)
             self.assertEqual(cfg.temperature, 0.0)
@@ -123,6 +126,7 @@ class BazelOpenaiConfigImplTest(unittest.TestCase):
         os.environ["INJECT_FOLLOWUPS"] = "false"
         os.environ["EDIT_DELTA_OUTPUT"] = "true"
         os.environ["MCP_MODE"] = "true"
+        os.environ["SUPERSEDE_ARG_KEEP"] = "35"
         os.environ["NODE_VISIT_LIMIT"] = "42"
         os.environ["BATCH_SIZE"] = "3"
         sys.argv = ["script.py"]
@@ -156,6 +160,8 @@ class BazelOpenaiConfigImplTest(unittest.TestCase):
             self.assertTrue(cfg.edit_delta_output)
             # Requirement: [AgentConfig] The agent config provides whether the agent should operate in mcp mode.
             self.assertTrue(cfg.is_mcp_mode)
+            # Requirement: [AgentConfig] The agent config provides the character retention limit bounding preserved string argument tails when tool responses are superseded.
+            self.assertEqual(cfg.supersede_arg_keep, 35)
             # Requirement: [DagConfig] The dag config provides the node visit limit bounding node visits during graph cleaning.
             self.assertEqual(cfg.node_visit_limit, 42)
             # Requirement: [DagConfig] The dag config provides the batch size bounding dirty nodes processed together in an agent session.
@@ -180,6 +186,7 @@ class BazelOpenaiConfigImplTest(unittest.TestCase):
                 "inject_followups": False,
                 "edit_delta_output": True,
                 "mcp_mode": True,
+                "supersede_arg_keep": 40,
                 "node_visit_limit": 450,
                 "batch_size": 4,
             }
@@ -220,6 +227,8 @@ class BazelOpenaiConfigImplTest(unittest.TestCase):
                 self.assertTrue(cfg.edit_delta_output)
                 # Requirement: [AgentConfig] The agent config provides whether the agent should operate in mcp mode.
                 self.assertTrue(cfg.is_mcp_mode)
+                # Requirement: [AgentConfig] The agent config provides the character retention limit bounding preserved string argument tails when tool responses are superseded.
+                self.assertEqual(cfg.supersede_arg_keep, 40)
                 # Requirement: [DagConfig] The dag config provides the node visit limit bounding node visits during graph cleaning.
                 self.assertEqual(cfg.node_visit_limit, 450)
                 # Requirement: [DagConfig] The dag config provides the batch size bounding dirty nodes processed together in an agent session.

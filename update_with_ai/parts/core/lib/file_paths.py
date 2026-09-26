@@ -33,7 +33,7 @@ class WorkspaceRoot(DirectoryPath):
     pass
 
 
-class FilePaths(ABC):
+class FilePathManager(ABC):
     @abstractmethod
     def create_host_path(self, path: str) -> HostPath:
         pass
@@ -62,6 +62,7 @@ class FilePaths(ABC):
 
     @abstractmethod
     def resolve_path(
-        self, root: WorkspaceRoot, relative: WorkspacePath
+        self, root: AbsolutePath, relative: WorkspacePath
     ) -> AbsolutePath:
         pass
+

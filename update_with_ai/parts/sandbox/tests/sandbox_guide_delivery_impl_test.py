@@ -10,8 +10,8 @@ from update_with_ai.parts.agent.lib.agent_file_alias import (
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.agent.lib.agent_node_config import (
-    Guide,
     NodeConfig,
+    NodeGuide,
     StepSection,
 )
 from update_with_ai.parts.sandbox.lib.sandbox_guide_delivery import GuideDelivery
@@ -19,14 +19,13 @@ from update_with_ai.parts.sandbox.lib.sandbox_guide_delivery_impl import (
     GuideDelivery as GuideDeliveryImpl,
     __initialize__,
 )
-from update_with_ai.parts.sandbox.lib.tool_provider import Response
 
 
 class MockNodeConfig:
     tier = agent_session
 
     def __init__(
-        self, guide: Optional[Guide] = None, feedback: Tuple[str, ...] = ()
+        self, guide: Optional[NodeGuide] = None, feedback: Tuple[str, ...] = ()
     ) -> None:
         self._guide = guide
         self._feedback = feedback
@@ -52,11 +51,11 @@ class MockNodeConfig:
         return set()
 
     @property
-    def guide(self) -> Optional[Guide]:
+    def guide(self) -> Optional[NodeGuide]:
         return self._guide
 
     @guide.setter
-    def guide(self, value: Optional[Guide]) -> None:
+    def guide(self, value: Optional[NodeGuide]) -> None:
         self._guide = value
 
     @property
@@ -82,14 +81,14 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
         )
 
     def test_dataclasses(self) -> None:
-        """CUJ: Instantiating StepSection and Guide records."""
+        """CUJ: Instantiating StepSection and NodeGuide records."""
         section = StepSection(index=0, title="Step 1", content="Content 1")
         self.assertEqual(section.index, 0)
         self.assertEqual(section.title, "Step 1")
         self.assertEqual(section.content, "Content 1")
 
-        guide = Guide(summary="Guide Summary", sections=[section])
-        self.assertEqual(guide.summary, "Guide Summary")
+        guide = NodeGuide(summary="NodeGuide Summary", sections=[section])
+        self.assertEqual(guide.summary, "NodeGuide Summary")
         self.assertEqual(len(guide.sections), 1)
 
     def test_parse_guide_and_skips_lint_checks(self) -> None:
@@ -105,7 +104,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             delivery = scope.get_singleton(GuideDelivery)
             parsed = delivery.parse_guide(content)
 
-            # Requirement: Guide parsing extracts the summary from content preceding the first section heading and under any heading titled `Summary`, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
+            # Requirement: NodeGuide parsing extracts the summary from content preceding the first section heading and under any heading titled `Summary`, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
             self.assertEqual(parsed.summary, "This is the summary text.")
             self.assertEqual(parsed.verification_failure, "Check error logs carefully.")
             self.assertEqual(len(parsed.sections), 2)
@@ -126,7 +125,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
                 "## Verification failure\nTrailing failure instructions."
             )
             parsed_trailing = delivery.parse_guide(trailing_vf_content)
-            # Requirement: Guide parsing extracts the summary from content preceding the first section heading and under any heading titled `Summary`, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
+            # Requirement: NodeGuide parsing extracts the summary from content preceding the first section heading and under any heading titled `Summary`, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
             self.assertEqual(
                 parsed_trailing.verification_failure, "Trailing failure instructions."
             )
@@ -134,7 +133,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
 
             # When content contains a ## Summary heading
             standard_guide_content = (
-                "# Guide: Standard Guide\n\n"
+                "# NodeGuide: Standard NodeGuide\n\n"
                 "## Summary\n"
                 "This is the standard summary text.\n\n"
                 "## Verification failure\nCheck error logs.\n\n"
@@ -144,7 +143,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             parsed_standard = delivery.parse_guide(standard_guide_content)
             self.assertEqual(
                 parsed_standard.summary,
-                "# Guide: Standard Guide\n\nThis is the standard summary text.",
+                "# NodeGuide: Standard NodeGuide\n\nThis is the standard summary text.",
             )
             self.assertEqual(parsed_standard.verification_failure, "Check error logs.")
             self.assertEqual(len(parsed_standard.sections), 1)
@@ -156,7 +155,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
                 "## Step 1\nFirst step.\n\n"
                 "## Summary\nTrailing summary content."
             )
-            # Requirement: Guide parsing extracts the summary from content preceding the first section heading and under any heading titled `Summary`, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
+            # Requirement: NodeGuide parsing extracts the summary from content preceding the first section heading and under any heading titled `Summary`, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
             parsed_ts = delivery.parse_guide(trailing_summary_content)
             self.assertIn("Trailing summary content.", parsed_ts.summary)
 
@@ -169,7 +168,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             res_none = delivery.advance_step(verification_passed=True)
             self.assertIsNone(res_none)
 
-        guide = Guide(
+        guide = NodeGuide(
             summary="High-level summary",
             verification_failure="Fix failure instructions",
             sections=[
@@ -187,8 +186,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             self.assertIs(delivery.guide, guide)
 
             # Verification failure before any steps delivered emits summary and failure diagnostics
-            # Requirement: Advancing a step when verification fails emits a response combining the guide summary, any configured verification failure instructions, and failure diagnostics without activating a step section when no step section has been delivered yet.
-            # Requirement: [GuideDelivery] Advancing step delivers instructional text when verification passes, or retains the current milestone and reports failure diagnostics alongside verification failure instructions when verification fails.
+            # Requirement: Advancing a step when verification fails emits a response combining the initial primer content (or guide summary when an initial primer is omitted), any configured verification failure instructions, and failure diagnostics without activating a step section when no step section has been delivered yet.
             res_fail0 = delivery.advance_step(
                 verification_passed=False, failure_diagnostics="Pre-flight check failed"
             )
@@ -200,36 +198,40 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             self.assertIn(
                 "## Verification failure\nFix failure instructions", res_fail0.content
             )
+            self.assertIn("Verification failed:\nPre-flight check failed", res_fail0.content)
             self.assertTrue(delivery.has_steps_remaining)
 
-            # Initial passing advance produces summary alone without step section
-            # Requirement: Advancing a step when verification passes emits a response containing the guide summary alone without delivering a step section when no step section has been delivered yet.
-            # Requirement: [GuideDelivery] Advancing step delivers instructional text when verification passes, or retains the current milestone and reports failure diagnostics alongside verification failure instructions when verification fails.
-            res0 = delivery.advance_step(verification_passed=True)
-            self.assertIsNotNone(res0)
-            assert res0 is not None
-            self.assertFalse(res0.is_failed)
-            self.assertFalse(res0.is_terminated)
-            self.assertEqual(res0.content, "High-level summary")
-            self.assertNotIn("## Verification failure", res0.content)
-            self.assertTrue(delivery.has_steps_remaining)
+            # When initial primer is configured, verification failure uses initial primer
+            # Requirement: Can record an initial primer.
+            # Requirement: Advancing a step when verification fails emits a response combining the initial primer content (or guide summary when an initial primer is omitted), any configured verification failure instructions, and failure diagnostics without activating a step section when no step section has been delivered yet.
+            delivery.set_initial_primer("Initial Primer Mapping Content")
+            res_fail_primer = delivery.advance_step(
+                verification_passed=False, failure_diagnostics="Primer check failed"
+            )
+            self.assertIsNotNone(res_fail_primer)
+            assert res_fail_primer is not None
+            self.assertIn("Initial Primer Mapping Content", res_fail_primer.content)
+            self.assertNotIn("High-level summary", res_fail_primer.content)
+            self.assertIn("Verification failed:\nPrimer check failed", res_fail_primer.content)
 
-            # Advance to first step section
-            # Requirement: Advancing a step when verification passes emits a response presenting the guide summary above the next step section content introduced by `Now check carefully:` and transitions to that step section when previous steps have been delivered and further step sections remain.
-            # Requirement: [GuideDelivery] Advancing step delivers instructional text when verification passes, or retains the current milestone and reports failure diagnostics alongside verification failure instructions when verification fails.
+            # First passing advance delivers the first step section
+            # Requirement: Advancing a step when verification passes emits a response presenting the next step section content introduced by Now check carefully: alongside instructions to check carefully, make edits if the source file does not conform to any checklist item, and call advance() only when conforming, transitioning to that step section when further step sections remain.
             res1 = delivery.advance_step(verification_passed=True)
             self.assertIsNotNone(res1)
             assert res1 is not None
             self.assertFalse(res1.is_failed)
             self.assertFalse(res1.is_terminated)
-            self.assertIn("High-level summary", res1.content)
+            self.assertNotIn("High-level summary", res1.content)
             self.assertIn("Step 1", res1.content)
             self.assertIn("Now check carefully:\nContent 1", res1.content)
+            self.assertIn(
+                "Check carefully and make edits if the source file does not conform to any checklist item, calling advance() only when the source file conforms to all checklist items.",
+                res1.content,
+            )
             self.assertTrue(delivery.has_steps_remaining)
 
-            # Verification failure while Step 1 is active retains step index and emits summary, current step, and diagnostics
-            # Requirement: Advancing a step when verification fails emits a response combining the guide summary, the current step section content introduced by `Now check carefully:`, any configured verification failure instructions, and failure diagnostics without advancing to subsequent sections when a step section is currently active.
-            # Requirement: [GuideDelivery] Advancing step delivers instructional text when verification passes, or retains the current milestone and reports failure diagnostics alongside verification failure instructions when verification fails.
+            # Verification failure while Step 1 is active retains step index and emits current step and diagnostics without guide summary
+            # Requirement: Advancing a step when verification fails emits a response combining the current step section content introduced by Now check carefully:, any configured verification failure instructions, and failure diagnostics without advancing to subsequent sections when a step section is currently active.
             res_fail1 = delivery.advance_step(
                 verification_passed=False, failure_diagnostics="Syntax error in step 1"
             )
@@ -237,7 +239,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             assert res_fail1 is not None
             self.assertTrue(res_fail1.is_failed)
             self.assertFalse(res_fail1.is_terminated)
-            self.assertIn("High-level summary", res_fail1.content)
+            self.assertNotIn("High-level summary", res_fail1.content)
             self.assertIn("Step 1", res_fail1.content)
             self.assertIn("Now check carefully:\nContent 1", res_fail1.content)
             self.assertIn(
@@ -246,17 +248,23 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             self.assertTrue(delivery.has_steps_remaining)
 
             # Advance to second step section
+            # Requirement: Advancing a step when verification passes emits a response presenting the next step section content introduced by Now check carefully: alongside instructions to check carefully, make edits if the source file does not conform to any checklist item, and call advance() only when conforming, transitioning to that step section when further step sections remain.
             res2 = delivery.advance_step(verification_passed=True)
             self.assertIsNotNone(res2)
             assert res2 is not None
             self.assertFalse(res2.is_failed)
             self.assertFalse(res2.is_terminated)
-            self.assertIn("High-level summary", res2.content)
+            self.assertNotIn("High-level summary", res2.content)
             self.assertIn("Step 2", res2.content)
             self.assertIn("Now check carefully:\nContent 2", res2.content)
+            self.assertIn(
+                "Check carefully and make edits if the source file does not conform to any checklist item, calling advance() only when the source file conforms to all checklist items.",
+                res2.content,
+            )
             self.assertFalse(delivery.has_steps_remaining)
 
             # Subsequent advance when exhausted produces None
+            # Requirement: When no guide is configured or no step sections remain, the guide delivery indicates that no steps remain and advancing produces no response.
             res3 = delivery.advance_step(verification_passed=True)
             self.assertIsNone(res3)
 

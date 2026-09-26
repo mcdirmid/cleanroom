@@ -161,24 +161,28 @@ _initialize_ = __initialize__
 
 def _get_gate() -> Optional[Any]:
     try:
-        from update_with_ai.parts.antigravity.lib import antigravity_sandbox_gate
-        return get_singleton(antigravity_sandbox_gate.AntigravitySandboxGate)
+        gate_mod = importlib.import_module("update_with_ai.parts.antigravity.lib.antigravity_sandbox_gate")
+        cls = getattr(gate_mod, "AntigravitySandboxGate")
+        return get_singleton(cls)
     except Exception:
         try:
             gate_mod = importlib.import_module("update_with_ai.parts.antigravity.lib.antigravity_sandbox_gate_impl")
-            return gate_mod.AntigravitySandboxGate()
+            cls = getattr(gate_mod, "AntigravitySandboxGate")
+            return cls()
         except Exception:
             return None
 
 
 def _get_logger() -> Optional[Any]:
     try:
-        from update_with_ai.parts.antigravity.lib import antigravity_run_logger
-        return get_singleton(antigravity_run_logger.AntigravityRunLogger)
+        logger_mod = importlib.import_module("update_with_ai.parts.antigravity.lib.antigravity_run_logger")
+        cls = getattr(logger_mod, "AntigravityRunLogger")
+        return get_singleton(cls)
     except Exception:
         try:
             logger_mod = importlib.import_module("update_with_ai.parts.antigravity.lib.antigravity_run_logger_impl")
-            return logger_mod.AntigravityRunLogger()
+            cls = getattr(logger_mod, "AntigravityRunLogger")
+            return cls()
         except Exception:
             return None
 
@@ -187,8 +191,9 @@ def _record_worker_status(session_id: Optional[str], status: str, unit: Optional
     if not session_id:
         return
     try:
-        from update_with_ai.parts.antigravity.lib import antigravity_coordinator
-        coord = get_singleton(antigravity_coordinator.AntigravityCoordinator)
+        coord_mod = importlib.import_module("update_with_ai.parts.antigravity.lib.antigravity_coordinator")
+        cls = getattr(coord_mod, "AntigravityCoordinator")
+        coord = get_singleton(cls)
         import time
         coord.record_worker_status(str(session_id), status, root=_repo_root, now=time.time(), unit=unit or "")
     except Exception:
@@ -256,8 +261,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return payload
 
     try:
-        from update_with_ai.parts.antigravity.lib import antigravity_asm
-        antigravity_asm.__initialize__()
+        asm_mod = importlib.import_module("update_with_ai.parts.antigravity.lib.antigravity_asm")
+        getattr(asm_mod, "__initialize__")()
     except Exception:
         pass
 

@@ -83,56 +83,72 @@ A core architectural principle of Cleanroom grounding is the strict separation b
 
 ---
 
-## 3. The Core Grounding Predicates: `action` and `knows`
+## 3. Deterministic Logic Reasoning: The Groundtalk Engine (Black Box)
 
-All grounding obligations in scope S decompose into two typed predicates:
+Cleanroom outsources all relational logic specifications, subtyping subsumption, and reachability proofs to **Groundtalk**: a dedicated declarative logic language and forward-chaining engine.
 
-### 3.1 `action(...)` (Capability Feasibility)
+> [!NOTE]
+> For the complete formal syntax, Datalog Horn rules, subtyping proofs, hybrid evaluation algorithms, and engine implementation details of Groundtalk, see the companion specification:
+> **[Groundtalk: Declarative Grounding Logic & Forward-Chaining Engine](file:///Users/seanmcdirmid/projects/cleanroom-grounding/design-docs/groundtalk.md)**.
 
-Capabilities represent operations or state mutations invoked on domain entities or collaborators:
+From the perspective of the Cleanroom specification and compilation pipeline, the Groundtalk reasoner operates as a **deterministic black box** with a precise input/output boundary:
 
-- **Unary Action**: `action(verb, TargetType): <justification>`
-  - Examples: `action("read", agent_file_alias.BoundFile)`, `action("install", tool_provider.Tool)`
-- **Relational Action**: `action(verb, TargetType, preposition, AuxType): <justification>`
-  - Examples: `action("format", str, "with", template_format.TemplateParameters)`, `action("record", agent_file_alias.BoundFile, "in", sandbox_file_editor.EditManager)`
+```
+  ┌────────────────────────────────────────────────────────┐
+  │                   INPUT TO GROUNDTALK                  │
+  ├────────────────────────────────────────────────────────┤
+  │ 1. Scoped Lexical Environment (a - e):                 │
+  │    - Operation parameters (a)                          │
+  │    - Object type properties of Self (b)                │
+  │    - Reachable operations (c)                          │
+  │    - Visible imported singletons & interfaces (d)      │
+  │    - Hardware / OS boundary axioms (_ext) (e)          │
+  │                                                        │
+  │ 2. Groundtalk Specification Obligations:               │
+  │    - GROUNDING_IMPLEMENTS: (Intrinsic capability axioms│
+  │    - GROUNDING_PROVISIONS: (Exported guarantees)       │
+  │    - GROUNDING_REQUIREMENTS: (Consumed dependencies)   │
+  │                                                        │
+  │ 3. Core Typed Predicates:                              │
+  │    - action(verb, TargetType, [prep, AuxType])         │
+  │    - knows(text_concept, pyi_type)                     │
+  └───────────────────────────┬────────────────────────────┘
+                              │
+                              ▼
+  ┌────────────────────────────────────────────────────────┐
+  │             GROUNDTALK ENGINE (BLACK BOX)              │
+  │  - Goal-Directed Backward Relevance Pruner (Cone)      │
+  │  - Scoped Semi-Naive Forward Chaining Closure          │
+  │  - Subtyping & Polymorphic Subsumption                 │
+  └───────────────────────────┬────────────────────────────┘
+                              │
+              ┌───────────────┴───────────────┐
+              ▼                               ▼
+  ┌────────────────────────┐      ┌────────────────────────┐
+  │   GroundtalkSuccess    │      │   GroundtalkFailure    │
+  │ - Complete Derivation  │      │ - Missing Goals (Diff) │
+  │   Witness Tree         │      │ - Near-Miss Matches    │
+  │   (Why-Provenance)     │      │ - Reachable Fact Pool  │
+  └───────────┬────────────┘      └───────────┬────────────┘
+              │                               │
+              ▼                               ▼
+  Downstream Code Gen              Neuro-Symbolic Gap
+  (grounding_to_lib)               Inspector (LLM)
+```
 
-#### Subtyping and Subsumption
-Action resolution natively respects object-oriented and structural subtyping:
-- If a collaborator provides `action("install", tool_provider.Tool)`, an operation requiring `action("install", sandbox_file_reader.ViewFileTool)` is automatically proven grounded via covariance over the target type (`ViewFileTool <: Tool`).
-- The author does not need to invent ad-hoc aliases; the solver leverages the declared type hierarchy in the `.pyi` AST.
+### 3.1 The Groundtalk Contract Boundary
 
-### 3.2 `knows(...)` (Knowledge Custody)
-
-`knows` is strictly reserved for **ambient contextual data or state observations** that a requirement explicitly demands inspecting as an end in itself:
-
-- **Syntax**: `knows(specifier, DataType): <justification>`
-  - Examples: `knows("guide file", Optional[agent_file_alias.UnboundFile])`, `knows("mcp mode", bool)`
-
-#### What `knows` is NOT:
-1. **Not Singletons**: Visible singletons in the same lifecycle tier are available by import. You never write `knows(AliasManager)` or `knows(NodeConfig)`.
-2. **Not Properties of Arguments in Scope**: If an operation receives `target_file: BoundFile`, accessing `target_file.workspace_path` or `target_file.relative_path` is intrinsic to holding `BoundFile`. You never write `knows("workspace path")`.
-3. **Not Internal Assembly Plumbing**: Intermediate variables needed only to fulfill an action (such as `workspace_root` needed to resolve a disk path for `action("read", BoundFile)`) are inferred by the solver, never declared as manual `knows` requirements.
+1. **Extraction (AST to Groundtalk)**:
+   [`grounding_tool.py`](file:///Users/seanmcdirmid/projects/cleanroom-grounding/update_with_ai/support/lib/grounding_tool.py) parses the `.pyi` AST to extract scope entities, imports, and docstring grounding blocks, constructing the `ScopedEnvironment` and Groundtalk declarations.
+2. **Execution**:
+   The toolchain invokes `GroundtalkEngine.verify_scope(scope_id, env, implements, provisions, requirements)`.
+3. **Outcomes**:
+   - **On Success (`GroundtalkSuccess`)**: Returns the derivation witness tree (exact collaborator method calls, property paths, and parameter conversions) used directly as the execution blueprint for `lib/*.py` code generation.
+   - **On Failure (`GroundtalkFailure`)**: Returns the unsatisfied goal difference ($\text{Gaps} = \text{Goals} - \text{Reachable}$) and partially satisfied candidate rules ("near-misses"), which are handed to the **Neuro-Symbolic Gap Inspector** for triage.
 
 ---
 
-## 4. Datalog and Reachability in Scoped Environments
-
-### 4.1 Forward Reachability
-For single-operation grounding, evaluation proceeds via forward reachability over the scoped environment:
-1. **Base Facts**:
-   ```
-   Environment(S) = Params(S) U Props(Self) U ReachableOps(Self) U VisibleSingletons(Imports) U ExtFacts
-   ```
-2. Forward chaining computes the reachable closure of all values, types, and operational capabilities the scope can access or invoke.
-3. For each required `action(...)` and `knows(...)`, the reasoner checks whether a provider exists in the reachable set (including via subtyping subsumption).
-4. If provable, the derivation witness (the exact collaborator calls and access paths) is recorded for downstream code generation. If unprovable, the set difference pinpoints the exact grounding gap.
-
-### 4.2 Transitive Closure & Lifecycle Tier Containment
-Transitive component imports (`imports:`) and lifecycle tier hierarchies (`system` >= `agent_session`) form directed acyclic reachability graphs. Datalog computes these transitive closures natively and deterministically in polynomial time, guaranteeing that no cycle or recursion can cause non-termination.
-
----
-
-## 5. The Grounding Architecture
+## 4. The Grounding Architecture & Specification Pipeline
 
 ```mermaid
 flowchart TD
@@ -161,7 +177,7 @@ flowchart TD
     Reasoner --> Fail
 ```
 
-### 5.1 Interface Contracts & Compounding Example: `sandbox_file_reader.pyi`
+### 4.1 Interface Contracts & Compounding Example: `sandbox_file_reader.pyi`
 
 Interface specifications declare numbered domain requirements alongside capability obligations with explicit justifications:
 
@@ -195,7 +211,7 @@ class ReadManager(Protocol):
 
 Notice that the property `read_only_files` simply declares its domain requirement and return type without ritual grounding blocks, while `ReadManager` justifies its `action("install", tool_provider.Tool)` directly against requirement 1.
 
-### 5.2 Implementation Reachability Example: `sandbox_file_reader_impl.pyi`
+### 4.2 Implementation Reachability Example: `sandbox_file_reader_impl.pyi`
 
 Implementation specifications are the target of reachability verification:
 
@@ -225,23 +241,23 @@ Resolution:
     def execute_tool(self, actual_parameter_bindings: tool_provider.ActualParameterBindings) -> tool_provider.Response:
         """
         PURPOSE:
-        Implements execute_tool on the view file tool to inspect file content with line number formatting and alias validation
+        Implements execute_tool on the view file tool to read file content with line number formatting and alias validation
 
         FRESH_REQUIREMENTS:
-        1. Records the read file in the edit manager on successful execution.
+        1. Records the read file on successful execution.
         2. Reads file content of the bound file from the filesystem, returning the content formatted with one-indexed right-aligned line numbers followed by a colon and space, and formatting read-only markdown files ending with .md with session template parameters after filtering out paragraphs beginning with > META:.
-        3. Treats a read-write file as having empty content when the target file does not exist on disk, and fails with a response guiding agent recovery when inspecting a missing read-only file.
-        4. Resolves to that grounding specification file alias if the relative path or qualified path addresses a module name or ends with .py and matches a declared read-only grounding specification ending with .pyi, when an unbound file is supplied.
-        5. Fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract if the unbound file addresses a test file ending with _test.py.
-        6. Fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that advance must be called to read the guide instead, otherwise.
-        7. View file tool responses for read-write files carry a suppression key matching the file's relative path, while responses for read-only files omit suppression keys and mask host paths.
+        3. Treats a read-write file as having empty content when the target file does not exist on disk, and fails with a response guiding agent recovery when reading a missing read-only file.
+        4. Fails with a response guiding agent recovery, reminding the agent that only declared files can be read, listing available readable file aliases, when an unbound file is supplied.
+        5. View file tool responses for read-write files carry a suppression key matching the file's relative path, while responses for read-only files omit suppression keys and mask host paths.
+
+        GROUNDING_IMPLEMENTS:
+          - action("call", Self): Implements tool execution for the view file tool.
 
         GROUNDING_REQUIREMENTS:
-          - action("record", agent_file_alias.BoundFile, "in", sandbox_file_editor.EditManager): Records file inspection in the edit manager as required by requirement 1.
-          - action("read", agent_file_alias.BoundFile): Reads file content from the filesystem as required by requirement 2.
+          - action("record", agent_file_alias.FileAlias): Records file read as required by requirement 1.
+          - action("read", agent_file_alias.FileAlias): Reads file content from the filesystem as required by requirement 2.
           - action("format", str, "with", template_format.TemplateParameters): Formats markdown templates with session template parameters as required by requirement 2.
-          - action("sanitize", str, "using", agent_file_alias.AliasManager): Masks host paths in output responses as required by requirement 7.
-          - knows("guide file", Optional[agent_file_alias.UnboundFile]): Checks whether an unbound file matches the session guide file as required by requirement 6.
+          - action("sanitize", str): Masks host paths in output responses as required by requirement 5.
         """
         ...
 ```
@@ -257,7 +273,7 @@ Notice the stark contrast with old, procedural grounding annotations:
 
 ---
 
-## 6. The Bidirectional Neuro-Symbolic Workflow
+## 5. The Bidirectional Neuro-Symbolic Workflow & Gap Bridging
 
 ```mermaid
 flowchart TD
@@ -274,35 +290,85 @@ flowchart TD
     
     Grounding --> Verifier
     
-    subgraph Outcome["Outcomes"]
+    subgraph Outcome["Proof Evaluation"]
         direction TB
-        Pass["Proof Succeeded"]
-        Fail["Grounding Gap (Unreachable Action or Knowledge)"]
+        Pass["Proof Succeeded (All Goals Reached)"]
+        Unsatisfied["Unproven Goals at Fixpoint"]
     end
     
     Reachability --> Pass
-    Reachability --> Fail
+    Reachability --> Unsatisfied
     
     Pass --> Witness["4. Derivation Witness Extracted<br/>(Exact collaborator methods and property paths)"]
     Witness --> LibGen["5. Library Implementation<br/>lib/<name>.py<br/>(Weaves witnesses into runtime control flow)"]
     
-    Fail --> Diagnostic["6. Structured Grounding Diagnostic<br/>(Missing param, missing import, inaccessible tier)"]
-    Diagnostic --> FaultRouter{"Fault Attribution"}
+    subgraph NeuroSymbolicBridge["6. Neuro-Symbolic Gap Inspector (LLM)"]
+        Triage{"Gap Triage"}
+        Synonym["Tier 1: Semantic Synonym / Aliasing<br/>alias(C1, C2) or Vocabulary Patch"]
+        BridgeRule["Tier 2: Derivation Bridge Rules<br/>Synthesizes missing projection/chaining clause"]
+        HardDefect["Tier 3: Structural Defect<br/>Generates Structured Diagnostic"]
+    end
+    
+    Unsatisfied --> Triage
+    Triage -- "Synonym Match" --> Synonym
+    Triage -- "Derivation Gap" --> BridgeRule
+    Triage -- "True Omission" --> HardDefect
+    
+    Synonym --> ReVerify["Re-feed Solver with Bridge"]
+    BridgeRule --> ReVerify
+    ReVerify --> Reachability
+    
+    HardDefect --> FaultRouter{"Fault Attribution"}
     FaultRouter -- "Local Defect" --> HLSRepair["7a. Local HLS Repair<br/>Patches high/<name>.md"]
     FaultRouter -- "Collaborator Defect" --> UpstreamRepair["7b. Upstream Escalation<br/>Patches high/<collaborator>.md"]
     HLSRepair --> HLS
     UpstreamRepair --> HLS
 ```
 
-### 6.1 Downstream Witness Generation (Code Generation Blueprint)
+### 5.1 Downstream Witness Generation (Code Generation Blueprint)
 When the grounding verifier succeeds, it outputs the **derivation witness**—the structured proof tree showing exactly which collaborator method produces each capability and which property path yields each value.
 
-This witness is included directly in the prompt given to the AI agent authoring the library code (`update_python_with_ai/guides/grounding_to_lib.md`). The code generator takes the verified witnesses and weaves them into the required `if/else` control flow branches.
+This witness is included directly in the prompt given to the AI agent authoring the library code (`update_python_with_ai/guides/grounding_to_lib.md`). The code generator takes the verified witnesses and weaves them into the required `if/else` control flow branches, eliminating hallucinations and guess-and-check API discovery.
 
-### 6.2 Upstream HLS Self-Healing & Fault Attribution
-Cleanroom's foundational rule states: **Grounding problems must be resolved upstream at the specification level (HLS first), never downstream in code.**
+### 5.2 The Intermediate Neuro-Symbolic Gap Bridging Engine
 
-When the grounding verifier detects an error, it generates an actionable, machine-readable diagnostic:
+In practice, a purely symbolic solver fails whenever two independently authored specifications use slight vocabulary variations for the same domain concept (e.g. `template_parameters` vs. `template_bindings`) or when a capability requires a short chain of pure projections. 
+
+Rather than treating solver reachability as a binary pass/fail cliff, Cleanroom introduces an **Intermediate Neuro-Symbolic Gap Inspector**. When the symbolic solver reaches a fixed point with unproven goals, it packages the unsatisfied goals, the available scope environment $(a - e)$, and the cited requirement prose, submitting them to an LLM evaluator.
+
+The LLM triages the gap across three progressive tiers:
+
+#### Tier 1: Semantic Synonym & Concept Aliasing
+When the consumer and provider express the same concept using different terminology (e.g., consumer requires `knows("template_parameters", TemplateParameters)` while `NodeConfig` provides `knows("template_bindings", TemplateParameters)`):
+1. The LLM recognizes that both terms refer to the identical domain concept.
+2. The engine emits a symmetric alias fact into the Datalog knowledge base:
+   ```datalog
+   alias(template_parameters, template_bindings).
+   ```
+   Supported by the Datalog concept unification rule:
+   ```datalog
+   knows(C1, Type) :- knows(C2, Type), alias(C1, C2).
+   ```
+3. The solver re-evaluates the query. If the alias satisfies the proof, the system records the bridge and queues an upstream vocabulary alignment recommendation to standardize the HLS prose.
+
+#### Tier 2: Derivation Bridge Rule Synthesis
+When an action goal requires bridging a domain entity to an external primitive through accessible helper methods or properties:
+- Example: Goal is `action("read", BoundFile)`.
+- Accessible scope contains `knows("agent_session", WorkspaceRoot)` on `AliasManager`, `action("read_text", HostPath)` on imported `filesystem_ext`, and parameter `target_file: BoundFile` which exposes `workspace_path: WorkspacePath`.
+- The LLM synthesizes the missing domain bridge rule:
+  ```datalog
+  action("read", BoundFile) :- 
+      knows("agent_session", WorkspaceRoot),
+      has_property(BoundFile, workspace_path, WorkspacePath),
+      action("resolve_path", WorkspaceRoot, "to", HostPath),
+      action("read_text", HostPath).
+  ```
+- The solver ingests this rule as a hypothesis. If the premises are indeed satisfied in the scoped environment, the proof succeeds and the synthesized derivation rule is incorporated directly into the code generation witness.
+
+#### Tier 3: Upstream HLS Self-Healing & Fault Attribution
+If the LLM determines that the goal cannot be bridged (e.g., an operation in `system` tier attempts to access `agent_session` state without passing a parameter, or a required external capability is completely missing from imports), the gap is classified as a genuine architectural defect.
+
+The engine generates an actionable, machine-readable diagnostic:
 ```json
 {
   "error": "UNGROUNDED_ACTION",
@@ -331,20 +397,7 @@ The fault router attributes the defect:
 
 ---
 
-## 7. Comparative Evaluation
-
-| Dimension | Current Cleanroom (`.pyi` NLP) | Classical FOL (Prolog) | Full Theorem Provers (Dafny / Lean) | Proposed Atomic Query + Reachability Solver |
-| :--- | :--- | :--- | :--- | :--- |
-| **Verification Reliability** | Low (LLM honor system) | Low–Medium (Cycles, non-termination) | Extremely High | **High (Deterministic proof)** |
-| **Termination Guarantee** | N/A (Unchecked) | No (Infinite SLD loops possible) | Undecidable (Manual proof tactics) | **Guaranteed (Polynomial time)** |
-| **Transitive Closure / Reachability**| Manual review | Cannot express finitely (Compactness) | Expressible via inductive proofs | **Native (Least Fixed Point)** |
-| **Capability Matching** | Unchecked prose | Unification on predicates | Verified via Hoare logic | **Action & Knowledge Reachability** |
-| **Witness Generation for Code Gen** | None (Guesses from stubs) | Poor | Manual extraction | **Automatic (Derivation witness blueprint)** |
-| **Authoring Burden** | Low (Free-form English) | Very High (Prolog clauses) | Prohibitive (Proof proofs) | **Minimal (Atomic action/knows queries)** |
-
----
-
-## 8. Practical Implementation Roadmap
+## 6. Practical Implementation Roadmap
 
 ### Phase 1: Datalog Scope & Import Verifier (Complete)
 - Extract relational facts from `.pyi` AST: `service`, `tier`, `imports`, `operation`.
@@ -364,7 +417,7 @@ The fault router attributes the defect:
 
 ---
 
-## 9. Conclusion
+## 7. Conclusion
 
 By separating orthogonal requirement presentation from semantic feasibility, discarding runtime control-flow distractions, and focusing on atomic `action(...)` and `knows(...)` reachability queries:
 - **The authoring burden is minimal**: The LLM transcribes atomic capability and knowledge phrases directly from HLS prose.

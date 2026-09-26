@@ -20,7 +20,7 @@ from support.lib.lifecycle import (
 )
 from update_with_ai.parts.agent.lib.agent_node_config import NodeConfig, RoleConfig
 from update_with_ai.parts.agent.lib.agent_session import agent_session
-from update_with_ai.parts.dag.lib.dag_storage import Change, DagStorage, Feedback, Node
+from update_with_ai.parts.dag.lib.dag_storage import ChangeMessage, DagStorage, FeedbackMessage, DagNode
 from update_with_ai.parts.dag.lib.dag_subgraph import DagSubgraph
 from update_with_ai.parts.mcp.lib.mcp_cache_arbiter import CacheArbiter
 from update_with_ai.parts.mcp.lib.mcp_gate import AccessDecision, AccessGate
@@ -30,9 +30,9 @@ from update_with_ai.parts.mcp.lib.mcp_server_impl import (
 )
 from update_with_ai.parts.sandbox.lib.sandbox_run_control import RunController
 from update_with_ai.parts.mcp.lib.mcp_session import (
-    Active,
+    ActiveSession,
     ConversationId,
-    Idle,
+    IdleSession,
     RoleAgentSession,
     RoleSessionManager,
     SessionStatus,
@@ -40,8 +40,8 @@ from update_with_ai.parts.mcp.lib.mcp_session import (
 from update_with_ai.parts.sandbox.lib.tool_provider import (
     ActualParameterBindings,
     IdentityParameterType,
-    Parameter,
-    Response,
+    ToolParameter,
+    ToolResponse,
     Tool,
     ToolManager,
 )
@@ -54,13 +54,13 @@ class DummyTool:
         self._name = name
         self._description = description
         self._parameters = {
-            Parameter(
+            ToolParameter(
                 name="target",
                 description="Target path",
                 parameter_type=IdentityParameterType(str),
                 is_required=True,
             ),
-            Parameter(
+            ToolParameter(
                 name="extra",
                 description="Extra notes",
                 parameter_type=IdentityParameterType(str),
@@ -78,59 +78,59 @@ class DummyTool:
         return self._description
 
     @property
-    def parameters(self) -> set[Parameter]:
+    def parameters(self) -> set[ToolParameter]:
         return self._parameters
 
     def execute_tool(
         self, actual_parameter_bindings: ActualParameterBindings
-    ) -> Response:
-        return Response(
+    ) -> ToolResponse:
+        return ToolResponse(
             is_failed=False, is_terminated=False, content="Executed DummyTool"
         )
 
 
 class MockStorage:
     def __init__(self) -> None:
-        self.registered_deps: list[Node] = []
-        self.cleared_nodes: list[Node] = []
-        self.messages: dict[Node, list[Any]] = {}
-        self.dependents: dict[Node, list[Node]] = {}
+        self.registered_deps: list[DagNode] = []
+        self.cleared_nodes: list[DagNode] = []
+        self.messages: dict[DagNode, list[Any]] = {}
+        self.dependents: dict[DagNode, list[DagNode]] = {}
 
-    def register_dependent(self, node: Node) -> None:
+    def register_dependent(self, node: DagNode) -> None:
         self.registered_deps.append(node)
 
-    def clear_messages(self, node: Node) -> None:
+    def clear_messages(self, node: DagNode) -> None:
         self.cleared_nodes.append(node)
 
-    def get_dependents(self, node: Node) -> list[Node]:
+    def get_dependents(self, node: DagNode) -> list[DagNode]:
         return self.dependents.get(node, [])
 
-    def add_message(self, msg: Any, to: Node) -> None:
+    def add_message(self, msg: Any, to: DagNode) -> None:
         self.messages.setdefault(to, []).append(msg)
 
-    def is_dirty(self, node: Node) -> bool:
+    def is_dirty(self, node: DagNode) -> bool:
         return bool(self.messages.get(node))
 
-    def get_dependencies(self, node: Node) -> list[Any]:
+    def get_dependencies(self, node: DagNode) -> list[Any]:
         return []
 
 
 class MockSubgraph:
     def __init__(self) -> None:
-        self.visited: list[Node] = []
-        self.target: Optional[Node] = None
-        self.ready_batch: list[Node] = []
+        self.visited: list[DagNode] = []
+        self.target: Optional[DagNode] = None
+        self.ready_batch: list[DagNode] = []
         self._complete: bool = False
-        self._nodes: set[Node] = set()
+        self._nodes: set[DagNode] = set()
 
-    def record_visit(self, nodes: Sequence[Node]) -> None:
+    def record_visit(self, nodes: Sequence[DagNode]) -> None:
         self.visited.extend(nodes)
 
-    def set_target(self, root: Node) -> None:
+    def set_target(self, root: DagNode) -> None:
         self.target = root
         self._nodes = {root}
 
-    def next_ready_batch(self) -> list[Node]:
+    def next_ready_batch(self) -> list[DagNode]:
         return self.ready_batch
 
     @property
@@ -139,12 +139,12 @@ class MockSubgraph:
 
 
 class MockRoleConfig:
-    def __init__(self, nodes: Sequence[Node]) -> None:
+    def __init__(self, nodes: Sequence[DagNode]) -> None:
         self.nodes = tuple(nodes)
 
 
 class MockBoundFile:
-    def __init__(self, relative_path: str, owning_node: Optional[Node] = None) -> None:
+    def __init__(self, relative_path: str, owning_node: Optional[DagNode] = None) -> None:
         self.relative_path = relative_path
         self.short_name = os.path.basename(relative_path)
         self.owning_node = owning_node
@@ -155,19 +155,27 @@ class MockNodeConfig:
         self,
         blame_targets: Sequence[Any] = (),
         read_only_files: Sequence[Any] = (),
+        blame_targets_by_node: Optional[Mapping[DagNode, set[Any]]] = None,
     ) -> None:
-        self.blame_targets = set(blame_targets)
+        if blame_targets_by_node is not None:
+            self.blame_targets_by_node = blame_targets_by_node
+        else:
+            self.blame_targets_by_node = (
+                {DagNode(unit_address="//dummy"): set(blame_targets)}
+                if blame_targets
+                else {}
+            )
         self.read_only_files = set(read_only_files)
 
 
 class MockRunController:
-    def __init__(self, submitted_nodes: set[Node]) -> None:
+    def __init__(self, submitted_nodes: set[DagNode]) -> None:
         self._submitted = submitted_nodes
 
-    def get_node_state(self, node: Node) -> str:
+    def get_node_state(self, node: DagNode) -> str:
         return "SUBMITTED" if node in self._submitted else "OPEN"
 
-    def is_clean_in_turn(self, node: Node) -> bool:
+    def is_clean_in_turn(self, node: DagNode) -> bool:
         return node in self._submitted
 
 
@@ -216,7 +224,7 @@ class MockRoleSessionManager:
             unit_root=unit_root,
             scope=scope,
             last_active_timestamp=time.time(),
-            status=Active(),
+            status=ActiveSession(),
         )
         return scope
 
@@ -244,16 +252,16 @@ class MockRoleSessionManager:
 class MockToolManager:
     def __init__(self) -> None:
         self.executed: list[tuple[str, Mapping[str, Any]]] = []
-        self.responses: dict[str, Response] = {}
+        self.responses: dict[str, ToolResponse] = {}
         self.installed_tools: list[Any] = []
 
     def execute_tool_with_arguments(
         self, name: str, arguments: Mapping[str, Any]
-    ) -> Response:
+    ) -> ToolResponse:
         self.executed.append((name, dict(arguments)))
         if name in self.responses:
             return self.responses[name]
-        return Response(
+        return ToolResponse(
             is_failed=False,
             is_terminated=False,
             content=f"Executed {name}",
@@ -329,7 +337,7 @@ class McpServerImplTest(unittest.TestCase):
         self.registry.register_instance(
             self.mock_rc, keys=[RunController], tier=agent_session
         )
-        upstream_node = Node(unit_address="//pkg:upstream", role_address="test")
+        upstream_node = DagNode(unit_address="//pkg:upstream", role_address="test")
         blame_file = MockBoundFile("tests/foo_test.py", owning_node=upstream_node)
         self.mock_node_cfg = MockNodeConfig(
             blame_targets=[blame_file], read_only_files=[blame_file]
@@ -362,7 +370,7 @@ class McpServerImplTest(unittest.TestCase):
         """CUJ: next_batch targets in-process DagSubgraph and queries next ready batch using system singletons."""
         with enter_phase(system, registry=self.registry) as sys_scope:
             server = sys_scope.get_singleton(McpServer)
-            ready_node = Node(unit_address="//pkg:unit", role_address="//update_python_with_ai:lib")
+            ready_node = DagNode(unit_address="//pkg:unit", role_address="//update_python_with_ai:lib")
             self.mock_subgraph.ready_batch = [ready_node]
             self.mock_storage.messages[ready_node] = ["dirty"]
 
@@ -376,7 +384,7 @@ class McpServerImplTest(unittest.TestCase):
             self.assertFalse(data["is_complete"])
             self.assertEqual(
                 self.mock_subgraph.target,
-                Node(unit_address="//pkg:asm", role_address="//update_python_with_ai:qa"),
+                DagNode(unit_address="//pkg:asm", role_address="//update_python_with_ai:qa"),
             )
 
             # Test role starting with // and unit starting with :
@@ -395,14 +403,14 @@ class McpServerImplTest(unittest.TestCase):
                 pass
 
             class MockDep:
-                def __init__(self, node: Node) -> None:
+                def __init__(self, node: DagNode) -> None:
                     self.node = node
 
             class MockManifestLoader:
                 def __init__(self) -> None:
                     self.loaded: list[Any] = []
 
-                def get_manifest(self, node: Node) -> Any:
+                def get_manifest(self, node: DagNode) -> Any:
                     return f"manifest_{node.unit_address}"
 
                 def load_manifest(self, content: Any, storage: Any) -> list[Any]:
@@ -411,7 +419,7 @@ class McpServerImplTest(unittest.TestCase):
 
             loader = MockManifestLoader()
             self.registry.register_instance(loader, keys=[BazelManifestLoader], tier=system)
-            dep_node = Node(unit_address="//pkg:dep", role_address="//update_python_with_ai:lib")
+            dep_node = DagNode(unit_address="//pkg:dep", role_address="//update_python_with_ai:lib")
             self.mock_storage.get_dependencies = lambda node: [MockDep(dep_node), MockDep(dep_node)] if node.unit_address == "//pkg:asm" else []
 
             res_str4 = server.next_batch("//pkg:asm", "qa")
@@ -426,7 +434,7 @@ class McpServerImplTest(unittest.TestCase):
             self.mock_session_mgr.scopes[cid] = session_scope
 
             # Configure tool manager response for get_work with idle message
-            self.mock_tool_mgr.responses["get_work"] = Response(
+            self.mock_tool_mgr.responses["get_work"] = ToolResponse(
                 is_failed=False,
                 is_terminated=False,
                 content="No dirty nodes are ready for cleaning.",
@@ -438,20 +446,20 @@ class McpServerImplTest(unittest.TestCase):
             self.assertIn("No dirty nodes are ready", output)
             self.assertIn("Waiting for upstream tasks.", output)
             self.assertIn(cid, self.mock_session_mgr.touched)
-            self.assertIsInstance(self.mock_session_mgr.status_map.get(cid), Idle)
+            self.assertIsInstance(self.mock_session_mgr.status_map.get(cid), IdleSession)
 
-            # Execute get_work with ready tasks to transition status to Active
-            self.mock_tool_mgr.responses["get_work"] = Response(
+            # Execute get_work with ready tasks to transition status to ActiveSession
+            self.mock_tool_mgr.responses["get_work"] = ToolResponse(
                 is_failed=False,
                 is_terminated=False,
                 content="Assigned 2 dirty nodes.",
             )
             out_active = server.execute_domain_tool(cid, "get_work", {})
             self.assertIn("Assigned 2 dirty nodes", out_active)
-            self.assertIsInstance(self.mock_session_mgr.status_map.get(cid), Active)
+            self.assertIsInstance(self.mock_session_mgr.status_map.get(cid), ActiveSession)
 
             # Execute another domain tool
-            self.mock_tool_mgr.responses["check_file"] = Response(
+            self.mock_tool_mgr.responses["check_file"] = ToolResponse(
                 is_failed=False,
                 is_terminated=False,
                 content="Check passed with 0 errors.",
@@ -466,13 +474,13 @@ class McpServerImplTest(unittest.TestCase):
             )
 
             # Execute submit tool and verify DAG synchronization
-            test_node = Node(unit_address="//pkg:unit", role_address="cleaner")
-            dep_node = Node(unit_address="//pkg:unit", role_address="tester")
+            test_node = DagNode(unit_address="//pkg:unit", role_address="cleaner")
+            dep_node = DagNode(unit_address="//pkg:unit", role_address="tester")
             self.mock_role_cfg.nodes = (test_node,)
             self.mock_rc._submitted = {test_node}
             self.mock_storage.dependents[test_node] = [dep_node]
 
-            self.mock_tool_mgr.responses["submit"] = Response(
+            self.mock_tool_mgr.responses["submit"] = ToolResponse(
                 is_failed=False,
                 is_terminated=False,
                 content="Session completed successfully.",
@@ -490,7 +498,7 @@ class McpServerImplTest(unittest.TestCase):
             )
 
             # Execute blame tool and verify DAG feedback attribution
-            self.mock_tool_mgr.responses["blame"] = Response(
+            self.mock_tool_mgr.responses["blame"] = ToolResponse(
                 is_failed=False,
                 is_terminated=False,
                 content="Target blamed.",
@@ -499,15 +507,15 @@ class McpServerImplTest(unittest.TestCase):
                 cid, "blame", {"to": "foo_test.py", "message": "Missing test case"}
             )
             self.assertIn("Target blamed.", blame_out)
-            upstream = Node(unit_address="//pkg:upstream", role_address="test")
+            upstream = DagNode(unit_address="//pkg:upstream", role_address="test")
             self.assertIn(upstream, self.mock_storage.messages)
             msgs = self.mock_storage.messages[upstream]
             self.assertEqual(len(msgs), 1)
-            self.assertIsInstance(msgs[0], Feedback)
+            self.assertIsInstance(msgs[0], FeedbackMessage)
             self.assertEqual(msgs[0].content, "Missing test case")
 
             # Execute fail tool and verify DAG feedback attribution
-            self.mock_tool_mgr.responses["fail"] = Response(
+            self.mock_tool_mgr.responses["fail"] = ToolResponse(
                 is_failed=False,
                 is_terminated=False,
                 content="Target failed.",

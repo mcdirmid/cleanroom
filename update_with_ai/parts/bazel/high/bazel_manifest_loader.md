@@ -12,7 +12,7 @@ Target execution requires resolving build metadata into executable nodes and vir
 
 ## Types and Behavior
 
-A *manifest* is a build artifact written by the build system carrying node reference fields and file path fields for a workspace target, including target node label, task prompt, declared source file, silent source files, template, direct dependencies, silent dependencies, star dependencies, feedback dependencies, guide target, and verification check.
+A *target manifest* is a build artifact written by the build system carrying node reference fields and file path fields for a workspace target, including target node label, task prompt, declared source file, silent source files, template, direct dependencies, silent dependencies, star dependencies, feedback dependencies, guide target, and verification check.
 
 The *bazel manifest loader* is a system service that resolves manifests into graph structures and node configurations.
 

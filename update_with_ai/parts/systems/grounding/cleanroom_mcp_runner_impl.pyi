@@ -6,53 +6,45 @@ import mcp_server
 
 @singleton_type('system')
 class McpRunner(cleanroom_mcp_runner.McpRunner):
-    """
-PURPOSE:
-Realizes the cleanroom mcp runner service to parse execution parameters and launch the server.
+    """Realizes the cleanroom mcp runner service to parse execution parameters and launch the server.
 
-GROUNDING_ARGUMENT:
-- Operates as a system singleton interacting with imported mcp_server.McpServer and runner_logger.RunnerLogger to parse parameters and execute transport loops.
-"""
+    GROUNDING_ARGUMENT:
+    - grounded_by: mcp_server.McpServer, runner_logger.RunnerLogger, cleanroom_mcp_runner.RunnerOptions
+    """
 
     @operation
     @override
     def run(self, options: cleanroom_mcp_runner.RunnerOptions) -> None:
         """
-PURPOSE:
-Validates runner options and starts the server using the configured transport.
+        REQUIREMENTS:
+        - Executing the runner validates runner options and executes the server using the configured transport.
+        - When standard input/output transport is requested, the runner executes the server over standard input/output.
+        - When Server-Sent Events transport is requested, the runner configures server host and port parameters, logs startup progress, and executes the server over Server-Sent Events.
+        - The runner sets the batch size in the execution environment.
 
-FRESH_REQUIREMENTS:
-- Executing the runner validates runner options and executes the server using the configured transport.
-- When standard input/output transport is requested, the runner executes the server over standard input/output.
-- When Server-Sent Events transport is requested, the runner configures server host and port parameters, logs startup progress, and executes the server over Server-Sent Events.
-- The runner sets the batch size in the execution environment.
+        GROUNDING_PROVISIONS:
+        - action("run", None): Executes server using runner options.
 
-INHERITED_REQUIREMENTS:
-- [McpRunner] The cleanroom mcp runner executes the server using runner options.
-
-GROUNDING_ARGUMENT:
-- Resolves imported mcp_server.McpServer, sets environment or parameters for host, port, and batch size, logs startup via imported runner_logger.RunnerLogger, and dispatches start with transport.
-"""
+        GROUNDING_ARGUMENT:
+        - action("run", Self) :- action("start_server", mcp_server.McpServer), action("consume_log_event", runner_logger.RunnerLogger).
+        """
         ...
 
     @operation
     @override
     def parse_arguments(self, arguments: Sequence[str]) -> cleanroom_mcp_runner.RunnerOptions:
         """
-PURPOSE:
-Parses command-line argument tokens into a runner options record.
+        REQUIREMENTS:
+        - The transport resolves from `--transport`, accepting `stdio` or `sse`, defaulting to `stdio`.
+        - The host resolves from `--host`, defaulting to `127.0.0.1`.
+        - The port resolves from `--port` as an integer, defaulting to 8765.
+        - The batch size resolves from `--batch-size` as an integer, defaulting to 10.
+        - Parsing arguments signals an error when invalid or unknown options are provided.
 
-FRESH_REQUIREMENTS:
-- The transport resolves from `--transport`, accepting `stdio` or `sse`, defaulting to `stdio`.
-- The host resolves from `--host`, defaulting to `127.0.0.1`.
-- The port resolves from `--port` as an integer, defaulting to 8765.
-- The batch size resolves from `--batch-size` as an integer, defaulting to 10.
-- Parsing arguments signals an error when invalid or unknown options are provided.
+        GROUNDING_PROVISIONS:
+        - action("parse_arguments", cleanroom_mcp_runner.RunnerOptions): Parses arguments into options.
 
-INHERITED_REQUIREMENTS:
-- [McpRunner] The cleanroom mcp runner parses command-line arguments into runner options.
-
-GROUNDING_ARGUMENT:
-- Uses an argument parser to validate flag parameters, converting to cleanroom_mcp_runner.RunnerOptions and raising ValueError on unhandled arguments.
-"""
+        GROUNDING_ARGUMENT:
+        - action("parse_arguments", Self) :- knows("transport", cleanroom_mcp_runner.RunnerOptions), knows("host", cleanroom_mcp_runner.RunnerOptions), knows("port", cleanroom_mcp_runner.RunnerOptions), knows("batch_size", cleanroom_mcp_runner.RunnerOptions).
+        """
         ...

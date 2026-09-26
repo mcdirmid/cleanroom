@@ -20,11 +20,11 @@ class ToolManager(tool_provider.ToolManager, Singleton):
 
     def execute_tool(
         self, name: str, wire_parameter_bindings: tool_provider.WireParameterBindings
-    ) -> tool_provider.Response:
+    ) -> tool_provider.ToolResponse:
         # Requirement: Executing a tool by name fails if no installed tool matches the requested name.
         tool = self._tools.get(name)
         if tool is None:
-            return tool_provider.Response(
+            return tool_provider.ToolResponse(
                 is_failed=True,
                 is_terminated=False,
                 content=f"Error: Unknown tool '{name}'. Installed tools: {', '.join(self._tools.keys())}",
@@ -36,7 +36,7 @@ class ToolManager(tool_provider.ToolManager, Singleton):
         # Requirement: Executing a tool by name fails if a parameter name does not match any parameter of the tool, and reminds the agent that only declared parameters of the tool can be provided.
         for p_name in wire_dict:
             if p_name not in params_by_name:
-                return tool_provider.Response(
+                return tool_provider.ToolResponse(
                     is_failed=True,
                     is_terminated=False,
                     content=f"Error: Unknown parameter '{p_name}' for tool '{name}'. Valid parameters: {', '.join(params_by_name.keys())}",
@@ -44,7 +44,7 @@ class ToolManager(tool_provider.ToolManager, Singleton):
                 )
 
         # Requirement: Executing a tool by name fails if an argument is not supplied for a required parameter of the tool, incorporating the parameter's missing message function evaluated with the set of supplied parameter names when configured, and reminds the agent that required parameters of the tool must be supplied.
-        actual_bindings: Set[Tuple[tool_provider.Parameter, object]] = set()
+        actual_bindings: Set[Tuple[tool_provider.ToolParameter, object]] = set()
         for p_name, p in params_by_name.items():
             if p_name not in wire_dict:
                 if p.is_required:
@@ -53,7 +53,7 @@ class ToolManager(tool_provider.ToolManager, Singleton):
                         note = p.missing_message(set(wire_dict.keys()))
                         if note:
                             content += f" Note: {note}"
-                    return tool_provider.Response(
+                    return tool_provider.ToolResponse(
                         is_failed=True,
                         is_terminated=False,
                         content=content,
@@ -75,7 +75,7 @@ class ToolManager(tool_provider.ToolManager, Singleton):
 
     def execute_tool_with_arguments(
         self, name: str, arguments: Mapping[str, Any]
-    ) -> tool_provider.Response:
+    ) -> tool_provider.ToolResponse:
         # Requirement: Executing a tool with arguments converts raw argument mappings into wire parameter bindings and executes the tool by name.
         wire_bindings = tool_provider.WireParameterBindings.from_dict(arguments)
         return self.execute_tool(name, wire_bindings)
@@ -92,8 +92,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_instance(
         str_type,
         keys=[
-            getattr(tool_provider, "StringParameterType", tool_provider.IdentityParameterType),
-            getattr(tool_provider, "StringParameterConverter", tool_provider.IdentityParameterType),
+            tool_provider.IdentityParameterType,
             tool_provider.ParameterType,
         ],
         tier=agent_session,
@@ -102,8 +101,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_instance(
         int_type,
         keys=[
-            getattr(tool_provider, "IntegerParameterType", tool_provider.IdentityParameterType),
-            getattr(tool_provider, "IntegerParameterConverter", tool_provider.IdentityParameterType),
+            tool_provider.IdentityParameterType,
         ],
         tier=agent_session,
     )
@@ -111,8 +109,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_instance(
         bool_type,
         keys=[
-            getattr(tool_provider, "BooleanParameterType", tool_provider.IdentityParameterType),
-            getattr(tool_provider, "BooleanParameterConverter", tool_provider.IdentityParameterType),
+            tool_provider.IdentityParameterType,
         ],
         tier=agent_session,
     )
@@ -120,8 +117,7 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg.register_instance(
         float_type,
         keys=[
-            getattr(tool_provider, "FloatParameterType", tool_provider.IdentityParameterType),
-            getattr(tool_provider, "FloatParameterConverter", tool_provider.IdentityParameterType),
+            tool_provider.IdentityParameterType,
         ],
         tier=agent_session,
     )

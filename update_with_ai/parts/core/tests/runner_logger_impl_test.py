@@ -7,7 +7,11 @@ import shutil
 import tempfile
 import unittest
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
-from update_with_ai.parts.core.lib.runner_logger import LogEvent, RunnerLogger
+from update_with_ai.parts.core.lib.runner_logger import (
+    RunnerLogEvent,
+    RunnerLogEvent,
+    RunnerLogger,
+)
 from update_with_ai.parts.core.lib.runner_logger_impl import (
     RunnerLogger as RunnerLoggerImpl,
     __initialize__,
@@ -35,9 +39,9 @@ class RunnerLoggerTest(unittest.TestCase):
     def test_log_event_dataclass(self) -> None:
         """CUJ: Instantiating structured log event records.
 
-        Asserts LogEvent properties and values.
+        Asserts RunnerLogEvent properties and values.
         """
-        event = LogEvent(
+        event = RunnerLogEvent(
             event_name="test_event",
             summary="short summary",
             transcript_representation="detailed transcript line",
@@ -53,17 +57,17 @@ class RunnerLoggerTest(unittest.TestCase):
         """
         with enter_phase("system", registry=self.registry) as scope:
             logger = scope.get_singleton(RunnerLogger)
-            # Requirement: Consuming a log event writes an unbuffered verbose record to the transcript log file.
-            # Requirement: [RunnerLogger] The runner logger consumes log events, writing compact single-line summaries to standard output and full verbose records to a transcript log file.
+            # Requirement: Consuming a runner log event writes an unbuffered verbose record to the transcript log file.
+            # Requirement: [RunnerLogger] The runner logger consumes runner log events, writing compact single-line summaries to standard output and full verbose records to a transcript log file.
             logger.consume(
-                LogEvent(
+                RunnerLogEvent(
                     event_name="start",
                     summary="Cleaning pass start",
                     transcript_representation="Full transcript line 1",
                 )
             )
             logger.consume(
-                LogEvent(
+                RunnerLogEvent(
                     event_name="finish",
                     summary="Cleaning pass finish",
                     transcript_representation="Full transcript line 2",
@@ -83,7 +87,7 @@ class RunnerLoggerTest(unittest.TestCase):
         """
         with enter_phase("system", registry=self.registry) as scope:
             logger = scope.get_singleton(RunnerLogger)
-            event = LogEvent(
+            event = RunnerLogEvent(
                 event_name="step",
                 summary="Executed step 1",
                 transcript_representation="Detailed step 1 logs",
@@ -91,8 +95,8 @@ class RunnerLoggerTest(unittest.TestCase):
 
             stdout_capture = io.StringIO()
             with contextlib.redirect_stdout(stdout_capture):
-                # Requirement: Consuming a log event writes a single-line compact summary to standard output.
-                # Requirement: [RunnerLogger] The runner logger consumes log events, writing compact single-line summaries to standard output and full verbose records to a transcript log file.
+                # Requirement: Consuming a runner log event writes a single-line compact summary to standard output.
+                # Requirement: [RunnerLogger] The runner logger consumes runner log events, writing compact single-line summaries to standard output and full verbose records to a transcript log file.
                 logger.consume(event)
 
             output = stdout_capture.getvalue()

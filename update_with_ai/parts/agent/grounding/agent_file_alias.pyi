@@ -1,241 +1,130 @@
+from dataclasses import dataclass
 from typing import Protocol, Type
 from framework import data_type, operation, override, singleton_type, variant
-from dataclasses import dataclass
+from support.lib.lifecycle import InTier
+from agent_session import AgentSessionTier
 import dag_storage
 import file_paths
 import tool_provider
 
+
 @data_type
 class FileContent(str):
-    """
-PURPOSE:
-Introduces file content to represent data read from or stored in a file
-"""
+    """Represents data read from or stored in a file."""
     ...
+
 
 @data_type
 class RegexPattern(str):
-    """
-PURPOSE:
-Introduces regex pattern as the pattern used to search in files
-"""
+    """Represents a pattern used to search in files."""
     ...
 
-@singleton_type('agent_session')
-class AliasManager(tool_provider.ParameterType['FileAlias', str], Protocol):
-    """
-PURPOSE:
-Defined as an agent session service configured with a workspace root that sanitizes output text
-
-INHERITANCE:
-- tool_provider.ParameterType: Established that the alias manager is a parameter type for file aliases, allowing file aliases to be used as tool parameters
-"""
-
-    @property
-    def workspace_root(self) -> file_paths.WorkspaceRoot:
-        """
-PURPOSE:
-Established that the alias manager is configured with a workspace root
-"""
-        ...
-
-    @property
-    @override
-    def actual_type(self) -> Type:
-        """
-PURPOSE:
-Sets the converter actual type for the alias manager to file alias
-"""
-        ...
-
-    @property
-    @override
-    def wire_type(self) -> Type[str]:
-        """
-PURPOSE:
-Sets the converter wire type for the alias manager to string
-"""
-        ...
-
-    @operation
-    @override
-    def convert(self, wire_value: str) -> 'FileAlias':
-        """
-PURPOSE:
-Converts a wire type string to a file alias, producing an unbound file if the relative path is not found or is ambiguous
-
-FRESH_REQUIREMENTS:
-- Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
-"""
-        ...
-
-    @operation
-    def sanitize_text(self, text: str) -> str:
-        """
-PURPOSE:
-Provides that the alias manager sanitizes text by masking occurrences of relative workspace paths and preceding path prefixes with relative paths
-
-FRESH_REQUIREMENTS:
-- Sanitizing text masks occurrences of relative workspace paths and preceding path prefixes with the corresponding file alias relative paths.
-"""
-        ...
 
 @dataclass(frozen=True, init=False)
 @data_type
 class FileAlias:
+    """Represents a session file, hiding physical filesystem details and paths from the agent.
+
+    Args:
+        relative_path: The relative path identifying the file within an agent session.
+
+    REQUIREMENTS:
+    - MUST display itself by its relative path when converted to a string.
     """
-PURPOSE:
-Defined to represent a session file, hiding physical filesystem details and paths from the agent
+    relative_path: str = ...
 
-FRESH_REQUIREMENTS:
-- A file alias displays itself by its relative path when converted to a string.
-"""
-
-    @property
-    def relative_path(self) -> str:
-        """
-PURPOSE:
-Established that each file alias has a relative path that identifies the file within an agent session
-"""
-        ...
 
 @dataclass(frozen=True, init=False)
 @variant
 class BoundFile(FileAlias):
+    """A file alias mapped to an actual workspace file.
+
+    Args:
+        workspace_path: The workspace path of the actual file.
+        owning_node: The graph node that owns this bound file.
     """
-PURPOSE:
-Classifies bound file as a file alias mapped to an actual workspace file
+    workspace_path: file_paths.WorkspacePath = ...
+    owning_node: dag_storage.DagNode = ...
 
-INHERITED_REQUIREMENTS:
-- [FileAlias] A file alias displays itself by its relative path when converted to a string.
-"""
-
-    @property
-    def workspace_path(self) -> file_paths.WorkspacePath:
-        """
-PURPOSE:
-Established that each bound file has a workspace path
-"""
-        ...
-
-    @property
-    def owning_node(self) -> dag_storage.Node:
-        """
-PURPOSE:
-Established that each bound file has an owning node
-"""
-        ...
-
-    @property
-    @override
-    def relative_path(self) -> str:
-        """
-PURPOSE:
-Established that each file alias has a relative path that identifies the file within an agent session
-"""
-        ...
 
 @dataclass(frozen=True)
 @variant
 class ReadOnlyFile(BoundFile):
-    """
-PURPOSE:
-Classifies read-only file as a bound file restricted to inspection
+    """A bound file restricted to read."""
+    ...
 
-INHERITED_REQUIREMENTS:
-- [FileAlias] A file alias displays itself by its relative path when converted to a string.
-"""
-
-    def __init__(self, relative_path: str, workspace_path: file_paths.WorkspacePath, owning_node: dag_storage.Node) -> None:
-        ...
-
-    @property
-    @override
-    def workspace_path(self) -> file_paths.WorkspacePath:
-        """
-PURPOSE:
-Established that each bound file has a workspace path
-"""
-        ...
-
-    @property
-    @override
-    def owning_node(self) -> dag_storage.Node:
-        """
-PURPOSE:
-Established that each bound file has an owning node
-"""
-        ...
-
-    @property
-    @override
-    def relative_path(self) -> str:
-        """
-PURPOSE:
-Established that each file alias has a relative path that identifies the file within an agent session
-"""
-        ...
 
 @dataclass(frozen=True)
 @variant
 class ReadWriteFile(BoundFile):
-    """
-PURPOSE:
-Classifies read-write file as a bound file permitted for inspection and modification
+    """A bound file permitted for read and write."""
+    ...
 
-INHERITED_REQUIREMENTS:
-- [FileAlias] A file alias displays itself by its relative path when converted to a string.
-"""
-
-    def __init__(self, relative_path: str, workspace_path: file_paths.WorkspacePath, owning_node: dag_storage.Node) -> None:
-        ...
-
-    @property
-    @override
-    def workspace_path(self) -> file_paths.WorkspacePath:
-        """
-PURPOSE:
-Established that each bound file has a workspace path
-"""
-        ...
-
-    @property
-    @override
-    def owning_node(self) -> dag_storage.Node:
-        """
-PURPOSE:
-Established that each bound file has an owning node
-"""
-        ...
-
-    @property
-    @override
-    def relative_path(self) -> str:
-        """
-PURPOSE:
-Established that each file alias has a relative path that identifies the file within an agent session
-"""
-        ...
 
 @dataclass(frozen=True)
 @variant
 class UnboundFile(FileAlias):
-    """
-PURPOSE:
-Classifies unbound file as a file alias that is not mapped to an actual file
+    """A file alias that is not mapped to an actual file."""
+    ...
 
-INHERITED_REQUIREMENTS:
-- [FileAlias] A file alias displays itself by its relative path when converted to a string.
-"""
 
-    def __init__(self, relative_path: str) -> None:
+@singleton_type("agent_session")
+class AliasManager(tool_provider.ParameterType[FileAlias, tool_provider.WireString], InTier[AgentSessionTier], Protocol):
+    """Configured with a workspace root, sanitizes text and converts string parameters to file aliases."""
+
+    @property
+    def workspace_root(self) -> file_paths.WorkspaceRoot:
+        """The workspace root directory for the agent session.
+
+        GROUNDING_PROVISIONS:
+        - knows("workspace_root", file_paths.WorkspaceRoot): Exposes workspace root absolute path to satisfy requirement 2.
+        """
         ...
 
     @property
     @override
-    def relative_path(self) -> str:
+    def actual_type(self) -> Type[FileAlias]:
+        ...
+
+    @property
+    @override
+    def wire_type(self) -> Type[tool_provider.WireString]:
+        ...
+
+    @operation
+    @override
+    def convert(self, wire_value: tool_provider.WireString) -> FileAlias:
+        """Converts a wire type string to a file alias.
+
+        Args:
+            wire_value: The wire string to convert into a file alias.
+
+        Returns:
+            The resolved FileAlias (BoundFile if matched, UnboundFile otherwise).
+
+        REQUIREMENTS:
+        - WHEN relative path matches a declared bound file, MUST return the matching read-only or read-write file.
+        - WHEN relative path does not match a declared bound file, MUST return an unbound file.
+
+        GROUNDING_PROVISIONS:
+        - action("convert", tool_provider.WireString): Converts wire type string to file alias to satisfy requirements 3, 4, and 5.
         """
-PURPOSE:
-Established that each file alias has a relative path that identifies the file within an agent session
-"""
+        ...
+
+    @operation
+    def sanitize_text(self, text: str) -> str:
+        """Sanitizes text by masking occurrences of relative workspace paths.
+
+        Args:
+            text: The input text containing potential workspace paths.
+
+        Returns:
+            The sanitized text with workspace paths masked by relative alias paths.
+
+        REQUIREMENTS:
+        - MUST mask occurrences of relative workspace paths and preceding path prefixes with file alias relative paths.
+
+        GROUNDING_PROVISIONS:
+        - action("sanitize", str): Sanitizes text by masking workspace paths with file aliases to satisfy requirement 6.
+        """
         ...

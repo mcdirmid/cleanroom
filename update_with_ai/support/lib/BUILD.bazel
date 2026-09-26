@@ -8,6 +8,7 @@ exports_files([
     "update_with_ai.bzl",
     "guides.bzl",
     "hls_lint.py",
+    "requirements_lint.py",
     "build_lint_common.py",
     "lib_lint.py",
     "test_lint.py",
@@ -24,6 +25,13 @@ pyright_library(
 pyright_library(
     name = "hls_lint",
     srcs = ["hls_lint.py"],
+    pyright_deps = [],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "requirements_lint",
+    srcs = ["requirements_lint.py"],
     pyright_deps = [],
     visibility = ["//visibility:public"],
 )

@@ -16,6 +16,8 @@ pyright_library(
         "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/agent/lib:agent_storage",
+        "//update_with_ai/parts/core/lib:file_paths",
+        "//update_with_ai/parts/core/lib:file_paths_impl",
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/sandbox/lib:tool_provider",
         ":bazel_manifest_loader",
@@ -24,8 +26,6 @@ pyright_library(
         ":bazel_storage_impl",
         ":bazel_target",
         ":bazel_target_impl",
-        ":file_paths",
-        ":file_paths_impl",
     ],
     visibility = ["//visibility:public"],
 )
@@ -40,9 +40,9 @@ pyright_library(
         "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/agent/lib:agent_storage",
+        "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
         ":bazel_target",
-        ":file_paths",
     ],
     visibility = ["//visibility:public"],
 )
@@ -57,10 +57,10 @@ pyright_library(
         "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/agent/lib:agent_storage",
+        "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
         ":bazel_manifest_loader",
         ":bazel_target",
-        ":file_paths",
     ],
     visibility = ["//visibility:public"],
 )
@@ -90,11 +90,11 @@ pyright_library(
         "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/agent/lib:agent_storage",
+        "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/sandbox/lib:tool_provider",
         ":bazel_manifest_loader",
         ":bazel_target",
-        ":file_paths",
     ],
     visibility = ["//visibility:public"],
 )
@@ -109,6 +109,7 @@ pyright_library(
         "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/agent/lib:agent_storage",
+        "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/core/lib:runner_logger",
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/loop/lib:loop",
@@ -116,7 +117,6 @@ pyright_library(
         "//update_with_ai/parts/loop/lib:loop_node_cleaner",
         ":bazel_manifest_loader",
         ":bazel_target",
-        ":file_paths",
     ],
     visibility = ["//visibility:public"],
 )
@@ -129,9 +129,9 @@ pyright_library(
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_session",
         "//update_with_ai/parts/agent/lib:agent_storage",
+        "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
         ":bazel_target",
-        ":file_paths",
     ],
     visibility = ["//visibility:public"],
 )
@@ -139,12 +139,12 @@ pyright_library(
 pyright_library(
     name = "bazel_target",
     srcs = ["bazel_target.py"],
-deps = [],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_session",
+        "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
-        ":file_paths",
     ],
     visibility = ["//visibility:public"],
 )
@@ -152,36 +152,13 @@ deps = [],
 pyright_library(
     name = "bazel_target_impl",
     srcs = ["bazel_target_impl.py"],
-deps = [],
+    deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_session",
+        "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
         ":bazel_target",
-        ":file_paths",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "file_paths",
-    srcs = ["file_paths.py"],
-    deps = [],
-    pyright_deps = [
-        "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_session",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-pyright_library(
-    name = "file_paths_impl",
-    srcs = ["file_paths_impl.py"],
-    deps = [],
-    pyright_deps = [
-        "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_session",
-        ":file_paths",
     ],
     visibility = ["//visibility:public"],
 )
@@ -189,4 +166,3 @@ pyright_library(
 build_derived_test(
     name = "targets_derived_test",
 )
-

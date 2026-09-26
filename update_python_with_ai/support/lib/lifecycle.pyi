@@ -170,6 +170,7 @@ from typing import (
     Callable,
     ContextManager,
     Optional,
+    Protocol,
     Sequence,
     TypeVar,
 )
@@ -180,12 +181,33 @@ T = TypeVar("T")
 class LifecycleTier:
     name: str
     parent: Optional[LifecycleTier]
-    def __init__(self, name: str, parent: Optional[LifecycleTier] = None) -> None: ...
+    def __init__(self, name: str = ..., parent: Optional[LifecycleTier] = None) -> None: ...
     def create_child(self, name: str) -> LifecycleTier: ...
-    def is_descendant_of(self, other: LifecycleTier | str) -> bool: ...
+    def is_descendant_of(self, other: LifecycleTier | type[LifecycleTier] | str) -> bool: ...
 
 
-system: LifecycleTier
+class RootTier(LifecycleTier): ...
+
+
+class ChildTierOf[ParentTier: LifecycleTier](LifecycleTier): ...
+
+
+class SystemTier(RootTier): ...
+
+
+class InTier[T: LifecycleTier](Protocol):
+    """Marker protocol indicating membership in a specific lifecycle tier."""
+    ...
+
+
+system: SystemTier
+
+
+def get_tier[T: LifecycleTier](tier_type: type[T]) -> T:
+    """
+    Retrieves the singleton instance of the specified lifecycle tier type.
+    """
+    ...
 
 
 class Singleton:
@@ -221,7 +243,7 @@ class LifecycleScope:
     is_closed: bool
     def __init__(
         self,
-        phase: LifecycleTier | str,
+        phase: LifecycleTier | type[LifecycleTier] | str,
         registry: Optional[LifecycleRegistry] = None,
         parent: Optional[LifecycleScope] = None,
         setup: Optional[Callable[[LifecycleScope], None]] = None,
@@ -235,14 +257,14 @@ class LifecycleScope:
     def close(self) -> None: ...
     def enter_child_phase(
         self,
-        phase: LifecycleTier | str,
+        phase: LifecycleTier | type[LifecycleTier] | str,
         *,
         setup: Optional[Callable[[LifecycleScope], None]] = None,
         defer_startup: bool = False,
     ) -> LifecycleScope: ...
     def begin_child_phase(
         self,
-        phase: LifecycleTier | str,
+        phase: LifecycleTier | type[LifecycleTier] | str,
         *,
         setup: Optional[Callable[[LifecycleScope], None]] = None,
         defer_startup: bool = False,
@@ -257,22 +279,22 @@ class LifecycleRegistry:
         impl: type[Any],
         *,
         keys: Sequence[type[Any]],
-        phase: LifecycleTier | str = ...,
+        phase: LifecycleTier | type[LifecycleTier] | str = ...,
     ) -> SingletonDescriptor: ...
     def register_singleton(
         self,
         impl: type[Any],
         *,
         keys: Sequence[type[Any]],
-        tier: Optional[LifecycleTier | str] = None,
+        tier: Optional[LifecycleTier | type[LifecycleTier] | str] = None,
     ) -> SingletonDescriptor: ...
     def register_instance(
         self,
         instance: Any,
         *,
         keys: Sequence[type[Any]],
-        phase: Optional[LifecycleTier | str] = None,
-        tier: Optional[LifecycleTier | str] = None,
+        phase: Optional[LifecycleTier | type[LifecycleTier] | str] = None,
+        tier: Optional[LifecycleTier | type[LifecycleTier] | str] = None,
     ) -> SingletonDescriptor: ...
     def find_descriptor(self, key: type[Any]) -> Optional[SingletonDescriptor]: ...
 
@@ -290,7 +312,7 @@ def get_singleton(key: type[T]) -> T: ...
 
 
 def enter_phase(
-    phase: LifecycleTier | str,
+    phase: LifecycleTier | type[LifecycleTier] | str,
     *,
     parent: Optional[LifecycleScope] = None,
     registry: Optional[LifecycleRegistry] = None,
@@ -300,7 +322,7 @@ def enter_phase(
 
 
 def begin_phase(
-    phase: LifecycleTier | str,
+    phase: LifecycleTier | type[LifecycleTier] | str,
     *,
     parent: Optional[LifecycleScope] = None,
     registry: Optional[LifecycleRegistry] = None,

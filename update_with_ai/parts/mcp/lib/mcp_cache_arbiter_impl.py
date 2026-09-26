@@ -19,7 +19,7 @@ class CacheArbiter(mcp_cache_arbiter.CacheArbiter, Singleton):
     ) -> mcp_cache_arbiter.CacheRoutingAction:
         session_mgr = get_singleton(mcp_session.RoleSessionManager)
         session = session_mgr.get_session(conversation_id)
-        if session is None or not isinstance(session.status, mcp_session.Idle):
+        if session is None or not isinstance(session.status, mcp_session.IdleSession):
             return mcp_cache_arbiter.NoRoutingAction()
 
         subgraph = get_singleton(dag_subgraph.DagSubgraph)
@@ -56,7 +56,7 @@ class CacheArbiter(mcp_cache_arbiter.CacheArbiter, Singleton):
         session_mgr = get_singleton(mcp_session.RoleSessionManager)
         actions: list[mcp_cache_arbiter.CacheRoutingAction] = []
         for conv_id, session in session_mgr.active_sessions.items():
-            if isinstance(session.status, mcp_session.Idle):
+            if isinstance(session.status, mcp_session.IdleSession):
                 action = self.evaluate_session_readiness(conv_id)
                 if not isinstance(action, mcp_cache_arbiter.NoRoutingAction):
                     actions.append(action)

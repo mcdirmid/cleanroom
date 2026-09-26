@@ -32,34 +32,61 @@ class CleanroomDagCliTest(unittest.TestCase):
             ["//update_python_with_ai:high"],
         )
 
-        # Low role depends on high
+        # Requirements role depends on high
+        self.assertEqual(
+            cleanroom_dag_cli.resolve_roles("requirements", "//pkg/unit"),
+            ["//update_python_with_ai:high", "//update_python_with_ai:requirements"],
+        )
+
+        # Grounding role depends on requirements and high
+        self.assertEqual(
+            cleanroom_dag_cli.resolve_roles("grounding", "//pkg/unit"),
+            [
+                "//update_python_with_ai:high",
+                "//update_python_with_ai:requirements",
+                "//update_python_with_ai:grounding",
+            ],
+        )
+
+        # Low role (backward-compatible alias) depends on requirements and high
         self.assertEqual(
             cleanroom_dag_cli.resolve_roles("low", "//pkg/unit"),
-            ["//update_python_with_ai:high", "//update_python_with_ai:low"],
+            [
+                "//update_python_with_ai:high",
+                "//update_python_with_ai:requirements",
+                "//update_python_with_ai:low",
+            ],
         )
 
-        # Lib role depends on low and high
+        # Lib role depends on grounding, requirements, and high
         self.assertEqual(
             cleanroom_dag_cli.resolve_roles("lib", "//pkg/unit"),
-            ["//update_python_with_ai:high", "//update_python_with_ai:low", "//update_python_with_ai:lib"],
+            [
+                "//update_python_with_ai:high",
+                "//update_python_with_ai:requirements",
+                "//update_python_with_ai:grounding",
+                "//update_python_with_ai:lib",
+            ],
         )
 
-        # Test role depends on lib, low, high
+        # Test role depends on lib, grounding, requirements, high
         self.assertEqual(
             cleanroom_dag_cli.resolve_roles("test", "//pkg/unit"),
             [
                 "//update_python_with_ai:high",
-                "//update_python_with_ai:low",
+                "//update_python_with_ai:requirements",
+                "//update_python_with_ai:grounding",
                 "//update_python_with_ai:lib",
                 "//update_python_with_ai:test",
             ],
         )
 
-        # Coverage role depends on qa, test, lib, low, high
+        # Coverage role depends on qa, test, lib, grounding, requirements, high
         roles_coverage = cleanroom_dag_cli.resolve_roles("coverage", "//pkg/unit")
         self.assertEqual(roles_coverage[-1], "//update_python_with_ai:coverage")
         self.assertIn("//update_python_with_ai:high", roles_coverage)
-        self.assertIn("//update_python_with_ai:low", roles_coverage)
+        self.assertIn("//update_python_with_ai:requirements", roles_coverage)
+        self.assertIn("//update_python_with_ai:grounding", roles_coverage)
         self.assertIn("//update_python_with_ai:lib", roles_coverage)
         self.assertIn("//update_python_with_ai:test", roles_coverage)
         self.assertIn("//update_python_with_ai:qa", roles_coverage)
@@ -91,7 +118,7 @@ class CleanroomDagCliTest(unittest.TestCase):
             data = json.loads(mock_stdout.getvalue())
             self.assertEqual(data["target"]["role"], "//update_python_with_ai:test")
             self.assertEqual(data["target"]["unit"], "//pkg/unit")
-            self.assertEqual(len(data["roles"]), 4)
+            self.assertEqual(len(data["roles"]), 5)
 
     def test_main_cli_inject_change(self) -> None:
         with patch("sys.stdout", new_callable=io.StringIO) as mock_stdout:
@@ -172,7 +199,7 @@ class CleanroomDagCliTest(unittest.TestCase):
             self.assertEqual(data["target"]["role"], "//update_python_with_ai:qa")
             self.assertEqual(data["target"]["unit"], "//testing/parts/sandbox:sandbox_asm")
             self.assertEqual(data["target"]["node_target"], "//testing/parts/sandbox:sandbox_asm_qa")
-            self.assertEqual(len(data["roles"]), 5)
+            self.assertEqual(len(data["roles"]), 6)
 
     def test_main_cli_inject_change_shortcut(self) -> None:
         with patch("sys.stdout", new_callable=io.StringIO) as mock_stdout:

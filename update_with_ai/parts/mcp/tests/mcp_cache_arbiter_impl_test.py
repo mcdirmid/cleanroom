@@ -6,7 +6,7 @@ import time
 from typing import List, Mapping, Optional, Sequence
 import unittest
 from support.lib.lifecycle import LifecycleRegistry, LifecycleScope, enter_phase, system
-from update_with_ai.parts.dag.lib.dag_storage import Node
+from update_with_ai.parts.dag.lib.dag_storage import DagNode
 from update_with_ai.parts.dag.lib.dag_subgraph import DagSubgraph
 from update_with_ai.parts.mcp.lib.mcp_cache_arbiter import (
     ColdCacheRecycle,
@@ -18,9 +18,9 @@ from update_with_ai.parts.mcp.lib.mcp_cache_arbiter_impl import (
     __initialize__,
 )
 from update_with_ai.parts.mcp.lib.mcp_session import (
-    Active,
+    ActiveSession,
     ConversationId,
-    Idle,
+    IdleSession,
     RoleAgentSession,
     RoleSessionManager,
 )
@@ -28,9 +28,9 @@ from update_with_ai.parts.mcp.lib.mcp_session import (
 
 class MockDagSubgraph:
     def __init__(self) -> None:
-        self.ready_nodes: List[Node] = []
+        self.ready_nodes: List[DagNode] = []
 
-    def next_ready_batch(self) -> List[Node]:
+    def next_ready_batch(self) -> List[DagNode]:
         return list(self.ready_nodes)
 
 
@@ -76,11 +76,11 @@ class McpCacheArbiterImplTest(unittest.TestCase):
                 unit_root="//pkg:builder",
                 scope=self._create_mock_scope(),
                 last_active_timestamp=time.time() - 300.0,
-                status=Idle(),
+                status=IdleSession(),
             )
             self.mock_session_mgr.sessions[cid] = session
             self.mock_subgraph.ready_nodes = [
-                Node(unit_address="//pkg:builder", role_address="builder")
+                DagNode(unit_address="//pkg:builder", role_address="builder")
             ]
 
             # Requirement: [CacheArbiter] Evaluating session readiness produces a warm cache wakeup when ready dirty nodes exist and elapsed inactivity is at most nine hundred seconds.
@@ -102,11 +102,11 @@ class McpCacheArbiterImplTest(unittest.TestCase):
                 unit_root="//pkg:builder",
                 scope=self._create_mock_scope(),
                 last_active_timestamp=time.time() - 950.0,
-                status=Idle(),
+                status=IdleSession(),
             )
             self.mock_session_mgr.sessions[cid] = session
             self.mock_subgraph.ready_nodes = [
-                Node(unit_address="//pkg:builder", role_address="builder")
+                DagNode(unit_address="//pkg:builder", role_address="builder")
             ]
 
             # Requirement: [CacheArbiter] Evaluating session readiness produces a cold cache recycle when ready dirty nodes exist and elapsed inactivity exceeds nine hundred seconds.
@@ -129,18 +129,18 @@ class McpCacheArbiterImplTest(unittest.TestCase):
                 unit_root="//pkg:builder",
                 scope=self._create_mock_scope(),
                 last_active_timestamp=time.time() - 100.0,
-                status=Active(),
+                status=ActiveSession(),
             )
             self.mock_session_mgr.sessions[cid] = session
             self.mock_subgraph.ready_nodes = [
-                Node(unit_address="//pkg:builder", role_address="builder")
+                DagNode(unit_address="//pkg:builder", role_address="builder")
             ]
 
-            # Active session -> No routing
+            # ActiveSession session -> No routing
             action_active = arbiter.evaluate_session_readiness(cid)
             self.assertIsInstance(action_active, NoRoutingAction)
 
-            # Idle session with no matching nodes for role -> No routing
+            # IdleSession session with no matching nodes for role -> No routing
             cid_idle = ConversationId("worker-idle-nowork")
             session_idle = RoleAgentSession(
                 conversation_id=cid_idle,
@@ -148,7 +148,7 @@ class McpCacheArbiterImplTest(unittest.TestCase):
                 unit_root="//pkg:auditor",
                 scope=self._create_mock_scope(),
                 last_active_timestamp=time.time() - 100.0,
-                status=Idle(),
+                status=IdleSession(),
             )
             self.mock_session_mgr.sessions[cid_idle] = session_idle
             action_nowork = arbiter.evaluate_session_readiness(cid_idle)
@@ -176,7 +176,7 @@ class McpCacheArbiterImplTest(unittest.TestCase):
                 unit_root="//pkg:builder",
                 scope=self._create_mock_scope(),
                 last_active_timestamp=now - 200.0,
-                status=Idle(),
+                status=IdleSession(),
             )
             self.mock_session_mgr.sessions[cid_cold] = RoleAgentSession(
                 conversation_id=cid_cold,
@@ -184,7 +184,7 @@ class McpCacheArbiterImplTest(unittest.TestCase):
                 unit_root="//pkg:builder",
                 scope=self._create_mock_scope(),
                 last_active_timestamp=now - 1200.0,
-                status=Idle(),
+                status=IdleSession(),
             )
             self.mock_session_mgr.sessions[cid_active] = RoleAgentSession(
                 conversation_id=cid_active,
@@ -192,7 +192,7 @@ class McpCacheArbiterImplTest(unittest.TestCase):
                 unit_root="//pkg:builder",
                 scope=self._create_mock_scope(),
                 last_active_timestamp=now - 50.0,
-                status=Active(),
+                status=ActiveSession(),
             )
             self.mock_session_mgr.sessions[cid_unmatched] = RoleAgentSession(
                 conversation_id=cid_unmatched,
@@ -200,11 +200,11 @@ class McpCacheArbiterImplTest(unittest.TestCase):
                 unit_root="//pkg:other",
                 scope=self._create_mock_scope(),
                 last_active_timestamp=now - 200.0,
-                status=Idle(),
+                status=IdleSession(),
             )
 
             self.mock_subgraph.ready_nodes = [
-                Node(unit_address="//pkg:builder", role_address="builder")
+                DagNode(unit_address="//pkg:builder", role_address="builder")
             ]
 
             # Requirement: [CacheArbiter] Evaluating all idle sessions produces routing actions for all idle sessions with ready work.

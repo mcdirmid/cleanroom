@@ -16,7 +16,7 @@ from support.lib.lifecycle import (
 )
 
 
-def _format_node(node: dag_storage.Node) -> str:
+def _format_node(node: dag_storage.DagNode) -> str:
     if node.role_address:
         return f"{node.unit_address}#{node.role_address}"
     return node.unit_address
@@ -28,13 +28,13 @@ class Loop(loop.Loop, Singleton):
     def __init__(self) -> None:
         pass
 
-    def run_cleaning_pass(self, root: dag_storage.Node) -> loop.BuildResult:
+    def run_cleaning_pass(self, root: dag_storage.DagNode) -> loop.BuildResult:
         start_time = time.time()
         logger = get_singleton(runner_logger.RunnerLogger)
         root_str = _format_node(root)
         # Requirement: Telemetry capturing execution events, pass duration, and build outcome is streamed to standard output and transcript files.
         logger.consume(
-            runner_logger.LogEvent(
+            runner_logger.RunnerLogEvent(
                 event_name="build_pass_start",
                 summary=f"Starting cleaning pass for root {root_str}",
                 transcript_representation=f"=== Cleaning Pass Started: {root_str} ===",
@@ -47,8 +47,8 @@ class Loop(loop.Loop, Singleton):
         node_cleaner = get_singleton(loop_node_cleaner.NodeCleaner)
 
         # Requirement: Target labels are resolved against workspace directories or runfiles trees to populate graph storage.
-        visited: Set[dag_storage.Node] = set()
-        queue: list[dag_storage.Node] = [root]
+        visited: Set[dag_storage.DagNode] = set()
+        queue: list[dag_storage.DagNode] = [root]
         while queue:
             curr = queue.pop(0)
             if curr in visited:
@@ -65,7 +65,7 @@ class Loop(loop.Loop, Singleton):
         failure_reason: Optional[str] = None
         try:
             cleaner.clean(root, node_cleaner)
-            reachable: Set[dag_storage.Node] = set()
+            reachable: Set[dag_storage.DagNode] = set()
             check_queue = [root]
             while check_queue:
                 curr_node = check_queue.pop(0)
@@ -95,7 +95,7 @@ class Loop(loop.Loop, Singleton):
         telemetry_summary = f"{summary} in {duration:.1f}s"
         # Requirement: Telemetry capturing execution events, pass duration, and build outcome is streamed to standard output and transcript files.
         logger.consume(
-            runner_logger.LogEvent(
+            runner_logger.RunnerLogEvent(
                 event_name="build_pass_end",
                 summary=telemetry_summary,
                 transcript_representation=f"=== Cleaning Pass Ended: {telemetry_summary} ===",
@@ -105,21 +105,21 @@ class Loop(loop.Loop, Singleton):
         return loop.BuildResult(success=success, summary=summary)
 
     def mark_node_dirty(
-        self, target: dag_storage.Node, change: dag_storage.Change
+        self, target: dag_storage.DagNode, change: dag_storage.ChangeMessage
     ) -> None:
         # Requirement: [Loop] The loop marks a target node dirty by injecting a change message into its pending messages.
         storage = get_singleton(dag_storage.DagStorage)
         storage.add_message(change, to=target)
 
     def inject_node_feedback(
-        self, target: dag_storage.Node, feedback: dag_storage.Feedback
+        self, target: dag_storage.DagNode, feedback: dag_storage.FeedbackMessage
     ) -> None:
         # Requirement: [Loop] The loop injects a caller-supplied feedback message into a target node.
         storage = get_singleton(dag_storage.DagStorage)
         storage.add_message(feedback, to=target)
 
     def broadcast_node_change(
-        self, origin: dag_storage.Node, change: dag_storage.Change
+        self, origin: dag_storage.DagNode, change: dag_storage.ChangeMessage
     ) -> None:
         # Requirement: [Loop] The loop broadcasts a caller-supplied change message from a node to all of its reverse dependencies.
         storage = get_singleton(dag_storage.DagStorage)

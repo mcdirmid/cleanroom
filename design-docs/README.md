@@ -32,10 +32,14 @@ The design documentation is organized across four foundational areas:
   - **Architectural Extensions (Section 8, TODO)**: Unused import ledgers, supervising LLM diagnostics evaluation, requirement prioritization, and atomic failure/response requirement decomposition.
   - **Grounding Translation & Alignment Challenges (Section 9)**: In-depth ledger of solved vs. open grounding problems, analyzing why prompt engineering alone fails at boundary enforcement, mock-to-protocol parity, and structural type translation.
 - **[Logic-Based Grounding Verification & Formal Specification](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/logic_based_grounding_verification.md)** (`logic_based_grounding_verification.md`):
-  - Formal analysis of logic programming paradigms (First-Order Logic, Prolog, Datalog, and Constructive Type Theory) for specification grounding.
-  - Explains why classical First-Order Logic falls short (monotonicity, frame problem, constructive value synthesis vs propositional truth, lifecycle scoping, exhaustive branching).
-  - Clarifies Datalog's forward chaining and goal-directed Magic Sets query evaluation.
-  - Proposes a 3-tier formal verification architecture combining Datalog scope checking, typed dataflow reachability, and effect framing to replace unverified natural language `GROUNDING_ARGUMENT:` blocks.
+  - Formal specification and end-to-end verification pipeline bridging High-Level Specs (`high/*.md`) to executable stubs (`.pyi`).
+  - Separates orthogonal requirement presentation from semantic reachability, treating logic reasoning as an outsourced black box.
+  - Documents the bidirectional neuro-symbolic workflow: downstream derivation witness extraction for library code generation, and upstream 3-tier gap triage (synonym aliasing, bridge rules, and HLS diagnostic self-healing).
+- **[Groundtalk: Declarative Grounding Logic & Forward-Chaining Engine](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/groundtalk.md)** (`groundtalk.md`):
+  - Definitive language specification and inference engine architecture for Cleanroom grounding logic.
+  - Formulates atomic capability (`action`) and state custody (`knows`) predicates with polymorphic subtyping subsumption.
+  - Formalizes the three grounding obligation categories: intrinsic axioms (`GROUNDING_IMPLEMENTS:`), exported guarantees (`GROUNDING_PROVISIONS:`), and consumed dependencies (`GROUNDING_REQUIREMENTS:`).
+  - Outlines the lightweight hybrid backward-pruned semi-naive forward-chaining engine embedded directly in `grounding_tool.py`, with why-provenance witness extraction and why-not provenance diagnostic gap diffing.
 - **[Legacy Grounding Format (Historical Archive)](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/grounding_format.md)** (`grounding_format.md`):
   - *Archived / Superseded*: Historical documentation of the earlier 4-column Markdown table format (`type | name | signature | comment`). Preserved for context on the evolution of Cleanroom grounding.
 

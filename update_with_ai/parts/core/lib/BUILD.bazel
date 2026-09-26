@@ -28,6 +28,29 @@ pyright_library(
     visibility = ["//visibility:public"],
 )
 
+pyright_library(
+    name = "file_paths",
+    srcs = ["file_paths.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "file_paths_impl",
+    srcs = ["file_paths_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_session",
+        ":file_paths",
+    ],
+    visibility = ["//visibility:public"],
+)
+
 build_derived_test(
     name = "targets_derived_test",
 )

@@ -2,28 +2,26 @@
 
 ## Purpose
 
-The agent_config interface component defines execution limits, interaction modes, and inspection policies governing agent sessions.
+The agent_config interface component defines execution limits, interaction modes, and read policies governing agent sessions.
 
-Autonomous agent workflows require explicit bounds on conversational depth, automated tool chaining, instructional delivery modes, and session initialization. Without centralized agent operational policies, individual drivers and execution environments risk unbound execution loops, inconsistent instruction pacing, and uncoordinated file inspections. The agent_config interface component establishes a unified system service that exposes conversational turn limits, follow-up injection policies, step-by-step guidance modes, and startup file inspection rules.
+Autonomous agent workflows require explicit bounds on conversational depth, automated tool chaining, instructional delivery modes, and session initialization. Without centralized agent operational policies, individual drivers and execution environments risk unbound execution loops, inconsistent instruction pacing, and uncoordinated file reads. The agent_config interface component establishes a unified system service that exposes conversational turn limits, follow-up injection policies, step-by-step guidance modes, and startup file read rules.
 
 **Out of scope:** The agent_config interface component does not manage API credentials, parse build manifests, or compute graph schedules; these are handled by other components.
 
 ## Types and Behavior
 
-A *conversation limit* is a bound on the maximum number of model interaction turns permitted in an agent run.
+A system's *agent config* provides execution parameters for agent sessions.
 
-The *agent config* is a system service that provides execution parameters for agent sessions.
+The agent config provides a conversation limit bounding the maximum number of model interaction turns permitted in an agent run. The agent config also provides a *supersede arg keep* limit bounding trailing characters of string arguments preserved when tool responses are superseded. The agent config also provides whether the agent:
 
-The agent config provides:
+- Injects followups to execute follow-up tool calls specified by tool responses.
 
-- The conversation limit bounding interaction turns.
+- Can use step mode to communicate a guide to the agent progressively.
 
-- Whether the agent should *inject followups* to execute follow-up tool calls specified by tool responses.
+- Performs startup reads to read declared files at session start.
 
-- Whether the agent should use *step mode* to communicate a guide to the agent progressively.
+- Operates in mcp mode.
 
-- Whether the agent should perform *startup reads* to inspect declared files at session start.
+- Expects editing tools to produce delta output.
 
-- Whether editing tools should produce *delta output*.
 
-- Whether the agent should operate in *mcp mode*.

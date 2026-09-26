@@ -30,7 +30,7 @@ def _role_tier(role_address: str) -> int:
     return role_order.get(name, 100)
 
 
-def _node_sort_key(n: dag_storage.Node) -> tuple[int, str, str]:
+def _node_sort_key(n: dag_storage.DagNode) -> tuple[int, str, str]:
     return (_role_tier(n.role_address), n.unit_address, n.role_address)
 
 
@@ -38,16 +38,16 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
     tier = system
 
     def __init__(self) -> None:
-        self._root: Optional[dag_storage.Node] = None
-        self._nodes: Set[dag_storage.Node] = set()
-        self._order: List[dag_storage.Node] = []
-        self._visits: Dict[dag_storage.Node, int] = {}
+        self._root: Optional[dag_storage.DagNode] = None
+        self._nodes: Set[dag_storage.DagNode] = set()
+        self._order: List[dag_storage.DagNode] = []
+        self._visits: Dict[dag_storage.DagNode, int] = {}
 
     def _collect_subgraph(
-        self, root: dag_storage.Node, storage: dag_storage.DagStorage
-    ) -> Set[dag_storage.Node]:
-        visited: Set[dag_storage.Node] = set()
-        queue: deque[dag_storage.Node] = deque([root])
+        self, root: dag_storage.DagNode, storage: dag_storage.DagStorage
+    ) -> Set[dag_storage.DagNode]:
+        visited: Set[dag_storage.DagNode] = set()
+        queue: deque[dag_storage.DagNode] = deque([root])
         while queue:
             curr = queue.popleft()
             if curr not in visited:
@@ -57,11 +57,11 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
         return visited
 
     def _topological_sort(
-        self, nodes: Set[dag_storage.Node], storage: dag_storage.DagStorage
-    ) -> List[dag_storage.Node]:
+        self, nodes: Set[dag_storage.DagNode], storage: dag_storage.DagStorage
+    ) -> List[dag_storage.DagNode]:
         sorted_nodes = sorted(nodes, key=_node_sort_key)
-        in_degree: Dict[dag_storage.Node, int] = {n: 0 for n in sorted_nodes}
-        adj: Dict[dag_storage.Node, List[dag_storage.Node]] = {n: [] for n in sorted_nodes}
+        in_degree: Dict[dag_storage.DagNode, int] = {n: 0 for n in sorted_nodes}
+        adj: Dict[dag_storage.DagNode, List[dag_storage.DagNode]] = {n: [] for n in sorted_nodes}
 
         for n in sorted_nodes:
             for dep in sorted(storage.get_dependencies(n), key=lambda d: _node_sort_key(d.node)):
@@ -70,7 +70,7 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
                     in_degree[n] += 1
 
         ready = sorted([n for n, deg in in_degree.items() if deg == 0], key=_node_sort_key)
-        order: List[dag_storage.Node] = []
+        order: List[dag_storage.DagNode] = []
 
         while ready:
             curr = ready.pop(0)
@@ -86,7 +86,7 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
 
         return order
 
-    def set_target(self, root: dag_storage.Node) -> None:
+    def set_target(self, root: dag_storage.DagNode) -> None:
         # Requirement: [DagSubgraph] Setting a target collects all reachable dependency nodes from the target node in dag storage and computes their dependency-first topological order.
         # Requirement: Setting a target node scopes the target subgraph to all reachable dependency nodes rooted at the target node in dag storage, arranged in dependency-first topological order, breaking ties by role tier depth first, then by unit address.
         storage = get_singleton(dag_storage.DagStorage)
@@ -101,12 +101,12 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
         storage = get_singleton(dag_storage.DagStorage)
         return not any(storage.is_dirty(n) for n in self._nodes)
 
-    def next_ready_batch(self) -> List[dag_storage.Node]:
+    def next_ready_batch(self) -> List[dag_storage.DagNode]:
         storage = get_singleton(dag_storage.DagStorage)
         cfg = get_singleton(dag_config.DagConfig)
         batch_size = max(1, cfg.batch_size)
 
-        ready_candidates: List[dag_storage.Node] = []
+        ready_candidates: List[dag_storage.DagNode] = []
         for curr in self._order:
             if not storage.is_dirty(curr):
                 continue
@@ -128,8 +128,8 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
 
         # Requirement: [DagSubgraph] When obtaining the next ready batch, uncleaned dirty nodes prioritized by role tier precedence (upstream roles before downstream roles) whose dependencies in the target subgraph are clean in dag storage or present in the same ready batch are selected, grouped by role address up to a maximum batch size.
         # Requirement: The next ready batch consists of contiguous dirty nodes in topological order that share the same role address, prioritized by role tier precedence (prioritizing lib before test, and test before qa) and having all their dependencies in the target subgraph clean in dag storage or present in the same ready batch, starting from the earliest ready dirty node in topological order and bounded by the batch size obtained from dag config.
-        batch: List[dag_storage.Node] = [curr]
-        batch_set: Set[dag_storage.Node] = {curr}
+        batch: List[dag_storage.DagNode] = [curr]
+        batch_set: Set[dag_storage.DagNode] = {curr}
 
         curr_idx = self._order.index(curr)
         if batch_size > 1:
@@ -151,7 +151,7 @@ class DagSubgraph(dag_subgraph.DagSubgraph, Singleton):
 
         return batch
 
-    def record_visit(self, nodes: Sequence[dag_storage.Node]) -> None:
+    def record_visit(self, nodes: Sequence[dag_storage.DagNode]) -> None:
         cfg = get_singleton(dag_config.DagConfig)
         limit = cfg.node_visit_limit
 

@@ -67,12 +67,12 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
 
     def can_write(
         self, path: Union[str, agent_file_alias.FileAlias]
-    ) -> tool_provider.Response:
+    ) -> tool_provider.ToolResponse:
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         target_file = (
             path
             if isinstance(path, agent_file_alias.FileAlias)
-            else alias_mgr.convert(path)
+            else alias_mgr.convert(tool_provider.WireString(path))
         )
 
         # Requirement: Tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
@@ -82,7 +82,7 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
                 if isinstance(target_file, agent_file_alias.FileAlias)
                 else str(target_file)  # pragma: no cover (assumption: converter always returns FileAlias)
             )
-            return tool_provider.Response(
+            return tool_provider.ToolResponse(
                 is_failed=True,
                 is_terminated=False,
                 content=f"Error: File '{file_name}' is not a declared read-write file.",
@@ -91,7 +91,7 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
 
         # Requirement: Tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
         if target_file in self.locked_files:
-            return tool_provider.Response(
+            return tool_provider.ToolResponse(
                 is_failed=True,
                 is_terminated=False,
                 content=f"Error: File '{target_file.relative_path}' is completed and locked against further modification for this session.",
@@ -100,7 +100,7 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
 
         # Requirement: When an unlocked read-write file is supplied, tool execution records the file edit in the edit manager and produces a successful response indicating that modification is permitted.
         self.record_file_edit(target_file)
-        return tool_provider.Response(
+        return tool_provider.ToolResponse(
             is_failed=False,
             is_terminated=False,
             content=f"Modification permitted for '{target_file.relative_path}'.",
@@ -156,7 +156,7 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
                     return True
         return False
 
-    def file_hash(self, file: Union[str, agent_file_alias.FileAlias]) -> str:
+    def file_hash(self, file: agent_file_alias.FileAlias) -> str:
         # Requirement: The edit manager computes a file hash for a read-write file from its content.
         # Requirement: [EditManager] The edit manager computes a file hash for a read-write file from its content.
         try:
@@ -164,7 +164,7 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
             target_file = (
                 file
                 if isinstance(file, agent_file_alias.FileAlias)
-                else alias_mgr.convert(file)
+                else alias_mgr.convert(tool_provider.WireString(file))
             )
             if not isinstance(target_file, agent_file_alias.BoundFile):
                 return hashlib.md5(b"").hexdigest()
@@ -243,8 +243,8 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
             self.record_initial_content(host_path, force=True)
 
 
-class _OrderedParameterSet(set[tool_provider.Parameter]):
-    def __init__(self, items: tuple[tool_provider.Parameter, ...]) -> None:
+class _OrderedParameterSet(set[tool_provider.ToolParameter]):
+    def __init__(self, items: tuple[tool_provider.ToolParameter, ...]) -> None:
         super().__init__(items)
         self._items = items
 
@@ -283,10 +283,10 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         )
 
     @property
-    def file_alias_parameter(self) -> tool_provider.Parameter:
+    def file_alias_parameter(self) -> tool_provider.ToolParameter:
         # Requirement: The replace file content tool path parameter uses the alias manager to convert a file alias.
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
-        return tool_provider.Parameter(
+        return tool_provider.ToolParameter(
             name="path",
             description="Target file alias (optional; defaults to the last file read or edited in the session)",
             parameter_converter=alias_mgr,
@@ -294,9 +294,9 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         )
 
     @property
-    def target_content_parameter(self) -> tool_provider.Parameter:
+    def target_content_parameter(self) -> tool_provider.ToolParameter:
         # Requirement: The replace file content tool target content parameter uses a string parameter converter to accept text.
-        return tool_provider.Parameter(
+        return tool_provider.ToolParameter(
             name="target_content",
             description="Exact text to replace within the file (or within start_line and end_line search window if provided). This parameter is always required.",
             parameter_converter=tool_provider.STRING_PARAMETER_TYPE,
@@ -305,9 +305,9 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         )
 
     @property
-    def replacement_content_parameter(self) -> tool_provider.Parameter:
+    def replacement_content_parameter(self) -> tool_provider.ToolParameter:
         # Requirement: The replace file content tool replacement content parameter uses a string parameter converter to accept text.
-        return tool_provider.Parameter(
+        return tool_provider.ToolParameter(
             name="replacement_content",
             description="Replacement text content",
             parameter_converter=tool_provider.STRING_PARAMETER_TYPE,
@@ -315,9 +315,9 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         )
 
     @property
-    def start_line_parameter(self) -> tool_provider.Parameter:
+    def start_line_parameter(self) -> tool_provider.ToolParameter:
         # Requirement: The replace file content tool start line parameter uses an integer parameter converter to accept an integer.
-        return tool_provider.Parameter(
+        return tool_provider.ToolParameter(
             name="start_line",
             description="Optional 1-based starting line number of the search window (inclusive). Note: target_content is still required and searched for within this range.",
             parameter_converter=tool_provider.INTEGER_PARAMETER_TYPE,
@@ -325,9 +325,9 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         )
 
     @property
-    def end_line_parameter(self) -> tool_provider.Parameter:
+    def end_line_parameter(self) -> tool_provider.ToolParameter:
         # Requirement: The replace file content tool end line parameter uses an integer parameter converter to accept an integer.
-        return tool_provider.Parameter(
+        return tool_provider.ToolParameter(
             name="end_line",
             description="Optional 1-based ending line number of the search window (inclusive). Note: target_content is still required and searched for within this range.",
             parameter_converter=tool_provider.INTEGER_PARAMETER_TYPE,
@@ -335,16 +335,16 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         )
 
     @property
-    def allow_multiple_parameter(self) -> tool_provider.Parameter:
+    def allow_multiple_parameter(self) -> tool_provider.ToolParameter:
         # Requirement: The replace file content tool allow multiple parameter uses a boolean parameter converter to accept a boolean.
-        return tool_provider.Parameter(
+        return tool_provider.ToolParameter(
             name="allow_multiple",
             description="Whether to allow replacing multiple occurrences (defaults to false)",
             parameter_converter=tool_provider.BOOLEAN_PARAMETER_TYPE,
             is_required=False,
         )
     @property
-    def parameters(self) -> Set[tool_provider.Parameter]:
+    def parameters(self) -> Set[tool_provider.ToolParameter]:
         return _OrderedParameterSet(
             (
                 self.file_alias_parameter,
@@ -358,7 +358,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
 
     def execute_tool(
         self, actual_parameter_bindings: tool_provider.ActualParameterBindings
-    ) -> tool_provider.Response:
+    ) -> tool_provider.ToolResponse:
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
         target_file = bindings_map.get("path")
         target_content = str(bindings_map.get("target_content", ""))
@@ -381,14 +381,14 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         if target_file is None:
             last_file = edit_mgr.last_read_or_edited_file
             if last_file is None:
-                return tool_provider.Response(
+                return tool_provider.ToolResponse(
                     is_failed=True,
                     is_terminated=False,
                     content="Error: 'path' was not specified and no file has been read or edited yet in this session.",
                     suppression_key="replace_file_content",
                 )
             if not isinstance(last_file, agent_file_alias.ReadWriteFile):
-                return tool_provider.Response(
+                return tool_provider.ToolResponse(
                     is_failed=True,
                     is_terminated=False,
                     content=f"Error: 'path' was not specified and the last accessed file '{last_file.relative_path}' is not a read-write file.",
@@ -400,7 +400,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         elif not isinstance(target_file, agent_file_alias.ReadWriteFile):
             # Requirement: Editing tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
             # Requirement: Editing tool responses share a constant suppression key replace_file_content.
-            return tool_provider.Response(
+            return tool_provider.ToolResponse(
                 is_failed=True,
                 is_terminated=False,
                 content=f"Error: {target_file} is not a read-write file.",
@@ -410,7 +410,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
 
         # Requirement: Editing tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
         if target_file in edit_mgr.locked_files:
-            return tool_provider.Response(
+            return tool_provider.ToolResponse(
                 is_failed=True,
                 is_terminated=False,
                 content=f"Error: `{target_file.relative_path}` has been locked against further modification.",
@@ -436,7 +436,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         # Requirement: Tool execution fails if the start line is less than one or exceeds the total line count plus one, when a start line is provided.
         if start_line is not None:
             if start_line < 1 or start_line > total_lines + 1:
-                return tool_provider.Response(
+                return tool_provider.ToolResponse(
                     is_failed=True,
                     is_terminated=False,
                     content=f"Error: start_line {start_line} out of bounds (1..{total_lines + 1}).",
@@ -446,7 +446,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         # Requirement: Tool execution fails if the end line is less than one or exceeds the total line count, when an end line is provided.
         if end_line is not None:
             if end_line < 1 or end_line > total_lines:
-                return tool_provider.Response(
+                return tool_provider.ToolResponse(
                     is_failed=True,
                     is_terminated=False,
                     content=f"Error: end_line {end_line} out of bounds (1..{total_lines}).",
@@ -456,7 +456,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
         # Requirement: Tool execution fails if the start line exceeds the end line, when both start line and end line are provided.
         if start_line is not None and end_line is not None:
             if start_line > end_line:
-                return tool_provider.Response(
+                return tool_provider.ToolResponse(
                     is_failed=True,
                     is_terminated=False,
                     content=f"Error: start_line ({start_line}) cannot be greater than end_line ({end_line}).",
@@ -516,7 +516,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                         if actual_end_line > actual_start_line
                         else f"line {actual_start_line}"
                     )
-                    return tool_provider.Response(
+                    return tool_provider.ToolResponse(
                         is_failed=True,
                         is_terminated=False,
                         content=(
@@ -526,13 +526,13 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                         ),
                         suppression_key="replace_file_content",
                     )
-                return tool_provider.Response(
+                return tool_provider.ToolResponse(
                     is_failed=True,
                     is_terminated=False,
                     content=f"Error: target_content not found in specified line range [{s_idx + 1}, {e_idx}].",
                     suppression_key="replace_file_content",
                 )
-            return tool_provider.Response(
+            return tool_provider.ToolResponse(
                 is_failed=True,
                 is_terminated=False,
                 content="Error: target_content not found in file.",
@@ -541,7 +541,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
 
         if not allow_multiple and count > 1:
             if start_line is not None or end_line is not None:
-                return tool_provider.Response(
+                return tool_provider.ToolResponse(
                     is_failed=True,
                     is_terminated=False,
                     content=f"Error: target_content matches {count} locations in line range [{s_idx + 1}, {e_idx}]. Set allow_multiple=true or narrow the line range.",
@@ -554,7 +554,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
             )
             first_line = content[:first_idx].count("\n") + 1
             second_line = content[:second_idx].count("\n") + 1
-            return tool_provider.Response(
+            return tool_provider.ToolResponse(
                 is_failed=True,
                 is_terminated=False,
                 content=(
@@ -575,7 +575,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
 
         # Requirement: Editing tool execution fails if the edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
         if new_content == content:
-            return tool_provider.Response(
+            return tool_provider.ToolResponse(
                 is_failed=True,
                 is_terminated=False,
                 content="Error: replacement produced no change to file content.",
@@ -622,7 +622,7 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
             )
 
         # Requirement: Editing tool responses share a constant suppression key replace_file_content.
-        return tool_provider.Response(
+        return tool_provider.ToolResponse(
             is_failed=False,
             is_terminated=False,
             content=content_msg,

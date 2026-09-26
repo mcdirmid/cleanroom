@@ -10,4 +10,6 @@ Autonomous multi-turn agent runs require isolated operational scopes beneath the
 
 ## Types and Behavior
 
-The *agent session* is a lifecycle tier defined under the system lifecycle tier.
+An *agent* is an autonomous entity that cleans and reads workspace nodes by observing context and issuing tool calls.
+
+The *agent session* is a lifecycle tier defined under the system lifecycle tier that bounds the execution, conversation, and ephemeral state of an agent.

@@ -18,7 +18,7 @@ filegroup(
 
 update_python_with_ai(
     name = "bazel_asm",
-    module_deps = [':bazel_manifest_loader_impl', ':bazel_node_config_impl', ':bazel_storage_impl', ':bazel_target_impl', ':file_paths_impl'],
+    module_deps = [':bazel_manifest_loader_impl', ':bazel_node_config_impl', ':bazel_storage_impl', ':bazel_target_impl', '//update_with_ai/parts/core:file_paths_impl'],
 )
 
 update_python_with_ai(
@@ -38,7 +38,7 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "bazel_node_config_impl",
-    module_deps = ['//update_with_ai/parts/agent:agent_config', '//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', ':bazel_manifest_loader', '//update_with_ai/parts/dag:dag_storage', ':file_paths', '//update_with_ai/parts/sandbox:tool_provider'],
+    module_deps = ['//update_with_ai/parts/agent:agent_config', '//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config', '//update_with_ai/parts/agent:agent_session', ':bazel_manifest_loader', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/core:file_paths', '//update_with_ai/parts/sandbox:tool_provider'],
 )
 
 update_python_with_ai(
@@ -48,30 +48,20 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "bazel_storage_impl",
-    module_deps = ['//update_with_ai/parts/agent:agent_storage', ':bazel_target', ':file_paths', '//update_with_ai/parts/core:update_with_ai_proto_ext'],
+    module_deps = ['//update_with_ai/parts/agent:agent_storage', ':bazel_target', '//update_with_ai/parts/core:file_paths', '//update_with_ai/parts/core:update_with_ai_proto_ext'],
 )
 
 update_python_with_ai(
     name = "bazel_target",
-    module_deps = ['//update_with_ai/parts/dag:dag_storage', ':file_paths'],
+    module_deps = ['//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/core:file_paths'],
 )
 
 update_python_with_ai(
     name = "bazel_target_impl",
-    module_deps = [':bazel_target', ':bazel_target_labels_ext', '//update_with_ai/parts/dag:dag_storage', ':file_paths'],
+    module_deps = [':bazel_target', ':bazel_target_labels_ext', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/core:file_paths'],
 )
 
 update_python_with_ai(
     name = "bazel_target_labels_ext",
     module_deps = [],
-)
-
-update_python_with_ai(
-    name = "file_paths",
-    module_deps = [],
-)
-
-update_python_with_ai(
-    name = "file_paths_impl",
-    module_deps = [':file_paths', '//update_with_ai/parts/core:filesystem_ext'],
 )

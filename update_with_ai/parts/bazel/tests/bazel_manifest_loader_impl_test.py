@@ -15,14 +15,14 @@ from update_with_ai.parts.agent.lib.agent_storage import (
 )
 from update_with_ai.parts.bazel.lib.bazel_manifest_loader import (
     BazelManifestLoader,
-    Manifest,
+        TargetManifest,
 )
 from update_with_ai.parts.bazel.lib.bazel_manifest_loader_impl import (
     BazelManifestLoader as BazelManifestLoaderImpl,
     __initialize__,
 )
 from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget, NodeDirectory
-from update_with_ai.parts.dag.lib.dag_storage import Dependency, Message, Node
+from update_with_ai.parts.dag.lib.dag_storage import DagDependency, DagMessage, DagNode
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 
 
@@ -49,16 +49,16 @@ class MockNodeIdUtils:
             s = f"{s}:{parts[-1]}"
         return s
 
-    def normalize(self, raw_label: str, role_label: str = "") -> Node:
+    def normalize(self, raw_label: str, role_label: str = "") -> DagNode:
         if "#" in raw_label:
             u, r = raw_label.split("#", 1)
-            return Node(unit_address=self._norm(u), role_address=self._norm(r))
-        return Node(
+            return DagNode(unit_address=self._norm(u), role_address=self._norm(r))
+        return DagNode(
             unit_address=self._norm(raw_label),
             role_address=self._norm(role_label) if role_label else "",
         )
 
-    def extract_directory(self, node: Node) -> NodeDirectory:
+    def extract_directory(self, node: DagNode) -> NodeDirectory:
         pkg = node.unit_address.split(":")[0].lstrip("/")
         return _make_node_dir(os.path.join(self.base_dir, pkg))
 
@@ -67,35 +67,35 @@ class MockGraphStorage:
     tier = "system"
 
     def __init__(self) -> None:
-        self._definitions: Dict[Node, NodeDefinition] = {}
-        self._dependencies: Dict[Node, Set[Dependency]] = {}
-        self._source_files: Dict[Node, str] = {}
+        self._definitions: Dict[DagNode, NodeDefinition] = {}
+        self._dependencies: Dict[DagNode, Set[DagDependency]] = {}
+        self._source_files: Dict[DagNode, str] = {}
 
-    def get_node_definition(self, node: Node) -> Optional[NodeDefinition]:
+    def get_node_definition(self, node: DagNode) -> Optional[NodeDefinition]:
         return self._definitions.get(node)
 
-    def get_dependencies(self, node: Node) -> Set[Dependency]:
+    def get_dependencies(self, node: DagNode) -> Set[DagDependency]:
         return set(self._dependencies.get(node, set()))
 
-    def get_dependents(self, node: Node) -> Set[Node]:
+    def get_dependents(self, node: DagNode) -> Set[DagNode]:
         return set()
 
-    def get_messages(self, node: Node) -> Set[Message]:
+    def get_messages(self, node: DagNode) -> Set[DagMessage]:
         return set()
 
-    def is_dirty(self, node: Node) -> bool:
+    def is_dirty(self, node: DagNode) -> bool:
         return False
 
-    def register_dependent(self, node: Node) -> None:
+    def register_dependent(self, node: DagNode) -> None:
         pass
 
-    def clear_dependents(self, node: Node) -> None:
+    def clear_dependents(self, node: DagNode) -> None:
         pass
 
-    def add_message(self, message: Message, to: Node) -> None:
+    def add_message(self, message: DagMessage, to: DagNode) -> None:
         pass
 
-    def clear_messages(self, node: Node) -> None:
+    def clear_messages(self, node: DagNode) -> None:
         pass
 
 
@@ -120,7 +120,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
 
     def test_get_manifest(self) -> None:
         """CUJ: Reading manifest file from node package directory."""
-        node = Node(unit_address="//pkg/sub:target", role_address="")
+        node = DagNode(unit_address="//pkg/sub:target", role_address="")
         pkg_path = os.path.join(self.test_dir, "pkg/sub")
         os.makedirs(pkg_path, exist_ok=True)
         manifest_file = os.path.join(pkg_path, ".manifest.json")
@@ -155,7 +155,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
                 os.path.join(rf_main, "rf_node_manifest.json"), "w", encoding="utf-8"
             ) as f:
                 f.write('{"label": "//pkg/rf:rf_node"}')
-            rf_node = Node(unit_address="//pkg/rf:rf_node", role_address="")
+            rf_node = DagNode(unit_address="//pkg/rf:rf_node", role_address="")
             with patch.dict(os.environ, {"RUNFILES_DIR": runfiles_dir}):
                 # Requirement: The bazel manifest loader retrieves target manifests from workspace directories or runfiles trees for nodes in dag storage.
                 # Requirement: [BazelManifestLoader] The bazel manifest loader retrieves the manifest for a node in dag storage.
@@ -165,7 +165,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
                 self.assertIn("rf_node", rf_manifest)
 
             # Candidate read failure suppresses OSError
-            err_node = Node(unit_address="//pkg/err:err_node", role_address="")
+            err_node = DagNode(unit_address="//pkg/err:err_node", role_address="")
             err_pkg = os.path.join(self.test_dir, "pkg/err")
             os.makedirs(err_pkg, exist_ok=True)
             with open(
@@ -178,7 +178,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
 
     def test_get_manifest_synthesizes_from_unit_and_role(self) -> None:
         """CUJ: get_manifest synthesizes node manifest with template, parameters, and 2D dependencies."""
-        unit_node = Node(unit_address="//pkg/calc:calc_impl", role_address="//rules:qa")
+        unit_node = DagNode(unit_address="//pkg/calc:calc_impl", role_address="//rules:qa")
         calc_pkg = os.path.join(self.test_dir, "pkg/calc")
         rules_pkg = os.path.join(self.test_dir, "rules")
         os.makedirs(calc_pkg, exist_ok=True)
@@ -242,7 +242,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             self.assertIn("//pkg/calc:calc_spec#//rules:lib", data["silent_deps"])
 
             # Inactive component type (pass-through node)
-            asm_node = Node(
+            asm_node = DagNode(
                 unit_address="//pkg/calc:calc_asm", role_address="//rules:qa"
             )
             with open(
@@ -282,7 +282,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
                 }
             ]
         }
-        manifest_content = Manifest(json.dumps(manifest_data))
+        manifest_content = TargetManifest(json.dumps(manifest_data))
 
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
@@ -293,7 +293,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             defn = results[0]
             # Requirement: A manifest loader normalizes node references into canonical nodes.
             self.assertEqual(
-                defn.node, Node(unit_address="//pkg:target_a", role_address="")
+                defn.node, DagNode(unit_address="//pkg:target_a", role_address="")
             )
             self.assertEqual(defn.task_prompt, "Clean target A")
 
@@ -329,7 +329,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             "verify": None,
             "dependency_paths": [],
         }
-        manifest_content = Manifest(json.dumps(manifest_data))
+        manifest_content = TargetManifest(json.dumps(manifest_data))
 
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
@@ -340,7 +340,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             defn = results[0]
             # Requirement: A manifest loader normalizes node references into canonical nodes.
             self.assertEqual(
-                defn.node, Node(unit_address="//pkg:sample_node", role_address="")
+                defn.node, DagNode(unit_address="//pkg:sample_node", role_address="")
             )
             self.assertEqual(defn.task_prompt, "Implement the requested feature")
 
@@ -385,7 +385,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
                 "silent_cross_role_deps": [":lib"],
             },
         }
-        manifest_content = Manifest(json.dumps(synthesized_data))
+        manifest_content = TargetManifest(json.dumps(synthesized_data))
 
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
@@ -394,7 +394,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             # Requirement: A manifest loader resolves target manifests by loading unit manifests and role manifests to synthesize node definitions and dependencies across unit and role dimensions.
             self.assertEqual(len(results), 1)
             defn = results[0]
-            expected_node = Node(
+            expected_node = DagNode(
                 unit_address="//parts/sample:sample_impl",
                 role_address="//update_python_with_ai/roles:lib",
             )
@@ -460,7 +460,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
                 "active_component_types": ["implementation"],
             },
         }
-        manifest_content = Manifest(json.dumps(passthrough_data))
+        manifest_content = TargetManifest(json.dumps(passthrough_data))
 
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
@@ -469,7 +469,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
 
             self.assertEqual(len(results), 1)
             defn = results[0]
-            expected_node = Node(
+            expected_node = DagNode(
                 unit_address="//parts/sample:sample_asm",
                 role_address="//update_python_with_ai/roles:qa",
             )
@@ -505,7 +505,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
         os.makedirs(pkg_path, exist_ok=True)
         os.makedirs(role_pkg_path, exist_ok=True)
 
-        node_direct = Node(unit_address="//pkg/direct:myunit", role_address="//update_python_with_ai/roles:myrole")
+        node_direct = DagNode(unit_address="//pkg/direct:myunit", role_address="//update_python_with_ai/roles:myrole")
         direct_file = os.path.join(pkg_path, "myunit_myrole_manifest.json")
         direct_content = {
             "unit_data": {"name": "myunit"},
@@ -542,7 +542,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
                 "active_component_types": ["implementation"],
             }, f)
 
-        node_no_colon = Node(unit_address="//alt:altunit", role_address="altrole")
+        node_no_colon = DagNode(unit_address="//alt:altunit", role_address="altrole")
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
             # Requirement: The bazel manifest loader retrieves target manifests from workspace directories or runfiles trees for nodes in dag storage.
@@ -563,7 +563,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
         with open(os.path.join(role_pkg_dot, ".dotrole_manifest.json"), "w", encoding="utf-8") as f:
             json.dump({"active_component_types": ["implementation"]}, f)
 
-        node_dot = Node(unit_address="dotpkg/dotunit", role_address="dotrole")
+        node_dot = DagNode(unit_address="dotpkg/dotunit", role_address="dotrole")
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
             # Requirement: The bazel manifest loader retrieves target manifests from workspace directories or runfiles trees for nodes in dag storage.
@@ -589,7 +589,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
                 "active_component_types": ["interface"],
             },
         }
-        manifest_content = Manifest(json.dumps(manifest_data))
+        manifest_content = TargetManifest(json.dumps(manifest_data))
 
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
@@ -616,7 +616,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
             # Requirement: A manifest loader resolves target manifests by loading unit manifests and role manifests to synthesize node definitions and dependencies across unit and role dimensions.
-            res = loader.load_manifest(Manifest(json.dumps(manifest_nocolon)), self.storage)
+            res = loader.load_manifest(TargetManifest(json.dumps(manifest_nocolon)), self.storage)
             self.assertEqual(len(res), 1)
 
     def test_load_manifest_passthrough_and_active_additional_deps(self) -> None:
@@ -642,7 +642,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
             # Requirement: A manifest loader synthesizes promptless pass-through node definitions that act as graph dependencies without propagating changes when a unit's component type is not active for a role.
-            res_pt = loader.load_manifest(Manifest(json.dumps(passthrough_data)), self.storage)
+            res_pt = loader.load_manifest(TargetManifest(json.dumps(passthrough_data)), self.storage)
             self.assertEqual(len(res_pt), 1)
             pt_node = res_pt[0].node
             deps_pt = self.storage.get_dependencies(pt_node)
@@ -673,7 +673,7 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             loader = scope.get_singleton(BazelManifestLoader)
             # Requirement: A manifest loader resolves target manifests by loading unit manifests and role manifests to synthesize node definitions and dependencies across unit and role dimensions.
             # Requirement: A manifest loader registers silent dependencies as non-propagating dependencies excluding their source files.
-            res_act = loader.load_manifest(Manifest(json.dumps(active_data)), self.storage)
+            res_act = loader.load_manifest(TargetManifest(json.dumps(active_data)), self.storage)
             self.assertEqual(len(res_act), 1)
             act_node = res_act[0].node
             deps_act = self.storage.get_dependencies(act_node)

@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from typing import Any, Mapping, Optional, Set, Tuple
 
-from update_with_ai.parts.dag.lib.dag_storage import Node
+from update_with_ai.parts.dag.lib.dag_storage import DagNode
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.agent.lib.agent_session import agent_session
@@ -22,7 +22,7 @@ from update_with_ai.parts.agent.lib.agent_file_alias import (
     UnboundFile,
     WorkspacePath,
 )
-from update_with_ai.parts.agent.lib.agent_node_config import Guide, NodeConfig
+from update_with_ai.parts.agent.lib.agent_node_config import NodeGuide, NodeConfig
 from update_with_ai.parts.sandbox.lib.template_format import TemplateFormatter
 from update_with_ai.parts.sandbox.lib.sandbox_file_editor import EditManager
 from update_with_ai.parts.sandbox.lib.sandbox_file_reader import (
@@ -39,11 +39,11 @@ from update_with_ai.parts.sandbox.lib.sandbox_file_reader_impl import (
 )
 from update_with_ai.parts.sandbox.lib.tool_provider import (
     ActualParameterBindings,
-    BooleanParameterType,
-    Parameter,
+    IdentityParameterType,
+    ToolParameter,
     ParameterType,
-    Response,
-    String,
+    ToolResponse,
+    WireString,
     Tool,
     ToolManager,
     WireParameterBindings,
@@ -62,8 +62,8 @@ class MockToolManager:
 
     def execute_tool(
         self, name: str, wire_parameter_bindings: WireParameterBindings
-    ) -> Response:
-        return Response(is_failed=False, is_terminated=False, content="")
+    ) -> ToolResponse:
+        return ToolResponse(is_failed=False, is_terminated=False, content="")
 
 
 class MockEditManager:
@@ -119,7 +119,7 @@ class MockAliasManager:
     def __init__(self, workspace_root: str) -> None:
         self.workspace_root = _make_workspace_root(workspace_root)
         self.actual_type = FileAlias
-        self.wire_type = String()
+        self.wire_type = WireString()
         self.files: dict[str, FileAlias] = {}
 
     def convert(self, wire_value: Any) -> Any:
@@ -167,7 +167,7 @@ class MockNodeConfig:
         return set()
 
     @property
-    def guide(self) -> Optional[Guide]:
+    def guide(self) -> Optional[NodeGuide]:
         return None
 
     @property
@@ -205,7 +205,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         with open(self.ro_pyi_path, "w", encoding="utf-8") as f:
             f.write("class Stub:\n    pass\n")
 
-        node = Node(unit_address="//pkg:test")
+        node = DagNode(unit_address="//pkg:test")
         self.ro_file = ReadOnlyFile(
             relative_path="readonly.txt",
             workspace_path=_make_workspace_path("readonly.txt"),
@@ -261,7 +261,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.tool_mgr, keys=[ToolManager], tier=agent_session
         )
         self.registry.register_instance(
-            self.bool_conv, keys=[BooleanParameterType], tier=agent_session
+            self.bool_conv, keys=[IdentityParameterType], tier=agent_session
         )
         self.registry.register_instance(
             self.alias_mgr, keys=[AliasManager], tier=agent_session
@@ -286,7 +286,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         """CUJ: Converting wire string into RegexPattern."""
         conv = RegexPatternParameterTypeImpl()
         # Requirement: The regex pattern parameter type converts a wire type string into a regex pattern.
-        pattern = conv.convert(r"foo\d+")
+        pattern = conv.convert(WireString(r"foo\d+"))
         self.assertEqual(pattern, r"foo\d+")
 
     def test_read_manager_initialization_and_properties(self) -> None:
@@ -446,7 +446,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
 
     def test_read_tool_missing_file_handling(self) -> None:
         """CUJ: Handling missing read-write files (treated as empty) vs missing read-only files (fails)."""
-        node = Node(unit_address="//pkg:test")
+        node = DagNode(unit_address="//pkg:test")
         missing_rw_file = ReadWriteFile(
             relative_path="missing_rw.txt",
             workspace_path=_make_workspace_path("missing_rw.txt"),
@@ -600,8 +600,8 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             converter = scope.get_singleton(RegexPatternParameterTypeImpl)
             # Requirement: The regex pattern parameter type converts a wire type string into a regex pattern.
             self.assertEqual(converter.actual_type, RegexPattern)
-            self.assertEqual(converter.wire_type, str)
-            pattern = converter.convert("matched_.*")
+            self.assertEqual(converter.wire_type, WireString)
+            pattern = converter.convert(WireString("matched_.*"))
             self.assertEqual(pattern, "matched_.*")
 
     def test_read_manager_initialization_tool_installation(self) -> None:
@@ -615,7 +615,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         reg_mcp.register_instance(self.node_cfg, keys=[NodeConfig], tier=agent_session)
         reg_mcp.register_instance(self.edit_mgr, keys=[EditManager], tier=agent_session)
         reg_mcp.register_instance(self.template_formatter, keys=[TemplateFormatter], tier=agent_session)
-        reg_mcp.register_instance(self.bool_conv, keys=[BooleanParameterType], tier=agent_session)
+        reg_mcp.register_instance(self.bool_conv, keys=[IdentityParameterType], tier=agent_session)
 
         with enter_phase(agent_session, registry=reg_mcp) as scope:
             # Requirement: The read manager installs the view file tool into the tool manager when mcp mode is inactive, installs no inspection tools when mcp mode is active, and never installs the search tool.

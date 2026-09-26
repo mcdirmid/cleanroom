@@ -1,6 +1,6 @@
 # openai_conversation_impl implementation component
 
-imports: openai_ext, tool_provider
+imports: agent_config, openai_ext, tool_provider
 implements: loop_conversation
 
 ## Purpose
@@ -15,7 +15,7 @@ Language model APIs impose strict role alternation invariants and reject uncoord
 
 The conversation formats messages in a model request according to OpenAI chat completion conventions for system, user, assistant, and tool messages.
 
-A tool response's suppression key identifies the latest preceding response with the same key in the conversation for replacement with a stub, while responses with unmatched keys are preserved intact. When a response is replaced with a stub, tool arguments in the correlating assistant invocation message are also replaced with an empty JSON object stub. A stub retains the reminder from the superseded tool response, which the newly appended response inherits when omitted.
+A tool response's suppression key identifies the latest preceding response with the same key in the conversation for replacement with a stub, while responses with unmatched keys are preserved intact. When a response is replaced with a stub, tool arguments in the correlating assistant invocation message retain their parameter keys, preserving non-string values and eliding string values longer than the supersede arg keep limit configured by the agent config to their trailing characters prefixed with a stub marker and ellipsis. A stub retains the reminder from the superseded tool response, which the newly appended response inherits when omitted.
 
 When assembling a model request from messages in the conversation:
 

@@ -10,7 +10,7 @@ Multi-agent coordination across external workspace environments requires observa
 
 ## Types and Behavior
 
-A *log event* record represents a captured execution action, exposing an *event name*, a *source*, and a *summary*.
+An *antigravity log event* record represents a captured execution action, exposing an *event name*, a *source*, and a *summary*.
 
 The *antigravity run logger* is a system service that records execution activity and maintains transcript associations. The antigravity run logger provides:
 

@@ -22,7 +22,7 @@ from update_with_ai.parts.agent.lib.agent_file_alias import (
     WorkspacePath,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
-from update_with_ai.parts.agent.lib.agent_node_config import Guide, NodeConfig
+from update_with_ai.parts.agent.lib.agent_node_config import NodeGuide, NodeConfig
 from update_with_ai.parts.sandbox.lib.template_format import TemplateFormatter
 from update_with_ai.parts.sandbox.lib.sandbox_file_editor import (
     EditManager,
@@ -35,15 +35,12 @@ from update_with_ai.parts.sandbox.lib.sandbox_file_editor_impl import (
 )
 from update_with_ai.parts.sandbox.lib.tool_provider import (
     ActualParameterBindings,
-    BooleanParameterConverter,
-    IntegerParameterConverter,
-    Parameter,
-    Response,
-    String,
-    StringParameterConverter,
     Tool,
     ToolManager,
+    ToolParameter,
+    ToolResponse,
     WireParameterBindings,
+    WireString,
 )
 
 
@@ -58,14 +55,14 @@ class MockToolManager:
 
     def execute_tool(
         self, name: str, wire_parameter_bindings: WireParameterBindings
-    ) -> Response:
-        return Response(is_failed=False, is_terminated=False, content="")
+    ) -> ToolResponse:
+        return ToolResponse(is_failed=False, is_terminated=False, content="")
 
 
 class MockStringConverter:
     tier = agent_session
     actual_type = str
-    wire_type = String()
+    wire_type = WireString()
 
     def convert(self, wire_value: Any) -> str:
         return str(wire_value)
@@ -123,7 +120,7 @@ class MockAliasManager:
     def __init__(self, workspace_root: str) -> None:
         self.workspace_root = _make_directory_path(workspace_root)
         self.actual_type = FileAlias
-        self.wire_type = String()
+        self.wire_type = WireString()
         self.files: dict[str, FileAlias] = {}
 
     def convert(self, wire_value: Any) -> Any:
@@ -191,7 +188,7 @@ class MockNodeConfig:
         return self._templates
 
     @property
-    def guide(self) -> Optional[Guide]:
+    def guide(self) -> Optional[NodeGuide]:
         return None
 
     @property

@@ -5,8 +5,8 @@ from typing import Dict, List, Sequence, Set
 from update_with_ai.parts.dag.lib.dag_config import DagConfig
 from update_with_ai.parts.dag.lib.dag_storage import (
     DagStorage,
-    Dependency,
-    Node,
+    DagDependency,
+    DagNode,
 )
 from update_with_ai.parts.dag.lib.dag_subgraph import DagSubgraph
 from update_with_ai.parts.dag.lib.dag_subgraph_impl import (
@@ -28,13 +28,13 @@ class MockDagStorage:
     tier = "system"
 
     def __init__(self) -> None:
-        self.dependencies: Dict[Node, Set[Dependency]] = {}
-        self.dirty_nodes: Set[Node] = set()
+        self.dependencies: Dict[DagNode, Set[DagDependency]] = {}
+        self.dirty_nodes: Set[DagNode] = set()
 
-    def get_dependencies(self, node: Node) -> Set[Dependency]:
+    def get_dependencies(self, node: DagNode) -> Set[DagDependency]:
         return set(self.dependencies.get(node, set()))
 
-    def is_dirty(self, node: Node) -> bool:
+    def is_dirty(self, node: DagNode) -> bool:
         return node in self.dirty_nodes
 
 
@@ -49,12 +49,12 @@ class DagSubgraphImplTest(unittest.TestCase):
 
     def test_set_target_and_topological_batching(self) -> None:
         """CUJ: Traverses dependency tree and yields ready batches in topological order."""
-        a = Node(unit_address="//pkg:a", role_address="")
-        b = Node(unit_address="//pkg:b", role_address="")
-        c = Node(unit_address="//pkg:c", role_address="")
+        a = DagNode(unit_address="//pkg:a", role_address="")
+        b = DagNode(unit_address="//pkg:b", role_address="")
+        c = DagNode(unit_address="//pkg:c", role_address="")
 
-        self.storage.dependencies[a] = {Dependency(node=b)}
-        self.storage.dependencies[b] = {Dependency(node=c)}
+        self.storage.dependencies[a] = {DagDependency(node=b)}
+        self.storage.dependencies[b] = {DagDependency(node=c)}
         self.storage.dirty_nodes.update([a, b, c])
 
         with enter_phase("system", registry=self.registry):
@@ -86,15 +86,15 @@ class DagSubgraphImplTest(unittest.TestCase):
 
     def test_batched_nodes_by_role(self) -> None:
         """CUJ: Batches contiguous ready nodes sharing the same role address up to batch size."""
-        root = Node(unit_address="//pkg:root", role_address="")
-        dep1 = Node(unit_address="//pkg:dep1", role_address="same_role")
-        dep2 = Node(unit_address="//pkg:dep2", role_address="same_role")
-        dep3 = Node(unit_address="//pkg:dep3", role_address="diff_role")
+        root = DagNode(unit_address="//pkg:root", role_address="")
+        dep1 = DagNode(unit_address="//pkg:dep1", role_address="same_role")
+        dep2 = DagNode(unit_address="//pkg:dep2", role_address="same_role")
+        dep3 = DagNode(unit_address="//pkg:dep3", role_address="diff_role")
 
         self.storage.dependencies[root] = {
-            Dependency(node=dep1),
-            Dependency(node=dep2),
-            Dependency(node=dep3),
+            DagDependency(node=dep1),
+            DagDependency(node=dep2),
+            DagDependency(node=dep3),
         }
         self.storage.dirty_nodes.update([root, dep1, dep2, dep3])
         self.dag_cfg.batch_size = 2
@@ -112,20 +112,20 @@ class DagSubgraphImplTest(unittest.TestCase):
 
     def test_role_tier_prioritization_in_next_ready_batch(self) -> None:
         """CUJ: Prioritizes upstream roles over downstream roles (lib before test, test before qa)."""
-        root = Node(unit_address="//pkg:root", role_address="")
-        lib_a = Node(unit_address="//pkg:a", role_address="//update_python_with_ai:lib")
-        test_a = Node(unit_address="//pkg:a", role_address="//update_python_with_ai:test")
-        qa_a = Node(unit_address="//pkg:a", role_address="//update_python_with_ai:qa")
+        root = DagNode(unit_address="//pkg:root", role_address="")
+        lib_a = DagNode(unit_address="//pkg:a", role_address="//update_python_with_ai:lib")
+        test_a = DagNode(unit_address="//pkg:a", role_address="//update_python_with_ai:test")
+        qa_a = DagNode(unit_address="//pkg:a", role_address="//update_python_with_ai:qa")
 
-        lib_b = Node(unit_address="//pkg:b", role_address="//update_python_with_ai:lib")
-        test_b = Node(unit_address="//pkg:b", role_address="//update_python_with_ai:test")
-        qa_b = Node(unit_address="//pkg:b", role_address="//update_python_with_ai:qa")
+        lib_b = DagNode(unit_address="//pkg:b", role_address="//update_python_with_ai:lib")
+        test_b = DagNode(unit_address="//pkg:b", role_address="//update_python_with_ai:test")
+        qa_b = DagNode(unit_address="//pkg:b", role_address="//update_python_with_ai:qa")
 
-        self.storage.dependencies[root] = {Dependency(node=qa_a), Dependency(node=qa_b)}
-        self.storage.dependencies[qa_a] = {Dependency(node=test_a)}
-        self.storage.dependencies[test_a] = {Dependency(node=lib_a)}
-        self.storage.dependencies[qa_b] = {Dependency(node=test_b)}
-        self.storage.dependencies[test_b] = {Dependency(node=lib_b)}
+        self.storage.dependencies[root] = {DagDependency(node=qa_a), DagDependency(node=qa_b)}
+        self.storage.dependencies[qa_a] = {DagDependency(node=test_a)}
+        self.storage.dependencies[test_a] = {DagDependency(node=lib_a)}
+        self.storage.dependencies[qa_b] = {DagDependency(node=test_b)}
+        self.storage.dependencies[test_b] = {DagDependency(node=lib_b)}
 
         self.storage.dirty_nodes.update([root, qa_a, test_a, lib_a, qa_b, test_b, lib_b])
         self.dag_cfg.batch_size = 2
@@ -164,13 +164,13 @@ class DagSubgraphImplTest(unittest.TestCase):
 
     def test_topological_order_preserved_over_lexicographical_in_batch(self) -> None:
         """CUJ: Preserves dependency-first topological order in batch selection even when alphabetical order is inverted."""
-        root = Node(unit_address="//pkg:root", role_address="")
-        clean_dep = Node(unit_address="//pkg:clean_dep", role_address="")
-        z_earlier = Node(unit_address="//pkg:z_earlier", role_address="//update_python_with_ai:lib")
-        a_later = Node(unit_address="//pkg:a_later", role_address="//update_python_with_ai:lib")
+        root = DagNode(unit_address="//pkg:root", role_address="")
+        clean_dep = DagNode(unit_address="//pkg:clean_dep", role_address="")
+        z_earlier = DagNode(unit_address="//pkg:z_earlier", role_address="//update_python_with_ai:lib")
+        a_later = DagNode(unit_address="//pkg:a_later", role_address="//update_python_with_ai:lib")
 
-        self.storage.dependencies[root] = {Dependency(node=z_earlier), Dependency(node=a_later)}
-        self.storage.dependencies[a_later] = {Dependency(node=clean_dep)}
+        self.storage.dependencies[root] = {DagDependency(node=z_earlier), DagDependency(node=a_later)}
+        self.storage.dependencies[a_later] = {DagDependency(node=clean_dep)}
         self.storage.dirty_nodes.update([root, z_earlier, a_later])
         self.dag_cfg.batch_size = 2
 
@@ -187,11 +187,11 @@ class DagSubgraphImplTest(unittest.TestCase):
 
     def test_next_ready_batch_empty_when_no_ready_nodes(self) -> None:
         """CUJ: Returns empty list when no uncleaned node has all dependencies clean."""
-        root = Node(unit_address="//pkg:root", role_address="")
-        dep = Node(unit_address="//pkg:dep", role_address="")
+        root = DagNode(unit_address="//pkg:root", role_address="")
+        dep = DagNode(unit_address="//pkg:dep", role_address="")
         # Cycle: root -> dep -> root
-        self.storage.dependencies[root] = {Dependency(node=dep)}
-        self.storage.dependencies[dep] = {Dependency(node=root)}
+        self.storage.dependencies[root] = {DagDependency(node=dep)}
+        self.storage.dependencies[dep] = {DagDependency(node=root)}
         self.storage.dirty_nodes.update([root, dep])
 
         with enter_phase("system", registry=self.registry):
@@ -204,7 +204,7 @@ class DagSubgraphImplTest(unittest.TestCase):
 
     def test_record_visit_enforces_limit(self) -> None:
         """CUJ: Enforces node visit limit and raises RuntimeError when exceeded."""
-        node = Node(unit_address="//pkg:limited", role_address="")
+        node = DagNode(unit_address="//pkg:limited", role_address="")
         self.storage.dirty_nodes.add(node)
         self.dag_cfg.node_visit_limit = 2
 

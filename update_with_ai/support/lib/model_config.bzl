@@ -85,6 +85,7 @@ def _model_config_impl(ctx):
         "edit_delta_output": ctx.attr.edit_delta_output,
         "node_visit_limit": ctx.attr.node_visit_limit,
         "batch_size": ctx.attr.batch_size,
+        "supersede_arg_keep": ctx.attr.supersede_arg_keep,
     }
 
     # Python module: json-encoded strings are valid Python string literals.
@@ -93,7 +94,7 @@ def _model_config_impl(ctx):
                 "max_iterations", "temperature", "timeout", "max_tokens",
                 "session_start_reads", "do_step_mode", "step_sections", "inject_followups",
                 "edit_delta_output",
-                "node_visit_limit", "batch_size"):
+                "node_visit_limit", "batch_size", "supersede_arg_keep"):
         entries.append('    "{}": {},'.format(key, _py_literal(config[key])))
 
     py_content = "\n".join(
@@ -191,6 +192,10 @@ _model_config = rule(
         "batch_size": attr.int(
             default = 1,
             doc = "Maximum number of dirty nodes belonging to the same role to process together in an agent session. Defaults to 1.",
+        ),
+        "supersede_arg_keep": attr.int(
+            default = 20,
+            doc = "Number of trailing characters of string arguments to retain when superseding tool responses. Defaults to 20.",
         ),
     },
 )

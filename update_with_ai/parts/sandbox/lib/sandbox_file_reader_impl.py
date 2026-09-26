@@ -37,12 +37,12 @@ class ReadManager(sandbox_file_reader.ReadManager, Singleton):
 
     def can_read(
         self, path: Union[str, agent_file_alias.FileAlias]
-    ) -> tool_provider.Response:
+    ) -> tool_provider.ToolResponse:
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         target_file = (
             path
             if isinstance(path, agent_file_alias.FileAlias)
-            else alias_mgr.convert(path)
+            else alias_mgr.convert(tool_provider.WireString(path))
         )
 
         read_mgr = self
@@ -52,7 +52,7 @@ class ReadManager(sandbox_file_reader.ReadManager, Singleton):
                 read_mgr.guide_file
                 and target_file.relative_path == read_mgr.guide_file.relative_path
             ):
-                return tool_provider.Response(
+                return tool_provider.ToolResponse(
                     is_failed=True,
                     is_terminated=False,
                     content="To read the task guide, call 'advance' instead.",
@@ -113,7 +113,7 @@ class ReadManager(sandbox_file_reader.ReadManager, Singleton):
                     guidance = f"Error: Unknown file '{target_file.relative_path}'. Test files are not inspectable by design; only declared grounding specifications (.pyi) and target library files (.py) are accessible. Available files: {', '.join(readable)}"
                 else:
                     guidance = f"Error: Unknown file '{target_file.relative_path}'. Available files: {', '.join(readable)}"
-                return tool_provider.Response(
+                return tool_provider.ToolResponse(
                     is_failed=True,
                     is_terminated=False,
                     content=guidance,
@@ -128,7 +128,7 @@ class ReadManager(sandbox_file_reader.ReadManager, Singleton):
         except (LookupError, KeyError):  # pragma: no cover (assumption: edit manager present in session tier)
             pass  # pragma: no cover
 
-        return tool_provider.Response(
+        return tool_provider.ToolResponse(
             is_failed=False,
             is_terminated=False,
             content=f"Access permitted for '{target_file.relative_path}'.",
@@ -183,10 +183,10 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
     @property
     def path_parameter(
         self,
-    ) -> tool_provider.Parameter[agent_file_alias.FileAlias, str]:
+    ) -> tool_provider.ToolParameter[agent_file_alias.FileAlias, tool_provider.WireString]:
         # Requirement: The view file tool path parameter uses the alias manager to convert a file alias.
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
-        return tool_provider.Parameter(
+        return tool_provider.ToolParameter(
             name="path",
             description="Target file alias",
             parameter_type=alias_mgr,
@@ -194,12 +194,12 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
         )
 
     @property
-    def parameters(self) -> Set[tool_provider.Parameter]:
+    def parameters(self) -> Set[tool_provider.ToolParameter]:
         return {self.path_parameter}
 
     def execute_tool(
         self, actual_parameter_bindings: tool_provider.ActualParameterBindings
-    ) -> tool_provider.Response:
+    ) -> tool_provider.ToolResponse:
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
         target_file = cast(agent_file_alias.FileAlias, bindings_map.get("path"))
 
@@ -210,7 +210,7 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
                 read_mgr.guide_file
                 and target_file.relative_path == read_mgr.guide_file.relative_path
             ):
-                return tool_provider.Response(
+                return tool_provider.ToolResponse(
                     is_failed=True,
                     is_terminated=False,
                     content="To read the task guide, call 'advance' instead.",
@@ -273,7 +273,7 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
                 else:
                     # Requirement: When an unbound file is supplied, tool execution fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead, otherwise.
                     guidance = f"Error: Unknown file '{target_file.relative_path}'. Available files: {', '.join(readable)}"
-                return tool_provider.Response(
+                return tool_provider.ToolResponse(
                     is_failed=True,
                     is_terminated=False,
                     content=guidance,
@@ -292,7 +292,7 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
             if isinstance(target_file, agent_file_alias.ReadWriteFile):
                 lines = []
             else:
-                return tool_provider.Response(
+                return tool_provider.ToolResponse(
                     is_failed=True,
                     is_terminated=False,
                     content=f"Error: File '{target_file.relative_path}' does not exist on disk.",
@@ -363,7 +363,7 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
         except (LookupError, KeyError):  # pragma: no cover (assumption: edit manager present in session tier)
             pass  # pragma: no cover
 
-        return tool_provider.Response(
+        return tool_provider.ToolResponse(
             is_failed=False,
             is_terminated=False,
             content=final_content,
@@ -374,7 +374,7 @@ class ViewFileTool(sandbox_file_reader.ViewFileTool, Singleton):
 
 
 class RegexPatternParameterType(
-    tool_provider.ParameterType[agent_file_alias.RegexPattern, str], Singleton
+    tool_provider.ParameterType[agent_file_alias.RegexPattern, tool_provider.WireString], Singleton
 ):
     tier = agent_session
 
@@ -386,12 +386,12 @@ class RegexPatternParameterType(
         return agent_file_alias.RegexPattern
 
     @property
-    def wire_type(self) -> Type[str]:
-        return str
+    def wire_type(self) -> Type[tool_provider.WireString]:
+        return tool_provider.WireString
 
-    def convert(self, wire_value: str) -> agent_file_alias.RegexPattern:
+    def convert(self, wire_value: tool_provider.WireString) -> agent_file_alias.RegexPattern:
         # Requirement: The regex pattern parameter type converts a wire type string into a regex pattern.
-        return agent_file_alias.RegexPattern(wire_value)
+        return agent_file_alias.RegexPattern(str(wire_value))
 
 
 class SearchTool(sandbox_file_reader.SearchTool, Singleton):
@@ -411,10 +411,10 @@ class SearchTool(sandbox_file_reader.SearchTool, Singleton):
     @property
     def regex_pattern_parameter(
         self,
-    ) -> tool_provider.Parameter[agent_file_alias.RegexPattern, str]:
+    ) -> tool_provider.ToolParameter[agent_file_alias.RegexPattern, tool_provider.WireString]:
         # Requirement: The search tool regex pattern parameter uses the regex pattern parameter type.
         conv = get_singleton(RegexPatternParameterType)
-        return tool_provider.Parameter(
+        return tool_provider.ToolParameter(
             name="pattern",
             description="Regex pattern to search",
             parameter_type=conv,
@@ -422,12 +422,12 @@ class SearchTool(sandbox_file_reader.SearchTool, Singleton):
         )
 
     @property
-    def parameters(self) -> Set[tool_provider.Parameter]:
+    def parameters(self) -> Set[tool_provider.ToolParameter]:
         return {self.regex_pattern_parameter}
 
     def execute_tool(
         self, actual_parameter_bindings: tool_provider.ActualParameterBindings
-    ) -> tool_provider.Response:
+    ) -> tool_provider.ToolResponse:
         bindings_map = {p.name: v for p, v in actual_parameter_bindings.bindings}
         pat_obj = bindings_map.get("pattern")
         pattern_str = str(pat_obj or "")
@@ -436,7 +436,7 @@ class SearchTool(sandbox_file_reader.SearchTool, Singleton):
         try:
             compiled = re.compile(pattern_str)
         except re.error as e:
-            return tool_provider.Response(
+            return tool_provider.ToolResponse(
                 is_failed=True,
                 is_terminated=False,
                 content=f"Error: Invalid regex pattern '{pattern_str}': {e}",
@@ -472,7 +472,7 @@ class SearchTool(sandbox_file_reader.SearchTool, Singleton):
                         )
 
         output = "\n".join(results) if results else "No matches found."
-        return tool_provider.Response(
+        return tool_provider.ToolResponse(
             is_failed=False,
             is_terminated=False,
             content=alias_mgr.sanitize_text(output),

@@ -17,9 +17,9 @@ class MockRunnerLogger(runner_logger.RunnerLogger, Singleton):
     tier = system
 
     def __init__(self) -> None:
-        self.events: list[runner_logger.LogEvent] = []
+        self.events: list[runner_logger.RunnerLogEvent] = []
 
-    def consume(self, event: runner_logger.LogEvent) -> None:
+    def consume(self, event: runner_logger.RunnerLogEvent) -> None:
         self.events.append(event)
 
 

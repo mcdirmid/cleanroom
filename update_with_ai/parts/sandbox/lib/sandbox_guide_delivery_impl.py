@@ -7,6 +7,7 @@ from . import sandbox_guide_delivery
 from . import tool_provider
 from support.lib.lifecycle import (
     LifecycleRegistry,
+    LifecycleResolutionError,
     Singleton,
     get_default_registry,
     get_singleton,
@@ -17,33 +18,42 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
     tier = agent_session
 
     def __init__(self) -> None:
-        self._guide: Optional[agent_node_config.Guide] = None
-        self._initial_delivered: bool = False
+        self._guide: Optional[agent_node_config.NodeGuide] = None
+        self._initial_primer: Optional[str] = None
         self._step_index: int = 0
 
     def initialize(self) -> None:
         # Requirement: Initializing the guide delivery obtains its guide from the node config.
         cfg = get_singleton(agent_node_config.NodeConfig)
         self._guide = cfg.guide
-        self._initial_delivered = False
+        self._initial_primer = None
         self._step_index = 0
+
+    def set_initial_primer(self, primer: str) -> None:
+        # Requirement: Can record an initial primer.
+        self._initial_primer = primer
+
+    @property
+    def guide(self) -> Optional[agent_node_config.NodeGuide]:
+        if self._guide is None:
+            try:
+                cfg = get_singleton(agent_node_config.NodeConfig)
+                self._guide = cfg.guide
+            except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):  # pragma: no cover (assumption: session singleton NodeConfig resolvable)
+                pass  # pragma: no cover
+        return self._guide
 
     @property
     def has_steps_remaining(self) -> bool:
         # Requirement: [GuideDelivery] Steps remaining indicates whether further step sections remain to be completed.
-        if self._guide is None:
+        g = self.guide
+        if g is None:
             return False
-        if not self._initial_delivered:
-            return True
-        return self._step_index < len(self._guide.sections)
-
-    @property
-    def guide(self) -> Optional[agent_node_config.Guide]:
-        return self._guide
+        return self._step_index < len(g.sections)
 
     def parse_guide(
         self, content: agent_file_alias.FileContent
-    ) -> agent_node_config.Guide:
+    ) -> agent_node_config.NodeGuide:
         # Requirement: Guide parsing extracts the summary from content preceding the first section heading and under any heading titled `Summary`, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
         raw = str(content)
         lines = raw.splitlines()
@@ -99,7 +109,7 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
             else None
         )
 
-        return agent_node_config.Guide(
+        return agent_node_config.NodeGuide(
             summary="\n".join(summary_lines).strip(),
             sections=sections,
             verification_failure=vf_text,
@@ -107,45 +117,41 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
 
     def advance_step(
         self, verification_passed: bool, failure_diagnostics: Optional[str] = None
-    ) -> Optional[tool_provider.Response]:
+    ) -> Optional[tool_provider.ToolResponse]:
         # Requirement: When no guide is configured or no step sections remain, the guide delivery indicates that no steps remain and advancing produces no response.
-        if self._guide is None or not self.has_steps_remaining:
+        g = self.guide
+        if g is None or not self.has_steps_remaining:
             return None
 
         if not verification_passed:
             diag_text = failure_diagnostics or ""
             vf_block = ""
-            if self._guide.verification_failure:
+            if g.verification_failure:
                 vf_block = (
-                    f"\n\n## Verification failure\n{self._guide.verification_failure}"
+                    f"\n\n## Verification failure\n{g.verification_failure}"
                 )
             if self._step_index == 0:
-                # Requirement: Advancing a step when verification fails emits a response combining the guide summary, any configured verification failure instructions, and failure diagnostics without activating a step section when no step section has been delivered yet.
-                content = f"{self._guide.summary}{vf_block}\n\nVerification failed:\n{diag_text}".strip()
+                # Requirement: Advancing a step when verification fails emits a response combining the initial primer content (or guide summary when an initial primer is omitted), any configured verification failure instructions, and failure diagnostics without activating a step section when no step section has been delivered yet.
+                base_text = self._initial_primer if self._initial_primer else g.summary
+                content = f"{base_text}{vf_block}\n\nVerification failed:\n{diag_text}".strip()
             else:
-                # Requirement: Advancing a step when verification fails emits a response combining the guide summary, the current step section content introduced by `Now check carefully:`, any configured verification failure instructions, and failure diagnostics without advancing to subsequent sections when a step section is currently active.
-                section = self._guide.sections[self._step_index - 1]
-                content = f"{self._guide.summary}\n\n## {section.title}\nNow check carefully:\n{section.content}{vf_block}\n\nVerification failed:\n{diag_text}".strip()
-            return tool_provider.Response(
+                # Requirement: Advancing a step when verification fails emits a response combining the current step section content introduced by Now check carefully:, any configured verification failure instructions, and failure diagnostics without advancing to subsequent sections when a step section is currently active.
+                section = g.sections[self._step_index - 1]
+                content = f"## {section.title}\nNow check carefully:\n{section.content}{vf_block}\n\nVerification failed:\n{diag_text}".strip()
+            return tool_provider.ToolResponse(
                 is_failed=True,
                 is_terminated=False,
                 content=content,
             )
 
-        if not self._initial_delivered:
-            # Requirement: Advancing a step when verification passes emits a response containing the guide summary alone without delivering a step section when no step section has been delivered yet.
-            self._initial_delivered = True
-            return tool_provider.Response(
-                is_failed=False,
-                is_terminated=False,
-                content=self._guide.summary,
-            )
-
-        # Requirement: Advancing a step when verification passes emits a response presenting the guide summary above the next step section content introduced by `Now check carefully:` and transitions to that step section when previous steps have been delivered and further step sections remain.
-        section = self._guide.sections[self._step_index]
+        # Requirement: Advancing a step when verification passes emits a response presenting the next step section content introduced by Now check carefully: alongside instructions to check carefully, make edits if the source file does not conform to any checklist item, and call advance() only when conforming, transitioning to that step section when further step sections remain.
+        section = g.sections[self._step_index]
         self._step_index += 1
-        content = f"{self._guide.summary}\n\n## {section.title}\nNow check carefully:\n{section.content}".strip()
-        return tool_provider.Response(
+        content = (
+            f"## {section.title}\nNow check carefully:\n{section.content}\n\n"
+            "Check carefully and make edits if the source file does not conform to any checklist item, calling advance() only when the source file conforms to all checklist items."
+        ).strip()
+        return tool_provider.ToolResponse(
             is_failed=False,
             is_terminated=False,
             content=content,

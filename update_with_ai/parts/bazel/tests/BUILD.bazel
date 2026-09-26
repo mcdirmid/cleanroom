@@ -48,7 +48,7 @@ pyright_test(
         "//update_with_ai/parts/bazel/lib:bazel_manifest_loader",
         "//update_with_ai/parts/bazel/lib:bazel_node_config_impl",
         "//update_with_ai/parts/bazel/lib:bazel_target",
-        "//update_with_ai/parts/bazel/lib:file_paths",
+        "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/sandbox/lib:tool_provider",
     ],
@@ -80,7 +80,7 @@ pyright_test(
         "//update_with_ai/parts/agent/lib:agent_storage",
         "//update_with_ai/parts/bazel/lib:bazel_storage_impl",
         "//update_with_ai/parts/bazel/lib:bazel_target",
-        "//update_with_ai/parts/bazel/lib:file_paths",
+        "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
     ],
 )
@@ -93,23 +93,11 @@ pyright_test(
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/bazel/lib:bazel_target",
         "//update_with_ai/parts/bazel/lib:bazel_target_impl",
-        "//update_with_ai/parts/bazel/lib:file_paths",
+        "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
-    ],
-)
-
-pyright_test(
-    name = "file_paths_impl_test",
-    srcs = ["file_paths_impl_test.py"],
-    deps = [],
-    pyright_deps = [
-        "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/bazel/lib:file_paths",
-        "//update_with_ai/parts/bazel/lib:file_paths_impl",
     ],
 )
 
 build_derived_test(
     name = "targets_derived_test",
 )
-

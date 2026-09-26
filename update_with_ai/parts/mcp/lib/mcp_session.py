@@ -15,18 +15,19 @@ class SessionStatus:
 
 
 @dataclass(frozen=True)
-class Active(SessionStatus):
+class ActiveSession(SessionStatus):
     pass
 
 
 @dataclass(frozen=True)
-class Idle(SessionStatus):
+class IdleSession(SessionStatus):
     pass
 
 
 @dataclass(frozen=True)
-class Terminated(SessionStatus):
+class TerminatedSession(SessionStatus):
     pass
+
 
 
 @dataclass(frozen=True)

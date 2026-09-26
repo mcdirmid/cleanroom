@@ -1,5 +1,7 @@
 # template_format interface component
 
+imports: agent_session
+
 ## Purpose
 
 The template_format interface component defines template evaluation and formatting contracts for parameterized Markdown documents in agent sessions.
@@ -10,13 +12,9 @@ Multi-stage agent pairing requires readable template files that survive Abstract
 
 ## Types and Behavior
 
-The *template formatter* is an agent session service that formats template documents using supplied parameter bindings.
+An agent session's *template formatter* formats template documents using supplied parameter bindings.
 
-The template formatter can *format template* text using *parameters* to produce formatted text.
-
-When formatting template text, the template formatter performs evaluation across document constructs.
-
-The template formatter:
+The template formatter can *format template* text using *parameters* to produce formatted text. When formatting template text, the template formatter:
 
 - Substitutes parameter placeholders matching bound keys with their corresponding string representations.
 

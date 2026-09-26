@@ -1,56 +1,42 @@
 # sandbox_file_reader_impl implementation component
 
-imports: filesystem_ext, tool_provider, agent_file_alias, agent_node_config, agent_config, template_format, sandbox_file_editor
+imports: agent_session, filesystem_ext, tool_provider, agent_file_alias, agent_node_config, agent_config, template_format, sandbox_file_editor, file_paths
 implements: sandbox_file_reader
 
 ## Purpose
 
-The sandbox_file_reader_impl implementation component realizes workspace inspection tools with strict edit-safety guardrails, agent self-correction feedback, and host path isolation.
+The sandbox_file_reader_impl implementation component realizes workspace read tools with strict edit-safety guardrails, agent self-correction feedback, and host path isolation.
 
-Permissive or forgiving tool implementations allow agents to drift into ambiguous formatting states, bypass intended procedural phases, or attempt unanchored modifications without adequate context. When errors occur, silent failures or uninformative exceptions cause agents to hallucinate corrective actions or become stuck in repetitive loops. The sandbox_file_reader_impl implementation component enforces deterministic preconditions and rich recovery feedback on each inspection action, compelling the agent to maintain precise intent while safeguarding the session from environment path leakage and premature instruction access.
+Autonomous agents require structured access to workspace files, but naive whole-file reads risk flooding prompt context and enabling unanchored edits across writable targets. When errors occur, silent failures or uninformative exceptions cause agents to hallucinate corrective actions or become stuck in repetitive loops. The sandbox_file_reader_impl implementation component enforces deterministic preconditions and rich recovery feedback on each read action, compelling the agent to maintain precise intent while safeguarding the session from environment path leakage and premature instruction access.
 
-**Out of scope:** The sandbox_file_reader_impl implementation component does not deliver progressive workflow instructions, advance workflow execution, or execute file modifications; these are handled by other components.
+**Out of scope:** The sandbox_file_reader_impl implementation component does not deliver progressive workflow instructions, advance workflow execution, or execute file writes; these are handled by other components.
 
 ## Types and Behavior
 
-The read manager provides the view file tool for the agent session when mcp mode is inactive, omits the search tool, installs no inspection tools when mcp mode is active, and provides a can read operation validating inspection access for a file path, obtaining declared read-only files, read-write files, and the guide file, when configured, from the session node configuration.
+The read manager exposes declared read-only files and read-write files to anchor access permissions to target boundaries.
 
-The view file tool is named `view_file`, accepting a file alias *path* parameter. Tool execution:
+The view file tool is named `view_file`, accepting a file alias path parameter to read declared workspace files. Tool availability depends on session interaction mode: in standard mode when mcp mode is inactive, the view file tool is installed for the agent session to keep agent context focused on declared files; when mcp mode is active, external protocol servers manage tools directly, so tool installation is omitted. The search tool is omitted from installation.
 
-- Records the read file in the edit manager on successful execution.
+Tool execution:
 
-- Reads file content from the filesystem at the host path formed from the alias manager workspace root and the bound file workspace path, returning the content formatted with one-indexed right-aligned line numbers followed by a colon and space, and formatting read-only markdown files ending with `.md` using the template formatter with session template parameters after filtering out paragraphs beginning with `> META:`.
+- Reads file content from the filesystem, formatting lines with one-indexed right-aligned line numbers followed by a colon and space to enable precise, line-bounded edits.
 
-- Treats a read-write file as having empty content when the target file does not exist on disk, and fails with a response guiding agent recovery when inspecting a missing read-only file.
+- Evaluates template placeholders in read-only markdown files ending with `.md` with session template parameters after filtering out paragraphs beginning with `> META:`, presenting rendered instructions to the agent.
 
-Executing the view file tool requires a bound file. When an unbound file is supplied, tool execution:
+- Accommodates uncreated workspace targets by treating missing read-write files as having empty content, while failing with a response guiding agent recovery when a required read-only file is missing from disk.
 
-- Resolves to that grounding specification file alias if the relative path or qualified path addresses a module name or ends with `.py` and matches a declared read-only grounding specification ending with `.pyi`.
+- Establishes the read file as the session's last read or written file upon successful execution, which can anchor subsequent file-based operations.
 
-- Fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract if the unbound file addresses a test file ending with `_test.py`.
+To prevent context clutter across multi-turn interactions, responses for read-write files carry a suppression key matching the file relative path so that repeated reads supersede earlier content, whereas responses for read-only files omit suppression keys and sanitize host paths to preserve reference context and prevent environment leakage.
 
-- Fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead, otherwise.
+The *regex pattern parameter type* is a parameter type that converts a wire type string into a regex pattern.
 
-View file tool responses for read-write files carry a suppression key matching the file's relative path, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
+The search tool is named `search_files`, accepting a regex pattern parameter to discover text patterns across declared workspace files while enforcing edit guardrails.
 
-The read manager executes can read to validate file inspection access. Executing can read:
+Tool execution:
 
-- Resolves to that grounding specification file alias if the relative path or qualified path addresses a module name or ends with `.py` and matches a declared read-only grounding specification ending with `.pyi`, when an unbound file is supplied.
+- Rejects malformed search queries by failing when given an invalid regex pattern.
 
-- Fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract, when an unbound file addresses a test file ending with `_test.py`.
+- Facilitates contract and reference discovery by searching across read-only files in the filesystem, providing matched line contents and line numbers sanitized to mask host paths on successful execution.
 
-- Fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead, when an unbound file is supplied otherwise.
-
-- Records the read file in the edit manager and produces a successful response indicating that access is permitted, when a bound file is supplied or resolved.
-
-The *regex pattern parameter type* is a parameter type for regex patterns that converts a wire type string into a regex pattern.
-
-The search tool is named `search_files`, accepting a regex pattern *pattern* parameter. Tool execution:
-
-- Searches for regex pattern matches across the read-only files and read-write files in the filesystem.
-
-- Fails when given an invalid regex pattern.
-
-- Provides matched line contents and line numbers for read-only files, sanitized by the alias manager to mask host paths, on successful execution.
-
-- States that matches were found but cannot be displayed to prevent unanchored edits, for read-write files.
+- Enforces edit safety by searching across read-write files in the filesystem and stating that matches were found but cannot be displayed, preventing unanchored edits without reading the target file directly through the view file tool.

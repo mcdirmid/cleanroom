@@ -3,4 +3,6 @@
 from support.lib.lifecycle import LifecycleTier, system
 
 agent_session: LifecycleTier = system.create_child("agent_session")
+AgentSessionTier = LifecycleTier
+
 

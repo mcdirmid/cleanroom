@@ -78,7 +78,16 @@ def is_uninitialized_test_module(content: str) -> bool:
     return False
 
 
-def extract_requirements_from_pyi(pyi_path: str) -> list[str]:
+def extract_requirements_from_pyi(
+    pyi_path: str, visited: set[str] | None = None
+) -> list[str]:
+    if visited is None:
+        visited = set()
+    norm = os.path.abspath(pyi_path)
+    if norm in visited:
+        return []
+    visited.add(norm)
+
     try:
         with open(pyi_path, "r", encoding="utf-8") as f:
             content = f.read()
@@ -125,6 +134,30 @@ def extract_requirements_from_pyi(pyi_path: str) -> list[str]:
                     if item and item not in seen:
                         seen.add(item)
                         requirements.append(item)
+
+    # Transitive inheritance for new specification format:
+    # If this is an _impl.pyi, also inspect sibling interface .pyi and imported local .pyi files
+    dir_name = os.path.dirname(pyi_path)
+    base_name = os.path.basename(pyi_path)
+    if base_name.endswith("_impl.pyi"):
+        iface_path = os.path.join(dir_name, base_name[:-9] + ".pyi")
+        if os.path.isfile(iface_path):
+            for req in extract_requirements_from_pyi(iface_path, visited):
+                if req not in seen:
+                    seen.add(req)
+                    requirements.append(req)
+
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            mod_target = node.module
+            if mod_target:
+                target_stem = mod_target.split(".")[-1]
+                imported_pyi = os.path.join(dir_name, f"{target_stem}.pyi")
+                if os.path.isfile(imported_pyi):
+                    for req in extract_requirements_from_pyi(imported_pyi, visited):
+                        if req not in seen:
+                            seen.add(req)
+                            requirements.append(req)
 
     return requirements
 

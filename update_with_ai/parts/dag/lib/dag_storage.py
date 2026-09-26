@@ -4,46 +4,47 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class Node:
+class DagNode:
     unit_address: str
     role_address: str = ""
 
 
 @dataclass(frozen=True)
-class Dependency:
-    node: Node
+class DagDependency:
+    node: DagNode
     is_silent: bool = False
 
 
 @dataclass(frozen=True, init=False)
-class Message:
+class DagMessage:
     content: str = ""
 
 
 @dataclass(frozen=True)
-class Change(Message):
+class ChangeMessage(DagMessage):
     content: str = ""
 
 
 @dataclass(frozen=True)
-class Feedback(Message):
+class FeedbackMessage(DagMessage):
     content: str = ""
-    target: Optional[Node] = None
+    target: Optional[DagNode] = None
+
 
 
 class DagStorage(Protocol):
-    def get_dependencies(self, node: Node) -> Set[Dependency]: ...
+    def get_dependencies(self, node: DagNode) -> Set[DagDependency]: ...
 
-    def get_dependents(self, node: Node) -> Set[Node]: ...
+    def get_dependents(self, node: DagNode) -> Set[DagNode]: ...
 
-    def get_messages(self, node: Node) -> Set[Message]: ...
+    def get_messages(self, node: DagNode) -> Set[DagMessage]: ...
 
-    def is_dirty(self, node: Node) -> bool: ...
+    def is_dirty(self, node: DagNode) -> bool: ...
 
-    def register_dependent(self, node: Node) -> None: ...
+    def register_dependent(self, node: DagNode) -> None: ...
 
-    def clear_dependents(self, node: Node) -> None: ...
+    def clear_dependents(self, node: DagNode) -> None: ...
 
-    def add_message(self, message: Message, to: Node) -> None: ...
+    def add_message(self, message: DagMessage, to: DagNode) -> None: ...
 
-    def clear_messages(self, node: Node) -> None: ...
+    def clear_messages(self, node: DagNode) -> None: ...

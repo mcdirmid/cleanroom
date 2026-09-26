@@ -19,11 +19,11 @@ class RunnerLogger(runner_logger.RunnerLogger, Singleton):
         with open(self.transcript_file_path, "w", encoding="utf-8") as f:
             f.write("")
 
-    def consume(self, event: runner_logger.LogEvent) -> None:
-        # Requirement: Consuming a log event writes a single-line compact summary to standard output.
+    def consume(self, event: runner_logger.RunnerLogEvent) -> None:
+        # Requirement: Consuming a runner log event writes a single-line compact summary to standard output.
         if event.summary:
             print(event.summary, flush=True)
-        # Requirement: Consuming a log event writes an unbuffered verbose record to the transcript log file.
+        # Requirement: Consuming a runner log event writes an unbuffered verbose record to the transcript log file.
         if event.transcript_representation:
             with open(self.transcript_file_path, "a", encoding="utf-8") as f:
                 f.write(event.transcript_representation + "\n")

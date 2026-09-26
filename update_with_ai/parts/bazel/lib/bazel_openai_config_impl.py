@@ -180,6 +180,12 @@ class OpenaiConfig(
             if "batch_size" in data
             else int(os.environ.get("BATCH_SIZE", "1"))
         )
+        self._supersede_arg_keep = (
+            int(data["supersede_arg_keep"])
+            if "supersede_arg_keep" in data
+            else int(os.environ.get("SUPERSEDE_ARG_KEEP", "20"))
+        )
+
 
     @property
     def model_name(self) -> str:
@@ -251,8 +257,11 @@ class OpenaiConfig(
         # Requirement: The dag config provides the batch size bounding dirty nodes processed together in an agent session.
         return self._batch_size
 
+    @property
+    def supersede_arg_keep(self) -> int:
+        # Requirement: The agent config provides the character retention limit bounding preserved string argument tails when tool responses are superseded.
+        return self._supersede_arg_keep
 
-ModelConfig = OpenaiConfig
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
@@ -261,7 +270,6 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         OpenaiConfig,
         keys=[
             OpenaiConfig,
-            ModelConfig,
             openai_config.OpenaiConfig,
             agent_config.AgentConfig,
             dag_config.DagConfig,

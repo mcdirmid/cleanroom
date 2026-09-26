@@ -17,14 +17,12 @@ When initialized for an agent session, the guide delivery obtains its guide pars
 
 Passing verification satisfies prerequisite milestone criteria for step advancement. Advancing a step when verification passes:
 
-- Emits a response containing the guide summary alone without delivering a step section when no step section has been delivered yet.
-
-- Emits a response presenting the guide summary above the next step section content introduced by `Now check carefully:` and transitions to that step section when previous steps have been delivered and further step sections remain.
+- Emits a response presenting the next step section content introduced by `Now check carefully:` alongside instructions to check carefully, make edits if the source file does not conform to any checklist item, and call advance() only when conforming, transitioning to that step section when further step sections remain.
 
 Failing verification preserves the current delivery position while communicating diagnostic feedback. Advancing a step when verification fails:
 
-- Emits a response combining the guide summary, any configured verification failure instructions, and failure diagnostics without activating a step section when no step section has been delivered yet.
+- Emits a response combining the initial primer content (or guide summary when an initial primer is omitted), any configured verification failure instructions, and failure diagnostics without activating a step section when no step section has been delivered yet.
 
-- Emits a response combining the guide summary, the current step section content introduced by `Now check carefully:`, any configured verification failure instructions, and failure diagnostics without advancing to subsequent sections when a step section is currently active.
+- Emits a response combining the current step section content introduced by `Now check carefully:`, any configured verification failure instructions, and failure diagnostics without advancing to subsequent sections when a step section is currently active.
 
 When no guide is configured or no step sections remain, the guide delivery indicates that no steps remain and advancing produces no response.

@@ -1,6 +1,6 @@
 # loop_node_cleaner_impl implementation component
 
-imports: agent_node_config, agent_storage, dag_storage, loop_conversation, loop_driver, sandbox
+imports: agent_node_config, agent_storage, dag_storage, loop_conversation, loop_driver, runner_logger, sandbox
 implements: loop_node_cleaner
 
 ## Purpose
@@ -13,7 +13,7 @@ Driving node execution requires bridging abstract graph clean directives to conc
 
 ## Types and Behavior
 
-The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes to session services, retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
+The node cleaner cleans dirty nodes within an agent session phase where the role config presents the role of the dirty nodes to session services, logging unexpected execution failures to the runner logger and retrying the session phase once upon encountering an unexpected execution failure before propagating the failure.
 
 The conversation is initialized with instructions directing the agent to call the get work tool.
 

@@ -10,6 +10,6 @@ Running multi-turn agent passes without observable logging hides failures and co
 
 ## Types and Behavior
 
-A *log event* is a record of an observable execution event that provides an *event name*, a single-line *summary*, and a verbose *transcript representation*.
+A *runner log event* is a record of an observable execution event that provides an *event name*, a single-line *summary*, and a verbose *transcript representation*.
 
-The *runner logger* is a system service that *consumes* log events, writing compact single-line summaries to standard output and full verbose records to a transcript log file.
+The *runner logger* is a system service that *consumes* runner log events, writing compact single-line summaries to standard output and full verbose records to a transcript log file.

@@ -7,7 +7,7 @@ import os
 import threading
 from typing import Any, Iterable, Mapping, Optional, Sequence
 from mcp.server.fastmcp import FastMCP, Context
-from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton, system
+from support.lib.lifecycle import LifecycleRegistry, LifecycleResolutionError, Singleton, get_default_registry, get_singleton, system
 from . import mcp_cache_arbiter
 from . import mcp_gate
 from . import mcp_server
@@ -158,13 +158,24 @@ class McpServer(mcp_server.McpServer, Singleton):
             with scope.activate():
                 try:
                     _ = scope.get_singleton(sandbox_run_control.RunController)
-                except Exception:  # pragma: no cover (assumption: run controller present in session tier)
+                    tool_mgr = scope.get_singleton(tool_provider.ToolManager)
+                    try:
+                        adv_tool = scope.get_singleton(sandbox_run_control.AdvanceTool)
+                        tool_mgr.install_tool(adv_tool)
+                    except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+                        pass
+                    try:
+                        blame_tool = scope.get_singleton(sandbox_run_control.BlameTool)
+                        tool_mgr.install_tool(blame_tool)
+                    except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+                        pass
+                except (LifecycleResolutionError, KeyError, RuntimeError, AttributeError):  # pragma: no cover (assumption: run controller present in session tier)
                     pass  # pragma: no cover
                 try:
                     tool_mgr = scope.get_singleton(tool_provider.ToolManager)
                     if hasattr(tool_mgr, "installed_tools"):
                         self.export_domain_tools(tool_mgr.installed_tools)
-                except Exception:  # pragma: no cover (assumption: tool_mgr resolvable)
+                except (LifecycleResolutionError, KeyError, RuntimeError, AttributeError):  # pragma: no cover (assumption: tool_mgr resolvable)
                     pass  # pragma: no cover (assumption: tool_mgr resolvable)
         self._sync_sentinel_file()
         return f"Registered role agent session '{conversation_id}' for role '{role_address}' at unit root '{unit_root}'."
@@ -197,18 +208,21 @@ class McpServer(mcp_server.McpServer, Singleton):
 
         storage = get_singleton(dag_storage.DagStorage)
         subgraph = get_singleton(dag_subgraph.DagSubgraph)
-        root = dag_storage.Node(unit_address=norm_unit, role_address=norm_role)
+        root = dag_storage.DagNode(unit_address=norm_unit, role_address=norm_role)
 
-        visited: set[dag_storage.Node] = set()
+        visited: set[dag_storage.DagNode] = set()
         try:
             import importlib
 
             loader_cls = None
             try:
-                import update_with_ai.parts.bazel.lib.bazel_manifest_loader_impl as bml
+                import importlib
 
+                bml = importlib.import_module(
+                    "update_with_ai.parts.bazel.lib.bazel_manifest_loader_impl"
+                )
                 loader_cls = getattr(bml, "BazelManifestLoader", None)
-            except Exception:  # pragma: no cover (defensive: dynamic import fallback)
+            except (ImportError, AttributeError):  # pragma: no cover (defensive: dynamic import fallback)
                 pass  # pragma: no cover (defensive: dynamic import fallback)
 
             manifest_loader = None
@@ -244,7 +258,7 @@ class McpServer(mcp_server.McpServer, Singleton):
                     pass  # pragma: no cover (defensive: scope resolution fallback)
 
             if manifest_loader is not None:
-                queue: list[dag_storage.Node] = [root]
+                queue: list[dag_storage.DagNode] = [root]
                 while queue:
                     curr = queue.pop(0)
                     if curr in visited:
@@ -311,9 +325,9 @@ class McpServer(mcp_server.McpServer, Singleton):
                 self.export_domain_tools(tool_mgr.installed_tools)
             if tool_name == "get_work":
                 if "No dirty nodes are ready" in resp.content:
-                    session_mgr.set_session_status(conversation_id, mcp_session.Idle())
+                    session_mgr.set_session_status(conversation_id, mcp_session.IdleSession())
                 else:
-                    session_mgr.set_session_status(conversation_id, mcp_session.Active())
+                    session_mgr.set_session_status(conversation_id, mcp_session.ActiveSession())
             elif tool_name == "submit" and not resp.is_failed:
                 try:
                     storage = scope.get_singleton(dag_storage.DagStorage)
@@ -337,7 +351,7 @@ class McpServer(mcp_server.McpServer, Singleton):
                                     pass  # pragma: no cover
                                 target_name = target_val or alias
                                 target_prefix = f"[{os.path.basename(target_name)}] " if target_name else ""
-                                chg = dag_storage.Change(content=f"{target_prefix}{summary}")
+                                chg = dag_storage.ChangeMessage(content=f"{target_prefix}{summary}")
                                 for dep in storage.get_dependents(n):
                                     storage.add_message(chg, to=dep)
                 except Exception:  # pragma: no cover (assumption: storage present)
@@ -348,7 +362,12 @@ class McpServer(mcp_server.McpServer, Singleton):
                     node_cfg = scope.get_singleton(agent_node_config.NodeConfig)
                     blame_target_str = str(norm_args.get("blame_target", "") or norm_args.get("target", "") or "").strip()
                     exp = str(norm_args.get("explanation", "") or "").strip()
-                    candidates = list(node_cfg.blame_targets) + list(node_cfg.read_only_files)
+                    all_bts = [
+                        bt
+                        for bts in node_cfg.blame_targets_by_node.values()
+                        for bt in bts
+                    ]
+                    candidates = all_bts + list(node_cfg.read_only_files)
                     for f in candidates:
                         rel = getattr(f, "relative_path", "")
                         short = getattr(f, "short_name", "")
@@ -364,7 +383,7 @@ class McpServer(mcp_server.McpServer, Singleton):
                                 or str(owner) == blame_target_str  # pragma: no cover (defensive: flexible blame target format fallback)
                                 or getattr(owner, "unit_address", None) == blame_target_str  # pragma: no cover (defensive: flexible blame target format fallback)
                             ):
-                                storage.add_message(dag_storage.Feedback(content=exp, target=owner), to=owner)
+                                storage.add_message(dag_storage.FeedbackMessage(content=exp, target=owner), to=owner)
                                 break
                 except Exception:  # pragma: no cover (assumption: storage and node_cfg present)
                     pass  # pragma: no cover
@@ -374,7 +393,7 @@ class McpServer(mcp_server.McpServer, Singleton):
                     role_cfg = scope.get_singleton(agent_node_config.RoleConfig)
                     exp = str(norm_args.get("explanation", "") or "").strip()
                     for n in role_cfg.nodes:
-                        storage.add_message(dag_storage.Feedback(content=exp), to=n)
+                        storage.add_message(dag_storage.FeedbackMessage(content=exp), to=n)
                 except Exception:  # pragma: no cover (assumption: storage and role_cfg present)
                     pass  # pragma: no cover
             if resp.reminder:

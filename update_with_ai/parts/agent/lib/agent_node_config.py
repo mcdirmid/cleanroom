@@ -15,10 +15,11 @@ class StepSection:
 
 
 @dataclass(frozen=True)
-class Guide:
+class NodeGuide:
     summary: str
     sections: List[StepSection]
     verification_failure: Optional[str] = None
+
 
 
 # Requirements specified in agent_node_config.pyi
@@ -29,14 +30,14 @@ class VerificationCheck(Protocol):
 
 @dataclass(frozen=True)
 class PerNodeInfo:
-    node: dag_storage.Node
+    node: dag_storage.DagNode
     read_only_files: Set[agent_file_alias.ReadOnlyFile]
     read_write_files: Set[agent_file_alias.ReadWriteFile]
     templates: Set[Tuple[agent_file_alias.BoundFile, agent_file_alias.FileContent]]
     template_parameters: Mapping[str, Any]
     allows_step_mode: bool
     guide_file: Optional[agent_file_alias.UnboundFile]
-    guide: Optional[Guide]
+    guide: Optional[NodeGuide]
     blame_targets: Set[agent_file_alias.BoundFile]
     verification_checks: Sequence[VerificationCheck]
     src_file_alias: Optional[str]
@@ -49,12 +50,12 @@ class RoleConfig(Protocol):
     def role(self) -> str: ...
 
     @property
-    def nodes(self) -> Sequence[dag_storage.Node]: ...
+    def nodes(self) -> Sequence[dag_storage.DagNode]: ...
 
     @property
     def version(self) -> int: ...
 
-    def set_nodes(self, nodes: Sequence[dag_storage.Node]) -> None: ...
+    def set_nodes(self, nodes: Sequence[dag_storage.DagNode]) -> None: ...
 
 
 class NodeConfig(Protocol):
@@ -82,15 +83,13 @@ class NodeConfig(Protocol):
     def template_parameters(self) -> Mapping[str, Any]: ...
 
     @property
-    def guide(self) -> Optional[Guide]: ...
+    def guide(self) -> Optional[NodeGuide]: ...
 
-    @property
-    def blame_targets(self) -> Set[agent_file_alias.BoundFile]: ...
 
     @property
     def blame_targets_by_node(
         self,
-    ) -> Mapping[dag_storage.Node, Set[agent_file_alias.BoundFile]]: ...
+    ) -> Mapping[dag_storage.DagNode, Set[agent_file_alias.BoundFile]]: ...
 
     @property
     def verification_checks(self) -> Sequence[VerificationCheck]: ...
@@ -98,10 +97,10 @@ class NodeConfig(Protocol):
     @property
     def verification_checks_by_node(
         self,
-    ) -> Mapping[dag_storage.Node, Sequence[VerificationCheck]]: ...
+    ) -> Mapping[dag_storage.DagNode, Sequence[VerificationCheck]]: ...
 
     @property
-    def src_file_alias_by_node(self) -> Mapping[dag_storage.Node, str]: ...
+    def src_file_alias_by_node(self) -> Mapping[dag_storage.DagNode, str]: ...
 
     @property
     def verification_success_message(self) -> Optional[str]: ...
@@ -110,4 +109,7 @@ class NodeConfig(Protocol):
     def feedback(self) -> Sequence[str]: ...
 
     @property
-    def per_node_info_by_node(self) -> Mapping[dag_storage.Node, PerNodeInfo]: ...
+    def per_node_info_by_node(self) -> Mapping[dag_storage.DagNode, PerNodeInfo]: ...
+
+
+

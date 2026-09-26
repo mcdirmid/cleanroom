@@ -25,7 +25,7 @@ class RoleConfig(agent_node_config.RoleConfig, Singleton):
 
     def __init__(self) -> None:
         self._role: str = ""
-        self._nodes: Sequence[dag_storage.Node] = ()
+        self._nodes: Sequence[dag_storage.DagNode] = ()
         self._version: int = 0
 
     @property
@@ -36,14 +36,14 @@ class RoleConfig(agent_node_config.RoleConfig, Singleton):
         self._role = role
 
     @property
-    def nodes(self) -> Sequence[dag_storage.Node]:
+    def nodes(self) -> Sequence[dag_storage.DagNode]:
         return self._nodes
 
     @property
     def version(self) -> int:
         return self._version
 
-    def set_nodes(self, nodes: Sequence[dag_storage.Node]) -> None:
+    def set_nodes(self, nodes: Sequence[dag_storage.DagNode]) -> None:
         self._nodes = tuple(nodes)
         self._version += 1
 
@@ -88,13 +88,13 @@ class RoleSessionManager(mcp_session.RoleSessionManager, Singleton):
 
             try:
                 subgraph = scope.get_singleton(dag_subgraph.DagSubgraph)
-                root_node = dag_storage.Node(unit_address=unit_root, role_address=role_address)
+                root_node = dag_storage.DagNode(unit_address=unit_root, role_address=role_address)
                 try:
                     storage = scope.get_singleton(dag_storage.DagStorage)
                     from update_with_ai.parts.bazel.lib import bazel_manifest_loader
                     manifest_loader = scope.get_singleton(bazel_manifest_loader.BazelManifestLoader)
-                    visited: set[dag_storage.Node] = set()
-                    queue: list[dag_storage.Node] = [root_node]
+                    visited: set[dag_storage.DagNode] = set()
+                    queue: list[dag_storage.DagNode] = [root_node]
                     while queue:
                         curr = queue.pop(0)
                         if curr in visited:
@@ -121,7 +121,7 @@ class RoleSessionManager(mcp_session.RoleSessionManager, Singleton):
             unit_root=unit_root,
             scope=scope,
             last_active_timestamp=time.time(),
-            status=mcp_session.Active(),
+            status=mcp_session.ActiveSession(),
         )
         self._sessions[conversation_id] = session
         return scope
@@ -146,7 +146,7 @@ class RoleSessionManager(mcp_session.RoleSessionManager, Singleton):
                 unit_root=session.unit_root,
                 scope=session.scope,
                 last_active_timestamp=time.time(),
-                status=mcp_session.Active(),
+                status=mcp_session.ActiveSession(),
             )
 
     def set_session_status(self, conversation_id: mcp_session.ConversationId, status: mcp_session.SessionStatus) -> None:

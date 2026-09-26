@@ -17,7 +17,7 @@ The node config and alias manager realize session configuration and file alias r
 
 The node config caches per node info loaded for active nodes from the role config, checking the role config version to unload cached per node info when nodes are no longer being cleaned, and loading per node info for newly active nodes from target node manifests.
 
-Loading per node info for a node resolves its declared source files and templates from the manifest as the node read-write files and templates, declared template parameters as the node template parameters, direct dependencies and transitive star dependencies resolved across dependency manifests as the node read-only files excluding declared silent dependencies and read-write files, whether the node allows step mode, declared guide targets as the guide file and task guide, declared feedback dependencies as blame targets mapped to their owning dependency nodes, declared verification commands as verification checks, declared source file alias relative path as the src file alias, declared verification success message, and feedback messages from graph storage as the feedback.
+Loading per node info for a node resolves its declared source files and templates from the manifest as the node read-write files and templates, declared template parameters as the node template parameters, direct dependencies and transitive star dependencies resolved across dependency manifests as the node read-only files excluding declared silent dependencies and read-write files, whether the node allows step mode, declared guide targets as the guide file and task guide, declared feedback dependencies as blame targets mapped to their owning dependency nodes, declared verification commands as verification checks, declared source file alias relative path as the src file alias, declared verification success message, and feedback messages from graph storage as the feedback. Parsing a task guide from guide content extracts the guide summary from content preceding the first section heading and under any heading titled `Summary`, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
 
 The node config dynamically aggregates session parameters across active nodes' per node info.
 
@@ -35,7 +35,7 @@ The node config dynamically provides:
 
 - The session guide file and task guide from the single active node when guide step mode is active.
 
-- The session blame targets aggregating blame targets across the active nodes, and blame targets by node mapping each active node to its declared blame targets.
+- The session blame targets by node mapping each active node to its declared blame targets.
 
 - The session verification checks aggregating verification checks across the active nodes, and verification checks by node mapping each active node to its verification checks.
 

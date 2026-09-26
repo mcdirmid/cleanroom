@@ -3,5 +3,28 @@
     "${workspaceFolder}/update_with_ai",
     "${workspaceFolder}/update_with_ai/lib",
     "${workspaceFolder}/update_with_ai/specs/grounding_pyi"
-  ]
+  ],
+  "editor.inlineSuggest.enabled": false,
+  "editor.quickSuggestions": {
+    "other": "off",
+    "comments": "off",
+    "strings": "off"
+  },
+  "editor.suggestOnTriggerCharacters": false,
+  "editor.acceptSuggestionOnEnter": "off",
+  "editor.tabCompletion": "off",
+  "editor.wordBasedSuggestions": "off",
+  "editor.snippetSuggestions": "none",
+  "editor.parameterHints.enabled": false,
+  "[markdown]": {
+    "editor.quickSuggestions": {
+      "other": "off",
+      "comments": "off",
+      "strings": "off"
+    },
+    "editor.suggestOnTriggerCharacters": false,
+    "editor.wordBasedSuggestions": "off",
+    "editor.inlineSuggest.enabled": false
+  },
+  "editor.wordWrap": "on"
 }

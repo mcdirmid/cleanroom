@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from update_with_ai.parts.loop.lib.loop_conversation import (
     Conversation,
-    Message,
+    ConversationMessage,
     ModelRequest,
 )
 from update_with_ai.parts.loop.lib.loop_guard import (
@@ -16,13 +16,11 @@ from update_with_ai.parts.loop.lib.loop_guard import (
     LoopReminder,
 )
 from update_with_ai.parts.loop.lib.loop_driver import (
-    AgentOutcome,
-    AgentDriver,
     LoopOutcome,
     LoopDriver,
 )
 from update_with_ai.parts.openai.lib.openai_driver_impl import (
-    AgentDriver as AgentDriverImpl,
+    LoopDriver as LoopDriverImpl,
     OpenAIError,
     __initialize__,
     _DEFAULT_CONVERTER,
@@ -34,12 +32,12 @@ from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.openai.lib.openai_config import OpenaiConfig
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
 from update_with_ai.parts.agent.lib.agent_session import agent_session
-from update_with_ai.parts.core.lib.runner_logger import LogEvent, RunnerLogger
+from update_with_ai.parts.core.lib.runner_logger import RunnerLogEvent, RunnerLogger
 from update_with_ai.parts.sandbox.lib.tool_provider import (
     ActualParameterBindings,
     FollowUpToolCall,
-    Parameter,
-    Response,
+    ToolParameter,
+    ToolResponse,
     Tool,
     ToolManager,
     WireParameterBindings,
@@ -64,9 +62,9 @@ class MockLogger:
     tier = system
 
     def __init__(self) -> None:
-        self.events: List[LogEvent] = []
+        self.events: List[RunnerLogEvent] = []
 
-    def consume(self, event: LogEvent) -> None:
+    def consume(self, event: RunnerLogEvent) -> None:
         self.events.append(event)
 
 
@@ -74,26 +72,26 @@ class MockHistory:
     tier = agent_session
 
     def __init__(self) -> None:
-        self._messages: List[Message] = []
-        self.tool_responses: List[tuple[Response, str, str]] = []
+        self._messages: List[ConversationMessage] = []
+        self.tool_responses: List[tuple[ToolResponse, str, str]] = []
 
     @property
-    def messages(self) -> List[Message]:
+    def messages(self) -> List[ConversationMessage]:
         return list(self._messages)
 
-    def append_message(self, message: Message) -> None:
+    def append_message(self, message: ConversationMessage) -> None:
         self._messages.append(message)
 
     def append_tool_response(
         self,
-        response: Response,
+        response: ToolResponse,
         tool_name: str,
         tool_call_id: str,
         wire_parameter_bindings: Optional[WireParameterBindings] = None,
     ) -> None:
         self.tool_responses.append((response, tool_name, tool_call_id))
         self._messages.append(
-            Message(
+            ConversationMessage(
                 role="tool",
                 content=response.content,
                 tool_call_id=tool_call_id,
@@ -132,7 +130,7 @@ class MockToolManager:
     def __init__(self) -> None:
         self._tools: Set[Tool] = set()
         self.executions: List[tuple[str, WireParameterBindings]] = []
-        self.responses: dict[str, Response] = {}
+        self.responses: dict[str, ToolResponse] = {}
         self.handlers: dict[str, Any] = {}
 
     @property
@@ -144,13 +142,13 @@ class MockToolManager:
 
     def execute_tool(
         self, name: str, bindings: WireParameterBindings
-    ) -> Response:
+    ) -> ToolResponse:
         self.executions.append((name, bindings))
         if name in self.handlers:
             return self.handlers[name](bindings)
         return self.responses.get(
             name,
-            Response(
+            ToolResponse(
                 is_failed=False,
                 is_terminated=False,
                 content=f"Executed {name}",
@@ -191,13 +189,13 @@ class DummyTool:
         return f"Tool {self._name}"
 
     @property
-    def parameters(self) -> Set[Parameter]:
+    def parameters(self) -> Set[ToolParameter]:
         return self._parameters
 
     def execute_tool(
         self, actual_parameter_bindings: ActualParameterBindings
-    ) -> Response:
-        return Response(is_failed=False, is_terminated=False, content="ok")
+    ) -> ToolResponse:
+        return ToolResponse(is_failed=False, is_terminated=False, content="ok")
 
 
 class DummyFunction:
@@ -278,9 +276,9 @@ class OpenAIDriverImplTest(unittest.TestCase):
         )
 
     def test_agent_outcome_dataclass(self) -> None:
-        """CUJ: Instantiating AgentOutcome dataclass."""
-        resp = Response(is_failed=False, is_terminated=True, content="Success")
-        outcome = AgentOutcome(
+        """CUJ: Instantiating LoopOutcome dataclass."""
+        resp = ToolResponse(is_failed=False, is_terminated=True, content="Success")
+        outcome = LoopOutcome(
             is_success=True, response=resp, conversation=self.history
         )
         self.assertTrue(outcome.is_success)
@@ -308,11 +306,11 @@ class OpenAIDriverImplTest(unittest.TestCase):
         comp2 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc]))])
         mock_client.chat.completions.create.side_effect = [comp1, comp2]
 
-        term_resp = Response(is_failed=False, is_terminated=True, content="Done")
+        term_resp = ToolResponse(is_failed=False, is_terminated=True, content="Done")
         self.tool_mgr.responses["finish_task"] = term_resp
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             outcome = runner.run()
 
             # Requirement: When a model response produces no tool executions, the loop driver appends a prompt to the conversation reminding that progress and conclusion require invoking tools, and continues the turn loop.
@@ -355,7 +353,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         mock_client.chat.completions.create.return_value = comp
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
 
             # Requirement: When turns reach the conversation limit from agent config, the loop driver halts with an unexpected failure.
             # Requirement: [LoopDriver] When the conversation limit from agent config is exceeded, the loop driver halts with an unexpected failure.
@@ -377,7 +375,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         completion = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc]))])
         mock_client.chat.completions.create.return_value = completion
 
-        term_resp = Response(
+        term_resp = ToolResponse(
             is_failed=False, is_terminated=True, content="Task completed successfully"
         )
         self.tool_mgr.responses["finish_task"] = term_resp
@@ -392,9 +390,9 @@ class OpenAIDriverImplTest(unittest.TestCase):
                 return "Finishes task"
 
             @property
-            def parameters(self) -> Set[Parameter]:
+            def parameters(self) -> Set[ToolParameter]:
                 return {
-                    Parameter(
+                    ToolParameter(
                         name="summary",
                         description="Summary",
                         parameter_converter=MockConverter(),
@@ -404,13 +402,13 @@ class OpenAIDriverImplTest(unittest.TestCase):
 
             def execute_tool(
                 self, actual_parameter_bindings: ActualParameterBindings
-            ) -> Response:
+            ) -> ToolResponse:
                 return term_resp
 
         self.tool_mgr.install_tool(DummyTool())
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             outcome = runner.run()
 
             # Requirement: [LoopDriver] The loop driver drives turns by sending model requests to a language model and executing requested tools.
@@ -445,15 +443,15 @@ class OpenAIDriverImplTest(unittest.TestCase):
         comp2 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc2]))])
         mock_client.chat.completions.create.side_effect = [comp1, comp2]
 
-        self.tool_mgr.responses["edit_file"] = Response(
+        self.tool_mgr.responses["edit_file"] = ToolResponse(
             is_failed=True, is_terminated=False, content="Error: file not found"
         )
-        self.tool_mgr.responses["finish_task"] = Response(
+        self.tool_mgr.responses["finish_task"] = ToolResponse(
             is_failed=False, is_terminated=True, content="Recovered"
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             outcome = runner.run()
 
             # Requirement: When driving a turn, the loop driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter sequence, and correlates tool results with model invocations according to OpenAI tool calling conventions.
@@ -513,12 +511,12 @@ class OpenAIDriverImplTest(unittest.TestCase):
         )
         mock_client.chat.completions.create.side_effect = [comp1, comp2]
 
-        self.tool_mgr.responses["finish_task"] = Response(
+        self.tool_mgr.responses["finish_task"] = ToolResponse(
             is_failed=False, is_terminated=True, content="Done"
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             outcome = runner.run()
 
             # Requirement: When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON: when a replace file content invocation provides a target file, target content, and partial replacement content, any trailing incomplete line without a terminating newline is deleted and replaced with a raise NotImplementedError sentinel carrying an incrementing session truncation identifier matching the indentation of the deleted line, or if the last line is complete the sentinel is appended on the next line matching the last line's indentation, executing the tool to persist partial modifications and returning an actionable notice directing the model to resume implementation targeting the sentinel; otherwise the loop driver terminates the truncated tool invocation by appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
@@ -598,18 +596,18 @@ class OpenAIDriverImplTest(unittest.TestCase):
         )
         mock_client.chat.completions.create.side_effect = [comp1, comp2, comp3]
 
-        self.tool_mgr.responses["replace_file_content"] = Response(
+        self.tool_mgr.responses["replace_file_content"] = ToolResponse(
             is_failed=False,
             is_terminated=False,
             content="Successfully replaced content in 'foo.py'.",
             suppression_key="replace_file_content",
         )
-        self.tool_mgr.responses["finish_task"] = Response(
+        self.tool_mgr.responses["finish_task"] = ToolResponse(
             is_failed=False, is_terminated=True, content="All done"
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             outcome = runner.run()
 
             # Requirement: When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON: when a replace file content invocation provides a target file, target content, and partial replacement content, any trailing incomplete line without a terminating newline is deleted and replaced with a raise NotImplementedError sentinel carrying an incrementing session truncation identifier matching the indentation of the deleted line, or if the last line is complete the sentinel is appended on the next line matching the last line's indentation, executing the tool to persist partial modifications and returning an actionable notice directing the model to resume implementation targeting the sentinel; otherwise the loop driver terminates the truncated tool invocation by appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
@@ -684,17 +682,17 @@ class OpenAIDriverImplTest(unittest.TestCase):
         dummy_tool = DummyTool(
             "replace_file_content",
             {
-                Parameter(
+                ToolParameter(
                     name="target_file",
                     description="",
                     parameter_converter=MockConverter(),
                 ),
-                Parameter(
+                ToolParameter(
                     name="target_content",
                     description="",
                     parameter_converter=MockConverter(),
                 ),
-                Parameter(
+                ToolParameter(
                     name="replacement_content",
                     description="",
                     parameter_converter=MockConverter(),
@@ -705,17 +703,17 @@ class OpenAIDriverImplTest(unittest.TestCase):
             lambda actual_parameter_bindings: executed_bindings.append(
                 dict(actual_parameter_bindings.bindings)
             )
-            or Response(
+            or ToolResponse(
                 is_failed=False, is_terminated=False, content="Replaced partial"
             )
         )
         self.tool_mgr.install_tool(dummy_tool)
-        self.tool_mgr.responses["finish_task"] = Response(
+        self.tool_mgr.responses["finish_task"] = ToolResponse(
             is_failed=False, is_terminated=True, content="Done"
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             # Requirement: When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON: when a replace file content invocation provides a target file, target content, and partial replacement content, any trailing incomplete line without a terminating newline is deleted and replaced with a raise NotImplementedError sentinel carrying an incrementing session truncation identifier matching the indentation of the deleted line, or if the last line is complete the sentinel is appended on the next line matching the last line's indentation, executing the tool to persist partial modifications and returning an actionable notice directing the model to resume implementation targeting the sentinel; otherwise the loop driver terminates the truncated tool invocation by appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
             outcome = runner.run()
             self.assertTrue(outcome.is_success)
@@ -806,17 +804,17 @@ class OpenAIDriverImplTest(unittest.TestCase):
         dummy_tool = DummyTool(
             "replace_file_content",
             {
-                Parameter(
+                ToolParameter(
                     name="target_file",
                     description="",
                     parameter_converter=MockConverter(),
                 ),
-                Parameter(
+                ToolParameter(
                     name="target_content",
                     description="",
                     parameter_converter=MockConverter(),
                 ),
-                Parameter(
+                ToolParameter(
                     name="replacement_content",
                     description="",
                     parameter_converter=MockConverter(),
@@ -827,17 +825,17 @@ class OpenAIDriverImplTest(unittest.TestCase):
             lambda actual_parameter_bindings: executed_bindings.append(
                 dict(actual_parameter_bindings.bindings)
             )
-            or Response(
+            or ToolResponse(
                 is_failed=False, is_terminated=False, content="Replaced partial"
             )
         )
         self.tool_mgr.install_tool(dummy_tool)
-        self.tool_mgr.responses["finish_task"] = Response(
+        self.tool_mgr.responses["finish_task"] = ToolResponse(
             is_failed=False, is_terminated=True, content="Done"
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             # Requirement: When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON: when a replace file content invocation provides a target file, target content, and partial replacement content, any trailing incomplete line without a terminating newline is deleted and replaced with a raise NotImplementedError sentinel carrying an incrementing session truncation identifier matching the indentation of the deleted line, or if the last line is complete the sentinel is appended on the next line matching the last line's indentation, executing the tool to persist partial modifications and returning an actionable notice directing the model to resume implementation targeting the sentinel; otherwise the loop driver terminates the truncated tool invocation by appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
             outcome = runner.run()
             self.assertTrue(outcome.is_success)
@@ -905,17 +903,17 @@ class OpenAIDriverImplTest(unittest.TestCase):
         dummy_tool = DummyTool(
             "replace_file_content",
             {
-                Parameter(
+                ToolParameter(
                     name="target_file",
                     description="",
                     parameter_converter=MockConverter(),
                 ),
-                Parameter(
+                ToolParameter(
                     name="target_content",
                     description="",
                     parameter_converter=MockConverter(),
                 ),
-                Parameter(
+                ToolParameter(
                     name="replacement_content",
                     description="",
                     parameter_converter=MockConverter(),
@@ -926,17 +924,17 @@ class OpenAIDriverImplTest(unittest.TestCase):
             lambda actual_parameter_bindings: executed_bindings.append(
                 dict(actual_parameter_bindings.bindings)
             )
-            or Response(
+            or ToolResponse(
                 is_failed=False, is_terminated=False, content="Replaced empty"
             )
         )
         self.tool_mgr.install_tool(dummy_tool)
-        self.tool_mgr.responses["finish_task"] = Response(
+        self.tool_mgr.responses["finish_task"] = ToolResponse(
             is_failed=False, is_terminated=True, content="Done"
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             # Requirement: When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON: when a replace file content invocation provides a target file, target content, and partial replacement content, any trailing incomplete line without a terminating newline is deleted and replaced with a raise NotImplementedError sentinel carrying an incrementing session truncation identifier matching the indentation of the deleted line, or if the last line is complete the sentinel is appended on the next line matching the last line's indentation, executing the tool to persist partial modifications and returning an actionable notice directing the model to resume implementation targeting the sentinel; otherwise the loop driver terminates the truncated tool invocation by appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
             outcome = runner.run()
             self.assertTrue(outcome.is_success)
@@ -994,12 +992,12 @@ class OpenAIDriverImplTest(unittest.TestCase):
         )
         mock_client.chat.completions.create.side_effect = [comp1, comp2]
 
-        self.tool_mgr.responses["finish_task"] = Response(
+        self.tool_mgr.responses["finish_task"] = ToolResponse(
             is_failed=False, is_terminated=True, content="Done"
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             # Requirement: When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON: when a replace file content invocation provides a target file, target content, and partial replacement content, any trailing incomplete line without a terminating newline is deleted and replaced with a raise NotImplementedError sentinel carrying an incrementing session truncation identifier matching the indentation of the deleted line, or if the last line is complete the sentinel is appended on the next line matching the last line's indentation, executing the tool to persist partial modifications and returning an actionable notice directing the model to resume implementation targeting the sentinel; otherwise the loop driver terminates the truncated tool invocation by appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
             outcome = runner.run()
             self.assertTrue(outcome.is_success)
@@ -1020,7 +1018,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             with self.assertRaises(RuntimeError) as ctx:
                 runner.run()
 
@@ -1030,6 +1028,33 @@ class OpenAIDriverImplTest(unittest.TestCase):
                 any(
                     e.event_name == "model_error"
                     and "[Turn 1] Model error:" in e.summary
+                    for e in self.logger.events
+                )
+            )
+
+    @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
+    def test_general_exception_handling_logs_model_error(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
+        """CUJ: Handling general exceptions during completion request by logging model_error and raising RuntimeError."""
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+        mock_client.chat.completions.create.side_effect = ConnectionError(
+            "Network transport disconnect"
+        )
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            runner = scope.get_singleton(LoopDriver)
+            with self.assertRaises(RuntimeError) as ctx:
+                runner.run()
+
+            self.assertIn("Network transport disconnect", str(ctx.exception))
+            # Requirement: The loop driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool names and arguments or text previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in tool result transcripts when present.
+            self.assertTrue(
+                any(
+                    e.event_name == "model_error"
+                    and "[Turn 1] Model error: Network transport disconnect" in e.summary
+                    and "=== Turn 1 Model Error ===" in e.transcript_representation
                     for e in self.logger.events
                 )
             )
@@ -1054,12 +1079,12 @@ class OpenAIDriverImplTest(unittest.TestCase):
             ]
         )
         mock_client.chat.completions.create.return_value = comp
-        self.tool_mgr.responses["finish"] = Response(
+        self.tool_mgr.responses["finish"] = ToolResponse(
             is_failed=False, is_terminated=True, content="Done"
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             runner.run()
             # Requirement: When driving a turn, the loop driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter sequence, and correlates tool results with model invocations according to OpenAI tool calling conventions.
             call_kwargs = mock_client.chat.completions.create.call_args.kwargs
@@ -1091,12 +1116,12 @@ class OpenAIDriverImplTest(unittest.TestCase):
             ]
         )
         mock_client.chat.completions.create.return_value = comp
-        self.tool_mgr.responses["finish"] = Response(
+        self.tool_mgr.responses["finish"] = ToolResponse(
             is_failed=False, is_terminated=True, content="Done"
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             runner.run()
             # Requirement: When driving a turn, the loop driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter sequence, and correlates tool results with model invocations according to OpenAI tool calling conventions.
             call_kwargs = mock_client.chat.completions.create.call_args.kwargs
@@ -1119,10 +1144,10 @@ class OpenAIDriverImplTest(unittest.TestCase):
         comp2 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc_term]))])
         mock_client.chat.completions.create.side_effect = [comp1, comp2]
 
-        self.tool_mgr.responses["view_file"] = Response(
+        self.tool_mgr.responses["view_file"] = ToolResponse(
             is_failed=False, is_terminated=False, content="file content"
         )
-        self.tool_mgr.responses["finish"] = Response(
+        self.tool_mgr.responses["finish"] = ToolResponse(
             is_failed=False, is_terminated=True, content="Done"
         )
 
@@ -1132,7 +1157,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         ]
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             outcome = runner.run()
 
             # Requirement: Evaluating a tool invocation with the loop guard records the tool execution in the loop guard, injecting a loop reminder into the conversation when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
@@ -1166,7 +1191,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             with self.assertRaises(RuntimeError) as ctx:
                 runner.run()
 
@@ -1206,18 +1231,18 @@ class OpenAIDriverImplTest(unittest.TestCase):
         )
         mock_client.chat.completions.create.return_value = comp1
 
-        self.tool_mgr.responses["view_file"] = Response(
+        self.tool_mgr.responses["view_file"] = ToolResponse(
             is_failed=False, is_terminated=False, content="read"
         )
-        self.tool_mgr.responses["replace"] = Response(
+        self.tool_mgr.responses["replace"] = ToolResponse(
             is_failed=False, is_terminated=False, content="replaced"
         )
-        self.tool_mgr.responses["advance"] = Response(
+        self.tool_mgr.responses["advance"] = ToolResponse(
             is_failed=False, is_terminated=True, content="advanced"
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             outcome = runner.run()
 
             self.assertTrue(outcome.is_success)
@@ -1237,19 +1262,19 @@ class OpenAIDriverImplTest(unittest.TestCase):
         mock_client.chat.completions.create.return_value = comp
 
         conv = MockConverter()
-        param_z = Parameter(
+        param_z = ToolParameter(
             name="z_param",
             description="z desc",
             parameter_converter=conv,
             is_required=True,
         )
-        param_a = Parameter(
+        param_a = ToolParameter(
             name="a_param",
             description="a desc",
             parameter_converter=conv,
             is_required=False,
         )
-        param_b = Parameter(
+        param_b = ToolParameter(
             name="b_param",
             description="b desc",
             parameter_converter=conv,
@@ -1261,12 +1286,12 @@ class OpenAIDriverImplTest(unittest.TestCase):
 
         self.tool_mgr.install_tool(tool_zebra)
         self.tool_mgr.install_tool(tool_alpha)
-        self.tool_mgr.responses["zebra"] = Response(
+        self.tool_mgr.responses["zebra"] = ToolResponse(
             is_failed=False, is_terminated=True, content="done"
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             outcome = runner.run()
 
             self.assertTrue(outcome.is_success)
@@ -1302,13 +1327,13 @@ class OpenAIDriverImplTest(unittest.TestCase):
         comp2 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc2]))])
         mock_client.chat.completions.create.side_effect = [comp1, comp2]
 
-        self.tool_mgr.responses["failing_tool"] = Response(
+        self.tool_mgr.responses["failing_tool"] = ToolResponse(
             is_failed=True,
             is_terminated=False,
             content="Execution failed.",
             reminder="Ensure parameters are non-empty.",
         )
-        self.tool_mgr.responses["finish"] = Response(
+        self.tool_mgr.responses["finish"] = ToolResponse(
             is_failed=False,
             is_terminated=True,
             content="Finished successfully.",
@@ -1316,7 +1341,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             outcome = runner.run()
 
             self.assertTrue(outcome.is_success)
@@ -1351,19 +1376,19 @@ class OpenAIDriverImplTest(unittest.TestCase):
         )
         mock_client.chat.completions.create.side_effect = [comp1, comp2]
 
-        self.tool_mgr.responses["step_tool"] = Response(
+        self.tool_mgr.responses["step_tool"] = ToolResponse(
             is_failed=False,
             is_terminated=False,
             content="Step output.",
         )
-        self.tool_mgr.responses["finish"] = Response(
+        self.tool_mgr.responses["finish"] = ToolResponse(
             is_failed=False,
             is_terminated=True,
             content="Finished.",
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             outcome = runner.run()
 
             self.assertTrue(outcome.is_success)
@@ -1403,25 +1428,25 @@ class OpenAIDriverImplTest(unittest.TestCase):
         comp3 = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc3]))])
         mock_client.chat.completions.create.side_effect = [comp1, comp2, comp3]
 
-        self.tool_mgr.responses["view_file"] = Response(
+        self.tool_mgr.responses["view_file"] = ToolResponse(
             is_failed=False,
             is_terminated=False,
             content="secret file content that should not appear in the logs",
             reminder="Check line numbers",
         )
-        self.tool_mgr.responses["replace"] = Response(
+        self.tool_mgr.responses["replace"] = ToolResponse(
             is_failed=False,
             is_terminated=False,
             content="replaced file diff chunk",
         )
-        self.tool_mgr.responses["finish"] = Response(
+        self.tool_mgr.responses["finish"] = ToolResponse(
             is_failed=False,
             is_terminated=True,
             content="Finished work.",
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             outcome = runner.run()
 
             self.assertTrue(outcome.is_success)
@@ -1473,20 +1498,20 @@ class OpenAIDriverImplTest(unittest.TestCase):
             tool_name="followup_tool",
             wire_parameter_bindings=WireParameterBindings(bindings=set()),
         )
-        self.tool_mgr.responses["initial_tool"] = Response(
+        self.tool_mgr.responses["initial_tool"] = ToolResponse(
             is_failed=False,
             is_terminated=False,
             content="Initial tool executed.",
             follow_up_tool_call=follow_up,
         )
-        self.tool_mgr.responses["followup_tool"] = Response(
+        self.tool_mgr.responses["followup_tool"] = ToolResponse(
             is_failed=False,
             is_terminated=True,
             content="Followup tool executed.",
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             outcome = runner.run()
 
             # Requirement: When configured by agent configuration to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool, appending a synthetic assistant invocation carrying the follow-up tool call's reasoning text as prior thought preceding the requested tool execution and the resulting follow-up response to the conversation immediately following the originating response.
@@ -1533,20 +1558,20 @@ class OpenAIDriverImplTest(unittest.TestCase):
             tool_name="followup_tool",
             wire_parameter_bindings=WireParameterBindings(bindings=set()),
         )
-        self.tool_mgr.responses["initial_tool"] = Response(
+        self.tool_mgr.responses["initial_tool"] = ToolResponse(
             is_failed=False,
             is_terminated=False,
             content="Initial tool executed.",
             follow_up_tool_call=follow_up,
         )
-        self.tool_mgr.responses["finish_tool"] = Response(
+        self.tool_mgr.responses["finish_tool"] = ToolResponse(
             is_failed=False,
             is_terminated=True,
             content="Finished.",
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             outcome = runner.run()
 
             self.assertTrue(outcome.is_success)
@@ -1569,12 +1594,12 @@ class OpenAIDriverImplTest(unittest.TestCase):
         comp = DummyCompletion([DummyChoice(DummyMessage(None, tool_calls=[tc]))])
         mock_client.chat.completions.create.return_value = comp
 
-        self.tool_mgr.responses["fail"] = Response(
+        self.tool_mgr.responses["fail"] = ToolResponse(
             is_failed=True, is_terminated=True, content="Cannot proceed"
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             with self.assertRaises(RuntimeError) as ctx:
                 runner.run()
 
@@ -1614,7 +1639,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
 
         # Tool log variants:
         # Failed tool execution retains error details
-        failed_resp = Response(
+        failed_resp = ToolResponse(
             is_failed=True, is_terminated=False, content="file not found error"
         )
         s_fail, t_fail = _format_tool_log(
@@ -1624,7 +1649,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         self.assertEqual(t_fail, "file not found error")
 
         # Follow-up tool execution prefix
-        ok_write = Response(is_failed=False, is_terminated=False, content="ok")
+        ok_write = ToolResponse(is_failed=False, is_terminated=False, content="ok")
         s_fu, t_fu = _format_tool_log(
             "replace_file_content",
             {"file": "mod.py"},
@@ -1673,19 +1698,19 @@ class OpenAIDriverImplTest(unittest.TestCase):
         mock_client.chat.completions.create.side_effect = [comp1, comp2, comp3]
 
         long_output_first_line = "X" * 90 + "\nsecond line"
-        self.tool_mgr.responses["step_tool"] = Response(
+        self.tool_mgr.responses["step_tool"] = ToolResponse(
             is_failed=False,
             is_terminated=False,
             content=long_output_first_line,
         )
-        self.tool_mgr.responses["finish"] = Response(
+        self.tool_mgr.responses["finish"] = ToolResponse(
             is_failed=False,
             is_terminated=True,
             content=long_output_first_line,
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             outcome = runner.run()
             # Requirement: The loop driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool names and arguments or text previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in tool result transcripts when present.
             self.assertTrue(outcome.is_success)
@@ -1702,7 +1727,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
     def test_parameter_conversion_exception_fallback(
         self, mock_openai_cls: MagicMock
     ) -> None:
-        """CUJ: Parameter converter exception falls back to unconverted wire value."""
+        """CUJ: ToolParameter converter exception falls back to unconverted wire value."""
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
         tc = DummyToolCall(
@@ -1717,18 +1742,18 @@ class OpenAIDriverImplTest(unittest.TestCase):
             def convert(self, wire_value: Any) -> Any:
                 raise ValueError("Conversion failed")
 
-        failing_param = Parameter(
+        failing_param = ToolParameter(
             name="param", description="", parameter_converter=FailingConverter()
         )
         custom_tool = DummyTool(name="custom_tool", parameters={failing_param})
 
         self.tool_mgr.install_tool(custom_tool)
-        self.tool_mgr.responses["custom_tool"] = Response(
+        self.tool_mgr.responses["custom_tool"] = ToolResponse(
             is_failed=False, is_terminated=True, content="Done"
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             outcome = runner.run()
             # Requirement: [LoopDriver] The loop driver drives turns by sending model requests to a language model and executing requested tools.
             self.assertTrue(outcome.is_success)
@@ -1750,7 +1775,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             tool_name="advance",
             wire_parameter_bindings=WireParameterBindings(bindings={("a", "1")}),
         )
-        resp_start = Response(
+        resp_start = ToolResponse(
             is_failed=False,
             is_terminated=False,
             content="Start done",
@@ -1763,7 +1788,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             tool_name="replace",
             wire_parameter_bindings=WireParameterBindings(bindings=set()),
         )
-        resp_f1 = Response(
+        resp_f1 = ToolResponse(
             is_failed=True,
             is_terminated=False,
             content=long_line,
@@ -1776,7 +1801,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
             tool_name="fail_followup",
             wire_parameter_bindings=WireParameterBindings(bindings=set()),
         )
-        resp_f2 = Response(
+        resp_f2 = ToolResponse(
             is_failed=False,
             is_terminated=False,
             content="OK step",
@@ -1785,7 +1810,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         )
         self.tool_mgr.responses["replace"] = resp_f2
 
-        resp_f3 = Response(
+        resp_f3 = ToolResponse(
             is_failed=True,
             is_terminated=True,
             content="Fatal followup error",
@@ -1793,7 +1818,7 @@ class OpenAIDriverImplTest(unittest.TestCase):
         self.tool_mgr.responses["fail_followup"] = resp_f3
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             with self.assertRaises(RuntimeError) as ctx:
                 runner.run()
 
@@ -1806,6 +1831,12 @@ class OpenAIDriverImplTest(unittest.TestCase):
         self.assertEqual(_repair_json('{"a": [1, 2]'), '{"a": [1, 2]}')
         self.assertEqual(_repair_json('{"a": "hello\\'), '{"a": "hello"}')
         self.assertEqual(_repair_json('{"a": 1,'), '{"a": 1}')
+        self.assertEqual(_repair_json('{"a": "hello\nworld'), '{"a": "hello\nworld"}')
+        self.assertEqual(_repair_json('{"a": 1, "b":'), '{"a": 1}')
+        self.assertEqual(_repair_json('{"a": 1, "b"'), '{"a": 1, "b": ""}')
+        self.assertEqual(_repair_json("[1, 2, 3]"), "{}")
+        self.assertEqual(_repair_json('"raw string"'), "{}")
+        self.assertEqual(_repair_json("42"), "{}")
 
     @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
     def test_truncation_tool_call_variants_and_usage_variants(
@@ -1870,18 +1901,98 @@ class OpenAIDriverImplTest(unittest.TestCase):
             comp_done,
         ]
 
-        self.tool_mgr.responses["finish_task"] = Response(
+        self.tool_mgr.responses["finish_task"] = ToolResponse(
             is_failed=False,
             is_terminated=True,
             content="Task done",
         )
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            runner = scope.get_singleton(AgentDriver)
+            runner = scope.get_singleton(LoopDriver)
             # Requirement: When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON: when a replace file content invocation provides a target file, target content, and partial replacement content, any trailing incomplete line without a terminating newline is deleted and replaced with a raise NotImplementedError sentinel carrying an incrementing session truncation identifier matching the indentation of the deleted line, or if the last line is complete the sentinel is appended on the next line matching the last line's indentation, executing the tool to persist partial modifications and returning an actionable notice directing the model to resume implementation targeting the sentinel; otherwise the loop driver terminates the truncated tool invocation by appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
             # Requirement: The loop driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool names and arguments or text previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in tool result transcripts when present.
             outcome = runner.run()
             self.assertTrue(outcome.is_success)
+
+    @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
+    def test_model_truncation_non_dict_and_newlines_no_attribute_error(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
+        """CUJ: Truncated tool call with raw newlines or non-dict args does not raise AttributeError and continues."""
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        # Turn 1: truncated completion with tool call having raw newlines and another having non-dict args
+        tc_newlines = DummyToolCall(
+            id="call_trunc_nl",
+            name="replace_file_content",
+            arguments='{"target_file": "foo.py", "target_content": "old", "replacement_content": "def foo():\n    x = 1\n',
+        )
+        tc_non_dict = DummyToolCall(
+            id="call_non_dict",
+            name="step_tool",
+            arguments="[1, 2, 3]",
+        )
+        comp_trunc = DummyCompletion(
+            choices=[
+                DummyChoice(
+                    message=DummyMessage(
+                        content="Generating code...",
+                        tool_calls=[tc_newlines, tc_non_dict],
+                    ),
+                    finish_reason="length",
+                )
+            ],
+            usage=DummyUsage(prompt_tokens=43000, cached_tokens=41000),
+        )
+
+        comp_done = DummyCompletion(
+            choices=[
+                DummyChoice(
+                    message=DummyMessage(
+                        content="Done now",
+                        tool_calls=[
+                            DummyToolCall(
+                                id="call_finish",
+                                name="finish_task",
+                                arguments="{}",
+                            )
+                        ],
+                    ),
+                    finish_reason="stop",
+                )
+            ],
+            usage=DummyUsage(prompt_tokens=44000, cached_tokens=42000),
+        )
+
+        mock_client.chat.completions.create.side_effect = [comp_trunc, comp_done]
+
+        self.tool_mgr.responses["replace_file_content"] = ToolResponse(
+            is_failed=False,
+            is_terminated=False,
+            content="Partial write ok",
+            suppression_key="replace_file_content",
+        )
+        self.tool_mgr.responses["finish_task"] = ToolResponse(
+            is_failed=False,
+            is_terminated=True,
+            content="All complete",
+        )
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            runner = scope.get_singleton(LoopDriver)
+            # Requirement: When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON: when a replace file content invocation provides a target file, target content, and partial replacement content, any trailing incomplete line without a terminating newline is deleted and replaced with a raise NotImplementedError sentinel carrying an incrementing session truncation identifier matching the indentation of the deleted line, or if the last line is complete the sentinel is appended on the next line matching the last line's indentation, executing the tool to persist partial modifications and returning an actionable notice directing the model to resume implementation targeting the sentinel; otherwise the loop driver terminates the truncated tool invocation by appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
+            # Requirement: The loop driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool names and arguments or text previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in tool result transcripts when present.
+            # Requirement: When tool execution produces a terminating response, the loop driver concludes the run and returns a loop outcome, or halts with an unexpected failure if the response indicates terminating failure.
+            outcome = runner.run()
+            self.assertTrue(outcome.is_success)
+
+        # Verify model completion event was logged for Turn 1 despite truncation
+        turn1_comp = [
+            e for e in self.logger.events if e.event_name == "model_completion"
+        ]
+        self.assertGreaterEqual(len(turn1_comp), 2)
+        self.assertIn("replace_file_content", turn1_comp[0].summary)
 
 
 if __name__ == "__main__":

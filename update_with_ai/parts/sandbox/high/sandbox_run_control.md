@@ -14,7 +14,7 @@ Autonomous agents require unambiguous control tools to signal when a task is fin
 
 A *resolve tool* is a polymorphic tool service defining a file alias *resolve target* parameter identifying the active node being resolved.
 
-The *run controller* is an agent session service configured with *blame targets*, which are bound files owned by upstream dependency nodes in dag storage, and node config verification checks. The run controller provides tools for terminating agent sessions and attributing outcomes.
+The *run controller* is an agent session service configured with per-node blame targets and node config verification checks. The run controller provides tools for terminating agent sessions and attributing outcomes.
 
 The run controller:
 
@@ -30,6 +30,6 @@ The run controller:
 
 - Installs a *fail tool* which is a resolve tool that terminates the run in failure, accepting a text *explanation* parameter.
 
-- Installs a *blame tool* which is a resolve tool, when blame targets are configured, attributing task failure to an upstream dependency node, accepting a file alias *blame target* parameter and a text explanation parameter.
+- Installs a *blame tool* which is a resolve tool, attributing task failure to an upstream dependency node, accepting a file alias *blame target* parameter and a text explanation parameter.
 
-- Installs a *get work tool* that retrieves active dirty nodes, materializes startup templates, accepting an integer *max batch size* parameter, and delivers the session task prompt.
+- Installs a *get work tool* that retrieves active dirty nodes, materializes startup templates, accepting an integer *max batch size* parameter, delivers the session task prompt, and specifies a follow-up execution of the advance tool when the guide is in step mode.

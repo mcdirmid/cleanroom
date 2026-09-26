@@ -20,7 +20,7 @@ class LoopCleaner(loop_cleaner.LoopCleaner, Singleton):
         pass
 
     def clean(
-        self, node: dag_storage.Node, cleaner: loop_node_cleaner.NodeCleaner
+        self, node: dag_storage.DagNode, cleaner: loop_node_cleaner.NodeCleaner
     ) -> None:
         subgraph = get_singleton(dag_subgraph.DagSubgraph)
         # Requirement: Target node scoping sets the target node on the dag subgraph to determine dependency-first topological order.
