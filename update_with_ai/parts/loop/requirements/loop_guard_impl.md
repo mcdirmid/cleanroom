@@ -1,6 +1,6 @@
 # loop_guard_impl implementation component
 
-imports: loop_guard, tool_provider
+imports: tool_provider
 implements: loop_guard
 
 ## Assumptions and Requirements

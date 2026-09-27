@@ -1,6 +1,6 @@
 # bazel_loop_impl implementation component
 
-imports: bazel_manifest_loader, loop, loop_cleaner, loop_node_cleaner, dag_storage, runner_logger
+imports: bazel_manifest_loader, dag_storage, loop_cleaner, loop_node_cleaner, runner_logger
 implements: loop
 
 ## Assumptions and Requirements

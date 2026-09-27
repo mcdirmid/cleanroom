@@ -104,7 +104,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
             delivery = scope.get_singleton(GuideDelivery)
             parsed = delivery.parse_guide(content)
 
-            # Requirement: NodeGuide parsing extracts the summary from content preceding the first section heading and under any heading titled `Summary`, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
+            # Requirement: Parsing extracts guide summary from content preceding the first section heading and under headings titled Summary, captures verification failure instructions when heading begins with Verification failure, and creates sequential step sections for subsequent level-two headings excluding Summary, Lint checks, or Verification failure.
             self.assertEqual(parsed.summary, "This is the summary text.")
             self.assertEqual(parsed.verification_failure, "Check error logs carefully.")
             self.assertEqual(len(parsed.sections), 2)
@@ -125,7 +125,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
                 "## Verification failure\nTrailing failure instructions."
             )
             parsed_trailing = delivery.parse_guide(trailing_vf_content)
-            # Requirement: NodeGuide parsing extracts the summary from content preceding the first section heading and under any heading titled `Summary`, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
+            # Requirement: Parsing extracts guide summary from content preceding the first section heading and under headings titled Summary, captures verification failure instructions when heading begins with Verification failure, and creates sequential step sections for subsequent level-two headings excluding Summary, Lint checks, or Verification failure.
             self.assertEqual(
                 parsed_trailing.verification_failure, "Trailing failure instructions."
             )
@@ -155,7 +155,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
                 "## Step 1\nFirst step.\n\n"
                 "## Summary\nTrailing summary content."
             )
-            # Requirement: NodeGuide parsing extracts the summary from content preceding the first section heading and under any heading titled `Summary`, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
+            # Requirement: Parsing extracts guide summary from content preceding the first section heading and under headings titled Summary, captures verification failure instructions when heading begins with Verification failure, and creates sequential step sections for subsequent level-two headings excluding Summary, Lint checks, or Verification failure.
             parsed_ts = delivery.parse_guide(trailing_summary_content)
             self.assertIn("Trailing summary content.", parsed_ts.summary)
 
@@ -180,7 +180,7 @@ class SandboxGuideDeliveryImplTest(unittest.TestCase):
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             delivery = scope.get_singleton(GuideDelivery)
-            # Requirement: Initializing the guide delivery obtains its guide from the node config.
+            # Requirement: When initialized for an agent session, the guide delivery obtains its guide parsed from configured guide file content.
             # Requirement: [GuideDelivery] Steps remaining indicates whether further step sections remain to be completed.
             self.assertTrue(delivery.has_steps_remaining)
             self.assertIs(delivery.guide, guide)

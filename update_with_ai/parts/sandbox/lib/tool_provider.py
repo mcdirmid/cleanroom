@@ -1,7 +1,7 @@
 # Requirements specified in tool_provider.pyi
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Mapping, Optional, Protocol, Sequence, Set, Tuple, Type, Union
+from typing import Any, Callable, Dict, Mapping, Optional, Protocol, Sequence, Set, Tuple, Type, Union, cast
 
 
 @dataclass(frozen=True, init=False)
@@ -99,7 +99,7 @@ class DictionaryParameterType[KeyActualT, KeyWireT, ValActualT, ValWireT](
     ParameterType[Mapping[KeyActualT, ValActualT], Mapping[KeyWireT, ValWireT]]
 ):
     value_type: ParameterType[ValActualT, ValWireT]
-    key_type: Any = STRING_PARAMETER_TYPE
+    key_type: ParameterType[KeyActualT, KeyWireT] = cast(Any, STRING_PARAMETER_TYPE)
 
     @property
     def actual_type(self) -> Type[Mapping[KeyActualT, ValActualT]]:

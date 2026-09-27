@@ -271,7 +271,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: The edit manager installs the replace file content tool into the tool manager when mcp mode is inactive, and installs no editing tools when mcp mode is active.
             # Requirement: [EditManager] The edit manager installs the replace file content tool.
             tool_names = {t.name for t in self.tool_mgr.installed_tools}
-            # Requirement: The replace file content tool is named `replace_file_content`.
+            # Verify the replace file content tool is named replace_file_content
             self.assertIn("replace_file_content", tool_names)
             self.assertNotIn("can_write", tool_names)
 
@@ -843,12 +843,12 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         with enter_phase(agent_session, registry=self.registry) as scope:
             replace_tool = scope.get_singleton(ReplaceFileContentTool)
 
-            # Requirement: The replace file content tool path parameter uses the alias manager to convert a file alias.
+            # Parameter: The replace file content tool path parameter uses the alias manager to convert a file alias.
             self.assertIs(
                 replace_tool.file_alias_parameter.parameter_converter, self.alias_mgr
             )
             self.assertFalse(replace_tool.file_alias_parameter.is_required)
-            # Requirement: The replace file content tool target content parameter uses a string parameter converter to accept text.
+            # Parameter: The replace file content tool target content parameter uses a string parameter converter to accept text.
             self.assertEqual(
                 replace_tool.target_content_parameter.parameter_converter.actual_type,
                 str,
@@ -863,22 +863,22 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 "append",
                 replace_tool.target_content_parameter.missing_message(set()).lower(),
             )
-            # Requirement: The replace file content tool replacement content parameter uses a string parameter converter to accept text.
+            # Parameter: The replace file content tool replacement content parameter uses a string parameter converter to accept text.
             self.assertEqual(
                 replace_tool.replacement_content_parameter.parameter_converter.actual_type,
                 str,
             )
-            # Requirement: The replace file content tool start line parameter uses an integer parameter converter to accept an integer.
+            # Parameter: The replace file content tool start line parameter uses an integer parameter converter to accept an integer.
             self.assertEqual(
                 replace_tool.start_line_parameter.parameter_converter.actual_type,
                 int,
             )
-            # Requirement: The replace file content tool end line parameter uses an integer parameter converter to accept an integer.
+            # Parameter: The replace file content tool end line parameter uses an integer parameter converter to accept an integer.
             self.assertEqual(
                 replace_tool.end_line_parameter.parameter_converter.actual_type,
                 int,
             )
-            # Requirement: The replace file content tool allow multiple parameter uses a boolean parameter converter to accept a boolean.
+            # Parameter: The replace file content tool allow multiple parameter uses a boolean parameter converter to accept a boolean.
             self.assertEqual(
                 replace_tool.allow_multiple_parameter.parameter_converter.actual_type,
                 bool,

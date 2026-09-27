@@ -59,8 +59,8 @@ The module defines clean Python runtime types and implementations realizing the 
 - [ ] Operation signatures match the grounding specification exactly in method name, parameter names, type annotations, defaults, and return type
 - [ ] The operation implementation satisfies all postconditions documented under `REQUIREMENTS:` in the implementation specification and inherited from imported interface specifications (`<name>.pyi`); inherited requirements are not duplicated in the implementation specification and are resolved by inspecting whatever interface `.pyi` files are imported by the implementation stub
 - [ ] The module links to its grounding specification in its header comment: `# Requirements specified in <name>.pyi`
-- [ ] The operation implementation relies on caller fulfillment of preconditions documented under `ASSUMPTIONS:` in the grounding specification or imported interface specifications; callee operations do not add redundant defensive validation unless explicit failure return signals are specified
-- [ ] Collaborator wiring, parameter provenance, and dependencies leverage Groundtalk grounding facts (`GROUNDING_REQUIREMENTS:`, `GROUNDING_PROVISIONS:`, `GROUNDING_IMPLEMENTS:`) and derivation paths in `GROUNDING_ARGUMENT:` docstrings
+- [ ] Existing defensive error detection in code is preserved; if defensive error detection is not present in existing code and not mandated by the specification, it is not added; failing defensive checks raise unhandled exceptions rather than returning fallback values or masking failures
+- [ ] Collaborator wiring, parameter provenance, and dependencies leverage Groundtalk derivation witness trees and grounding facts (`GROUNDING_REQUIREMENTS:`, `GROUNDING_PROVISIONS:`, `GROUNDING_IMPLEMENTS:`, `GROUNDING_ANTECEDENTS:`)
 - [ ] Expected failures and informational outcomes return the exact status, flag, or record structure specified in the contract; status indicators distinguish expected informational outcomes from operational failures in accordance with the grounding specification's documented postconditions
 - [ ] Relational and identity-sensitive requirements (such as operations acting when an entity matches or for the same resource) evaluate the exact entity identity or resource discriminator; substituting a broad category, tool name, or coarse heuristic in place of specific entity identity is prohibited
 - [ ] Requirements restricting actions to specific matching conditions preserve non-matching entities and unrelated resources without unintended modification or destruction
@@ -106,7 +106,7 @@ The module defines clean Python runtime types and implementations realizing the 
 - [ ] Redefining types instead of importing them from their owning interface module
 - [ ] Swallowing unexpected failures into default fallback values instead of allowing exceptions to propagate
 - [ ] Importing implementation modules (`*_impl.py`) in non-assembly library code
-- [ ] Adding unmandated defensive validation for preconditions that `ASSUMPTIONS:` assigns to callers
+- [ ] Deleting existing defensive error detection, or adding new unmandated defensive validation not contracted in the specification
 - [ ] Substituting broad categories or tool names for specific entity identity when evaluating relational requirements
 - [ ] Inventing behavior, heuristics, synthetic outcomes, or termination side effects not specified in the grounding contracts
 - [ ] Omitting the specification link header comment `# Requirements specified in <name>.pyi`

@@ -892,9 +892,6 @@ class CheckFilesTool(sandbox_run_control.CheckFilesTool, Singleton):
         )
 
 
-CheckFileTool = CheckFilesTool
-
-
 class AdvanceTool(sandbox_run_control.AdvanceTool, Singleton):
     tier = agent_session
 
@@ -1589,6 +1586,14 @@ class BlameTool(_ResolveTool, sandbox_run_control.BlameTool, Singleton):
                 reminder="Only upstream files configured as blame targets can be blamed.",
             )
 
+        if "\n" in exp or "\r" in exp:
+            return tool_provider.ToolResponse(
+                is_failed=True,
+                is_terminated=False,
+                content="Error: Blame explanation must be a single paragraph without newlines.",
+                reminder="Provide the blame explanation as a single continuous paragraph without line breaks or bulleted lists.",
+            )
+
         source_alias = rc.get_alias_for_node(source_node)
 
         # Requirement: Tool execution fails when an in-batch dependency of the resolve target is not clean in the current get work turn, reminding the agent that in-batch dependencies must be submitted before dependent targets.
@@ -1767,9 +1772,6 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         CheckFilesTool,
         keys=[
             CheckFilesTool,
-            sandbox_run_control.CheckFilesTool,
-            CheckFileTool,
-            sandbox_run_control.CheckFilesTool,
             sandbox_run_control.CheckFilesTool,
             tool_provider.Tool,
         ],

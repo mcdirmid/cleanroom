@@ -1,6 +1,6 @@
 # mcp_cache_arbiter_impl implementation component
 
-imports: dag_storage, dag_subgraph, mcp_cache_arbiter, mcp_session
+imports: dag_storage, dag_subgraph, mcp_session
 implements: mcp_cache_arbiter
 
 ## Assumptions and Requirements

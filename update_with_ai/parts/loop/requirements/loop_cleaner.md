@@ -1,6 +1,6 @@
 # loop_cleaner interface component
 
-imports: loop_node_cleaner, dag_storage
+imports: dag_storage, loop_node_cleaner
 
 ## Assumptions and Requirements
 

@@ -8,9 +8,6 @@ class TargetManifest(str):
     pass
 
 
-Manifest = TargetManifest
-
-
 class BazelManifestLoader(Protocol):
     def get_manifest(
         self, node: dag_storage.DagNode

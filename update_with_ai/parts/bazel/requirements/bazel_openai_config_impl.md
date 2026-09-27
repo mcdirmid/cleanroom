@@ -1,7 +1,7 @@
 # bazel_openai_config_impl implementation component
 
-imports: agent_config, dag_config, openai_config
-implements: openai_config, agent_config, dag_config
+imports: model_config_ext
+implements: agent_config, dag_config, openai_config
 
 ## Assumptions and Requirements
 

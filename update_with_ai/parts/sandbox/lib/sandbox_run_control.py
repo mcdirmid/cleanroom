@@ -14,10 +14,6 @@ class CheckFilesTool(tool_provider.Tool, Protocol):
     pass
 
 
-CheckFileTool = CheckFilesTool
-RunTestsTool = CheckFilesTool
-
-
 class AdvanceTool(tool_provider.Tool, Protocol):
     pass
 
@@ -30,9 +26,6 @@ class ResolveTool(tool_provider.Tool, Protocol):
 class SubmitTool(ResolveTool, Protocol):
     @property
     def change_summary(self) -> tool_provider.ToolParameter[str, str]: ...
-
-
-FinishTool = SubmitTool
 
 
 class FailTool(ResolveTool, Protocol):

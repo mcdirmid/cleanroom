@@ -1,6 +1,6 @@
 # bazel_manifest_loader_impl implementation component
 
-imports: agent_storage, bazel_manifest_loader, bazel_target, dag_storage, agent_file_alias, json_manifest_ext, agent_node_config
+imports: dag_storage, agent_node_config, agent_file_alias, bazel_target, agent_storage, json_manifest_ext
 implements: bazel_manifest_loader
 
 ## Assumptions and Requirements

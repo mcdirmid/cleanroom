@@ -30,7 +30,7 @@ implements: sandbox_run_control
 21. Submit tool fails when workspace files were modified and change summary is omitted.
 22. Submit tool marks resolve target clean on success and produces non-terminating response if active nodes remain or terminating response if all nodes are resolved.
 23. The fail tool is named fail, accepts resolve target and explanation parameters, failing the target and marking in-batch dependents failed.
-24. The blame tool is named blame, accepts resolve target, blame target, and explanation parameters, attributing failure to upstream node.
+24. The blame tool is named blame, accepts resolve target, blame target, and explanation parameters, fails if the explanation contains newline characters, and attributes failure to upstream node.
 25. The get work tool is named get_work, accepts max batch size parameter, retrieves ready dirty nodes, initializes guide delivery, materializes startup templates, delivers session task prompt, and specifies a follow-up execution of the advance tool when the guide is in step mode.
 
 ## Grounding Facts

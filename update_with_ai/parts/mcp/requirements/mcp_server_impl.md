@@ -1,6 +1,6 @@
 # mcp_server_impl implementation component
 
-imports: dag_storage, dag_subgraph, fastmcp_ext, mcp_cache_arbiter, mcp_gate, mcp_server, mcp_session, tool_provider
+imports: dag_storage, dag_subgraph, fastmcp_ext, mcp_cache_arbiter, mcp_gate, mcp_session, tool_provider
 implements: mcp_server
 
 ## Assumptions and Requirements

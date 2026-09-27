@@ -1,6 +1,6 @@
 # loop_cleaner_impl implementation component
 
-imports: loop_cleaner, loop_node_cleaner, dag_storage, dag_subgraph
+imports: dag_storage, dag_subgraph, loop_node_cleaner
 implements: loop_cleaner
 
 ## Assumptions and Requirements

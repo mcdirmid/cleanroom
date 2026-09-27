@@ -1,6 +1,6 @@
 # bazel_manifest_loader interface component
 
-imports: agent_storage, bazel_target, dag_storage, agent_file_alias, agent_node_config
+imports: dag_storage, agent_node_config, agent_file_alias, bazel_target, agent_storage
 
 ## Assumptions and Requirements
 

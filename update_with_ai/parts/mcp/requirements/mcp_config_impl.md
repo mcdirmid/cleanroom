@@ -1,6 +1,5 @@
 # mcp_config_impl implementation component
 
-imports: agent_config, dag_config
 implements: agent_config, dag_config
 
 ## Assumptions and Requirements

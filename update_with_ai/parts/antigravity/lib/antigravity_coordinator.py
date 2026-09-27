@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Protocol, Sequence
 
 
 @dataclass(frozen=True)
@@ -49,21 +49,16 @@ class ActionPlan:
     summary: str
 
 
-class AntigravityCoordinator:
-    def load_state(self, root: str, target: str) -> CoordinatorState:
-        raise NotImplementedError
+class AntigravityCoordinator(Protocol):
+    def load_state(self, root: str, target: str) -> CoordinatorState: ...
 
-    def save_state(self, state: CoordinatorState, root: str) -> None:
-        raise NotImplementedError
+    def save_state(self, state: CoordinatorState, root: str) -> None: ...
 
-    def evaluate_pruning(self, state: CoordinatorState, config: CoordinatorConfig, now: float) -> Sequence[str]:
-        raise NotImplementedError
+    def evaluate_pruning(self, state: CoordinatorState, config: CoordinatorConfig, now: float) -> Sequence[str]: ...
 
-    def is_worker_eligible_for_reuse(self, worker: WorkerState, units: Sequence[str], config: CoordinatorConfig, now: float) -> bool:
-        raise NotImplementedError
+    def is_worker_eligible_for_reuse(self, worker: WorkerState, units: Sequence[str], config: CoordinatorConfig, now: float) -> bool: ...
 
-    def partition_batches(self, batch: Sequence[Mapping[str, str]], batch_size: int) -> Sequence[Sequence[Mapping[str, str]]]:
-        raise NotImplementedError
+    def partition_batches(self, batch: Sequence[Mapping[str, str]], batch_size: int) -> Sequence[Sequence[Mapping[str, str]]]: ...
 
     def plan_next_step(
         self,
@@ -73,14 +68,10 @@ class AntigravityCoordinator:
         root: str,
         now: float,
         port: int,
-    ) -> ActionPlan:
-        raise NotImplementedError
+    ) -> ActionPlan: ...
 
-    def register_spawned_workers(self, spawned_map: Mapping[str, str], root: str, now: float) -> None:
-        raise NotImplementedError
+    def register_spawned_workers(self, spawned_map: Mapping[str, str], root: str, now: float) -> None: ...
 
-    def record_worker_status(self, session_id: str, status: str, root: str, now: float, unit: str = "") -> None:
-        raise NotImplementedError
+    def record_worker_status(self, session_id: str, status: str, root: str, now: float, unit: str = "") -> None: ...
 
-    def ensure_server_running(self, port: int, batch_size: int, root: str) -> bool:
-        raise NotImplementedError
+    def ensure_server_running(self, port: int, batch_size: int, root: str) -> bool: ...

@@ -463,6 +463,7 @@ class BlameTool(sandbox_run_control.BlameTool):
         - Tool execution defaults the blame target parameter to that target and the resolve target parameter to the active node configured with that blame target when the blame target parameter is omitted and the resolve target parameter matches a configured blame target.
         - Tool execution defaults the resolve target parameter using resolve target defaulting rules when the resolve target parameter is omitted and cannot be inferred from the blame target.
         - Tool execution fails if the blame target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
+        - Tool execution fails if the explanation contains newline characters, providing an error response and reminding the agent that the blame explanation must be a single paragraph without newlines.
         - Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
 
         GROUNDING_PROVISIONS:

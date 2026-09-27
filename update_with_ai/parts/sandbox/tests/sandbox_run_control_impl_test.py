@@ -541,17 +541,17 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # Requirement: [RunController] The run controller installs a blame tool which is a resolve tool, attributing task failure to an upstream dependency node, accepting a file alias blame target parameter and a text explanation parameter.
             # Requirement: [RunController] The run controller installs a get work tool that retrieves active dirty nodes, materializes startup templates, accepting an integer max batch size parameter, and delivers the session task prompt.
             tool_names = {t.name for t in self.tool_mgr.installed_tools}
-            # Requirement: The advance tool is named `advance`, accepts no parameters, and shares a constant suppression key `advance`.
+            # Verify the advance tool is named advance
             self.assertIn("advance", tool_names)
-            # Requirement: The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter, and shares a constant suppression key `submit`.
+            # Verify the submit tool is named submit
             self.assertIn("submit", tool_names)
-            # Requirement: The fail tool is named `fail`, accepting a resolve target parameter and a text explanation parameter.
+            # Verify the fail tool is named fail
             self.assertIn("fail", tool_names)
-            # Requirement: The check files tool is named `check_files`, accepts no parameters, and shares a constant suppression key `check_files`.
+            # Verify the check files tool is named check_files
             self.assertIn("check_files", tool_names)
-            # Requirement: The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter, and a text explanation parameter.
+            # Verify the blame tool is named blame
             self.assertIn("blame", tool_names)
-            # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter.
+            # Verify the get work tool is named get_work
             self.assertIn("get_work", tool_names)
 
     def test_run_controller_initialization_without_step_mode(self) -> None:
@@ -642,7 +642,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             advance = scope.get_singleton(AdvanceToolImpl)
             b = ActualParameterBindings(bindings=set())
 
-            # Requirement: The advance tool is named `advance`, accepts no parameters, and shares a constant suppression key `advance`.
+            # Verify the advance tool is named advance
             self.assertEqual(advance.name, "advance")
             self.assertEqual(advance.parameters, set())
             self.assertIsInstance(advance.description, str)
@@ -836,7 +836,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         """CUJ: SubmitTool declares target and change_summary parameters with converters."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             submit = scope.get_singleton(SubmitToolImpl)
-            # Requirement: The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter, and shares a constant suppression key `submit`.
+            # Verify the submit tool is named submit
             self.assertEqual(submit.name, "submit")
             self.assertIsInstance(submit.description, str)
             self.assertEqual(submit.parameters, {submit.resolve_target, submit.target, submit.change_summary})
@@ -871,7 +871,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertTrue(resp.follow_up_tool_call.reasoning_text)
             assert resp.follow_up_tool_call.reasoning_text is not None
             self.assertIn("guide step", resp.follow_up_tool_call.reasoning_text.lower())
-            # Requirement: The submit tool is named `submit`, accepting a resolve target parameter and a text change summary parameter, and shares a constant suppression key `submit`.
+            # Verify submit suppression key
             self.assertEqual(resp.suppression_key, "submit")
 
     def test_submit_tool_fails_when_verification_failing_specifies_check_files_followup(
@@ -1030,7 +1030,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             fail_tool = scope.get_singleton(FailToolImpl)
             self.assertIsInstance(fail_tool.description, str)
             self.assertGreater(len(fail_tool.parameters), 0)
-            # Requirement: The fail tool is named `fail`, accepting a resolve target parameter and a text explanation parameter.
+            # Verify the fail tool is named fail
             self.assertEqual(fail_tool.name, "fail")
             self.assertIs(fail_tool.explanation.parameter_converter, STRING_PARAMETER_TYPE)
 
@@ -1053,7 +1053,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             blame_tool = scope.get_singleton(BlameToolImpl)
             self.assertIsInstance(blame_tool.description, str)
             self.assertGreater(len(blame_tool.parameters), 0)
-            # Requirement: The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter, and a text explanation parameter.
+            # Verify the blame tool is named blame
             self.assertEqual(blame_tool.name, "blame")
             self.assertIs(blame_tool.blame_target.parameter_converter, self.alias_mgr)
             self.assertIs(blame_tool.explanation.parameter_converter, STRING_PARAMETER_TYPE)
@@ -1075,6 +1075,20 @@ class SandboxRunControlImplTest(unittest.TestCase):
             resp_inv = blame_tool.execute_tool(b_invalid)
             self.assertTrue(resp_inv.is_failed)
             self.assertIsNotNone(resp_inv.reminder)
+
+            # Multiline explanation fails
+            b_multiline = ActualParameterBindings(
+                bindings={
+                    (blame_tool.blame_target, self.blame_target_file),
+                    (blame_tool.explanation, "Line 1\nLine 2"),
+                }
+            )
+            # Requirement: Tool execution fails if the explanation contains newline characters, providing an error response and reminding the agent that the blame explanation must be a single paragraph without newlines.
+            resp_multi = blame_tool.execute_tool(b_multiline)
+            self.assertTrue(resp_multi.is_failed)
+            self.assertFalse(resp_multi.is_terminated)
+            self.assertEqual(resp_multi.content, "Error: Blame explanation must be a single paragraph without newlines.")
+            self.assertEqual(resp_multi.reminder, "Provide the blame explanation as a single continuous paragraph without line breaks or bulleted lists.")
 
             # Valid target terminates with Blamed attribution
             b_valid = ActualParameterBindings(
@@ -1603,7 +1617,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             check_files = scope.get_singleton(CheckFilesTool)
-            # Requirement: The check files tool is named `check_files`, accepts no parameters, and shares a constant suppression key `check_files`.
+            # Verify the check files tool is named check_files
             self.assertEqual(check_files.name, "check_files")
             self.assertEqual(check_files.parameters, set())
             self.assertIsInstance(check_files.description, str)
@@ -1621,7 +1635,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
                 "## Verification failure\nInspect diagnostics and fix workspace files.",
                 resp.content,
             )
-            # Requirement: The check files tool is named `check_files`, accepts no parameters, and shares a constant suppression key `check_files`.
+            # Verify check files suppression key
             self.assertEqual(resp.suppression_key, "check_files")
 
     def test_check_files_tool_passing_verification_presents_results(self) -> None:
@@ -1641,7 +1655,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertFalse(resp.is_failed)
             self.assertFalse(resp.is_terminated)
             self.assertIn("All tests pass in test.py", resp.content)
-            # Requirement: The check files tool is named `check_files`, accepts no parameters, and shares a constant suppression key `check_files`.
+            # Verify check files suppression key
             self.assertEqual(resp.suppression_key, "check_files")
 
             # Custom verification_success_message
@@ -2006,7 +2020,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
             param_names = {p.name for p in get_work.parameters}
             self.assertIn("max_batch_size", param_names)
-            # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter.
+            # Verify the get work tool max_batch_size parameter
             self.assertEqual(get_work.max_batch_size.name, "max_batch_size")
             self.assertFalse(get_work.max_batch_size.is_required)
 
@@ -2086,7 +2100,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             # Call get_work with max_batch_size = 1
             # Requirement: [Tool] When a parameter is required, an argument must be supplied for tool execution.
-            # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter.
+            # Verify the get work tool max_batch_size parameter
             # Requirement: Tool execution obtains dirty nodes from dag storage and dag subgraph, updating the active nodes and execution version on role config, when no open active nodes remain.
             # Requirement: Tool execution materializes startup templates on disk, initializes guide delivery and resets guide advance state for the assigned batch, and returns the rendered task primer mapping source files to grounding files with guide file attribution, incoming messages, and instructions to read the guide file for alignment guidance when ready dirty nodes are obtained and guide step mode is inactive.
             initial_version = self.role_cfg.execution_version
@@ -2148,7 +2162,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         """CUJ: CheckFilesTool exposes its name, description, and empty parameters set."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             check_files = scope.get_singleton(CheckFilesToolImpl)
-            # Requirement: The check files tool is named `check_files`, accepts no parameters, and shares a constant suppression key `check_files`.
+            # Verify the check files tool is named check_files
             self.assertEqual(check_files.name, "check_files")
             self.assertEqual(check_files.parameters, set())
             self.assertIsInstance(check_files.description, str)
@@ -2188,7 +2202,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.subgraph.batch_index = 0
             self.storage.node_definitions = {node_diff: MockNodeDefinition(task_prompt="Diff prompt")}
             self.storage.messages = {node_diff: []}
-            # Requirement: The get work tool is named `get_work`, accepting an integer max batch size parameter.
+            # Verify the get work tool max_batch_size parameter
             resp_zero = get_work.execute_tool(
                 ActualParameterBindings(bindings={(get_work.max_batch_size, 0)})
             )
@@ -2852,7 +2866,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
         with enter_phase(agent_session, registry=self.registry) as scope:
             rc = scope.get_singleton(RunControllerImpl)
             rc.reset_nodes([node1])
-            # Requirement: The run controller caches verification evaluation results alongside edit manager file hashes for target nodes, reusing the cached verification outcome as long as no workspace files have been updated since that evaluation.
+            # Requirement: Evaluation of verification checks for an active node is cached alongside the edit manager file hash of the target node read-write file.
+            # Requirement: When the target read-write file hash has not changed since the previous evaluation, verification check execution is omitted and the cached verification outcome is reused.
             passed, diag = rc.evaluate_verification_for_node(node1)
             self.assertTrue(passed)
 
@@ -3019,7 +3034,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             rc.reset_nodes([node1, node2, node3])
 
             # 1. Match blame target by suffix: "b/dep.py"
-            # Requirement: The blame tool matches the blame target parameter by file alias, relative path, or unique filename against configured blame targets.
+            # Requirement: Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
             b_suffix = ActualParameterBindings(
                 bindings={
                     (blame.resolve_target, "unit1.py"),
@@ -3035,7 +3050,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.edit_mgr.locked_files.clear()
 
             # 2. Match blame target by basename: "other_dir/dep.py" (not suffix of "a/b/dep.py")
-            # Requirement: The blame tool matches the blame target parameter by file alias, relative path, or unique filename against configured blame targets.
+            # Requirement: Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
             b_base = ActualParameterBindings(
                 bindings={
                     (blame.resolve_target, "unit1.py"),
@@ -3088,7 +3103,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             get_work = scope.get_singleton(GetWorkToolImpl)
-            # Requirement: The get work tool is named get_work, accepting an integer max batch size parameter.
+            # Verify the get work tool max_batch_size parameter
             b = ActualParameterBindings(
                 bindings={
                     (get_work.max_batch_size, cast(Any, "invalid_number")),

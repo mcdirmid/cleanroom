@@ -1611,7 +1611,7 @@ class BazelNodeConfigImplTest(unittest.TestCase):
             # Test single node filters out guide_file from read_only_files in step mode
             role_cfg.set_nodes((node1,))
             cfg._cached_version = role_cfg.version
-            # Requirement: The session read-only files aggregating read-only files across the active nodes excluding files mapped to read-write files, and read-only files by node mapping each active node to its declared read-only files.
+            # Requirement: The session read-only files aggregating read-only files across the active nodes, excluding files present in the session read-write files.
             ro_files = cfg.read_only_files
             self.assertIn(other_ro, ro_files)
             self.assertNotIn(guide_ro, ro_files)

@@ -285,7 +285,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
     def test_regex_pattern_converter(self) -> None:
         """CUJ: Converting wire string into RegexPattern."""
         conv = RegexPatternParameterTypeImpl()
-        # Requirement: The regex pattern parameter type converts a wire type string into a regex pattern.
+        # Verify regex pattern parameter type converts a wire type string into a regex pattern
         pattern = conv.convert(WireString(r"foo\d+"))
         self.assertEqual(pattern, r"foo\d+")
 
@@ -293,12 +293,13 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         """CUJ: ReadManager installs tools and exposes declared files from NodeConfig."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             read_mgr = scope.get_singleton(ReadManager)
-            # Requirement: The read manager installs the view file tool into the tool manager when mcp mode is inactive, installs no inspection tools when mcp mode is active, and never installs the search tool.
+            # Requirement: WHEN agent config mcp mode is inactive, MUST install the view file tool for the agent session.
+            # Requirement: MUST omit the search tool.
             # Requirement: [ReadManager] The read manager installs the view file tool and search tool.
             tool_names = {t.name for t in self.tool_mgr.installed_tools}
-            # Requirement: The view file tool is named `view_file`.
+            # Verify the view file tool is named view_file
             self.assertIn("view_file", tool_names)
-            # Requirement: The search tool is named `search_files`.
+            # Verify the search tool is omitted
             self.assertNotIn("search_files", tool_names)
             self.assertNotIn("can_read", tool_names)
 
@@ -307,11 +308,11 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.tool_mgr.installed_tools.clear()
             scope.get_singleton(ReadManagerImpl).initialize()
             tool_names_mcp = {t.name for t in self.tool_mgr.installed_tools}
-            # Requirement: The read manager installs the view file tool into the tool manager when mcp mode is inactive, installs no inspection tools when mcp mode is active, and never installs the search tool.
+            # Requirement: WHEN agent config mcp mode is active, MUST install no read tools.
             self.assertEqual(len(tool_names_mcp), 0)
             self.assertNotIn("view_file", tool_names_mcp)
 
-            # Requirement: The read manager exposes declared read-only files, read-write files, and optional guide file obtained from the node config.
+            # Verify read manager exposes declared files from node config
             # Requirement: [ReadManager] The read manager exposes the session's set of read-only files.
             # Requirement: [ReadManager] The read manager exposes the session's set of read-write files.
             # Requirement: [ReadManager] When step-mode is active, the read manager is configured with a guide file that is an unbound file.
@@ -327,15 +328,15 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertEqual(view_tool.name, "view_file")
             self.assertIsInstance(view_tool.description, str)
             self.assertEqual(view_tool.parameters, {view_tool.path_parameter})
-            # Requirement: The view file tool path parameter uses the alias manager to convert a file alias.
+            # Verify the view file tool path parameter uses the alias manager to convert a file alias
             self.assertIs(view_tool.path_parameter.parameter_converter, self.alias_mgr)
 
             # 1. Read-only file formatting and sanitization
             bindings1 = ActualParameterBindings(
                 bindings={(view_tool.path_parameter, self.ro_file)}
             )
-            # Requirement: Tool execution reads file content from the filesystem at the host path formed from the alias manager workspace root and the bound file workspace path, returning the content formatted with one-indexed right-aligned line numbers followed by a colon and space, and formatting read-only markdown files ending with `.md` using the template formatter with session template parameters after filtering out paragraphs beginning with `> META:`.
-            # Requirement: View file tool responses for read-write files carry a suppression key matching the file's relative path, while responses for read-only files omit suppression keys and sanitize host paths through the alias manager.
+            # Requirement: WHEN reading an existing file, MUST format file content with one-indexed right-aligned line numbers followed by a colon and space.
+            # Requirement: WHEN reading a read-only file, MUST omit suppression key and sanitize host paths.
             resp1 = view_tool.execute_tool(bindings1)
             self.assertFalse(resp1.is_failed)
             self.assertIsNone(resp1.suppression_key)
@@ -346,6 +347,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             bindings2 = ActualParameterBindings(
                 bindings={(view_tool.path_parameter, self.rw_file)}
             )
+            # Requirement: WHEN reading a read-write file, MUST set suppression key matching the file relative path.
             resp2 = view_tool.execute_tool(bindings2)
             self.assertFalse(resp2.is_failed)
             self.assertEqual(resp2.suppression_key, self.rw_file.relative_path)
@@ -381,7 +383,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertTrue(resp_unknown.is_failed)
             self.assertTrue(resp_unknown.reminder)
 
-            # Requirement: When an unbound file is supplied, tool execution resolves to that grounding specification file alias if the relative path or qualified path addresses a module name or ends with `.py` and matches a declared read-only grounding specification ending with `.pyi`.
+            # Requirement: WHEN path matches a declared file workspace path, MUST produce a successful Response indicating access is permitted.
             # Transparent resolution: stub.py -> stub.pyi
             resp_py = view_tool.execute_tool(
                 ActualParameterBindings(
@@ -429,7 +431,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertFalse(resp_mod_bare.is_failed)
             self.assertIn("class Stub:", resp_mod_bare.content)
 
-            # Requirement: When an unbound file is supplied, tool execution fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract if the unbound file addresses a test file ending with `_test.py`.
+            # Requirement: WHEN path does not match any declared file workspace path, MUST produce a Response with failed set to True reminding the agent that only declared files can be read and listing readable file aliases.
             # Test files are rejected with dedicated guidance
             resp_test = view_tool.execute_tool(
                 ActualParameterBindings(
@@ -461,7 +463,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         with enter_phase(agent_session, registry=self.registry) as scope:
             view_tool = scope.get_singleton(ViewFileTool)
 
-            # Requirement: Tool execution treats a read-write file as having empty content when the target file does not exist on disk, and fails with a response guiding agent recovery when inspecting a missing read-only file.
+            # Requirement: WHEN reading a read-write file that does not exist on disk, MUST treat file content as empty.
             rw_bindings = ActualParameterBindings(
                 bindings={(view_tool.path_parameter, missing_rw_file)}
             )
@@ -471,6 +473,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertEqual(rw_resp.suppression_key, missing_rw_file.relative_path)
 
             # Reading missing read-only file fails with guidance
+            # Requirement: WHEN reading a missing read-only file, MUST produce a Response with failed set to True guiding agent recovery.
             ro_bindings = ActualParameterBindings(
                 bindings={(view_tool.path_parameter, missing_ro_file)}
             )
@@ -485,8 +488,8 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             b = ActualParameterBindings(
                 bindings={(view_tool.path_parameter, self.ro_md_file)}
             )
-            # Requirement: When reading markdown files ending with .md, paragraphs beginning with > META: are filtered out from the returned content.
-            # Requirement: When reading read-only markdown files ending with .md, content is formatted using the template formatter with session template parameters after filtering out paragraphs beginning with > META:.
+            # Requirement: WHEN reading a markdown file ending with .md, MUST filter out paragraphs beginning with '> META:'.
+            # Requirement: WHEN reading a read-only markdown file ending with .md, MUST format content with session template parameters.
             resp = view_tool.execute_tool(b)
             self.assertFalse(resp.is_failed)
             self.assertNotIn("Meta note", resp.content)
@@ -500,13 +503,13 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         """CUJ: Searching regex across files and handling invalid regex."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             search_tool = scope.get_singleton(SearchTool)
-            # Requirement: The search tool is named `search_files`.
+            # Verify the search tool is named search_files
             self.assertEqual(search_tool.name, "search_files")
             self.assertIsInstance(search_tool.description, str)
             self.assertGreater(len(search_tool.parameters), 0)
             conv = search_tool.regex_pattern_parameter.parameter_converter
             # Requirement: [SearchTool] The search tool accepts a regex pattern parameter.
-            # Requirement: The search tool regex pattern parameter uses the regex pattern parameter type.
+            # Verify the search tool regex pattern parameter uses the regex pattern parameter type
             self.assertIsNotNone(conv.actual_type)
             self.assertIsNotNone(conv.wire_type)
 
@@ -514,15 +517,15 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             bindings = ActualParameterBindings(
                 bindings={(search_tool.regex_pattern_parameter, "Line")}
             )
-            # Requirement: Tool execution searches for regex pattern matches across the read-only files and read-write files in the filesystem.
+            # Verify search tool searches pattern matches across read-only and read-write files
             # Requirement: [SearchTool] Executing the search tool searches pattern matches across the session's read-only and read-write files.
             resp = search_tool.execute_tool(bindings)
             self.assertFalse(resp.is_failed)
             # Read-only shows line content
-            # Requirement: Tool execution provides matched line contents and line numbers for read-only files, sanitized by the alias manager to mask host paths, on successful execution.
+            # Requirement: WHEN matches are found for read-only files, MUST return matched line contents and line numbers sanitized to mask host paths.
             self.assertIn("readonly.txt:1: Line 1 readonly", resp.content)
             # Read-write masks details to prevent unanchored edits
-            # Requirement: Tool execution states that matches were found but cannot be displayed to prevent unanchored edits, for read-write files.
+            # Requirement: WHEN matches are found for read-write files, MUST state that matches were found but cannot be displayed to prevent unanchored edits.
             self.assertIn(self.rw_file.relative_path, resp.content)
             self.assertTrue(
                 "unanchored" in resp.content.lower() or "matches" in resp.content.lower()
@@ -532,7 +535,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             bindings_invalid = ActualParameterBindings(
                 bindings={(search_tool.regex_pattern_parameter, "[unclosed")}
             )
-            # Requirement: Tool execution fails when given an invalid regex pattern.
+            # Requirement: WHEN regex pattern is invalid, MUST return a Response with failed set to True.
             resp_inv = search_tool.execute_tool(bindings_invalid)
             self.assertTrue(resp_inv.is_failed)
 
@@ -543,7 +546,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             b = ActualParameterBindings(
                 bindings={(view_tool.path_parameter, self.rw_file)}
             )
-            # Requirement: Tool execution records the read file in the edit manager on successful execution.
+            # Requirement: WHEN reading a file succeeds, MUST record the read file to establish the session's last read or written file.
             resp = view_tool.execute_tool(b)
             self.assertFalse(resp.is_failed)
             self.assertEqual(self.edit_mgr.last_read_or_edited_file, self.rw_file)
@@ -555,7 +558,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             # Requirement: [ReadManager] The read manager provides a can read operation validating inspection access for a file path.
 
             # 1. Successful bound file validation records file read
-            # Requirement: When a bound file is supplied or resolved, tool execution records the read file in the edit manager and produces a successful response indicating that access is permitted.
+            # Requirement: WHEN path matches a declared file workspace path, MUST produce a successful Response indicating access is permitted.
             resp_ro = read_mgr.can_read(self.ro_file.relative_path)
             self.assertFalse(resp_ro.is_failed)
             self.assertEqual(self.edit_mgr.last_read_or_edited_file, self.ro_file)
@@ -565,13 +568,13 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertFalse(resp_ro_direct.is_failed)
 
             # 2. Step-mode guide file rejection
-            # Requirement: When an unbound file is supplied, tool execution fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead, otherwise.
+            # Requirement: WHEN path does not match any declared file workspace path, MUST produce a Response with failed set to True reminding the agent that only declared files can be read and listing readable file aliases.
             resp_guide = read_mgr.can_read(self.guide_unbound.relative_path)
             self.assertTrue(resp_guide.is_failed)
             self.assertIn("advance", resp_guide.content)
 
             # 3. Transparent resolution from .py to .pyi
-            # Requirement: When an unbound file is supplied, tool execution resolves to that grounding specification file alias if the relative path or qualified path addresses a module name or ends with `.py` and matches a declared read-only grounding specification ending with `.pyi`.
+            # Requirement: WHEN path matches a declared file workspace path, MUST produce a successful Response indicating access is permitted.
             resp_py = read_mgr.can_read("stub.py")
             self.assertFalse(resp_py.is_failed)
             self.assertEqual(self.edit_mgr.last_read_or_edited_file, self.ro_pyi_file)
@@ -582,13 +585,13 @@ class SandboxFileReaderImplTest(unittest.TestCase):
                 self.assertEqual(self.edit_mgr.last_read_or_edited_file, self.ro_pyi_file)
 
             # 4. Cleanroom blindness: _test.py rejection
-            # Requirement: When an unbound file is supplied, tool execution fails with a response explaining that test files are not inspectable and grounding specifications serve as the contract if the unbound file addresses a test file ending with `_test.py`.
+            # Requirement: WHEN path does not match any declared file workspace path, MUST produce a Response with failed set to True reminding the agent that only declared files can be read and listing readable file aliases.
             resp_test = read_mgr.can_read("my_target_test.py")
             self.assertTrue(resp_test.is_failed)
             self.assertTrue(resp_test.content)
 
             # 5. Undeclared file rejection
-            # Requirement: When an unbound file is supplied, tool execution fails with a response guiding agent recovery, reminding the agent that only declared files can be inspected, listing available readable file aliases, and, if the unbound file matches the guide file configured for step-mode, that `advance` must be called to read the guide instead, otherwise.
+            # Requirement: WHEN path does not match any declared file workspace path, MUST produce a Response with failed set to True reminding the agent that only declared files can be read and listing readable file aliases.
             resp_unknown = read_mgr.can_read("unknown.txt")
             self.assertTrue(resp_unknown.is_failed)
             self.assertIn(self.ro_file.relative_path, resp_unknown.content)
@@ -598,7 +601,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         """CUJ: RegexPatternParameterType converts between string wire representations and regex patterns."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             converter = scope.get_singleton(RegexPatternParameterTypeImpl)
-            # Requirement: The regex pattern parameter type converts a wire type string into a regex pattern.
+            # Verify regex pattern parameter type conversion
             self.assertEqual(converter.actual_type, RegexPattern)
             self.assertEqual(converter.wire_type, WireString)
             pattern = converter.convert(WireString("matched_.*"))
@@ -618,13 +621,13 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         reg_mcp.register_instance(self.bool_conv, keys=[IdentityParameterType], tier=agent_session)
 
         with enter_phase(agent_session, registry=reg_mcp) as scope:
-            # Requirement: The read manager installs the view file tool into the tool manager when mcp mode is inactive, installs no inspection tools when mcp mode is active, and never installs the search tool.
-            # Requirement: [ReadManager] The read manager installs the view file tool and search tool.
+            # Requirement: WHEN agent config mcp mode is active, MUST install no read tools.
+            # Requirement: MUST omit the search tool.
             self.assertEqual(len(tm_mcp.installed_tools), 0)
 
         with enter_phase(agent_session, registry=self.registry) as scope:
-            # Requirement: The read manager installs the view file tool into the tool manager when mcp mode is inactive, installs no inspection tools when mcp mode is active, and never installs the search tool.
-            # Requirement: [ReadManager] The read manager installs the view file tool and search tool.
+            # Requirement: WHEN agent config mcp mode is inactive, MUST install the view file tool for the agent session.
+            # Requirement: MUST omit the search tool.
             installed = self.tool_mgr.installed_tools
             self.assertEqual(len(installed), 1)
             installed_tool = next(iter(installed))

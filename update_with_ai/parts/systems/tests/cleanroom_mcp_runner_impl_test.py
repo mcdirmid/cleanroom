@@ -9,8 +9,8 @@ from support.lib.lifecycle import (
 )
 from update_with_ai.parts.core.lib import runner_logger
 from update_with_ai.parts.mcp.lib import mcp_server
-from update_with_ai.parts.systems.lib import cleanroom_mcp_runner
-from update_with_ai.parts.systems.lib import cleanroom_mcp_runner_impl
+from update_with_ai.parts.systems.lib import cleanroom_mcp_runner, cleanroom_mcp_runner_impl
+from update_with_ai.parts.systems.lib.cleanroom_mcp_runner_impl import McpRunner
 
 
 class MockRunnerLogger(runner_logger.RunnerLogger, Singleton):

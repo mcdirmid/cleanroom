@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from typing import Any, cast
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.agent.lib.agent_node_config import RoleConfig, NodeConfig
@@ -17,7 +18,6 @@ from update_with_ai.parts.mcp.lib import mcp_asm
 from update_with_ai.parts.mcp.lib.mcp_cache_arbiter import CacheArbiter
 from update_with_ai.parts.mcp.lib.mcp_gate import AccessGate
 from update_with_ai.parts.mcp.lib.mcp_server import McpServer
-from update_with_ai.parts.mcp.lib.mcp_server_impl import McpServer as McpServerImpl
 from update_with_ai.parts.mcp.lib.mcp_session import ConversationId, RoleSessionManager
 from update_with_ai.parts.sandbox.lib import sandbox_asm
 from update_with_ai.parts.sandbox.lib.sandbox import Sandbox
@@ -120,14 +120,15 @@ class BazelMcpSystemAsmTest(unittest.TestCase):
     def test_mcp_server_end_to_end_operations(self) -> None:
         """CUJ: Exercise McpServer registration, domain tool execution, access validation, and deregistration."""
         with enter_phase(system, registry=self.registry) as sys_scope:
-            mcp_server = sys_scope.get_singleton(McpServerImpl)
+            mcp_server = sys_scope.get_singleton(McpServer)
+            mcp_server_any = cast(Any, mcp_server)
             cid = ConversationId("antigravity-worker-e2e")
 
             # Start MCP server
             mcp_server.start("stdio")
-            self.assertTrue(mcp_server._running)
-            self.assertIsNotNone(mcp_server._app)
-            assert mcp_server._app is not None
+            self.assertTrue(mcp_server_any._running)
+            self.assertIsNotNone(mcp_server_any._app)
+            assert mcp_server_any._app is not None
 
             # Register role agent via McpServer
             reg_resp = mcp_server.register_role_agent(cid, "code_cleaner", "//pkg:cleaner")
@@ -135,12 +136,12 @@ class BazelMcpSystemAsmTest(unittest.TestCase):
 
             # Domain tools installed in ToolManager are dynamically exported to FastMCP
             for t_name in ["get_work", "submit", "check_files", "fail"]:
-                tool_obj = mcp_server._app._tool_manager.get_tool(t_name)
+                tool_obj = mcp_server_any._app._tool_manager.get_tool(t_name)
                 self.assertIsNotNone(tool_obj)
 
             # Native file tools and internal gate operations are NOT exposed as MCP tools
             for non_mcp in ["view_file", "replace_file_content", "can_read", "can_write"]:
-                self.assertNotIn(non_mcp, mcp_server._app._tool_manager._tools)
+                self.assertNotIn(non_mcp, mcp_server_any._app._tool_manager._tools)
 
             # Validate access via McpServer
             access_resp = mcp_server.handle_validate_access(cid, "can_read", "pkg/test.py")
@@ -160,7 +161,7 @@ class BazelMcpSystemAsmTest(unittest.TestCase):
 
             # Stop MCP server
             mcp_server.stop()
-            self.assertFalse(mcp_server._running)
+            self.assertFalse(mcp_server_any._running)
 
 
 if __name__ == "__main__":

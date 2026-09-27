@@ -1,6 +1,6 @@
 # loop_driver interface component
 
-imports: loop_conversation, loop_guard, agent_config, runner_logger, tool_provider
+imports: agent_config, loop_conversation, loop_guard, runner_logger, tool_provider
 
 ## Assumptions and Requirements
 

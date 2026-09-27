@@ -1,6 +1,6 @@
 # mcp_session_impl implementation component
 
-imports: agent_config, agent_node_config, agent_session, dag_storage, dag_subgraph, mcp_session
+imports: agent_config, agent_node_config, agent_session, dag_storage, dag_subgraph
 implements: mcp_session
 
 ## Assumptions and Requirements

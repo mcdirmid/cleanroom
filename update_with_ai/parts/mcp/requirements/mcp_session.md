@@ -1,5 +1,7 @@
 # mcp_session interface component
 
+imports: agent_config, agent_session, dag_subgraph
+
 ## Assumptions and Requirements
 
 ### Requirements

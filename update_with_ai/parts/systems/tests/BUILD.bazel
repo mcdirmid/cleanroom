@@ -24,7 +24,6 @@ pyright_test(
         "//update_with_ai/parts/mcp/lib:mcp_cache_arbiter",
         "//update_with_ai/parts/mcp/lib:mcp_gate",
         "//update_with_ai/parts/mcp/lib:mcp_server",
-        "//update_with_ai/parts/mcp/lib:mcp_server_impl",
         "//update_with_ai/parts/mcp/lib:mcp_session",
         "//update_with_ai/parts/sandbox/lib:sandbox",
         "//update_with_ai/parts/sandbox/lib:sandbox_asm",

@@ -136,7 +136,7 @@ class AntigravityCoordinatorImplTest(unittest.TestCase):
     @patch("update_with_ai.parts.antigravity.lib.antigravity_coordinator_impl.get_singleton")
     def test_plan_next_step_revives_overlapping_worker(self, mock_get: MagicMock, mock_ensure: MagicMock) -> None:
         # Requirement: The antigravity coordinator computes an action plan for a target, an active worker reports mapping, coordinator config, workspace root, timestamp, and a server port.
-        # Requirement: When a ready batch is returned, the batch is partitioned by batch size. For each partition, eligible warm workers matching the ready role are evaluated, preferring workers with unit footprint overlap and selecting the worker with the least conversation context tokens, falling back to eligible non-overlapping workers with least conversation context tokens. Assigned units are additively merged into the revived worker's unit footprint. If no eligible warm worker is found, a fresh worker is spawned.
+        # Requirement: When a ready batch is returned, the batch is partitioned by batch size. For each partition, eligible warm workers matching the ready role are evaluated, preferring workers with unit footprint overlap and selecting the worker with the least conversation context tokens, falling back to eligible non-overlapping workers with least conversation context tokens. Assigned units are additively merged into the revived worker's unit footprint. Reviving a warm worker registers the new session on the Model Context Protocol server and records the session association in the sandbox gate. If no eligible warm worker is found, a fresh worker is spawned and its session is registered on the Model Context Protocol server.
         now = 2000.0
         w1 = WorkerState(
             conv_id="w1",
@@ -180,7 +180,7 @@ class AntigravityCoordinatorImplTest(unittest.TestCase):
     @patch("update_with_ai.parts.antigravity.lib.antigravity_coordinator_impl.AntigravityCoordinator.ensure_server_running", return_value=True)
     @patch("update_with_ai.parts.antigravity.lib.antigravity_coordinator_impl.get_singleton")
     def test_plan_next_step_selects_least_tokens_and_merges_footprint(self, mock_get: MagicMock, mock_ensure: MagicMock) -> None:
-        # Requirement: When a ready batch is returned, the batch is partitioned by batch size. For each partition, eligible warm workers matching the ready role are evaluated, preferring workers with unit footprint overlap and selecting the worker with the least conversation context tokens, falling back to eligible non-overlapping workers with least conversation context tokens. Assigned units are additively merged into the revived worker's unit footprint. If no eligible warm worker is found, a fresh worker is spawned.
+        # Requirement: When a ready batch is returned, the batch is partitioned by batch size. For each partition, eligible warm workers matching the ready role are evaluated, preferring workers with unit footprint overlap and selecting the worker with the least conversation context tokens, falling back to eligible non-overlapping workers with least conversation context tokens. Assigned units are additively merged into the revived worker's unit footprint. Reviving a warm worker registers the new session on the Model Context Protocol server and records the session association in the sandbox gate. If no eligible warm worker is found, a fresh worker is spawned and its session is registered on the Model Context Protocol server.
         now = 2000.0
         # Two non-overlapping idle workers: w1 has 50k tokens, w2 has 20k tokens
         w1 = WorkerState(
@@ -241,7 +241,7 @@ class AntigravityCoordinatorImplTest(unittest.TestCase):
     @patch("update_with_ai.parts.antigravity.lib.antigravity_coordinator_impl.get_singleton")
     def test_register_spawned_workers_inherits_metadata(self, mock_get: MagicMock, mock_ensure: MagicMock) -> None:
         # Requirement: The antigravity coordinator associates newly spawned conversation identifiers with assigned sessions in coordinator state.
-        # Requirement: Registering spawned workers associates newly spawned conversation identifiers with their assigned sessions, copying role and unit footprint from pending spawns into active worker state records.
+        # Requirement: Registering spawned workers associates newly spawned conversation identifiers with their assigned sessions, copying role and unit footprint from pending spawns into active worker state records with busy status.
         now = 2000.0
         mock_mcp = MagicMock()
         mock_mcp.next_batch.return_value = json.dumps({

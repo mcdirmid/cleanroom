@@ -30,7 +30,7 @@ class WireType:
     ...
 
 
-@dataclass(frozen=True, init=False)
+@dataclass(frozen=True)
 @variant
 class WireString(WireType):
     """String wire type."""

@@ -1,6 +1,6 @@
 # bazel_node_config_impl implementation component
 
-imports: bazel_manifest_loader, dag_storage, agent_file_alias, file_paths, agent_config, agent_node_config, tool_provider
+imports: agent_config, bazel_manifest_loader, dag_storage, file_paths, tool_provider
 implements: agent_node_config, agent_file_alias
 
 ## Assumptions and Requirements

@@ -1,6 +1,6 @@
 # mcp_gate_impl implementation component
 
-imports: filesystem_ext, mcp_gate, mcp_session, sandbox_file_editor, sandbox_file_reader
+imports: filesystem_ext, mcp_session, sandbox_file_editor, sandbox_file_reader
 implements: mcp_gate
 
 ## Assumptions and Requirements

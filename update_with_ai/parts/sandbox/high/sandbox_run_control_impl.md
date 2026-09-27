@@ -95,6 +95,8 @@ The blame tool:
 
 - Fails if the blame target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
 
+- Fails if the explanation contains newline characters, providing an error response and reminding the agent that the blame explanation must be a single paragraph without newlines.
+
 - Marks the blame target as attributed and resolves the active node on successful tool execution.
 
 The get work tool is named `get_work`, accepting an integer max batch size parameter.

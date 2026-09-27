@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Protocol
 
 
 @dataclass(frozen=True)
@@ -12,12 +12,9 @@ class AntigravityLogEvent:
     summary: str
 
 
-class AntigravityRunLogger:
-    def log_event(self, event_name: str, source: str, summary: str) -> None:
-        raise NotImplementedError
+class AntigravityRunLogger(Protocol):
+    def log_event(self, event_name: str, source: str, summary: str) -> None: ...
 
-    def register_transcript(self, identifier: str, slug: str) -> None:
-        raise NotImplementedError
+    def register_transcript(self, identifier: str, slug: str) -> None: ...
 
-    def sanitize_slug(self, label: str) -> str:
-        raise NotImplementedError
+    def sanitize_slug(self, label: str) -> str: ...

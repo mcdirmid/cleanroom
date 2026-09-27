@@ -11,7 +11,7 @@ class AntigravityMcpClientImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.client = AntigravityMcpClient()
 
-    @patch("urllib.request.urlopen")
+    @patch("update_with_ai.parts.antigravity.lib.antigravity_mcp_client_impl.urllib.request.urlopen")
     def test_call_tool_success(self, mock_urlopen: MagicMock) -> None:
         # Requirement: The antigravity mcp client dispatches a tool name with an arguments mapping to a server port.
         # Requirement: Calling a tool connects to the server at the configured host and port, transmitting a JSON-encoded request specifying tool name and arguments.

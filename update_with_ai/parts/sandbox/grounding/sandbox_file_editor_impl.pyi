@@ -193,7 +193,7 @@ class EditManager(sandbox_file_editor.EditManager):
             The hex digest of the file hash.
 
         GROUNDING_IMPLEMENTS:
-        - action("file_hash", str): Computes SHA-256 hash digest of file content.
+        - action("file_hash", str): Computes MD5 hash digest of file content.
         """
         ...
 
