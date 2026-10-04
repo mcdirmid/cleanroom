@@ -80,7 +80,8 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, InTier[SystemTier]):
         COVERED:
         - MUST clean dirty nodes within an agent session phase presenting the node role.
         - MUST retry the session phase once upon encountering an unexpected failure before propagating.
-        - WHEN the outcome signals advancement with file modifications, MUST deliver change messages to downstream dependents.
+        - WHEN the outcome signals advancement with file modifications, MUST mark the nodes clean in graph storage with the change summary.
+        - WHEN the outcome signals advancement without file modifications, MUST mark the nodes clean without advancing last changed timestamps.
         - WHEN the outcome signals blame attributed to a configured blame target, MUST deliver feedback messages strictly to the declared feedback dependency node owning the blamed file.
         - WHEN the outcome signals blame attributed to a target failing to match a configured blame target, MUST produce no propagating messages and leave nodes dirty.
         - MUST NOT deliver feedback messages to non-feedback dependencies, guides, or fixed node specifications.
@@ -155,14 +156,11 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, InTier[SystemTier]):
         _dep_item: dag_storage.DagDependency = only_elem(_all_deps)
         _is_feedback_dep: bool = _dep_item.node in _feedback_deps
 
-        # Advancement change delivery knowledge
-        change_msg = dag_storage.ChangeMessage()
-        dependents: Set[dag_storage.DagNode] = storage.get_dependents(sample_node)
-        sample_dependent: dag_storage.DagNode = only_elem(dependents)
-        storage.add_message(change_msg, to=sample_dependent)
+        # Advancement clean knowledge
+        _advancement_with_mods: bool = True
+        _advancement_without_mods: bool = False
 
         # Node cleanup knowledge
-        storage.register_dependent(sample_node)
         storage.clear_messages(sample_node)
 
         _res: bool = True

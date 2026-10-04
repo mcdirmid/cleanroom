@@ -83,4 +83,14 @@ py_test(
     ],
 )
 
+py_test(
+    name = "src_metadata_test",
+    srcs = ["src_metadata_test.py"],
+    main = "src_metadata_test.py",
+    imports = ["../.."],
+    deps = [
+        "//update_with_ai/support/lib:src_metadata",
+    ],
+)
+
 

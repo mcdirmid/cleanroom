@@ -23,4 +23,12 @@ When executing a cleaning pass:
 
 - Telemetry capturing execution events, pass duration, and build outcome is streamed to standard output and transcript files.
 
+When marking an acyclic subgraph clean:
+
+- Missing source files across the target subgraph are materialized from declared templates or initialized as empty files.
+
+- Node metadata headers are stamped with the current timestamp as the last cleaned timestamp, initializing missing last changed timestamps and default change descriptions, and clearing unacted feedback.
+
+Deleting the last cleaned timestamp from a target node's source file metadata header marks the target node dirty.
+
 > META: "Cycles are only guarded by an assumption and a node visitation limit; cycle detection is never to be turned into a requirement."

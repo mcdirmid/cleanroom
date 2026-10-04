@@ -59,15 +59,3 @@ class AgentStorage(dag_storage.DagStorage, InTier[SystemTier], Protocol):
         - MUST provide task prompts for declared nodes.
         """
         ...
-
-    @operation
-    def mark_dependents_dirty(self, node: dag_storage.DagNode) -> None:
-        """Marks registered dependent nodes dirty when propagating dependencies change.
-
-        Args:
-            node: The dependency node that changed.
-
-        POSTCONDITIONS:
-        - MUST mark dependent nodes dirty when propagating dependencies change.
-        """
-        ...

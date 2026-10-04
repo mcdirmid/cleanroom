@@ -1,7 +1,7 @@
 # bazel_asm assembly component
 
 assembles: bazel_manifest_loader_impl, bazel_node_config_impl, bazel_storage_impl, bazel_target_impl, file_paths_impl
-imports: agent_config, bazel_manifest_ext, bazel_target_labels_ext, filesystem_ext, tool_provider, update_with_ai_proto_ext
+imports: agent_config, bazel_manifest_ext, bazel_target_labels_ext, filesystem_ext, src_metadata_ext, tool_provider
 implements: agent_file_alias, agent_node_config, agent_storage, bazel_manifest_loader, bazel_target, dag_storage, file_paths
 
 ## Purpose
@@ -20,7 +20,7 @@ The bazel assembly aggregates the following constituents:
 
 - The bazel manifest loader implementation from bazel_manifest_loader_impl, closing the bazel manifest loader interface to parse JSON manifests, resolve node references, and compute dependency closures.
 
-- The bazel storage implementation from bazel_storage_impl, closing the agent storage and dag storage interfaces to provide in-memory graph indexing and durable message and reverse dependency persistence.
+- The bazel storage implementation from bazel_storage_impl, closing the agent storage and dag storage interfaces to provide in-memory graph indexing, in-band source file metadata persistence, and dynamic dirty evaluation.
 
 - The bazel target implementation from bazel_target_impl, closing the bazel target interface to normalize target labels and resolve package directory paths.
 

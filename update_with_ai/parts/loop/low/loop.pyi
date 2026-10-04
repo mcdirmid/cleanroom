@@ -43,17 +43,32 @@ class Loop(InTier[SystemTier], Protocol):
         ...
 
     @operation
+    def mark_subgraph_clean(self, target: dag_storage.DagNode) -> None:
+        """Marks all nodes in an acyclic subgraph clean, materializing missing templates and clearing unacted feedback.
+
+        Args:
+            target: The root target node in graph storage.
+
+        POSTCONDITIONS:
+        - MUST mark all nodes in the acyclic subgraph clean.
+        - MUST materialize missing source files from declared templates.
+        - MUST initialize timestamps and default change descriptions.
+        - MUST clear unacted feedback across the subgraph.
+        """
+        ...
+
+    @operation
     def mark_dirty(
-        self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage
+        self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage = ...
     ) -> None:
-        """Marks a target node dirty by injecting a change message into its pending messages.
+        """Marks a target node dirty by removing its last cleaned timestamp from in-band source metadata.
 
         Args:
             target: The target node to mark dirty.
-            message: The change message explaining why the node requires cleaning.
+            message: Optional change message for backward compatibility.
 
         POSTCONDITIONS:
-        - MUST mark the target node dirty by injecting the change message into its pending messages.
+        - MUST mark the target node dirty by removing its last cleaned timestamp from in-band source metadata.
         """
         ...
 

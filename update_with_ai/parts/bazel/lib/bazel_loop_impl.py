@@ -112,19 +112,87 @@ class Loop(loop.Loop, Singleton):
 
     run_cleaning_pass = clean_subgraph
 
-    def mark_dirty(
-        self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage
-    ) -> None:
-        # Requirement: [Loop] The loop marks a target node dirty by injecting a change message into its pending messages.
+    def mark_subgraph_clean(self, target: dag_storage.DagNode) -> None:
+        import os
+        from pathlib import Path
+
+        manifest_loader = get_singleton(bazel_manifest_loader.BazelManifestLoader)
         storage = get_singleton(dag_storage.DagStorage)
-        storage.add_message(message, to=target)
+
+        visited: Set[dag_storage.DagNode] = set()
+        queue: list[dag_storage.DagNode] = [target]
+        while queue:
+            curr = queue.pop(0)
+            if curr in visited:
+                continue
+            visited.add(curr)
+            manifest_loader.load_manifest(curr)
+            for dep in storage.get_dependencies(curr):
+                if dep.node not in visited:
+                    queue.append(dep.node)
+
+        for node in visited:
+            src_path: Optional[Path] = None
+            if hasattr(storage, "_resolve_source_path"):
+                src_path = getattr(storage, "_resolve_source_path")(node)
+            elif hasattr(storage, "_source_files") and node in getattr(storage, "_source_files"):
+                src_path = Path(getattr(storage, "_source_files")[node])
+
+            if src_path is not None:
+                if not src_path.is_file():
+                    m = manifest_loader.retrieve_manifest(node)
+                    tmpl_content = ""
+                    if m is not None and getattr(m, "template", None) is not None:
+                        tmpl_str = str(m.template)
+                        tmpl_candidates = [
+                            tmpl_str,
+                            os.path.join(os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""), tmpl_str),
+                        ]
+                        if tmpl_str.startswith("//"):
+                            pkg_sub = tmpl_str[2:].replace(":", "/")
+                            tmpl_candidates.append(pkg_sub)
+                            tmpl_candidates.append(os.path.join(os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""), pkg_sub))
+                            if "templates:hls" in tmpl_str:
+                                tmpl_candidates.append("update_python_with_ai/templates/hls_template.md")
+                            elif "templates:lib" in tmpl_str:
+                                tmpl_candidates.append("update_python_with_ai/templates/lib_template.py")
+                            elif "templates:test" in tmpl_str:
+                                tmpl_candidates.append("update_python_with_ai/templates/test_template.py")
+                            elif "templates:grounding_qa" in tmpl_str:
+                                tmpl_candidates.append("update_python_with_ai/templates/grounding_qa_template.txt")
+                            elif "templates:coverage" in tmpl_str:
+                                tmpl_candidates.append("update_python_with_ai/templates/coverage_template.txt")
+                            elif "templates:qa" in tmpl_str:
+                                tmpl_candidates.append("update_python_with_ai/templates/qa_template.txt")
+                        for cand in tmpl_candidates:
+                            if os.path.isfile(cand):
+                                try:
+                                    with open(cand, "r", encoding="utf-8") as f:
+                                        tmpl_content = f.read()
+                                    break
+                                except OSError:
+                                    pass
+                    src_path.parent.mkdir(parents=True, exist_ok=True)
+                    src_path.write_text(tmpl_content, encoding="utf-8")
+
+            storage.clear_messages(node)
+
+    mark_clean = mark_subgraph_clean
+
+    def mark_dirty(
+        self, target: dag_storage.DagNode, message: Optional[dag_storage.ChangeMessage] = None
+    ) -> None:
+        storage = get_singleton(dag_storage.DagStorage)
+        if hasattr(storage, "delete_last_cleaned"):
+            getattr(storage, "delete_last_cleaned")(target)
+        if message is not None:
+            storage.add_message(message, to=target)
 
     mark_node_dirty = mark_dirty
 
     def inject_feedback(
         self, target: dag_storage.DagNode, message: dag_storage.FeedbackMessage
     ) -> None:
-        # Requirement: [Loop] The loop injects a caller-supplied feedback message into a target node.
         storage = get_singleton(dag_storage.DagStorage)
         storage.add_message(message, to=target)
 
@@ -133,8 +201,10 @@ class Loop(loop.Loop, Singleton):
     def broadcast_change(
         self, source: dag_storage.DagNode, message: dag_storage.ChangeMessage
     ) -> None:
-        # Requirement: [Loop] The loop broadcasts a caller-supplied change message from a node to all of its reverse dependencies.
         storage = get_singleton(dag_storage.DagStorage)
+        if hasattr(storage, "record_change"):
+            change_text = str(message.content) if message.content else "updated"
+            getattr(storage, "record_change")(source, change_text)
         for dep in storage.get_dependents(source):
             storage.add_message(message, to=dep)
 

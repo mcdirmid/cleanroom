@@ -336,6 +336,7 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
 
         limit = agent_cfg.conversation_limit
         turns = 0
+        consecutive_truncations = 0
         last_turn_prompt_tokens: Optional[int] = None
         last_turn_cached_tokens: Optional[int] = None
 
@@ -400,9 +401,83 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                     create_kwargs["max_tokens"] = openai_cfg.max_tokens
 
                 completion = client.chat.completions.create(**create_kwargs)
-                if not getattr(completion, "choices", None):  # pragma: no cover (assumption: completion returns at least one choice)
+                error_payload = getattr(completion, "error", None)
+                if not getattr(completion, "choices", None):
+                    is_incomplete = False
+                    err_msg = ""
+                    if isinstance(error_payload, dict):
+                        code = error_payload.get("code")
+                        msg = str(error_payload.get("message", ""))
+                        if code == "incomplete_tool_call" or "unrecoverable tool call" in msg.lower():
+                            is_incomplete = True
+                            err_msg = msg or str(code)
+                    if is_incomplete:
+                        consecutive_truncations += 1
+                        if consecutive_truncations > 3:
+                            raise RuntimeError(
+                                f"Model repeatedly failed with incomplete tool call: {err_msg}"
+                            )
+                        logger.consume(
+                            _log_event(
+                                event_name="model_completion",
+                                summary=f"[Turn {turns}] Truncation error: incomplete tool call (limit exceeded)",
+                                transcript=f"=== Assistant Response (turn {turns}) ===\nServer error: incomplete tool call (output exceeded max tokens)\n{err_msg}",
+                            )
+                        )
+                        history.append_message(
+                            _conv_msg(
+                                role="assistant",
+                                content="I attempted to execute a tool call, but the output exceeded the server's token limit and was rejected by the server.",
+                            )
+                        )
+                        history.append_message(
+                            _conv_msg(
+                                role="user",
+                                content=(
+                                    "ERROR: Tool call generation exceeded output token limit (max_tokens). "
+                                    "The server rejected the incomplete tool invocation. "
+                                    "Do NOT attempt to rewrite or replace an entire large file in a single tool call. "
+                                    "Instead, use `replace_file_content` to make smaller, targeted chunk edits on specific line ranges."
+                                ),
+                            )
+                        )
+                        continue
                     raise RuntimeError("Model returned no choices in completion response")
             except (OpenAIError, OSError, RuntimeError, ValueError) as e:
+                err_str = str(e).lower()
+                if isinstance(e, OpenAIError) and (
+                    "incomplete_tool_call" in err_str or "unrecoverable tool call" in err_str
+                ):
+                    consecutive_truncations += 1
+                    if consecutive_truncations > 3:
+                        raise RuntimeError(
+                            f"Model repeatedly failed with incomplete tool call: {e}"
+                        ) from e
+                    logger.consume(
+                        _log_event(
+                            event_name="model_completion",
+                            summary=f"[Turn {turns}] Truncation error: incomplete tool call (limit exceeded)",
+                            transcript=f"=== Assistant Response (turn {turns}) ===\nServer error: incomplete tool call (output exceeded max tokens)\n{e}",
+                        )
+                    )
+                    history.append_message(
+                        _conv_msg(
+                            role="assistant",
+                            content="I attempted to execute a tool call, but the output exceeded the server's token limit and was rejected by the server.",
+                        )
+                    )
+                    history.append_message(
+                        _conv_msg(
+                            role="user",
+                            content=(
+                                "ERROR: Tool call generation exceeded output token limit (max_tokens). "
+                                "The server rejected the incomplete tool invocation. "
+                                "Do NOT attempt to rewrite or replace an entire large file in a single tool call. "
+                                "Instead, use `replace_file_content` to make smaller, targeted chunk edits on specific line ranges."
+                            ),
+                        )
+                    )
+                    continue
                 logger.consume(
                     _log_event(
                         event_name="model_error",
@@ -411,6 +486,8 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                     )
                 )
                 raise RuntimeError(f"Model error: {e}") from e
+
+            consecutive_truncations = 0
 
             usage = getattr(completion, "usage", None)
             if usage is not None:

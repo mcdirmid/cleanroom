@@ -133,32 +133,11 @@ class DagStorage(InTier[SystemTier], Protocol):
 
         POSTCONDITIONS:
         - MUST return whether the node needs to be cleaned.
-        - WHEN the node has messages, MUST return true.
-        """
-        ...
-
-    @operation
-    def register_dependent(self, node: DagNode) -> None:
-        """Registers a node as a dependent to all of its non-silent dependencies.
-
-        Args:
-            node: The node to register as a dependent.
-
-        POSTCONDITIONS:
-        - MUST register the node as a dependent across its non-silent dependencies.
-        - MUST exclude silent dependencies when registering the node as a dependent.
-        """
-        ...
-
-    @operation
-    def clear_dependents(self, node: DagNode) -> None:
-        """Clears all recorded dependents of a node.
-
-        Args:
-            node: The node whose recorded dependents are emptied.
-
-        POSTCONDITIONS:
-        - MUST clear all registered dependents from the node.
+        - WHEN the declared source file is missing from disk, MUST return true.
+        - WHEN in-band metadata is missing or invalid, MUST return true.
+        - WHEN in-band metadata is uncleaned with a change description, MUST return true.
+        - WHEN unacted feedback messages exist for the node, MUST return true.
+        - WHEN any non-silent dependency was changed after the node was last cleaned, MUST return true.
         """
         ...
 
@@ -172,6 +151,7 @@ class DagStorage(InTier[SystemTier], Protocol):
 
         POSTCONDITIONS:
         - MUST add the message to the node.
+        - WHEN a change message is added, MUST mark the node dirty by clearing its last cleaned status.
         """
         ...
 

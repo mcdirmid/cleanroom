@@ -27,6 +27,7 @@ from update_with_ai.parts.loop.lib.loop_driver import (
 )
 from update_with_ai.parts.openai.lib.openai_driver_impl import (
     LoopDriver,
+    OpenAIError,
     __initialize__,
 )
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
@@ -272,10 +273,11 @@ class DummyUsage:
 
 class DummyCompletion:
     def __init__(
-        self, choices: List[DummyChoice], usage: Any = None
+        self, choices: List[DummyChoice], usage: Any = None, error: Any = None
     ) -> None:
         self.choices = choices
         self.usage = usage
+        self.error = error
 
 
 class OpenAIDriverImplTest(unittest.TestCase):
@@ -1957,6 +1959,130 @@ class OpenAIDriverImplTest(unittest.TestCase):
         ]
         self.assertGreaterEqual(len(turn1_comp), 2)
         self.assertIn("replace_file_content", turn1_comp[0].summary)
+
+    @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
+    def test_incomplete_tool_call_error_payload_recovers_and_continues(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        comp_err = DummyCompletion(
+            choices=[],
+            error={
+                "code": "incomplete_tool_call",
+                "message": "Model output contains an unrecoverable tool call.",
+            },
+        )
+        comp_done = DummyCompletion(
+            choices=[
+                DummyChoice(
+                    message=DummyMessage(
+                        content=ToolResponseContent("Finished successfully"),
+                        tool_calls=[
+                            DummyToolCall(
+                                id="call_finish",
+                                name="finish_task",
+                                arguments="{}",
+                            )
+                        ],
+                    ),
+                    finish_reason="stop",
+                )
+            ],
+            usage=DummyUsage(prompt_tokens=5000, cached_tokens=4000),
+        )
+
+        mock_client.chat.completions.create.side_effect = [comp_err, comp_done]
+
+        self.tool_mgr.responses["finish_task"] = ToolResponse(
+            is_failed=False,
+            is_terminated=True,
+            content=ToolResponseContent("All done"),
+        )
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            runner = scope.get_singleton(LoopDriver)
+            # Requirement: When a model completion response fails with an incomplete tool call error, the loop driver appends an actionable recovery notice directing smaller edits and continues the turn loop, or halts with an unexpected failure when repeated consecutive truncation failures occur.
+            outcome = runner.run()
+            self.assertTrue(outcome.response.is_terminated)
+
+        # Verify recovery messages were appended to conversation
+        messages = self.history.messages
+        user_recovery_msgs = [
+            m
+            for m in messages
+            if m.role == "user"
+            and m.content is not None
+            and "Tool call generation exceeded output token limit" in m.content
+        ]
+        self.assertEqual(len(user_recovery_msgs), 1)
+
+    @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
+    def test_openai_error_incomplete_tool_call_recovers_and_continues(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        comp_done = DummyCompletion(
+            choices=[
+                DummyChoice(
+                    message=DummyMessage(
+                        content=ToolResponseContent("Finished"),
+                        tool_calls=[
+                            DummyToolCall(
+                                id="call_finish",
+                                name="finish_task",
+                                arguments="{}",
+                            )
+                        ],
+                    ),
+                    finish_reason="stop",
+                )
+            ],
+            usage=DummyUsage(prompt_tokens=5000, cached_tokens=4000),
+        )
+
+        mock_client.chat.completions.create.side_effect = [
+            OpenAIError("Tool call generation failed: code=incomplete_tool_call"),
+            comp_done,
+        ]
+
+        self.tool_mgr.responses["finish_task"] = ToolResponse(
+            is_failed=False,
+            is_terminated=True,
+            content=ToolResponseContent("Done"),
+        )
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            runner = scope.get_singleton(LoopDriver)
+            # Requirement: When a model completion response fails with an incomplete tool call error, the loop driver appends an actionable recovery notice directing smaller edits and continues the turn loop, or halts with an unexpected failure when repeated consecutive truncation failures occur.
+            outcome = runner.run()
+            self.assertTrue(outcome.response.is_terminated)
+
+    @patch("update_with_ai.parts.openai.lib.openai_driver_impl.OpenAI")
+    def test_repeated_incomplete_tool_call_exceeds_retry_limit_and_halts(
+        self, mock_openai_cls: MagicMock
+    ) -> None:
+        mock_client = MagicMock()
+        mock_openai_cls.return_value = mock_client
+
+        comp_err = DummyCompletion(
+            choices=[],
+            error={
+                "code": "incomplete_tool_call",
+                "message": "unrecoverable tool call",
+            },
+        )
+        mock_client.chat.completions.create.return_value = comp_err
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            runner = scope.get_singleton(LoopDriver)
+            # Requirement: When a model completion response fails with an incomplete tool call error, the loop driver appends an actionable recovery notice directing smaller edits and continues the turn loop, or halts with an unexpected failure when repeated consecutive truncation failures occur.
+            with self.assertRaises(RuntimeError) as ctx:
+                runner.run()
+            self.assertIn("repeatedly failed with incomplete tool call", str(ctx.exception))
 
 
 if __name__ == "__main__":

@@ -1,24 +1,36 @@
 # bazel_storage_impl implementation component
 
-imports: bazel_target, update_with_ai_proto_ext, file_paths
+imports: bazel_target, file_paths, src_metadata_ext
 implements: agent_storage, dag_storage
 
 ## Purpose
 
-The bazel_storage_impl implementation component realizes in-memory graph indexing, protobuf text format persistence, dirty node evaluation, and silent dependency filtering for Bazel targets.
+The bazel_storage_impl implementation component realizes in-memory graph indexing, in-band source file metadata persistence, dynamic forward dirty node evaluation, and silent dependency filtering for Bazel targets.
 
-Coordinating multi-node builds requires fast in-memory access to target metadata alongside durable on-disk persistence of inter-node communication records. The bazel_storage_impl implementation component maintains target configurations and graph edges in memory, serializes message queues and reverse dependencies into per-package `.update_with_ai.textproto` files, evaluates node dirty conditions from pending messages and source file presence, and filters silent dependencies from dirty propagation.
+Coordinating multi-node builds requires fast in-memory access to target metadata alongside durable on-disk persistence of inter-node communication records. Storing inter-node communication records in sidecar package files causes state desynchronization, ghost records, and merge conflicts across branches. The bazel_storage_impl implementation component resolves declared source files against the workspace root, extracts and updates in-band comment headers using src_metadata_ext, evaluates dirty status dynamically from forward dependency timestamps and unacted feedback, and filters silent dependencies from dirty propagation.
 
-**Out of scope:** The bazel_storage_impl implementation component does not deserialize JSON files, drive agent loops, or execute verification commands; these are handled by other components.
+**Out of scope:** The bazel_storage_impl implementation component does not deserialize JSON manifests, drive agent loops, or execute verification commands; these are handled by other components.
 
 ## Types and Behavior
 
-The agent storage maintains node definitions, task prompts, dependencies, and reverse dependencies mapped to nodes in dag storage.
+The agent storage maintains node definitions, task prompts, declared source paths, and forward dependencies mapped to nodes in dag storage.
 
-A node in dag storage is dirty if it has messages explaining why it requires cleaning, or if its declared source file is missing from the workspace root, recording a change message to implement the source file for the node.
+The agent storage resolves each node's declared source file against the workspace root, reading and writing in-band metadata comment blocks containing last cleaned timestamps, last changed timestamps, change descriptions, and unacted feedback entries.
 
-The agent storage serializes pending messages and reverse dependencies for nodes into protobuf text format files.
- 
-All nodes located within the same package directory share a common package message file named `.update_with_ai.textproto`. The agent storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
+Evaluating whether a node is dirty in dag storage inspects the node's source file and in-band metadata.
 
-When evaluating dependency propagation in the agent storage, propagating dependencies exclude silent dependencies declared on a node.
+A node evaluates as dirty when:
+
+- Its declared source file is missing from the workspace root, synthesizing a change message to implement the source file.
+
+- Its source file metadata is missing, unparseable, or its last cleaned timestamp is missing.
+
+- Its source file metadata contains unacted feedback entries, synthesizing feedback messages for the unacted entries.
+
+- Any non-silent forward dependency has a last changed timestamp strictly newer than the node's last cleaned timestamp, synthesizing a change message describing the dependency update.
+
+Marking a node clean updates the source file's in-band metadata header in-place, recording the current timestamp as the last cleaned timestamp, updating the last changed timestamp and change description when file modifications occurred, and removing all unacted feedback entries.
+
+Deleting the last cleaned timestamp from a node's source file metadata header marks the node dirty without modifying its change description or last changed timestamp.
+
+Recording a feedback message against a dependency target node updates the target node's source file in-band metadata header in-place, appending an unacted feedback entry carrying the current timestamp, blaming node address, and feedback explanation.

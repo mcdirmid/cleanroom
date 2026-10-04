@@ -1,7 +1,7 @@
 # bazel_openai_loop_asm assembly component
 
 assembles: bazel_asm, bazel_loop_impl, bazel_openai_config_impl, dag_asm, loop_asm, runner_logger_impl, sandbox_asm
-imports: agent_session, bazel_manifest_ext, bazel_target_labels_ext, commonmark_ext, filesystem_ext, json_ext, model_config_ext, openai_ext, update_with_ai_proto_ext
+imports: agent_session, bazel_manifest_ext, bazel_target_labels_ext, commonmark_ext, filesystem_ext, json_ext, model_config_ext, openai_ext, src_metadata_ext
 implements: agent_config, agent_file_alias, agent_node_config, agent_storage, bazel_manifest_loader, bazel_target, dag_config, dag_storage, dag_subgraph, file_paths, loop, loop_cleaner, loop_conversation, loop_driver, loop_guard, loop_node_cleaner, openai_config, runner_logger, sandbox, sandbox_file_editor, sandbox_file_reader, sandbox_guide_delivery, sandbox_run_control, template_format, tool_provider
 
 ## Purpose

@@ -71,17 +71,12 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
     def is_dirty(self, node: dag_storage.DagNode) -> bool:
         """
         COVERED:
-        - WHEN a node has messages or its declared source file is missing from the workspace root, MUST return true.
-          - Condition knowledge: test self.get_messages(node) or query source file existence.
-          - Consequent knowledge: return boolean indicator.
-        - WHEN a declared source file is missing from the workspace root, MUST record a change message to implement the source file.
-          - Condition knowledge: detect missing source file on filesystem.
-          - Consequent knowledge: self.add_message(ChangeMessage(...), to=node).        """
-        _missing_src_msg = dag_storage.ChangeMessage(
-            content=dag_storage.MessageContent("Implement missing source file")
-        )
-        self.add_message(_missing_src_msg, to=node)
-        _dirty: bool = len(self.get_messages(node)) > 0
+        - WHEN a declared source file is missing from the workspace root, MUST return true and record a change message to implement the source file.
+        - WHEN source file metadata is missing or its last cleaned timestamp is missing, MUST return true.
+        - WHEN source file metadata contains unacted feedback entries, MUST return true.
+        - WHEN a non-silent forward dependency has a last changed timestamp newer than the node's last cleaned timestamp, MUST return true.
+        """
+        _node = node
         raise NotImplementedError
 
     def add_message(
@@ -89,38 +84,26 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
     ) -> None:
         """
         COVERED:
-        - MUST serialize pending messages into package .update_with_ai.textproto files.
-          - Consequent knowledge: update self._messages[to] and emit protobuf text records.        """
-        self._messages[to] = {message}
+        - WHEN message is a feedback message, MUST append an unacted feedback entry to the target source file metadata.
+        """
+        _msg = message
+        _to = to
         raise NotImplementedError
 
     def clear_messages(self, node: dag_storage.DagNode) -> None:
         """
         COVERED:
-        - Clears node messages.
+        - MUST update the last cleaned timestamp and remove unacted feedback entries from source metadata.
         """
-        self._messages[node] = set()
+        _node = node
         raise NotImplementedError
 
-    def register_dependent(self, node: dag_storage.DagNode) -> None:
+    def delete_last_cleaned(self, node: dag_storage.DagNode) -> None:
         """
         COVERED:
-        - MUST serialize reverse dependencies into package .update_with_ai.textproto files.
-          - Consequent knowledge: update self._dependents and serialize protobuf text records.
-        - MUST exclude silent dependencies when serializing reverse dependencies.
-          - Condition knowledge: inspect dep.is_silent and filter out silent dependencies.
-          - Consequent knowledge: omit from reverse dependency serialization.        """
-        dep = only_elem(self.get_dependencies(node))
-        _silent: bool = dep.is_silent
-        self._dependents[dep.node] = {node}
-        raise NotImplementedError
-
-    def clear_dependents(self, node: dag_storage.DagNode) -> None:
+        - MUST delete the last cleaned timestamp from the source file metadata header.
         """
-        COVERED:
-        - Clears node dependents.
-        """
-        self._dependents[node] = set()
+        _node = node
         raise NotImplementedError
 
 

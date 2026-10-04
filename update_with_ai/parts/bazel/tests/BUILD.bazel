@@ -10,6 +10,7 @@ pyright_test(
     deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_python_with_ai/support/lib:src_metadata",
         "//update_with_ai/parts/agent/lib:agent_storage",
         "//update_with_ai/parts/bazel/lib:bazel_loop_impl",
         "//update_with_ai/parts/bazel/lib:bazel_manifest_loader",
@@ -75,6 +76,7 @@ pyright_test(
     deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_python_with_ai/support/lib:src_metadata",
         "//update_with_ai/parts/agent/lib:agent_storage",
         "//update_with_ai/parts/bazel/lib:bazel_storage_impl",
         "//update_with_ai/parts/bazel/lib:bazel_target",

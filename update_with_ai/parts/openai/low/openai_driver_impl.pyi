@@ -24,6 +24,7 @@ class LoopDriver(
         - MUST transmit completion requests following OpenAI conventions with model parameters from configuration.
         - MUST order tools and parameters deterministically.
         - WHEN a model response is truncated, MUST recover by repairing partial replace file content payloads with indented sentinels or terminate with failure responses before resuming generation.
+        - WHEN a model completion response fails with an incomplete tool call error, MUST append an actionable recovery notice directing smaller edits and continue the turn loop or halt upon repeated failures.
         - MUST stream turn events and summaries to runner logger.
         - WHEN loop guard produces a loop reminder, MUST append reminder to the conversation.
         - WHEN loop guard produces loop failure, MUST halt with an unexpected failure.

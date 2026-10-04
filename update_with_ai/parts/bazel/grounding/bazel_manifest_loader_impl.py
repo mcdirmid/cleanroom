@@ -139,7 +139,6 @@ class BazelManifestLoader(
             unit_address=dag_storage.UnitAddress(str(dep_label)),
             role_address=dag_storage.RoleAddress(""),
         )
-        storage.register_dependent(dep_node)
 
         silent_dep_label: bazel_manifest_loader.TargetLabel = only_elem(sample_manifest.silent_dependencies)
         silent_dep_node: dag_storage.DagNode = dag_storage.DagNode(

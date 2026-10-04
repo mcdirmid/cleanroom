@@ -2963,6 +2963,7 @@ def find_ext_spec_paths(
         spec_file = f"{stem_d}.pyi"
         found = False
         candidates = [
+            os.path.join(search_base_dir, "..", "low", spec_file),
             os.path.join(search_base_dir, "..", "grounding", spec_file),
             os.path.join(search_base_dir, "..", "specs", "grounding", spec_file),
             os.path.join(ws, "update_with_ai/specs/grounding", spec_file),
@@ -2974,14 +2975,24 @@ def find_ext_spec_paths(
                 found = True
                 break
         if not found:
+            for cand in Path(ws).glob(f"*/parts/*/low/{spec_file}"):
+                pyi_paths.append(str(cand.resolve()))
+                found = True
+                break
+        if not found:
             for cand in Path(ws).glob(f"*/parts/*/grounding/{spec_file}"):
                 pyi_paths.append(str(cand.resolve()))
                 found = True
                 break
-            if not found:
-                for cand in Path(ws).glob(f"parts/*/grounding/{spec_file}"):
-                    pyi_paths.append(str(cand.resolve()))
-                    break
+        if not found:
+            for cand in Path(ws).glob(f"parts/*/low/{spec_file}"):
+                pyi_paths.append(str(cand.resolve()))
+                found = True
+                break
+        if not found:
+            for cand in Path(ws).glob(f"parts/*/grounding/{spec_file}"):
+                pyi_paths.append(str(cand.resolve()))
+                break
     return pyi_paths
 
 

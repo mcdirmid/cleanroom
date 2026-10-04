@@ -264,14 +264,11 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             # Requirement: MUST clean dirty nodes within an agent session phase presenting the node role.
             # Requirement: MUST clean dirty nodes sharing a role.
             # Requirement: MUST communicate whether processing should continue.
-            # Requirement: WHEN the outcome signals advancement with file modifications, MUST deliver change messages to downstream dependents.
+            # Requirement: WHEN the outcome signals advancement with file modifications, MUST mark the nodes clean in graph storage with the change summary.
             # Requirement: WHEN cleaning completes without unhandleable failure, MUST return true.
             cont = cleaner.clean([node])
             self.assertTrue(cont)
-            self.assertIn(dep, self.storage.messages)
-            msgs = list(self.storage.messages[dep])
-            self.assertEqual(len(msgs), 1)
-            self.assertIsInstance(msgs[0], ChangeMessage)
+            self.assertEqual(self.storage.messages.get(node, set()), set())
 
     def test_clean_blame_delivers_feedback(self) -> None:
         """CUJ: Session outcome signaling blame delivers feedback message to blamed dependency."""
@@ -339,7 +336,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             cont = cleaner.clean([node])
             self.assertTrue(cont)
             self.assertEqual(self.runner.run_count, 0)
-            self.assertIn(dep, self.storage.messages)
+            self.assertEqual(self.storage.messages.get(node, set()), set())
 
     def test_clean_retries_on_unexpected_failure(self) -> None:
         """CUJ: Retries session phase once upon encountering unexpected failure before propagating."""

@@ -54,8 +54,10 @@ class Conversation(
             tool_arguments: Serialized arguments passed to the tool.
 
         POSTCONDITIONS:
-        - MUST replace preceding responses sharing suppression keys with stubs.
-        - MUST elide string arguments exceeding supersede keep limit.
+        - MUST retain a buffer of up to three most recent responses sharing suppression keys.
+        - MUST replace preceding responses beyond the buffer limit with stubs.
+        - MUST preserve file path parameters and non-string arguments in superseded tool calls.
+        - MUST replace other string arguments with a stub marker in superseded tool calls.
         - MUST retain reminders on stubs and inherit them when omitted.
         """
         ...

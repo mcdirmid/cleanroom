@@ -62,6 +62,16 @@ pyright_library(
     imports = ["../../..", "."],
 )
 
+pyright_library(
+    name = "src_metadata_ext",
+    srcs = ["src_metadata_ext.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+    ],
+    imports = ["../../..", "."],
+)
+
 build_derived_test(
     name = "targets_derived_test",
 )

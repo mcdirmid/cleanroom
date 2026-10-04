@@ -22,7 +22,9 @@ The loop:
 
 - Executes a cleaning pass over an acyclic subgraph rooted at a target node in graph storage.
 
-- Marks a target node dirty by injecting a change message into its pending messages.
+- Marks all nodes in an acyclic subgraph clean, materializing missing source files from declared templates, initializing timestamps and default change descriptions, and clearing unacted feedback.
+
+- Marks a target node dirty by removing its last cleaned timestamp from in-band source metadata.
 
 - Injects a caller-supplied feedback message into a target node.
 

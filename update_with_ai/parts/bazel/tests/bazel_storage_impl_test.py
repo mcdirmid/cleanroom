@@ -30,6 +30,7 @@ from update_with_ai.parts.dag.lib.dag_storage import (
     DagDependency,
     FeedbackMessage,
     DagNode,
+    MessageContent,
     RoleAddress,
     UnitAddress,
 )
@@ -130,39 +131,55 @@ class BazelStorageImplTest(unittest.TestCase):
             self.assertEqual(storage.get_dependencies(node), {dep})
 
     def test_messages_persistence_and_dirty_state(self) -> None:
-        """CUJ: Adding messages serializes to package textproto and controls dirty state."""
-        node = _make_dag_node("//pkg/sub:target")
+        """CUJ: Adding messages persists feedback to in-band source metadata and controls dirty state."""
+        node = _make_dag_node("//pkg/sub:target", "lib")
+        rel_path = "pkg/sub/target.py"
+        abs_src = os.path.join(self.test_dir, rel_path)
+        os.makedirs(os.path.dirname(abs_src), exist_ok=True)
+        with open(abs_src, "w", encoding="utf-8") as f:
+            f.write(
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-01T10:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-01T10:00:00Z\n"
+                "# CHANGE: init\n"
+                "# --- END CLEANROOM METADATA ---\n"
+                "print('hello')\n"
+            )
 
         with enter_phase("system", registry=self.registry) as scope:
             storage = scope.get_singleton(AgentStorage)
+            cast(Any, storage)._source_files[node] = rel_path
             self.assertFalse(storage.is_dirty(node))
             self.assertEqual(storage.get_messages(node), set())
 
             # Add ChangeMessage and FeedbackMessage messages
-            # Requirement: MUST serialize pending messages into package .update_with_ai.textproto files.
+            # Requirement: WHEN message is a feedback message, MUST append an unacted feedback entry to the target source file metadata.
             # Requirement: MUST add the message to the node.
-            storage.add_message(ChangeMessage(), to=node)
-            storage.add_message(FeedbackMessage(), to=node)
+            storage.add_message(ChangeMessage(content=MessageContent("Need refactor")), to=node)
+            storage.add_message(FeedbackMessage(content=MessageContent("Syntax error on line 5")), to=node)
 
-            # Requirement: WHEN a node has messages or its declared source file is missing from the workspace root, MUST return true.
-            # Requirement: WHEN the node has messages, MUST return true.
+            # Requirement: WHEN source file metadata is missing or contains unacted feedback entries, MUST return true.
+            # Requirement: MUST return the set of messages recorded for the node.
             self.assertTrue(storage.is_dirty(node))
             msgs = storage.get_messages(node)
             self.assertEqual(len(msgs), 2)
             self.assertTrue(any(isinstance(m, ChangeMessage) for m in msgs))
             self.assertTrue(any(isinstance(m, FeedbackMessage) for m in msgs))
 
-            # Verify textproto file was written to package directory
-            proto_path = os.path.join(
-                self.test_dir, "pkg/sub", ".update_with_ai.textproto"
-            )
-            self.assertTrue(os.path.isfile(proto_path))
+            # Verify in-band metadata has unacted feedback entry
+            with open(abs_src, "r", encoding="utf-8") as f:
+                content = f.read()
+            self.assertIn("Syntax error on line 5", content)
 
-            # Clear messages resets dirty state
+            # Clear messages resets dirty state and updates metadata
             # Requirement: MUST clear all messages from the node.
+            # Requirement: MUST update the last cleaned timestamp and remove unacted feedback entries from source metadata.
             storage.clear_messages(node)
             self.assertFalse(storage.is_dirty(node))
             self.assertEqual(storage.get_messages(node), set())
+            with open(abs_src, "r", encoding="utf-8") as f:
+                content_after = f.read()
+            self.assertNotIn("Syntax error on line 5", content_after)
 
     def test_missing_source_file_dirty_state(self) -> None:
         """CUJ: A node is dirty when its declared source file is missing from the workspace root."""
@@ -174,8 +191,7 @@ class BazelStorageImplTest(unittest.TestCase):
             # DagNode with declared source file that does not exist yet
             rel_path = "pkg/src/target.py"
             cast(Any, storage)._source_files[node] = rel_path
-            # Requirement: WHEN a declared source file is missing from the workspace root, MUST record a change message to implement the source file.
-            # Requirement: WHEN a node has messages or its declared source file is missing from the workspace root, MUST return true.
+            # Requirement: WHEN a declared source file is missing from the workspace root, MUST return true and record a change message to implement the source file.
             self.assertTrue(storage.is_dirty(node))
 
             # Calling is_dirty recorded a change message to implement the source file
@@ -189,23 +205,23 @@ class BazelStorageImplTest(unittest.TestCase):
             self.assertTrue(storage.is_dirty(node))
             self.assertEqual(len(storage.get_messages(node)), 1)
 
-            # Even after creating the declared source file on disk, the node remains dirty because the recorded change message persists
+            # Even after creating the declared source file on disk without valid metadata, the node remains dirty
             abs_src = os.path.join(self.test_dir, rel_path)
             os.makedirs(os.path.dirname(abs_src), exist_ok=True)
             with open(abs_src, "w", encoding="utf-8") as f:
                 f.write("# source file\n")
             self.assertTrue(storage.is_dirty(node))
 
-            # Clearing messages once the source file exists clears the dirty state
+            # Clearing messages once the source file exists writes valid cleaned metadata and clears the dirty state
             # Requirement: MUST clear all messages from the node.
             storage.clear_messages(node)
             self.assertFalse(storage.is_dirty(node))
 
-    def test_reverse_dependencies_registration_and_clearing(self) -> None:
-        """CUJ: Registering dependent writes reverse dependency to non-silent dependencies."""
-        upstream = _make_dag_node("//pkg/lib:core")
-        downstream = _make_dag_node("//pkg/app:main")
-        silent_upstream = _make_dag_node("//pkg/silent:tool")
+    def test_dependents_and_dependency_timestamps_dirty_state(self) -> None:
+        """CUJ: Querying dependents and dynamic dirty evaluation from dependency timestamps."""
+        upstream = _make_dag_node("//pkg/lib:core", "lib")
+        downstream = _make_dag_node("//pkg/app:main", "lib")
+        silent_upstream = _make_dag_node("//pkg/silent:tool", "lib")
 
         with enter_phase("system", registry=self.registry) as scope:
             storage = scope.get_singleton(AgentStorage)
@@ -217,21 +233,106 @@ class BazelStorageImplTest(unittest.TestCase):
                 DagDependency(node=silent_upstream, is_silent=True),
             }
 
-            # Register dependent
-            # Requirement: MUST serialize reverse dependencies into package .update_with_ai.textproto files.
-            # Requirement: MUST exclude silent dependencies when serializing reverse dependencies.
-            # Requirement: MUST register the node as a dependent across its non-silent dependencies.
-            storage.register_dependent(downstream)
+            # Requirement: MUST return the set of downstream nodes depending on the node.
+            self.assertEqual(storage.get_dependents(upstream), {downstream})
+            self.assertEqual(storage.get_dependents(silent_upstream), set())
 
-            # Non-silent upstream has downstream recorded as dependent
-            self.assertIn(downstream, storage.get_dependents(upstream))
-            # Silent upstream does NOT have downstream recorded
-            self.assertNotIn(downstream, storage.get_dependents(silent_upstream))
+            # Create source files: upstream changed after downstream was cleaned
+            upstream_file = "pkg/lib/core.py"
+            downstream_file = "pkg/app/main.py"
+            abs_up = os.path.join(self.test_dir, upstream_file)
+            abs_down = os.path.join(self.test_dir, downstream_file)
+            os.makedirs(os.path.dirname(abs_up), exist_ok=True)
+            os.makedirs(os.path.dirname(abs_down), exist_ok=True)
 
-            # Clear dependents on upstream
-            # Requirement: MUST clear all registered dependents from the node.
-            storage.clear_dependents(upstream)
-            self.assertEqual(storage.get_dependents(upstream), set())
+            with open(abs_up, "w", encoding="utf-8") as f:
+                f.write(
+                    "# --- CLEANROOM METADATA ---\n"
+                    "# LAST_CLEANED: 2026-10-02T15:00:00Z\n"
+                    "# LAST_CHANGED: 2026-10-02T15:00:00Z\n"
+                    "# CHANGE: upstream update\n"
+                    "# --- END CLEANROOM METADATA ---\n"
+                )
+            with open(abs_down, "w", encoding="utf-8") as f:
+                f.write(
+                    "# --- CLEANROOM METADATA ---\n"
+                    "# LAST_CLEANED: 2026-10-02T14:00:00Z\n"
+                    "# LAST_CHANGED: 2026-10-02T14:00:00Z\n"
+                    "# CHANGE: initial main\n"
+                    "# --- END CLEANROOM METADATA ---\n"
+                )
+
+            cast(Any, storage)._source_files[upstream] = upstream_file
+            cast(Any, storage)._source_files[downstream] = downstream_file
+
+            # Requirement: WHEN a non-silent forward dependency has a last changed timestamp newer than the node's last cleaned timestamp, MUST return true.
+            self.assertTrue(storage.is_dirty(downstream))
+
+            # Cleaning downstream brings its last_cleaned forward, making it not dirty
+            storage.clear_messages(downstream)
+            self.assertFalse(storage.is_dirty(downstream))
+
+    def test_delete_last_cleaned_marks_dirty(self) -> None:
+        """CUJ: Deleting last_cleaned from source metadata marks the node dirty without modifying last_changed or change description."""
+        node = _make_dag_node("//pkg/app:service", "lib")
+        rel_path = "pkg/app/service.py"
+        abs_src = os.path.join(self.test_dir, rel_path)
+        os.makedirs(os.path.dirname(abs_src), exist_ok=True)
+        with open(abs_src, "w", encoding="utf-8") as f:
+            f.write(
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-02T15:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-02T15:00:00Z\n"
+                "# CHANGE: initial clean\n"
+                "# --- END CLEANROOM METADATA ---\n"
+                "def run(): pass\n"
+            )
+
+        with enter_phase("system", registry=self.registry) as scope:
+            storage = scope.get_singleton(AgentStorage)
+            cast(Any, storage)._source_files[node] = rel_path
+
+            # Initially clean
+            self.assertFalse(storage.is_dirty(node))
+
+            # Requirement: MUST delete the last cleaned timestamp from the source file metadata header.
+            cast(Any, storage).delete_last_cleaned(node)
+
+            # File on disk must have LAST_CLEANED removed, but retain LAST_CHANGED and CHANGE
+            with open(abs_src, "r", encoding="utf-8") as f:
+                disk_content = f.read()
+            self.assertNotIn("LAST_CLEANED:", disk_content)
+            self.assertIn("LAST_CHANGED: 2026-10-02T15:00:00Z", disk_content)
+            self.assertIn("CHANGE: initial clean", disk_content)
+
+            # Node evaluates as dirty
+            self.assertTrue(storage.is_dirty(node))
+
+        # Simulate a fresh process run (new storage instance reading disk)
+        fresh_registry = LifecycleRegistry()
+        fresh_registry.register_instance(
+            self.file_paths_service, keys=[FilePathManager], tier="system"
+        )
+        fresh_registry.register_instance(
+            self.node_id_utils, keys=[BazelTarget], tier="system"
+        )
+        __initialize__(fresh_registry)
+
+        with enter_phase("system", registry=fresh_registry) as scope:
+            fresh_storage = scope.get_singleton(AgentStorage)
+            cast(Any, fresh_storage)._source_files[node] = rel_path
+
+            # In the fresh process, node is still dirty purely from disk state
+            self.assertTrue(fresh_storage.is_dirty(node))
+
+            # Clearing messages stamps LAST_CLEANED and makes it clean
+            fresh_storage.clear_messages(node)
+            self.assertFalse(fresh_storage.is_dirty(node))
+            with open(abs_src, "r", encoding="utf-8") as f:
+                cleaned_content = f.read()
+            self.assertIn("LAST_CLEANED:", cleaned_content)
+            self.assertIn("LAST_CHANGED: 2026-10-02T15:00:00Z", cleaned_content)
+            self.assertIn("CHANGE: initial clean", cleaned_content)
 
     def test_dag_storage_protocol_aliasing(self) -> None:
         """CUJ: Resolving singleton via DagStorage protocol alias."""
@@ -239,33 +340,6 @@ class BazelStorageImplTest(unittest.TestCase):
             dag = scope.get_singleton(DagStorage)
             graph = scope.get_singleton(AgentStorage)
             self.assertIs(dag, graph)
-
-
-    def test_mark_dependents_dirty(self) -> None:
-        """CUJ: Propagating dirty state delivers a ChangeMessage to registered downstream dependents."""
-        upstream = _make_dag_node("//pkg/lib:core")
-        downstream = _make_dag_node("//pkg/app:main")
-
-        with enter_phase("system", registry=self.registry) as scope:
-            storage = scope.get_singleton(AgentStorage)
-            assert isinstance(storage, AgentStorageImpl)
-
-            # Register downstream as dependent of upstream
-            cast(Any, storage)._dependencies[downstream] = {
-                DagDependency(node=upstream, is_silent=False),
-            }
-            storage.register_dependent(downstream)
-            self.assertIn(downstream, storage.get_dependents(upstream))
-
-            # Mark dependents dirty
-            # Requirement: MUST mark dependent nodes dirty when propagating dependencies change.
-            storage.mark_dependents_dirty(upstream)
-
-            # Downstream receives a ChangeMessage and becomes dirty
-            self.assertTrue(storage.is_dirty(downstream))
-            msgs = storage.get_messages(downstream)
-            self.assertEqual(len(msgs), 1)
-            self.assertTrue(any(isinstance(m, ChangeMessage) for m in msgs))
 
 
 if __name__ == "__main__":

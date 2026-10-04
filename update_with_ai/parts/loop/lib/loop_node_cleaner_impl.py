@@ -310,15 +310,10 @@ class NodeCleaner(loop_node_cleaner.NodeCleaner, Singleton):
             return True
 
         for node in nodes:
-            storage.register_dependent(node)
             storage.clear_messages(node)
 
         for m in msgs:
-            if isinstance(m, dag_storage.ChangeMessage):
-                for node in nodes:
-                    for dependent in storage.get_dependents(node):
-                        storage.add_message(m, to=dependent)
-            elif isinstance(m, dag_storage.FeedbackMessage):
+            if isinstance(m, dag_storage.FeedbackMessage):
                 if m.target is not None:
                     storage.add_message(m, to=m.target)
 

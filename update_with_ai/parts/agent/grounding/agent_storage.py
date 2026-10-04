@@ -40,17 +40,3 @@ class AgentStorage(dag_storage.DagStorage, InTier[SystemTier], Protocol):
         node_def: NodeDefinition = self.get_node_definition(node)
         _prompt: TaskPrompt = node_def.task_prompt
         raise NotImplementedError
-
-    def mark_dependents_dirty(self, node: dag_storage.DagNode) -> None:
-        """
-        COVERED:
-        - MUST mark dependent nodes dirty when propagating dependencies change.
-          - Condition knowledge: query dependents via self.get_dependents(node).
-          - Consequent knowledge: construct ChangeMessage and record via self.add_message.        """
-        dependents: Set[dag_storage.DagNode] = self.get_dependents(node)
-        sample_dep: dag_storage.DagNode = only_elem(dependents)
-        change_msg: dag_storage.ChangeMessage = dag_storage.ChangeMessage(
-            content=dag_storage.MessageContent(f"Dependency {node.unit_address} changed")
-        )
-        self.add_message(change_msg, to=sample_dep)
-        raise NotImplementedError

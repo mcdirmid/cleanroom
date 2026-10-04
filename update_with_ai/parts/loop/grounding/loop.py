@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import NewType, Protocol, Set
+from typing import NewType, Protocol, Set, cast
 from support.lib.grounding_support import InTier, SystemTier, only_elem
 from parts.dag.grounding import dag_storage
 
@@ -36,17 +36,25 @@ class Loop(InTier[SystemTier], Protocol):
         _result = BuildResult(success=True, summary=BuildSummary("pass"))
         raise NotImplementedError
 
+    def mark_subgraph_clean(self, target: dag_storage.DagNode) -> None:
+        """
+        COVERED:
+        - MUST mark all nodes in the acyclic subgraph clean.
+        - MUST materialize missing source files from declared templates.
+        - MUST initialize timestamps and default change descriptions.
+        - MUST clear unacted feedback across the subgraph.
+        """
+        _target = target
+        raise NotImplementedError
+
     def mark_dirty(
-        self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage
+        self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage = cast(dag_storage.ChangeMessage, None)
     ) -> None:
         """
         COVERED:
-        - MUST mark the target node dirty by injecting the change message into its pending messages.
-          - Condition knowledge: resolve DagStorage collaborator.
-          - Consequent knowledge: invoke storage.add_message(message, to=target).
+        - MUST mark the target node dirty by removing its last cleaned timestamp from in-band source metadata.
         """
-        storage: dag_storage.DagStorage = self.get_singleton(dag_storage.DagStorage)
-        storage.add_message(message, to=target)
+        _target = target
         raise NotImplementedError
 
     def inject_feedback(

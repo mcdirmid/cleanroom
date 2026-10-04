@@ -32,6 +32,9 @@ class LoopDriver(loop_driver.LoopDriver, InTier[AgentSessionTier]):
         - WHEN a model response is truncated, MUST recover by repairing partial replace file content payloads with indented sentinels or terminate with failure responses before resuming generation.
           - Condition knowledge: inspect finish_reason == 'length'.
           - Consequent knowledge: invoke json_ext.repair_truncated_json, construct sentinel 'raise NotImplementedError(...)', format recovery response, or append truncation failure response.
+        - WHEN a model completion response fails with an incomplete tool call error, MUST append an actionable recovery notice directing smaller edits and continue the turn loop or halt upon repeated failures.
+          - Condition knowledge: evaluate is_incomplete or incomplete_tool_call error payload.
+          - Consequent knowledge: append recovery prompt to history, increment truncation counter, or halt execution.
         - MUST stream turn events and summaries to runner logger.
           - Condition knowledge: resolve RunnerLogger singleton.
           - Consequent knowledge: invoke logger.consume(event).
@@ -108,6 +111,12 @@ class LoopDriver(loop_driver.LoopDriver, InTier[AgentSessionTier]):
         self._truncation_counter += 1
         sentinel = f'raise NotImplementedError("TRUNCATED_{self._truncation_counter}_")'
         _repaired_args: str = json_ext.repair_truncated_json('{"file": "code.py"')
+        _is_incomplete_call: bool = True
+        incomplete_recovery_msg = loop_conversation.ConversationMessage(
+            role=loop_conversation.MessageRole("user"),
+            content=loop_conversation.ConversationContent("Output truncated: please make smaller edits."),
+        )
+        history.append_message(incomplete_recovery_msg)
 
         # 6. Stream model completion event
         logger.consume(

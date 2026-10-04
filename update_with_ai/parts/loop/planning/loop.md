@@ -21,9 +21,10 @@ By managing end-to-end cleaning runs, injecting change and feedback messages, an
 - A caller supplies a target node in graph storage when executing a cleaning pass. [clean_pass_target_supplied]
 - The loop executes a cleaning pass over an acyclic subgraph rooted at a target node in graph storage. [execute_cleaning_pass]
 - The loop produces a build result upon pass completion. [produce_build_result]
+- A caller supplies a target node when marking an acyclic subgraph clean. [mark_clean_target_supplied]
+- The loop marks all nodes in an acyclic subgraph clean, materializing missing source files from declared templates, initializing timestamps and default change descriptions, and clearing unacted feedback. [mark_subgraph_clean]
 - A caller supplies a target node when marking a target node dirty. [mark_dirty_target_supplied]
-- A caller supplies a change message when marking a target node dirty. [mark_dirty_message_supplied]
-- The loop marks a target node dirty by injecting a change message into its pending messages. [mark_node_dirty]
+- The loop marks a target node dirty by removing its last cleaned timestamp from in-band source metadata. [mark_node_dirty]
 - A caller supplies a target node when injecting a feedback message. [inject_feedback_target_supplied]
 - A caller supplies a feedback message when injecting a feedback message. [inject_feedback_message_supplied]
 - The loop injects a caller-supplied feedback message into a target node. [inject_feedback_message]
@@ -34,5 +35,7 @@ By managing end-to-end cleaning runs, injecting change and feedback messages, an
 ## Woven Contracts
 
 - Executing a cleaning pass traverses the subgraph rooted at a target node and yields a build result. [clean_pass_target_supplied, execute_cleaning_pass, produce_build_result, dag_storage: [access_dag_dependencies]]
-- Injecting change or feedback messages records diagnostic updates in target node messages. [mark_dirty_target_supplied, mark_dirty_message_supplied, mark_node_dirty, inject_feedback_target_supplied, inject_feedback_message_supplied, inject_feedback_message, dag_storage: [add_node_messages]]
+- Marking an acyclic subgraph clean primes target and dependency source files with clean timestamps, materializing missing templates and clearing unacted feedback. [mark_clean_target_supplied, mark_subgraph_clean, dag_storage: [access_dag_dependencies, clear_node_messages]]
+- Marking a target node dirty removes its last cleaned timestamp from in-band source metadata. [mark_dirty_target_supplied, mark_node_dirty, dag_storage: [mark_node_dirty]]
+- Injecting feedback messages records diagnostic updates in target node messages. [inject_feedback_target_supplied, inject_feedback_message_supplied, inject_feedback_message, dag_storage: [add_node_messages]]
 - Broadcasting change messages propagates updates from a modified node across all registered reverse dependencies. [broadcast_change_node_supplied, broadcast_change_message_supplied, broadcast_change_message, dag_storage: [access_node_dependents, add_node_messages]]

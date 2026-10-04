@@ -40,6 +40,7 @@ exports_files([
     "grounding_lint.py",
     "lib_lint.py",
     "test_lint.py",
+    "src_metadata.py",
 ], visibility = ["//visibility:public"])
 
 pyright_library(
@@ -61,6 +62,14 @@ pyright_library(
 pyright_library(
     name = "lifecycle",
     srcs = ["lifecycle.py"],
+    pyright_deps = [],
+    imports = ["../.."],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "src_metadata",
+    srcs = ["src_metadata.py"],
     pyright_deps = [],
     imports = ["../.."],
     visibility = ["//visibility:public"],

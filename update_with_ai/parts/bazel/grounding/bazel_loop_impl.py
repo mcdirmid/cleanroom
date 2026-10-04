@@ -99,15 +99,28 @@ class Loop(loop.Loop, InTier[SystemTier]):
         )
         raise NotImplementedError
 
+    def mark_subgraph_clean(self, target: dag_storage.DagNode) -> None:
+        """
+        COVERED:
+        - MUST materialize missing source files across the target subgraph from declared templates.
+        - MUST stamp node metadata headers with the current timestamp as the last cleaned timestamp.
+        - MUST initialize missing last changed timestamps and default change descriptions.
+        - MUST clear unacted feedback across the target subgraph.
+        """
+        loader = self.get_singleton(bazel_manifest_loader.BazelManifestLoader)
+        loader.load_manifest(target)
+        storage = self.get_singleton(dag_storage.DagStorage)
+        storage.clear_messages(target)
+        raise NotImplementedError
+
     def mark_dirty(
-        self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage
+        self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage = cast(dag_storage.ChangeMessage, None)
     ) -> None:
         """
         COVERED:
-        - Marks target node dirty with change message.
+        - MUST delete the last cleaned timestamp from the target node source file metadata header.
         """
-        storage = self.get_singleton(dag_storage.DagStorage)
-        storage.add_message(message, to=target)
+        _target = target
         raise NotImplementedError
 
     def inject_feedback(

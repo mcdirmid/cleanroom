@@ -7,7 +7,7 @@ implements: loop_node_cleaner
 
 The loop_node_cleaner_impl implementation component realizes node clean execution, initial get work conversation seeding, and outcome message dispatching for agent-driven nodes.
 
-Driving node execution requires bridging abstract graph clean directives to concrete multi-turn turn loops and translating tool termination responses back into graph messages. The loop_node_cleaner_impl implementation component configures session roles for dirty nodes, initializes conversation history with get work directives, executes the agent loop, and converts termination responses into propagating graph updates.
+Driving node execution requires bridging abstract graph clean directives to concrete multi-turn turn loops and translating tool termination responses back into graph updates. The loop_node_cleaner_impl implementation component configures session roles for dirty nodes, initializes conversation history with get work directives, executes the agent loop, and converts termination responses into in-band graph state updates.
 
 **Out of scope:** The loop_node_cleaner_impl implementation component does not parse JSON build manifests, enforce repetition thresholds, or write transcript logs to disk; these are handled by other components.
 
@@ -19,14 +19,14 @@ The conversation is initialized with instructions directing the agent to call th
 
 Cleaning resolves dirty nodes by evaluating the loop driver outcome.
 
-Resolving dirty nodes produces:
+Resolving dirty nodes results in:
 
-- Change messages for downstream dependent nodes when the outcome signals successful advancement with workspace file modifications, and no change messages or change summaries when no workspace files were modified.
+- Marking the nodes clean in graph storage with the change summary from the outcome when the outcome signals successful advancement with workspace file modifications, and marking the nodes clean without advancing last changed timestamps when no workspace files were modified.
 
-- Feedback messages containing the blame explanation and addressed strictly to the declared feedback dependency node owning the blamed file when the outcome signals blame attributed to a configured blame target of the dirty nodes, producing no propagating messages and leaving the nodes dirty when the blamed file does not match a configured blame target.
+- Feedback messages containing the blame explanation and addressed strictly to the declared feedback dependency node owning the blamed file when the outcome signals blame attributed to a configured blame target of the dirty nodes, leaving the nodes dirty when the blamed file does not match a configured blame target.
 
-- No propagating messages when the outcome signals run failure, leaving the nodes dirty and communicating that processing cannot continue.
+- Leaving the nodes dirty without updating clean state when the outcome signals run failure, communicating that processing cannot continue.
 
-When dirty nodes define no task prompt, cleaning resolves the nodes without establishing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
+When dirty nodes define no task prompt, cleaning resolves the nodes without establishing an agent session phase, marking the nodes clean with a change summary when incoming pending messages indicate changes from upstream dependencies, and marking the nodes clean without changes otherwise.
 
-Cleaning dirty nodes registers the nodes as dependents to their non-silent dependencies in graph storage, delivering resulting change messages to downstream dependents and delivering feedback messages strictly to their addressed feedback dependency node. Delivering feedback messages to arbitrary dependencies, non-feedback dependencies, guides, or fixed node specifications is prohibited.
+Cleaning dirty nodes marks the nodes clean in graph storage, delivering feedback messages strictly to their addressed feedback dependency node. Delivering feedback messages to arbitrary dependencies, non-feedback dependencies, guides, or fixed node specifications is prohibited.

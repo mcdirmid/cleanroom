@@ -9,7 +9,7 @@ import dag_storage
 
 @singleton_type("system")
 class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
-    """Realizes in-memory graph indexing and protobuf text message persistence for Bazel targets."""
+    """Realizes in-memory graph indexing and in-band source file metadata persistence for Bazel targets."""
 
     @operation
     @override
@@ -28,17 +28,19 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
     @operation
     @override
     def is_dirty(self, node: dag_storage.DagNode) -> bool:
-        """Indicates whether a node requires cleaning based on messages or missing source file.
+        """Indicates whether a node requires cleaning based on missing files, metadata, feedback, or dependency updates.
 
         Args:
             node: The node whose dirty status is checked.
 
         Returns:
-            True if the node has messages or missing source file.
+            True if the node requires cleaning.
 
         POSTCONDITIONS:
-        - WHEN a node has messages or its declared source file is missing from the workspace root, MUST return true.
-        - WHEN a declared source file is missing from the workspace root, MUST record a change message to implement the source file.
+        - WHEN a declared source file is missing from the workspace root, MUST return true and record a change message to implement the source file.
+        - WHEN source file metadata is missing or its last cleaned timestamp is missing, MUST return true.
+        - WHEN source file metadata contains unacted feedback entries, MUST return true.
+        - WHEN a non-silent forward dependency has a last changed timestamp newer than the node's last cleaned timestamp, MUST return true.
         """
         ...
 
@@ -47,27 +49,38 @@ class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier]):
     def add_message(
         self, message: dag_storage.DagMessage, to: dag_storage.DagNode
     ) -> None:
-        """Adds a message to a node and persists it to package message storage.
+        """Adds a message to a node, updating in-band source metadata with unacted feedback.
 
         Args:
             message: The message to record.
             to: The target node receiving the message.
 
         POSTCONDITIONS:
-        - MUST serialize pending messages into package .update_with_ai.textproto files.
+        - WHEN message is a feedback message, MUST append an unacted feedback entry to the target source file metadata.
         """
         ...
 
     @operation
     @override
-    def register_dependent(self, node: dag_storage.DagNode) -> None:
-        """Registers a node as a dependent across its non-silent dependencies.
+    def clear_messages(self, node: dag_storage.DagNode) -> None:
+        """Clears messages for a node, updating in-band source metadata on clean.
 
         Args:
-            node: The node to register as a dependent.
+            node: The node whose messages are cleared.
 
         POSTCONDITIONS:
-        - MUST serialize reverse dependencies into package .update_with_ai.textproto files.
-        - MUST exclude silent dependencies when serializing reverse dependencies.
+        - MUST update the last cleaned timestamp and remove unacted feedback entries from source metadata.
+        """
+        ...
+
+    @operation
+    def delete_last_cleaned(self, node: dag_storage.DagNode) -> None:
+        """Deletes the last cleaned timestamp from a node's source file metadata header.
+
+        Args:
+            node: The node whose last cleaned timestamp is deleted.
+
+        POSTCONDITIONS:
+        - MUST delete the last cleaned timestamp from the source file metadata header.
         """
         ...

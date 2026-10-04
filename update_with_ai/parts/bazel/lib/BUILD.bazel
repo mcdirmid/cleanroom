@@ -8,7 +8,9 @@ package(default_visibility = ["//visibility:public"])
 pyright_library(
     name = "bazel_asm",
     srcs = ["bazel_asm.py"],
-    deps = [],
+    deps = [
+        "//update_python_with_ai/support/lib:src_metadata",
+    ],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_config",
@@ -118,7 +120,9 @@ pyright_library(
 pyright_library(
     name = "bazel_storage_impl",
     srcs = ["bazel_storage_impl.py"],
-    deps = [],
+    deps = [
+        "//update_python_with_ai/support/lib:src_metadata",
+    ],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
         "//update_with_ai/parts/agent/lib:agent_session",

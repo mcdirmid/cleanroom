@@ -680,8 +680,6 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
         if hasattr(storage_any, "_dependencies"):  # pragma: no cover (assumption: manifest resides in package directory)
             storage_any._dependencies[node] = deps
 
-        storage.register_dependent(node)
-
         all_dep_labels: List[bazel_manifest_loader.TargetLabel] = []
         all_dep_labels.extend(m.dependencies)
         all_dep_labels.extend(m.silent_dependencies)

@@ -60,6 +60,7 @@ class MockDagStorage:
         self.messages: dict[dag_storage.DagNode, list[dag_storage.DagMessage]] = {}
         self.dependents_map: dict[dag_storage.DagNode, Set[dag_storage.DagNode]] = {}
         self.dependencies_map: dict[dag_storage.DagNode, Set[dag_storage.DagDependency]] = {}
+        self._source_files: dict[dag_storage.DagNode, str] = {}
 
     def get_dependencies(self, node: dag_storage.DagNode) -> Set[dag_storage.DagDependency]:
         return self.dependencies_map.get(node, set())
@@ -88,6 +89,15 @@ class MockDagStorage:
     def clear_messages(self, node: dag_storage.DagNode) -> None:
         self.messages.pop(node, None)
         self.dirty_nodes.discard(node)
+        if node in self._source_files:
+            from pathlib import Path
+            from support.lib import src_metadata
+            src_path = Path(self._source_files[node])
+            if src_path.is_file():
+                src_metadata.mark_clean(src_path)
+
+    def delete_last_cleaned(self, node: dag_storage.DagNode) -> None:
+        self.dirty_nodes.add(node)
 
 
 class MockLoopCleaner:
@@ -278,17 +288,79 @@ class BazelLoopImplTest(unittest.TestCase):
             self.assertIn("failed", result.summary)
 
     def test_mark_dirty(self) -> None:
-        """CUJ: Marking a target node dirty by injecting a change message."""
+        """CUJ: Marking a target node dirty by deleting last_cleaned."""
         target = _make_dag_node("//pkg:lib")
-        change = dag_storage.ChangeMessage()
 
         with enter_phase("system", registry=self.registry):
             runner = get_singleton(loop.Loop)
-            # Requirement: MUST mark the target node dirty by injecting the change message into its pending messages.
-            runner.mark_dirty(target, change)
+            # Requirement: MUST delete the last cleaned timestamp from the target node source file metadata header.
+            runner.mark_dirty(target)
 
             self.assertTrue(self.storage.is_dirty(target))
-            self.assertIn(change, self.storage.get_messages(target))
+
+    def test_mark_subgraph_clean(self) -> None:
+        """CUJ: Marking an acyclic subgraph clean with template materialization."""
+        import tempfile
+        from pathlib import Path
+        from support.lib import src_metadata
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = _make_dag_node("//pkg:app")
+            dep = _make_dag_node("//pkg:lib")
+            self.storage.dependencies_map[root] = {
+                dag_storage.DagDependency(node=dep, is_silent=False)
+            }
+            root_src = Path(tmp_dir) / "app.py"
+            dep_src = Path(tmp_dir) / "lib.py"
+            tmpl_file = Path(tmp_dir) / "template.py"
+            tmpl_file.write_text("# template content\n", encoding="utf-8")
+
+            # root_src exists with unacted feedback
+            root_src.write_text(
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-02T14:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-02T14:00:00Z\n"
+                "# CHANGE: Initial\n"
+                "# FEEDBACK:\n"
+                "# - [2026-10-02T14:10:00Z from user]: fix me\n"
+                "# --- END CLEANROOM METADATA ---\n"
+                "print('app')\n",
+                encoding="utf-8",
+            )
+            self.storage._source_files[root] = str(root_src)
+            self.storage._source_files[dep] = str(dep_src)
+
+            self.manifest_loader.manifests["//pkg:lib"] = bazel_manifest_loader.TargetManifest(
+                label=bazel_manifest_loader.TargetLabel("//pkg:lib"),
+                template=bazel_manifest_loader.sandbox_file_editor.FileTemplate(str(tmpl_file)),
+            )
+
+            self.storage.dirty_nodes.add(root)
+            self.storage.dirty_nodes.add(dep)
+
+            with enter_phase("system", registry=self.registry):
+                runner = get_singleton(loop.Loop)
+                runner.mark_subgraph_clean(root)
+
+                # Both nodes should have messages cleared in storage
+                self.assertFalse(self.storage.is_dirty(root))
+                self.assertFalse(self.storage.is_dirty(dep))
+
+                # root_src should have feedback cleared and LAST_CLEANED updated
+                meta_root = src_metadata.extract_metadata(root_src)
+                self.assertIsNotNone(meta_root)
+                assert meta_root is not None
+                self.assertEqual(meta_root.feedback, [])
+                self.assertIsNotNone(meta_root.last_cleaned)
+
+                # dep_src should have been materialized from template
+                self.assertTrue(dep_src.is_file())
+                self.assertIn("# template content", dep_src.read_text(encoding="utf-8"))
+                meta_dep = src_metadata.extract_metadata(dep_src)
+                self.assertIsNotNone(meta_dep)
+                assert meta_dep is not None
+                self.assertEqual(meta_dep.change_summary, "new file")
+                self.assertIsNotNone(meta_dep.last_cleaned)
 
     def test_inject_feedback(self) -> None:
         """CUJ: Injecting caller-supplied feedback message to mark a node dirty."""

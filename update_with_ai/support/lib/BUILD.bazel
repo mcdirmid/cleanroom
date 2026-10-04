@@ -27,6 +27,12 @@ pyright_library(
 )
 
 alias(
+    name = "src_metadata",
+    actual = "//update_python_with_ai/support/lib:src_metadata",
+    visibility = ["//visibility:public"],
+)
+
+alias(
     name = "high_lint",
     actual = "//update_python_with_ai/support/lib:high_lint",
     visibility = ["//visibility:public"],

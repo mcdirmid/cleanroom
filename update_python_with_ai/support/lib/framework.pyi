@@ -1,3 +1,9 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-04T02:03:40Z
+# LAST_CHANGED: 2026-10-04T02:03:40Z
+# CHANGE: new file
+# --- END CLEANROOM METADATA ---
+
 """Cleanroom Specification Framework Stubs: Structural markers for pure .pyi specifications.
 
 Defines decorator annotations and structural types used in low-level specifications
@@ -111,5 +117,14 @@ def operation(func: F) -> F:
     In @singleton_type and @poly_type classes, every member method is either an @operation
     (performing an action or state transition) or a @property (exposing state or references).
     Operations define preconditions (PRECONDITIONS:) and postconditions (POSTCONDITIONS:).
+    """
+    ...
+
+
+def override(func: F) -> F:
+    """Marks a member as a specialized implementation or narrowing of a supertype member.
+
+    Override is used to indicate that a method provides a more specific implementation
+    of a supertype method, typically in subclass hierarchies.
     """
     ...

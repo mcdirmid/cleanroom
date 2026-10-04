@@ -1,6 +1,6 @@
+# Requirements specified in openai_conversation_impl.pyi
 import json
 from typing import Any, List, Optional, Sequence
-from update_with_ai.parts.agent.lib import agent_config
 from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.loop.lib import loop_conversation
 from update_with_ai.parts.sandbox.lib import tool_provider
@@ -8,8 +8,30 @@ from support.lib.lifecycle import (
     LifecycleRegistry,
     Singleton,
     get_default_registry,
-    get_singleton,
 )
+
+_SUPPRESSION_BUFFER_LIMIT = 3
+
+_PATH_PARAM_NAMES = frozenset({
+    "path",
+    "target_file",
+    "targetfile",
+    "file",
+    "file_alias",
+    "file_path",
+    "filepath",
+    "file_name",
+    "filename",
+})
+
+
+def _is_path_param(name: str) -> bool:
+    normalized = name.lower().replace("-", "_")
+    return (
+        normalized in _PATH_PARAM_NAMES
+        or normalized.endswith("_path")
+        or normalized.endswith("_file")
+    )
 
 
 class Conversation(loop_conversation.Conversation, Singleton):
@@ -93,72 +115,74 @@ class Conversation(loop_conversation.Conversation, Singleton):
 
         effective_reminder = tool_response.reminder
         if tool_response.suppression_key is not None:
-            for i in range(len(self._messages) - 1, -1, -1):
-                if (
-                    self._suppression_keys[i] == tool_response.suppression_key
-                    and not self._messages[i].is_stub
-                ):
-                    old_msg = self._messages[i]
-                    if effective_reminder is None:
-                        effective_reminder = old_msg.reminder
-                    self._messages[i] = loop_conversation.ConversationMessage(
-                        role=old_msg.role,
-                        content=loop_conversation.ConversationContent("[Superseded]"),
-                        tool_call_id=old_msg.tool_call_id,
-                        tool_name=old_msg.tool_name,
-                        reminder=old_msg.reminder,
-                        is_stub=True,
-                    )
-                    if old_msg.tool_call_id:
-                        for j in range(i - 1, -1, -1):
-                            if (
-                                self._messages[j].role == loop_conversation.MessageRole("assistant")
-                                and self._messages[j].tool_call_id == old_msg.tool_call_id
-                            ):
-                                asst_msg = self._messages[j]
+            if effective_reminder is None:
+                for i in range(len(self._messages) - 1, -1, -1):
+                    if (
+                        self._suppression_keys[i] == tool_response.suppression_key
+                        and self._messages[i].reminder is not None
+                    ):
+                        effective_reminder = self._messages[i].reminder
+                        break
+
+            matching_indices = [
+                i
+                for i in range(len(self._messages))
+                if self._suppression_keys[i] == tool_response.suppression_key
+                and not self._messages[i].is_stub
+            ]
+
+            keep_preceding = _SUPPRESSION_BUFFER_LIMIT - 1
+            num_to_stub = max(0, len(matching_indices) - keep_preceding)
+            indices_to_stub = matching_indices[:num_to_stub]
+
+            for old_idx in indices_to_stub:
+                old_msg = self._messages[old_idx]
+                self._messages[old_idx] = loop_conversation.ConversationMessage(
+                    role=old_msg.role,
+                    content=loop_conversation.ConversationContent("[Superseded]"),
+                    tool_call_id=old_msg.tool_call_id,
+                    tool_name=old_msg.tool_name,
+                    reminder=old_msg.reminder,
+                    is_stub=True,
+                )
+                if old_msg.tool_call_id:
+                    for j in range(old_idx - 1, -1, -1):
+                        if (
+                            self._messages[j].role == loop_conversation.MessageRole("assistant")
+                            and self._messages[j].tool_call_id == old_msg.tool_call_id
+                        ):
+                            asst_msg = self._messages[j]
+                            new_tool_args: Optional[loop_conversation.SerializedArguments] = asst_msg.tool_arguments
+                            if asst_msg.tool_arguments:
                                 try:
-                                    agent_cfg = get_singleton(agent_config.AgentConfig)
-                                    keep_n = int(agent_cfg.supersede_arg_keep)
-                                except (KeyError, LookupError, AttributeError):  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
-                                    keep_n = 20
-
-                                new_tool_args: Optional[loop_conversation.SerializedArguments] = asst_msg.tool_arguments
-                                if asst_msg.tool_arguments:
-                                    try:
-                                        parsed = json.loads(str(asst_msg.tool_arguments))
-                                        if isinstance(parsed, dict):
-                                            elided: dict[str, Any] = {}
-                                            for k, v in parsed.items():
-                                                if isinstance(v, str):
-                                                    if keep_n <= 0:
-                                                        elided[k] = "[STUB]"
-                                                    elif len(v) > keep_n:
-                                                        elided[k] = f"[STUB]...{v[-keep_n:]}"
-                                                    else:
-                                                        elided[k] = v
-                                                else:
-                                                    elided[k] = v
-                                            new_tool_args = loop_conversation.SerializedArguments(
-                                                json.dumps(elided, sort_keys=True)
-                                            )
-                                        else:
-                                            new_tool_args = loop_conversation.SerializedArguments("{}")  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
-                                    except (json.JSONDecodeError, TypeError):  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
+                                    parsed = json.loads(str(asst_msg.tool_arguments))
+                                    if isinstance(parsed, dict):
+                                        elided: dict[str, Any] = {}
+                                        for k, v in parsed.items():
+                                            if _is_path_param(k) or not isinstance(v, str):
+                                                elided[k] = v
+                                            else:
+                                                elided[k] = "[STUB]"
+                                        new_tool_args = loop_conversation.SerializedArguments(
+                                            json.dumps(elided, sort_keys=True)
+                                        )
+                                    else:
                                         new_tool_args = loop_conversation.SerializedArguments("{}")  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
-                                else:
+                                except (json.JSONDecodeError, TypeError):  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
                                     new_tool_args = loop_conversation.SerializedArguments("{}")  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
+                            else:
+                                new_tool_args = loop_conversation.SerializedArguments("{}")  # pragma: no cover (assumption: SerializedArguments contains valid JSON)
 
-                                self._messages[j] = loop_conversation.ConversationMessage(
-                                    role=asst_msg.role,
-                                    content=asst_msg.content,
-                                    tool_call_id=asst_msg.tool_call_id,
-                                    tool_name=asst_msg.tool_name,
-                                    reminder=asst_msg.reminder,
-                                    tool_arguments=new_tool_args,
-                                    is_stub=True,
-                                )
-                                break
-                    break
+                            self._messages[j] = loop_conversation.ConversationMessage(
+                                role=asst_msg.role,
+                                content=asst_msg.content,
+                                tool_call_id=asst_msg.tool_call_id,
+                                tool_name=asst_msg.tool_name,
+                                reminder=asst_msg.reminder,
+                                tool_arguments=new_tool_args,
+                                is_stub=True,
+                            )
+                            break
 
         self._messages.append(
             loop_conversation.ConversationMessage(

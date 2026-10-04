@@ -1,3 +1,9 @@
+# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-04T02:03:40Z
+# LAST_CHANGED: 2026-10-04T02:03:40Z
+# CHANGE: new file
+# --- END CLEANROOM METADATA ---
+
 '''
 # Cleanroom Lifecycle Management Specification & Usage Guide
 

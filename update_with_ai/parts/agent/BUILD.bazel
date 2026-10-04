@@ -40,3 +40,8 @@ update_python_with_ai(
     name = "agent_storage",
     module_deps = ['//update_with_ai/parts/dag:dag_storage'],
 )
+
+update_python_with_ai(
+    name = "src_metadata_ext",
+    module_deps = [],
+)

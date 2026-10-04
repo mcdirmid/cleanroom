@@ -15,7 +15,7 @@ class Conversation(loop_conversation.Conversation, InTier[AgentSessionTier]):
     DISCHARGED:
     - initialize: Discharges initial message intake and synthetic call injection for unprompted responses.
     - append_message: Discharges message append tracking.
-    - append_tool_response: Discharges response append, suppression stubbing, arg elision, and reminder retention.
+    - append_tool_response: Discharges response append, suppression buffering, all-or-nothing arg stubbing, and reminder retention.
     - get_model_request: Discharges role schema assembly and active reminder formatting.
     """
 
@@ -79,20 +79,22 @@ class Conversation(loop_conversation.Conversation, InTier[AgentSessionTier]):
     ) -> None:
         """
         COVERED:
-        - MUST replace preceding responses sharing suppression keys with stubs.
+        - MUST retain a buffer of up to three most recent responses sharing suppression keys.
           - Condition knowledge: evaluate tool_response.suppression_key is not None.
+          - Consequent knowledge: evaluate buffer count of matching unsuppressed responses.
+        - MUST replace preceding responses beyond the buffer limit with stubs.
+          - Condition knowledge: evaluate matching unsuppressed count exceeding buffer limit.
           - Consequent knowledge: construct stub ConversationMessage with is_stub=True and content='[Superseded]'.
-        - MUST elide string arguments exceeding supersede keep limit.
-          - Condition knowledge: resolve AgentConfig singleton and access cfg.supersede_arg_keep.
-          - Condition knowledge: evaluate string argument length against supersede keep limit.
-          - Consequent knowledge: invoke json_ext.parse_json and json_ext.dump_json to construct elided argument string and stub assistant message.
+        - MUST preserve file path parameters and non-string arguments in superseded tool calls.
+          - Condition knowledge: inspect tool argument keys for path and non-string parameters.
+          - Consequent knowledge: preserve path parameter values and non-string values intact.
+        - MUST replace other string arguments with a stub marker in superseded tool calls.
+          - Condition knowledge: inspect string arguments not representing file path parameters.
+          - Consequent knowledge: construct stub assistant message with string arguments set to '[STUB]'.
         - MUST retain reminders on stubs and inherit them when omitted.
           - Condition knowledge: evaluate tool_response.reminder is None and inspect prior reminder.
-          - Consequent knowledge: inherit prior reminder into effective_reminder.        """
-        # Resolve AgentConfig singleton to evaluate supersede keep limit
-        cfg = self.get_singleton(agent_config.AgentConfig)
-        keep_n: int = int(cfg.supersede_arg_keep)
-
+          - Consequent knowledge: inherit prior reminder into effective_reminder.
+        """
         # Knowledge: evaluate suppression key and construct stubbed preceding response
         _has_suppression: bool = tool_response.suppression_key is not None
         old_msg = only_elem(self._messages)
@@ -111,19 +113,18 @@ class Conversation(loop_conversation.Conversation, InTier[AgentSessionTier]):
             is_stub=True,
         )
 
-        # Knowledge: evaluate argument length against supersede keep limit and construct stub assistant call
+        # Knowledge: construct stub assistant call preserving path parameters and stubbing other strings
         arg_str = str(tool_arguments)
         _parsed_args = json_ext.parse_json(arg_str)
-        _exceeds_limit: bool = len(arg_str) > keep_n
-        elided_args = loop_conversation.SerializedArguments(
-            json_ext.dump_json({"arg": f"[STUB]...{arg_str[-keep_n:]}"}, sort_keys=True)
+        stubbed_args = loop_conversation.SerializedArguments(
+            json_ext.dump_json({"path": "foo.py", "content": "[STUB]"}, sort_keys=True)
         )
         asst_stub = loop_conversation.ConversationMessage(
             role=loop_conversation.MessageRole("assistant"),
             content=loop_conversation.ConversationContent(""),
             tool_call_id=tool_call_id,
             tool_name=tool_name,
-            tool_arguments=elided_args,
+            tool_arguments=stubbed_args,
             is_stub=True,
         )
 

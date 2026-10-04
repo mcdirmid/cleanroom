@@ -88,16 +88,6 @@ pyright_library(
     imports = ["../../..", "."],
 )
 
-pyright_library(
-    name = "update_with_ai_proto_ext",
-    srcs = ["update_with_ai_proto_ext.py"],
-    deps = [],
-    pyright_deps = [
-        "//update_python_with_ai/support/lib:grounding_support",
-    ],
-    imports = ["../../..", "."],
-)
-
 build_derived_test(
     name = "targets_derived_test",
 )

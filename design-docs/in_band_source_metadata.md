@@ -176,16 +176,18 @@ A node $N$ in the DAG is considered **dirty** if and only if at least one of the
 
 $$\begin{aligned}
 \text{is\_dirty}(N) \iff & \text{src\_file\_missing}(N) \\
+& \lor \text{metadata\_invalid\_or\_missing}(N) \\
 & \lor \text{has\_feedback}(N) \\
-& \lor \left(\exists D \in \text{NonSilentDependencies}(N) \mid N.\text{last\_cleaned} < D.\text{last\_changed}\right) \\
-& \lor \text{metadata\_invalid\_or\_missing}(N)
+& \lor \left(\exists D \in \text{NonSilentDependencies}(N) \mid N.\text{last\_cleaned} < D.\text{last\_changed}\right)
 \end{aligned}$$
+
+- **`metadata_invalid_or_missing(N)`**: If the in-band metadata comment block is missing, unparseable, or its `LAST_CLEANED` attribute is missing, $N$ evaluates as **dirty**.
 
 ```mermaid
 flowchart TD
     Start["Check is_dirty(Node N)"] --> Missing{"Is src file<br/>missing on disk?"}
     Missing -- Yes --> Dirty["DIRTY: Node requires cleaning"]
-    Missing -- No --> MetaValid{"Is metadata block<br/>valid & parseable?"}
+    Missing -- No --> MetaValid{"Is metadata block present<br/>and has LAST_CLEANED?"}
     MetaValid -- No --> Dirty
     MetaValid -- Yes --> HasFB{"Does metadata contain<br/>a FEEDBACK section?"}
     HasFB -- Yes --> Dirty
@@ -194,12 +196,43 @@ flowchart TD
     CheckDeps -- No --> Clean["CLEAN: Node is up-to-date"]
 ```
 
-### 4.2 Non-Silent vs. Silent Dependencies
+### 4.2 Explicit CLI Operations & State Transitions
+
+Cleanroom provides dedicated CLI targets per node for manual lifecycle management:
+
+1. **`_dirty` (`bazel run //pkg:target_dirty`)**:
+   - Deletes the `LAST_CLEANED` field from the node's source file header in-place.
+   - Retains `LAST_CHANGED` and `CHANGE:` descriptions without modification.
+   - Because `LAST_CLEANED` is absent, the node immediately evaluates as **dirty** on the next check.
+
+2. **`_mark_clean` (`bazel run //pkg:target_mark_clean`)**:
+   - Traverses the entire acyclic subgraph rooted at `target`.
+   - For every node in the subgraph:
+     - **Template Materialization**: If the declared source file does not exist on disk, it is materialized from its declared template (or created as an empty file if no template is declared).
+     - **Header Stamping**: Sets `LAST_CLEANED = T_now`. If `LAST_CHANGED` is missing, sets `LAST_CHANGED = T_now`. If `CHANGE:` is missing, sets `CHANGE: new file`.
+     - **Feedback Clearance**: Strips any unacted `FEEDBACK:` section.
+     - **In-Memory Clearance**: Clears pending in-memory messages for the node.
+   - Used to prime existing codebases into a clean baseline state and reset subgraphs.
+
+3. **`_change` (`bazel run //pkg:target_change -- "<change description>"`)**:
+   - Updates **only the target node** (does not modify the rest of the subgraph):
+     - Sets `LAST_CLEANED = T_now`.
+     - Sets `LAST_CHANGED = T_now`.
+     - Sets `CHANGE: <change description>`.
+     - Strips any unacted `FEEDBACK:` section.
+   - **Dynamic Downstream Invalidation**: All non-silent downstream dependents automatically evaluate as dirty dynamically on subsequent checks because their `LAST_CLEANED` is older than this node's new `LAST_CHANGED`.
+
+4. **`_feedback` (`bazel run //pkg:target_feedback -- "<explanation>"`)**:
+   - Appends an unacted feedback record to the target node's header:
+     `- [<UTC timestamp> from user]: <explanation>`
+   - The target node immediately evaluates as dirty because `has_feedback(N) == True`.
+
+### 4.3 Non-Silent vs. Silent Dependencies
 In Cleanroom, dependencies are declared as either propagating or silent:
 - **Non-Silent Dependencies (`is_silent == False`)**: Standard behavioral contracts. When an upstream contract changes, its dependents must re-verify compliance against the new contract. If $D.\text{last\_changed} > N.\text{last\_cleaned}$, $N$ is dirty.
 - **Silent Dependencies (`is_silent == True`)**: Reference material, meta-rules, or background utilities (e.g. `meta_guide.md`, static type definitions, formatting helpers). A modification to a silent dependency does **not** dirty dependent nodes.
 
-### 4.3 Why Reverse Dependencies on Disk Are Obsolete
+### 4.4 Why Reverse Dependencies on Disk Are Obsolete
 In the legacy `.update_with_ai.textproto` model:
 - Modifying node $D$ required computing $\text{ReverseDependencies}(D)$ and mutating every dependent node's `.update_with_ai.textproto` file on disk.
 - If reverse dependencies were incomplete or out of date, downstream nodes remained incorrectly marked clean.

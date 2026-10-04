@@ -57,8 +57,3 @@ update_python_with_ai(
 )
 
 
-update_python_with_ai(
-    name = "update_with_ai_proto_ext",
-    module_deps = [],
-)
-

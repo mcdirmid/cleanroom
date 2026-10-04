@@ -18,8 +18,10 @@ A system's *dag storage* stores node graph structure, status, and messages.
 
 A dag storage provides access to a node's *dag dependencies* that refer to its direct upstream nodes in the graph, identifying whether a dependency is *silent* to preclude change message propagation from that dependency.
 
-A dag storage can register a node as a dependent to all of its non-silent dependencies, can access dependents registered to a node, and can clear the dependents registered to a node.
-
 A *dag message* is text content explaining to the agent why a node requires cleaning, and is either a *change message* informing of changes made to upstream dependencies, or a *feedback message* blaming a specific dependency target node for defects detected by downstream dependents.
 
-A dag storage can add messages to, access messages for, and clear messages from a node. A dag storage exposes whether a node is dirty, meaning it requires cleaning. A node is considered dirty if it has messages.
+A dag storage provides access to messages for a node, can record feedback messages blaming dependency target nodes, can record change messages marking a target node dirty, and exposes whether a node is *dirty*, meaning it requires cleaning.
+
+A node is considered dirty if its source artifact is missing on disk, if its in-band metadata is missing, invalid, or uncleaned, if it has unacted feedback messages, or if any non-silent dependency was changed after the node was last cleaned.
+
+Recording a change message against a target node marks it dirty by updating its in-band metadata with the change description and clearing its last cleaned status.

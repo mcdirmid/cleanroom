@@ -121,8 +121,8 @@ pyright_library(
     pyright_deps = [
         "//update_python_with_ai/support/lib:grounding_support",
         "//update_with_ai/parts/agent/grounding:agent_storage",
+        "//update_with_ai/parts/agent/grounding:src_metadata_ext",
         "//update_with_ai/parts/core/grounding:file_paths",
-        "//update_with_ai/parts/core/grounding:update_with_ai_proto_ext",
         "//update_with_ai/parts/dag/grounding:dag_storage",
         ":bazel_target",
     ],
