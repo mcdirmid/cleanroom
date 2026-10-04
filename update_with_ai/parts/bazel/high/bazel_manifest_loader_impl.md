@@ -35,6 +35,6 @@ The bazel manifest loader:
 
 - Records declared primary source files and silent source files in agent storage, normalizing repository-relative paths across package directories and workspace roots without duplicating package path segments.
 
-- Registers declared direct dependencies and non-propagating silent dependencies in agent storage.
+- Registers declared direct dependencies, feedback dependencies, and non-propagating silent dependencies in agent storage.
 
 - Synthesizes empty node definitions for referenced dependency targets lacking manifests.

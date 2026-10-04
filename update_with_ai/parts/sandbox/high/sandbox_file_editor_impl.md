@@ -1,29 +1,27 @@
 # sandbox_file_editor_impl implementation component
 
-imports: filesystem_ext, tool_provider, agent_file_alias, agent_node_config, agent_config, template_format
+imports: filesystem_ext, tool_provider, agent_file_alias, agent_node_config, agent_config
 implements: sandbox_file_editor
 
 ## Purpose
 
 The sandbox_file_editor_impl implementation component realizes targeted in-place text replacement for writable workspace files.
 
-Unchecked writes to source code can introduce partial edits, exceed LLM window constraints, or write to invalid file coordinates. The sandbox_file_editor_impl implementation component provides guarded in-memory and disk operations that validate string uniqueness, check line boundary conditions, and perform atomic template initialization for newly configured tasks.
+Unchecked writes to source code can introduce partial edits, exceed LLM window constraints, or write to invalid file coordinates. The sandbox_file_editor_impl implementation component provides guarded in-memory and disk operations that validate string uniqueness and check line boundary conditions.
 
 **Out of scope:** The sandbox_file_editor_impl implementation component does not enforce git version control, execute code formatters, or resolve task dependencies; these are handled by other components.
 
 ## Types and Behavior
 
-The edit manager provides the replace file content tool for the agent session when mcp mode is inactive, installs no editing tools when mcp mode is active, and provides a can write operation validating write access for a read-write file. Materializing templates retrieves configured templates from the node config, formats initial template content using the template formatter with session template parameters, checks whether target files exist in the filesystem at the host path formed from the alias manager workspace root and the read-write file workspace path, writes formatted template content for missing files while preserving existing files, and records initial content baselines for active read-write files.
+The edit manager provides the replace file content tool for the agent session when mcp mode is inactive, installs no editing tools when mcp mode is active, and provides a can write operation validating write access for a read-write file. At session initialization, the edit manager records initial content baselines for active read-write files.
 
-The edit manager exposes whether workspace file writes occurred during the session by comparing current workspace file content against initial content before editing, tracks a file update revision that increments whenever workspace files are updated, computes the file hash by reading file content from the filesystem at its resolved host path and returning an MD5 hexadecimal digest of the content, and exposes read-write files locked against write, supporting locking and unlocking individual read-write files. The edit manager tracks the last read or edited file alias across the session, recording file reads from the file reader and file edits from editing tools.
+The edit manager exposes whether workspace file writes occurred during the session by comparing current workspace file content against initial content before editing, tracks a file update revision that increments whenever workspace files are updated, and computes the file hash by reading file content from the filesystem at its resolved host path and returning an MD5 hexadecimal digest of the content. The edit manager tracks the last read or edited file alias across the session, recording file reads from the file reader and file edits from editing tools.
 
 Editing tools write to read-write files in the workspace.
 
 Editing tool execution fails if:
 
 - The file alias is not a read-write file, reminding the agent that only declared read-write files can be written.
-
-- The file alias is locked against write, reminding the agent that files that have been the target of a submit, fail, or blame cannot be written.
 
 - The edit produces no change to file content, reminding the agent that the edit had no effect and such edits will fail.
 
@@ -69,6 +67,5 @@ Executing can write:
 
 - Fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be written.
 
-- Fails if the file alias is locked against write, reminding the agent that files that have been the target of a submit, fail, or blame cannot be written.
+- Records the file edit in the edit manager and produces a successful response indicating that write access is permitted, when a declared read-write file is supplied.
 
-- Records the file edit in the edit manager and produces a successful response indicating that write access is permitted, when an unlocked read-write file is supplied.

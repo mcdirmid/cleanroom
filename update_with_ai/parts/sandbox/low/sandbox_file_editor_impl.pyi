@@ -11,7 +11,7 @@ import tool_provider
 
 @singleton_type("agent_session")
 class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier]):
-    """Realizes workspace file modification tracking, write locking, and template materialization."""
+    """Realizes workspace file modification tracking."""
 
     @property
     @override
@@ -30,50 +30,7 @@ class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier]):
 
     @property
     @override
-    def locked_files(self) -> Set[agent_file_alias.ReadWriteFile]:
-        ...
-
-    @property
-    @override
     def last_read_or_edited_file(self) -> Optional[agent_file_alias.FileAlias]:
-        ...
-
-    @operation
-    @override
-    def lock_file(self, file: agent_file_alias.ReadWriteFile) -> None:
-        """Locks a read-write file against modification.
-
-        Args:
-            file: The read-write file to lock.
-
-        POSTCONDITIONS:
-        - MUST lock the read-write file against modification.
-        """
-        ...
-
-    @operation
-    @override
-    def unlock_file(self, file: agent_file_alias.ReadWriteFile) -> None:
-        """Unlocks a read-write file to allow modification.
-
-        Args:
-            file: The read-write file to unlock.
-
-        POSTCONDITIONS:
-        - MUST unlock the read-write file to allow modification.
-        """
-        ...
-
-    @operation
-    @override
-    def materialize_templates(self) -> None:
-        """Materializes configured templates into missing read-write files.
-
-        POSTCONDITIONS:
-        - MUST format initial template content using session template parameters.
-        - MUST write formatted template content for missing read-write files while preserving existing files.
-        - MUST record initial content baselines for active read-write files.
-        """
         ...
 
     @operation
@@ -117,8 +74,7 @@ class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier]):
 
         POSTCONDITIONS:
         - WHEN the target file is not a declared read-write file, MUST fail reminding the agent that only declared read-write files can be written.
-        - WHEN the target file is locked against write, MUST fail reminding the agent that files targeted by submit, fail, or blame cannot be written.
-        - WHEN an unlocked read-write file is supplied, MUST record the file edit and confirm write access.
+        - WHEN a declared read-write file is supplied, MUST record the file edit and confirm write access.
         """
         ...
 

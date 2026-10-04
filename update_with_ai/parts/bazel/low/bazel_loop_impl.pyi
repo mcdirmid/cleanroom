@@ -1,5 +1,6 @@
 """Bazel loop implementation low-level specification."""
 
+from typing import Optional
 from framework import operation, override, singleton_type
 from support.lib.lifecycle import InTier, SystemTier
 import dag_storage
@@ -54,7 +55,7 @@ class Loop(loop.Loop, InTier[SystemTier]):
     @operation
     @override
     def mark_dirty(
-        self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage = ...
+        self, target: dag_storage.DagNode, message: Optional[dag_storage.ChangeMessage] = ...
     ) -> None:
         """Marks a target node dirty by deleting its last cleaned timestamp.
 

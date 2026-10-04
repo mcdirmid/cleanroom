@@ -91,13 +91,29 @@ class Loop(InTier[SystemTier], Protocol):
     def broadcast_change(
         self, source: dag_storage.DagNode, message: dag_storage.ChangeMessage
     ) -> None:
-        """Broadcasts a change message from a node to all of its reverse dependencies.
+        """Records a change message on a target node in graph storage, dynamically invalidating downstream dependencies.
 
         Args:
             source: The modified node.
             message: The change message informing of changes made.
 
         POSTCONDITIONS:
-        - MUST broadcast the change message to all reverse dependencies of the node.
+        - MUST mark the target node clean in graph storage with the change description from the change message.
         """
         ...
+
+    @operation
+    def record_change(
+        self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage
+    ) -> None:
+        """Records a change message on a target node in graph storage, dynamically invalidating downstream dependencies.
+
+        Args:
+            target: The modified node.
+            message: The change message informing of changes made.
+
+        POSTCONDITIONS:
+        - MUST mark the target node clean in graph storage with the change description from the change message.
+        """
+        ...
+

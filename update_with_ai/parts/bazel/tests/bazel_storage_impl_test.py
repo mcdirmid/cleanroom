@@ -26,6 +26,7 @@ from update_with_ai.parts.core.lib.file_paths import (
 from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget, NodeDirectory
 from update_with_ai.parts.dag.lib.dag_storage import (
     ChangeMessage,
+    ChangeDescription,
     DagStorage,
     DagDependency,
     FeedbackMessage,
@@ -125,7 +126,7 @@ class BazelStorageImplTest(unittest.TestCase):
 
             # Dependencies
             dep = DagDependency(node=dep_node, is_silent=False)
-            cast(Any, storage)._dependencies[node] = {dep}
+            storage.store_dependencies(node, {dep})
             # Requirement: [AgentStorage] MUST return the set of upstream dependencies for the node.
             # Requirement: MUST return the set of upstream dependencies for the node.
             self.assertEqual(storage.get_dependencies(node), {dep})
@@ -147,8 +148,8 @@ class BazelStorageImplTest(unittest.TestCase):
             )
 
         with enter_phase("system", registry=self.registry) as scope:
-            storage = scope.get_singleton(AgentStorage)
-            cast(Any, storage)._source_files[node] = rel_path
+            storage = scope.get_singleton(AgentStorageImpl)
+            storage.record_source_file(node, rel_path)
             self.assertFalse(storage.is_dirty(node))
             self.assertEqual(storage.get_messages(node), set())
 
@@ -171,10 +172,16 @@ class BazelStorageImplTest(unittest.TestCase):
                 content = f.read()
             self.assertIn("Syntax error on line 5", content)
 
-            # Clear messages resets dirty state and updates metadata
-            # Requirement: MUST clear all messages from the node.
-            # Requirement: MUST update the last cleaned timestamp and remove unacted feedback entries from source metadata.
+            # Clear messages resets in-memory messages but does not alter source file metadata on disk
             storage.clear_messages(node)
+            self.assertEqual(len(storage.get_messages(node)), 1)
+            self.assertTrue(all(isinstance(m, FeedbackMessage) for m in storage.get_messages(node)))
+            with open(abs_src, "r", encoding="utf-8") as f:
+                self.assertIn("Syntax error on line 5", f.read())
+
+            # Mark node clean resets dirty state and updates metadata
+            # Requirement: MUST update the last cleaned timestamp and remove unacted feedback entries from source metadata.
+            storage.mark_node_clean(node)
             self.assertFalse(storage.is_dirty(node))
             self.assertEqual(storage.get_messages(node), set())
             with open(abs_src, "r", encoding="utf-8") as f:
@@ -190,7 +197,7 @@ class BazelStorageImplTest(unittest.TestCase):
 
             # DagNode with declared source file that does not exist yet
             rel_path = "pkg/src/target.py"
-            cast(Any, storage)._source_files[node] = rel_path
+            storage.record_source_file(node, rel_path)
             # Requirement: WHEN a declared source file is missing from the workspace root, MUST return true and record a change message to implement the source file.
             self.assertTrue(storage.is_dirty(node))
 
@@ -212,13 +219,12 @@ class BazelStorageImplTest(unittest.TestCase):
                 f.write("# source file\n")
             self.assertTrue(storage.is_dirty(node))
 
-            # Clearing messages once the source file exists writes valid cleaned metadata and clears the dirty state
-            # Requirement: MUST clear all messages from the node.
-            storage.clear_messages(node)
+            # Marking node clean once the source file exists writes valid cleaned metadata and clears the dirty state
+            storage.mark_node_clean(node)
             self.assertFalse(storage.is_dirty(node))
 
-    def test_dependents_and_dependency_timestamps_dirty_state(self) -> None:
-        """CUJ: Querying dependents and dynamic dirty evaluation from dependency timestamps."""
+    def test_dependency_timestamps_dirty_state(self) -> None:
+        """CUJ: Dynamic dirty evaluation from dependency timestamps."""
         upstream = _make_dag_node("//pkg/lib:core", "lib")
         downstream = _make_dag_node("//pkg/app:main", "lib")
         silent_upstream = _make_dag_node("//pkg/silent:tool", "lib")
@@ -228,14 +234,13 @@ class BazelStorageImplTest(unittest.TestCase):
             assert isinstance(storage, AgentStorageImpl)
 
             # Set dependencies: one normal, one silent
-            cast(Any, storage)._dependencies[downstream] = {
-                DagDependency(node=upstream, is_silent=False),
-                DagDependency(node=silent_upstream, is_silent=True),
-            }
-
-            # Requirement: MUST return the set of downstream nodes depending on the node.
-            self.assertEqual(storage.get_dependents(upstream), {downstream})
-            self.assertEqual(storage.get_dependents(silent_upstream), set())
+            storage.store_dependencies(
+                downstream,
+                {
+                    DagDependency(node=upstream, is_silent=False),
+                    DagDependency(node=silent_upstream, is_silent=True),
+                },
+            )
 
             # Create source files: upstream changed after downstream was cleaned
             upstream_file = "pkg/lib/core.py"
@@ -262,14 +267,14 @@ class BazelStorageImplTest(unittest.TestCase):
                     "# --- END CLEANROOM METADATA ---\n"
                 )
 
-            cast(Any, storage)._source_files[upstream] = upstream_file
-            cast(Any, storage)._source_files[downstream] = downstream_file
+            storage.record_source_file(upstream, upstream_file)
+            storage.record_source_file(downstream, downstream_file)
 
             # Requirement: WHEN a non-silent forward dependency has a last changed timestamp newer than the node's last cleaned timestamp, MUST return true.
             self.assertTrue(storage.is_dirty(downstream))
 
             # Cleaning downstream brings its last_cleaned forward, making it not dirty
-            storage.clear_messages(downstream)
+            storage.mark_node_clean(downstream)
             self.assertFalse(storage.is_dirty(downstream))
 
     def test_delete_last_cleaned_marks_dirty(self) -> None:
@@ -290,13 +295,14 @@ class BazelStorageImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=self.registry) as scope:
             storage = scope.get_singleton(AgentStorage)
-            cast(Any, storage)._source_files[node] = rel_path
+            assert isinstance(storage, AgentStorageImpl)
+            storage.record_source_file(node, rel_path)
 
             # Initially clean
             self.assertFalse(storage.is_dirty(node))
 
             # Requirement: MUST delete the last cleaned timestamp from the source file metadata header.
-            cast(Any, storage).delete_last_cleaned(node)
+            storage.delete_last_cleaned(node)
 
             # File on disk must have LAST_CLEANED removed, but retain LAST_CHANGED and CHANGE
             with open(abs_src, "r", encoding="utf-8") as f:
@@ -320,13 +326,14 @@ class BazelStorageImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=fresh_registry) as scope:
             fresh_storage = scope.get_singleton(AgentStorage)
-            cast(Any, fresh_storage)._source_files[node] = rel_path
+            assert isinstance(fresh_storage, AgentStorageImpl)
+            fresh_storage.record_source_file(node, rel_path)
 
             # In the fresh process, node is still dirty purely from disk state
             self.assertTrue(fresh_storage.is_dirty(node))
 
-            # Clearing messages stamps LAST_CLEANED and makes it clean
-            fresh_storage.clear_messages(node)
+            # Marking node clean stamps LAST_CLEANED and makes it clean
+            fresh_storage.mark_node_clean(node)
             self.assertFalse(fresh_storage.is_dirty(node))
             with open(abs_src, "r", encoding="utf-8") as f:
                 cleaned_content = f.read()
@@ -341,8 +348,361 @@ class BazelStorageImplTest(unittest.TestCase):
             graph = scope.get_singleton(AgentStorage)
             self.assertIs(dag, graph)
 
+    def test_auditor_role_dirty_evaluation_and_stamping(self) -> None:
+        """CUJ: Auditor role dirtiness tracks feedback target audit tags and upstream contracts."""
+        grounding_node = _make_dag_node("//pkg/spec:item", "grounding")
+        contract_node = _make_dag_node("//pkg/spec:item", "low")
+        auditor_node = _make_dag_node("//pkg/spec:item", "grounding_qa")
+
+        grounding_file = "pkg/spec/grounding/item.py"
+        contract_file = "pkg/spec/low/item.pyi"
+        abs_grounding = os.path.join(self.test_dir, grounding_file)
+        abs_contract = os.path.join(self.test_dir, contract_file)
+        os.makedirs(os.path.dirname(abs_grounding), exist_ok=True)
+        os.makedirs(os.path.dirname(abs_contract), exist_ok=True)
+
+        with open(abs_contract, "w", encoding="utf-8") as f:
+            f.write(
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-02T10:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-02T10:00:00Z\n"
+                "# CHANGE: low spec\n"
+                "# --- END CLEANROOM METADATA ---\n"
+            )
+
+        with enter_phase("system", registry=self.registry) as scope:
+            storage = scope.get_singleton(AgentStorage)
+            assert isinstance(storage, AgentStorageImpl)
+
+            storage.record_source_file(grounding_node, grounding_file)
+            storage.record_source_file(contract_node, contract_file)
+            storage.store_dependencies(
+                auditor_node,
+                {
+                    DagDependency(node=contract_node, is_silent=False),
+                    DagDependency(node=grounding_node, is_silent=False),
+                },
+            )
+            storage.store_feedback_dependencies(auditor_node, {grounding_node})
+
+            # Requirement: WHEN an auditor node has any verified feedback target file missing or any feedback target node dirty, MUST return true.
+            self.assertTrue(storage.is_dirty(auditor_node))
+
+            # Create target file with valid metadata, but missing GROUNDING_QA_AUDIT tag
+            with open(abs_grounding, "w", encoding="utf-8") as f:
+                f.write(
+                    "# --- CLEANROOM METADATA ---\n"
+                    "# LAST_CLEANED: 2026-10-02T11:00:00Z\n"
+                    "# LAST_CHANGED: 2026-10-02T11:00:00Z\n"
+                    "# CHANGE: grounding spec\n"
+                    "# --- END CLEANROOM METADATA ---\n"
+                )
+
+            # Requirement: WHEN an auditor node has any verified feedback target file metadata missing, unparseable, or missing the auditor role audit timestamp, MUST return true.
+            self.assertTrue(storage.is_dirty(auditor_node))
+
+            # Requirement: WHEN node is an auditor role, MUST stamp the role audit timestamp on each verified feedback target file metadata without updating last changed timestamp.
+            storage.mark_node_clean(auditor_node)
+            with open(abs_grounding, "r", encoding="utf-8") as f:
+                content = f.read()
+            self.assertIn("GROUNDING_QA_AUDIT:", content)
+            self.assertIn("LAST_CHANGED: 2026-10-02T11:00:00Z", content)
+            self.assertFalse(storage.is_dirty(auditor_node))
+
+            # If target file is modified with newer LAST_CHANGED, auditor becomes dirty
+            # Requirement: WHEN an auditor node has any verified feedback target file with last changed timestamp newer than its audit timestamp, MUST return true.
+            with open(abs_grounding, "w", encoding="utf-8") as f:
+                f.write(
+                    "# --- CLEANROOM METADATA ---\n"
+                    "# LAST_CLEANED: 2026-10-02T12:00:00Z\n"
+                    "# LAST_CHANGED: 2026-10-02T12:00:00Z\n"
+                    "# CHANGE: grounding spec edit\n"
+                    "# GROUNDING_QA_AUDIT: 2026-10-02T11:30:00Z\n"
+                    "# --- END CLEANROOM METADATA ---\n"
+                )
+            self.assertTrue(storage.is_dirty(auditor_node))
+
+            # Re-certify grounding target
+            storage.mark_node_clean(auditor_node)
+            self.assertFalse(storage.is_dirty(auditor_node))
+
+            # If upstream contract is modified with newer LAST_CHANGED, auditor becomes dirty
+            # Requirement: WHEN an auditor node has any non-silent contract dependency with last changed timestamp newer than a verified feedback target file audit timestamp, MUST return true.
+            with open(abs_contract, "w", encoding="utf-8") as f:
+                f.write(
+                    "# --- CLEANROOM METADATA ---\n"
+                    "# LAST_CLEANED: 2099-01-01T10:00:00Z\n"
+                    "# LAST_CHANGED: 2099-01-01T10:00:00Z\n"
+                    "# CHANGE: contract update\n"
+                    "# --- END CLEANROOM METADATA ---\n"
+                )
+            self.assertTrue(storage.is_dirty(auditor_node))
+
+
+    def test_auditor_dual_target_qa_evaluation(self) -> None:
+        """CUJ: Dual-target QA auditor checks both lib and test files and stamps both on clean."""
+        lib_node = _make_dag_node("//pkg/mod:item", "lib")
+        test_node = _make_dag_node("//pkg/mod:item", "test")
+        qa_node = _make_dag_node("//pkg/mod:item", "qa")
+
+        lib_file = "pkg/mod/lib/item.py"
+        test_file = "pkg/mod/tests/item_test.py"
+        abs_lib = os.path.join(self.test_dir, lib_file)
+        abs_test = os.path.join(self.test_dir, test_file)
+        os.makedirs(os.path.dirname(abs_lib), exist_ok=True)
+        os.makedirs(os.path.dirname(abs_test), exist_ok=True)
+
+        with open(abs_lib, "w", encoding="utf-8") as f:
+            f.write(
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-02T10:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-02T10:00:00Z\n"
+                "# CHANGE: lib init\n"
+                "# --- END CLEANROOM METADATA ---\n"
+            )
+        with open(abs_test, "w", encoding="utf-8") as f:
+            f.write(
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-02T10:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-02T10:00:00Z\n"
+                "# CHANGE: test init\n"
+                "# --- END CLEANROOM METADATA ---\n"
+            )
+
+        with enter_phase("system", registry=self.registry) as scope:
+            storage = scope.get_singleton(AgentStorage)
+            assert isinstance(storage, AgentStorageImpl)
+
+            storage.record_source_file(lib_node, lib_file)
+            storage.record_source_file(test_node, test_file)
+
+            # Prior to storing feedback dependencies, auditor operations raise KeyError
+            with self.assertRaises(KeyError):
+                storage.get_feedback_dependencies(qa_node)
+            with self.assertRaises(KeyError):
+                storage.is_dirty(qa_node)
+
+            # Store feedback dependencies for QA auditor
+            storage.store_feedback_dependencies(qa_node, {lib_node, test_node})
+            feedback_deps = storage.get_feedback_dependencies(qa_node)
+            self.assertEqual(feedback_deps, {lib_node, test_node})
+
+            # Initially dirty because neither file has QA_AUDIT
+            self.assertTrue(storage.is_dirty(qa_node))
+
+            # Marking node clean stamps QA_AUDIT on BOTH lib and test
+            storage.mark_node_clean(qa_node)
+            self.assertFalse(storage.is_dirty(qa_node))
+
+            with open(abs_lib, "r", encoding="utf-8") as f:
+                lib_content = f.read()
+            with open(abs_test, "r", encoding="utf-8") as f:
+                test_content = f.read()
+
+            self.assertIn("QA_AUDIT:", lib_content)
+            self.assertIn("QA_AUDIT:", test_content)
+            self.assertIn("LAST_CHANGED: 2026-10-02T10:00:00Z", lib_content)
+            self.assertIn("LAST_CHANGED: 2026-10-02T10:00:00Z", test_content)
+
+            # If lib is modified with mark_node_clean, QA becomes dirty
+            storage.mark_node_clean(lib_node, ChangeDescription("updated logic"))
+            self.assertTrue(storage.is_dirty(qa_node))
+
+            # Stamping QA clean restores clean state
+            storage.mark_node_clean(qa_node)
+            self.assertFalse(storage.is_dirty(qa_node))
+
+            # If test is modified with mark_node_clean, QA becomes dirty
+            storage.mark_node_clean(test_node, ChangeDescription("updated tests"))
+            self.assertTrue(storage.is_dirty(qa_node))
+
+    def test_auditor_delete_last_cleaned_removes_audit_tag(self) -> None:
+        """CUJ: delete_last_cleaned on an auditor node removes its audit tag from targets."""
+        lib_node = _make_dag_node("//pkg/svc:item", "lib")
+        test_node = _make_dag_node("//pkg/svc:item", "test")
+        qa_node = _make_dag_node("//pkg/svc:item", "qa")
+
+        lib_file = "pkg/svc/lib/item.py"
+        test_file = "pkg/svc/tests/item_test.py"
+        abs_lib = os.path.join(self.test_dir, lib_file)
+        abs_test = os.path.join(self.test_dir, test_file)
+        os.makedirs(os.path.dirname(abs_lib), exist_ok=True)
+        os.makedirs(os.path.dirname(abs_test), exist_ok=True)
+
+        with open(abs_lib, "w", encoding="utf-8") as f:
+            f.write(
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-02T10:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-02T10:00:00Z\n"
+                "# CHANGE: init\n"
+                "# --- END CLEANROOM METADATA ---\n"
+            )
+        with open(abs_test, "w", encoding="utf-8") as f:
+            f.write(
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-02T10:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-02T10:00:00Z\n"
+                "# CHANGE: init\n"
+                "# --- END CLEANROOM METADATA ---\n"
+            )
+
+        with enter_phase("system", registry=self.registry) as scope:
+            storage = scope.get_singleton(AgentStorage)
+            assert isinstance(storage, AgentStorageImpl)
+
+            storage.record_source_file(lib_node, lib_file)
+            storage.record_source_file(test_node, test_file)
+            storage.store_feedback_dependencies(qa_node, {lib_node, test_node})
+
+            # Stamp clean
+            storage.mark_node_clean(qa_node)
+            self.assertFalse(storage.is_dirty(qa_node))
+
+            # Requirement: WHEN node is an auditor role, MUST remove the role audit timestamp from each verified feedback target file metadata.
+            storage.delete_last_cleaned(qa_node)
+
+            with open(abs_lib, "r", encoding="utf-8") as f:
+                lib_content = f.read()
+            with open(abs_test, "r", encoding="utf-8") as f:
+                test_content = f.read()
+
+            self.assertNotIn("QA_AUDIT:", lib_content)
+            self.assertNotIn("QA_AUDIT:", test_content)
+            self.assertTrue(storage.is_dirty(qa_node))
+
+    def test_mark_node_clean_with_change_description_updates_metadata(self) -> None:
+        """CUJ: mark_node_clean records change description and updates timestamps on source file."""
+        node = _make_dag_node("//pkg/feat:calc", "lib")
+        rel_path = "pkg/feat/calc.py"
+        abs_src = os.path.join(self.test_dir, rel_path)
+        os.makedirs(os.path.dirname(abs_src), exist_ok=True)
+        with open(abs_src, "w", encoding="utf-8") as f:
+            f.write(
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-01T10:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-01T10:00:00Z\n"
+                "# CHANGE: old change\n"
+                "# --- END CLEANROOM METADATA ---\n"
+                "def add(a, b):\n    return a + b\n"
+            )
+
+        with enter_phase("system", registry=self.registry) as scope:
+            storage = scope.get_singleton(AgentStorage)
+            assert isinstance(storage, AgentStorageImpl)
+            storage.record_source_file(node, rel_path)
+
+            # Requirement: MUST record change description and mark clean.
+            storage.mark_node_clean(node, ChangeDescription("Added multiplication"))
+            self.assertFalse(storage.is_dirty(node))
+
+            with open(abs_src, "r", encoding="utf-8") as f:
+                content = f.read()
+            self.assertIn("CHANGE: Added multiplication", content)
+            self.assertNotIn("CHANGE: old change", content)
+
+    def test_materialize_template_creates_file_and_preserves_existing(self) -> None:
+        """CUJ: materialize_template creates missing source file without overwriting existing files."""
+        node_new = _make_dag_node("//pkg/new:item", "lib")
+        node_existing = _make_dag_node("//pkg/exist:item", "lib")
+        rel_new = "pkg/new/item.py"
+        rel_exist = "pkg/exist/item.py"
+        abs_exist = os.path.join(self.test_dir, rel_exist)
+        os.makedirs(os.path.dirname(abs_exist), exist_ok=True)
+        with open(abs_exist, "w", encoding="utf-8") as f:
+            f.write("existing content\n")
+
+        with enter_phase("system", registry=self.registry) as scope:
+            storage = scope.get_singleton(AgentStorage)
+            assert isinstance(storage, AgentStorageImpl)
+            storage.record_source_file(node_new, rel_new)
+            storage.record_source_file(node_existing, rel_exist)
+
+            # Requirement: Materialize template creates missing file on disk
+            storage.materialize_template(node_new)
+            abs_new = os.path.join(self.test_dir, rel_new)
+            self.assertTrue(os.path.isfile(abs_new))
+
+            # Requirement: Materialize template does not overwrite existing file
+            storage.materialize_template(node_existing)
+            with open(abs_exist, "r", encoding="utf-8") as f:
+                self.assertEqual(f.read(), "existing content\n")
+
+    def test_non_file_dependencies_do_not_mark_node_dirty(self) -> None:
+        """CUJ: Non-file dependencies (e.g. guide targets) do not mark an otherwise clean node dirty."""
+        node = _make_dag_node("//pkg/feat:calc", "lib")
+        guide_node = _make_dag_node("//pkg/guides:guide", "")
+        rel_path = "pkg/feat/calc.py"
+        abs_src = os.path.join(self.test_dir, rel_path)
+        os.makedirs(os.path.dirname(abs_src), exist_ok=True)
+        with open(abs_src, "w", encoding="utf-8") as f:
+            f.write(
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-01T10:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-01T10:00:00Z\n"
+                "# CHANGE: initial\n"
+                "# --- END CLEANROOM METADATA ---\n"
+            )
+
+        with enter_phase("system", registry=self.registry) as scope:
+            storage = scope.get_singleton(AgentStorage)
+            assert isinstance(storage, AgentStorageImpl)
+            storage.record_source_file(node, rel_path)
+            # Register non-silent dependency on guide_node (which has no source file)
+            storage.store_dependencies(
+                node,
+                {
+                    DagDependency(node=guide_node, is_silent=False)
+                },
+            )
+
+            self.assertFalse(storage.is_dirty(node))
+
+    def test_qualified_auditor_node_stamps_and_cleans(self) -> None:
+        """CUJ: Fully qualified auditor node with store_feedback_dependencies stamps audit and marks clean."""
+        lib_node = _make_dag_node("//pkg/svc:item", "//update_python_with_ai:lib")
+        test_node = _make_dag_node("//pkg/svc:item", "//update_python_with_ai:test")
+        qa_node = _make_dag_node("//pkg/svc:item", "//update_python_with_ai:qa")
+
+        lib_file = "pkg/svc/lib/item.py"
+        test_file = "pkg/svc/tests/item_test.py"
+        abs_lib = os.path.join(self.test_dir, lib_file)
+        abs_test = os.path.join(self.test_dir, test_file)
+        os.makedirs(os.path.dirname(abs_lib), exist_ok=True)
+        os.makedirs(os.path.dirname(abs_test), exist_ok=True)
+
+        with open(abs_lib, "w", encoding="utf-8") as f:
+            f.write(
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-02T10:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-02T10:00:00Z\n"
+                "# CHANGE: init\n"
+                "# --- END CLEANROOM METADATA ---\n"
+            )
+        with open(abs_test, "w", encoding="utf-8") as f:
+            f.write(
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-02T10:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-02T10:00:00Z\n"
+                "# CHANGE: init\n"
+                "# --- END CLEANROOM METADATA ---\n"
+            )
+
+        with enter_phase("system", registry=self.registry) as scope:
+            storage = scope.get_singleton(AgentStorage)
+            assert isinstance(storage, AgentStorageImpl)
+            storage.record_source_file(lib_node, lib_file)
+            storage.record_source_file(test_node, test_file)
+
+            storage.store_feedback_dependencies(qa_node, {lib_node, test_node})
+            self.assertEqual(storage.get_feedback_dependencies(qa_node), {lib_node, test_node})
+
+            self.assertTrue(storage.is_dirty(qa_node))
+            storage.mark_node_clean(qa_node)
+            self.assertFalse(storage.is_dirty(qa_node))
+
 
 if __name__ == "__main__":
     unittest.main()
 
 # Untested requirements: None
+

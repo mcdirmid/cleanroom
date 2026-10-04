@@ -1,7 +1,7 @@
 """Bazel loop implementation grounding specification module."""
 
 from __future__ import annotations
-from typing import Set, cast
+from typing import Optional, Set, cast
 from support.lib.grounding_support import InTier, SystemTier, only_elem
 from parts.core.grounding import runner_logger
 from parts.dag.grounding import dag_storage, dag_subgraph
@@ -114,7 +114,7 @@ class Loop(loop.Loop, InTier[SystemTier]):
         raise NotImplementedError
 
     def mark_dirty(
-        self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage = cast(dag_storage.ChangeMessage, None)
+        self, target: dag_storage.DagNode, message: Optional[dag_storage.ChangeMessage] = None
     ) -> None:
         """
         COVERED:
@@ -139,12 +139,21 @@ class Loop(loop.Loop, InTier[SystemTier]):
     ) -> None:
         """
         COVERED:
-        - Broadcasts change message to dependents.
+        - MUST mark the target node clean in graph storage with the change description from the change message.
         """
         storage = self.get_singleton(dag_storage.DagStorage)
-        dependents: Set[dag_storage.DagNode] = storage.get_dependents(source)
-        sample_dep: dag_storage.DagNode = only_elem(dependents)
-        storage.add_message(message, to=sample_dep)
+        storage.mark_node_clean(source, dag_storage.ChangeDescription(str(message.content)))
+        raise NotImplementedError
+
+    def record_change(
+        self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage
+    ) -> None:
+        """
+        COVERED:
+        - MUST mark the target node clean in graph storage with the change description from the change message.
+        """
+        storage = self.get_singleton(dag_storage.DagStorage)
+        storage.mark_node_clean(target, dag_storage.ChangeDescription(str(message.content)))
         raise NotImplementedError
 
 

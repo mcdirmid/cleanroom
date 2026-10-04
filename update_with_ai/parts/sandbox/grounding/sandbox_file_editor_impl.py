@@ -9,29 +9,24 @@ from parts.core.grounding import filesystem_ext, file_paths
 from parts.dag.grounding import dag_storage
 from parts.sandbox.grounding import (
     sandbox_file_editor,
-    template_format,
     tool_provider,
 )
 
 
 class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier]):
-    """Realizes workspace file modification tracking, write locking, and template materialization.
+    """Realizes workspace file modification tracking.
 
     DISCHARGED:
     - file_update_revision: Discharges revision increment tracking.
-    - lock_file / unlock_file: Discharges write locking set operations.
-    - materialize_templates: Discharges startup template formatting, baseline recording, and filesystem emission.
     - record_file_read / record_file_edit: Discharges last read or edited file tracking.
     - file_hash: Discharges MD5 digest computation.
-    - can_write: Discharges write access validation and locking enforcement.
+    - can_write: Discharges write access validation.
     """
 
     def __init__(self) -> None:
         self._has_modifications: bool = False
         self._revision: int = 0
-        self._locked_files: Set[agent_file_alias.ReadWriteFile] = set()
         self._last_file: Optional[agent_file_alias.FileAlias] = None
-        self._baselines: dict[agent_file_alias.ReadWriteFile, str] = {}
 
     @property
     def has_modifications(self) -> bool:
@@ -53,81 +48,12 @@ class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier]):
         raise NotImplementedError
 
     @property
-    def locked_files(self) -> Set[agent_file_alias.ReadWriteFile]:
-        """
-        COVERED:
-        - Returns locked files set.
-        """
-        _locked = self._locked_files
-        raise NotImplementedError
-
-    @property
     def last_read_or_edited_file(self) -> Optional[agent_file_alias.FileAlias]:
         """
         COVERED:
         - Returns last read or edited file alias.
         """
         _last = self._last_file
-        raise NotImplementedError
-
-    def lock_file(self, file: agent_file_alias.ReadWriteFile) -> None:
-        """
-        COVERED:
-        - MUST lock the read-write file against modification.
-          - Consequent knowledge: add file to self._locked_files.
-        """
-        self._locked_files.add(file)
-        raise NotImplementedError
-
-    def unlock_file(self, file: agent_file_alias.ReadWriteFile) -> None:
-        """
-        COVERED:
-        - MUST unlock the read-write file to allow modification.
-          - Consequent knowledge: discard file from self._locked_files.
-        """
-        self._locked_files.discard(file)
-        raise NotImplementedError
-
-    def materialize_templates(self) -> None:
-        """
-        COVERED:
-        - MUST format initial template content using session template parameters.
-          - Condition knowledge: resolve NodeConfig, TemplateFormatter; evaluate format_template.
-        - MUST write formatted template content for missing read-write files while preserving existing files.
-          - Condition knowledge: check file existence via filesystem_ext.read_text_file.
-          - Consequent knowledge: call filesystem_ext.write_text_file when missing.
-        - MUST record initial content baselines for active read-write files.
-          - Consequent knowledge: record baseline in self._baselines.        """
-        node_cfg = self.get_singleton(agent_node_config.NodeConfig)
-        formatter = self.get_singleton(template_format.TemplateFormatter)
-
-        templates = node_cfg.templates
-        sample_target = key(templates)
-        sample_tmpl = value(templates)
-        sample_param_k = key(node_cfg.template_parameters)
-        sample_param_v = value(node_cfg.template_parameters)
-        formatted_params = {
-            template_format.TemplateKey(str(sample_param_k)): sample_param_v
-        }
-        formatted = formatter.format_template(
-            template_format.TemplateText(str(sample_tmpl)),
-            formatted_params,
-        )
-
-        exists, _existing_content = filesystem_ext.read_text_file(str(sample_target.relative_path))
-        filesystem_ext.write_text_file(
-            str(sample_target.relative_path),
-            str(formatted),
-        )
-        sample_rw_target = agent_file_alias.ReadWriteFile(
-            relative_path=agent_file_alias.RelativePath("rw_target.py"),
-            workspace_path=file_paths.WorkspacePath(file_paths.PathString("src/rw_target.py")),
-            owning_node=dag_storage.DagNode(
-                unit_address=dag_storage.UnitAddress("u"),
-                role_address=dag_storage.RoleAddress("r"),
-            ),
-        )
-        self._baselines[sample_rw_target] = str(formatted)
         raise NotImplementedError
 
     def record_file_read(self, file: agent_file_alias.FileAlias) -> None:
@@ -172,11 +98,9 @@ class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier]):
         - WHEN the target file is not a declared read-write file, MUST fail reminding the agent that only declared read-write files can be written.
           - Condition knowledge: test target not in declared read-write files.
           - Consequent knowledge: return failed ToolResponse with reminder "Only declared read-write files can be written.".
-        - WHEN the target file is locked against write, MUST fail reminding the agent that files targeted by submit, fail, or blame cannot be written.
-          - Condition knowledge: test target in self._locked_files.
-          - Consequent knowledge: return failed ToolResponse with reminder "Files targeted by submit, fail, or blame cannot be written.".
-        - WHEN an unlocked read-write file is supplied, MUST record the file edit and confirm write access.
-          - Consequent knowledge: call self.record_file_edit(target) and return confirming ToolResponse.        """
+        - WHEN a declared read-write file is supplied, MUST record the file edit and confirm write access.
+          - Consequent knowledge: call self.record_file_edit(target) and return confirming ToolResponse.
+        """
         node_cfg = self.get_singleton(agent_node_config.NodeConfig)
         rw_files = node_cfg.read_write_files
         sample_rw = only_elem(rw_files)
@@ -189,16 +113,7 @@ class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier]):
             reminder=tool_provider.ToolReminder("Only declared read-write files can be written."),
         )
 
-        # Locked file failure knowledge
-        _is_locked: bool = sample_rw in self._locked_files
-        _locked_resp = tool_provider.ToolResponse(
-            is_failed=True,
-            is_terminated=False,
-            content=f"Error: File '{sample_rw.relative_path}' is locked against modification.",
-            reminder=tool_provider.ToolReminder("Files targeted by submit, fail, or blame cannot be written."),
-        )
-
-        # Unlocked read-write file success knowledge
+        # Declared read-write file success knowledge
         self.record_file_edit(sample_rw)
         _resp = tool_provider.ToolResponse(
             is_failed=False,

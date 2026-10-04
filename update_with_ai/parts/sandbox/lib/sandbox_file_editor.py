@@ -3,7 +3,6 @@ from typing import Any, Mapping, NewType, Optional, Protocol, Set, Union
 from update_with_ai.parts.agent.lib import agent_file_alias
 from . import tool_provider
 
-FileTemplate = NewType("FileTemplate", agent_file_alias.FileContent)
 FileUpdateRevision = NewType("FileUpdateRevision", int)
 LineNumber = NewType("LineNumber", int)
 TargetContent = NewType("TargetContent", str)
@@ -38,16 +37,7 @@ class EditManager(Protocol):
     def file_update_revision(self) -> FileUpdateRevision: ...
 
     @property
-    def locked_files(self) -> Set[agent_file_alias.ReadWriteFile]: ...
-
-    @property
     def last_read_or_edited_file(self) -> Optional[agent_file_alias.FileAlias]: ...
-
-    def lock_file(self, file: agent_file_alias.ReadWriteFile) -> None: ...
-
-    def unlock_file(self, file: agent_file_alias.ReadWriteFile) -> None: ...
-
-    def materialize_templates(self) -> None: ...
 
     def record_file_read(self, file: agent_file_alias.FileAlias) -> None: ...
 

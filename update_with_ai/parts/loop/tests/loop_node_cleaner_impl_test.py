@@ -69,9 +69,7 @@ class MockStorage:
     def __init__(self) -> None:
         self.definitions: dict[DagNode, NodeDefinition] = {}
         self.messages: dict[DagNode, Set[DagMessage]] = {}
-        self.dependents: dict[DagNode, Set[DagNode]] = {}
         self.dependencies: dict[DagNode, Set[DagDependency]] = {}
-        self.registered_dependents: List[DagNode] = []
 
     def get_node_definition(self, node: DagNode) -> Optional[NodeDefinition]:
         return self.definitions.get(node)
@@ -85,23 +83,11 @@ class MockStorage:
     def add_message(self, message: DagMessage, to: DagNode) -> None:
         self.messages.setdefault(to, set()).add(message)
 
-    def get_dependents(self, node: DagNode) -> Set[DagNode]:
-        return self.dependents.get(node, set())
-
     def get_dependencies(self, node: DagNode) -> Set[DagDependency]:
         return self.dependencies.get(node, set())
 
     def is_dirty(self, node: DagNode) -> bool:
         return bool(self.messages.get(node))
-
-    def register_dependent(self, node: DagNode) -> None:
-        self.registered_dependents.append(node)
-        for dep in self.get_dependencies(node):
-            if not dep.is_silent:
-                self.dependents.setdefault(dep.node, set()).add(node)
-
-    def clear_dependents(self, node: DagNode) -> None:
-        pass
 
 
 class MockSandbox:
@@ -251,11 +237,9 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
         )
 
     def test_clean_advancement_delivers_changes(self) -> None:
-        """CUJ: Successful session advancement with modifications delivers change messages to dependents."""
+        """CUJ: Successful session advancement with modifications clears messages on cleaned node."""
         node = _make_dag_node("//pkg:unit", "lib")
-        dep = _make_dag_node("//pkg:dependent", "lib")
         self.storage.definitions[node] = NodeDefinition(task_prompt=TaskPrompt("Prompt"))
-        self.storage.dependents[node] = {dep}
         self.storage.messages[node] = {_make_change("dirty")}
         self.sandbox.has_modifications = True
 
@@ -326,8 +310,6 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
     def test_clean_promptless_nodes_resolves_without_session(self) -> None:
         """CUJ: Dirty nodes without task prompt resolve pass-through changes without session phase."""
         node = _make_dag_node("//pkg:pass_thru", "lib")
-        dep = _make_dag_node("//pkg:pass_thru_dep", "lib")
-        self.storage.dependents[node] = {dep}
         self.storage.messages[node] = {_make_change("upstream change")}
 
         with enter_phase(system, registry=self.registry) as scope:
@@ -485,11 +467,9 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             self.assertTrue(self.storage.is_dirty(node))
 
     def test_clean_advancement_without_modifications_no_change_messages(self) -> None:
-        """CUJ: Successful session without file modifications does not deliver change messages to dependents."""
+        """CUJ: Successful session without file modifications clears messages on cleaned node."""
         node = _make_dag_node("//pkg:unit_clean", "lib")
-        dep = _make_dag_node("//pkg:dep_clean", "lib")
         self.storage.definitions[node] = NodeDefinition(task_prompt=TaskPrompt("Prompt"))
-        self.storage.dependents[node] = {dep}
         self.storage.messages[node] = {_make_change("dirty")}
         self.sandbox.has_modifications = False
 
@@ -497,7 +477,7 @@ class LoopNodeCleanerImplTest(unittest.TestCase):
             cleaner = scope.get_singleton(NodeCleanerImpl)
             cont = cleaner.clean([node])
             self.assertTrue(cont)
-            self.assertEqual(len(self.storage.messages.get(dep, set())), 0)
+            self.assertEqual(len(self.storage.messages.get(node, set())), 0)
 
     def test_clean_multi_node_session(self) -> None:
         """CUJ: Cleaning multiple nodes sharing a role within a single agent session."""

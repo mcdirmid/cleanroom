@@ -70,10 +70,16 @@ class FakeAgentStorage:
     def __init__(self) -> None:
         self._definitions: Dict[DagNode, NodeDefinition] = {}
         self._dependencies: Dict[DagNode, Set[DagDependency]] = {}
+        self._feedback_dependencies: Dict[DagNode, Set[DagNode]] = {}
         self._source_files: Dict[DagNode, str] = {}
         self._silent_source_files: Dict[DagNode, Sequence[str]] = {}
-        self._dependents: Dict[DagNode, Set[DagNode]] = {}
         self._messages: Dict[DagNode, Set[DagMessage]] = {}
+
+    def store_feedback_dependencies(self, node: DagNode, feedback_dependencies: Set[DagNode]) -> None:
+        self._feedback_dependencies[node] = set(feedback_dependencies)
+
+    def get_feedback_dependencies(self, node: DagNode) -> Set[DagNode]:
+        return set(self._feedback_dependencies.get(node, set()))
 
     def get_node_definition(self, node: DagNode) -> Optional[NodeDefinition]:
         return self._definitions.get(node)
@@ -89,6 +95,9 @@ class FakeAgentStorage:
 
     def get_dependencies(self, node: DagNode) -> Set[DagDependency]:
         return set(self._dependencies.get(node, set()))
+
+    def store_dependencies(self, node: DagNode, dependencies: Set[DagDependency]) -> None:
+        self._dependencies[node] = set(dependencies)
 
     def add_dependency(self, from_node: DagNode, to_node: DagNode, is_silent: bool = False) -> None:
         deps = self._dependencies.setdefault(from_node, set())
@@ -107,16 +116,7 @@ class FakeAgentStorage:
     def record_silent_source_files(self, node: DagNode, paths: Sequence[str]) -> None:
         self._silent_source_files[node] = list(paths)
 
-    def get_dependents(self, node: DagNode) -> Set[DagNode]:
-        return set(self._dependents.get(node, set()))
-
-    def register_dependent(self, node: DagNode) -> None:
-        for dep in self.get_dependencies(node):
-            if not dep.is_silent:
-                self._dependents.setdefault(dep.node, set()).add(node)
-
-    def clear_dependents(self, node: DagNode) -> None:
-        self._dependents.pop(node, None)
+    store_silent_source_files = record_silent_source_files
 
     def get_messages(self, node: DagNode) -> Set[DagMessage]:
         return set(self._messages.get(node, set()))
@@ -129,9 +129,6 @@ class FakeAgentStorage:
 
     def is_dirty(self, node: DagNode) -> bool:
         return bool(self._messages.get(node))
-
-    def mark_dependents_dirty(self, node: DagNode) -> None:
-        pass
 
 
 class BazelManifestLoaderImplTest(unittest.TestCase):
@@ -353,6 +350,8 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
             self.assertIn(DagDependency(node=dep_b_node, is_silent=False), deps)
             self.assertIn(DagDependency(node=silent_c_node, is_silent=True), deps)
             self.assertEqual(self.storage.get_source_file(node), "pkg/target_a.py")
+            feedback_e_node = self.node_utils.normalize_target("//pkg:feedback_e")
+            self.assertEqual(self.storage.get_feedback_dependencies(node), {feedback_e_node})
 
     def test_load_manifest_synthesizes_definitions_for_unmanifested_dependencies(self) -> None:
         """CUJ: Synthesizing node definitions for declared dependencies lacking explicit manifests."""

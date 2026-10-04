@@ -28,3 +28,8 @@ class Loop(Protocol):
     def broadcast_change(
         self, source: dag_storage.DagNode, message: dag_storage.ChangeMessage
     ) -> None: ...
+
+    def record_change(
+        self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage
+    ) -> None: ...
+

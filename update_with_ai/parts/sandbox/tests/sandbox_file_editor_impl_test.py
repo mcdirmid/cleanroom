@@ -304,23 +304,6 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
             self.assertFalse(edit_mgr.has_modifications)
 
-            # Requirement: Materializing templates retrieves configured templates from the node config, formats initial template content using the template formatter with session template parameters, checks whether target files exist in the filesystem at the host path formed from the alias manager workspace root and the read-write file workspace path, writes formatted template content for missing files while preserving existing files, and records initial content baselines for active read-write files.
-            # Requirement: [EditManager] Materializing templates populates missing read-write files with initial template content without overwriting existing files.
-            edit_mgr.materialize_templates()
-
-            # Missing file materialized
-            missing_host = os.path.join(self.test_dir, "missing.txt")
-            self.assertTrue(os.path.isfile(missing_host))
-            with open(missing_host, "r", encoding="utf-8") as f:
-                self.assertEqual(f.read(), "Starter template materialized content")
-
-            # Existing file NOT overwritten
-            with open(self.target_path, "r", encoding="utf-8") as f:
-                self.assertNotIn("Existing overwrite attempt", f.read())
-
-            # Baseline is recorded for active read-write files: no modifications yet
-            self.assertFalse(edit_mgr.has_modifications)
-
             # Editing existing read-write file triggers has_modifications against the recorded baseline
             with open(self.target_path, "a", encoding="utf-8") as f:
                 f.write("appended content\n")
@@ -812,7 +795,6 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         """CUJ: EditManager records initial contents from filesystem and detects modifications."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             edit_mgr = scope.get_singleton(EditManager)
-            edit_mgr.materialize_templates()
             self.assertFalse(edit_mgr.has_modifications)
 
             # Modifying existing file triggers has_modifications
@@ -870,74 +852,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 bool,
             )
 
-    def test_materialize_templates_runs_verification_checks(self) -> None:
-        """CUJ: Running verification checks when templates are materialized."""
-        mock_check = MagicMock()
-        mock_check.verify.return_value = (True, "OK")
-        mock_failing_check = MagicMock()
-        mock_failing_check.verify.side_effect = RuntimeError("lint error")
 
-        new_rw_file = ReadWriteFile(
-            relative_path=RelativePath("templated.txt"),
-            workspace_path=_make_workspace_path("templated.txt"),
-            owning_node=MagicMock(),
-        )
-        self.node_cfg._templates[new_rw_file] = FileContent("Initial template")
-        self.node_cfg._verification_checks = [mock_check, mock_failing_check]
-
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            edit_mgr = scope.get_singleton(EditManager)
-            edit_mgr.materialize_templates()
-            mock_check.verify.assert_called_once()
-            mock_failing_check.verify.assert_called_once()
-
-            templated_host = os.path.join(self.test_dir, "templated.txt")
-            self.assertTrue(os.path.isfile(templated_host))
-            self.assertFalse(edit_mgr.has_modifications)
-
-    def test_locked_files_management(self) -> None:
-        """CUJ: Locking and unlocking read-write files in EditManager."""
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            edit_mgr = scope.get_singleton(EditManager)
-            # Requirement: The edit manager exposes read-write files locked against modification.
-            # Requirement: [EditManager] The edit manager exposes read-write files locked against modification.
-            self.assertEqual(edit_mgr.locked_files, set())
-
-            # Requirement: The edit manager supports locking individual read-write files against modification.
-            # Requirement: [EditManager] The edit manager supports locking individual read-write files against modification.
-            edit_mgr.lock_file(self.rw_file)
-            self.assertEqual(edit_mgr.locked_files, {self.rw_file})
-
-            # Requirement: The edit manager supports unlocking individual read-write files.
-            # Requirement: [EditManager] The edit manager supports unlocking individual read-write files.
-            edit_mgr.unlock_file(self.rw_file)
-            self.assertEqual(edit_mgr.locked_files, set())
-
-    def test_replace_file_content_fails_on_locked_file(self) -> None:
-        """CUJ: Replacing content fails when target file is locked against modification."""
-        with enter_phase(agent_session, registry=self.registry) as scope:
-            edit_mgr = scope.get_singleton(EditManager)
-            replace_tool = scope.get_singleton(ReplaceFileContentTool)
-
-            edit_mgr.lock_file(self.rw_file)
-
-            # Requirement: Editing tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
-            bindings = ActualParameterBindings(
-                bindings={
-                    (replace_tool.path_parameter, self.rw_file),
-                    (replace_tool.target_content_parameter, "Line 1"),
-                    (replace_tool.replacement_content_parameter, "New Line 1"),
-                }
-            )
-            resp = replace_tool.execute_tool(bindings)
-            self.assertTrue(resp.is_failed)
-            self.assertIsNotNone(resp.reminder)
-            self.assertTrue(resp.reminder)
-
-            # Unlock allows modification again
-            edit_mgr.unlock_file(self.rw_file)
-            resp_unlocked = replace_tool.execute_tool(bindings)
-            self.assertFalse(resp_unlocked.is_failed)
 
     def test_edit_manager_tracks_last_read_or_edited_file(self) -> None:
         """CUJ: EditManager tracks last read or edited file alias across session."""
@@ -1001,23 +916,10 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertFalse(resp_rw.is_failed)
             self.assertEqual(edit_mgr.last_read_or_edited_file, self.rw_file)
 
-            # 3. Locked file fails
-            edit_mgr.lock_file(self.rw_file)
-            # Requirement: Tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
-            resp_locked = edit_mgr.can_write(self.rw_file)
-            self.assertTrue(resp_locked.is_failed)
-            self.assertIsNotNone(resp_locked.reminder)
-            self.assertTrue(resp_locked.reminder)
-
-            # 4. Unlocking permits modification again
-            edit_mgr.unlock_file(self.rw_file)
-            resp_unlocked = edit_mgr.can_write(self.rw_file)
-            self.assertFalse(resp_unlocked.is_failed)
-
-            # 5. Write access validation passing RelativePath string rather than FileAlias instance fails with guidance
+            # 3. Write access validation passing RelativePath string rather than FileAlias instance fails with guidance
             unregistered_rel = RelativePath("unregistered.py")
             resp_unregistered = edit_mgr.can_write(unregistered_rel)
-            # Requirement: WHEN checking write access for a path that is not a declared read-write file or is locked against modification, MUST fail with guidance.
+            # Requirement: WHEN checking write access for a path that is not a declared read-write file, MUST fail with guidance.
             self.assertTrue(resp_unregistered.is_failed)
 
     def test_edit_manager_has_modifications_newly_created_file(self) -> None:
@@ -1032,7 +934,6 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
         with enter_phase(agent_session, registry=self.registry) as scope:
             edit_mgr = scope.get_singleton(EditManager)
-            edit_mgr.materialize_templates()
             created_host = os.path.join(self.test_dir, "created_file.txt")
             self.assertFalse(os.path.exists(created_host))
             self.assertFalse(edit_mgr.has_modifications)

@@ -361,7 +361,7 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                             for s in raw_silent_srcs
                         ),
                         template=(
-                            bazel_manifest_loader.sandbox_file_editor.FileTemplate(str(raw_template))
+                            bazel_manifest_loader.agent_file_alias.FileContent(str(raw_template))
                             if raw_template is not None
                             else None
                         ),
@@ -387,6 +387,7 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                             if raw_verify is not None
                             else None
                         ),
+                        allows_step_mode=t.get("allows_step_mode", True),
                     )
                     self._manifests[t_node] = m
                     if len(targets) == 1:
@@ -583,13 +584,14 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
             task_prompt=agent_storage.TaskPrompt(prompt_text) if prompt_text else None,
             source_file=bazel_manifest_loader.agent_file_alias.RelativePath(src_val) if src_val is not None else None,
             silent_source_files=tuple(bazel_manifest_loader.agent_file_alias.RelativePath(s) for s in resolved_silent_srcs),
-            template=bazel_manifest_loader.sandbox_file_editor.FileTemplate(role_data["template"]) if role_data.get("template") is not None else None,
+            template=bazel_manifest_loader.agent_file_alias.FileContent(str(role_data["template"])) if role_data.get("template") is not None else None,
             dependencies=tuple(bazel_manifest_loader.TargetLabel(d) for d in deps_list),
             silent_dependencies=tuple(bazel_manifest_loader.TargetLabel(d) for d in silent_deps_list),
             star_dependencies=tuple(bazel_manifest_loader.TargetLabel(d) for d in star_deps_list),
             feedback_dependencies=tuple(bazel_manifest_loader.TargetLabel(d) for d in feedback_deps_list),
             guide_target=bazel_manifest_loader.TargetLabel(role_data["guide"]) if role_data.get("guide") is not None else None,
             verification_check=bazel_manifest_loader.VerificationCommand(verify_val) if verify_val is not None else None,
+            allows_step_mode=role_data.get("allows_step_mode", True),
         )
 
     def load_manifest(self, node: dag_storage.DagNode) -> None:
@@ -617,12 +619,10 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                 storage_any._definitions[n] = d
 
         def _record_source_file(n: dag_storage.DagNode, p: str) -> None:
-            for meth in ("store_source_file", "record_source_file", "set_source_file"):
-                if hasattr(storage_any, meth):
-                    getattr(storage_any, meth)(n, p)
-                    return
-            if hasattr(storage_any, "_source_files"):  # pragma: no cover (assumption: manifest resides in package directory)
-                storage_any._source_files[n] = p
+            if hasattr(storage_any, "record_source_file"):
+                storage_any.record_source_file(n, p)
+            elif hasattr(storage_any, "store_source_file"):
+                storage_any.store_source_file(n, p)
 
         if m is None:  # pragma: no cover (assumption: manifest resides in package directory)
             prompt = agent_storage.TaskPrompt("")
@@ -661,13 +661,8 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
             norm_silents = tuple(
                 _normalize_source_file_path(pkg_path, s) for s in m.silent_source_files
             )
-            for meth in ("store_silent_source_files", "record_silent_source_files", "set_silent_source_files"):
-                if hasattr(storage_any, meth):
-                    getattr(storage_any, meth)(node, norm_silents)
-                    break
-            else:
-                if hasattr(storage_any, "_silent_source_files"):
-                    storage_any._silent_source_files[node] = norm_silents
+            if hasattr(storage_any, "store_silent_source_files"):
+                storage_any.store_silent_source_files(node, norm_silents)
 
         deps: Set[dag_storage.DagDependency] = set()
         for dep_label in m.dependencies:
@@ -677,8 +672,16 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
             dep_node = node_util.normalize_target(bazel_target.TargetIdentifier(dep_label))
             deps.add(dag_storage.DagDependency(node=dep_node, is_silent=True))
 
-        if hasattr(storage_any, "_dependencies"):  # pragma: no cover (assumption: manifest resides in package directory)
-            storage_any._dependencies[node] = deps
+        if hasattr(storage_any, "store_dependencies"):
+            storage_any.store_dependencies(node, deps)
+
+        fb_nodes: Set[dag_storage.DagNode] = set()
+        for fb_label in m.feedback_dependencies:
+            fb_node = node_util.normalize_target(bazel_target.TargetIdentifier(fb_label))
+            fb_nodes.add(fb_node)
+
+        if hasattr(storage_any, "store_feedback_dependencies"):
+            storage_any.store_feedback_dependencies(node, fb_nodes)
 
         all_dep_labels: List[bazel_manifest_loader.TargetLabel] = []
         all_dep_labels.extend(m.dependencies)
@@ -688,8 +691,8 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
 
         for dep_label in all_dep_labels:
             dep_node = node_util.normalize_target(bazel_target.TargetIdentifier(dep_label))
+            dep_m = self.retrieve_manifest(dep_node)
             if _get_definition(dep_node) is None:
-                dep_m = self.retrieve_manifest(dep_node)
                 if dep_m is not None and dep_m.task_prompt:
                     dep_prompt = dep_m.task_prompt
                 else:
@@ -698,22 +701,18 @@ class BazelManifestLoader(bazel_manifest_loader.BazelManifestLoader, Singleton):
                     dep_node,
                     agent_storage.NodeDefinition(task_prompt=dep_prompt),
                 )
-                if dep_m is not None and dep_m.source_file:
-                    dep_pkg_path = node_util.extract_node_dir(dep_node).path
-                    dep_norm_rel = _normalize_source_file_path(dep_pkg_path, dep_m.source_file)
-                    _record_source_file(dep_node, dep_norm_rel)
-                if dep_m is not None and hasattr(dep_m, "silent_source_files") and dep_m.silent_source_files:
-                    dep_pkg_path = node_util.extract_node_dir(dep_node).path
-                    dep_norm_silents = tuple(
-                        _normalize_source_file_path(dep_pkg_path, s) for s in dep_m.silent_source_files
-                    )
-                    for meth in ("store_silent_source_files", "record_silent_source_files", "set_silent_source_files"):
-                        if hasattr(storage_any, meth):
-                            getattr(storage_any, meth)(dep_node, dep_norm_silents)
-                            break
-                    else:
-                        if hasattr(storage_any, "_silent_source_files"):
-                            storage_any._silent_source_files[dep_node] = dep_norm_silents
+            if dep_m is not None and dep_m.source_file:
+                dep_pkg_path = node_util.extract_node_dir(dep_node).path
+                dep_norm_rel = _normalize_source_file_path(dep_pkg_path, dep_m.source_file)
+                _record_source_file(dep_node, dep_norm_rel)
+            if dep_m is not None and hasattr(dep_m, "silent_source_files") and dep_m.silent_source_files:
+                dep_pkg_path = node_util.extract_node_dir(dep_node).path
+                dep_norm_silents = tuple(
+                    _normalize_source_file_path(dep_pkg_path, s) for s in dep_m.silent_source_files
+                )
+                if hasattr(storage_any, "store_silent_source_files"):
+                    storage_any.store_silent_source_files(dep_node, dep_norm_silents)
+
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:

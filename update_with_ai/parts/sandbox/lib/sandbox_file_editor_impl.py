@@ -2,13 +2,11 @@
 import difflib
 import hashlib
 import os
-import subprocess
 from typing import Any, Mapping, Optional, Set, Union, cast
 from update_with_ai.parts.agent.lib import agent_config
 from update_with_ai.parts.agent.lib import agent_file_alias
 from update_with_ai.parts.agent.lib import agent_node_config
 from . import sandbox_file_editor
-from . import template_format
 from . import tool_provider
 from support.lib.lifecycle import (
     LifecycleRegistry,
@@ -43,18 +41,7 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
     def __init__(self) -> None:
         self._initial_contents: dict[str, Optional[str]] = {}
         self._file_update_revision: int = 0
-        self._locked_files: set[agent_file_alias.ReadWriteFile] = set()
         self._last_read_or_edited_file: Optional[agent_file_alias.FileAlias] = None
-
-    @property
-    def locked_files(self) -> Set[agent_file_alias.ReadWriteFile]:
-        return set(self._locked_files)
-
-    def lock_file(self, file: agent_file_alias.ReadWriteFile) -> None:
-        self._locked_files.add(file)
-
-    def unlock_file(self, file: agent_file_alias.ReadWriteFile) -> None:
-        self._locked_files.discard(file)
 
     def initialize(self) -> None:
         tm = get_singleton(tool_provider.ToolManager)
@@ -97,14 +84,6 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
                 is_terminated=False,
                 content=f"Error: File '{file_name}' is not a declared read-write file.",
                 reminder="Only declared read-write files can be modified.",
-            )
-
-        if target_file in self.locked_files:
-            return _make_tool_response(
-                is_failed=True,
-                is_terminated=False,
-                content=f"Error: File '{target_file.relative_path}' is completed and locked against further modification for this session.",
-                reminder="Files that have been the target of a submit, fail, or blame cannot be modified.",
             )
 
         self.record_file_edit(target_file)
@@ -204,50 +183,6 @@ class EditManager(sandbox_file_editor.EditManager, Singleton):
         self._file_update_revision += 1
         if host_path is not None:
             self.record_initial_content(host_path)
-
-    def materialize_templates(self) -> None:
-        cfg = get_singleton(agent_node_config.NodeConfig)
-        alias_mgr = get_singleton(agent_file_alias.AliasManager)
-        formatter = get_singleton(template_format.TemplateFormatter)
-
-        materialized_paths: list[str] = []
-        for bound_file, content in cfg.templates.items():
-            host_path = os.path.join(
-                alias_mgr.workspace_root.path, bound_file.workspace_path.path
-            )
-            if not os.path.exists(host_path):
-                os.makedirs(os.path.dirname(host_path), exist_ok=True)
-                formatted_content = formatter.format_template(
-                    template_format.TemplateText(str(content)),
-                    {
-                        template_format.TemplateKey(k): v
-                        for k, v in cfg.template_parameters.items()
-                    },
-                )
-                with open(host_path, "w", encoding="utf-8") as f:
-                    f.write(formatted_content)
-                materialized_paths.append(host_path)
-
-        if materialized_paths:
-            for check in getattr(cfg, "verification_checks", []):
-                try:
-                    check.verify()
-                except (subprocess.SubprocessError, OSError, RuntimeError):
-                    pass
-
-        for host_path in materialized_paths:
-            try:
-                with open(host_path, "r", encoding="utf-8") as f:
-                    actual_content = f.read()
-            except OSError:  # pragma: no cover (assumption: workspace filesystem accessible)
-                actual_content = None
-            self.record_initial_content(host_path, actual_content, force=True)
-
-        for rw_file in getattr(cfg, "read_write_files", []):
-            host_path = os.path.join(
-                alias_mgr.workspace_root.path, rw_file.workspace_path.path
-            )
-            self.record_initial_content(host_path, force=True)
 
 
 def _target_content_missing_message(
@@ -444,16 +379,6 @@ class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, Singlet
                 reminder="Only declared read-write files can be modified.",
                 suppression_key="replace_file_content",
             )
-
-        if target_file in edit_mgr.locked_files:
-            return _make_tool_response(
-                is_failed=True,
-                is_terminated=False,
-                content=f"Error: `{target_file.relative_path}` has been locked against further modification.",
-                reminder="Files that have been the target of a submit, fail, or blame cannot be modified.",
-                suppression_key="replace_file_content",
-            )
-
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         host_path = os.path.join(
             alias_mgr.workspace_root.path, target_file.workspace_path.path

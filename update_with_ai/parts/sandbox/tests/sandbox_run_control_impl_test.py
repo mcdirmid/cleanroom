@@ -312,7 +312,6 @@ class MockEditManager:
     ) -> None:
         self.has_modifications = has_modifications
         self.file_update_revision = file_update_revision
-        self._locked_files: Set[Any] = set()
         self._last_read_or_edited_file: Optional[Any] = None
         self._file_hashes: dict[Any, str] = {}
 
@@ -331,19 +330,6 @@ class MockEditManager:
     @last_read_or_edited_file.setter
     def last_read_or_edited_file(self, value: Optional[Any]) -> None:
         self._last_read_or_edited_file = value
-
-    @property
-    def locked_files(self) -> Set[Any]:
-        return set(self._locked_files)
-
-    def lock_file(self, file: Any) -> None:
-        self._locked_files.add(file)
-
-    def unlock_file(self, file: Any) -> None:
-        self._locked_files.discard(file)
-
-    def materialize_templates(self) -> None:
-        pass
 
 
 class TargetFileObj:
@@ -375,9 +361,11 @@ class MockDagStorage:
 
     def __init__(self) -> None:
         self.dependencies: dict[DagNode, Set[DagDependency]] = {}
-        self.messages: dict[DagNode, Sequence[Any]] = {}
+        self.messages: dict[DagNode, List[Any]] = {}
         self.node_definitions: dict[DagNode, Any] = {}
         self.dirty_nodes: Set[DagNode] = set()
+        self.cleaned_nodes: list[tuple[DagNode, Optional[str]]] = []
+        self.materialized_nodes: list[DagNode] = []
 
     def get_dependencies(self, node: DagNode) -> Set[DagDependency]:
         return self.dependencies.get(node, set())
@@ -390,6 +378,16 @@ class MockDagStorage:
 
     def is_dirty(self, node: DagNode) -> bool:
         return node in self.dirty_nodes
+
+    def mark_node_clean(self, node: DagNode, change_description: Optional[str] = None) -> None:
+        self.dirty_nodes.discard(node)
+        self.cleaned_nodes.append((node, change_description))
+
+    def materialize_template(self, node: DagNode) -> None:
+        self.materialized_nodes.append(node)
+
+    def add_message(self, message: Any, to: DagNode) -> None:
+        self.messages.setdefault(to, []).append(message)
 
 
 class MockDagSubgraph:
@@ -1176,8 +1174,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
             submit = scope.get_singleton(SubmitToolImpl)
             rc: Any = scope.get_singleton(RunControllerImpl)
 
-            # Address lookup by unit address fallback
-            self.assertEqual(rc.get_node_for_alias("//pkg:unit1"), node1)
+            # Unit name and package-qualified lookup; fully qualified address rejected
+            self.assertEqual(rc.get_node_for_alias("unit1"), node1)
+            self.assertEqual(rc.get_node_for_alias("pkg/unit1"), node1)
+            self.assertIsNone(rc.get_node_for_alias("//pkg:unit1"))
 
             # 1. Submitting without target in multi-target session fails when multiple unsubmitted targets exist
             b_no_target = ActualParameterBindings(bindings=set())
@@ -1296,8 +1296,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(rc.get_node_state(node1), "FAILED")
             self.assertEqual(rc.get_node_state(node2), "FAILED")
             self.assertIn("Remaining submit targets to handle:\n- `f_unit3.py`", resp1.content)
-            self.assertIn(f_rw1, self.edit_mgr.locked_files)
-            self.assertIn(f_rw2, self.edit_mgr.locked_files)
             self.edit_mgr.last_read_or_edited_file = None
 
             # 2. Failing already-failed node fails because it is not an open target
@@ -1315,13 +1313,11 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # 3. Failing when only 1 unsubmitted target remains defaults to that target
             # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
             # Requirement: Executing the fail tool marks the active node as failed and resolves the active node.
-            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
             # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
             resp2 = fail_tool.execute_tool(b_no_target)
             self.assertTrue(resp2.is_failed)
             self.assertTrue(resp2.is_terminated)
             self.assertEqual(rc.get_node_state(node3), "FAILED")
-            self.assertIn(f_rw3, self.edit_mgr.locked_files)
             self.assertIn("Failed: No target", resp2.content)
 
     def test_multi_node_blame_blocks_dependents_and_terminates(self) -> None:
@@ -1397,10 +1393,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(rc.get_node_state(node1), "BLAME")
             self.assertEqual(rc.get_node_state(node2), "FAILED")
             self.assertEqual(rc.get_node_state(node3), "OPEN")
-            self.assertIn(b_rw1, self.edit_mgr.locked_files)
-            self.assertIn(b_rw2, self.edit_mgr.locked_files)
-            self.assertNotIn(b_rw3, self.edit_mgr.locked_files)
-            self.assertNotIn(bt1, self.edit_mgr.locked_files)
+            self.assertEqual(len(self.storage.get_messages(bt1.owning_node)), 1)
+            self.assertEqual(self.storage.get_messages(bt1.owning_node)[0].content, "Spec defect")
             self.assertIn(
                 "Target `b_unit1.py` blamed `upstream_spec1.md`: Spec defect",
                 resp_ok.content,
@@ -1416,14 +1410,13 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
             # Requirement: Tool execution defaults the blame target parameter to that target and the resolve target parameter to the active node configured with that blame target when the blame target parameter is omitted and the resolve target parameter matches a configured blame target.
             # Requirement: Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
-            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
             # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
             resp_ok3 = blame_tool.execute_tool(b_ok3)
             self.assertFalse(resp_ok3.is_failed)
             self.assertTrue(resp_ok3.is_terminated)
             self.assertEqual(rc.get_node_state(node3), "BLAME")
-            self.assertIn(b_rw3, self.edit_mgr.locked_files)
-            self.assertNotIn(bt3, self.edit_mgr.locked_files)
+            self.assertEqual(len(self.storage.get_messages(bt3.owning_node)), 1)
+            self.assertEqual(self.storage.get_messages(bt3.owning_node)[0].content, "Spec defect 3")
             self.assertIn("Blamed upstream_spec3.md: Spec defect 3", resp_ok3.content)
 
     def test_resolve_tool_types_and_parameters(self) -> None:
@@ -1586,10 +1579,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(rc.get_node_state(node2), "FAILED")
             self.assertEqual(rc.get_node_state(node3), "FAILED")
             self.assertEqual(rc.get_node_state(node4), "OPEN")
-            self.assertIn(rw1, self.edit_mgr.locked_files)
-            self.assertIn(rw2, self.edit_mgr.locked_files)
-            self.assertIn(rw3, self.edit_mgr.locked_files)
-            self.assertNotIn(rw4, self.edit_mgr.locked_files)
             self.assertIn("- `casc4.py`", resp.content)
 
     def test_check_files_evaluates_all_open_targets_and_caches(self) -> None:
@@ -1909,19 +1898,17 @@ class SandboxRunControlImplTest(unittest.TestCase):
             resp_sub_ok = submit.execute_tool(b_empty)
             self.assertFalse(resp_sub_ok.is_failed)
             self.assertEqual(rc.get_node_state(node1), "SUBMITTED")
-            self.assertIn(rw1, self.edit_mgr.locked_files)
+            self.assertIn(node1, [n for n, _ in self.storage.cleaned_nodes])
 
-            # 4. Now rw1 is submitted and locked; last_read_or_edited_file is still rw1 (now locked)
-            # Exactly one unsubmitted read-write file remains (rw2) -> defaults to rw2 even if last accessed was rw1
+            # 4. Now node1 is submitted; exactly one unsubmitted node remains (node2) -> defaults to node2
             # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
             # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
-            # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
             # Requirement: When all active nodes are resolved, resolving an active node produces a terminating response indicating that the session completed successfully for submitted nodes, carrying the explanation for failed nodes, or attributing defect feedback to the blame target owning node for blamed nodes, when mcp mode is inactive.
             resp_sub_rw2 = submit.execute_tool(b_empty)
             self.assertFalse(resp_sub_rw2.is_failed)
             self.assertTrue(resp_sub_rw2.is_terminated)
             self.assertEqual(rc.get_node_state(node2), "SUBMITTED")
-            self.assertIn(rw2, self.edit_mgr.locked_files)
+            self.assertIn(node2, [n for n, _ in self.storage.cleaned_nodes])
 
     def test_multi_node_target_matching_by_alias_relative_path_and_unique_filename(
         self,
@@ -1955,8 +1942,10 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(
                 rc.get_node_for_alias("testing/parts/pkg/logs/unit1_qa.log"), node1
             )
-            # 2. Look up by unit address
-            self.assertEqual(rc.get_node_for_alias("//pkg:unit1"), node1)
+            # 2. Look up by unit name / package-qualified name (fully qualified address is rejected)
+            self.assertEqual(rc.get_node_for_alias("unit1"), node1)
+            self.assertEqual(rc.get_node_for_alias("pkg/unit1"), node1)
+            self.assertIsNone(rc.get_node_for_alias("//pkg:unit1"))
             # 3. Look up by unique filename / basename
             self.assertEqual(rc.get_node_for_alias("unit1_qa.log"), node1)
             # 4. Ambiguous basename returns None (unit2_qa.log is shared by node2 and node3)
@@ -2149,7 +2138,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertFalse(resp.is_failed)
             self.assertFalse(resp.is_terminated)
             self.assertIsNone(resp.follow_up_tool_call)
-            self.assertTrue(self.sb.materialize_startup_templates_called)
+            self.assertIn(node_a, self.storage.materialized_nodes)
             self.assertTrue(self.guide_del.initialize_called)
             self.assertEqual(self.role_cfg.active_nodes, [node_a])
             self.assertEqual(self.role_cfg.execution_version, initial_version + 1)
@@ -2272,7 +2261,6 @@ class SandboxRunControlImplTest(unittest.TestCase):
             # Requirement: Automatically marks in-batch dependent nodes as failed and locks their read-write files upon node failure or blame attribution.
             rc.block_dependents(node1)
             self.assertEqual(rc.get_node_state(node2), "FAILED")
-            self.assertIn(rw2, self.edit_mgr.locked_files)
 
     def test_format_task_prompt_with_guide_file_and_messages(self) -> None:
         """CUJ: format_task_prompt formats guide instructions, node definitions, and incoming messages."""
@@ -2428,16 +2416,16 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertEqual(rc.resolve_default_target(), node1)
 
             # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
-            self.edit_mgr.lock_file(rw1)
+            rc.set_node_state(node1, "SUBMITTED")
             self.edit_mgr.last_read_or_edited_file = None
             self.assertEqual(rc.resolve_default_target(), node2)
 
-            self.edit_mgr.unlock_file(rw1)
-            self.edit_mgr.lock_file(rw2)
+            rc.set_node_state(node1, "OPEN")
+            rc.set_node_state(node2, "SUBMITTED")
             self.assertEqual(rc.resolve_default_target(), node1)
 
             # Last read file with no owning_node resolves via get_node_for_alias
-            self.edit_mgr.unlock_file(rw2)
+            rc.set_node_state(node2, "OPEN")
             rw_no_owner = ReadWriteFile(
                 relative_path=RelativePath("unit2.py"),
                 workspace_path=_make_workspace_path("unit2.py"),
@@ -2484,7 +2472,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             # Requirement: When the resolve target parameter is omitted, it defaults to the single session read-write file or remaining unsubmitted active node.
             self.edit_mgr.last_read_or_edited_file = None
-            self.edit_mgr.lock_file(rw_z)
+            rc.set_node_state(node_z, "SUBMITTED")
             self.assertEqual(rc.resolve_default_target(), node_a)
 
             # Single unsubmitted file with owning_node=None resolving via alias or falling back to open_nodes[0]
@@ -2641,6 +2629,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
 
             # 8. Both blame_target and resolve_target omitted fails due to missing blame target
             rc.reset_nodes([node1, node2, node3])
+            self.edit_mgr.last_read_or_edited_file = None
             b_both_omitted = ActualParameterBindings(
                 bindings={(blame.explanation_parameter, "Both omitted")}
             )
@@ -2885,7 +2874,7 @@ class SandboxRunControlImplTest(unittest.TestCase):
         with enter_phase(agent_session, registry=self.registry) as scope:
             rc: Any = scope.get_singleton(RunControllerImpl)
             prompt_fb = rc.format_task_prompt([node_lib])
-            self.assertIn("Fix //pkg:unit based on feedback: Fix syntax error", prompt_fb)
+            self.assertIn("Fix pkg/unit based on feedback: Fix syntax error", prompt_fb)
 
     def test_is_node_dirty_rw_file_alias_lookup(self) -> None:
         """CUJ: evaluate_verification_for_node resolves rw_file by relative_path when owning_node is None."""
@@ -3082,9 +3071,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
             res_suffix = blame.execute_tool(b_suffix)
             self.assertFalse(res_suffix.is_failed)
 
-            # Reset node1 state and locked files
+            # Reset node1 state
             rc._node_states[node1] = "OPEN"
-            self.edit_mgr.locked_files.clear()
 
             # 2. Match blame target by basename: "other_dir/dep.py" (not suffix of "a/b/dep.py")
             # Requirement: Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
@@ -3098,9 +3086,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
             res_base = blame.execute_tool(b_base)
             self.assertFalse(res_base.is_failed)
 
-            # Reset node1 state and locked files
+            # Reset node1 state
             rc._node_states[node1] = "OPEN"
-            self.edit_mgr.locked_files.clear()
 
             # 3. Multiple matching nodes for blame_target, def_node (node3 via last_read) is not in matching_nodes
             self.edit_mgr.last_read_or_edited_file = rw3
@@ -3115,9 +3102,8 @@ class SandboxRunControlImplTest(unittest.TestCase):
             self.assertFalse(res_tiebreak.is_failed)
             self.assertIn("unit1.py", res_tiebreak.content)
 
-            # Reset node1 state and locked files
+            # Reset node1 state
             rc._node_states[node1] = "OPEN"
-            self.edit_mgr.locked_files.clear()
 
             # 4. Target parameter matches blame target of multiple nodes, def_node (node2) IS in matching_nodes
             self.edit_mgr.last_read_or_edited_file = rw2
@@ -3148,6 +3134,148 @@ class SandboxRunControlImplTest(unittest.TestCase):
             )
             resp = get_work.execute_tool(b)
             self.assertFalse(resp.is_failed)
+
+    def test_unit_name_matching_and_target_omission(self) -> None:
+        """CUJ: Resolve tools match short unit names, package-qualified names, and support target omission and blame attribution from blame_target."""
+        node1 = _make_dag_node(unit_address="//my_pkg:unit_foo_lib_qa", role_address="qa")
+        node2 = _make_dag_node(unit_address="//my_pkg:unit_bar_lib_qa", role_address="qa")
+        vcheck1 = MockVerificationCheck(passes=True)
+        vcheck2 = MockVerificationCheck(passes=True)
+        self.node_cfg.verification_checks_by_node = {node1: [vcheck1], node2: [vcheck2]}
+        self.node_cfg.is_step_mode = False
+        self.guide_del.has_steps_remaining = False
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            rc: Any = scope.get_singleton(RunControllerImpl)
+            submit = scope.get_singleton(SubmitToolImpl)
+            fail = scope.get_singleton(FailToolImpl)
+            blame = scope.get_singleton(BlameToolImpl)
+
+            # 1. Short unit name submission when unique among active nodes
+            rc.reset_nodes([node1, node2])
+            b_short = ActualParameterBindings(
+                bindings={
+                    (submit.target_parameter, "unit_foo"),
+                }
+            )
+            # Requirement: A resolve tool matches the resolve target parameter by declared source file, short unit name (when unique), or package-qualified unit name against open active nodes.
+            resp_short = submit.execute_tool(b_short)
+            self.assertFalse(resp_short.is_failed)
+            self.assertIn("unit_foo", resp_short.content)
+            self.assertEqual(rc.open_nodes(), [node2])
+
+            # 2. Package-qualified unit name submission
+            b_pkg = ActualParameterBindings(
+                bindings={
+                    (submit.target_parameter, "my_pkg/unit_bar"),
+                }
+            )
+            resp_pkg = submit.execute_tool(b_pkg)
+            self.assertFalse(resp_pkg.is_failed)
+            self.assertEqual(rc.open_nodes(), [])
+
+            # 3. Ambiguous short unit name fails when duplicate
+            node_a = _make_dag_node(unit_address="//pkg_a:widget_coverage", role_address="coverage")
+            node_b = _make_dag_node(unit_address="//pkg_b:widget_coverage", role_address="coverage")
+            vcheck_a = MockVerificationCheck(passes=True)
+            vcheck_b = MockVerificationCheck(passes=True)
+            self.node_cfg.verification_checks_by_node = {node_a: [vcheck_a], node_b: [vcheck_b]}
+            rc.reset_nodes([node_a, node_b])
+
+            # Verify prompt instructions generated by format_task_prompt
+            prompt_multi = rc.format_task_prompt([node_a, node_b])
+            self.assertIn("specify target as <unit_name> (if unique among session units) or <relative_path>/<unit_name> (if ambiguous)", prompt_multi)
+            prompt_single = rc.format_task_prompt([node_b])
+            self.assertIn("When calling submit or fail for a single unit, the target parameter may be omitted.", prompt_single)
+
+            b_ambig = ActualParameterBindings(
+                bindings={
+                    (submit.target_parameter, "widget"),
+                }
+            )
+            resp_ambig = submit.execute_tool(b_ambig)
+            self.assertTrue(resp_ambig.is_failed)
+            self.assertIn("Error: Target 'widget' is not an open target.", resp_ambig.content)
+
+            # 4. Fully qualified unit address fails, relative_path/unit_name resolves duplicate
+            b_fq_invalid = ActualParameterBindings(
+                bindings={
+                    (submit.target_parameter, "//pkg_a:widget_coverage"),
+                }
+            )
+            resp_fq = submit.execute_tool(b_fq_invalid)
+            self.assertTrue(resp_fq.is_failed)
+            self.assertIn("Error: Target '//pkg_a:widget_coverage' is not an open target.", resp_fq.content)
+
+            b_rel = ActualParameterBindings(
+                bindings={
+                    (submit.target_parameter, "pkg_a/widget"),
+                }
+            )
+            resp_rel = submit.execute_tool(b_rel)
+            self.assertFalse(resp_rel.is_failed)
+            self.assertEqual(rc.open_nodes(), [node_b])
+
+            # 5. Providing change_summary for auditor node fails
+            b_auditor_with_summary = ActualParameterBindings(
+                bindings={
+                    (submit.change_summary_parameter, "Should not be allowed for auditor"),
+                }
+            )
+            resp_auditor_fail = submit.execute_tool(b_auditor_with_summary)
+            self.assertTrue(resp_auditor_fail.is_failed)
+            self.assertIn("Change summary is prohibited for audit nodes", resp_auditor_fail.content)
+
+            # 5b. Target omission when only 1 node remains open without change summary
+            b_omit = ActualParameterBindings(bindings=set())
+            # Requirement: When omitted with a single open active node, resolve target defaults to that remaining unsubmitted active node.
+            resp_omit = submit.execute_tool(b_omit)
+            self.assertFalse(resp_omit.is_failed)
+            self.assertEqual(rc.open_nodes(), [])
+
+            # 6. Target omission with fail tool when single node is active
+            solo_node = _make_dag_node(unit_address="//pkg:solo_unit_qa", role_address="qa")
+            rc.reset_nodes([solo_node])
+            b_fail_omit = ActualParameterBindings(
+                bindings={
+                    (fail.explanation_parameter, "Solo node failure explanation"),
+                }
+            )
+            resp_fail_omit = fail.execute_tool(b_fail_omit)
+            self.assertTrue(resp_fail_omit.is_failed)
+            self.assertEqual(rc.open_nodes(), [])
+
+            # 7. Blame identification using just blame_target in multi-node session
+            node_upstream = _make_dag_node(unit_address="//pkg:upstream_spec", role_address="high")
+            n1 = _make_dag_node(unit_address="//pkg:calc_lib", role_address="lib")
+            n2 = _make_dag_node(unit_address="//pkg:parser_lib", role_address="lib")
+            bt1 = ReadOnlyFile(
+                relative_path=RelativePath("high/calc.md"),
+                workspace_path=_make_workspace_path("pkg/high/calc.md"),
+                owning_node=node_upstream,
+            )
+            bt2 = ReadOnlyFile(
+                relative_path=RelativePath("high/parser.md"),
+                workspace_path=_make_workspace_path("pkg/high/parser.md"),
+                owning_node=node_upstream,
+            )
+            self.node_cfg.blame_targets_by_node = {
+                n1: {bt1},
+                n2: {bt2},
+            }
+            rc.reset_nodes([n1, n2])
+
+            b_blame = ActualParameterBindings(
+                bindings={
+                    (blame.blame_target_parameter, bt2),
+                    (blame.explanation_parameter, "Specification defect in parser"),
+                }
+            )
+            # Requirement: The blame tool identifies the active node attributing blame from the specified blame target.
+            resp_blame = blame.execute_tool(b_blame)
+            self.assertFalse(resp_blame.is_failed)
+            self.assertIn("parser", resp_blame.content)
+            self.assertEqual(rc.open_nodes(), [n1])
 
 
 if __name__ == "__main__":

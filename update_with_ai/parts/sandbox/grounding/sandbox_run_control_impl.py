@@ -329,15 +329,23 @@ class SubmitTool(
         - WHEN session feedback is present and no files were modified, MUST fail.
           - Condition knowledge: test bool(node_cfg.feedback) and not edit_mgr.has_modifications.
           - Consequent knowledge: return failed ToolResponse citing feedback without modifications.
+        - WHEN target is an auditor node and change summary is provided, MUST fail reminding agent that change summary is prohibited for audit nodes.
+          - Condition knowledge: test role is auditor and change_summary is not None.
+          - Consequent knowledge: return failed ToolResponse reminding that change summary is prohibited for audit nodes.
         - WHEN files were modified and change summary is omitted, MUST fail.
           - Condition knowledge: test edit_mgr.has_modifications and change_summary is None.
           - Consequent knowledge: return failed ToolResponse reminding that change_summary is required.
+        - MUST mark the resolve target clean in storage via dag_storage with the provided change summary so that the node is no longer dirty.
+          - Condition knowledge: obtain DagStorage singleton.
+          - Consequent knowledge: invoke storage.mark_node_clean and assert not storage.is_dirty.
         - MUST mark resolve target clean in current turn.
-          - Consequent knowledge: resolve edit_mgr.lock_file on resolve target and return terminating ToolResponse.        """
+          - Consequent knowledge: return terminating ToolResponse.
+        """
         node_cfg = self.get_singleton(agent_node_config.NodeConfig)
         delivery = self.get_singleton(sandbox_guide_delivery.GuideDelivery)
         controller = self.get_singleton(RunController)
         edit_mgr = self.get_singleton(sandbox_file_editor.EditManager)
+        storage = self.get_singleton(dag_storage.DagStorage)
 
         # 1. Unfinished guide steps failure knowledge
         _advance_followup = tool_provider.FollowUpToolCall(
@@ -371,7 +379,17 @@ class SubmitTool(
             content="Node feedback was delivered but no file modifications were made.",
         )
 
-        # 4. Modified without change summary failure knowledge
+        # 4. Auditor with change summary failure knowledge
+        sample_node = key(node_cfg.blame_targets_by_node)
+        _is_auditor: bool = "qa" in str(sample_node.role_address) or "coverage" in str(sample_node.role_address)
+        _auditor_summary_resp = tool_provider.ToolResponse(
+            is_failed=True,
+            is_terminated=False,
+            content="Change summary is prohibited for audit nodes.",
+            reminder=tool_provider.ToolReminder("Do not provide change_summary for audit nodes."),
+        )
+
+        # 5. Modified without change summary failure knowledge
         _missing_summary_resp = tool_provider.ToolResponse(
             is_failed=True,
             is_terminated=False,
@@ -379,9 +397,9 @@ class SubmitTool(
             reminder=tool_provider.ToolReminder("Supply change_summary when files were modified."),
         )
 
-        # 5. Clean submission knowledge
-        sample_rw = only_elem(node_cfg.read_write_files)
-        edit_mgr.lock_file(sample_rw)
+        # 6. Clean submission knowledge via dag_storage
+        storage.mark_node_clean(sample_node, dag_storage.ChangeDescription("Summary of changes"))
+        _is_dirty: bool = storage.is_dirty(sample_node)
 
         _submit_resp = tool_provider.ToolResponse(
             is_failed=False,
@@ -473,11 +491,6 @@ class FailTool(
         - MUST mark active node as failed.
           - Consequent knowledge: return terminating failed ToolResponse carrying failure explanation.
         """
-        edit_mgr = self.get_singleton(sandbox_file_editor.EditManager)
-        node_cfg = self.get_singleton(agent_node_config.NodeConfig)
-        sample_rw = only_elem(node_cfg.read_write_files)
-        edit_mgr.lock_file(sample_rw)
-
         _fail_resp = tool_provider.ToolResponse(
             is_failed=True,
             is_terminated=True,
@@ -583,35 +596,43 @@ class BlameTool(
     ) -> tool_provider.ToolResponse:
         """
         COVERED:
-        - WHEN blame target matches a configured blame target, MUST default resolve target to that node.
-          - Condition knowledge: test blame_target in blame_targets.
-          - Consequent knowledge: default resolve target to blamed node.
-        - WHEN blame target is omitted and resolve target matches a configured blame target, MUST swap their assignments.
-          - Condition knowledge: test blame_target omitted, resolve target in blame_targets.
-          - Consequent knowledge: swap resolve target and blame target.
+        - MUST identify active node attributing blame from specified blame target.
+          - Condition knowledge: test blame target matching across blame targets of active nodes.
+          - Consequent knowledge: identify active node attributing blame.
+        - WHEN blame target is omitted in single-target context, MUST default to single configured blame target of active node.
+          - Condition knowledge: test blame target omitted, single configured blame target available.
+          - Consequent knowledge: default blame target to single configured blame target.
         - WHEN blame target does not match any configured blame target, MUST fail listing available blame targets.
           - Condition knowledge: test blame_target not in blame_targets.
           - Consequent knowledge: return failed ToolResponse listing configured blame targets.
         - WHEN explanation contains newline characters, MUST fail reminding agent that explanation must be a single paragraph.
           - Condition knowledge: test newline character in explanation.
           - Consequent knowledge: return failed ToolResponse with single-paragraph reminder.
+        - MUST record defect feedback for the blamed target via dag_storage so that the blamed node receives the feedback message.
+          - Condition knowledge: obtain DagStorage singleton and construct FeedbackMessage.
+          - Consequent knowledge: invoke storage.add_message with blamed node.
         - MUST mark blame target as attributed.
-          - Consequent knowledge: lock files via edit_mgr and return terminating ToolResponse citing blamed prerequisite.        """
+          - Consequent knowledge: return terminating ToolResponse citing blamed prerequisite.
+        """
         node_cfg = self.get_singleton(agent_node_config.NodeConfig)
-        edit_mgr = self.get_singleton(sandbox_file_editor.EditManager)
+        storage = self.get_singleton(dag_storage.DagStorage)
 
         sample_node = key(node_cfg.blame_targets_by_node)
         blame_targets = node_cfg.blame_targets_by_node[sample_node]
         sample_target = only_elem(blame_targets)
 
-        # 1. Invalid blame target failure knowledge
+        # 1. Identify active node attributing blame and default single target
+        _identified_node = sample_node
+        _default_target = sample_target
+
+        # 2. Invalid blame target failure knowledge
         _invalid_blame_resp = tool_provider.ToolResponse(
             is_failed=True,
             is_terminated=False,
             content=f"Error: Unknown blame target. Available blame targets: {sample_target.relative_path}",
         )
 
-        # 2. Multi-line explanation failure knowledge
+        # 3. Multi-line explanation failure knowledge
         explanation_str = "Explanation line 1\nExplanation line 2"
         _has_newline: bool = "\n" in explanation_str
         _newline_fail_resp = tool_provider.ToolResponse(
@@ -621,7 +642,15 @@ class BlameTool(
             reminder=tool_provider.ToolReminder("Explanation must be a single paragraph."),
         )
 
-        # 3. Swap and attribution knowledge
+        # 4. Attribution and defect feedback recording knowledge via dag_storage
+        blamed_node = getattr(sample_target, "owning_node", sample_node)
+        storage.add_message(
+            dag_storage.FeedbackMessage(
+                content=dag_storage.MessageContent(explanation_str),
+                target=blamed_node,
+            ),
+            to=blamed_node,
+        )
         _blame_attributed_str = f"Blamed {sample_target.relative_path}: defect detected."
 
         _blame_resp = tool_provider.ToolResponse(
@@ -706,7 +735,7 @@ class GetWorkTool(
           - Condition knowledge: test ready nodes obtained and node_cfg.is_step_mode.
           - Consequent knowledge: return ToolResponse prompting advance.        """
         subgraph = self.get_singleton(dag_subgraph.DagSubgraph)
-        edit_mgr = self.get_singleton(sandbox_file_editor.EditManager)
+        storage = self.get_singleton(dag_storage.DagStorage)
         node_cfg = self.get_singleton(agent_node_config.NodeConfig)
 
         # 1. Open nodes failure knowledge
@@ -726,7 +755,8 @@ class GetWorkTool(
         )
 
         # 3. Materialize templates and build task primer knowledge
-        edit_mgr.materialize_templates()
+        sample_node = only_elem(batch)
+        storage.materialize_template(sample_node)
 
         _step_mode: bool = node_cfg.is_step_mode
         primer_text = "Task primer: follow guide step mode by calling advance."

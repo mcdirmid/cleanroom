@@ -10,11 +10,10 @@ VerificationCommand = NewType("VerificationCommand", str)
 
 class _Types:
     RelativePath = NewType("RelativePath", str)
-    FileTemplate = NewType("FileTemplate", str)
+    FileContent = NewType("FileContent", str)
 
 
 agent_file_alias = _Types
-sandbox_file_editor = _Types
 
 
 @dataclass(frozen=True)
@@ -23,13 +22,14 @@ class TargetManifest:
     task_prompt: Optional[agent_storage.TaskPrompt] = None
     source_file: Optional[agent_file_alias.RelativePath] = None
     silent_source_files: Sequence[agent_file_alias.RelativePath] = ()
-    template: Optional[sandbox_file_editor.FileTemplate] = None
+    template: Optional[agent_file_alias.FileContent] = None
     dependencies: Sequence[TargetLabel] = ()
     silent_dependencies: Sequence[TargetLabel] = ()
     star_dependencies: Sequence[TargetLabel] = ()
     feedback_dependencies: Sequence[TargetLabel] = ()
     guide_target: Optional[TargetLabel] = None
     verification_check: Optional[VerificationCommand] = None
+    allows_step_mode: Optional[bool] = True
 
 
 class BazelManifestLoader(Protocol):

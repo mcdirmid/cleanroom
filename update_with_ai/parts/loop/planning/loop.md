@@ -4,9 +4,9 @@ imports: dag_storage
 
 ## Intent
 
-Executing multi-stage agent workflows across interdependent graph structures requires evaluating dirty state and coordinating cleaning passes in dependency order. Without a centralized orchestration boundary, callers must manually coordinate node invalidations, state transitions, and change notifications across graph storage. The loop interface component coordinates this end-to-end lifecycle: dispatching cleaning passes across target subgraphs, routing feedback into target nodes, and broadcasting change messages to reverse dependencies.
+Executing multi-stage agent workflows across interdependent graph structures requires evaluating dirty state and coordinating cleaning passes in dependency order. Without a centralized orchestration boundary, callers must manually coordinate node invalidations, state transitions, and change notifications across graph storage. The loop interface component coordinates this end-to-end lifecycle: dispatching cleaning passes across target subgraphs, routing feedback into target nodes, and recording change descriptions on modified nodes to dynamically invalidate downstream dependencies.
 
-By managing end-to-end cleaning runs, injecting change and feedback messages, and propagating notifications to dependents, the loop isolates build coordination complexity from execution runners.
+By managing end-to-end cleaning runs, injecting change and feedback messages, and recording change descriptions, the loop isolates build coordination complexity from execution runners.
 
 ## Factored Contracts
 
@@ -28,9 +28,9 @@ By managing end-to-end cleaning runs, injecting change and feedback messages, an
 - A caller supplies a target node when injecting a feedback message. [inject_feedback_target_supplied]
 - A caller supplies a feedback message when injecting a feedback message. [inject_feedback_message_supplied]
 - The loop injects a caller-supplied feedback message into a target node. [inject_feedback_message]
-- A caller supplies a node when broadcasting a change message. [broadcast_change_node_supplied]
-- A caller supplies a change message when broadcasting a change message. [broadcast_change_message_supplied]
-- The loop broadcasts a caller-supplied change message from a node to all of its reverse dependencies. [broadcast_change_message]
+- A caller supplies a target node when recording a change message. [record_change_node_supplied]
+- A caller supplies a change message when recording a change message. [record_change_message_supplied]
+- The loop records a caller-supplied change message on a target node in graph storage, updating in-band source metadata and dynamically invalidating downstream dependencies. [record_node_change_message]
 
 ## Woven Contracts
 
@@ -38,4 +38,4 @@ By managing end-to-end cleaning runs, injecting change and feedback messages, an
 - Marking an acyclic subgraph clean primes target and dependency source files with clean timestamps, materializing missing templates and clearing unacted feedback. [mark_clean_target_supplied, mark_subgraph_clean, dag_storage: [access_dag_dependencies, clear_node_messages]]
 - Marking a target node dirty removes its last cleaned timestamp from in-band source metadata. [mark_dirty_target_supplied, mark_node_dirty, dag_storage: [mark_node_dirty]]
 - Injecting feedback messages records diagnostic updates in target node messages. [inject_feedback_target_supplied, inject_feedback_message_supplied, inject_feedback_message, dag_storage: [add_node_messages]]
-- Broadcasting change messages propagates updates from a modified node across all registered reverse dependencies. [broadcast_change_node_supplied, broadcast_change_message_supplied, broadcast_change_message, dag_storage: [access_node_dependents, add_node_messages]]
+- Recording change messages updates a modified node in graph storage with a change description, clearing unacted feedback and dynamically invalidating downstream dependencies. [record_change_node_supplied, record_change_message_supplied, record_node_change_message, dag_storage: [mark_clean_with_change_description]]

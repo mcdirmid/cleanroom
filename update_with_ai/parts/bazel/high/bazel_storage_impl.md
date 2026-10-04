@@ -13,7 +13,7 @@ Coordinating multi-node builds requires fast in-memory access to target metadata
 
 ## Types and Behavior
 
-The agent storage maintains node definitions, task prompts, declared source paths, and forward dependencies mapped to nodes in dag storage.
+The agent storage records declared source file paths, forward dependencies, silent source file paths, and feedback dependencies mapped to nodes in dag storage, maintaining node definitions and task prompts.
 
 The agent storage resolves each node's declared source file against the workspace root, reading and writing in-band metadata comment blocks containing last cleaned timestamps, last changed timestamps, change descriptions, and unacted feedback entries.
 
@@ -29,8 +29,28 @@ A node evaluates as dirty when:
 
 - Any non-silent forward dependency has a last changed timestamp strictly newer than the node's last cleaned timestamp, synthesizing a change message describing the dependency update.
 
-Marking a node clean updates the source file's in-band metadata header in-place, recording the current timestamp as the last cleaned timestamp, updating the last changed timestamp and change description when file modifications occurred, and removing all unacted feedback entries.
+Marking a node clean clears messages for the node and updates in-band metadata with a clean timestamp. When an optional change description is provided for a node with a source artifact, marking the node clean updates its last changed timestamp and change description in its in-band metadata, and clears unacted feedback.
 
 Deleting the last cleaned timestamp from a node's source file metadata header marks the node dirty without modifying its change description or last changed timestamp.
 
+Evaluating whether an auditor role node is dirty in dag storage inspects the in-band metadata of its verified feedback target files. Querying feedback dependencies or evaluating dirty status for an auditor role node without configured feedback dependencies fails fast with an error.
+
+An auditor role node evaluates as dirty when:
+
+- Any verified feedback target file is missing from the workspace root, or any verified feedback target node evaluates as dirty.
+
+- Any verified feedback target file metadata is missing, unparseable, or missing the auditor role audit timestamp.
+
+- Any verified feedback target file has a last changed timestamp strictly newer than its audit timestamp for that auditor role.
+
+- Any non-silent contract dependency has a last changed timestamp strictly newer than any verified feedback target file audit timestamp for that auditor role.
+
+Marking an auditor role node clean records the current timestamp as the auditor role audit timestamp on each verified feedback target file in-band metadata header without modifying the target file last changed timestamp.
+
+Deleting the last cleaned timestamp from an auditor role node removes the auditor role audit timestamp from each verified feedback target file in-band metadata header.
+
+Materializing template for a node writes configured template content into its declared source file if the file is missing from the workspace root without overwriting existing files.
+
 Recording a feedback message against a dependency target node updates the target node's source file in-band metadata header in-place, appending an unacted feedback entry carrying the current timestamp, blaming node address, and feedback explanation.
+
+

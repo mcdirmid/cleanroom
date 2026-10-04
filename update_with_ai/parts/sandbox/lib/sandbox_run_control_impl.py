@@ -41,6 +41,40 @@ def _make_tool_response(
     )
 
 
+def _extract_unit_info(node: dag_storage.DagNode) -> Tuple[str, str]:
+    addr = str(node.unit_address).strip()
+    if ":" in addr:
+        pkg_part, target_part = addr.split(":", 1)
+        pkg = pkg_part.lstrip("/").strip()
+    elif "/" in addr:
+        pkg, target_part = addr.rsplit("/", 1)
+        pkg = pkg.lstrip("/").strip()
+    else:
+        pkg, target_part = "", addr
+
+    role = str(node.role_address).split(":")[-1].strip() if node.role_address else ""
+    KNOWN_ROLES = ("grounding_qa", "coverage", "qa", "grounding", "planning", "high", "low", "test", "lib")
+    unit_name = target_part
+    if role and unit_name.endswith(f"_{role}"):
+        unit_name = unit_name[:-len(f"_{role}")]
+    elif any(unit_name.endswith(f"_{r}") for r in KNOWN_ROLES):
+        for r in KNOWN_ROLES:
+            if unit_name.endswith(f"_{r}"):
+                unit_name = unit_name[:-len(f"_{r}")]
+                break
+    if role in ("qa", "coverage", "grounding_qa"):
+        for dep_role in ("lib", "test", "grounding"):
+            if unit_name.endswith(f"_{dep_role}"):
+                unit_name = unit_name[:-len(f"_{dep_role}")]
+                break
+    return pkg, unit_name
+
+
+def _is_auditor_node(node: dag_storage.DagNode) -> bool:
+    role = str(node.role_address).split(":")[-1].strip() if node.role_address else ""
+    return role in ("qa", "coverage", "grounding_qa")
+
+
 class RunController(sandbox_run_control.RunController, Singleton):
     tier = agent_session
 
@@ -60,39 +94,96 @@ class RunController(sandbox_run_control.RunController, Singleton):
         self._initialized_nodes = False
         self._cleaned_in_turn: Set[dag_storage.DagNode] = set()
 
-    def _ensure_nodes(self) -> None:
+    def _populate_node_aliases(self, nodes: Sequence[dag_storage.DagNode]) -> None:
         cfg = get_singleton(agent_node_config.NodeConfig)
-        if cfg.src_file_alias_by_node:
-            for node, alias in cfg.src_file_alias_by_node.items():
-                if node not in self._node_states:
-                    self._nodes.append(node)
-                    self._alias_to_node[alias] = node
-                    self._node_to_alias[node] = alias
-                    self._node_states[node] = "OPEN"
-        elif cfg.read_write_files:
+        self._nodes = list(nodes)
+        self._alias_to_node.clear()
+        self._node_to_alias.clear()
+
+        node_infos: Dict[dag_storage.DagNode, Tuple[str, str]] = {
+            n: _extract_unit_info(n) for n in self._nodes
+        }
+        unit_counts: Dict[str, int] = {}
+        for _, u in node_infos.values():
+            unit_counts[u] = unit_counts.get(u, 0) + 1
+
+        for n in self._nodes:
+            pkg, unit_name = node_infos[n]
+            is_unique_unit = (unit_counts.get(unit_name, 0) == 1)
+
+            src_alias = None
+            if cfg.src_file_alias_by_node and n in cfg.src_file_alias_by_node:
+                src_alias = cfg.src_file_alias_by_node[n]
+            elif cfg.read_write_files:
+                for f in cfg.read_write_files:
+                    if hasattr(f, "owning_node") and f.owning_node == n:
+                        src_alias = f.relative_path
+                        break
+
+            if src_alias:
+                display_alias = src_alias
+            elif is_unique_unit:
+                display_alias = unit_name
+            elif pkg:
+                display_alias = f"{pkg}/{unit_name}"
+            else:
+                display_alias = unit_name
+
+            self._node_to_alias[n] = display_alias
+            if n not in self._node_states:
+                self._node_states[n] = "OPEN"
+
+            self._alias_to_node[display_alias] = n
+            if src_alias:
+                self._alias_to_node[src_alias] = n
+
+            pkg_unit = f"{pkg}/{unit_name}" if pkg else unit_name
+            self._alias_to_node[pkg_unit] = n
+
+            if is_unique_unit:
+                self._alias_to_node[unit_name] = n
+
+    def _ensure_nodes(self) -> None:
+        if self._nodes:
+            return
+        cfg = get_singleton(agent_node_config.NodeConfig)
+        collected_nodes: List[dag_storage.DagNode] = []
+
+        try:
+            role_cfg = get_singleton(agent_node_config.RoleConfig)
+            if role_cfg.nodes:
+                for n in role_cfg.nodes:
+                    if n not in collected_nodes:
+                        collected_nodes.append(n)
+        except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+            pass
+
+        if not collected_nodes and cfg.src_file_alias_by_node:
+            for n in cfg.src_file_alias_by_node.keys():
+                if n not in collected_nodes:
+                    collected_nodes.append(n)
+
+        if not collected_nodes and cfg.read_write_files:
             for f in sorted(cfg.read_write_files, key=lambda x: x.relative_path):
                 if hasattr(f, "owning_node") and f.owning_node is not None:
-                    node = f.owning_node
-                    if node not in self._node_states:
-                        self._nodes.append(node)
-                        self._alias_to_node[f.relative_path] = node
-                        self._node_to_alias[node] = f.relative_path
-                        self._node_states[node] = "OPEN"
-        if not self._nodes:
+                    if f.owning_node not in collected_nodes:
+                        collected_nodes.append(f.owning_node)
+
+        if not collected_nodes:
+            has_role = False
             try:
                 role_cfg = get_singleton(agent_node_config.RoleConfig)
                 has_role = bool(role_cfg.role)
-            except (LifecycleResolutionError, KeyError):  # pragma: no cover (assumption: RoleConfig registered in session)
-                has_role = False  # pragma: no cover (assumption: RoleConfig registered in session)
+            except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+                pass
             if not has_role:
                 dummy_node = dag_storage.DagNode(
                     unit_address=dag_storage.UnitAddress("//session:target"),
                     role_address=dag_storage.RoleAddress(""),
                 )
-                self._nodes.append(dummy_node)
-                self._alias_to_node["target"] = dummy_node
-                self._node_to_alias[dummy_node] = "target"
-                self._node_states[dummy_node] = "OPEN"
+                collected_nodes.append(dummy_node)
+
+        self._populate_node_aliases(collected_nodes)
 
     @property
     def nodes(self) -> Sequence[dag_storage.DagNode]:
@@ -106,18 +197,44 @@ class RunController(sandbox_run_control.RunController, Singleton):
 
     def get_node_for_alias(self, alias_or_name: str) -> Optional[dag_storage.DagNode]:
         self._ensure_nodes()
-        if alias_or_name in self._alias_to_node:
-            return self._alias_to_node[alias_or_name]
+        cand = alias_or_name.strip()
+        if not cand:
+            return None
+
+        if cand in self._alias_to_node:
+            return self._alias_to_node[cand]
+
         for node, alias in self._node_to_alias.items():
-            if alias == alias_or_name or node.unit_address == alias_or_name:
+            if alias == cand:
                 return node
+
+        norm_cand = cand.lstrip("/")
+
+        pkg_cand = None
+        if "/" in norm_cand:
+            pkg_cand = norm_cand
+
+        matching_pkg: List[dag_storage.DagNode] = []
+        matching_unit: List[dag_storage.DagNode] = []
+        for node in self.nodes:
+            pkg, unit = _extract_unit_info(node)
+            pkg_unit = f"{pkg}/{unit}" if pkg else unit
+            if pkg_cand and (pkg_cand == pkg_unit or pkg_unit.endswith("/" + pkg_cand)):
+                matching_pkg.append(node)
+            if cand == unit or norm_cand == unit:
+                matching_unit.append(node)
+
+        if len(matching_pkg) == 1:
+            return matching_pkg[0]
+        if len(matching_unit) == 1:
+            return matching_unit[0]
+
         matching = [
             node
             for node, alias in self._node_to_alias.items()
-            if os.path.basename(alias) == os.path.basename(alias_or_name)
-            or os.path.basename(node.unit_address) == alias_or_name
-            or alias.endswith("/" + alias_or_name.lstrip("/"))
-            or alias_or_name.endswith("/" + alias.lstrip("/"))
+            if os.path.basename(alias) == os.path.basename(cand)
+            or alias.endswith("/" + norm_cand)
+            or norm_cand.endswith("/" + alias.lstrip("/"))
         ]
         if len(matching) == 1:
             return matching[0]
@@ -126,7 +243,10 @@ class RunController(sandbox_run_control.RunController, Singleton):
     def get_alias_for_node(self, node: dag_storage.DagNode) -> str:
         self._ensure_nodes()
         alias = self._node_to_alias.get(node)
-        return alias if alias else (node.unit_address or "")
+        if alias:
+            return alias
+        pkg, unit_name = _extract_unit_info(node)
+        return f"{pkg}/{unit_name}" if pkg else unit_name
 
     def get_node_state(self, node: dag_storage.DagNode) -> str:
         self._ensure_nodes()
@@ -173,7 +293,6 @@ class RunController(sandbox_run_control.RunController, Singleton):
                 if self._node_states.get(n) == "OPEN":
                     if curr in self.get_in_batch_dependencies(n):
                         self._node_states[n] = "FAILED"
-                        self.lock_node_files(n)
                         to_check.append(n)
 
     def block_dependents(self, node: dag_storage.DagNode) -> None:
@@ -196,22 +315,7 @@ class RunController(sandbox_run_control.RunController, Singleton):
                 )
         return None
 
-    def lock_node_files(self, node: dag_storage.DagNode) -> None:
-        self._ensure_nodes()
-        edit_mgr = get_singleton(sandbox_file_editor.EditManager)
-        cfg = get_singleton(agent_node_config.NodeConfig)
-        target_alias = self.get_alias_for_node(node)
-        for f in cfg.read_write_files:
-            if isinstance(f, agent_file_alias.ReadWriteFile):
-                if f.relative_path == target_alias or (
-                    hasattr(f, "owning_node") and f.owning_node == node
-                ):
-                    edit_mgr.lock_file(f)
-
     def reset_nodes(self, nodes: Sequence[dag_storage.DagNode]) -> None:
-        self._nodes = list(nodes)
-        self._alias_to_node = {}
-        self._node_to_alias = {}
         self._node_states = {}
         self._cached_node_passed = {}
         self._cached_node_diag = {}
@@ -220,14 +324,10 @@ class RunController(sandbox_run_control.RunController, Singleton):
         self._cached_diag = ""
         self._cached_revision = None
         self._cleaned_in_turn.clear()
-        cfg = get_singleton(agent_node_config.NodeConfig)
-        for n in self._nodes:
-            alias = cfg.src_file_alias_by_node.get(n, n.unit_address)
-            self._alias_to_node[alias] = n
-            self._node_to_alias[n] = alias
-            self._node_states[n] = "OPEN"
+        self._populate_node_aliases(nodes)
         if not self._nodes:
             self._ensure_nodes()
+        cfg = get_singleton(agent_node_config.NodeConfig)
         try:
             tm = get_singleton(tool_provider.ToolManager)
             if cfg.is_step_mode:
@@ -349,7 +449,6 @@ class RunController(sandbox_run_control.RunController, Singleton):
             alias_str = (
                 n_cfg.src_file_alias_by_node.get(n)
                 or self.get_alias_for_node(n)
-                or n.unit_address  # pragma: no cover (assumption: component files follow standard workspace naming convention)
             )
             grounding_file = self._resolve_grounding_file(n, alias_str, n_cfg)
             if grounding_file:
@@ -433,6 +532,14 @@ class RunController(sandbox_run_control.RunController, Singleton):
                 parts.append("\n".join(message_lines))
             if footer:
                 parts.append(footer)
+            if is_multi_node:
+                parts.append(
+                    "When submitting or failing completed units, specify target as <unit_name> (if unique among session units) or <relative_path>/<unit_name> (if ambiguous)."
+                )
+            else:
+                parts.append(
+                    "When calling submit or fail for a single unit, the target parameter may be omitted."
+                )
             return "\n\n".join(parts).strip()
 
     def initialize(self) -> None:
@@ -708,30 +815,18 @@ class RunController(sandbox_run_control.RunController, Singleton):
 
     def resolve_default_target(self) -> Optional[dag_storage.DagNode]:
         self._ensure_nodes()
-        cfg = get_singleton(agent_node_config.NodeConfig)
-        edit_mgr = get_singleton(sandbox_file_editor.EditManager)
-
-        if len(cfg.read_write_files) == 1:
-            rw_file = next(iter(cfg.read_write_files))
-            node = getattr(rw_file, "owning_node", None)
-            if node is None:
-                node = self.get_node_for_alias(
-                    getattr(rw_file, "relative_path", str(rw_file))
-                )
-            if node is not None:
-                return node
-            return self.nodes[0] if self.nodes else None
-
-        if not cfg.read_write_files and len(self.nodes) <= 1:
-            return self.nodes[0] if self.nodes else None
-
         open_nodes = self.open_nodes()
         if not open_nodes:
             return None
 
+        # Requirement: When omitted with a single open active node, resolve target defaults to that remaining unsubmitted active node.
+        if len(open_nodes) == 1:
+            return open_nodes[0]
+
+        cfg = get_singleton(agent_node_config.NodeConfig)
+        edit_mgr = get_singleton(sandbox_file_editor.EditManager)
+
         def _is_file_open(f: agent_file_alias.BoundFile) -> bool:
-            if f in edit_mgr.locked_files:
-                return False
             owning_node = getattr(f, "owning_node", None)
             if owning_node is not None and self.get_node_state(owning_node) != "OPEN":
                 return False
@@ -749,11 +844,8 @@ class RunController(sandbox_run_control.RunController, Singleton):
                 node = self.get_node_for_alias(
                     getattr(f, "relative_path", str(f))
                 )
-            if node is not None:
+            if node is not None and node in open_nodes:
                 return node
-            return open_nodes[0]
-
-        if not cfg.read_write_files and len(open_nodes) == 1:
             return open_nodes[0]
 
         last_f = edit_mgr.last_read_or_edited_file
@@ -1017,7 +1109,9 @@ class _ResolveTool(sandbox_run_control.ResolveTool):
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         return tool_provider.ToolParameter(
             name=tool_provider.ParameterName("target"),
-            description=tool_provider.ParameterDescription("Active node target file alias being resolved."),
+            description=tool_provider.ParameterDescription(
+                "Target being resolved: source file alias (if any), unit_name (if unique among session units), or relative_path/unit_name (if ambiguous). May be omitted when only one unit is being processed."
+            ),
             parameter_type=alias_mgr,
             is_required=False,
         )
@@ -1031,7 +1125,9 @@ class _ResolveTool(sandbox_run_control.ResolveTool):
         alias_mgr = get_singleton(agent_file_alias.AliasManager)
         return tool_provider.ToolParameter(
             name=tool_provider.ParameterName("resolve_target"),
-            description=tool_provider.ParameterDescription("Active node target file alias being resolved."),
+            description=tool_provider.ParameterDescription(
+                "Target being resolved: source file alias (if any), unit_name (if unique among session units), or relative_path/unit_name (if ambiguous). May be omitted when only one unit is being processed."
+            ),
             parameter_type=alias_mgr,
             is_required=False,
         )
@@ -1207,11 +1303,27 @@ class SubmitTool(_ResolveTool, sandbox_run_control.SubmitTool, Singleton):
                 suppression_key="submit",
             )
 
+        if _is_auditor_node(target_node) and summary_str:
+            return _make_tool_response(
+                is_failed=True,
+                is_terminated=False,
+                content="Error: Change summary is prohibited for audit nodes.",
+                reminder="Do not provide a change summary when submitting audit nodes.",
+                suppression_key="submit",
+            )
+
+        # Requirement: Tool execution marks the resolve target clean in graph storage with the provided change summary.
+        storage = get_singleton(dag_storage.DagStorage)
+        change_desc = (
+            dag_storage.ChangeDescription(summary_str)
+            if (summary_str and not _is_auditor_node(target_node))
+            else None
+        )
+        storage.mark_node_clean(target_node, change_desc)
+
         # Requirement: Tool execution marks the resolve target clean and submitted in the current get work turn and resolves the active node.
-        # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
         rc.set_node_state(target_node, "SUBMITTED")
         rc.mark_clean_in_turn(target_node)
-        rc.lock_node_files(target_node)
         open_nodes = rc.open_nodes()
 
         if open_nodes:
@@ -1348,10 +1460,8 @@ class FailTool(_ResolveTool, sandbox_run_control.FailTool, Singleton):
             return dep_resp
 
         # Requirement: Executing the fail tool marks the active node as failed and resolves the active node.
-        # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
-        # Requirement: Automatically marks in-batch dependent nodes as failed and locks their read-write files upon node failure or blame attribution.
+        # Requirement: Automatically marks in-batch dependent nodes as failed upon node failure or blame attribution.
         rc.set_node_state(target_node, "FAILED")
-        rc.lock_node_files(target_node)
         rc.fail_dependents(target_node)
 
         open_nodes = rc.open_nodes()
@@ -1498,68 +1608,39 @@ class BlameTool(_ResolveTool, sandbox_run_control.BlameTool, Singleton):
             return None
 
         open_nodes = rc.open_nodes()
+        cand_nodes = open_nodes if open_nodes else list(rc.nodes)
 
         # Resolve blamee and source_node
+        source_node: Optional[dag_storage.DagNode] = None
+        matched_target: Optional[agent_file_alias.BoundFile] = None
+        blamee_str: str = ""
+
+        # Requirement: The blame tool identifies the active node attributing blame from the specified blame target.
         if raw_blame_target is not None or blame_target_str:
-            blamee = raw_blame_target
             blamee_str = blame_target_str
-            if target_str:
-                cand_node = rc.get_node_for_alias(target_str)
-                if cand_node is not None and rc.get_node_state(cand_node) == "OPEN":
-                    source_node = cand_node
-                else:
-                    matching_nodes = [
-                        n
-                        for n in open_nodes
-                        if _match_node_blame_target(
-                            n, raw_blame_target, blame_target_str
-                        )
-                        is not None
-                    ]
-                    if matching_nodes:
-                        source_node = matching_nodes[0]
-                    else:
-                        source_node = cand_node or (  # pragma: no cover (defensive: fallback when cand_node not open)
-                            open_nodes[0]
-                            if open_nodes
-                            else (rc.nodes[0] if rc.nodes else None)
-                        )
-            else:
-                # Requirement: Tool execution defaults the resolve target parameter to that active node when the blame target matches a configured blame target of an open active node.
-                matching_nodes = [
-                    n
-                    for n in open_nodes
-                    if _match_node_blame_target(
-                        n, raw_blame_target, blame_target_str
-                    )
-                    is not None
-                ]
-                if matching_nodes:
-                    if len(matching_nodes) == 1:
-                        source_node = matching_nodes[0]
-                    else:
-                        def_node = rc.resolve_default_target()
-                        source_node = (
-                            def_node
-                            if def_node in matching_nodes
-                            else matching_nodes[0]
-                        )
-                else:
-                    # Requirement: Tool execution defaults the resolve target parameter using resolve target defaulting rules when the resolve target parameter is omitted and cannot be inferred from the blame target.
-                    source_node = rc.resolve_default_target() or (  # pragma: no cover (defensive: fallback when default target cannot be resolved)
-                        open_nodes[0]
-                        if open_nodes
-                        else (rc.nodes[0] if rc.nodes else None)
-                    )
-        elif raw_target is not None or target_str:
-            # Requirement: Tool execution defaults the blame target parameter to that target and the resolve target parameter to the active node configured with that blame target when the blame target parameter is omitted and the resolve target parameter matches a configured blame target.
             matching_nodes = [
-                n
-                for n in open_nodes
+                n for n in cand_nodes
+                if _match_node_blame_target(n, raw_blame_target, blame_target_str) is not None
+            ]
+            if matching_nodes:
+                if len(matching_nodes) == 1:
+                    source_node = matching_nodes[0]
+                else:
+                    def_node = rc.resolve_default_target()
+                    source_node = (
+                        def_node
+                        if def_node in matching_nodes
+                        else matching_nodes[0]
+                    )
+                matched_target = _match_node_blame_target(source_node, raw_blame_target, blame_target_str)
+
+        # Requirement: Resolves the active node attributing blame from the resolve target parameter when matching a configured blame target.
+        if matched_target is None and (raw_target is not None or target_str):
+            matching_nodes = [
+                n for n in cand_nodes
                 if _match_node_blame_target(n, raw_target, target_str) is not None
             ]
             if matching_nodes:
-                blamee = raw_target
                 blamee_str = target_str
                 if len(matching_nodes) == 1:
                     source_node = matching_nodes[0]
@@ -1570,30 +1651,31 @@ class BlameTool(_ResolveTool, sandbox_run_control.BlameTool, Singleton):
                         if def_node in matching_nodes
                         else matching_nodes[0]
                     )
-            else:
+                matched_target = _match_node_blame_target(source_node, raw_target, target_str)
+
+        # If source_node was not inferred from blame target:
+        if source_node is None:
+            if raw_target is not None or target_str:
                 cand_node = rc.get_node_for_alias(target_str)
-                if cand_node is not None and rc.get_node_state(cand_node) == "OPEN":
+                if cand_node is not None and (rc.get_node_state(cand_node) == "OPEN" or not open_nodes):
                     source_node = cand_node
-                    blamee = None
-                    blamee_str = ""
-                else:
-                    source_node = rc.resolve_default_target() or (  # pragma: no cover (defensive: fallback when default target cannot be resolved)
-                        open_nodes[0]
-                        if open_nodes
-                        else (rc.nodes[0] if rc.nodes else None)
-                    )
-                    blamee = raw_target
-                    blamee_str = target_str
-        else:
-            # Both omitted
-            # Requirement: Tool execution defaults the resolve target parameter using resolve target defaulting rules when the resolve target parameter is omitted and cannot be inferred from the blame target.
-            source_node = rc.resolve_default_target() or (  # pragma: no cover (defensive: fallback when default target cannot be resolved)
-                open_nodes[0]
-                if open_nodes
-                else (rc.nodes[0] if rc.nodes else None)
-            )
-            blamee = None
-            blamee_str = ""
+            elif len(open_nodes) == 1:
+                source_node = open_nodes[0]
+            elif not open_nodes and len(rc.nodes) == 1:
+                source_node = rc.nodes[0]
+            else:
+                source_node = rc.resolve_default_target()
+
+        # If source_node is known and blame target not yet matched:
+        if source_node is not None and matched_target is None:
+            if raw_blame_target is not None or blame_target_str:
+                matched_target = _match_node_blame_target(source_node, raw_blame_target, blame_target_str)
+                blamee_str = blame_target_str
+            else:
+                # Requirement: When blame target is omitted in a single-target context, the blame tool defaults to the single configured blame target of the active node.
+                node_blame_targets = rc.get_blame_targets_for_node(source_node)
+                if len(node_blame_targets) == 1:
+                    matched_target = next(iter(node_blame_targets))
 
         if source_node is None:
             open_targets = ", ".join(
@@ -1606,19 +1688,18 @@ class BlameTool(_ResolveTool, sandbox_run_control.BlameTool, Singleton):
                 reminder=f"Specify an open target: {open_targets}",
             )
 
-        allowed_blame_targets = rc.get_blame_targets_for_node(source_node)
-        matched_target = _match_node_blame_target(source_node, blamee, blamee_str)
-
         if matched_target is None:
+            allowed_blame_targets = rc.get_blame_targets_for_node(source_node)
             avail = ", ".join(
                 getattr(t, "relative_path", getattr(t, "short_name", ""))
                 for t in allowed_blame_targets
             )
+            bad_label = blamee_str or target_str
             # Requirement: Tool execution fails if the blame target does not match any configured blame target, providing an error response listing the available blame targets and reminding the agent that only upstream files configured as blame targets can be blamed.
             return _make_tool_response(
                 is_failed=True,
                 is_terminated=False,
-                content=f"Error: Target '{blamee_str}' is not a valid blame target. Available: {avail}",
+                content=f"Error: Target '{bad_label}' is not a valid blame target. Available: {avail}",
                 reminder="Only upstream files configured as blame targets can be blamed.",
             )
 
@@ -1637,14 +1718,24 @@ class BlameTool(_ResolveTool, sandbox_run_control.BlameTool, Singleton):
         if dep_resp is not None:
             return dep_resp
 
+        # Requirement: MUST record defect feedback for the blamed target via dag_storage so that the blamed node receives the feedback message.
+        storage = get_singleton(dag_storage.DagStorage)
+        blamed_node = getattr(matched_target, "owning_node", None)
+        if blamed_node is not None:
+            storage.add_message(
+                dag_storage.FeedbackMessage(
+                    content=dag_storage.MessageContent(exp),
+                    target=blamed_node,
+                ),
+                to=blamed_node,
+            )
+
         # Requirement: Tool execution marks the blame target as attributed and resolves the active node on successful tool execution.
-        # Requirement: Resolving an active node locks the resolve target read-write files in the edit manager against subsequent modification.
-        # Requirement: Automatically marks in-batch dependent nodes as failed and locks their read-write files upon node failure or blame attribution.
+        # Requirement: Automatically marks in-batch dependent nodes as failed upon node failure or blame attribution.
         target_name = getattr(
             matched_target, "relative_path", getattr(matched_target, "short_name", "")
         )
         rc.set_node_state(source_node, "BLAME")
-        rc.lock_node_files(source_node)
         rc.fail_dependents(source_node)
 
         open_nodes = rc.open_nodes()
@@ -1787,8 +1878,9 @@ class GetWorkTool(sandbox_run_control.GetWorkTool, Singleton):
         except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):  # pragma: no cover (assumption: tier services instantiated)
             pass
 
-        sb = get_singleton(sandbox.Sandbox)
-        sb.materialize_templates()
+        storage = get_singleton(dag_storage.DagStorage)
+        for n in batch:
+            storage.materialize_template(n)
 
         n_cfg = get_singleton(agent_node_config.NodeConfig)
         rendered_prompt = rc.format_task_prompt(batch)

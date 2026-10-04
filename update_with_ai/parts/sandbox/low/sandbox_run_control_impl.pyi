@@ -90,7 +90,9 @@ class SubmitTool(
         - WHEN verification is failing, MUST fail specifying follow-up execution of check files.
         - WHEN an initial implementation change is assigned and no files were modified, MUST fail.
         - WHEN session feedback is present and no files were modified, MUST fail.
+        - WHEN target is an auditor node and change summary is provided, MUST fail reminding agent that change summary is prohibited for audit nodes.
         - WHEN files were modified and change summary is omitted, MUST fail.
+        - MUST mark the resolve target clean in storage via dag_storage with the provided change summary so that the node is no longer dirty.
         - MUST mark resolve target clean in current turn.
         """
         ...
@@ -141,10 +143,11 @@ class BlameTool(
             Response recording blame feedback.
 
         POSTCONDITIONS:
-        - WHEN blame target matches a configured blame target, MUST default resolve target to that node.
-        - WHEN blame target is omitted and resolve target matches a configured blame target, MUST swap their assignments.
+        - MUST identify active node attributing blame from specified blame target.
+        - WHEN blame target is omitted in single-target context, MUST default to single configured blame target of active node.
         - WHEN blame target does not match any configured blame target, MUST fail listing available blame targets.
         - WHEN explanation contains newline characters, MUST fail reminding agent that explanation must be a single paragraph.
+        - MUST record defect feedback for the blamed target via dag_storage so that the blamed node receives the feedback message.
         - MUST mark blame target as attributed.
         """
         ...

@@ -4,15 +4,13 @@ imports: agent_session, agent_file_alias, tool_provider
 
 ## Purpose
 
-The sandbox_file_editor interface component provides safe workspace file editing tools and template materialization for writable files while preventing arbitrary disk writes.
+The sandbox_file_editor interface component provides safe workspace file editing tools for writable files while preventing arbitrary disk writes.
 
-Autonomous agents require structured mechanisms to update code and configurations, but unrestrained whole-file overwrites risk destroying context, introducing syntax corruption, and bypassing file access permissions. Furthermore, multi-stage workflows frequently initialize new tasks with boilerplate starter templates that must not clobber existing implementations. The sandbox_file_editor interface component establishes an isolated editing layer restricted strictly to declared writable files, offering precise replacement and line-bounded writes alongside non-destructive template initialization.
+Autonomous agents require structured mechanisms to update code and configurations, but unrestrained whole-file overwrites risk destroying context, introducing syntax corruption, and bypassing file access permissions. The sandbox_file_editor interface component establishes an isolated editing layer restricted strictly to declared writable files, offering precise replacement and line-bounded writes.
 
 **Out of scope:** The sandbox_file_editor interface component does not manage agent turn loops, execute verification checks, or resolve host file paths; these are handled by other components.
 
 ## Types and Behavior
-
-A *file template* is file content representing initial boilerplate for a read-write file.
 
 An *editing tool* is a tool that writes to a read-write file.
 
@@ -21,8 +19,6 @@ An agent session's *replace file content tool* is an editing tool that replaces 
 An agent session's *edit manager* writes to workspace files and tracks session edits.
 
 The edit manager:
-
-- Can *materialize* templates into missing read-write files at session start without overwriting existing files.
 
 - Exposes whether workspace file writes occurred during the session, determined by whether workspace file contents differ from their initial state prior to editing.
 

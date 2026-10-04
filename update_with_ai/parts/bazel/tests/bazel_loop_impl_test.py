@@ -58,27 +58,21 @@ class MockDagStorage:
     def __init__(self) -> None:
         self.dirty_nodes: Set[dag_storage.DagNode] = set()
         self.messages: dict[dag_storage.DagNode, list[dag_storage.DagMessage]] = {}
-        self.dependents_map: dict[dag_storage.DagNode, Set[dag_storage.DagNode]] = {}
         self.dependencies_map: dict[dag_storage.DagNode, Set[dag_storage.DagDependency]] = {}
         self._source_files: dict[dag_storage.DagNode, str] = {}
+        self.manifest_loader: Optional[MockManifestLoader] = None
+        self.cleaned_nodes: list[dag_storage.DagNode] = []
+        self.cleaned_changes: dict[dag_storage.DagNode, Optional[dag_storage.ChangeDescription]] = {}
+        self.materialized_nodes: list[dag_storage.DagNode] = []
 
     def get_dependencies(self, node: dag_storage.DagNode) -> Set[dag_storage.DagDependency]:
         return self.dependencies_map.get(node, set())
-
-    def get_dependents(self, node: dag_storage.DagNode) -> Set[dag_storage.DagNode]:
-        return self.dependents_map.get(node, set())
 
     def get_messages(self, node: dag_storage.DagNode) -> Set[dag_storage.DagMessage]:
         return set(self.messages.get(node, []))
 
     def is_dirty(self, node: dag_storage.DagNode) -> bool:
         return node in self.dirty_nodes
-
-    def register_dependent(self, node: dag_storage.DagNode) -> None:
-        pass
-
-    def clear_dependents(self, node: dag_storage.DagNode) -> None:
-        self.dependents_map.pop(node, None)
 
     def add_message(self, message: dag_storage.DagMessage, to: dag_storage.DagNode) -> None:
         if to not in self.messages:
@@ -89,15 +83,21 @@ class MockDagStorage:
     def clear_messages(self, node: dag_storage.DagNode) -> None:
         self.messages.pop(node, None)
         self.dirty_nodes.discard(node)
-        if node in self._source_files:
-            from pathlib import Path
-            from support.lib import src_metadata
-            src_path = Path(self._source_files[node])
-            if src_path.is_file():
-                src_metadata.mark_clean(src_path)
 
     def delete_last_cleaned(self, node: dag_storage.DagNode) -> None:
         self.dirty_nodes.add(node)
+
+    def mark_node_clean(
+        self,
+        node: dag_storage.DagNode,
+        change_description: Optional[dag_storage.ChangeDescription] = None,
+    ) -> None:
+        self.cleaned_nodes.append(node)
+        self.cleaned_changes[node] = change_description
+        self.clear_messages(node)
+
+    def materialize_template(self, node: dag_storage.DagNode) -> None:
+        self.materialized_nodes.append(node)
 
 
 class MockLoopCleaner:
@@ -137,6 +137,7 @@ class BazelLoopImplTest(unittest.TestCase):
         self.logger = MockRunnerLogger()
         self.manifest_loader = MockManifestLoader()
         self.storage = MockDagStorage()
+        self.storage.manifest_loader = self.manifest_loader
         self.cleaner = MockLoopCleaner(self.storage)
         self.node_cleaner = MockNodeCleaner()
 
@@ -300,67 +301,33 @@ class BazelLoopImplTest(unittest.TestCase):
 
     def test_mark_subgraph_clean(self) -> None:
         """CUJ: Marking an acyclic subgraph clean with template materialization."""
-        import tempfile
-        from pathlib import Path
-        from support.lib import src_metadata
+        root = _make_dag_node("//pkg:app")
+        dep = _make_dag_node("//pkg:lib")
+        self.storage.dependencies_map[root] = {
+            dag_storage.DagDependency(node=dep, is_silent=False)
+        }
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            root = _make_dag_node("//pkg:app")
-            dep = _make_dag_node("//pkg:lib")
-            self.storage.dependencies_map[root] = {
-                dag_storage.DagDependency(node=dep, is_silent=False)
-            }
-            root_src = Path(tmp_dir) / "app.py"
-            dep_src = Path(tmp_dir) / "lib.py"
-            tmpl_file = Path(tmp_dir) / "template.py"
-            tmpl_file.write_text("# template content\n", encoding="utf-8")
+        self.manifest_loader.manifests["//pkg:lib"] = bazel_manifest_loader.TargetManifest(
+            label=bazel_manifest_loader.TargetLabel("//pkg:lib"),
+            template=bazel_manifest_loader.agent_file_alias.FileContent("# template content\n"),
+        )
 
-            # root_src exists with unacted feedback
-            root_src.write_text(
-                "# --- CLEANROOM METADATA ---\n"
-                "# LAST_CLEANED: 2026-10-02T14:00:00Z\n"
-                "# LAST_CHANGED: 2026-10-02T14:00:00Z\n"
-                "# CHANGE: Initial\n"
-                "# FEEDBACK:\n"
-                "# - [2026-10-02T14:10:00Z from user]: fix me\n"
-                "# --- END CLEANROOM METADATA ---\n"
-                "print('app')\n",
-                encoding="utf-8",
-            )
-            self.storage._source_files[root] = str(root_src)
-            self.storage._source_files[dep] = str(dep_src)
+        self.storage.dirty_nodes.add(root)
+        self.storage.dirty_nodes.add(dep)
 
-            self.manifest_loader.manifests["//pkg:lib"] = bazel_manifest_loader.TargetManifest(
-                label=bazel_manifest_loader.TargetLabel("//pkg:lib"),
-                template=bazel_manifest_loader.sandbox_file_editor.FileTemplate(str(tmpl_file)),
-            )
+        with enter_phase("system", registry=self.registry):
+            runner = get_singleton(loop.Loop)
+            runner.mark_subgraph_clean(root)
 
-            self.storage.dirty_nodes.add(root)
-            self.storage.dirty_nodes.add(dep)
+            # Both nodes should have messages cleared in storage
+            self.assertFalse(self.storage.is_dirty(root))
+            self.assertFalse(self.storage.is_dirty(dep))
 
-            with enter_phase("system", registry=self.registry):
-                runner = get_singleton(loop.Loop)
-                runner.mark_subgraph_clean(root)
-
-                # Both nodes should have messages cleared in storage
-                self.assertFalse(self.storage.is_dirty(root))
-                self.assertFalse(self.storage.is_dirty(dep))
-
-                # root_src should have feedback cleared and LAST_CLEANED updated
-                meta_root = src_metadata.extract_metadata(root_src)
-                self.assertIsNotNone(meta_root)
-                assert meta_root is not None
-                self.assertEqual(meta_root.feedback, [])
-                self.assertIsNotNone(meta_root.last_cleaned)
-
-                # dep_src should have been materialized from template
-                self.assertTrue(dep_src.is_file())
-                self.assertIn("# template content", dep_src.read_text(encoding="utf-8"))
-                meta_dep = src_metadata.extract_metadata(dep_src)
-                self.assertIsNotNone(meta_dep)
-                assert meta_dep is not None
-                self.assertEqual(meta_dep.change_summary, "new file")
-                self.assertIsNotNone(meta_dep.last_cleaned)
+            # Both nodes should have been materialized and marked clean in storage
+            self.assertIn(root, self.storage.cleaned_nodes)
+            self.assertIn(dep, self.storage.cleaned_nodes)
+            self.assertIn(root, self.storage.materialized_nodes)
+            self.assertIn(dep, self.storage.materialized_nodes)
 
     def test_inject_feedback(self) -> None:
         """CUJ: Injecting caller-supplied feedback message to mark a node dirty."""
@@ -376,22 +343,30 @@ class BazelLoopImplTest(unittest.TestCase):
             self.assertIn(feedback, self.storage.get_messages(target))
 
     def test_broadcast_change(self) -> None:
-        """CUJ: Broadcasting a change message to all downstream reverse dependencies."""
+        """CUJ: Recording a change message on origin node in graph storage."""
         origin = _make_dag_node("//pkg:origin")
-        dep1 = _make_dag_node("//pkg:dep1")
-        dep2 = _make_dag_node("//pkg:dep2")
-        self.storage.dependents_map[origin] = {dep1, dep2}
-        change = dag_storage.ChangeMessage()
+        change = dag_storage.ChangeMessage(content=dag_storage.MessageContent("refactored api"))
 
         with enter_phase("system", registry=self.registry):
             runner = get_singleton(loop.Loop)
-            # Requirement: MUST broadcast the change message to all reverse dependencies of the node.
+            # Requirement: MUST mark the target node clean in graph storage with the change description from the change message.
             runner.broadcast_change(origin, change)
 
-            self.assertTrue(self.storage.is_dirty(dep1))
-            self.assertTrue(self.storage.is_dirty(dep2))
-            self.assertIn(change, self.storage.get_messages(dep1))
-            self.assertIn(change, self.storage.get_messages(dep2))
+            self.assertIn(origin, self.storage.cleaned_nodes)
+            self.assertEqual(self.storage.cleaned_changes.get(origin), "refactored api")
+
+    def test_record_change(self) -> None:
+        """CUJ: Recording a change message on target node in graph storage."""
+        origin = _make_dag_node("//pkg:origin")
+        change = dag_storage.ChangeMessage(content=dag_storage.MessageContent("updated methods"))
+
+        with enter_phase("system", registry=self.registry):
+            runner = get_singleton(loop.Loop)
+            # Requirement: MUST mark the target node clean in graph storage with the change description from the change message.
+            runner.record_change(origin, change)
+
+            self.assertIn(origin, self.storage.cleaned_nodes)
+            self.assertEqual(self.storage.cleaned_changes.get(origin), "updated methods")
 
 
 if __name__ == "__main__":

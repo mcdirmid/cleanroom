@@ -242,7 +242,11 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
         agent_node_config.TemplateParamKey("dir"): pkg_path,
     }
 
-    allows_step_mode = True
+    allows_step_mode = (
+        manifest.allows_step_mode
+        if manifest is not None and manifest.allows_step_mode is not None
+        else True
+    )
 
     guide_target = manifest.guide_target if manifest is not None else None
     guide_file: Optional[agent_file_alias.UnboundFile] = None

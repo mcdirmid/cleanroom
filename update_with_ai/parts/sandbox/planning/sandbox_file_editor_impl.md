@@ -1,13 +1,13 @@
 # sandbox_file_editor_impl implementation component
 
-imports: filesystem_ext, tool_provider, agent_file_alias, agent_node_config, agent_config, template_format
+imports: filesystem_ext, tool_provider, agent_file_alias, agent_node_config, agent_config
 implements: sandbox_file_editor
 
 ## Intent
 
 Unchecked file overwrites can corrupt source repositories, destroy uncommitted user work, and exhaust token budgets with repetitive full-file payload emissions. The sandbox_file_editor_impl implementation component realizes safe, localized text replacements within bounded line ranges for declared read-write files. By checking line bounds, falling back from exact string matches to whitespace-tolerant line comparisons, and producing contextual line diagnostics when matches are ambiguous or relocated, the editor prevents accidental clobbering while assisting autonomous agents in self-correcting drift.
 
-Furthermore, the implementation manages initial file templates non-destructively, maintains write locks against files submitted for review, tracks revision counters, and emits structured diff deltas to minimize conversational overhead.
+Furthermore, the implementation tracks revision counters and emits structured diff deltas to minimize conversational overhead.
 
 ## Factored Contracts
 
@@ -15,21 +15,12 @@ Furthermore, the implementation manages initial file templates non-destructively
 
 - The edit manager provides the replace file content tool when mcp mode is inactive. [provide_tool_when_mcp_inactive]
 - The edit manager installs no editing tools when mcp mode is active. [install_no_tools_when_mcp_active]
-- Materializing templates retrieves configured templates from node config. [retrieve_configured_templates]
-- Materializing templates formats initial template content using the template formatter with session template parameters. [format_initial_template_content]
-- Materializing templates checks whether target files exist in the filesystem. [check_target_files_exist]
-- Materializing templates writes formatted template content for missing files. [write_missing_template_files]
-- Materializing templates preserves existing files. [preserve_existing_template_files]
-- Materializing templates records initial content baselines for active read-write files. [record_initial_content_baselines]
+- At session initialization, initial content baselines are recorded for active read-write files. [record_initial_content_baselines]
 - The edit manager compares current workspace file content against initial content before editing. [compare_current_against_initial_content]
 - The edit manager increments the file update revision whenever workspace files are updated. [increment_revision_on_file_update]
 - The edit manager computes the file hash by returning an MD5 hexadecimal digest of content read from the filesystem. [compute_md5_file_hash]
-- The edit manager locks individual read-write files. [lock_read_write_file]
-- The edit manager unlocks individual read-write files. [unlock_read_write_file]
 - Editing tool execution fails when the target file is not a read-write file. [fail_when_target_not_read_write]
 - Editing tool execution reminds the agent that only declared read-write files can be written when the target file is not a read-write file. [remind_only_read_write_writable]
-- Editing tool execution fails when the file alias is locked against write. [fail_when_file_locked]
-- Editing tool execution reminds the agent that files targeted by submit, fail, or blame cannot be written when the file alias is locked against write. [remind_locked_files_unwritable]
 - Editing tool execution fails when the edit produces no change to file content. [fail_when_edit_produces_no_change]
 - Editing tool execution reminds the agent that no-op edits will fail when the edit produces no change. [remind_no_op_edits_fail]
 - Successful editing tool execution writes updated file content to the filesystem. [write_updated_content_on_success]
@@ -61,14 +52,12 @@ Furthermore, the implementation manages initial file templates non-destructively
 - When target content matches multiple locations and allow multiple is false, failure feedback indicates the first two matching line numbers. [feedback_first_two_matching_lines]
 - When target content is not found in the search window but exists elsewhere in the file, failure feedback indicates the line numbers where target content was located. [feedback_relocated_lines_when_outside_range]
 - The can write operation fails when the target path is not a declared read-write file. [can_write_fails_when_not_read_write]
-- The can write operation fails when the target path is locked against write. [can_write_fails_when_locked]
-- When an unlocked read-write file is supplied, the can write operation records the file edit. [can_write_records_file_edit]
-- When an unlocked read-write file is supplied, the can write operation produces a successful response indicating write access is permitted. [can_write_produces_success_response]
+- When a declared read-write file is supplied, the can write operation records the file edit. [can_write_records_file_edit]
+- When a declared read-write file is supplied, the can write operation produces a successful response indicating write access is permitted. [can_write_produces_success_response]
 
 ## Woven Contracts
 
-- At session startup, templates are formatted with session parameters and written to missing read-write files while preserving existing workspace content. [retrieve_configured_templates, format_initial_template_content, check_target_files_exist, write_missing_template_files, preserve_existing_template_files, record_initial_content_baselines, sandbox_file_editor: [materialize_templates_at_start], template_format: [format_template_text_supplied, format_template_params_supplied, format_template_text]]
-- Validating write access confirms access and records file edits for unlocked read-write files, but rejects undeclared or locked targets. [can_write_fails_when_not_read_write, can_write_fails_when_locked, can_write_records_file_edit, can_write_produces_success_response, remind_only_read_write_writable, remind_locked_files_unwritable, sandbox_file_editor: [can_write_validates_access]]
+- Validating write access confirms access and records file edits for declared read-write files, but rejects undeclared targets. [can_write_fails_when_not_read_write, can_write_records_file_edit, can_write_produces_success_response, remind_only_read_write_writable, sandbox_file_editor: [can_write_validates_access]]
 - Missing path arguments default to the last read or edited read-write file with an advisory warning, failing if no valid file history exists. [implicitly_bind_last_read_or_edited_file, warn_when_path_implicitly_bound, fail_when_path_omitted_and_no_last_file, fail_when_path_omitted_and_last_not_read_write, sandbox_file_editor: [track_last_read_or_edited]]
 - Line search windows are validated against file bounds, rejecting non-positive or inverted bounds before matching proceeds. [fail_when_start_line_less_than_one, fail_when_start_line_exceeds_line_count_plus_one, fail_when_end_line_less_than_one, fail_when_end_line_exceeds_line_count, fail_when_start_exceeds_end]
 - Target content matching attempts exact matching first, falling back to whitespace-tolerant matching when single replacements are requested. [match_target_content_exactly, fallback_whitespace_stripped_matching, whitespace_fallback_succeeds_on_single_match]

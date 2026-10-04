@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-04T02:03:40Z
+LAST_CLEANED: 2026-10-04T19:49:10Z
 LAST_CHANGED: 2026-10-04T02:03:40Z
 CHANGE: new file
 -->
@@ -10,7 +10,7 @@ CHANGE: new file
 
 The artifact is a High-Level Specification (HLS) that defines a software component declaratively through literate prose under `high/<name>.md`. In a multi-node session, multiple high-level specifications are processed together; each target is identified by its file alias relative path, and each target is submitted individually via `submit(target="<target_file>", change_summary="...")` when complete (in single-target sessions, the target parameter may be omitted). The artifact conforms to this guide and the component architecture described in the design documents. Specifications define interface (`high/<name>.md`), implementation (`high/<name>_impl.md`), external boundary (`high/<name>_ext.md`), or assembly (`high/<name>_asm.md`) components without pseudo-code, bolding, nested bullet trees, or artificial parameter flags.
 
-Specifications define domain concepts through a disciplined term ontology where each concept is represented by exactly one canonical term, avoiding synonym drift and avoiding introducing different terms for opposite sides of the same concept. Component visibility and lifetimes are governed by hierarchical lifecycle tiers (the root system tier and subordinate tiers defined by interface components) where services access each other directly without object type containment or factory plumbing. Specifications follow a closed two-section layout: a why-focused `## Purpose` section with an `**Out of scope:**` boundary disclaimer, and either a unified `## Types and Behavior` section expressed in literate prose with semantic italics strictly on term introductions (for interface, implementation, and assembly specifications), or a `## Grounding Gaps Covered` section in plain prose without semantic italics (for external boundary specifications).
+Specifications define domain concepts through a disciplined term ontology where each concept is represented by exactly one canonical term, avoiding synonym drift and avoiding introducing different terms for opposite sides of the same concept. Component visibility and lifetimes are governed by hierarchical lifecycle tiers (the root system tier and subordinate tiers defined by interface components) where services access each other directly without object type containment or factory plumbing. Specifications follow a closed two-section layout: a why-focused `## Purpose` section with an `**Out of scope:**` boundary disclaimer and an optional `**Delegated:**` boundary statement, and either a unified `## Types and Behavior` section expressed in literate prose with semantic italics strictly on term introductions (for interface, implementation, and assembly specifications), or a `## Grounding Gaps Covered` section in plain prose without semantic italics (for external boundary specifications).
 
 > META: "High-level specifications establish declarative component architectures and disciplined term ontologies; synonym drift, dual-term divergence, and unmandated behaviors are avoided."
 
@@ -28,7 +28,7 @@ Specifications define domain concepts through a disciplined term ontology where 
 - [ ] An assembly component's `imports:` clause contains all components imported by its constituents except those implemented by the assembly
 - [ ] A root assembly component ready for execution implements all interface components in the binary and has no imports outside data types and external boundary components
 - [ ] Front-matter never contains `instantiates:` or `types from <dep>:` statements
-- [ ] Imported component names in `imports:` never appear in `## Types and Behavior`
+- [ ] Imported component names in `imports:` never appear in `## Types and Behavior` or `**Out of scope:**`, appearing only in `**Delegated:**` when declared
 - [ ] Section inventory is closed strictly to `## Purpose` and `## Types and Behavior` (or `## Grounding Gaps Covered` for external boundary specifications)
 - [ ] Sub-headers (`###`) are strictly prohibited
 
@@ -51,10 +51,11 @@ Specifications define domain concepts through a disciplined term ontology where 
 - [ ] The `## Purpose` section begins with a single standalone summary sentence naming the component (`The <name> <component_type> component ...`) and articulating why the component exists rather than how it maintains state
 - [ ] A single blank line follows the summary sentence, followed by one or two paragraphs of architectural rationale motivating the component from a system perspective
 - [ ] The architectural rationale explains systemic friction, cascading risks, and workflow failure modes prevented, without overlapping or repeating behavioral details from `## Types and Behavior`
-- [ ] The section ends with an out of scope paragraph qualified by the exact prefix `**Out of scope:** `
-- [ ] The out of scope text identifies client workflow purpose, background intent, or caller motivations mentioned in `## Types and Behavior` rather than component obligations
-- [ ] Out of scope never lists low-level technical operations that the component delegates to dependencies
-- [ ] Out of scope never names specific external components, ending with `; these are handled by other components.`
+- [ ] The section ends with an out of scope paragraph qualified by the exact prefix `**Out of scope:** `, optionally followed by a delegated paragraph qualified by the exact prefix `**Delegated:** `
+- [ ] The out of scope text identifies workflow purpose, background intent, or caller motivations outside the component and its imported dependencies, ending with `; these are handled by other components.`
+- [ ] Out of scope never lists technical operations that the component coordinates or delegates to its imported dependencies
+- [ ] The delegated text identifies responsibilities within the workflow coordinated by this component that are explicitly delegated to imported collaborator components, mentioning imported component names only at a high level
+- [ ] Collaborator component names in `imports:` appear only in `**Delegated:**` and never appear in `**Out of scope:**` or `## Types and Behavior`
 
 ## Term ontology and semantic italics
 
@@ -66,7 +67,7 @@ Specifications define domain concepts through a disciplined term ontology where 
 - [ ] Operation arguments are italicized upon introduction so that operation signatures and parameter names can be cleanly extracted
 - [ ] Literal tokens, method names, and identifiers mentioned in message feedback or naming are enclosed in backticks
 - [ ] External boundary specifications (`high/<name>_ext.md`) use zero semantic italics throughout the document
-- [ ] No bolding (`**term**`) is used anywhere in the specification, except for the `**Out of scope:**` prefix
+- [ ] No bolding (`**term**`) is used anywhere in the specification, except for the `**Out of scope:**` and `**Delegated:**` prefixes
 
 ## Canonical language and dual-term elimination
 
@@ -130,8 +131,8 @@ Specifications define domain concepts through a disciplined term ontology where 
 - [ ] Dangling lead-ins — writing bullets that clash grammatically with the introductory fragment lead-in
 - [ ] Colon after complete sentence — ending a complete sentence with a colon before a bullet list
 - [ ] Nested bullets — creating multi-level bullet trees instead of flat single-level bullet paragraphs
-- [ ] Naming collaborators in out of scope — naming specific components instead of using "other components"
-- [ ] Implementation delegation in out of scope — listing delegated technical tasks rather than distinguishing client workflow intent from component obligations
+- [ ] Naming collaborators in out of scope — naming specific components in out of scope instead of in delegated
+- [ ] Confusing out of scope with delegation — placing delegated collaborator responsibilities into out of scope rather than the dedicated delegated paragraph
 - [ ] Bolding types — using `**term**` instead of `*term*` for introductions
 - [ ] Spatial containment — writing "inside service X" instead of peer tier membership
 - [ ] "Is-a" lifecycle classification — writing "service X is a system service" or "coordinator Y is a render session service" instead of natural possessive or containment phrasing ("A system's service X...", "The coordinator Y of a render session...", "A render session's coordinator Y...")

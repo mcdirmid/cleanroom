@@ -6,12 +6,15 @@ import tempfile
 from support.lib.src_metadata import (
     FileMetadata,
     append_feedback,
+    clear_audits,
     delete_last_cleaned,
     extract_metadata,
     extract_metadata_from_text,
+    format_metadata_block,
     mark_clean,
     record_change,
     rewrite_metadata_in_text,
+    stamp_audit,
     update_metadata,
 )
 
@@ -262,6 +265,112 @@ x = 1
             self.assertEqual(len(meta2.feedback), 2)
             self.assertEqual(meta2.feedback[1], "[2026-10-02T14:52:10Z from //other:test]: Contract error")
 
+    def test_extract_audit_tags(self) -> None:
+        text = """# --- CLEANROOM METADATA ---
+# LAST_CLEANED: 2026-10-02T14:55:48Z
+# LAST_CHANGED: 2026-10-02T14:50:12Z
+# CHANGE: Added AgentConfig protocol.
+# QA_AUDIT: 2026-10-02T15:00:00Z
+# COVERAGE_AUDIT: 2026-10-02T15:05:00Z
+# FEEDBACK:
+# - [2026-10-02T15:10:00Z from //test]: Fix me
+# --- END CLEANROOM METADATA ---
+
+x = 1
+"""
+        meta = extract_metadata_from_text(text, "agent_config.py")
+        self.assertIsNotNone(meta)
+        assert meta is not None
+        self.assertEqual(meta.audits.get("QA_AUDIT"), "2026-10-02T15:00:00Z")
+        self.assertEqual(meta.audits.get("COVERAGE_AUDIT"), "2026-10-02T15:05:00Z")
+        self.assertEqual(len(meta.feedback), 1)
+
+    def test_format_metadata_block_with_audits(self) -> None:
+        meta = FileMetadata(
+            last_cleaned="2026-10-02T15:00:00Z",
+            last_changed="2026-10-02T14:50:00Z",
+            change_summary="Feature implementation.",
+            feedback=[],
+            audits={"QA_AUDIT": "2026-10-02T15:00:00Z", "COVERAGE_AUDIT": "2026-10-02T15:02:00Z"},
+        )
+        lines = format_metadata_block(meta, is_html=False)
+        formatted = "\n".join(lines)
+        self.assertIn("# QA_AUDIT: 2026-10-02T15:00:00Z", formatted)
+        self.assertIn("# COVERAGE_AUDIT: 2026-10-02T15:02:00Z", formatted)
+
+    def test_stamp_audit_helper_preserves_last_changed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            file_path = Path(tmp_dir) / "mod.py"
+            file_path.write_text(
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-02T14:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-02T14:00:00Z\n"
+                "# CHANGE: Feature.\n"
+                "# --- END CLEANROOM METADATA ---\n"
+                "x = 42\n",
+                encoding="utf-8",
+            )
+            stamp_audit(file_path, "qa")
+            meta = extract_metadata(file_path)
+            self.assertIsNotNone(meta)
+            assert meta is not None
+            # Non-bump invariant: last_changed must NOT be modified
+            self.assertEqual(meta.last_changed, "2026-10-02T14:00:00Z")
+            # last_cleaned and QA_AUDIT must be stamped
+            self.assertIsNotNone(meta.last_cleaned)
+            self.assertIn("QA_AUDIT", meta.audits)
+            self.assertEqual(meta.audits["QA_AUDIT"], meta.last_cleaned)
+
+            # Stamp another role: coverage
+            stamp_audit(file_path, "coverage")
+            meta2 = extract_metadata(file_path)
+            self.assertIsNotNone(meta2)
+            assert meta2 is not None
+            self.assertEqual(meta2.last_changed, "2026-10-02T14:00:00Z")
+            self.assertIn("QA_AUDIT", meta2.audits)
+            self.assertIn("COVERAGE_AUDIT", meta2.audits)
+
+    def test_record_change_clears_audits(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            file_path = Path(tmp_dir) / "mod2.py"
+            file_path.write_text(
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-02T14:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-02T14:00:00Z\n"
+                "# CHANGE: Feature.\n"
+                "# QA_AUDIT: 2026-10-02T14:10:00Z\n"
+                "# --- END CLEANROOM METADATA ---\n"
+                "x = 42\n",
+                encoding="utf-8",
+            )
+            record_change(file_path, "New change")
+            meta = extract_metadata(file_path)
+            self.assertIsNotNone(meta)
+            assert meta is not None
+            self.assertEqual(meta.change_summary, "New change")
+            # Author edit invalidation: audits must be cleared
+            self.assertEqual(meta.audits, {})
+
+    def test_clear_audits_helper(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            file_path = Path(tmp_dir) / "mod3.py"
+            file_path.write_text(
+                "# --- CLEANROOM METADATA ---\n"
+                "# LAST_CLEANED: 2026-10-02T14:00:00Z\n"
+                "# LAST_CHANGED: 2026-10-02T14:00:00Z\n"
+                "# CHANGE: Feature.\n"
+                "# QA_AUDIT: 2026-10-02T14:10:00Z\n"
+                "# --- END CLEANROOM METADATA ---\n"
+                "x = 42\n",
+                encoding="utf-8",
+            )
+            clear_audits(file_path)
+            meta = extract_metadata(file_path)
+            self.assertIsNotNone(meta)
+            assert meta is not None
+            self.assertEqual(meta.audits, {})
+
 
 if __name__ == "__main__":
     unittest.main()
+

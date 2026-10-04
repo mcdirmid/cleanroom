@@ -6,7 +6,6 @@ from typing import NewType, Optional, Protocol, Sequence
 from support.lib.grounding_support import InTier, SystemTier
 from parts.agent.grounding import agent_file_alias, agent_storage
 from parts.dag.grounding import dag_storage
-from parts.sandbox.grounding import sandbox_file_editor
 
 TargetLabel = NewType("TargetLabel", str)
 VerificationCommand = NewType("VerificationCommand", str)
@@ -23,13 +22,14 @@ class TargetManifest:
     task_prompt: Optional[agent_storage.TaskPrompt] = None
     source_file: Optional[agent_file_alias.RelativePath] = None
     silent_source_files: Sequence[agent_file_alias.RelativePath] = ()
-    template: Optional[sandbox_file_editor.FileTemplate] = None
+    template: Optional[agent_file_alias.FileContent] = None
     dependencies: Sequence[TargetLabel] = ()
     silent_dependencies: Sequence[TargetLabel] = ()
     star_dependencies: Sequence[TargetLabel] = ()
     feedback_dependencies: Sequence[TargetLabel] = ()
     guide_target: Optional[TargetLabel] = None
     verification_check: Optional[VerificationCommand] = None
+    allows_step_mode: Optional[bool] = True
 
 
 class BazelManifestLoader(InTier[SystemTier], Protocol):

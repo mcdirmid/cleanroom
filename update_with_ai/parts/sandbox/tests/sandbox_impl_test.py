@@ -2,8 +2,13 @@
 
 import unittest
 
+from unittest.mock import MagicMock
+from typing import Any
+
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
+from update_with_ai.parts.agent.lib.agent_node_config import NodeConfig
 from update_with_ai.parts.agent.lib.agent_session import agent_session
+from update_with_ai.parts.dag.lib import dag_storage
 from update_with_ai.parts.sandbox.lib.sandbox import Sandbox
 from update_with_ai.parts.sandbox.lib.sandbox_file_editor import EditManager
 from update_with_ai.parts.sandbox.lib.sandbox_impl import (
@@ -17,10 +22,16 @@ class MockEditManager:
 
     def __init__(self) -> None:
         self.has_modifications = False
-        self.templates_materialized = False
 
-    def materialize_templates(self) -> None:
-        self.templates_materialized = True
+
+class MockDagStorage:
+    tier = "system"
+
+    def __init__(self) -> None:
+        self.materialized_nodes: list[Any] = []
+
+    def materialize_template(self, node: Any) -> None:
+        self.materialized_nodes.append(node)
 
 
 class SandboxImplTest(unittest.TestCase):
@@ -32,9 +43,22 @@ class SandboxImplTest(unittest.TestCase):
         self.registry.register_instance(
             self.edit_mgr, keys=[EditManager], tier=agent_session
         )
+        self.storage = MockDagStorage()
+        self.registry.register_instance(
+            self.storage, keys=[dag_storage.DagStorage], tier="system"
+        )
 
     def test_has_modifications_and_template_materialization_delegation(self) -> None:
-        """CUJ: Sandbox delegates modification checking and template materialization to EditManager."""
+        """CUJ: Sandbox delegates modification checking to EditManager and template materialization to DagStorage."""
+        node = MagicMock()
+        rw_file = MagicMock()
+        rw_file.owning_node = node
+        node_cfg = MagicMock()
+        node_cfg.read_write_files = [rw_file]
+        self.registry.register_instance(
+            node_cfg, keys=[NodeConfig], tier=agent_session
+        )
+
         with enter_phase(agent_session, registry=self.registry) as scope:
             sb = scope.get_singleton(Sandbox)
 
@@ -44,11 +68,10 @@ class SandboxImplTest(unittest.TestCase):
             self.edit_mgr.has_modifications = True
             self.assertTrue(sb.has_modifications)
 
-            # Requirement: Materializing startup templates delegates to the edit manager to write template content to missing read-write files without overwriting existing files.
-            # Requirement: Materializing startup templates populates missing read-write files without overwriting existing files.
-            self.assertFalse(self.edit_mgr.templates_materialized)
+            # Requirement: Materializing startup templates delegates to dag storage.
+            self.assertEqual(len(self.storage.materialized_nodes), 0)
             sb.materialize_templates()
-            self.assertTrue(self.edit_mgr.templates_materialized)
+            self.assertEqual(self.storage.materialized_nodes, [node])
 
 
 if __name__ == "__main__":

@@ -7,7 +7,6 @@ from agent_session import AgentSessionTier
 import agent_file_alias
 import tool_provider
 
-FileTemplate = NewType("FileTemplate", agent_file_alias.FileContent)
 FileUpdateRevision = NewType("FileUpdateRevision", int)
 LineNumber = NewType("LineNumber", int)
 TargetContent = NewType("TargetContent", str)
@@ -68,53 +67,11 @@ class EditManager(InTier[AgentSessionTier], Protocol):
         ...
 
     @property
-    def locked_files(self) -> Set[agent_file_alias.ReadWriteFile]:
-        """Exposes read-write files locked against modification.
-
-        POSTCONDITIONS:
-        - MUST return the set of read-write files locked against modification.
-        """
-        ...
-
-    @property
     def last_read_or_edited_file(self) -> Optional[agent_file_alias.FileAlias]:
         """Tracks the last file read or edited across the session.
 
         POSTCONDITIONS:
         - MUST return the most recently read or edited file alias across the session.
-        """
-        ...
-
-    @operation
-    def lock_file(self, file: agent_file_alias.ReadWriteFile) -> None:
-        """Locks a read-write file against modification.
-
-        Args:
-            file: The read-write file to lock.
-
-        POSTCONDITIONS:
-        - MUST lock the read-write file against modification.
-        """
-        ...
-
-    @operation
-    def unlock_file(self, file: agent_file_alias.ReadWriteFile) -> None:
-        """Unlocks a read-write file to allow modification.
-
-        Args:
-            file: The read-write file to unlock.
-
-        POSTCONDITIONS:
-        - MUST unlock the read-write file to allow modification.
-        """
-        ...
-
-    @operation
-    def materialize_templates(self) -> None:
-        """Materializes templates into missing read-write files at session start.
-
-        POSTCONDITIONS:
-        - MUST materialize templates into missing read-write files at session start without overwriting existing files.
         """
         ...
 
@@ -170,8 +127,8 @@ class EditManager(InTier[AgentSessionTier], Protocol):
             Response indicating whether modification is permitted.
 
         POSTCONDITIONS:
-        - WHEN checking write access for a workspace path or file alias matching a declared read-write file that is not locked against modification, MUST confirm access.
-        - WHEN checking write access for a path that is not a declared read-write file or is locked against modification, MUST fail with guidance.
+        - WHEN checking write access for a workspace path or file alias matching a declared read-write file, MUST confirm access.
+        - WHEN checking write access for a path that is not a declared read-write file, MUST fail with guidance.
         """
         ...
 

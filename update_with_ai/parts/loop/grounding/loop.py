@@ -75,11 +75,20 @@ class Loop(InTier[SystemTier], Protocol):
     ) -> None:
         """
         COVERED:
-        - MUST broadcast the change message to all reverse dependencies of the node.
-          - Condition knowledge: resolve DagStorage and query storage.get_dependents(source).
-          - Consequent knowledge: invoke storage.add_message(message, to=dependent).        """
+        - MUST mark the target node clean in graph storage with the change description from the change message.
+        """
         storage: dag_storage.DagStorage = self.get_singleton(dag_storage.DagStorage)
-        dependents: Set[dag_storage.DagNode] = storage.get_dependents(source)
-        sample_dep: dag_storage.DagNode = only_elem(dependents)
-        storage.add_message(message, to=sample_dep)
+        storage.mark_node_clean(source, dag_storage.ChangeDescription(str(message.content)))
         raise NotImplementedError
+
+    def record_change(
+        self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage
+    ) -> None:
+        """
+        COVERED:
+        - MUST mark the target node clean in graph storage with the change description from the change message.
+        """
+        storage: dag_storage.DagStorage = self.get_singleton(dag_storage.DagStorage)
+        storage.mark_node_clean(target, dag_storage.ChangeDescription(str(message.content)))
+        raise NotImplementedError
+

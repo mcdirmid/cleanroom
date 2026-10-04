@@ -9,7 +9,9 @@ The sandbox_run_control_impl implementation component realizes self-contained ou
 
 Autonomous agents reaching task completion require strict verification enforcement to ensure dirty files are documented, progressive milestones are completed, and broken builds are caught before terminating a turn. The sandbox_run_control_impl implementation component coordinates milestone progression with guide delivery, inspects edit manager modification state, evaluates installed verification checks, and validates blame targets, converting outcome decisions into structured tool responses.
 
-**Out of scope:** The sandbox_run_control_impl implementation component does not modify files on disk, parse syntax trees, or compute topological dependency schedules; these are handled by other components.
+**Out of scope:** The sandbox_run_control_impl implementation component does not parse syntax trees or compute topological dependency schedules; these are handled by other components.
+
+**Delegated:** File storage, template materialization, and metadata mutation concerns are delegated to dag_storage.
 
 ## Types and Behavior
 
@@ -39,11 +41,11 @@ The advance tool:
 
 - Produces a response specifying a follow-up execution of the submit tool without a change summary and with reasoning text indicating that all guide steps are complete when verification is passing, no steps remain, and no workspace files were modified.
 
-A resolve tool defines a file alias resolve target parameter (with target accepted as an alias), and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes.
+A resolve tool defines a file alias resolve target parameter (with target accepted as an alias). Active nodes are identified by short unit name when unique among active session nodes, or by package-qualified unit name (`pkg/unit_name`) when ambiguous. A resolve tool matches the resolve target parameter against open active nodes by declared source file alias (if the node has one), short unit name (when unique among active nodes), or package-qualified unit name (`pkg/unit_name`).
 
 When the resolve target parameter is omitted, it defaults to:
 
-- The single session read-write file or remaining unsubmitted active node.
+- The single remaining unsubmitted open active node when only one node is being processed.
 
 - The last read or written path when multiple unsubmitted read-write files exist and that path corresponds to an open active node.
 
@@ -53,9 +55,7 @@ A resolve tool:
 
 - Fails when an in-batch dependency of the resolve target is not clean in the current get work turn, reminding the agent that in-batch dependencies must be submitted before dependent targets.
 
-- Locks the resolve target read-write files in the edit manager against subsequent modification upon resolving an active node.
-
-- Automatically marks in-batch dependent nodes as failed and locks their read-write files upon node failure or blame attribution.
+- Automatically marks in-batch dependent nodes as failed upon node failure or blame attribution.
 
 - Produces a non-terminating response with a reminder listing remaining active nodes formatted via the template formatter when other active nodes remain.
 
@@ -75,9 +75,11 @@ The submit tool:
 
 - Fails when session feedback is present and no workspace files were modified, reminding the agent that workspace files must be modified to address feedback or that the fail tool must be used.
 
+- Fails if a change summary is provided when resolving an auditor node, reminding the agent that change summaries are not permitted for audit nodes.
+
 - Fails if workspace files were modified and the change summary is omitted, reminding the agent that a change summary must be provided when completing the session after modifying workspace files.
 
-- Marks the resolve target clean and submitted in the current get work turn and resolves the active node.
+- Marks the resolve target clean in graph storage with the provided change summary, marks the resolve target clean and submitted in the current get work turn, and resolves the active node.
 
 The fail tool is named `fail`, accepting a resolve target parameter and a text explanation parameter.
 
@@ -85,13 +87,13 @@ The fail tool:
 
 - Marks the active node as failed and resolves the active node.
 
-The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter, and a text explanation parameter.
+The blame tool is named `blame`, accepting a resolve target parameter, a file alias blame target parameter, and a text explanation parameter. Because active nodes never share feedback targets, the blame tool identifies the active node attributing blame from the specified blame target.
 
 The blame tool:
 
-- Defaults the resolve target parameter to that active node when the blame target matches a configured blame target of an open active node.
+- Resolves the active node attributing blame from the specified blame target (or resolve target parameter when matching a configured blame target).
 
-- Defaults the blame target parameter to that target and the resolve target parameter to the active node configured with that blame target when the blame target parameter is omitted and the resolve target parameter matches a configured blame target.
+- Defaults the blame target parameter to the single configured blame target of the remaining active node when omitted in a single-target context.
 
 - Defaults the resolve target parameter using resolve target defaulting rules when the resolve target parameter is omitted and cannot be inferred from the blame target.
 
@@ -99,7 +101,7 @@ The blame tool:
 
 - Fails if the explanation contains newline characters, providing an error response and reminding the agent that the blame explanation must be a single paragraph without newlines.
 
-- Marks the blame target as attributed and resolves the active node on successful tool execution.
+- Records defect feedback for the blamed target in graph storage, marks the blame target as attributed, and resolves the active node on successful tool execution.
 
 The get work tool is named `get_work`, accepting an integer max batch size parameter.
 
@@ -111,6 +113,6 @@ The get work tool:
 
 - Produces an idle response indicating that no dirty nodes are ready if no dirty nodes are ready for cleaning.
 
-- Materializes startup templates on disk, initializes guide delivery and resets guide advance state for the assigned batch, and returns the rendered task primer mapping source files to grounding files with guide file attribution, incoming messages, and instructions to read the guide file for alignment guidance when ready dirty nodes are obtained and guide step mode is inactive.
+- Materializes startup templates through graph storage, initializes guide delivery and resets guide advance state for the assigned batch, and returns the rendered task primer mapping each node (identified by declared source file alias, short unit name when unique among batch nodes, or package-qualified unit name when ambiguous) to its grounding file with guide file attribution, incoming messages, alignment instructions, and target resolution instructions specifying target as short unit name (when unique) or package-qualified unit name (when ambiguous) in multi-node batches, or indicating that target may be omitted when only one node is being processed, when ready dirty nodes are obtained and guide step mode is inactive.
 
-- Materializes startup templates on disk, initializes guide delivery, records the task primer in guide delivery, and returns the task primer mapping source files to grounding files, guide summary, incoming messages, and instructions to call the advance tool when done making edits without guide file citation and without specifying a follow-up execution of the advance tool when ready dirty nodes are obtained and guide step mode is active.
+- Materializes startup templates through graph storage, initializes guide delivery, records the task primer in guide delivery, and returns the task primer mapping source files to grounding files, guide summary, incoming messages, and instructions to call the advance tool when done making edits without guide file citation and without specifying a follow-up execution of the advance tool when ready dirty nodes are obtained and guide step mode is active.

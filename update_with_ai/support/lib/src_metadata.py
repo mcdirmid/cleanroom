@@ -1,12 +1,12 @@
 """Hermetic and declarative in-band source file metadata parsing and updating engine."""
 
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import os
 from pathlib import Path
 import re
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -15,6 +15,7 @@ class FileMetadata:
     last_changed: Optional[str]
     change_summary: str
     feedback: List[str]
+    audits: dict[str, str] = field(default_factory=dict)
 
 
 def current_utc_timestamp() -> str:
@@ -98,6 +99,7 @@ def parse_metadata_content(block_lines: List[str]) -> FileMetadata:
     last_changed: Optional[str] = None
     change_summary = ""
     feedback: List[str] = []
+    audits: Dict[str, str] = {}
 
     in_feedback = False
     for line in block_lines:
@@ -126,19 +128,26 @@ def parse_metadata_content(block_lines: List[str]) -> FileMetadata:
             in_feedback = False
         elif raw.startswith("FEEDBACK:"):
             in_feedback = True
-        elif in_feedback:
-            if raw.startswith("-"):
-                item = raw[1:].strip()
-                if item:
-                    feedback.append(item)
-            elif raw.startswith("LAST_") or raw.startswith("CHANGE:"):
-                in_feedback = False
+        elif in_feedback and raw.startswith("-"):
+            item = raw[1:].strip()
+            if item:
+                feedback.append(item)
+        elif "_AUDIT:" in raw:
+            key, val = raw.split(":", 1)
+            key = key.strip()
+            val = val.strip()
+            if key.endswith("_AUDIT") and val:
+                audits[key] = val
+            in_feedback = False
+        else:
+            in_feedback = False
 
     return FileMetadata(
         last_cleaned=last_cleaned,
         last_changed=last_changed,
         change_summary=change_summary,
         feedback=feedback,
+        audits=audits,
     )
 
 
@@ -178,6 +187,9 @@ def format_metadata_block(meta: FileMetadata, is_html: bool) -> List[str]:
             lines.append(f"LAST_CHANGED: {meta.last_changed}")
         if ch:
             lines.append(f"CHANGE: {ch}")
+        if meta.audits:
+            for k in sorted(meta.audits.keys()):
+                lines.append(f"{k}: {meta.audits[k]}")
         if meta.feedback:
             lines.append("FEEDBACK:")
             for fb in meta.feedback:
@@ -191,6 +203,9 @@ def format_metadata_block(meta: FileMetadata, is_html: bool) -> List[str]:
             lines.append(f"# LAST_CHANGED: {meta.last_changed}")
         if ch:
             lines.append(f"# CHANGE: {ch}")
+        if meta.audits:
+            for k in sorted(meta.audits.keys()):
+                lines.append(f"# {k}: {meta.audits[k]}")
         if meta.feedback:
             lines.append("# FEEDBACK:")
             for fb in meta.feedback:
@@ -208,6 +223,9 @@ def rewrite_metadata_in_text(
     change_summary: Optional[str] = None,
     clear_feedback: bool = False,
     append_feedback: Optional[str] = None,
+    audits: Optional[Dict[str, str]] = None,
+    clear_audits: bool = False,
+    stamp_audit: Optional[str] = None,
 ) -> str:
     """Updates or injects the in-band metadata block within a content string."""
     is_html = _is_html_comment_format(filename_or_ext)
@@ -217,7 +235,7 @@ def rewrite_metadata_in_text(
     existing_meta = (
         parse_metadata_content(lines[bounds[0] : bounds[1] + 1])
         if bounds is not None
-        else FileMetadata(last_cleaned=None, last_changed=None, change_summary="", feedback=[])
+        else FileMetadata(last_cleaned=None, last_changed=None, change_summary="", feedback=[], audits={})
     )
 
     if clear_last_cleaned:
@@ -238,12 +256,26 @@ def rewrite_metadata_in_text(
     if append_feedback:
         new_feedback.append(append_feedback)
 
+    if clear_audits:
+        new_audits: Dict[str, str] = {}
+    elif audits is not None:
+        new_audits = dict(audits)
+    else:
+        new_audits = dict(existing_meta.audits)
+
+    if stamp_audit:
+        role_upper = stamp_audit.upper().strip()
+        tag = role_upper if role_upper.endswith("_AUDIT") else f"{role_upper}_AUDIT"
+        new_audits[tag] = current_utc_timestamp()
+
     new_meta = FileMetadata(
         last_cleaned=new_last_cleaned,
         last_changed=new_last_changed,
         change_summary=new_change,
         feedback=new_feedback,
+        audits=new_audits,
     )
+
 
     new_block_lines = format_metadata_block(new_meta, is_html)
 
@@ -272,6 +304,9 @@ def update_metadata(
     change_summary: Optional[str] = None,
     clear_feedback: bool = False,
     append_feedback: Optional[str] = None,
+    audits: Optional[Dict[str, str]] = None,
+    clear_audits: bool = False,
+    stamp_audit: Optional[str] = None,
 ) -> None:
     """Rewrites a file in-place, updating its metadata block while preserving code."""
     p = Path(file_path)
@@ -288,6 +323,9 @@ def update_metadata(
         change_summary=change_summary,
         clear_feedback=clear_feedback,
         append_feedback=append_feedback,
+        audits=audits,
+        clear_audits=clear_audits,
+        stamp_audit=stamp_audit,
     )
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(updated, encoding="utf-8")
@@ -319,7 +357,7 @@ def mark_clean(file_path: Path | str, default_change: str = "new file") -> None:
 
 
 def record_change(file_path: Path | str, change_description: str) -> None:
-    """Marks a node changed: updates LAST_CLEANED, LAST_CHANGED, and CHANGE, clearing feedback."""
+    """Marks a node changed: updates LAST_CLEANED, LAST_CHANGED, and CHANGE, clearing feedback and audits."""
     now = current_utc_timestamp()
     update_metadata(
         file_path,
@@ -327,6 +365,7 @@ def record_change(file_path: Path | str, change_description: str) -> None:
         last_changed=now,
         change_summary=change_description,
         clear_feedback=True,
+        clear_audits=True,
     )
 
 
@@ -338,5 +377,21 @@ def append_feedback(file_path: Path | str, explanation: str, sender: str = "user
         now = current_utc_timestamp()
         entry = f"[{now} from {sender}]: {explanation}"
     update_metadata(file_path, append_feedback=entry)
+
+
+def stamp_audit(file_path: Path | str, role_name: str) -> None:
+    """Stamps or updates <ROLE>_AUDIT = now in the file's in-band header without modifying LAST_CHANGED."""
+    now = current_utc_timestamp()
+    update_metadata(
+        file_path,
+        last_cleaned=now,
+        stamp_audit=role_name,
+    )
+
+
+def clear_audits(file_path: Path | str) -> None:
+    """Removes all audit tags from the file's in-band metadata block."""
+    update_metadata(file_path, clear_audits=True)
+
 
 

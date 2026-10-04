@@ -20,8 +20,12 @@ A dag storage provides access to a node's *dag dependencies* that refer to its d
 
 A *dag message* is text content explaining to the agent why a node requires cleaning, and is either a *change message* informing of changes made to upstream dependencies, or a *feedback message* blaming a specific dependency target node for defects detected by downstream dependents.
 
-A dag storage provides access to messages for a node, can record feedback messages blaming dependency target nodes, can record change messages marking a target node dirty, and exposes whether a node is *dirty*, meaning it requires cleaning.
+A dag storage provides access to messages for a node, can record feedback messages blaming dependency target nodes, can record change messages marking a target node dirty, can *materialize a template* for a node when its source artifact is missing on disk, can *mark a node clean* in graph storage, and exposes whether a node is *dirty*, meaning it requires cleaning.
 
 A node is considered dirty if its source artifact is missing on disk, if its in-band metadata is missing, invalid, or uncleaned, if it has unacted feedback messages, or if any non-silent dependency was changed after the node was last cleaned.
 
 Recording a change message against a target node marks it dirty by updating its in-band metadata with the change description and clearing its last cleaned status.
+
+Materializing a template for a node writes initial template content to disk if its source artifact is missing on disk, preserving existing files without overwriting.
+
+Marking a node clean clears messages for the node and updates in-band metadata with a clean timestamp. When an optional change description is provided for a node with a source artifact, marking the node clean updates its last changed timestamp and change description in its in-band metadata, and clears unacted feedback. When marking an auditor node clean, audit metadata is stamped across all of its feedback dependencies.

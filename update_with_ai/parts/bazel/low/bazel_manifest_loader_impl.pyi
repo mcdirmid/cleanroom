@@ -55,6 +55,7 @@ class BazelManifestLoader(
         - MUST populate agent storage with node definitions carrying task prompts.
         - MUST record declared primary source file paths in agent storage without duplicating package path segments.
         - MUST register declared direct dependencies in agent storage.
+        - MUST register declared feedback dependencies in agent storage.
         - MUST register declared silent dependencies as non-propagating dependencies in agent storage.
         - MUST synthesize fallback node definitions for referenced targets lacking manifests.
         """

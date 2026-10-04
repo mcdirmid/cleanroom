@@ -132,50 +132,12 @@ class Loop(loop.Loop, Singleton):
                     queue.append(dep.node)
 
         for node in visited:
-            src_path: Optional[Path] = None
-            if hasattr(storage, "_resolve_source_path"):
-                src_path = getattr(storage, "_resolve_source_path")(node)
-            elif hasattr(storage, "_source_files") and node in getattr(storage, "_source_files"):
-                src_path = Path(getattr(storage, "_source_files")[node])
-
-            if src_path is not None:
-                if not src_path.is_file():
-                    m = manifest_loader.retrieve_manifest(node)
-                    tmpl_content = ""
-                    if m is not None and getattr(m, "template", None) is not None:
-                        tmpl_str = str(m.template)
-                        tmpl_candidates = [
-                            tmpl_str,
-                            os.path.join(os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""), tmpl_str),
-                        ]
-                        if tmpl_str.startswith("//"):
-                            pkg_sub = tmpl_str[2:].replace(":", "/")
-                            tmpl_candidates.append(pkg_sub)
-                            tmpl_candidates.append(os.path.join(os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""), pkg_sub))
-                            if "templates:hls" in tmpl_str:
-                                tmpl_candidates.append("update_python_with_ai/templates/hls_template.md")
-                            elif "templates:lib" in tmpl_str:
-                                tmpl_candidates.append("update_python_with_ai/templates/lib_template.py")
-                            elif "templates:test" in tmpl_str:
-                                tmpl_candidates.append("update_python_with_ai/templates/test_template.py")
-                            elif "templates:grounding_qa" in tmpl_str:
-                                tmpl_candidates.append("update_python_with_ai/templates/grounding_qa_template.txt")
-                            elif "templates:coverage" in tmpl_str:
-                                tmpl_candidates.append("update_python_with_ai/templates/coverage_template.txt")
-                            elif "templates:qa" in tmpl_str:
-                                tmpl_candidates.append("update_python_with_ai/templates/qa_template.txt")
-                        for cand in tmpl_candidates:
-                            if os.path.isfile(cand):
-                                try:
-                                    with open(cand, "r", encoding="utf-8") as f:
-                                        tmpl_content = f.read()
-                                    break
-                                except OSError:
-                                    pass
-                    src_path.parent.mkdir(parents=True, exist_ok=True)
-                    src_path.write_text(tmpl_content, encoding="utf-8")
-
-            storage.clear_messages(node)
+            if hasattr(storage, "materialize_template"):
+                storage.materialize_template(node)
+            if hasattr(storage, "mark_node_clean"):
+                storage.mark_node_clean(node)
+            else:
+                storage.clear_messages(node)
 
     mark_clean = mark_subgraph_clean
 
@@ -198,17 +160,23 @@ class Loop(loop.Loop, Singleton):
 
     inject_node_feedback = inject_feedback
 
+    def record_change(
+        self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage
+    ) -> None:
+        storage = get_singleton(dag_storage.DagStorage)
+        change_text = str(message.content) if message.content else "updated"
+        storage.mark_node_clean(target, dag_storage.ChangeDescription(change_text))
+
+    record_node_change = record_change
+
     def broadcast_change(
         self, source: dag_storage.DagNode, message: dag_storage.ChangeMessage
     ) -> None:
-        storage = get_singleton(dag_storage.DagStorage)
-        if hasattr(storage, "record_change"):
-            change_text = str(message.content) if message.content else "updated"
-            getattr(storage, "record_change")(source, change_text)
-        for dep in storage.get_dependents(source):
-            storage.add_message(message, to=dep)
+        self.record_change(source, message)
 
     broadcast_node_change = broadcast_change
+
+
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:

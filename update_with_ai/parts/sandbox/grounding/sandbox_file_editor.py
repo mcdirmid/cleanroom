@@ -6,7 +6,6 @@ from support.lib.grounding_support import InTier, AgentSessionTier, key, value
 from parts.agent.grounding import agent_file_alias
 from parts.sandbox.grounding import tool_provider
 
-FileTemplate = NewType("FileTemplate", agent_file_alias.FileContent)
 FileUpdateRevision = NewType("FileUpdateRevision", int)
 LineNumber = NewType("LineNumber", int)
 TargetContent = NewType("TargetContent", str)
@@ -77,43 +76,11 @@ class EditManager(InTier[AgentSessionTier], Protocol):
         raise NotImplementedError
 
     @property
-    def locked_files(self) -> Set[agent_file_alias.ReadWriteFile]:
-        """
-        DEFERRED:
-        - MUST return the set of read-write files locked against modification.
-        - Deferred to sandbox_file_editor_impl.py.
-        """
-        raise NotImplementedError
-
-    @property
     def last_read_or_edited_file(self) -> Optional[agent_file_alias.FileAlias]:
         """
         DEFERRED:
         - MUST return the most recently read or edited file alias across the session.
         - Deferred to sandbox_file_editor_impl.py.
-        """
-        raise NotImplementedError
-
-    def lock_file(self, file: agent_file_alias.ReadWriteFile) -> None:
-        """
-        DEFERRED:
-        - MUST lock the read-write file against modification.
-        - Deferred to sandbox_file_editor_impl.py.
-        """
-        raise NotImplementedError
-
-    def unlock_file(self, file: agent_file_alias.ReadWriteFile) -> None:
-        """
-        DEFERRED:
-        - MUST unlock the read-write file to allow modification.
-        - Deferred to sandbox_file_editor_impl.py.
-        """
-        raise NotImplementedError
-
-    def materialize_templates(self) -> None:
-        """
-        DEFERRED:
-        - MUST materialize templates into missing read-write files at session start without overwriting existing files.
         """
         raise NotImplementedError
 
@@ -148,8 +115,8 @@ class EditManager(InTier[AgentSessionTier], Protocol):
     ) -> tool_provider.ToolResponse:
         """
         DEFERRED:
-        - WHEN checking write access for a workspace path or file alias matching a declared read-write file that is not locked against modification, MUST confirm access.
-        - WHEN checking write access for a path that is not a declared read-write file or is locked against modification, MUST fail with guidance.
+        - WHEN checking write access for a workspace path or file alias matching a declared read-write file, MUST confirm access.
+        - WHEN checking write access for a path that is not a declared read-write file, MUST fail with guidance.
         """
         raise NotImplementedError
 

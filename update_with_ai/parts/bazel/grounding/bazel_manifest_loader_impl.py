@@ -115,6 +115,9 @@ class BazelManifestLoader(
         - MUST register declared direct dependencies in agent storage.
           - Condition knowledge: access manifest.dependencies via only_elem.
           - Consequent knowledge: register dependent edge in storage.
+        - MUST register declared feedback dependencies in agent storage.
+          - Condition knowledge: access manifest.feedback_dependencies via only_elem.
+          - Consequent knowledge: register feedback dependencies in storage.
         - MUST register declared silent dependencies as non-propagating dependencies in agent storage.
           - Condition knowledge: access manifest.silent_dependencies via only_elem.
           - Consequent knowledge: register silent dependent edge.
@@ -139,6 +142,13 @@ class BazelManifestLoader(
             unit_address=dag_storage.UnitAddress(str(dep_label)),
             role_address=dag_storage.RoleAddress(""),
         )
+
+        feedback_dep_label: bazel_manifest_loader.TargetLabel = only_elem(sample_manifest.feedback_dependencies)
+        feedback_dep_node: dag_storage.DagNode = dag_storage.DagNode(
+            unit_address=dag_storage.UnitAddress(str(feedback_dep_label)),
+            role_address=dag_storage.RoleAddress(""),
+        )
+        storage.store_feedback_dependencies(node, {feedback_dep_node})
 
         silent_dep_label: bazel_manifest_loader.TargetLabel = only_elem(sample_manifest.silent_dependencies)
         silent_dep_node: dag_storage.DagNode = dag_storage.DagNode(

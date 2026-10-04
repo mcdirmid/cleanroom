@@ -56,7 +56,6 @@ pyright_library(
         "//update_with_ai/parts/agent/grounding:agent_file_alias",
         "//update_with_ai/parts/agent/grounding:agent_storage",
         "//update_with_ai/parts/dag/grounding:dag_storage",
-        "//update_with_ai/parts/sandbox/grounding:sandbox_file_editor",
         ":bazel_target",
     ],
     imports = ["../../..", "."],

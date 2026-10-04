@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 from typing import cast
-from support.lib.grounding_support import InTier, AgentSessionTier
+from support.lib.grounding_support import InTier, AgentSessionTier, key
+from parts.agent.grounding import agent_node_config
+from parts.dag.grounding import dag_storage
 from parts.sandbox.grounding import sandbox, sandbox_file_editor
 
 
@@ -11,7 +13,7 @@ class Sandbox(sandbox.Sandbox, InTier[AgentSessionTier]):
 
     DISCHARGED:
     - has_modifications: Discharges modification inquiry via EditManager.
-    - materialize_templates: Discharges template materialization via EditManager.
+    - materialize_templates: Discharges template materialization via DagStorage.
     """
 
     @property
@@ -27,11 +29,14 @@ class Sandbox(sandbox.Sandbox, InTier[AgentSessionTier]):
     def materialize_templates(self) -> None:
         """
         COVERED:
-        - Information accessibility: resolves EditManager and invokes materialize_templates.
+        - Information accessibility: resolves DagStorage and invokes materialize_template.
         """
-        edit_mgr: sandbox_file_editor.EditManager = self.get_singleton(sandbox_file_editor.EditManager)
-        edit_mgr.materialize_templates()
+        storage: dag_storage.DagStorage = self.get_singleton(dag_storage.DagStorage)
+        node_cfg: agent_node_config.NodeConfig = self.get_singleton(agent_node_config.NodeConfig)
+        sample_node = key(node_cfg.blame_targets_by_node)
+        storage.materialize_template(sample_node)
         raise NotImplementedError
+
 
 
 def __initialize__() -> None:

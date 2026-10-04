@@ -6,7 +6,7 @@ imports: dag_storage
 
 The loop interface component orchestrates complete multi-node build and cleaning passes across workspace nodes to final artifact completion.
 
-Executing multi-stage agent workflows across interdependent graph structures requires evaluating dirty state and coordinating cleaning passes in dependency order. Without a centralized orchestration boundary, callers must manually coordinate node invalidations, state transitions, and change notifications across graph storage. The loop interface component coordinates this end-to-end lifecycle: dispatching cleaning passes across target subgraphs, routing feedback into target nodes, and broadcasting change messages to reverse dependencies.
+Executing multi-stage agent workflows across interdependent graph structures requires evaluating dirty state and coordinating cleaning passes in dependency order. Without a centralized orchestration boundary, callers must manually coordinate node invalidations, state transitions, and change notifications across graph storage. The loop interface component coordinates this end-to-end lifecycle: dispatching cleaning passes across target subgraphs, routing feedback into target nodes, and recording change descriptions on modified nodes to dynamically invalidate downstream dependencies.
 
 **Out of scope:** The loop interface component does not parse build manifests, execute agent turn interactions, or serialize session transcripts; these are handled by other components.
 
@@ -28,6 +28,6 @@ The loop:
 
 - Injects a caller-supplied feedback message into a target node.
 
-- Broadcasts a caller-supplied change message from a node to all of its reverse dependencies.
+- Records a caller-supplied change message on a target node in graph storage, updating in-band source metadata and dynamically invalidating downstream dependencies.
 
 - Produces a build result upon pass completion.
