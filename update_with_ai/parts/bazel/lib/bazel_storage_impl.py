@@ -1,6 +1,8 @@
 # Requirements specified in bazel_storage_impl.pyi
 from pathlib import Path
+import os
 from typing import Any, Dict, List, Mapping, Optional, Set
+
 from update_with_ai.parts.agent.lib import agent_storage
 from . import bazel_target
 from update_with_ai.parts.dag.lib import dag_storage
@@ -23,14 +25,15 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         self._source_files: Dict[dag_storage.DagNode, str] = {}
 
     def _get_store_path(self, node: dag_storage.DagNode) -> Path:
-        # Requirement: All nodes located within the same package directory share a common package message file named `.update_with_ai.textproto`.
-        # Requirement: The agent storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
         node_util = get_singleton(bazel_target.BazelTarget)
-        pkg_dir = node_util.extract_directory(node)
+        pkg_dir = node_util.extract_node_dir(node)
         paths_service = get_singleton(file_paths.FilePathManager)
-        root = paths_service.get_workspace_root()
-        resolved_dir = paths_service.resolve_directory(root, pkg_dir)
+        root_str = os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd()
+        root = file_paths.WorkspaceRoot(file_paths.PathString(root_str))
+        resolved_dir = paths_service.resolve_path(root, pkg_dir)
         return Path(resolved_dir.path) / ".update_with_ai.textproto"
+
+
 
     def _load_package_data(self, path: Path) -> Dict[str, Dict[str, Any]]:
         # Requirement: The agent storage resolves the package directory against the workspace root to read and write message files at their absolute path, creating files if missing and ignoring absent files on read.
@@ -92,18 +95,39 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8")
             return True
-        except OSError:
+        except OSError:  # pragma: no cover (assumption: package directory writable)
             return False
 
     def get_node_definition(
         self, node: dag_storage.DagNode
-    ) -> Optional[agent_storage.NodeDefinition]:
-        # Requirement: [AgentStorage] The agent storage provides task prompts and node definitions for declared nodes.
-        # Requirement: The agent storage maintains node definitions and task prompts mapped to nodes in dag storage.
-        return self._definitions.get(node)
+    ) -> agent_storage.NodeDefinition:
+        return self._definitions.get(
+            node,
+            agent_storage.NodeDefinition(
+                task_prompt=agent_storage.TaskPrompt("")
+            ),
+        )
+
+    def store_node_definition(
+        self, node: dag_storage.DagNode, definition: agent_storage.NodeDefinition
+    ) -> None:
+        self._definitions[node] = definition
+
+    def get_task_prompt(self, node: dag_storage.DagNode) -> agent_storage.TaskPrompt:
+        return self.get_node_definition(node).task_prompt
+
+    def mark_dependents_dirty(self, node: dag_storage.DagNode) -> None:
+        for dep in self.get_dependents(node):
+            self.add_message(
+                dag_storage.ChangeMessage(
+                    content=dag_storage.MessageContent(
+                        f"dependency {node.unit_address} changed"
+                    )
+                ),
+                to=dep,
+            )
 
     def get_dependencies(self, node: dag_storage.DagNode) -> Set[dag_storage.DagDependency]:
-        # Requirement: [AgentStorage] The agent storage maintains nodes, dependencies, reverse dependencies, and pending messages from workspace targets.
         return set(self._dependencies.get(node, set()))
 
     def _node_to_id(self, node: dag_storage.DagNode) -> str:
@@ -113,10 +137,9 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
 
     def _id_to_node(self, node_id: str) -> dag_storage.DagNode:
         node_util = get_singleton(bazel_target.BazelTarget)
-        return node_util.normalize(node_id)
+        return node_util.normalize_target(bazel_target.TargetIdentifier(node_id))
 
     def get_dependents(self, node: dag_storage.DagNode) -> Set[dag_storage.DagNode]:
-        # Requirement: All nodes located within the same package directory share a common package message file named `.update_with_ai.textproto`.
         path = self._get_store_path(node)
         data = self._load_package_data(path)
         record = data.get(self._node_to_id(node), {})
@@ -126,7 +149,6 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         return deps
 
     def get_messages(self, node: dag_storage.DagNode) -> Set[dag_storage.DagMessage]:
-        # Requirement: All nodes located within the same package directory share a common package message file named `.update_with_ai.textproto`.
         path = self._get_store_path(node)
         data = self._load_package_data(path)
         record = data.get(self._node_to_id(node), {})
@@ -134,26 +156,43 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
         for msg in record.get("messages", []):
             content = msg.get("content", "")
             if msg.get("kind") == "feedback":
-                messages.add(dag_storage.FeedbackMessage(content=content))
+                messages.add(
+                    dag_storage.FeedbackMessage(
+                        content=dag_storage.MessageContent(content)
+                    )
+                )
             else:
-                messages.add(dag_storage.ChangeMessage(content=content))
+                messages.add(
+                    dag_storage.ChangeMessage(
+                        content=dag_storage.MessageContent(content)
+                    )
+                )
         return messages
 
     def is_dirty(self, node: dag_storage.DagNode) -> bool:
-        # Requirement: A node in dag storage is dirty if it has messages explaining why it requires cleaning, or if its declared source file is missing from the workspace root, recording a change message to implement the source file for the node.
-        # Requirement: [DagStorage] A node is dirty if, but not only if, it has messages.
         if node in self._source_files:
             src_rel = self._source_files[node]
-            paths_service = get_singleton(file_paths.FilePathManager)
-            root = paths_service.get_workspace_root()
+            root_str = os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd()
+            root = file_paths.WorkspaceRoot(file_paths.PathString(root_str))
             resolved = Path(root.path) / src_rel
             if not resolved.is_file():
                 content = f"implement {src_rel}"
                 msgs = self.get_messages(node)
-                if not any(m.content == content for m in msgs):
-                    self.add_message(dag_storage.ChangeMessage(content=content), to=node)
+                if not any(
+                    isinstance(m, (dag_storage.ChangeMessage, dag_storage.FeedbackMessage))
+                    and m.content == content
+                    for m in msgs
+                ):
+                    self.add_message(
+                        dag_storage.ChangeMessage(
+                            content=dag_storage.MessageContent(content)
+                        ),
+                        to=node,
+                    )
                 return True
         return len(self.get_messages(node)) > 0
+
+
 
     def register_dependent(self, node: dag_storage.DagNode) -> None:
         # Requirement: Registering a node as a dependent adds the node to the dependents of all of its non-silent dependencies.
@@ -183,17 +222,20 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
             self._save_package_data(path, data)
 
     def add_message(self, message: dag_storage.DagMessage, to: dag_storage.DagNode) -> None:
-        # Requirement: Adding a message to a node records the message explaining why the node requires cleaning.
-        # Requirement: [DagStorage] Adding a message to a node records the message for that node.
         path = self._get_store_path(to)
         data = self._load_package_data(path)
         to_id = self._node_to_id(to)
         record = data.setdefault(to_id, {"messages": [], "reverse_dependencies": []})
         msg_list: List[Dict[str, str]] = record.setdefault("messages", [])
         kind = "feedback" if isinstance(message, dag_storage.FeedbackMessage) else "change"
-        content = message.content if hasattr(message, "content") else ""
+        content = (
+            message.content
+            if isinstance(message, (dag_storage.ChangeMessage, dag_storage.FeedbackMessage))
+            else ""  # pragma: no cover (assumption: message contains content)
+        )
         msg_list.append({"kind": kind, "content": content})
         self._save_package_data(path, data)
+
 
     def clear_messages(self, node: dag_storage.DagNode) -> None:
         # Requirement: Clearing messages for a node removes all recorded messages explaining why it requires cleaning.
@@ -206,8 +248,6 @@ class AgentStorage(agent_storage.AgentStorage, Singleton):
             self._save_package_data(path, data)
 
 
-# Compatibility alias
-DagStorage = AgentStorage
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:

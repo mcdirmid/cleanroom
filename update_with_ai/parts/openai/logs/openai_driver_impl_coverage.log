@@ -1,0 +1,30 @@
+from __future__ import annotations
+from typing import Optional
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton, system
+from staging.parts.agent.lib.agent_session import agent_session
+from agent_session import AgentSessionTier
+import loop_driver
+
+# Requirements specified in openai_driver_impl.pyi
+
+class LoopDriver(loop_driver.LoopDriver, InTier[AgentSessionTier], Singleton):
+    tier = agent_session
+
+    def __init__(self) -> None:
+        # TODO___init___body
+        pass
+
+    def run(self) -> loop_driver.LoopOutcome:
+        # TODO_run_body
+        raise NotImplementedError
+
+
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        LoopDriver,
+        keys=[LoopDriver, loop_driver.LoopDriver, InTier[AgentSessionTier]],
+        tier=agent_session,
+    )
+
+_initialize_ = __initialize__

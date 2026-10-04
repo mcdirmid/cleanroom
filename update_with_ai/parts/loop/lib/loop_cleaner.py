@@ -6,5 +6,5 @@ from update_with_ai.parts.dag.lib import dag_storage
 
 class LoopCleaner(Protocol):
     def clean(
-        self, node: dag_storage.DagNode, cleaner: loop_node_cleaner.NodeCleaner
-    ) -> None: ...
+        self, target: dag_storage.DagNode, node_cleaner: loop_node_cleaner.NodeCleaner
+    ) -> bool: ...

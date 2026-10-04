@@ -3,14 +3,52 @@
 load("//bin:pyright_library.bzl", "pyright_library")
 load("//update_with_ai/support/lib:update_with_ai.bzl", "update_with_ai")
 
+update_with_ai(
+    name = "framework_spec",
+    src = "framework.pyi",
+    prompt = "Cleanroom specification framework stubs.",
+    visibility = ["//visibility:public"],
+)
+
+update_with_ai(
+    name = "lifecycle_spec",
+    src = "lifecycle.pyi",
+    prompt = "Cleanroom lifecycle specification stubs.",
+    visibility = ["//visibility:public"],
+)
+
+update_with_ai(
+    name = "grounding_support_spec",
+    src = "grounding_support.pyi",
+    prompt = "Cleanroom grounding support specification stubs.",
+    visibility = ["//visibility:public"],
+)
+
 exports_files([
     "framework.py",
+    "framework.pyi",
     "lifecycle.py",
     "lifecycle.pyi",
+    "grounding_support.py",
+    "grounding_support.pyi",
     "update_python_with_ai.bzl",
     "check_build_derived.py",
     "build_derived_test.bzl",
+    "build_lint_common.py",
+    "high_lint.py",
+    "low_lint.py",
+    "grounding_lint.py",
+    "lib_lint.py",
+    "test_lint.py",
 ], visibility = ["//visibility:public"])
+
+pyright_library(
+    name = "grounding_support",
+    srcs = ["grounding_support.py"],
+    pyright_deps = ["//update_with_ai/support/lib:grounding_support"],
+    imports = ["../..", "."],
+    visibility = ["//visibility:public"],
+)
 
 pyright_library(
     name = "framework",
@@ -28,9 +66,44 @@ pyright_library(
     visibility = ["//visibility:public"],
 )
 
-update_with_ai(
-    name = "lifecycle_spec",
-    src = "lifecycle.pyi",
-    prompt = "Maintain the Cleanroom lifecycle specification and usage guide.",
+pyright_library(
+    name = "build_lint_common",
+    srcs = ["build_lint_common.py"],
+    pyright_deps = [],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "high_lint",
+    srcs = ["high_lint.py"],
+    pyright_deps = [],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "low_lint",
+    srcs = ["low_lint.py"],
+    pyright_deps = [],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "grounding_lint",
+    srcs = ["grounding_lint.py"],
+    pyright_deps = [],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "lib_lint",
+    srcs = ["lib_lint.py"],
+    pyright_deps = [":build_lint_common"],
+    visibility = ["//visibility:public"],
+)
+
+pyright_library(
+    name = "test_lint",
+    srcs = ["test_lint.py"],
+    pyright_deps = [":build_lint_common"],
     visibility = ["//visibility:public"],
 )

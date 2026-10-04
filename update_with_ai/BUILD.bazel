@@ -1,5 +1,9 @@
 # update_with_ai/BUILD.bazel
 
+load("//update_with_ai/support/lib:update_with_ai.bzl", "batch_mark_clean")
+
+package(default_visibility = ["//visibility:public"])
+
 filegroup(
     name = "high_specs",
     srcs = [
@@ -10,7 +14,6 @@ filegroup(
         "//update_with_ai/parts/bazel:high_specs",
         "//update_with_ai/parts/openai:high_specs",
         "//update_with_ai/parts/core:high_specs",
-        "//update_with_ai/parts/mcp:high_specs",
         "//update_with_ai/parts/systems:high_specs",
     ],
     visibility = ["//visibility:public"],
@@ -26,7 +29,6 @@ filegroup(
         "//update_with_ai/parts/bazel:grounding_specs",
         "//update_with_ai/parts/openai:grounding_specs",
         "//update_with_ai/parts/core:grounding_specs",
-        "//update_with_ai/parts/mcp:grounding_specs",
         "//update_with_ai/parts/systems:grounding_specs",
     ],
     visibility = ["//visibility:public"],
@@ -50,7 +52,6 @@ filegroup(
         "//update_with_ai/parts/core:BUILD.bazel",
         "//update_with_ai/parts/dag:BUILD.bazel",
         "//update_with_ai/parts/loop:BUILD.bazel",
-        "//update_with_ai/parts/mcp:BUILD.bazel",
         "//update_with_ai/parts/openai:BUILD.bazel",
         "//update_with_ai/parts/sandbox:BUILD.bazel",
         "//update_with_ai/parts/systems:BUILD.bazel",
@@ -58,3 +59,118 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
+# ============================================================================
+# Aggregate batch mark clean targets for parts packages.
+# ============================================================================
+
+# Clean all nodes across all roles in all parts packages
+batch_mark_clean(
+    name = "all_mark_clean",
+    role = "",
+    scope_dir = "update_with_ai/parts",
+)
+
+alias(
+    name = "clean",
+    actual = ":all_mark_clean",
+)
+
+# Role-specific batch mark clean targets and aliases
+batch_mark_clean(
+    name = "high_mark_clean",
+    role = "high",
+    scope_dir = "update_with_ai/parts",
+)
+
+alias(
+    name = "all_high_mark_clean",
+    actual = ":high_mark_clean",
+)
+
+batch_mark_clean(
+    name = "requirements_mark_clean",
+    role = "requirements",
+    scope_dir = "update_with_ai/parts",
+)
+
+alias(
+    name = "all_requirements_mark_clean",
+    actual = ":requirements_mark_clean",
+)
+
+batch_mark_clean(
+    name = "planning_mark_clean",
+    role = "planning",
+    scope_dir = "update_with_ai/parts",
+)
+
+alias(
+    name = "all_planning_mark_clean",
+    actual = ":planning_mark_clean",
+)
+
+batch_mark_clean(
+    name = "low_mark_clean",
+    role = "low",
+    scope_dir = "update_with_ai/parts",
+)
+
+alias(
+    name = "all_low_mark_clean",
+    actual = ":low_mark_clean",
+)
+
+batch_mark_clean(
+    name = "grounding_mark_clean",
+    role = "grounding",
+    scope_dir = "update_with_ai/parts",
+)
+
+alias(
+    name = "all_grounding_mark_clean",
+    actual = ":grounding_mark_clean",
+)
+
+batch_mark_clean(
+    name = "lib_mark_clean",
+    role = "lib",
+    scope_dir = "update_with_ai/parts",
+)
+
+alias(
+    name = "all_lib_mark_clean",
+    actual = ":lib_mark_clean",
+)
+
+batch_mark_clean(
+    name = "test_mark_clean",
+    role = "test",
+    scope_dir = "update_with_ai/parts",
+)
+
+alias(
+    name = "all_test_mark_clean",
+    actual = ":test_mark_clean",
+)
+
+batch_mark_clean(
+    name = "qa_mark_clean",
+    role = "qa",
+    scope_dir = "update_with_ai/parts",
+)
+
+alias(
+    name = "all_qa_mark_clean",
+    actual = ":qa_mark_clean",
+)
+
+batch_mark_clean(
+    name = "coverage_mark_clean",
+    role = "coverage",
+    scope_dir = "update_with_ai/parts",
+)
+
+alias(
+    name = "all_coverage_mark_clean",
+    actual = ":coverage_mark_clean",
+)

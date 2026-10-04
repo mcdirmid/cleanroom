@@ -13,7 +13,9 @@ Detecting loops requires maintaining state across consecutive turns to distingui
 
 ## Types and Behavior
 
-The loop guard tracks consecutive executions of identical tools with identical arguments and consecutive edits to the same file and line range. Repetition tracking evaluates consecutive identical executions against configured thresholds. Tool execution evaluation:
+The loop guard tracks consecutive executions of identical tools with identical arguments and consecutive edits to the same file and line range. Repetition tracking evaluates consecutive identical executions against configured thresholds.
+
+Tool execution evaluation:
 
 - Produces a loop reminder advising the agent that no new information will be revealed by repeated tool execution until session read-write files are updated and that repeating the tool call without modifying files will trigger fatal loop termination, when consecutive identical tool executions reach the reminder threshold of two repetitions.
 

@@ -186,27 +186,63 @@ class LifecycleTier:
     def is_descendant_of(self, other: LifecycleTier | type[LifecycleTier] | str) -> bool: ...
 
 
-class RootTier(LifecycleTier): ...
+class RootTier(LifecycleTier):
+    """Base class for root lifecycle tiers in Cleanroom's hierarchy."""
+    ...
 
 
-class ChildTierOf[ParentTier: LifecycleTier](LifecycleTier): ...
+class ChildTierOf[ParentTier: LifecycleTier](LifecycleTier):
+    """Generic base class declaring a subordinate tier under ParentTier.
+
+    Subordinate tiers inherit from ChildTierOf[ParentTier] to establish
+    static type-level hierarchy relationships.
+    """
+    ...
 
 
-class SystemTier(RootTier): ...
+class SystemTier(RootTier):
+    """Root system tier for singleton services spanning the entire process lifecycle."""
+    ...
 
 
 class InTier[T: LifecycleTier](Protocol):
-    """Marker protocol indicating membership in a specific lifecycle tier."""
+    """Marker protocol indicating membership in a specific lifecycle tier.
+
+    Active services inheriting InTier[TierType] statically declare that they belong
+    to TierType (e.g. InTier[SystemTier]), allowing static analysis, IDEs, and Groundtalk
+    solvers to reason about singleton visibility and collaborator reachability.
+    """
     ...
 
 
 system: SystemTier
 
 
+__all__ = [
+    "LifecycleTier",
+    "RootTier",
+    "ChildTierOf",
+    "SystemTier",
+    "InTier",
+    "system",
+    "get_tier",
+    "Singleton",
+    "Initializable",
+    "SingletonDescriptor",
+    "LifecycleScope",
+    "LifecycleRegistry",
+    "get_default_registry",
+    "get_active_scope",
+    "get_ambient_system_scope",
+    "get_singleton",
+    "enter_phase",
+    "begin_phase",
+    "singleton",
+]
+
+
 def get_tier[T: LifecycleTier](tier_type: type[T]) -> T:
-    """
-    Retrieves the singleton instance of the specified lifecycle tier type.
-    """
+    """Retrieves the singleton instance of the specified lifecycle tier type."""
     ...
 
 

@@ -3,6 +3,8 @@ import json
 import os
 import sys
 from typing import Any, Mapping, Optional
+
+
 from update_with_ai.parts.agent.lib import agent_config
 from update_with_ai.parts.dag.lib import dag_config
 from update_with_ai.parts.openai.lib import openai_config
@@ -15,7 +17,6 @@ from support.lib.lifecycle import (
 
 
 def _resolve_target_label() -> str:
-    # Requirement: The openai config, agent config, and dag config resolve the target configuration from the MODEL_CONFIG_TARGET environment variable, the AGENT_CONFIG_TARGET environment variable, or the --config command-line argument, defaulting to the standard //model_configs:default target.
     label = os.environ.get("MODEL_CONFIG_TARGET") or os.environ.get(
         "AGENT_CONFIG_TARGET"
     )
@@ -33,7 +34,6 @@ def _resolve_target_label() -> str:
 
 
 def _find_target_config_file(target_label: str) -> Optional[str]:
-    # Requirement: The openai config, agent config, and dag config load execution parameters and authentication credentials for language model agent runs from the target module.
     clean = target_label.strip()
     if clean.startswith("@@//"):
         clean = clean[2:]
@@ -83,29 +83,25 @@ def _find_target_config_file(target_label: str) -> Optional[str]:
     return None
 
 
-class OpenaiConfig(
-    openai_config.OpenaiConfig,
-    agent_config.AgentConfig,
-    dag_config.DagConfig,
-    Singleton,
-):
-    tier = system
-
+class _ConfigData:
     def __init__(self) -> None:
         target_label = _resolve_target_label()
         config_file = _find_target_config_file(target_label)
 
         data: Mapping[str, Any] = {}
         if config_file is not None:
-            with open(config_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            try:
+                with open(config_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError):  # pragma: no cover (assumption: valid workspace config file)
+                pass
 
-        self._model_name = (
+        self.model_name = (
             str(data["model"])
             if "model" in data
             else os.environ.get("OPENAI_MODEL", "gpt-4o")
         )
-        self._base_url = (
+        self.base_url = (
             data.get("base_url")
             if "base_url" in data
             else os.environ.get("OPENAI_BASE_URL", None)
@@ -113,55 +109,56 @@ class OpenaiConfig(
 
         api_key_env = data.get("api_key_env")
         if api_key_env:
-            self._api_key = os.environ.get(api_key_env, None)
+            self.api_key = os.environ.get(api_key_env, None)
         else:
-            self._api_key = os.environ.get("AGENT_API_KEY") or os.environ.get(
+            self.api_key = os.environ.get("AGENT_API_KEY") or os.environ.get(
                 "OPENAI_API_KEY", None
             )
 
-        self._timeout = (
-            int(float(data["timeout"]))
+        self.timeout = (
+            float(data["timeout"])
             if "timeout" in data
-            else int(os.environ.get("MODEL_TIMEOUT", "60"))
+            else float(os.environ.get("MODEL_TIMEOUT", "60"))
         )
-        self._conversation_limit = (
+        self.conversation_limit = (
             int(data["max_iterations"])
             if "max_iterations" in data
             else int(os.environ.get("MODEL_CONVERSATION_LIMIT", "20"))
         )
-        self._temperature = (
+        self.temperature = (
             float(data["temperature"])
             if "temperature" in data
             else float(os.environ.get("MODEL_TEMPERATURE", "0.0"))
         )
         if "max_tokens" in data and data["max_tokens"] is not None:
-            self._max_tokens: Optional[int] = int(data["max_tokens"])
+            self.max_tokens: Optional[int] = int(data["max_tokens"])
         elif os.environ.get("MODEL_MAX_TOKENS"):
-            self._max_tokens = int(os.environ["MODEL_MAX_TOKENS"])
+            self.max_tokens = int(os.environ["MODEL_MAX_TOKENS"])
         else:
-            self._max_tokens = None
+            self.max_tokens = None
+
         raw_step = data.get("do_step_mode", data.get("step_sections"))
-        self._is_step_mode = (
+        self.is_step_mode = (
             bool(raw_step)
             if raw_step is not None
             else os.environ.get("STEP_MODE", "true").lower() in ("true", "1")
         )
-        self._is_startup_reads = (
+        self.is_startup_reads = (
             bool(data["session_start_reads"])
             if "session_start_reads" in data
             else os.environ.get("STARTUP_READS", "true").lower() in ("true", "1")
         )
-        self._inject_followups = (
+        self.inject_followups = (
             bool(data["inject_followups"])
             if "inject_followups" in data
             else os.environ.get("INJECT_FOLLOWUPS", "true").lower() in ("true", "1")
         )
-        self._edit_delta_output = (
+        self.edit_delta_output = (
             bool(data["edit_delta_output"])
             if "edit_delta_output" in data
             else os.environ.get("EDIT_DELTA_OUTPUT", "false").lower() in ("true", "1")
         )
-        self._is_mcp_mode = (
+        self.is_mcp_mode = (
             bool(data["mcp_mode"])
             if "mcp_mode" in data
             else (
@@ -170,109 +167,137 @@ class OpenaiConfig(
             ).lower()
             in ("true", "1")
         )
-        self._node_visit_limit = (
+        self.node_visit_limit = (
             int(data["node_visit_limit"])
             if "node_visit_limit" in data
             else int(os.environ.get("NODE_VISIT_LIMIT", "500"))
         )
-        self._batch_size = (
+        self.batch_size = (
             int(data["batch_size"])
             if "batch_size" in data
             else int(os.environ.get("BATCH_SIZE", "1"))
         )
-        self._supersede_arg_keep = (
+        self.supersede_arg_keep = (
             int(data["supersede_arg_keep"])
             if "supersede_arg_keep" in data
             else int(os.environ.get("SUPERSEDE_ARG_KEEP", "20"))
         )
 
 
-    @property
-    def model_name(self) -> str:
-        # Requirement: The openai config provides the model name designating the target model.
-        return self._model_name
+_DATA: Optional[_ConfigData] = None
 
-    @property
-    def base_url(self) -> Optional[str]:
-        # Requirement: The openai config provides the base url designating the remote model API endpoint address.
-        return self._base_url
 
-    @property
-    def api_key(self) -> Optional[str]:
-        # Requirement: The openai config provides the api key providing authentication credentials from the designated environment variable, or ambient environment credentials.
-        return self._api_key
+def _get_config_data() -> _ConfigData:
+    return _ConfigData()
 
-    @property
-    def timeout(self) -> int:
-        # Requirement: The openai config provides the timeout specifying the maximum request duration in seconds.
-        return self._timeout
+
+class AgentConfig(agent_config.AgentConfig, Singleton):
+    tier = system
+
+    def __init__(self) -> None:
+        self._cfg = _get_config_data()
 
     @property
     def conversation_limit(self) -> agent_config.ConversationLimit:
-        # Requirement: The agent config provides the conversation limit bounding interaction turns.
-        return self._conversation_limit
-
-    @property
-    def temperature(self) -> float:
-        # Requirement: The openai config provides the temperature specifying the sampling temperature for model requests.
-        return self._temperature
-
-    @property
-    def max_tokens(self) -> Optional[int]:
-        # Requirement: The openai config provides the max tokens bound resolved from the target module when token generation is constrained.
-        return self._max_tokens
-
-    @property
-    def is_step_mode(self) -> bool:
-        # Requirement: The agent config provides whether the agent should use step mode to communicate a guide progressively.
-        return self._is_step_mode
-
-    @property
-    def is_startup_reads(self) -> bool:
-        # Requirement: The agent config provides whether the agent should perform startup reads to inspect declared files at session start.
-        return self._is_startup_reads
+        return agent_config.ConversationLimit(self._cfg.conversation_limit)
 
     @property
     def inject_followups(self) -> bool:
-        # Requirement: The agent config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
-        return self._inject_followups
+        return self._cfg.inject_followups
+
+    @property
+    def is_step_mode(self) -> bool:
+        return self._cfg.is_step_mode
+
+    @property
+    def is_startup_reads(self) -> bool:
+        return self._cfg.is_startup_reads
 
     @property
     def edit_delta_output(self) -> bool:
-        # Requirement: Whether editing tools should produce delta output.
-        return self._edit_delta_output
+        return self._cfg.edit_delta_output
 
     @property
     def is_mcp_mode(self) -> bool:
-        # Requirement: Whether the agent should operate in mcp mode.
-        return self._is_mcp_mode
+        return self._cfg.is_mcp_mode
+
+    @property
+    def supersede_arg_keep(self) -> agent_config.SupersedeArgKeepLimit:
+        return agent_config.SupersedeArgKeepLimit(self._cfg.supersede_arg_keep)
+
+
+class DagConfig(dag_config.DagConfig, Singleton):
+    tier = system
+
+    def __init__(self) -> None:
+        self._cfg = _get_config_data()
 
     @property
     def node_visit_limit(self) -> dag_config.NodeVisitLimit:
-        # Requirement: The dag config provides the node visit limit bounding node visits during graph cleaning.
-        return self._node_visit_limit
+        return dag_config.NodeVisitLimit(self._cfg.node_visit_limit)
 
     @property
     def batch_size(self) -> dag_config.BatchSize:
-        # Requirement: The dag config provides the batch size bounding dirty nodes processed together in an agent session.
-        return self._batch_size
+        return dag_config.BatchSize(self._cfg.batch_size)
+
+
+class OpenAIConfig(openai_config.OpenAIConfig, Singleton):
+    tier = system
+
+    def __init__(self) -> None:
+        self._cfg = _get_config_data()
 
     @property
-    def supersede_arg_keep(self) -> int:
-        # Requirement: The agent config provides the character retention limit bounding preserved string argument tails when tool responses are superseded.
-        return self._supersede_arg_keep
+    def model_name(self) -> openai_config.ModelName:
+        return openai_config.ModelName(self._cfg.model_name)
 
+    @property
+    def base_url(self) -> Optional[openai_config.BaseUrl]:
+        return (
+            openai_config.BaseUrl(self._cfg.base_url)
+            if self._cfg.base_url is not None
+            else None
+        )
+
+    @property
+    def api_key(self) -> Optional[openai_config.ApiKey]:
+        return (
+            openai_config.ApiKey(self._cfg.api_key)
+            if self._cfg.api_key is not None
+            else None
+        )
+
+    @property
+    def timeout(self) -> openai_config.TimeoutSeconds:
+        return openai_config.TimeoutSeconds(self._cfg.timeout)
+
+    @property
+    def temperature(self) -> openai_config.Temperature:
+        return openai_config.Temperature(self._cfg.temperature)
+
+    @property
+    def max_tokens(self) -> Optional[openai_config.MaxTokens]:
+        return (
+            openai_config.MaxTokens(self._cfg.max_tokens)
+            if self._cfg.max_tokens is not None
+            else None
+        )
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
-        OpenaiConfig,
-        keys=[
-            OpenaiConfig,
-            openai_config.OpenaiConfig,
-            agent_config.AgentConfig,
-            dag_config.DagConfig,
-        ],
+        AgentConfig,
+        keys=[AgentConfig, agent_config.AgentConfig],
+        tier=system,
+    )
+    reg.register_singleton(
+        DagConfig,
+        keys=[DagConfig, dag_config.DagConfig],
+        tier=system,
+    )
+    reg.register_singleton(
+        OpenAIConfig,
+        keys=[OpenAIConfig, openai_config.OpenAIConfig],
         tier=system,
     )

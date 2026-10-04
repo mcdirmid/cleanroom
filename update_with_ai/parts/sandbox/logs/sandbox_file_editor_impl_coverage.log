@@ -1,0 +1,93 @@
+from __future__ import annotations
+from typing import Any, Mapping, Optional, Set, Union
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton, system
+from staging.parts.agent.lib.agent_session import agent_session
+from agent_session import AgentSessionTier
+import agent_file_alias
+import sandbox_file_editor
+import tool_provider
+
+# Requirements specified in sandbox_file_editor_impl.pyi
+
+class EditManager(sandbox_file_editor.EditManager, InTier[AgentSessionTier], Singleton):
+    tier = agent_session
+
+    def __init__(self) -> None:
+        # TODO___init___body
+        pass
+
+    @property
+    def has_modifications(self) -> bool:
+        # TODO_has_modifications_body
+        raise NotImplementedError
+
+    @property
+    def file_update_revision(self) -> sandbox_file_editor.FileUpdateRevision:
+        # TODO_file_update_revision_body
+        raise NotImplementedError
+
+    @property
+    def locked_files(self) -> Set[agent_file_alias.ReadWriteFile]:
+        # TODO_locked_files_body
+        raise NotImplementedError
+
+    @property
+    def last_read_or_edited_file(self) -> Optional[agent_file_alias.FileAlias]:
+        # TODO_last_read_or_edited_file_body
+        raise NotImplementedError
+
+    def lock_file(self, file: agent_file_alias.ReadWriteFile) -> None:
+        # TODO_lock_file_body
+        raise NotImplementedError
+
+    def unlock_file(self, file: agent_file_alias.ReadWriteFile) -> None:
+        # TODO_unlock_file_body
+        raise NotImplementedError
+
+    def materialize_templates(self) -> None:
+        # TODO_materialize_templates_body
+        raise NotImplementedError
+
+    def record_file_read(self, file: agent_file_alias.FileAlias) -> None:
+        # TODO_record_file_read_body
+        raise NotImplementedError
+
+    def record_file_edit(self, file: agent_file_alias.ReadWriteFile) -> None:
+        # TODO_record_file_edit_body
+        raise NotImplementedError
+
+    def file_hash(self, file: agent_file_alias.FileAlias) -> sandbox_file_editor.FileHash:
+        # TODO_file_hash_body
+        raise NotImplementedError
+
+    def can_write(self, path: Union[agent_file_alias.RelativePath, agent_file_alias.FileAlias]) -> tool_provider.ToolResponse:
+        # TODO_can_write_body
+        raise NotImplementedError
+
+
+class ReplaceFileContentTool(sandbox_file_editor.ReplaceFileContentTool, InTier[AgentSessionTier], Singleton):
+    tier = agent_session
+
+    def __init__(self) -> None:
+        # TODO___init___body
+        pass
+
+    def execute_tool(self, actual_parameter_bindings: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]) -> tool_provider.ToolResponse:
+        # TODO_execute_tool_body
+        raise NotImplementedError
+
+
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        EditManager,
+        keys=[EditManager, sandbox_file_editor.EditManager, InTier[AgentSessionTier]],
+        tier=agent_session,
+    )
+    reg.register_singleton(
+        ReplaceFileContentTool,
+        keys=[ReplaceFileContentTool, sandbox_file_editor.ReplaceFileContentTool, InTier[AgentSessionTier]],
+        tier=agent_session,
+    )
+
+_initialize_ = __initialize__

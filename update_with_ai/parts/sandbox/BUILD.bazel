@@ -6,13 +6,13 @@ package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "high_specs",
-    srcs = glob(["high/*.md"]),
+    srcs = glob(["high/*.md"], allow_empty = True),
     visibility = ["//visibility:public"],
 )
 
 filegroup(
     name = "grounding_specs",
-    srcs = glob(["grounding/*.pyi"]),
+    srcs = glob(["grounding/*.gt", "grounding/*.py", "grounding/*.pyi", "low/*.pyi"], allow_empty = True),
     visibility = ["//visibility:public"],
 )
 
@@ -83,7 +83,7 @@ update_python_with_ai(
 
 update_python_with_ai(
     name = "tool_provider",
-    module_deps = [],
+    module_deps = ['//update_with_ai/parts/agent:agent_session'],
 )
 
 update_python_with_ai(

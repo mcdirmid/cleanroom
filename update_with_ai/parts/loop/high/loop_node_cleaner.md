@@ -12,7 +12,7 @@ Multi-step build and agent workflows execute heterogeneous tasks—such as code 
 
 ## Types and Behavior
 
-A *node cleaner* is a polymorphic service that cleans nodes sharing a role.
+A polymorphic *node cleaner* cleans nodes sharing a role.
 
 A node cleaner can *clean* dirty nodes, communicating whether processing should *continue*. Processing cannot continue only if a failure occurs while cleaning the nodes that cannot be handled by cleaning any other node; otherwise, processing continues.
 

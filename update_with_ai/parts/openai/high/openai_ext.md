@@ -10,7 +10,9 @@ Direct coupling between domain components and remote model API endpoints creates
 
 ## Grounding Gaps Covered
 
-The openai_ext component provides the external domain knowledge and protocol mechanics required to execute chat completions against remote OpenAI-compatible endpoints:
+The openai_ext component provides the external domain knowledge and protocol mechanics required to execute chat completions against remote OpenAI-compatible endpoints.
+
+Grounding gaps covered include:
 
 - Chat completion wire protocol: Defines the HTTP POST request payload format for the `/v1/chat/completions` endpoint, including model identifier strings, ordered message sequences adhering to OpenAI chat completion and tool calling conventions (system prompts, user inputs, assistant responses with function tool calls, and tool call results correlated by call identifier), tool definitions schema conforming to function-calling specifications, temperature parameters, and execution timeouts.
 

@@ -1,0 +1,32 @@
+from __future__ import annotations
+from typing import Optional
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton, system
+import runner_logger
+
+# Requirements specified in runner_logger_impl.pyi
+
+class RunnerLogger(runner_logger.RunnerLogger, Singleton):
+    tier = system
+
+    def __init__(self) -> None:
+        # TODO___init___body
+        pass
+
+    def initialize(self) -> None:
+        # TODO_initialize_body
+        raise NotImplementedError
+
+    def consume(self, event: runner_logger.RunnerLogEvent) -> None:
+        # TODO_consume_body
+        raise NotImplementedError
+
+
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        RunnerLogger,
+        keys=[RunnerLogger, runner_logger.RunnerLogger],
+        tier=system,
+    )
+
+_initialize_ = __initialize__

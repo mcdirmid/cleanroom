@@ -14,7 +14,7 @@ Autonomous agent tasks require multi-turn interaction loops where model decision
 
 A *loop outcome* is the final result of an agent run that carries a termination outcome from tool execution and the final state of the conversation.
 
-The *loop driver* is an agent session service that coordinates the turn loop for an agent session.
+An agent session's *loop driver* coordinates the turn loop for an agent session.
 
 The loop driver:
 

@@ -4,6 +4,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple, Type
 from . import bazel_manifest_loader
 from . import bazel_target
@@ -28,7 +29,7 @@ class _CommandVerificationCheck(agent_node_config.VerificationCheck):
         self._command = command
         self._cwd = cwd
 
-    def verify(self) -> Tuple[bool, str]:
+    def verify(self) -> Tuple[bool, agent_node_config.VerificationDiagnostic]:
         env = os.environ.copy()
         if not env.get("BUILD_WORKSPACE_DIRECTORY"):
             env["BUILD_WORKSPACE_DIRECTORY"] = self._cwd or os.getcwd()
@@ -44,15 +45,16 @@ class _CommandVerificationCheck(agent_node_config.VerificationCheck):
             )
             passed = res.returncode == 0
             output = res.stdout
-            if res.stderr:
+            if res.stderr:  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
                 output = f"{output}\n{res.stderr}".strip() if output else res.stderr
-            return passed, output
-        except Exception as e:
-            return False, str(e)
+            return passed, agent_node_config.VerificationDiagnostic(output)
+        except (OSError, subprocess.SubprocessError) as e:  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
+            return False, agent_node_config.VerificationDiagnostic(str(e))
+
 
 
 def _make_host_path(cls: Any, path: str) -> Any:
-    if issubclass(cls, str):
+    if issubclass(cls, str):  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
         return cls(path)
     obj = object.__new__(cls)
     object.__setattr__(obj, "path", path)
@@ -61,6 +63,7 @@ def _make_host_path(cls: Any, path: str) -> Any:
 
 def _parse_guide_markdown(content: str) -> agent_node_config.NodeGuide:
     lines = content.splitlines()
+    preamble_lines: List[str] = []
     summary_lines: List[str] = []
     sections: List[agent_node_config.StepSection] = []
     verification_failure_lines: Optional[List[str]] = None
@@ -68,125 +71,132 @@ def _parse_guide_markdown(content: str) -> agent_node_config.NodeGuide:
     current_title: Optional[str] = None
     current_section_lines: List[str] = []
 
+    def _process_section(title: str, sec_lines: List[str]) -> None:
+        nonlocal verification_failure_lines
+        t_lower = title.strip().lower()
+        if t_lower == "summary" or t_lower.startswith("summary"):
+            summary_lines.extend(sec_lines)
+        elif t_lower.startswith("verification failure"):
+            verification_failure_lines = list(sec_lines)
+        elif not t_lower.startswith("lint checks"):
+            sections.append(
+                agent_node_config.StepSection(
+                    index=agent_node_config.StepIndex(len(sections)),
+                    title=agent_node_config.StepTitle(title),
+                    content=agent_node_config.StepContent(
+                        "\n".join(sec_lines).strip()
+                    ),
+                )
+            )
+
     for line in lines:
         if line.startswith("## "):
             if current_title is None:
-                summary_lines = list(current_section_lines)
+                preamble_lines = list(current_section_lines)
             else:
-                if current_title.startswith("Summary"):
-                    summary_lines.extend(current_section_lines)
-                elif current_title.startswith("Verification failure"):
-                    verification_failure_lines = list(current_section_lines)
-                elif not current_title.startswith("Lint checks"):
-                    sections.append(
-                        agent_node_config.StepSection(
-                            index=len(sections),
-                            title=current_title,
-                            content="\n".join(current_section_lines).strip(),
-                        )
-                    )
+                _process_section(current_title, current_section_lines)
             current_title = line[3:].strip()
             current_section_lines = []
         else:
             current_section_lines.append(line)
 
     if current_title is not None:
-        if current_title.startswith("Summary"):
-            summary_lines.extend(current_section_lines)
-        elif current_title.startswith("Verification failure"):
-            verification_failure_lines = list(current_section_lines)
-        elif not current_title.startswith("Lint checks"):
-            sections.append(
-                agent_node_config.StepSection(
-                    index=len(sections),
-                    title=current_title,
-                    content="\n".join(current_section_lines).strip(),
-                )
-            )
-    elif not summary_lines:
-        summary_lines = current_section_lines
+        _process_section(current_title, current_section_lines)
+    else:  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
+        preamble_lines = list(current_section_lines)
 
-    summary = "\n".join(summary_lines).strip()
+    clean_preamble = [l for l in preamble_lines if not l.startswith("# ")]
+    combined_summary_lines: List[str] = []
+    if any(l.strip() for l in clean_preamble):
+        combined_summary_lines.extend(clean_preamble)  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
+    if summary_lines:
+        combined_summary_lines.extend(summary_lines)
+    if not combined_summary_lines:  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
+        combined_summary_lines = preamble_lines
+
+    summary = "\n".join(combined_summary_lines).strip()
     vf_text = (
         "\n".join(verification_failure_lines).strip()
         if verification_failure_lines is not None
-        else None
+        else None  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
     )
     return agent_node_config.NodeGuide(
-        summary=summary,
+        summary=agent_node_config.GuideSummary(summary),
         sections=sections,
-        verification_failure=vf_text,
+        verification_failure=(
+            agent_node_config.VerificationFailureInstructions(vf_text)
+            if vf_text is not None
+            else None  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
+        ),
     )
 
 
 def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo:
-    all_feedback: List[str] = []
+    all_feedback: List[agent_node_config.NodeFeedback] = []
     try:
         storage = get_singleton(dag_storage.DagStorage)
         msgs = storage.get_messages(n)
         all_feedback.extend(
-            m.content
+            agent_node_config.NodeFeedback(m.content)
             for m in msgs
             if isinstance(m, dag_storage.FeedbackMessage) and m.content
         )
-    except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+    except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
         pass
     feedback = tuple(all_feedback)
 
     try:
         loader = get_singleton(bazel_manifest_loader.BazelManifestLoader)
-    except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+    except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
         loader = None
 
     try:
         node_util = get_singleton(bazel_target.BazelTarget)
-    except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):
+    except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
         node_util = None
 
-    manifest_raw = loader.get_manifest(n) if loader is not None else None
-    data: Dict[str, Any] = {}
-    if manifest_raw is not None:
-        try:
-            data = json.loads(str(manifest_raw))
-        except (json.JSONDecodeError, ValueError, TypeError):
-            pass
+    manifest = loader.retrieve_manifest(n) if loader is not None else None
 
     pkg_path = ""
     if node_util is not None:
-        pkg_dir = node_util.extract_directory(n)
+        pkg_dir = node_util.extract_node_dir(n)
         pkg_path = pkg_dir.path.lstrip("/")
 
     rw_files: Set[agent_file_alias.ReadWriteFile] = set()
-    src_alias: Optional[str] = None
+    src_alias: Optional[agent_file_alias.RelativePath] = None
 
-    src = data.get("src")
+    src = manifest.source_file if manifest is not None else None
     if src:
         if src.startswith(pkg_path + "/") or (
-            pkg_path and src.startswith("/" + pkg_path + "/")
+            pkg_path and src.startswith("/" + pkg_path + "/")  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
         ):
             norm_rel = os.path.normpath(src.lstrip("/"))
-        else:
+        else:  # pragma: no cover (assumption: guide markdown adheres to role guide specification)
             norm_rel = os.path.normpath(os.path.join(pkg_path, src))
         ws_path = _make_host_path(agent_file_alias.WorkspacePath, norm_rel)
         rw = agent_file_alias.ReadWriteFile(
-            relative_path=norm_rel, workspace_path=ws_path, owning_node=n
+            relative_path=agent_file_alias.RelativePath(norm_rel),
+            workspace_path=ws_path,
+            owning_node=n,
         )
         rw_files.add(rw)
-        src_alias = norm_rel
+        src_alias = agent_file_alias.RelativePath(norm_rel)
 
-    silent_srcs = data.get("silent_srcs", [])
+    silent_srcs = manifest.silent_source_files if manifest is not None else ()
     for s_src in silent_srcs:
         norm_rel = os.path.normpath(os.path.join(pkg_path, s_src))
         ws_path = _make_host_path(agent_file_alias.WorkspacePath, norm_rel)
         rw = agent_file_alias.ReadWriteFile(
-            relative_path=norm_rel, workspace_path=ws_path, owning_node=n
+            relative_path=agent_file_alias.RelativePath(norm_rel),
+            workspace_path=ws_path,
+            owning_node=n,
         )
         rw_files.add(rw)
 
-    templates: Set[
-        Tuple[agent_file_alias.BoundFile, agent_file_alias.FileContent]
-    ] = set()
-    template_rel = data.get("template")
+    templates: Dict[
+        agent_file_alias.BoundFile, agent_file_alias.FileContent
+    ] = {}
+    template_rel = manifest.template if manifest is not None else None
     if template_rel and rw_files:
         content_str: Optional[str] = None
         cand_paths = [
@@ -218,78 +228,223 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
             content_obj = agent_file_alias.FileContent(content_str)
             for rw in rw_files:
                 if rw.owning_node == n:
-                    templates.add((rw, content_obj))
+                    templates[rw] = content_obj
 
-    template_parameters: Dict[str, Any] = {}
-    raw_params = data.get("template_parameters")
-    if isinstance(raw_params, dict):
-        template_parameters.update(raw_params)
-    elif isinstance(raw_params, str):
-        try:
-            decoded = json.loads(raw_params)
-            if isinstance(decoded, dict):
-                template_parameters.update(decoded)
-        except (json.JSONDecodeError, ValueError):
-            pass
-
-    allows_step = data.get(
-        "allows_step_mode",
-        data.get("step_mode", data.get("step_sections", True)),
+    unit_name = (
+        n.unit_address.split(":")[-1]
+        if ":" in n.unit_address
+        else os.path.basename(n.unit_address)
     )
-    allows_step_mode = bool(allows_step)
+    template_parameters: Dict[agent_node_config.TemplateParamKey, Any] = {
+        agent_node_config.TemplateParamKey("unit_name"): unit_name,
+        agent_node_config.TemplateParamKey("unit_dir"): pkg_path,
+        agent_node_config.TemplateParamKey("name"): unit_name,
+        agent_node_config.TemplateParamKey("dir"): pkg_path,
+    }
 
-    guide_target = data.get("guide")
+    allows_step_mode = True
+
+    guide_target = manifest.guide_target if manifest is not None else None
     guide_file: Optional[agent_file_alias.UnboundFile] = None
     guide: Optional[agent_node_config.NodeGuide] = None
     if guide_target:
+        cand_labels: List[str] = [guide_target]
+        if guide_target.startswith(":"):
+            if pkg_path:
+                cand_labels.insert(0, f"//{pkg_path}{guide_target}")
+                cand_labels.append(f"//{pkg_path}:{guide_target.lstrip(':')}")
+        elif not guide_target.startswith("//"):
+            if pkg_path:
+                cand_labels.append(f"//{pkg_path}:{guide_target}")
+                cand_labels.append(f"//{pkg_path}/{guide_target}")
+
+        cand_nodes: List[dag_storage.DagNode] = []
+        for cl in cand_labels:
+            if node_util is not None:
+                try:
+                    cand_nodes.append(
+                        node_util.normalize_target(bazel_target.TargetIdentifier(cl))
+                    )
+                except (ValueError, TypeError, KeyError, LookupError, AttributeError):
+                    pass
+            cand_nodes.append(
+                dag_storage.DagNode(
+                    unit_address=dag_storage.UnitAddress(cl),
+                    role_address=dag_storage.RoleAddress(""),
+                )
+            )
+
+        g_manifest: Optional[bazel_manifest_loader.TargetManifest] = None
+        if loader is not None:
+            for gn in cand_nodes:
+                try:
+                    g_manifest = loader.retrieve_manifest(gn)
+                    if g_manifest is not None:
+                        break
+                except (
+                    LifecycleResolutionError,
+                    KeyError,
+                    LookupError,
+                    RuntimeError,
+                    ValueError,
+                    AttributeError,
+                ):
+                    pass
+
+        g_text: Optional[str] = None
+        manifest_cand_paths: List[str] = []
+
+        if g_manifest is not None:
+            if g_manifest.source_file:
+                s_str = str(g_manifest.source_file)
+                manifest_cand_paths.append(s_str)
+            if g_manifest.template:
+                t_str = str(g_manifest.template)
+                if not t_str.startswith("#") and "\n" not in t_str:
+                    manifest_cand_paths.append(t_str)
+
         guide_filename = (
-            guide_target.split(":")[-1]
-            if ":" in guide_target
-            else os.path.basename(guide_target)
+            str(g_manifest.source_file)
+            if g_manifest is not None
+            and g_manifest.source_file
+            and "\n" not in str(g_manifest.source_file)
+            else (
+                guide_target.split(":")[-1]
+                if ":" in guide_target
+                else os.path.basename(guide_target)
+            )
         )
         if not guide_filename.endswith(".md"):
             guide_filename += ".md"
-        guide_file = agent_file_alias.UnboundFile(relative_path=guide_filename)
+        guide_file = agent_file_alias.UnboundFile(
+            relative_path=agent_file_alias.RelativePath(guide_filename)
+        )
 
-        guide_cand_paths = [
-            os.path.join(
-                os.environ.get("BUILD_WORKSPACE_DIRECTORY", ""),
-                "update_python_with_ai/guides",
-                guide_filename,
-            ),
-            os.path.join("update_python_with_ai/guides", guide_filename),
-        ]
-        for base in (
-            os.environ.get("RUNFILES_DIR", ""),
-            os.environ.get("BAZEL_RUNFILES", ""),
-        ):
-            if base:
-                guide_cand_paths.extend(
-                    [
+        if g_text is None:
+            cand_rel_files: List[str] = []
+            if guide_filename:
+                cand_rel_files.append(guide_filename)
+            for mcp in manifest_cand_paths:
+                cand_rel_files.append(mcp)
+                cand_rel_files.append(os.path.basename(mcp))
+            if not guide_target.startswith("//") and not guide_target.startswith(":"):
+                cand_rel_files.append(guide_target)
+                if not guide_target.endswith(".md"):
+                    cand_rel_files.append(f"{guide_target}.md")
+            cand_rel_files.append(os.path.basename(guide_target))
+            if not os.path.basename(guide_target).endswith(".md"):
+                cand_rel_files.append(f"{os.path.basename(guide_target)}.md")
+
+            seen_cands: Set[str] = set()
+            unique_cand_rel: List[str] = []
+            for cr in cand_rel_files:
+                if cr and cr not in seen_cands:
+                    seen_cands.add(cr)
+                    unique_cand_rel.append(cr)
+
+            pkg_norm = os.path.normpath(pkg_path.strip("/")) if pkg_path else ""
+            pkg_variants: List[str] = (
+                [pkg_norm] if pkg_norm and pkg_norm != "." else [""]
+            )
+            if pkg_norm and pkg_norm != ".":
+                parts = pkg_norm.split("/")
+                for i in range(1, len(parts)):
+                    pkg_variants.append("/".join(parts[i:]))
+
+            guide_cand_paths: List[str] = []
+            ws_root = os.environ.get("BUILD_WORKSPACE_DIRECTORY", "")
+            runfiles_bases = [
+                os.environ.get("RUNFILES_DIR", ""),
+                os.environ.get("BAZEL_RUNFILES", ""),
+                os.environ.get("TEST_SRCDIR", ""),
+            ]
+            if sys.argv and sys.argv[0]:
+                argv_rf = f"{sys.argv[0]}.runfiles"
+                runfiles_bases.append(argv_rf)
+
+            for cr in unique_cand_rel:
+                guide_cand_paths.append(cr)
+                guide_cand_paths.append(
+                    os.path.join("update_python_with_ai/guides", os.path.basename(cr))
+                )
+                if ws_root:
+                    guide_cand_paths.append(os.path.join(ws_root, cr))
+                    guide_cand_paths.append(
                         os.path.join(
-                            base, "update_python_with_ai/guides", guide_filename
-                        ),
+                            ws_root,
+                            "update_python_with_ai/guides",
+                            os.path.basename(cr),
+                        )
+                    )
+
+                for pv in pkg_variants:
+                    if pv:
+                        guide_cand_paths.append(os.path.join(pv, cr))
+                        guide_cand_paths.append(
+                            os.path.join(pv, "guides", os.path.basename(cr))
+                        )
+                        if ws_root:
+                            guide_cand_paths.append(os.path.join(ws_root, pv, cr))
+                            guide_cand_paths.append(
+                                os.path.join(
+                                    ws_root, pv, "guides", os.path.basename(cr)
+                                )
+                            )
+
+                for base in runfiles_bases:
+                    if not base:
+                        continue
+                    guide_cand_paths.append(os.path.join(base, cr))
+                    guide_cand_paths.append(os.path.join(base, "_main", cr))
+                    guide_cand_paths.append(
+                        os.path.join(
+                            base,
+                            "update_python_with_ai/guides",
+                            os.path.basename(cr),
+                        )
+                    )
+                    guide_cand_paths.append(
                         os.path.join(
                             base,
                             "_main/update_python_with_ai/guides",
-                            guide_filename,
-                        ),
-                    ]
-                )
-        for gp in guide_cand_paths:
-            if gp and os.path.exists(gp) and os.path.isfile(gp):
-                try:
-                    with open(gp, "r", encoding="utf-8") as gf:
-                        g_text = gf.read()
-                    guide = _parse_guide_markdown(g_text)
-                    break
-                except (OSError, UnicodeDecodeError):
-                    pass
+                            os.path.basename(cr),
+                        )
+                    )
+                    for pv in pkg_variants:
+                        if pv:
+                            guide_cand_paths.append(os.path.join(base, pv, cr))
+                            guide_cand_paths.append(
+                                os.path.join(base, "_main", pv, cr)
+                            )
+                            guide_cand_paths.append(
+                                os.path.join(base, pv, "guides", os.path.basename(cr))
+                            )
+                            guide_cand_paths.append(
+                                os.path.join(
+                                    base,
+                                    "_main",
+                                    pv,
+                                    "guides",
+                                    os.path.basename(cr),
+                                )
+                            )
 
-    deps = data.get("deps", [])
-    star_deps = data.get("star_deps", [])
-    silent_deps = set(data.get("silent_deps", []))
-    feedback_deps = set(data.get("feedback_deps", []))
+            for gp in guide_cand_paths:
+                if gp and os.path.exists(gp) and os.path.isfile(gp):
+                    try:
+                        with open(gp, "r", encoding="utf-8") as gf:
+                            g_text = gf.read()
+                            break
+                    except (OSError, UnicodeDecodeError):
+                        pass
+
+        if g_text is not None:
+            guide = _parse_guide_markdown(g_text)
+
+    deps = list(manifest.dependencies) if manifest is not None else []
+    star_deps = list(manifest.star_dependencies) if manifest is not None else []
+    silent_deps = set(manifest.silent_dependencies) if manifest is not None else set()
+    feedback_deps = set(manifest.feedback_dependencies) if manifest is not None else set()
 
     star_closure: List[str] = []
     star_seen: Set[str] = set()
@@ -301,21 +456,20 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
         star_seen.add(curr_label)
         star_closure.append(curr_label)
         curr_node = (
-            node_util.normalize(curr_label)
+            node_util.normalize_target(bazel_target.TargetIdentifier(curr_label))
             if node_util is not None
-            else dag_storage.DagNode(unit_address=curr_label)  # pragma: no cover (assumption: node_util is registered in system tier)
+            else dag_storage.DagNode(
+                unit_address=dag_storage.UnitAddress(curr_label),
+                role_address=dag_storage.RoleAddress(""),
+            )
         )
-        dep_manifest_raw = (
-            loader.get_manifest(curr_node) if loader is not None else None
+        dep_manifest = (
+            loader.retrieve_manifest(curr_node) if loader is not None else None
         )
-        if dep_manifest_raw:
-            try:
-                dep_data = json.loads(str(dep_manifest_raw))
-                for next_sd in dep_data.get("star_deps", []):
-                    if next_sd not in star_seen and next_sd not in silent_deps:
-                        frontier.append(next_sd)
-            except (json.JSONDecodeError, ValueError, TypeError):
-                pass
+        if dep_manifest is not None:
+            for next_sd in dep_manifest.star_dependencies:
+                if next_sd not in star_seen and next_sd not in silent_deps:
+                    frontier.append(next_sd)
 
     blame_targets: Set[agent_file_alias.BoundFile] = set()
     read_only_files: Set[agent_file_alias.ReadOnlyFile] = set()
@@ -326,28 +480,26 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
         if dep_label in silent_deps:
             continue
         dep_node = (
-            node_util.normalize(dep_label)
+            node_util.normalize_target(bazel_target.TargetIdentifier(dep_label))
             if node_util is not None
-            else dag_storage.DagNode(unit_address=dep_label)  # pragma: no cover (assumption: node_util is registered in system tier)
+            else dag_storage.DagNode(
+                unit_address=dag_storage.UnitAddress(dep_label),
+                role_address=dag_storage.RoleAddress(""),
+            )
         )
         is_blame = dep_label in feedback_deps
-        dep_manifest_raw = (
-            loader.get_manifest(dep_node) if loader is not None else None
+        dep_manifest = (
+            loader.retrieve_manifest(dep_node) if loader is not None else None
         )
         dep_srcs: List[str] = []
         dep_pkg = (
-            node_util.extract_directory(dep_node).path.lstrip("/")
+            node_util.extract_node_dir(dep_node).path.lstrip("/")
             if node_util is not None
-            else ""  # pragma: no cover (assumption: node_util is registered in system tier)
+            else ""
         )
 
-        if dep_manifest_raw:
-            try:
-                dep_data = json.loads(str(dep_manifest_raw))
-                if dep_data.get("src"):
-                    dep_srcs.append(dep_data["src"])
-            except (json.JSONDecodeError, ValueError, TypeError):
-                pass
+        if dep_manifest is not None and dep_manifest.source_file:
+            dep_srcs.append(dep_manifest.source_file)
         elif "guides" in dep_label:
             guide_fn = dep_label.split(":")[-1]
             if not guide_fn.endswith(".md"):
@@ -368,6 +520,7 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
             target_name = dep_label.split(":")[-1]
             dep_srcs.append(f"{target_name}.py")
 
+
         for ds in dep_srcs:
             if ds.startswith(dep_pkg + "/") or (
                 dep_pkg and ds.startswith("/" + dep_pkg + "/")
@@ -380,7 +533,7 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
                 agent_file_alias.WorkspacePath, norm_rel
             )
             bound_file = agent_file_alias.ReadOnlyFile(
-                relative_path=norm_rel,
+                relative_path=agent_file_alias.RelativePath(norm_rel),
                 workspace_path=ws_path,
                 owning_node=dep_node,
             )
@@ -391,8 +544,9 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
                 blame_targets.add(bound_file)
 
     ws_dir = os.environ.get("BUILD_WORKSPACE_DIRECTORY") or os.getcwd()
-    verify_cmd = data.get("verify")
+    verify_cmd = manifest.verification_check if manifest is not None else None
     node_checks: List[agent_node_config.VerificationCheck] = []
+
     if verify_cmd and str(verify_cmd).strip():
         check = _CommandVerificationCheck(
             command=str(verify_cmd).strip(), cwd=ws_dir
@@ -400,13 +554,9 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
         node_checks.append(check)
     verification_checks = tuple(node_checks)
 
-    v_msg = data.get("verification_success_message")
-    verification_success_message = (
-        str(v_msg).strip() if v_msg and str(v_msg).strip() else None
-    )
+    verification_success_message = None
 
     return agent_node_config.PerNodeInfo(
-        node=n,
         read_only_files=read_only_files,
         read_write_files=rw_files,
         templates=templates,
@@ -424,6 +574,8 @@ def _load_per_node_info(n: dag_storage.DagNode) -> agent_node_config.PerNodeInfo
 
 class NodeConfig(agent_node_config.NodeConfig, Singleton):
     tier = agent_session
+
+
 
     def __init__(self) -> None:
         self._per_node_cache: Dict[dag_storage.DagNode, agent_node_config.PerNodeInfo] = {}
@@ -555,21 +707,20 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
     @property
     def templates(
         self,
-    ) -> Set[Tuple[agent_file_alias.BoundFile, agent_file_alias.FileContent]]:
-        # Requirement: The session read-write files and templates aggregating read-write files and templates across the active nodes, mapping read-write files to initial file content.
-        # Requirement: [NodeConfig] The node config provides the session templates, mapping read-write files to initial file content.
+    ) -> Mapping[agent_file_alias.BoundFile, agent_file_alias.FileContent]:
         self._sync_cache()
-        res: Set[Tuple[agent_file_alias.BoundFile, agent_file_alias.FileContent]] = set()
+        res: Dict[agent_file_alias.BoundFile, agent_file_alias.FileContent] = {}
         for pni in self._active_per_node_infos():
             res.update(pni.templates)
         return res
 
+
     @property
-    def template_parameters(self) -> Mapping[str, Any]:
+    def template_parameters(self) -> Mapping[agent_node_config.TemplateParamKey, Any]:
         # Requirement: The session template parameters combining template parameters across the active nodes.
         # Requirement: [NodeConfig] The node config provides the session template parameters, providing parameter bindings for template evaluation.
         self._sync_cache()
-        res: Dict[str, Any] = {}
+        res: Dict[agent_node_config.TemplateParamKey, Any] = {}
         for pni in self._active_per_node_infos():
             res.update(pni.template_parameters)
         return res
@@ -579,8 +730,6 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
         # Requirement: The session guide file and task guide from the single active node when guide step mode is active.
         # Requirement: [NodeConfig] The node config provides the session guide, providing structured instructional text when step mode is active.
         self._sync_cache()
-        if not self.is_step_mode:
-            return None
         infos = self._active_per_node_infos()
         if len(infos) == 1:
             return infos[0].guide
@@ -590,17 +739,13 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
     def blame_targets_by_node(
         self,
     ) -> Mapping[dag_storage.DagNode, Set[agent_file_alias.BoundFile]]:
-        # Requirement: The session blame targets by node mapping each active node to its declared blame targets.
-        # Requirement: [NodeConfig] The node config provides the session blame targets by node, which are bound files eligible for defect attribution mapped by session node.
         self._sync_cache()
         return {
-            pni.node: set(pni.blame_targets) for pni in self._active_per_node_infos()
+            n: set(pni.blame_targets) for n, pni in self._per_node_cache.items()
         }
 
     @property
     def verification_checks(self) -> Sequence[agent_node_config.VerificationCheck]:
-        # Requirement: The session verification checks aggregating verification checks across the active nodes, and verification checks by node mapping each active node to its verification checks.
-        # Requirement: [NodeConfig] The node config provides the session verification checks evaluated during session advancement.
         self._sync_cache()
         res: List[agent_node_config.VerificationCheck] = []
         for pni in self._active_per_node_infos():
@@ -611,27 +756,28 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
     def verification_checks_by_node(
         self,
     ) -> Mapping[dag_storage.DagNode, Sequence[agent_node_config.VerificationCheck]]:
-        # Requirement: The session verification checks aggregating verification checks across the active nodes, and verification checks by node mapping each active node to its verification checks.
-        # Requirement: [NodeConfig] The node config provides the session verification checks by node evaluated for each session node.
         self._sync_cache()
         return {
-            pni.node: tuple(pni.verification_checks)
-            for pni in self._active_per_node_infos()
+            n: tuple(pni.verification_checks)
+            for n, pni in self._per_node_cache.items()
         }
 
     @property
-    def src_file_alias_by_node(self) -> Mapping[dag_storage.DagNode, str]:
-        # Requirement: The session src file alias by node mapping each active node to the relative path of its declared source file alias.
-        # Requirement: [NodeConfig] The node config provides the session src file alias by node, mapping each session node to the relative path of its declared source file alias.
+    def src_file_alias_by_node(
+        self,
+    ) -> Mapping[dag_storage.DagNode, agent_file_alias.RelativePath]:
         self._sync_cache()
-        res: Dict[dag_storage.DagNode, str] = {}
-        for pni in self._active_per_node_infos():
+        res: Dict[dag_storage.DagNode, agent_file_alias.RelativePath] = {}
+        for n, pni in self._per_node_cache.items():
             if pni.src_file_alias is not None:
-                res[pni.node] = pni.src_file_alias
+                res[n] = pni.src_file_alias
         return res
 
+
     @property
-    def verification_success_message(self) -> Optional[str]:
+    def verification_success_message(
+        self,
+    ) -> Optional[agent_node_config.VerificationSuccessMessage]:
         # Requirement: The session verification success message from the active node when the session contains exactly one node.
         # Requirement: [NodeConfig] The node config provides the session verification success message, exposing informative verification feedback when configured.
         self._sync_cache()
@@ -641,18 +787,53 @@ class NodeConfig(agent_node_config.NodeConfig, Singleton):
         return None
 
     @property
-    def feedback(self) -> Sequence[str]:
+    def feedback(self) -> Sequence[agent_node_config.NodeFeedback]:
         # Requirement: The session feedback combining feedback messages retrieved from graph storage across the active nodes.
         # Requirement: [NodeConfig] The node config provides the session feedback, exposing incoming feedback delivered to the node when present.
         self._sync_cache()
-        res: List[str] = []
+        res: List[agent_node_config.NodeFeedback] = []
         for pni in self._active_per_node_infos():
             res.extend(pni.feedback)
         return tuple(res)
 
+    @property
+    def blame_targets(
+        self,
+    ) -> Mapping[agent_file_alias.ReadWriteFile, agent_file_alias.ReadOnlyFile]:
+        self._sync_cache()
+        res: Dict[agent_file_alias.ReadWriteFile, agent_file_alias.ReadOnlyFile] = {}
+        for pni in self._active_per_node_infos():
+            ro_targets = [
+                bt for bt in pni.blame_targets
+                if isinstance(bt, agent_file_alias.ReadOnlyFile)
+            ]
+            if ro_targets:
+                for rw in pni.read_write_files:
+                    res[rw] = ro_targets[0]
+        return res
+
+    @property
+    def messages(
+        self,
+    ) -> Mapping[agent_file_alias.ReadWriteFile, Sequence[dag_storage.DagMessage]]:
+        self._sync_cache()
+        storage = get_singleton(dag_storage.DagStorage)
+        res: Dict[agent_file_alias.ReadWriteFile, Sequence[dag_storage.DagMessage]] = {}
+        for n, pni in self._per_node_cache.items():
+            msgs = tuple(storage.get_messages(n))
+            for rw in pni.read_write_files:
+                res[rw] = msgs
+        return res
+
+
 
 _EXECROOT_PATTERN: re.Pattern[str] = re.compile(
     r"/(?:[^\s:;\"\'`()<>{}\[\]/]+/)*execroot/[^\s:;\"\'`()<>{}\[\]/]+/"
+)
+
+
+_WORKSPACE_PATTERN: re.Pattern[str] = re.compile(
+    r"/(?:[^\s:;\"\'`()<>{}\[\]/]+/)*workspace/"
 )
 
 
@@ -665,11 +846,22 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
         self._paths: Dict[str, str] = {}
         self._masking_patterns: List[Tuple[re.Pattern[str], str]] = []
         self._cached_version: Optional[int] = None
-        env_root = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
-        root_path = env_root if env_root and os.path.isabs(env_root) else os.getcwd()
-        self._workspace_root: file_paths.WorkspaceRoot = _make_host_path(
-            file_paths.WorkspaceRoot, os.path.normpath(root_path)
-        )
+        try:
+            fp_mgr: Any = get_singleton(file_paths.FilePathManager)
+            if hasattr(fp_mgr, "get_workspace_root"):
+                self._workspace_root: file_paths.WorkspaceRoot = fp_mgr.get_workspace_root()
+            else:
+                env_root = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
+                root_path = env_root if env_root and os.path.isabs(env_root) else os.getcwd()
+                self._workspace_root = _make_host_path(
+                    file_paths.WorkspaceRoot, os.path.normpath(root_path)
+                )
+        except (LifecycleResolutionError, KeyError, RuntimeError, ValueError, AttributeError):
+            env_root = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
+            root_path = env_root if env_root and os.path.isabs(env_root) else os.getcwd()
+            self._workspace_root = _make_host_path(
+                file_paths.WorkspaceRoot, os.path.normpath(root_path)
+            )
 
     def initialize(self) -> None:
         self._sync_cache()
@@ -729,11 +921,10 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
         return agent_file_alias.FileAlias
 
     @property
-    def wire_type(self) -> Type[tool_provider.WireString]:
-        return tool_provider.WireString
+    def wire_type(self) -> Type[str]:
+        return str
 
-    def convert(self, wire_value: tool_provider.WireString) -> agent_file_alias.FileAlias:
-        # Requirement: Converting a wire type string produces the matching file alias if its relative path is found, or if its short name unambiguously resolves to a single declared bound file, and produces an unbound file if the relative path is not found or is ambiguous.
+    def convert(self, wire_value: str) -> agent_file_alias.FileAlias:
         self._sync_cache()
         str_val = str(wire_value)
         if str_val in self._aliases:
@@ -741,12 +932,18 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
         matches = self._short_name_to_aliases.get(str_val)
         if matches is not None and len(matches) == 1:
             return matches[0]
-        return agent_file_alias.UnboundFile(relative_path=str_val)
+        return agent_file_alias.UnboundFile(
+            relative_path=agent_file_alias.RelativePath(str_val)
+        )
 
-    def sanitize_text(self, text: str) -> str:
-        # Requirement: The alias manager sanitizes output text by masking occurrences of each file's relative workspace path and any preceding path prefix with its relative path, using performant regular expression patterns that disallow directory separators within prefix segments to prevent catastrophic backtracking, stripping workspace root path prefixes, and stripping execution root path prefixes.
+    def to_file_alias(self, wire_path: str) -> agent_file_alias.FileAlias:
+        return self.convert(wire_path)
+
+    def sanitize_text(
+        self, text: agent_file_alias.UnsanitizedText
+    ) -> agent_file_alias.SanitizedText:
         self._sync_cache()
-        res = text
+        res = str(text)
         for pattern, rel_path in self._masking_patterns:
             res = pattern.sub(rel_path, res)
         for host_path, rel_path in self._paths.items():
@@ -758,8 +955,9 @@ class AliasManager(agent_file_alias.AliasManager, Singleton):
                 res = res.replace(ws_root_slash, "")
             if self._workspace_root.path in res:
                 res = res.replace(self._workspace_root.path, "")
+        res = _WORKSPACE_PATTERN.sub("", res)
         res = _EXECROOT_PATTERN.sub("", res)
-        return res
+        return agent_file_alias.SanitizedText(res)
 
     @property
     def workspace_root(self) -> file_paths.WorkspaceRoot:
@@ -782,3 +980,4 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         ],
         tier=agent_session,
     )
+

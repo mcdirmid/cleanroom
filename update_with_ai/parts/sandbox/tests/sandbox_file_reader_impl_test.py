@@ -4,23 +4,23 @@ import os
 import shutil
 import tempfile
 import unittest
-from typing import Any, Mapping, Optional, Set, Tuple
+from dataclasses import dataclass
+from typing import Any, cast, Mapping, Optional, Set, Tuple
 
-from update_with_ai.parts.dag.lib.dag_storage import DagNode
+from update_with_ai.parts.dag.lib.dag_storage import DagNode, RoleAddress, UnitAddress
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, system
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.agent.lib.agent_file_alias import (
     AliasManager,
     BoundFile,
-    DirectoryPath,
     FileAlias,
     FileContent,
     ReadOnlyFile,
     ReadWriteFile,
     RegexPattern,
+    RelativePath,
     UnboundFile,
-    WorkspacePath,
 )
 from update_with_ai.parts.agent.lib.agent_node_config import NodeGuide, NodeConfig
 from update_with_ai.parts.sandbox.lib.template_format import TemplateFormatter
@@ -38,17 +38,25 @@ from update_with_ai.parts.sandbox.lib.sandbox_file_reader_impl import (
     __initialize__,
 )
 from update_with_ai.parts.sandbox.lib.tool_provider import (
-    ActualParameterBindings,
     IdentityParameterType,
-    ToolParameter,
+    ParameterConversionError,
+    ParameterName,
     ParameterType,
-    ToolResponse,
-    WireString,
     Tool,
     ToolManager,
-    WireParameterBindings,
+    ToolParameter,
+    ToolResponse,
+    ToolResponseContent,
     WireType,
 )
+
+
+class ActualParameterBindings(dict[Any, Any]):
+    def __init__(self, bindings: Any) -> None:
+        if isinstance(bindings, set):
+            super().__init__(dict(bindings))
+        else:
+            super().__init__(bindings)
 
 
 class MockToolManager:
@@ -61,9 +69,9 @@ class MockToolManager:
         self.installed_tools.add(tool)
 
     def execute_tool(
-        self, name: str, wire_parameter_bindings: WireParameterBindings
+        self, name: Any, wire_parameter_bindings: Mapping[ParameterName, WireType]
     ) -> ToolResponse:
-        return ToolResponse(is_failed=False, is_terminated=False, content="")
+        return ToolResponse(is_failed=False, is_terminated=False, content=ToolResponseContent(""))
 
 
 class MockEditManager:
@@ -95,22 +103,23 @@ class MockAgentConfig:
         self.is_mcp_mode = is_mcp_mode
 
 
-def _make_directory_path(path: str) -> DirectoryPath:
-    obj = object.__new__(DirectoryPath)
-    object.__setattr__(obj, "path", path)
-    return obj
+@dataclass(frozen=True)
+class _WorkspacePathDouble:
+    path: str
+
+    def __str__(self) -> str:
+        return self.path
+
+    def __fspath__(self) -> str:
+        return self.path
 
 
-def _make_workspace_path(path: str) -> WorkspacePath:
-    obj = object.__new__(WorkspacePath)
-    object.__setattr__(obj, "path", path)
-    return obj
+def _make_workspace_path(path: str) -> Any:
+    return _WorkspacePathDouble(path)
 
 
-def _make_workspace_root(path: str) -> WorkspacePath:
-    obj = object.__new__(WorkspacePath)
-    object.__setattr__(obj, "path", path)
-    return obj
+def _make_workspace_root(path: str) -> Any:
+    return _WorkspacePathDouble(path)
 
 
 class MockAliasManager:
@@ -119,7 +128,7 @@ class MockAliasManager:
     def __init__(self, workspace_root: str) -> None:
         self.workspace_root = _make_workspace_root(workspace_root)
         self.actual_type = FileAlias
-        self.wire_type = WireString()
+        self.wire_type = str
         self.files: dict[str, FileAlias] = {}
 
     def convert(self, wire_value: Any) -> Any:
@@ -127,7 +136,7 @@ class MockAliasManager:
             return wire_value
         if str(wire_value) in self.files:
             return self.files[str(wire_value)]
-        return UnboundFile(relative_path=str(wire_value))
+        return UnboundFile(relative_path=RelativePath(str(wire_value)))
 
     def sanitize_text(self, text: str) -> str:
         return text.replace(self.workspace_root.path, "[WORKSPACE]")
@@ -163,8 +172,8 @@ class MockNodeConfig:
         return self._template_parameters
 
     @property
-    def templates(self) -> Set[Tuple[BoundFile, FileContent]]:
-        return set()
+    def templates(self) -> Mapping[BoundFile, FileContent]:
+        return {}
 
     @property
     def guide(self) -> Optional[NodeGuide]:
@@ -205,33 +214,33 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         with open(self.ro_pyi_path, "w", encoding="utf-8") as f:
             f.write("class Stub:\n    pass\n")
 
-        node = DagNode(unit_address="//pkg:test")
+        node = DagNode(unit_address=UnitAddress("//pkg:test"), role_address=RoleAddress(""))
         self.ro_file = ReadOnlyFile(
-            relative_path="readonly.txt",
+            relative_path=RelativePath("readonly.txt"),
             workspace_path=_make_workspace_path("readonly.txt"),
             owning_node=node,
         )
         self.ro_py_file = ReadOnlyFile(
-            relative_path="readonly.py",
+            relative_path=RelativePath("readonly.py"),
             workspace_path=_make_workspace_path("readonly.py"),
             owning_node=node,
         )
         self.ro_pyi_file = ReadOnlyFile(
-            relative_path="stub.pyi",
+            relative_path=RelativePath("stub.pyi"),
             workspace_path=_make_workspace_path("stub.pyi"),
             owning_node=node,
         )
         self.ro_md_file = ReadOnlyFile(
-            relative_path="spec.md",
+            relative_path=RelativePath("spec.md"),
             workspace_path=_make_workspace_path("spec.md"),
             owning_node=node,
         )
         self.rw_file = ReadWriteFile(
-            relative_path="writable.txt",
+            relative_path=RelativePath("writable.txt"),
             workspace_path=_make_workspace_path("writable.txt"),
             owning_node=node,
         )
-        self.guide_unbound = UnboundFile(relative_path="guide.md")
+        self.guide_unbound = UnboundFile(relative_path=RelativePath("guide.md"))
 
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
@@ -286,13 +295,13 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         """CUJ: Converting wire string into RegexPattern."""
         conv = RegexPatternParameterTypeImpl()
         # Verify regex pattern parameter type converts a wire type string into a regex pattern
-        pattern = conv.convert(WireString(r"foo\d+"))
+        pattern = conv.convert(r"foo\d+")
         self.assertEqual(pattern, r"foo\d+")
 
     def test_read_manager_initialization_and_properties(self) -> None:
         """CUJ: ReadManager installs tools and exposes declared files from NodeConfig."""
         with enter_phase(agent_session, registry=self.registry) as scope:
-            read_mgr = scope.get_singleton(ReadManager)
+            read_mgr = scope.get_singleton(ReadManagerImpl)
             # Requirement: WHEN agent config mcp mode is inactive, MUST install the view file tool for the agent session.
             # Requirement: MUST omit the search tool.
             # Requirement: [ReadManager] The read manager installs the view file tool and search tool.
@@ -315,11 +324,9 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             # Verify read manager exposes declared files from node config
             # Requirement: [ReadManager] The read manager exposes the session's set of read-only files.
             # Requirement: [ReadManager] The read manager exposes the session's set of read-write files.
-            # Requirement: [ReadManager] When step-mode is active, the read manager is configured with a guide file that is an unbound file.
             self.assertIn(self.ro_file, read_mgr.read_only_files)
             self.assertIn(self.ro_py_file, read_mgr.read_only_files)
             self.assertIn(self.rw_file, read_mgr.read_write_files)
-            self.assertEqual(read_mgr.guide_file, self.guide_unbound)
 
     def test_view_file_tool_execution_and_formatting(self) -> None:
         """CUJ: Formatting with right-aligned line numbers and suppression keys."""
@@ -327,9 +334,9 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             view_tool = scope.get_singleton(ViewFileTool)
             self.assertEqual(view_tool.name, "view_file")
             self.assertIsInstance(view_tool.description, str)
-            self.assertEqual(view_tool.parameters, {view_tool.path_parameter})
+            self.assertEqual(view_tool.parameters, {view_tool.path_parameter.name: view_tool.path_parameter})
             # Verify the view file tool path parameter uses the alias manager to convert a file alias
-            self.assertIs(view_tool.path_parameter.parameter_converter, self.alias_mgr)
+            self.assertIs(view_tool.path_parameter.parameter_type, self.alias_mgr)
 
             # 1. Read-only file formatting and sanitization
             bindings1 = ActualParameterBindings(
@@ -375,7 +382,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertTrue(resp_guide.is_failed)
 
             # Unbound unknown file -> fails
-            unknown_unbound = UnboundFile(relative_path="unknown.txt")
+            unknown_unbound = UnboundFile(relative_path=RelativePath("unknown.txt"))
             bindings_unknown = ActualParameterBindings(
                 bindings={(view_tool.path_parameter, unknown_unbound)}
             )
@@ -388,20 +395,20 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             resp_py = view_tool.execute_tool(
                 ActualParameterBindings(
                     bindings={
-                        (view_tool.path_parameter, UnboundFile(relative_path="stub.py"))
+                        (view_tool.path_parameter, UnboundFile(relative_path=RelativePath("stub.py")))
                     }
                 )
             )
             self.assertFalse(resp_py.is_failed)
             self.assertIn("class Stub:", resp_py.content)
 
-            # Transparent resolution: module path testing.parts.pkg.stub.py -> stub.pyi
+            # Transparent resolution: module path update_with_ai.parts.pkg.stub.py -> stub.pyi
             resp_pkg = view_tool.execute_tool(
                 ActualParameterBindings(
                     bindings={
                         (
                             view_tool.path_parameter,
-                            UnboundFile(relative_path="testing.parts.pkg.stub.py"),
+                            UnboundFile(relative_path=RelativePath("update_with_ai.parts.pkg.stub.py")),
                         )
                     }
                 )
@@ -413,7 +420,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             resp_bare = view_tool.execute_tool(
                 ActualParameterBindings(
                     bindings={
-                        (view_tool.path_parameter, UnboundFile(relative_path="stub"))
+                        (view_tool.path_parameter, UnboundFile(relative_path=RelativePath("stub")))
                     }
                 )
             )
@@ -424,7 +431,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             resp_mod_bare = view_tool.execute_tool(
                 ActualParameterBindings(
                     bindings={
-                        (view_tool.path_parameter, UnboundFile(relative_path="pkg.stub"))
+                        (view_tool.path_parameter, UnboundFile(relative_path=RelativePath("pkg.stub")))
                     }
                 )
             )
@@ -438,7 +445,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
                     bindings={
                         (
                             view_tool.path_parameter,
-                            UnboundFile(relative_path="my_target_test.py"),
+                            UnboundFile(relative_path=RelativePath("my_target_test.py")),
                         )
                     }
                 )
@@ -448,14 +455,14 @@ class SandboxFileReaderImplTest(unittest.TestCase):
 
     def test_read_tool_missing_file_handling(self) -> None:
         """CUJ: Handling missing read-write files (treated as empty) vs missing read-only files (fails)."""
-        node = DagNode(unit_address="//pkg:test")
+        node = DagNode(unit_address=UnitAddress("//pkg:test"), role_address=RoleAddress(""))
         missing_rw_file = ReadWriteFile(
-            relative_path="missing_rw.txt",
+            relative_path=RelativePath("missing_rw.txt"),
             workspace_path=_make_workspace_path("missing_rw.txt"),
             owning_node=node,
         )
         missing_ro_file = ReadOnlyFile(
-            relative_path="missing_ro.txt",
+            relative_path=RelativePath("missing_ro.txt"),
             workspace_path=_make_workspace_path("missing_ro.txt"),
             owning_node=node,
         )
@@ -507,7 +514,7 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             self.assertEqual(search_tool.name, "search_files")
             self.assertIsInstance(search_tool.description, str)
             self.assertGreater(len(search_tool.parameters), 0)
-            conv = search_tool.regex_pattern_parameter.parameter_converter
+            conv = search_tool.regex_pattern_parameter.parameter_type
             # Requirement: [SearchTool] The search tool accepts a regex pattern parameter.
             # Verify the search tool regex pattern parameter uses the regex pattern parameter type
             self.assertIsNotNone(conv.actual_type)
@@ -556,6 +563,8 @@ class SandboxFileReaderImplTest(unittest.TestCase):
         with enter_phase(agent_session, registry=self.registry) as scope:
             read_mgr = scope.get_singleton(ReadManager)
             # Requirement: [ReadManager] The read manager provides a can read operation validating inspection access for a file path.
+            # Assert on ReadManager.guide_file property accessor
+            self.assertEqual(cast(Any, read_mgr).guide_file, self.guide_unbound)
 
             # 1. Successful bound file validation records file read
             # Requirement: WHEN path matches a declared file workspace path, MUST produce a successful Response indicating access is permitted.
@@ -575,24 +584,24 @@ class SandboxFileReaderImplTest(unittest.TestCase):
 
             # 3. Transparent resolution from .py to .pyi
             # Requirement: WHEN path matches a declared file workspace path, MUST produce a successful Response indicating access is permitted.
-            resp_py = read_mgr.can_read("stub.py")
+            resp_py = read_mgr.can_read(RelativePath("stub.py"))
             self.assertFalse(resp_py.is_failed)
             self.assertEqual(self.edit_mgr.last_read_or_edited_file, self.ro_pyi_file)
 
             for cand in ["pkg.sub.stub.py", "pkg.stub", "pkg/stub.py"]:
-                resp_cand = read_mgr.can_read(cand)
+                resp_cand = read_mgr.can_read(RelativePath(cand))
                 self.assertFalse(resp_cand.is_failed)
                 self.assertEqual(self.edit_mgr.last_read_or_edited_file, self.ro_pyi_file)
 
             # 4. Cleanroom blindness: _test.py rejection
             # Requirement: WHEN path does not match any declared file workspace path, MUST produce a Response with failed set to True reminding the agent that only declared files can be read and listing readable file aliases.
-            resp_test = read_mgr.can_read("my_target_test.py")
+            resp_test = read_mgr.can_read(RelativePath("my_target_test.py"))
             self.assertTrue(resp_test.is_failed)
             self.assertTrue(resp_test.content)
 
             # 5. Undeclared file rejection
             # Requirement: WHEN path does not match any declared file workspace path, MUST produce a Response with failed set to True reminding the agent that only declared files can be read and listing readable file aliases.
-            resp_unknown = read_mgr.can_read("unknown.txt")
+            resp_unknown = read_mgr.can_read(RelativePath("unknown.txt"))
             self.assertTrue(resp_unknown.is_failed)
             self.assertIn(self.ro_file.relative_path, resp_unknown.content)
             self.assertTrue(resp_unknown.reminder)
@@ -603,9 +612,14 @@ class SandboxFileReaderImplTest(unittest.TestCase):
             converter = scope.get_singleton(RegexPatternParameterTypeImpl)
             # Verify regex pattern parameter type conversion
             self.assertEqual(converter.actual_type, RegexPattern)
-            self.assertEqual(converter.wire_type, WireString)
-            pattern = converter.convert(WireString("matched_.*"))
+            self.assertEqual(converter.wire_type, str)
+            pattern = converter.convert("matched_.*")
             self.assertEqual(pattern, "matched_.*")
+
+            # Requirement: WHEN wire_value is not a valid regular expression pattern, MUST raise tool_provider.ParameterConversionError with message formatted as "Invalid regex pattern '{wire_value}': {error}".
+            with self.assertRaises(ParameterConversionError) as ctx:
+                converter.convert("[unclosed")
+            self.assertIn("Invalid regex pattern '[unclosed':", str(ctx.exception.message))
 
     def test_read_manager_initialization_tool_installation(self) -> None:
         """CUJ: Verify ReadManager installs ViewFileTool when mcp mode is inactive and no inspection tools when active."""

@@ -1,0 +1,103 @@
+# update_with_ai/parts/core/grounding/BUILD.bazel
+
+load("//bin:pyright_library.bzl", "pyright_library")
+load("//update_python_with_ai/support/lib:build_derived_test.bzl", "build_derived_test")
+
+package(default_visibility = ["//visibility:public"])
+
+pyright_library(
+    name = "commonmark_ext",
+    srcs = ["commonmark_ext.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "file_paths",
+    srcs = ["file_paths.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "file_paths_impl",
+    srcs = ["file_paths_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        ":file_paths",
+        ":filesystem_ext",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "filesystem_ext",
+    srcs = ["filesystem_ext.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "json_ext",
+    srcs = ["json_ext.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "model_config_ext",
+    srcs = ["model_config_ext.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "runner_logger",
+    srcs = ["runner_logger.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "runner_logger_impl",
+    srcs = ["runner_logger_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        ":runner_logger",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "update_with_ai_proto_ext",
+    srcs = ["update_with_ai_proto_ext.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+    ],
+    imports = ["../../..", "."],
+)
+
+build_derived_test(
+    name = "targets_derived_test",
+)

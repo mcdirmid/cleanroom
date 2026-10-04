@@ -26,7 +26,7 @@ Execution fails if:
 
 On successful argument resolution, the tool manager executes the tool with the resolved actual parameter bindings and returns the response produced by the tool.
 
-Executing a tool with arguments converts raw argument mappings into wire parameter bindings and executes the tool by name.
+Executing a tool with argument mappings executes the tool by name with wire parameter bindings.
 
 The identity parameter type converts wire type values to produce identical actual values for its target type.
 

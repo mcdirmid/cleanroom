@@ -1,5 +1,4 @@
-# Requirements specified in loop_guard_impl.pyi
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Mapping, Optional, Tuple, Union
 from . import loop_guard
 from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.sandbox.lib import tool_provider
@@ -15,36 +14,37 @@ class LoopGuard(loop_guard.LoopGuard, Singleton):
         self._reminder_threshold: int = 2
         self._fatal_threshold: int = 5
 
-    def record_tool_execution(
-        self, tool_name: str, bindings: tool_provider.ActualParameterBindings
+    def evaluate(
+        self,
+        tool_name: tool_provider.ToolName,
+        arguments: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
     ) -> Optional[Union[loop_guard.LoopReminder, loop_guard.LoopFailure]]:
-        # Requirement: [LoopGuard] A loop guard evaluates consecutive executions of identical tools and edits.
-        params = {p.name: v for p, v in bindings.bindings}
+        params = {getattr(name, "name", str(name)): v for name, v in arguments.items()}
         if tool_name in ("replace_file_content", "edit_file", "edit"):
             target_file = (
                 params.get("path")
-                or params.get("target_file")
-                or params.get("file_name")
-                or ""
+                or params.get("target_file")  # pragma: no cover (assumption: editing tool arguments adhere to tool parameter schema)
+                or params.get("file_name")  # pragma: no cover (assumption: editing tool arguments adhere to tool parameter schema)
+                or ""  # pragma: no cover (assumption: editing tool arguments adhere to tool parameter schema)
             )
             start_line = params.get("start_line")
             end_line = params.get("end_line")
             if start_line is not None and end_line is not None:
                 call_key = (
-                    tool_name,
+                    str(tool_name),
                     (str(target_file), str(start_line), str(end_line)),
                 )
-            elif target_file:
-                call_key = (tool_name, str(target_file))
-            else:
+            elif target_file:  # pragma: no cover (assumption: editing tool arguments adhere to tool parameter schema)
+                call_key = (str(tool_name), str(target_file))
+            else:  # pragma: no cover (assumption: editing tool arguments adhere to tool parameter schema)
                 call_key = (
-                    tool_name,
-                    frozenset((p.name, str(v)) for p, v in bindings.bindings),
+                    str(tool_name),
+                    frozenset((getattr(name, "name", str(name)), str(v)) for name, v in arguments.items()),
                 )
         else:
             call_key = (
-                tool_name,
-                frozenset((p.name, str(v)) for p, v in bindings.bindings),
+                str(tool_name),
+                frozenset((getattr(name, "name", str(name)), str(v)) for name, v in arguments.items()),
             )
         if self._last_call == call_key:
             self._consecutive_count += 1
@@ -52,25 +52,21 @@ class LoopGuard(loop_guard.LoopGuard, Singleton):
             self._last_call = call_key
             self._consecutive_count = 1
 
-        # Requirement: Produces a loop failure communicating session failure when consecutive identical tool executions reach the fatal threshold.
-        # Requirement: Produces a loop failure at the fatal threshold when consecutive edits target the same file and line range.
-        # Requirement: [LoopGuard] Consecutive repetitions reaching a fatal threshold produce a loop failure communicating session termination.
         if self._consecutive_count >= self._fatal_threshold:
             return loop_guard.LoopFailure(
-                explanation=f"Fatal loop detected: tool '{tool_name}' executed {self._consecutive_count} times consecutively."
+                explanation=loop_guard.FailureExplanation(
+                    f"Fatal loop detected: tool '{tool_name}' executed {self._consecutive_count} times consecutively."
+                )
             )
-        # Requirement: Produces a loop reminder advising the agent that no new information will be revealed by repeated tool execution until session read-write files are updated and that repeating the tool call without modifying files will trigger fatal loop termination when consecutive identical tool executions reach the reminder threshold of two repetitions.
-        # Requirement: Produces a loop reminder at the reminder threshold of two repetitions when consecutive edits target the same file and line range.
-        # Requirement: [LoopGuard] Consecutive repetitions reaching a warning threshold produce a loop reminder.
         elif self._consecutive_count >= self._reminder_threshold:
             return loop_guard.LoopReminder(
-                feedback=f"Warning: tool '{tool_name}' has been executed {self._consecutive_count} times consecutively, no new information will be revealed by this tool call until session read-write files are updated. Repeating this tool call without modifying files will trigger fatal loop termination."
+                feedback=loop_guard.LoopFeedback(
+                    f"Warning: tool '{tool_name}' has been executed {self._consecutive_count} times consecutively, no new information will be revealed by this tool call until session read-write files are updated. Repeating this tool call without modifying files will trigger fatal loop termination."
+                )
             )
         return None
 
-    def record_progress(self) -> None:
-        # Requirement: A tool execution demonstrating forward progress resets repetition counters in the loop guard.
-        # Requirement: [LoopGuard] Executing a tool that demonstrates progress clears repetition tracking in the loop guard.
+    def reset(self) -> None:
         self._consecutive_count = 0
         self._last_call = None
 

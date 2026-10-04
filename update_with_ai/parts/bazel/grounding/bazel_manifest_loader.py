@@ -1,0 +1,61 @@
+"""Bazel manifest loader grounding specification module."""
+
+from __future__ import annotations
+from dataclasses import dataclass
+from typing import NewType, Optional, Protocol, Sequence
+from support.lib.grounding_support import InTier, SystemTier
+from parts.agent.grounding import agent_file_alias, agent_storage
+from parts.dag.grounding import dag_storage
+from parts.sandbox.grounding import sandbox_file_editor
+
+TargetLabel = NewType("TargetLabel", str)
+VerificationCommand = NewType("VerificationCommand", str)
+
+
+@dataclass(frozen=True)
+class TargetManifest:
+    """Build artifact carrying node references and file paths for a workspace target.
+
+    COVERED:
+    - Encapsulates label, prompt, source files, template, and dependency relations.
+    """
+    label: TargetLabel
+    task_prompt: Optional[agent_storage.TaskPrompt] = None
+    source_file: Optional[agent_file_alias.RelativePath] = None
+    silent_source_files: Sequence[agent_file_alias.RelativePath] = ()
+    template: Optional[sandbox_file_editor.FileTemplate] = None
+    dependencies: Sequence[TargetLabel] = ()
+    silent_dependencies: Sequence[TargetLabel] = ()
+    star_dependencies: Sequence[TargetLabel] = ()
+    feedback_dependencies: Sequence[TargetLabel] = ()
+    guide_target: Optional[TargetLabel] = None
+    verification_check: Optional[VerificationCommand] = None
+
+
+class BazelManifestLoader(InTier[SystemTier], Protocol):
+    """Discovers and translates build system target manifests into runtime graph structures."""
+
+    def retrieve_manifest(self, node: dag_storage.DagNode) -> Optional[TargetManifest]:
+        """
+        COVERED:
+        - MUST retrieve the manifest for the node.
+          - Consequent knowledge: return TargetManifest record.
+
+        DEFERRED:
+        - Filesystem manifest discovery deferred to bazel_manifest_loader_impl.py.
+        """
+        _manifest: Optional[TargetManifest] = TargetManifest(label=TargetLabel(str(node.unit_address)))
+        raise NotImplementedError
+
+    def load_manifest(self, node: dag_storage.DagNode) -> None:
+        """
+        DEFERRED:
+        - MUST resolve manifests into target nodes, dependencies, node definitions, task prompts, and dependency graph edges.
+        - MUST populate agent storage with resolved structures.
+        - MUST resolve declared direct dependencies into dependency graph edges in agent storage.
+        - MUST resolve declared silent dependencies as non-propagating dependencies in agent storage.
+        - MUST synthesize definitions for declared dependencies lacking explicit manifests.
+        - MUST synthesize promptless pass-through node definitions when a unit component type is not active for a role.
+          - Deferred to bazel_manifest_loader_impl.py.
+        """
+        raise NotImplementedError

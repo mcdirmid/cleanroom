@@ -1,0 +1,33 @@
+from __future__ import annotations
+from typing import Optional
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton, system
+import bazel_target
+import dag_storage
+
+# Requirements specified in bazel_target_impl.pyi
+
+class BazelTarget(bazel_target.BazelTarget, InTier[SystemTier], Singleton):
+    tier = system
+
+    def __init__(self) -> None:
+        # TODO___init___body
+        pass
+
+    def normalize_target(self, target_identifier: bazel_target.TargetIdentifier) -> dag_storage.DagNode:
+        # TODO_normalize_target_body
+        raise NotImplementedError
+
+    def extract_node_dir(self, node: dag_storage.DagNode) -> bazel_target.NodeDirectory:
+        # TODO_extract_node_dir_body
+        raise NotImplementedError
+
+
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        BazelTarget,
+        keys=[BazelTarget, bazel_target.BazelTarget, InTier[SystemTier]],
+        tier=system,
+    )
+
+_initialize_ = __initialize__

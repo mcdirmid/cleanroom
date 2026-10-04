@@ -1,13 +1,18 @@
 """Unit tests for bazel_target_impl aligned with grounding specifications."""
 
 import unittest
-from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget, NodeDirectory
+from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget, NodeDirectory, TargetIdentifier
 from update_with_ai.parts.bazel.lib.bazel_target_impl import (
     BazelTarget as BazelTargetImpl,
     __initialize__,
 )
-from update_with_ai.parts.dag.lib.dag_storage import DagNode
+from update_with_ai.parts.core.lib.file_paths import PathString
+from update_with_ai.parts.dag.lib.dag_storage import DagNode, RoleAddress, UnitAddress
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
+
+
+def _make_dag_node(unit_address: str, role_address: str = "") -> DagNode:
+    return DagNode(unit_address=UnitAddress(unit_address), role_address=RoleAddress(role_address))
 
 
 class TestBazelTargetImpl(unittest.TestCase):
@@ -15,79 +20,62 @@ class TestBazelTargetImpl(unittest.TestCase):
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
 
-    def test_normalize(self) -> None:
-        """Tests CUJ for normalizing various Bazel target label formats into canonical DagNode.
-
-        Checks postconditions & invariants:
-        - Labels starting with // are preserved.
-        - Repository qualifiers (@@//, @//) are stripped.
-        - Omitted target labels (//pkg) are expanded to //pkg:pkg.
-        """
+    def test_normalize_target(self) -> None:
+        """CUJ: Normalizing various Bazel target label formats into canonical DagNode."""
         with enter_phase("system", registry=self.registry) as scope:
             utils = scope.get_singleton(BazelTarget)
-            # Requirement: The bazel target normalizes raw target labels by stripping repository qualifiers and expanding omitted target names.
-            # Requirement: [BazelTarget] The bazel target normalizes an arbitrary Bazel target identifier string into a canonical node.
+            # Requirement: MUST strip repository qualifiers and expand omitted target names into canonical nodes.
+            # Requirement: MUST normalize an arbitrary Bazel target identifier string into a canonical node.
             self.assertEqual(
-                utils.normalize("//pkg/sub:target"),
-                DagNode(unit_address="//pkg/sub:target", role_address=""),
+                utils.normalize_target(TargetIdentifier("//pkg/sub:target")),
+                _make_dag_node("//pkg/sub:target"),
             )
             self.assertEqual(
-                utils.normalize("@@//pkg:target"),
-                DagNode(unit_address="//pkg:target", role_address=""),
+                utils.normalize_target(TargetIdentifier("@@//pkg:target")),
+                _make_dag_node("//pkg:target"),
             )
             self.assertEqual(
-                utils.normalize("@//pkg:target"),
-                DagNode(unit_address="//pkg:target", role_address=""),
+                utils.normalize_target(TargetIdentifier("@//pkg:target")),
+                _make_dag_node("//pkg:target"),
             )
             self.assertEqual(
-                utils.normalize("//pkg"),
-                DagNode(unit_address="//pkg:pkg", role_address=""),
+                utils.normalize_target(TargetIdentifier("//pkg")),
+                _make_dag_node("//pkg:pkg"),
             )
             self.assertEqual(
-                utils.normalize("//foo/bar"),
-                DagNode(unit_address="//foo/bar:bar", role_address=""),
+                utils.normalize_target(TargetIdentifier("//foo/bar")),
+                _make_dag_node("//foo/bar:bar"),
             )
             self.assertEqual(
-                utils.normalize("pkg:target"),
-                DagNode(unit_address="//pkg:target", role_address=""),
+                utils.normalize_target(TargetIdentifier("pkg:target")),
+                _make_dag_node("//pkg:target"),
             )
             self.assertEqual(
-                utils.normalize("//pkg/sub:target#//roles:lib"),
-                DagNode(unit_address="//pkg/sub:target", role_address="//roles:lib"),
+                utils.normalize_target(TargetIdentifier("//pkg/sub:target#//roles:lib")),
+                _make_dag_node("//pkg/sub:target", "//roles:lib"),
             )
             self.assertEqual(
-                utils.normalize(""),
-                DagNode(unit_address="", role_address=""),
+                utils.normalize_target(TargetIdentifier("")),
+                _make_dag_node(""),
             )
 
-    def test_extract_directory(self) -> None:
-        """Tests CUJ for extracting package directory from canonical DagNode.
-
-        Checks postconditions & invariants:
-        - Extracts package directory relative to workspace.
-        - Root target //:root_target resolves to empty path.
-        """
-
-        def _make_node_dir(path: str) -> NodeDirectory:
-            obj = object.__new__(NodeDirectory)
-            object.__setattr__(obj, "path", path)
-            return obj
-
+    def test_extract_node_dir(self) -> None:
+        """CUJ: Extracting package directory from canonical DagNode."""
         with enter_phase("system", registry=self.registry) as scope:
             utils = scope.get_singleton(BazelTarget)
-            # Requirement: The bazel target derives node directories from normalized nodes relative to a workspace root.
-            # Requirement: [BazelTarget] The bazel target extracts a node directory from a node.
+            # Requirement: MUST derive node directories by extracting package directory paths relative to a workspace root.
+            # Requirement: MUST extract a node directory from a node.
             self.assertEqual(
-                utils.extract_directory(
-                    DagNode(unit_address="//pkg/sub:target", role_address="")
+                utils.extract_node_dir(
+                    _make_dag_node("//pkg/sub:target")
                 ),
-                _make_node_dir("pkg/sub"),
+                NodeDirectory(path=PathString("pkg/sub")),
             )
             self.assertEqual(
-                utils.extract_directory(
-                    DagNode(unit_address="//:root_target", role_address="")
+                utils.extract_node_dir(
+                    _make_dag_node("//:root_target")
                 ),
-                _make_node_dir(""),
+                NodeDirectory(path=PathString("")),
             )
 
 

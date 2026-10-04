@@ -1,7 +1,7 @@
 # sandbox_asm assembly component
 
 assembles: sandbox_file_editor_impl, sandbox_file_reader_impl, sandbox_guide_delivery_impl, sandbox_impl, sandbox_run_control_impl, template_format_impl, tool_provider_impl
-imports: agent_config, agent_file_alias, agent_node_config, commonmark_ext, dag_storage, filesystem_ext
+imports: agent_config, agent_file_alias, agent_node_config, agent_session, commonmark_ext, dag_storage, dag_subgraph, file_paths, filesystem_ext
 implements: sandbox, sandbox_file_reader, sandbox_file_editor, sandbox_run_control, sandbox_guide_delivery, tool_provider, template_format
 
 ## Purpose

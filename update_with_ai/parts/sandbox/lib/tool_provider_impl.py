@@ -1,5 +1,5 @@
 # Requirements specified in tool_provider_impl.pyi
-from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Set, Tuple, Type
+from typing import Any, Dict, Mapping, Optional, Set
 from . import tool_provider
 from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry
 from update_with_ai.parts.agent.lib.agent_session import agent_session
@@ -9,76 +9,113 @@ class ToolManager(tool_provider.ToolManager, Singleton):
     tier = agent_session
 
     def __init__(self) -> None:
-        self._tools: Dict[str, tool_provider.Tool] = {}
+        self._tools: Dict[tool_provider.ToolName, tool_provider.Tool] = {}
 
     @property
-    def installed_tools(self) -> Set[tool_provider.Tool]:
-        return set(self._tools.values())
+    def installed_tools(self) -> Mapping[tool_provider.ToolName, tool_provider.Tool]:
+        return dict(self._tools)
 
     def install_tool(self, tool: tool_provider.Tool) -> None:
-        self._tools[tool.name] = tool
+        self._tools[tool_provider.ToolName(tool.name)] = tool
 
     def execute_tool(
-        self, name: str, wire_parameter_bindings: tool_provider.WireParameterBindings
+        self,
+        name: tool_provider.ToolName,
+        wire_parameter_bindings: Mapping[tool_provider.ParameterName, tool_provider.WireType],
     ) -> tool_provider.ToolResponse:
-        # Requirement: Executing a tool by name fails if no installed tool matches the requested name.
         tool = self._tools.get(name)
         if tool is None:
+            installed = ", ".join(self._tools.keys())
             return tool_provider.ToolResponse(
                 is_failed=True,
                 is_terminated=False,
-                content=f"Error: Unknown tool '{name}'. Installed tools: {', '.join(self._tools.keys())}",
+                content=tool_provider.ToolResponseContent(
+                    f"Error: Unknown tool '{name}'. Installed tools: {installed}"
+                ),
             )
 
-        wire_dict = dict(wire_parameter_bindings.bindings)
-        params_by_name = {p.name: p for p in tool.parameters}
+        raw_wire: Any = wire_parameter_bindings
+        if isinstance(raw_wire, Mapping):
+            wire_dict = {str(k): v for k, v in raw_wire.items()}
+        elif hasattr(raw_wire, "bindings"):  # pragma: no cover (assumption: arguments conform to Mapping interface)
+            wire_dict = {str(k): v for k, v in getattr(raw_wire, "bindings")}
+        elif hasattr(raw_wire, "items"):  # pragma: no cover (assumption: arguments conform to Mapping interface)
+            items_fn: Any = getattr(raw_wire, "items")
+            raw_items: Any = items_fn() if callable(items_fn) else items_fn
+            wire_dict = {str(k): v for k, v in list(raw_items)}
+        else:  # pragma: no cover (assumption: arguments conform to Mapping interface)
+            wire_dict = {}
 
-        # Requirement: Executing a tool by name fails if a parameter name does not match any parameter of the tool, and reminds the agent that only declared parameters of the tool can be provided.
+        params_by_name: dict[tool_provider.ParameterName, tool_provider.ToolParameter[Any, Any]] = {}
+        for k, v in tool.parameters.items():
+            params_by_name[tool_provider.ParameterName(k)] = v
+
         for p_name in wire_dict:
             if p_name not in params_by_name:
+                valid_params = ", ".join(params_by_name.keys())
                 return tool_provider.ToolResponse(
                     is_failed=True,
                     is_terminated=False,
-                    content=f"Error: Unknown parameter '{p_name}' for tool '{name}'. Valid parameters: {', '.join(params_by_name.keys())}",
-                    reminder="Only declared parameters of the tool can be provided.",
+                    content=tool_provider.ToolResponseContent(
+                        f"Error: Unknown parameter '{p_name}' for tool '{name}'. Valid parameters: {valid_params}"
+                    ),
+                    reminder=tool_provider.ToolReminder(
+                        "Only declared parameters of the tool can be provided."
+                    ),
                 )
 
-        # Requirement: Executing a tool by name fails if an argument is not supplied for a required parameter of the tool, incorporating the parameter's missing message function evaluated with the set of supplied parameter names when configured, and reminds the agent that required parameters of the tool must be supplied.
-        actual_bindings: Set[Tuple[tool_provider.ToolParameter, object]] = set()
+        actual_bindings: dict[tool_provider.ToolParameter[Any, Any], Any] = {}
         for p_name, p in params_by_name.items():
             if p_name not in wire_dict:
                 if p.is_required:
-                    content = f"Error: Required parameter '{p_name}' missing for tool '{name}'."
+                    note = ""
                     if p.missing_message is not None:
-                        note = p.missing_message(set(wire_dict.keys()))
-                        if note:
-                            content += f" Note: {note}"
+                        note = p.missing_message({tool_provider.ParameterName(k) for k in wire_dict.keys()})
+                    if note:
+                        content = f"Error: Required parameter '{p_name}' missing for tool '{name}'. Note: {note}"
+                    else:
+                        content = f"Error: Required parameter '{p_name}' missing for tool '{name}'."
                     return tool_provider.ToolResponse(
                         is_failed=True,
                         is_terminated=False,
-                        content=content,
-                        reminder="Required parameters of the tool must be supplied.",
+                        content=tool_provider.ToolResponseContent(content),
+                        reminder=tool_provider.ToolReminder(
+                            "Required parameters of the tool must be supplied."
+                        ),
                     )
-                # Requirement: When an argument is omitted for a parameter that is not required and has a default value, the tool manager binds the default value as the actual parameter value.
                 if p.default_value is not None:
-                    actual_bindings.add((p, p.default_value))
+                    actual_bindings[p] = p.default_value
             else:
                 raw_val = wire_dict[p_name]
-                conv_val = p.parameter_type.convert(raw_val)
-                actual_bindings.add((p, conv_val))
+                try:
+                    conv_val = p.parameter_type.convert(raw_val)
+                except tool_provider.ParameterConversionError as e:
+                    return tool_provider.ToolResponse(
+                        is_failed=True,
+                        is_terminated=False,
+                        content=tool_provider.ToolResponseContent(
+                            f"Error: Invalid argument for parameter '{p_name}': {e.message}"
+                        ),
+                        reminder=tool_provider.ToolReminder(
+                            "Parameters must match their declared wire types."
+                        ),
+                    )
+                actual_bindings[p] = conv_val
 
-        # Requirement: When parameter mappings are successfully resolved, executing a tool by name executes the matching tool with the resolved actual parameter bindings and returns the tool's response.
-        # Requirement: [ToolManager] Executing a tool by name with wire parameter bindings produces the tool response upon resolving parameter conversions.
         return tool.execute_tool(
-            tool_provider.ActualParameterBindings(bindings=actual_bindings)
+            tool_provider._ActionParameterBindings(
+                actual_bindings,
+                parameters_by_name=params_by_name,
+            )
         )
 
     def execute_tool_with_arguments(
-        self, name: str, arguments: Mapping[str, Any]
+        self,
+        name: tool_provider.ToolName,
+        arguments: Mapping[tool_provider.ParameterName, tool_provider.WireType],
     ) -> tool_provider.ToolResponse:
-        # Requirement: Executing a tool with arguments converts raw argument mappings into wire parameter bindings and executes the tool by name.
-        wire_bindings = tool_provider.WireParameterBindings.from_dict(arguments)
-        return self.execute_tool(name, wire_bindings)
+        bindings = tool_provider._WireParameterBindings(arguments)
+        return self.execute_tool(name, bindings)
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
@@ -121,4 +158,3 @@ def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
         ],
         tier=agent_session,
     )
-

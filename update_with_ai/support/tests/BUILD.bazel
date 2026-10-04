@@ -14,17 +14,6 @@ test_suite(
     tests = ["//update_python_with_ai/support/tests:lifecycle_test_type_check"],
 )
 
-py_test(
-    name = "test_spec_toolchain",
-    srcs = ["test_spec_toolchain.py"],
-    main = "test_spec_toolchain.py",
-    imports = ["../..", "../lib"],
-    deps = [
-        "//update_with_ai/support/lib:framework",
-        "//update_with_ai/support/lib:grounding_tool_lib",
-    ],
-)
-
 pyright_test(
     name = "bazel_macros_test",
     srcs = ["bazel_macros_test.py"],
@@ -39,24 +28,24 @@ pyright_test(
     ],
 )
 
-sh_test(
-    name = "lib_lint_test",
-    srcs = ["lib_lint_test.sh"],
-    data = [
-        "//update_with_ai/support/lib:build_lint_common.py",
-        "//update_with_ai/support/lib:lib_lint.py",
-    ],
-    tags = ["lint"],
+test_suite(
+    name = "high_lint_test",
+    tests = ["//update_python_with_ai/support/tests:high_lint_test"],
 )
 
-sh_test(
+test_suite(
+    name = "low_lint_test",
+    tests = ["//update_python_with_ai/support/tests:low_lint_test"],
+)
+
+test_suite(
+    name = "lib_lint_test",
+    tests = ["//update_python_with_ai/support/tests:lib_lint_test"],
+)
+
+test_suite(
     name = "test_lint_test",
-    srcs = ["test_lint_test.sh"],
-    data = [
-        "//update_with_ai/support/lib:build_lint_common.py",
-        "//update_with_ai/support/lib:test_lint.py",
-    ],
-    tags = ["lint"],
+    tests = ["//update_python_with_ai/support/tests:test_lint_test"],
 )
 
 sh_test(
@@ -72,43 +61,25 @@ sh_test(
 )
 
 py_test(
-    name = "cleanroom_sandbox_hook_test",
-    srcs = ["cleanroom_sandbox_hook_test.py"],
-    main = "cleanroom_sandbox_hook_test.py",
+    name = "cleanroom_workspace_tool_test",
+    srcs = ["cleanroom_workspace_tool_test.py"],
+    main = "cleanroom_workspace_tool_test.py",
     imports = ["../.."],
+    data = [
+        "//update_python_with_ai/support/lib:check_build_derived.py",
+    ],
     deps = [
-        "//update_with_ai/support/lib:cleanroom_sandbox_hook_lib",
+        "//update_with_ai/support/lib:cleanroom_workspace_tool_lib",
     ],
 )
 
 py_test(
-    name = "cleanroom_dag_cli_test",
-    srcs = ["cleanroom_dag_cli_test.py"],
-    main = "cleanroom_dag_cli_test.py",
+    name = "grounding_support_test",
+    srcs = ["grounding_support_test.py"],
+    main = "grounding_support_test.py",
     imports = ["../.."],
     deps = [
-        "//update_with_ai/support/lib:cleanroom_dag_cli_lib",
-    ],
-)
-
-py_test(
-    name = "cleanroom_run_logger_test",
-    srcs = ["cleanroom_run_logger_test.py"],
-    main = "cleanroom_run_logger_test.py",
-    imports = ["../.."],
-    deps = [
-        "//update_with_ai/support/lib:cleanroom_run_logger_lib",
-    ],
-)
-
-py_test(
-    name = "coordinator_engine_test",
-    srcs = ["coordinator_engine_test.py"],
-    main = "coordinator_engine_test.py",
-    imports = ["../.."],
-    deps = [
-        "//update_with_ai/support/lib:cleanroom_coordinator_engine_lib",
-        "//update_with_ai/support/lib:coordinator_config_lib",
+        "//update_with_ai/support/lib:grounding_support",
     ],
 )
 

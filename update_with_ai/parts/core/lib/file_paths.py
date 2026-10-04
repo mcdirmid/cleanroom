@@ -1,68 +1,43 @@
 # Requirements specified in file_paths.pyi
-"""File paths interface and data types."""
-
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import NewType, Protocol
+
+PathString = NewType("PathString", str)
+ValidationMessage = NewType("ValidationMessage", str)
 
 
-@dataclass(frozen=True, init=False)
+@dataclass(frozen=True)
 class HostPath:
-    path: str
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(path={self.path!r})"
+    path: PathString
 
 
-@dataclass(frozen=True, init=False)
+@dataclass(frozen=True)
 class AbsolutePath(HostPath):
     pass
 
 
-@dataclass(frozen=True, init=False)
+@dataclass(frozen=True)
 class WorkspacePath(HostPath):
     pass
 
 
-@dataclass(frozen=True, init=False)
-class DirectoryPath(AbsolutePath):
+@dataclass(frozen=True)
+class WorkspaceRoot(AbsolutePath):
     pass
 
 
-@dataclass(frozen=True, init=False)
-class WorkspaceRoot(DirectoryPath):
-    pass
+@dataclass(frozen=True)
+class PathValidationError(ValueError):
+    message: ValidationMessage
 
 
-class FilePathManager(ABC):
-    @abstractmethod
-    def create_host_path(self, path: str) -> HostPath:
-        pass
+class FilePathManager(Protocol):
+    def create_host_path(self, path: PathString) -> HostPath: ...
 
-    @abstractmethod
-    def create_absolute_path(self, path: str) -> AbsolutePath:
-        pass
+    def create_absolute_path(self, path: PathString) -> AbsolutePath: ...
 
-    @abstractmethod
-    def create_workspace_path(self, path: str) -> WorkspacePath:
-        pass
+    def create_workspace_path(self, path: PathString) -> WorkspacePath: ...
 
-    @abstractmethod
-    def create_directory_path(self, path: str) -> DirectoryPath:
-        pass
-
-    @abstractmethod
-    def get_workspace_root(self) -> WorkspaceRoot:
-        pass
-
-    @abstractmethod
-    def resolve_directory(
-        self, root: WorkspaceRoot, relative: WorkspacePath
-    ) -> DirectoryPath:
-        pass
-
-    @abstractmethod
     def resolve_path(
         self, root: AbsolutePath, relative: WorkspacePath
-    ) -> AbsolutePath:
-        pass
-
+    ) -> AbsolutePath: ...

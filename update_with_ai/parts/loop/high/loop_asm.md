@@ -1,7 +1,7 @@
 # loop_asm assembly component
 
 assembles: loop_cleaner_impl, loop_guard_impl, loop_node_cleaner_impl, openai_conversation_impl, openai_driver_impl
-imports: agent_config, agent_node_config, agent_storage, dag_storage, dag_subgraph, openai_config, openai_ext, runner_logger, sandbox, template_format, tool_provider
+imports: agent_config, agent_node_config, agent_storage, dag_storage, dag_subgraph, json_ext, openai_config, openai_ext, runner_logger, sandbox, tool_provider
 implements: loop_cleaner, loop_conversation, loop_driver, loop_guard, loop_node_cleaner
 
 ## Purpose

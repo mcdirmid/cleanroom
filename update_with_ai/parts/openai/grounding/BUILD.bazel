@@ -1,0 +1,66 @@
+# update_with_ai/parts/openai/grounding/BUILD.bazel
+
+load("//bin:pyright_library.bzl", "pyright_library")
+load("//update_python_with_ai/support/lib:build_derived_test.bzl", "build_derived_test")
+
+package(default_visibility = ["//visibility:public"])
+
+pyright_library(
+    name = "openai_config",
+    srcs = ["openai_config.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "openai_conversation_impl",
+    srcs = ["openai_conversation_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_config",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+        "//update_with_ai/parts/core/grounding:json_ext",
+        "//update_with_ai/parts/loop/grounding:loop_conversation",
+        "//update_with_ai/parts/sandbox/grounding:tool_provider",
+        ":openai_ext",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "openai_driver_impl",
+    srcs = ["openai_driver_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_config",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+        "//update_with_ai/parts/core/grounding:json_ext",
+        "//update_with_ai/parts/core/grounding:runner_logger",
+        "//update_with_ai/parts/loop/grounding:loop_conversation",
+        "//update_with_ai/parts/loop/grounding:loop_driver",
+        "//update_with_ai/parts/loop/grounding:loop_guard",
+        "//update_with_ai/parts/sandbox/grounding:tool_provider",
+        ":openai_config",
+        ":openai_ext",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "openai_ext",
+    srcs = ["openai_ext.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+    ],
+    imports = ["../../..", "."],
+)
+
+build_derived_test(
+    name = "targets_derived_test",
+)

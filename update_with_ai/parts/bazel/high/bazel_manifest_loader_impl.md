@@ -1,48 +1,40 @@
 # bazel_manifest_loader_impl implementation component
 
-imports: dag_storage, agent_node_config, agent_file_alias, bazel_target, agent_storage, json_manifest_ext
+imports: agent_storage, bazel_manifest_ext, bazel_target, dag_storage, file_paths
 implements: bazel_manifest_loader
 
 ## Purpose
 
-The bazel_manifest_loader_impl implementation component loads JSON format manifests, resolves node references and package-relative file paths, computes star-dependency transitive source closures, derives minimal file aliases, and constructs target node configurations.
+The bazel_manifest_loader_impl implementation component discovers manifest JSON files in workspace directories and runfiles trees, synthesizes unit and role metadata into target manifests, and populates graph storage with node definitions and dependency edges.
 
-Target manifests emitted by Bazel record target labels, source files, and dependencies using workspace-relative or package-relative representations. Executing agents and maintaining dependency graphs requires transforming these declarative records into fully qualified graph nodes, resolving relative source files, and constructing isolated node configurations. The bazel_manifest_loader_impl implementation component parses JSON manifest files, normalizes node references, computes transitive source closures for star dependencies, resolves guide and blame mappings, and populates graph storage with complete node definitions.
+Target execution requires transforming build system metadata into fully qualified graph nodes and dependencies. The build system emits factored unit manifests and role manifests across workspace directories and runfiles trees. The bazel_manifest_loader_impl implementation component locates manifest files across candidate search paths, decodes unit and role schemas using bazel manifest ext, evaluates source patterns and prompt templates, synthesizes pass-through nodes for inactive stages, and registers dependency relationships in agent storage.
 
-**Out of scope:** The bazel_manifest_loader_impl implementation component does not execute build commands, drive agent turns, or manage file modification permissions during runs; these are handled by other components.
+**Out of scope:** The bazel_manifest_loader_impl implementation component does not execute build commands, drive agent turns, or resolve session file aliases; these are handled by other components.
 
 ## Types and Behavior
 
-The bazel manifest loader loads target manifests to construct graph structures and node configurations.
+The bazel manifest loader loads target manifests to construct graph structures and node definitions.
+
+When resolving workspace directories, the loader anchors relative package paths against the workspace root retrieved from the file path manager (or process environment). When resolving runfiles trees, the loader anchors canonical relative package paths against candidate runfiles roots. When recording declared source files and silent source files in agent storage, the loader normalizes repository-relative paths across package directories and workspace roots without prepending redundant package path segments.
 
 The bazel manifest loader:
 
-- Retrieves target manifests from workspace directories or runfiles trees for graph nodes.
+- Retrieves target manifests from workspace directories or runfiles trees for graph nodes, checking package paths and candidate runfile directories.
 
-- Parses manifests from JSON files written by the build system in workspace directories or runfiles trees into json manifests.
+- Loads unit manifests and role manifests using bazel manifest ext to synthesize target manifest records across unit and role dimensions.
 
-- Extracts manifest node references from a json manifest and normalizes them into canonical nodes.
+- Synthesizes target node manifests with source files, templates, declared dependencies, feedback dependencies, silent dependencies, and star dependencies across unit and role dimensions.
 
-- Extracts manifest file paths from a json manifest and resolves them relative to target package directories.
+- Incorporates fixed role node dependencies as declared direct dependencies across unit and role dimensions.
 
-- Resolves a target node's declared source file, template, and silent source files into read-write files and startup template mappings in its node configuration.
-
-- Resolves declared direct dependencies into read-only files, and transitive star-dependency closures into read-only files in the target node configuration by retrieving declared source files from corresponding dependency node manifests.
-
-- Registers declared silent dependencies as non-propagating dependencies in graph storage, excluding their source files from dependent node configurations.
-
-- Resolves declared guide targets into task guides from declared source files of referenced guide manifests, excluding step-mode guide source files from declared read-only files.
-
-- Maps declared source files of feedback dependencies to blame targets associated with their owning dependency nodes in the target node configuration.
-
-- Derives file aliases for all accessible workspace files.
-
-- Synthesizes node definitions for referenced dependency targets lacking manifests.
-
-- Resolves target manifests by loading unit manifests and role manifests to synthesize node definitions and dependencies across unit and role dimensions.
-
-- Synthesizes target node manifests with templates, template parameters, declared dependencies, feedback dependencies, silent dependencies, and star dependencies across unit and role dimensions.
-
-- Evaluates role source patterns and task prompt templates parameterized with unit metadata to configure synthesized nodes.
+- Evaluates role source patterns and task prompt templates parameterized with unit metadata to configure synthesized target manifests.
 
 - Synthesizes promptless pass-through node definitions that act as graph dependencies without propagating changes when a unit's component type is not active for a role.
+
+- Populates agent storage with node definitions carrying task prompts for target nodes.
+
+- Records declared primary source files and silent source files in agent storage, normalizing repository-relative paths across package directories and workspace roots without duplicating package path segments.
+
+- Registers declared direct dependencies and non-propagating silent dependencies in agent storage.
+
+- Synthesizes empty node definitions for referenced dependency targets lacking manifests.

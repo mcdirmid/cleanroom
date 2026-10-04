@@ -56,6 +56,7 @@ RUFF_ARGS=(
     format
     --exclude "update_python_with_ai/templates"
     --exclude "*.pyi"
+    --exclude "staging"
     --exclude "testing"
     update_with_ai
     update_python_with_ai

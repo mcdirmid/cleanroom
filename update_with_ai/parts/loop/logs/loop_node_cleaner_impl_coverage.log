@@ -1,0 +1,29 @@
+from __future__ import annotations
+from typing import Optional, Sequence
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton, system
+import dag_storage
+import loop_node_cleaner
+
+# Requirements specified in loop_node_cleaner_impl.pyi
+
+class NodeCleaner(loop_node_cleaner.NodeCleaner, InTier[SystemTier], Singleton):
+    tier = system
+
+    def __init__(self) -> None:
+        # TODO___init___body
+        pass
+
+    def clean(self, nodes: Sequence[dag_storage.DagNode]) -> bool:
+        # TODO_clean_body
+        raise NotImplementedError
+
+
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        NodeCleaner,
+        keys=[NodeCleaner, loop_node_cleaner.NodeCleaner, InTier[SystemTier]],
+        tier=system,
+    )
+
+_initialize_ = __initialize__

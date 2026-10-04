@@ -6,13 +6,13 @@ package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "high_specs",
-    srcs = glob(["high/*.md"]),
+    srcs = glob(["high/*.md"], allow_empty = True),
     visibility = ["//visibility:public"],
 )
 
 filegroup(
     name = "grounding_specs",
-    srcs = glob(["grounding/*.pyi"]),
+    srcs = glob(["grounding/*.gt", "grounding/*.py", "grounding/*.pyi", "low/*.pyi"], allow_empty = True),
     visibility = ["//visibility:public"],
 )
 
@@ -22,13 +22,20 @@ update_python_with_ai(
 )
 
 update_python_with_ai(
+    name = "bazel_manifest_ext",
+    module_deps = [],
+)
+
+update_python_with_ai(
     name = "bazel_manifest_loader",
-    module_deps = ['//update_with_ai/parts/agent:agent_storage', ':bazel_target', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/agent:agent_node_config'],
+    module_deps = ['//update_with_ai/parts/agent:agent_storage', ':bazel_target', '//update_with_ai/parts/dag:dag_storage'],
 )
 
 update_python_with_ai(
     name = "bazel_manifest_loader_impl",
-    module_deps = ['//update_with_ai/parts/agent:agent_storage', ':bazel_manifest_loader', ':bazel_target', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/agent:agent_file_alias', '//update_with_ai/parts/core:json_manifest_ext', '//update_with_ai/parts/agent:agent_node_config'],
+    module_deps = [
+        '//update_with_ai/parts/agent:agent_storage', ':bazel_manifest_ext', ':bazel_manifest_loader', ':bazel_target', '//update_with_ai/parts/dag:dag_storage', '//update_with_ai/parts/core:file_paths'
+    ],
 )
 
 update_python_with_ai(

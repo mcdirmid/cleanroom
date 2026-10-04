@@ -1,0 +1,110 @@
+# update_with_ai/parts/BUILD.bazel
+#
+# Aggregate batch mark clean targets for parts packages.
+# When synced to staging, these targets become //update_with_ai/parts:<role>_mark_clean.
+
+load("//update_with_ai/support/lib:update_with_ai.bzl", "batch_mark_clean")
+
+package(default_visibility = ["//visibility:public"])
+
+# Clean all nodes across all roles in all parts packages
+batch_mark_clean(
+    name = "all_mark_clean",
+    role = "",
+)
+
+alias(
+    name = "clean",
+    actual = ":all_mark_clean",
+)
+
+# Role-specific batch mark clean targets and aliases
+batch_mark_clean(
+    name = "high_mark_clean",
+    role = "high",
+)
+
+alias(
+    name = "all_high_mark_clean",
+    actual = ":high_mark_clean",
+)
+
+batch_mark_clean(
+    name = "requirements_mark_clean",
+    role = "requirements",
+)
+
+alias(
+    name = "all_requirements_mark_clean",
+    actual = ":requirements_mark_clean",
+)
+
+batch_mark_clean(
+    name = "planning_mark_clean",
+    role = "planning",
+)
+
+alias(
+    name = "all_planning_mark_clean",
+    actual = ":planning_mark_clean",
+)
+
+batch_mark_clean(
+    name = "low_mark_clean",
+    role = "low",
+)
+
+alias(
+    name = "all_low_mark_clean",
+    actual = ":low_mark_clean",
+)
+
+batch_mark_clean(
+    name = "grounding_mark_clean",
+    role = "grounding",
+)
+
+alias(
+    name = "all_grounding_mark_clean",
+    actual = ":grounding_mark_clean",
+)
+
+batch_mark_clean(
+    name = "lib_mark_clean",
+    role = "lib",
+)
+
+alias(
+    name = "all_lib_mark_clean",
+    actual = ":lib_mark_clean",
+)
+
+batch_mark_clean(
+    name = "test_mark_clean",
+    role = "test",
+)
+
+alias(
+    name = "all_test_mark_clean",
+    actual = ":test_mark_clean",
+)
+
+batch_mark_clean(
+    name = "qa_mark_clean",
+    role = "qa",
+)
+
+alias(
+    name = "all_qa_mark_clean",
+    actual = ":qa_mark_clean",
+)
+
+batch_mark_clean(
+    name = "coverage_mark_clean",
+    role = "coverage",
+)
+
+alias(
+    name = "all_coverage_mark_clean",
+    actual = ":coverage_mark_clean",
+)

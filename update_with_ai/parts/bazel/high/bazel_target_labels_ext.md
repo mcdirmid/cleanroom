@@ -10,7 +10,9 @@ Bazel targets can be addressed using apparent, repository-qualified, or shorthan
 
 ## Grounding Gaps Covered
 
-The bazel_target_labels_ext component provides the external domain knowledge and parsing rules required to process Bazel target labels and map packages to filesystem locations:
+The bazel_target_labels_ext component provides the external domain knowledge and parsing rules required to process Bazel target labels and map packages to filesystem locations.
+
+Grounding gaps covered include:
 
 - Bazel target label normalization: Parses diverse Bazel target label representations including fully qualified repository labels, main repository qualifiers, package-only shorthand where the target name matches the package name, and package-relative target names, stripping main repository prefixes and expanding implicit target identifiers into canonical `//package:target` format.
 

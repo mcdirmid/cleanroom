@@ -77,8 +77,49 @@ class LifecycleTier:
         return f"<LifecycleTier {self.name}>"
 
 
-system: LifecycleTier = LifecycleTier("system")
+class RootTier(LifecycleTier):
+    """Base class for root lifecycle tiers in Cleanroom's hierarchy."""
+    pass
+
+
+class ChildTierOf[ParentTier: LifecycleTier](LifecycleTier):
+    """Generic base class declaring a subordinate tier under ParentTier.
+
+    Subordinate tiers inherit from ChildTierOf[ParentTier] to establish
+    static type-level hierarchy relationships.
+    """
+    pass
+
+
+class SystemTier(RootTier):
+    """Root system tier for singleton services spanning the entire process lifecycle."""
+    def __init__(self, name: str = "system") -> None:
+        super().__init__(name=name, parent=None)
+
+
+class InTier[T: LifecycleTier](Protocol):
+    """Marker protocol indicating membership in a specific lifecycle tier.
+
+    Active services inheriting InTier[TierType] statically declare that they belong
+    to TierType (e.g. InTier[SystemTier]), allowing static analysis, IDEs, and Groundtalk
+    solvers to reason about singleton visibility and collaborator reachability.
+    """
+    pass
+
+
+system: SystemTier = SystemTier("system")
 _known_tiers: Dict[str, LifecycleTier] = {"system": system}
+
+
+def get_tier[T: LifecycleTier](tier_type: type[T]) -> T:
+    """Retrieves the singleton instance of the specified lifecycle tier type."""
+    if issubclass(tier_type, SystemTier):
+        return cast(T, system)
+    tier_name = getattr(tier_type, "name", tier_type.__name__.lower())
+    if tier_name in _known_tiers:
+        return cast(T, _known_tiers[tier_name])
+    child = system.create_child(tier_name)
+    return cast(T, child)
 
 
 def _resolve_tier(val: LifecycleTier | str) -> LifecycleTier:

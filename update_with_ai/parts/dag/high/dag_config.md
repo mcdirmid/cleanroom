@@ -14,4 +14,4 @@ A *node visit limit* is a bound on the maximum number of times any node can be v
 
 A *batch size* is a bound on the maximum number of dirty nodes of the same role processed together in an agent session.
 
-The *dag config* is a system service that provides the node visit limit and batch size for dependency graph execution.
+A system's *dag config* provides the node visit limit and batch size for dependency graph execution.

@@ -14,4 +14,4 @@ Multi-step workflows require deterministic node addressing and durable state sto
 
 A *node directory* is a workspace path addressing the workspace package directory of a node. A node directory is constructed exclusively through service operations rather than direct public constructors.
 
-The *bazel target* is a system service that *normalizes* an arbitrary Bazel target identifier string into a canonical node and *extracts* a node directory from a node.
+A system's *bazel target* *normalizes* an arbitrary Bazel target identifier string into a canonical node and *extracts* a node directory from a node.

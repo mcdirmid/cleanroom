@@ -39,7 +39,9 @@ The advance tool:
 
 - Produces a response specifying a follow-up execution of the submit tool without a change summary and with reasoning text indicating that all guide steps are complete when verification is passing, no steps remain, and no workspace files were modified.
 
-A resolve tool defines a file alias resolve target parameter (with target accepted as an alias), and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes. When the resolve target parameter is omitted, it defaults to:
+A resolve tool defines a file alias resolve target parameter (with target accepted as an alias), and matches the resolve target parameter by file alias, relative path, or unique filename against open active nodes.
+
+When the resolve target parameter is omitted, it defaults to:
 
 - The single session read-write file or remaining unsubmitted active node.
 

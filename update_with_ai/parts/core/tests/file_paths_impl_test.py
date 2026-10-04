@@ -1,22 +1,20 @@
 """Unit tests for file_paths_impl aligned with grounding specifications."""
 
-import os
 import unittest
+from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from update_with_ai.parts.core.lib.file_paths import (
-    FilePathManager,
-
-    HostPath,
     AbsolutePath,
+    FilePathManager,
+    HostPath,
+    PathString,
+    PathValidationError,
     WorkspacePath,
-    DirectoryPath,
     WorkspaceRoot,
 )
 from update_with_ai.parts.core.lib.file_paths_impl import (
     FilePathManager as FilePathManagerImpl,
-
     __initialize__,
 )
-from support.lib.lifecycle import LifecycleRegistry, enter_phase
 
 
 class TestFilePathsImpl(unittest.TestCase):
@@ -27,112 +25,73 @@ class TestFilePathsImpl(unittest.TestCase):
     def test_create_host_path(self) -> None:
         with enter_phase("system", registry=self.registry) as scope:
             service = scope.get_singleton(FilePathManager)
-            hp = service.create_host_path("/any/path/file.txt")
-            # Requirement: [FilePaths] Returns a host path encapsulating the path string.
+            hp = service.create_host_path(PathString("/any/path/file.txt"))
+            # Requirement: MUST return a host path encapsulating the path string.
             self.assertIsInstance(hp, HostPath)
             self.assertEqual(hp.path, "/any/path/file.txt")
 
     def test_create_absolute_path(self) -> None:
         with enter_phase("system", registry=self.registry) as scope:
             service = scope.get_singleton(FilePathManager)
-            ap = service.create_absolute_path("/var/log/app.log")
-            # Requirement: [FilePaths] If the path string is absolute, returns an absolute path encapsulating the path string.
+            # Requirement: MUST validate that the path is absolute and return an absolute path encapsulating the path string.
+            ap = service.create_absolute_path(PathString("/var/log/app.log"))
             self.assertIsInstance(ap, AbsolutePath)
             self.assertIsInstance(ap, HostPath)
             self.assertEqual(ap.path, "/var/log/app.log")
 
-            # Requirement: [FilePaths] If the path string is not absolute, raises a failure.
-            with self.assertRaises(ValueError):
-                service.create_absolute_path("relative/path/app.log")
+            # Requirement: WHEN the path is not absolute, MUST raise PathValidationError with diagnostic feedback formatted as "Path is not absolute: {path}".
+            with self.assertRaises(PathValidationError) as ctx:
+                service.create_absolute_path(PathString("relative/path/app.log"))
+            self.assertEqual(str(ctx.exception), "Path is not absolute: relative/path/app.log")
 
     def test_create_workspace_path(self) -> None:
         with enter_phase("system", registry=self.registry) as scope:
             service = scope.get_singleton(FilePathManager)
-            wp = service.create_workspace_path("src/lib/app.py")
-            # Requirement: [FilePaths] If the path string is relative, returns a workspace path encapsulating the path string.
+            # Requirement: MUST validate that the path is relative without leading path separators and return a workspace path encapsulating the path string.
+            wp = service.create_workspace_path(PathString("src/lib/app.py"))
             self.assertIsInstance(wp, WorkspacePath)
             self.assertIsInstance(wp, HostPath)
             self.assertEqual(wp.path, "src/lib/app.py")
 
-            # Requirement: [FilePaths] If the path string is absolute, raises a failure.
-            with self.assertRaises(ValueError):
-                service.create_workspace_path("/absolute/path")
+            # Requirement: WHEN the path is absolute or has leading path separators, MUST raise PathValidationError with diagnostic feedback formatted as "Workspace path must be relative, got absolute: {path}".
+            with self.assertRaises(PathValidationError) as ctx:
+                service.create_workspace_path(PathString("/absolute/path"))
+            self.assertEqual(
+                str(ctx.exception),
+                "Workspace path must be relative, got absolute: /absolute/path",
+            )
 
-    def test_create_directory_path(self) -> None:
+            with self.assertRaises(PathValidationError) as ctx2:
+                service.create_workspace_path(PathString("/leading/slash"))
+            self.assertEqual(
+                str(ctx2.exception),
+                "Workspace path must be relative, got absolute: /leading/slash",
+            )
+
+    def test_resolve_path(self) -> None:
         with enter_phase("system", registry=self.registry) as scope:
             service = scope.get_singleton(FilePathManager)
-            dp = service.create_directory_path("/tmp/output")
-            # Requirement: [FilePaths] If the path string is absolute, returns a directory path encapsulating the path string.
-            self.assertIsInstance(dp, DirectoryPath)
-            self.assertIsInstance(dp, AbsolutePath)
-            self.assertEqual(dp.path, "/tmp/output")
+            root = service.create_absolute_path(PathString("/workspace/root"))
+            rel_file = service.create_workspace_path(
+                PathString("testing/specs/.update_with_ai.textproto")
+            )
+            # Requirement: MUST produce the combined absolute path formed by joining the workspace root and the relative workspace path.
+            resolved_file = service.resolve_path(root, rel_file)
+            self.assertIsInstance(resolved_file, AbsolutePath)
+            self.assertEqual(
+                resolved_file.path,
+                "/workspace/root/testing/specs/.update_with_ai.textproto",
+            )
 
-            # Requirement: [FilePaths] If the path string is not absolute, raises a failure.
-            with self.assertRaises(ValueError):
-                service.create_directory_path("relative/dir")
-
-    def test_get_workspace_root_with_env(self) -> None:
-        with enter_phase("system", registry=self.registry) as scope:
-            service = scope.get_singleton(FilePathManager)
-            old_env = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
-            try:
-                os.environ["BUILD_WORKSPACE_DIRECTORY"] = "/custom/workspace"
-                root = service.get_workspace_root()
-                # Requirement: [FilePaths] Returns a workspace root representing the physical workspace root directory.
-                self.assertIsInstance(root, WorkspaceRoot)
-                self.assertIsInstance(root, DirectoryPath)
-                self.assertEqual(root.path, "/custom/workspace")
-            finally:
-                if old_env is not None:
-                    os.environ["BUILD_WORKSPACE_DIRECTORY"] = old_env
-                else:
-                    os.environ.pop("BUILD_WORKSPACE_DIRECTORY", None)
-
-    def test_get_workspace_root_fallback(self) -> None:
-        with enter_phase("system", registry=self.registry) as scope:
-            service = scope.get_singleton(FilePathManager)
-            old_env = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
-            try:
-                os.environ.pop("BUILD_WORKSPACE_DIRECTORY", None)
-                root = service.get_workspace_root()
-                # Requirement: [FilePaths] Returns a workspace root representing the physical workspace root directory.
-                self.assertIsInstance(root, WorkspaceRoot)
-                self.assertEqual(root.path, os.path.normpath(os.getcwd()))
-            finally:
-                if old_env is not None:
-                    os.environ["BUILD_WORKSPACE_DIRECTORY"] = old_env
-
-    def test_resolve_directory_and_path(self) -> None:
-        with enter_phase("system", registry=self.registry) as scope:
-            service = scope.get_singleton(FilePathManager)
-            old_env = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
-            try:
-                os.environ["BUILD_WORKSPACE_DIRECTORY"] = "/workspace/root"
-                root = service.get_workspace_root()
-                rel_dir = service.create_workspace_path("testing/specs")
-                resolved_dir = service.resolve_directory(root, rel_dir)
-                # Requirement: [FilePaths] Returns a directory path formed by joining the workspace root and the workspace path.
-                self.assertIsInstance(resolved_dir, DirectoryPath)
-                self.assertEqual(resolved_dir.path, "/workspace/root/testing/specs")
-
-                rel_file = service.create_workspace_path(
-                    "testing/specs/.update_with_ai.textproto"
-                )
-                resolved_file = service.resolve_path(root, rel_file)
-                # Requirement: [FilePaths] Returns an absolute path formed by joining the workspace root and the workspace path.
-                self.assertIsInstance(resolved_file, AbsolutePath)
-                self.assertEqual(
-                    resolved_file.path,
-                    "/workspace/root/testing/specs/.update_with_ai.textproto",
-                )
-            finally:
-                if old_env is not None:
-                    os.environ["BUILD_WORKSPACE_DIRECTORY"] = old_env
-                else:
-                    os.environ.pop("BUILD_WORKSPACE_DIRECTORY", None)
+    def test_workspace_root_type(self) -> None:
+        root = WorkspaceRoot(PathString("/workspace/root"))
+        self.assertIsInstance(root, AbsolutePath)
+        self.assertIsInstance(root, HostPath)
+        self.assertEqual(root.path, "/workspace/root")
 
 
 if __name__ == "__main__":
     unittest.main()
 
-# Untested requirements: None
+# Untested requirements:
+# None

@@ -1,16 +1,7 @@
 # Requirements specified in file_paths_impl.pyi
-"""File paths service implementation."""
-
 import os
 from typing import Optional
-from .file_paths import (
-    FilePathManager as FilePathManagerInterface,
-    HostPath,
-    AbsolutePath,
-    WorkspacePath,
-    DirectoryPath,
-    WorkspaceRoot,
-)
+from . import file_paths
 from support.lib.lifecycle import (
     LifecycleRegistry,
     Singleton,
@@ -19,74 +10,42 @@ from support.lib.lifecycle import (
 )
 
 
-def _make_host_path(cls, path: str):
-    obj = object.__new__(cls)
-    object.__setattr__(obj, "path", path)
-    return obj
-
-
-class FilePathManager(FilePathManagerInterface, Singleton):
+class FilePathManager(file_paths.FilePathManager, Singleton):
     tier = system
 
     def __init__(self) -> None:
         pass
 
-    def create_host_path(self, path: str) -> HostPath:
-        # Requirement: [FilePaths] Returns a host path encapsulating the path string.
-        if not path:  # pragma: no cover (assumption: caller supplies a non-empty string)
-            raise ValueError("Host path cannot be empty")  # pragma: no cover (assumption: caller supplies a non-empty string)
-        return _make_host_path(HostPath, path)
+    def create_host_path(self, path: file_paths.PathString) -> file_paths.HostPath:
+        return file_paths.HostPath(path=path)
 
-    def create_absolute_path(self, path: str) -> AbsolutePath:
+    def create_absolute_path(self, path: file_paths.PathString) -> file_paths.AbsolutePath:
         if not os.path.isabs(path):
-            # Requirement: [FilePaths] If the path string is not absolute, raises a failure.
-            raise ValueError(f"Path is not absolute: {path}")
-        # Requirement: [FilePaths] If the path string is absolute, returns an absolute path encapsulating the path string.
-        return _make_host_path(AbsolutePath, os.path.normpath(path))
+            raise file_paths.PathValidationError(
+                file_paths.ValidationMessage(f"Path is not absolute: {path}")
+            )
+        return file_paths.AbsolutePath(file_paths.PathString(os.path.normpath(path)))
 
-    def create_workspace_path(self, path: str) -> WorkspacePath:
-        if os.path.isabs(path):
-            # Requirement: [FilePaths] If the path string is absolute, raises a failure.
-            raise ValueError(f"Workspace path must be relative, got absolute: {path}")
-        norm = os.path.normpath(path)
-        # Requirement: [FilePaths] If the path string is relative, returns a workspace path encapsulating the path string.
-        return _make_host_path(WorkspacePath, norm)
-
-    def create_directory_path(self, path: str) -> DirectoryPath:
-        if not os.path.isabs(path):
-            # Requirement: [FilePaths] If the path string is not absolute, raises a failure.
-            raise ValueError(f"Directory path must be absolute: {path}")
-        # Requirement: [FilePaths] If the path string is absolute, returns a directory path encapsulating the path string.
-        return _make_host_path(DirectoryPath, os.path.normpath(path))
-
-    def get_workspace_root(self) -> WorkspaceRoot:
-        # Requirement: [FilePaths] Returns a workspace root representing the physical workspace root directory.
-        env_root = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
-        if env_root and os.path.isabs(env_root):
-            root_path = env_root
-        else:
-            root_path = os.getcwd()
-        return _make_host_path(WorkspaceRoot, os.path.normpath(root_path))
-
-    def resolve_directory(
-        self, root: WorkspaceRoot, relative: WorkspacePath
-    ) -> DirectoryPath:
-        # Requirement: [FilePaths] Returns a directory path formed by joining the workspace root and the workspace path.
-        joined = os.path.join(root.path, relative.path)
-        return _make_host_path(DirectoryPath, os.path.normpath(joined))
+    def create_workspace_path(self, path: file_paths.PathString) -> file_paths.WorkspacePath:
+        if os.path.isabs(path) or path.startswith("/") or path.startswith("\\"):
+            raise file_paths.PathValidationError(
+                file_paths.ValidationMessage(
+                    f"Workspace path must be relative, got absolute: {path}"
+                )
+            )
+        return file_paths.WorkspacePath(file_paths.PathString(os.path.normpath(path)))
 
     def resolve_path(
-        self, root: AbsolutePath, relative: WorkspacePath
-    ) -> AbsolutePath:
-        # Requirement: [FilePaths] Returns an absolute path formed by joining the workspace root and the workspace path.
+        self, root: file_paths.AbsolutePath, relative: file_paths.WorkspacePath
+    ) -> file_paths.AbsolutePath:
         joined = os.path.join(root.path, relative.path)
-        return _make_host_path(AbsolutePath, os.path.normpath(joined))
+        return file_paths.AbsolutePath(file_paths.PathString(os.path.normpath(joined)))
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
     reg = get_default_registry() if registry is None else registry
     reg.register_singleton(
         FilePathManager,
-        keys=[FilePathManager, FilePathManagerInterface],
+        keys=[FilePathManager, file_paths.FilePathManager],
         tier=system,
     )

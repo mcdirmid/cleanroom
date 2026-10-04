@@ -1,9 +1,25 @@
-# update_with_ai/parts/bazel/tests/BUILD.bazel
+# staging/parts/bazel/tests/BUILD.bazel
 
 load("//bin:pyright_library.bzl", "pyright_test")
-load("//update_python_with_ai/support/lib:build_derived_test.bzl", "build_derived_test")
 
 package(default_visibility = ["//visibility:public"])
+
+pyright_test(
+    name = "bazel_loop_impl_test",
+    srcs = ["bazel_loop_impl_test.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:lifecycle",
+        "//update_with_ai/parts/agent/lib:agent_storage",
+        "//update_with_ai/parts/bazel/lib:bazel_loop_impl",
+        "//update_with_ai/parts/bazel/lib:bazel_manifest_loader",
+        "//update_with_ai/parts/core/lib:runner_logger",
+        "//update_with_ai/parts/dag/lib:dag_storage",
+        "//update_with_ai/parts/loop/lib:loop",
+        "//update_with_ai/parts/loop/lib:loop_cleaner",
+        "//update_with_ai/parts/loop/lib:loop_node_cleaner",
+    ],
+)
 
 pyright_test(
     name = "bazel_manifest_loader_impl_test",
@@ -11,26 +27,12 @@ pyright_test(
     deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_file_alias",
-        "//update_with_ai/parts/agent/lib:agent_node_config",
         "//update_with_ai/parts/agent/lib:agent_storage",
         "//update_with_ai/parts/bazel/lib:bazel_manifest_loader",
         "//update_with_ai/parts/bazel/lib:bazel_manifest_loader_impl",
         "//update_with_ai/parts/bazel/lib:bazel_target",
+        "//update_with_ai/parts/core/lib:file_paths",
         "//update_with_ai/parts/dag/lib:dag_storage",
-    ],
-)
-
-pyright_test(
-    name = "bazel_openai_config_impl_test",
-    srcs = ["bazel_openai_config_impl_test.py"],
-    deps = [],
-    pyright_deps = [
-        "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_config",
-        "//update_with_ai/parts/bazel/lib:bazel_openai_config_impl",
-        "//update_with_ai/parts/dag/lib:dag_config",
-        "//update_with_ai/parts/openai/lib:openai_config",
     ],
 )
 
@@ -55,19 +57,15 @@ pyright_test(
 )
 
 pyright_test(
-    name = "bazel_loop_impl_test",
-    srcs = ["bazel_loop_impl_test.py"],
+    name = "bazel_openai_config_impl_test",
+    srcs = ["bazel_openai_config_impl_test.py"],
     deps = [],
     pyright_deps = [
         "//update_python_with_ai/support/lib:lifecycle",
-        "//update_with_ai/parts/agent/lib:agent_storage",
-        "//update_with_ai/parts/bazel/lib:bazel_loop_impl",
-        "//update_with_ai/parts/bazel/lib:bazel_manifest_loader",
-        "//update_with_ai/parts/core/lib:runner_logger",
-        "//update_with_ai/parts/dag/lib:dag_storage",
-        "//update_with_ai/parts/loop/lib:loop",
-        "//update_with_ai/parts/loop/lib:loop_cleaner",
-        "//update_with_ai/parts/loop/lib:loop_node_cleaner",
+        "//update_with_ai/parts/agent/lib:agent_config",
+        "//update_with_ai/parts/bazel/lib:bazel_openai_config_impl",
+        "//update_with_ai/parts/dag/lib:dag_config",
+        "//update_with_ai/parts/openai/lib:openai_config",
     ],
 )
 
@@ -98,6 +96,3 @@ pyright_test(
     ],
 )
 
-build_derived_test(
-    name = "targets_derived_test",
-)

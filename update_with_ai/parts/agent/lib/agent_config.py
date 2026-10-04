@@ -1,9 +1,10 @@
 # Requirements specified in agent_config.pyi
 """Agent configuration interface and data types."""
 
-from typing import Protocol
+from typing import NewType, Protocol
 
-ConversationLimit = int
+ConversationLimit = NewType("ConversationLimit", int)
+SupersedeArgKeepLimit = NewType("SupersedeArgKeepLimit", int)
 
 
 class AgentConfig(Protocol):
@@ -26,5 +27,4 @@ class AgentConfig(Protocol):
     def is_mcp_mode(self) -> bool: ...
 
     @property
-    def supersede_arg_keep(self) -> int: ...
-
+    def supersede_arg_keep(self) -> SupersedeArgKeepLimit: ...

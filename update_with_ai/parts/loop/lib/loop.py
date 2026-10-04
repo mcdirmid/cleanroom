@@ -1,26 +1,28 @@
 # Requirements specified in loop.pyi
 from dataclasses import dataclass
-from typing import Protocol
+from typing import NewType, Protocol
 from update_with_ai.parts.dag.lib import dag_storage
+
+BuildSummary = NewType("BuildSummary", str)
 
 
 @dataclass(frozen=True)
 class BuildResult:
     success: bool
-    summary: str
+    summary: BuildSummary
 
 
 class Loop(Protocol):
-    def run_cleaning_pass(self, root: dag_storage.DagNode) -> BuildResult: ...
+    def clean_subgraph(self, target: dag_storage.DagNode) -> BuildResult: ...
 
-    def mark_node_dirty(
-        self, target: dag_storage.DagNode, change: dag_storage.ChangeMessage
+    def mark_dirty(
+        self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage
     ) -> None: ...
 
-    def inject_node_feedback(
-        self, target: dag_storage.DagNode, feedback: dag_storage.FeedbackMessage
+    def inject_feedback(
+        self, target: dag_storage.DagNode, message: dag_storage.FeedbackMessage
     ) -> None: ...
 
-    def broadcast_node_change(
-        self, origin: dag_storage.DagNode, change: dag_storage.ChangeMessage
+    def broadcast_change(
+        self, source: dag_storage.DagNode, message: dag_storage.ChangeMessage
     ) -> None: ...

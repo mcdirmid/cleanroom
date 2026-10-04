@@ -16,7 +16,7 @@ A *conversation message* is an entry in an agent conversation, having a *role*, 
 
 A *model request* is a formatted sequence of messages prepared for transmission to a language model.
 
-The *conversation* is an agent session service that maintains chronological messages for an agent run.
+An agent session's *conversation* maintains chronological messages for an agent run.
 
 The conversation:
 

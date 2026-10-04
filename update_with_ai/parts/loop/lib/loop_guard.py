@@ -1,24 +1,27 @@
 # Requirements specified in loop_guard.pyi
-"""Loop guard interface and data types."""
-
 from dataclasses import dataclass
-from typing import Optional, Protocol, Union
+from typing import Any, Mapping, NewType, Optional, Protocol, Union
 from update_with_ai.parts.sandbox.lib import tool_provider
+
+LoopFeedback = NewType("LoopFeedback", str)
+FailureExplanation = NewType("FailureExplanation", str)
 
 
 @dataclass(frozen=True)
 class LoopReminder:
-    feedback: str
+    feedback: LoopFeedback
 
 
 @dataclass(frozen=True)
 class LoopFailure:
-    explanation: str
+    explanation: FailureExplanation
 
 
 class LoopGuard(Protocol):
-    def record_tool_execution(
-        self, tool_name: str, bindings: tool_provider.ActualParameterBindings
+    def evaluate(
+        self,
+        tool_name: tool_provider.ToolName,
+        arguments: Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType],
     ) -> Optional[Union[LoopReminder, LoopFailure]]: ...
 
-    def record_progress(self) -> None: ...
+    def reset(self) -> None: ...

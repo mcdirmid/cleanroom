@@ -20,25 +20,25 @@ class LoopCleaner(loop_cleaner.LoopCleaner, Singleton):
         pass
 
     def clean(
-        self, node: dag_storage.DagNode, cleaner: loop_node_cleaner.NodeCleaner
-    ) -> None:
+        self, target: dag_storage.DagNode, node_cleaner: loop_node_cleaner.NodeCleaner
+    ) -> bool:
         subgraph = get_singleton(dag_subgraph.DagSubgraph)
-        # Requirement: Target node scoping sets the target node on the dag subgraph to determine dependency-first topological order.
-        subgraph.set_target(node)
+        subgraph.set_target(target)
 
-        # Requirement: Cleaning processes ready batches of dirty nodes in topological order, recording node visits for each cleaned batch, and halts immediately if the node cleaner communicates that processing cannot continue.
-        # Requirement: [LoopCleaner] Cleaning concludes when all nodes in the subgraph rooted at the node are clean.
-        # Requirement: Cleaning concludes when the dag subgraph is complete, indicating all reachable nodes in the target subgraph are clean.
-        while not subgraph.is_complete:
-            # Requirement: [LoopCleaner] Cleaning a node cleans dirty nodes in dependency-first topological order, ensuring all dependencies of a node are clean before that node is cleaned.
+        def _is_complete() -> bool:
+            comp = getattr(subgraph, "is_complete")
+            return bool(comp()) if callable(comp) else bool(comp)
+
+        while not _is_complete():
             batch = subgraph.next_ready_batch()
-            if not batch:  # pragma: no cover (assumption: acyclic subgraph guarantees non-empty batch when incomplete)
-                break  # pragma: no cover (assumption: acyclic subgraph guarantees non-empty batch when incomplete)
+            if not batch:  # pragma: no cover (assumption: acyclic graph progress guaranteed)
+                break
+            should_continue = node_cleaner.clean(batch)
             subgraph.record_visit(batch)
-            should_continue = cleaner.clean(batch)
-            # Requirement: [LoopCleaner] Cleaning dirty nodes halts if the node cleaner communicates that processing cannot continue.
             if not should_continue:
-                return
+                return False
+
+        return _is_complete()
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:

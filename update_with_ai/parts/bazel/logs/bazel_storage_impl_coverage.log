@@ -1,0 +1,45 @@
+from __future__ import annotations
+from typing import Optional, Set
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton, system
+import agent_storage
+import dag_storage
+
+# Requirements specified in bazel_storage_impl.pyi
+
+class AgentStorage(agent_storage.AgentStorage, InTier[SystemTier], Singleton):
+    tier = system
+
+    def __init__(self) -> None:
+        # TODO___init___body
+        pass
+
+    def get_node_definition(self, node: dag_storage.DagNode) -> agent_storage.NodeDefinition:
+        # TODO_get_node_definition_body
+        raise NotImplementedError
+
+    def store_node_definition(self, node: dag_storage.DagNode, definition: agent_storage.NodeDefinition) -> None:
+        # TODO_store_node_definition_body
+        raise NotImplementedError
+
+    def is_dirty(self, node: dag_storage.DagNode) -> bool:
+        # TODO_is_dirty_body
+        raise NotImplementedError
+
+    def add_message(self, message: dag_storage.DagMessage, to: dag_storage.DagNode) -> None:
+        # TODO_add_message_body
+        raise NotImplementedError
+
+    def register_dependent(self, node: dag_storage.DagNode) -> None:
+        # TODO_register_dependent_body
+        raise NotImplementedError
+
+
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        AgentStorage,
+        keys=[AgentStorage, agent_storage.AgentStorage, InTier[SystemTier]],
+        tier=system,
+    )
+
+_initialize_ = __initialize__

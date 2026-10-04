@@ -12,7 +12,7 @@ Autonomous agents given monolithic instructions frequently attempt all objective
 
 ## Types and Behavior
 
-The *guide delivery* is an agent session service configured with a guide that delivers instructions to an agent progressively.
+An agent session's *guide delivery* is configured with a guide that delivers instructions to an agent progressively.
 
 A guide delivery:
 

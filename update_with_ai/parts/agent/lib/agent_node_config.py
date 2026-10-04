@@ -1,59 +1,67 @@
 # Requirements specified in agent_node_config.pyi
-"""Node configuration interface and types."""
-
 from dataclasses import dataclass
-from typing import Any, List, Mapping, Optional, Protocol, Sequence, Set, Tuple
+from typing import Any, List, Mapping, NewType, Optional, Protocol, Sequence, Set, Tuple
 from update_with_ai.parts.dag.lib import dag_storage
 from . import agent_file_alias
+
+StepIndex = NewType("StepIndex", int)
+StepTitle = NewType("StepTitle", str)
+StepContent = NewType("StepContent", str)
+GuideSummary = NewType("GuideSummary", str)
+VerificationFailureInstructions = NewType("VerificationFailureInstructions", str)
+VerificationDiagnostic = NewType("VerificationDiagnostic", str)
+VerificationSuccessMessage = NewType("VerificationSuccessMessage", str)
+NodeFeedback = NewType("NodeFeedback", str)
+RoleName = NewType("RoleName", str)
+ExecutionVersion = NewType("ExecutionVersion", int)
+TemplateParamKey = NewType("TemplateParamKey", str)
 
 
 @dataclass(frozen=True)
 class StepSection:
-    index: int
-    title: str
-    content: str
+    index: StepIndex
+    title: StepTitle
+    content: StepContent
 
 
 @dataclass(frozen=True)
 class NodeGuide:
-    summary: str
+    summary: GuideSummary
     sections: List[StepSection]
-    verification_failure: Optional[str] = None
+    verification_failure: Optional[VerificationFailureInstructions] = None
 
-
-
-# Requirements specified in agent_node_config.pyi
 
 class VerificationCheck(Protocol):
-    def verify(self) -> Tuple[bool, str]: ...
+    def verify(self) -> Tuple[bool, VerificationDiagnostic]: ...
 
 
 @dataclass(frozen=True)
 class PerNodeInfo:
-    node: dag_storage.DagNode
     read_only_files: Set[agent_file_alias.ReadOnlyFile]
     read_write_files: Set[agent_file_alias.ReadWriteFile]
-    templates: Set[Tuple[agent_file_alias.BoundFile, agent_file_alias.FileContent]]
-    template_parameters: Mapping[str, Any]
+    templates: Mapping[agent_file_alias.BoundFile, agent_file_alias.FileContent]
+    template_parameters: Mapping[TemplateParamKey, Any]
     allows_step_mode: bool
     guide_file: Optional[agent_file_alias.UnboundFile]
     guide: Optional[NodeGuide]
     blame_targets: Set[agent_file_alias.BoundFile]
     verification_checks: Sequence[VerificationCheck]
-    src_file_alias: Optional[str]
-    verification_success_message: Optional[str]
-    feedback: Sequence[str]
+    src_file_alias: Optional[agent_file_alias.RelativePath]
+    verification_success_message: Optional[VerificationSuccessMessage]
+    feedback: Sequence[NodeFeedback]
 
 
 class RoleConfig(Protocol):
     @property
-    def role(self) -> str: ...
+    def role(self) -> RoleName: ...
 
     @property
     def nodes(self) -> Sequence[dag_storage.DagNode]: ...
 
     @property
-    def version(self) -> int: ...
+    def version(self) -> ExecutionVersion: ...
+
+    def set_role(self, role: RoleName) -> None: ...
 
     def set_nodes(self, nodes: Sequence[dag_storage.DagNode]) -> None: ...
 
@@ -77,14 +85,13 @@ class NodeConfig(Protocol):
     @property
     def templates(
         self,
-    ) -> Set[Tuple[agent_file_alias.BoundFile, agent_file_alias.FileContent]]: ...
+    ) -> Mapping[agent_file_alias.BoundFile, agent_file_alias.FileContent]: ...
 
     @property
-    def template_parameters(self) -> Mapping[str, Any]: ...
+    def template_parameters(self) -> Mapping[TemplateParamKey, Any]: ...
 
     @property
     def guide(self) -> Optional[NodeGuide]: ...
-
 
     @property
     def blame_targets_by_node(
@@ -100,16 +107,17 @@ class NodeConfig(Protocol):
     ) -> Mapping[dag_storage.DagNode, Sequence[VerificationCheck]]: ...
 
     @property
-    def src_file_alias_by_node(self) -> Mapping[dag_storage.DagNode, str]: ...
+    def src_file_alias_by_node(
+        self,
+    ) -> Mapping[dag_storage.DagNode, agent_file_alias.RelativePath]: ...
 
     @property
-    def verification_success_message(self) -> Optional[str]: ...
+    def verification_success_message(
+        self,
+    ) -> Optional[VerificationSuccessMessage]: ...
 
     @property
-    def feedback(self) -> Sequence[str]: ...
+    def feedback(self) -> Sequence[NodeFeedback]: ...
 
     @property
     def per_node_info_by_node(self) -> Mapping[dag_storage.DagNode, PerNodeInfo]: ...
-
-
-

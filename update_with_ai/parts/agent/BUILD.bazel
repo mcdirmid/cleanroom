@@ -6,13 +6,13 @@ package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "high_specs",
-    srcs = glob(["high/*.md"]),
+    srcs = glob(["high/*.md"], allow_empty = True),
     visibility = ["//visibility:public"],
 )
 
 filegroup(
     name = "grounding_specs",
-    srcs = glob(["grounding/*.pyi"]),
+    srcs = glob(["grounding/*.gt", "grounding/*.py", "grounding/*.pyi", "low/*.pyi"], allow_empty = True),
     visibility = ["//visibility:public"],
 )
 

@@ -1,0 +1,66 @@
+# update_with_ai/parts/dag/grounding/BUILD.bazel
+
+load("//bin:pyright_library.bzl", "pyright_library")
+load("//update_python_with_ai/support/lib:build_derived_test.bzl", "build_derived_test")
+
+package(default_visibility = ["//visibility:public"])
+
+pyright_library(
+    name = "dag_asm",
+    srcs = ["dag_asm.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        ":dag_subgraph_impl",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "dag_config",
+    srcs = ["dag_config.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "dag_storage",
+    srcs = ["dag_storage.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "dag_subgraph",
+    srcs = ["dag_subgraph.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        ":dag_config",
+        ":dag_storage",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "dag_subgraph_impl",
+    srcs = ["dag_subgraph_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        ":dag_config",
+        ":dag_storage",
+        ":dag_subgraph",
+    ],
+    imports = ["../../..", "."],
+)
+
+build_derived_test(
+    name = "targets_derived_test",
+)

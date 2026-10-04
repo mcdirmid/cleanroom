@@ -12,22 +12,23 @@ def build_derived_test(name = "targets_derived_test", kind = None, tags = ["lint
             kind = "lib"
         elif pkg.endswith("/tests"):
             kind = "test"
+        elif pkg.endswith("/grounding"):
+            kind = "grounding"
         else:
-            fail("kind must be specified as 'lib' or 'test'")
+            fail("kind must be specified as 'lib', 'test', or 'grounding'")
 
     parent_pkg = pkg.rsplit("/", 1)[0]
     build_file_rel = pkg + "/BUILD.bazel"
     parent_build_file_rel = parent_pkg + "/BUILD.bazel"
 
-    src_py_glob = native.glob(["*.py"])
+    src_py_glob = native.glob(["*.py"], allow_empty = True)
 
     data = [
         "//update_python_with_ai/support/lib:check_build_derived.py",
-        "//update_with_ai/support/lib:build_lint_common.py",
+        "//update_python_with_ai/support/lib:build_lint_common.py",
         ":BUILD.bazel",
         "//" + parent_pkg + ":BUILD.bazel",
         "//" + parent_pkg + ":grounding_specs",
-        "//update_with_ai:part_build_files",
     ] + src_py_glob
 
 

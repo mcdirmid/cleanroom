@@ -1,6 +1,6 @@
 # openai_conversation_impl implementation component
 
-imports: agent_config, openai_ext, tool_provider
+imports: agent_config, json_ext, openai_ext, tool_provider
 implements: loop_conversation
 
 ## Purpose

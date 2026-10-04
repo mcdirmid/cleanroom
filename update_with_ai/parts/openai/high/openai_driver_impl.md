@@ -1,6 +1,6 @@
 # openai_driver_impl implementation component
 
-imports: agent_config, loop_conversation, loop_guard, openai_config, openai_ext, runner_logger, tool_provider
+imports: agent_config, json_ext, loop_conversation, loop_guard, openai_config, openai_ext, runner_logger, tool_provider
 implements: loop_driver
 
 ## Purpose

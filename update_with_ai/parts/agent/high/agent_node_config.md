@@ -18,9 +18,11 @@ A *node guide* provides structured instructional text containing a summary, sequ
 
 A *verification check* can verify session criteria, communicating whether verification passed and diagnostic feedback on failure.
 
-The *role config* of an agent session provides the role of the session, the sequence of nodes currently being cleaned, and an execution version that increments whenever the cleaned nodes change. The role config can set nodes to configure the nodes currently being cleaned in the agent session and increment the execution version.
+The *role config* of an agent session provides the role of the session, the sequence of nodes currently being cleaned, and an execution version that increments whenever the cleaned nodes change. The role config can set role to configure the role of the session, and can set nodes to configure the nodes currently being cleaned in the agent session and increment the execution version.
 
-The *session config* of an agent session service provides resolved configuration parameters for the active session. The session config provides:
+An agent session's *session config* provides resolved configuration parameters for the active session.
+
+The session config provides:
 
 - The session read-only files, restricting bound files to read.
 

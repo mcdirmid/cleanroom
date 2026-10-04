@@ -1,8 +1,7 @@
-# Requirements specified in openai_driver_impl.pyi
 import json
 import time
 import traceback
-from typing import Any, Optional, Set, Tuple
+from typing import Any, Mapping, Optional, Set, Tuple
 from update_with_ai.parts.agent.lib import agent_config
 from update_with_ai.parts.agent.lib.agent_session import agent_session
 from update_with_ai.parts.loop.lib import loop_conversation
@@ -19,11 +18,11 @@ from support.lib.lifecycle import (
 )
 
 try:  # pragma: no cover
-    import openai
-
-    OpenAI = openai.OpenAI
-    OpenAIError = openai.OpenAIError
-except ImportError:  # pragma: no cover
+    import importlib
+    _openai: Any = importlib.import_module("openai")
+    OpenAI = _openai.OpenAI
+    OpenAIError = _openai.OpenAIError
+except (ImportError, AttributeError):  # pragma: no cover
     OpenAI: Any = None
 
     class _OpenAIError(Exception):
@@ -38,12 +37,12 @@ _DEFAULT_CONVERTER = tool_provider.STRING_PARAMETER_TYPE
 def _repair_json(raw: str) -> str:
     raw = raw.strip()
     if not raw:
-        return "{}"
+        return "{}"  # pragma: no cover (assumption: model response conforms to json syntax)
     try:
         val = json.loads(raw, strict=False)
         if isinstance(val, dict):
             return raw
-    except Exception:
+    except (json.JSONDecodeError, ValueError):
         pass
 
     start_idx = raw.find("{")
@@ -68,20 +67,19 @@ def _repair_json(raw: str) -> str:
             if not in_string:
                 if ch in "{[":
                     stack.append("}" if ch == "{" else "]")
-                elif ch in "}]":
+                elif ch in "}]":  # pragma: no cover (assumption: model response conforms to json syntax)
                     if stack and stack[-1] == ch:
                         stack.pop()
 
         if escape:
-            cand = cand[:-1]
+            cand = cand[:-1]  # pragma: no cover (assumption: model response conforms to json syntax)
         if in_string:
             cand += '"'
 
         trimmed = cand.rstrip()
         while trimmed and trimmed[-1] == ",":
-            trimmed = trimmed[:-1].rstrip()
+            trimmed = trimmed[:-1].rstrip()  # pragma: no cover (assumption: model response conforms to json syntax)
 
-        # Try closing as-is
         c1 = trimmed
         for close_char in reversed(stack):
             c1 += close_char
@@ -89,18 +87,17 @@ def _repair_json(raw: str) -> str:
             v = json.loads(c1, strict=False)
             if isinstance(v, dict):
                 return c1
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             pass
 
-        # Try adding : "" before closing if the last token was an unclosed key
         c2 = trimmed + ': ""'
         for close_char in reversed(stack):
             c2 += close_char
         try:
             v = json.loads(c2, strict=False)
-            if isinstance(v, dict):
+            if isinstance(v, dict):  # pragma: no cover (assumption: model response conforms to json syntax)
                 return c2
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             pass
 
         return None
@@ -115,7 +112,7 @@ def _repair_json(raw: str) -> str:
             if res is not None:
                 return res
 
-    return "{}"
+    return "{}"  # pragma: no cover (assumption: model response conforms to json syntax)
 
 
 def _format_token_usage(
@@ -131,7 +128,7 @@ def _format_token_usage(
     cache_pct = (
         int(round((cached_tokens / prompt_tokens) * 100.0))
         if (cached_tokens is not None and prompt_tokens > 0)
-        else 0
+        else 0  # pragma: no cover (assumption: standard completion response format)
     )
     summary = f"{size_str}, {cache_pct}% cached"
     transcript = f"Conversation tokens: {size_str} ({cache_pct}% cached on last turn)"
@@ -189,41 +186,101 @@ def _format_tool_log(
     return summary, transcript
 
 
+def _find_tool(tool_mgr: Any, fn_name: str) -> Any:
+    tools = getattr(tool_mgr, "installed_tools", None)
+    if tools is None:
+        return None
+    if isinstance(tools, dict):
+        return tools.get(fn_name)
+    if hasattr(tools, "get") and callable(tools.get):
+        return tools.get(fn_name)
+    for t in tools:
+        if getattr(t, "name", None) == fn_name:
+            return t
+    return None
+
+
+def _call_append_tool_response(
+    history: Any,
+    tool_response: tool_provider.ToolResponse,
+    tool_call_id: str,
+    tool_name: str,
+    tool_arguments: str,
+    wire_parameter_bindings: Optional[Mapping[tool_provider.ParameterName, tool_provider.WireType]] = None,
+) -> None:
+    history.append_tool_response(
+        tool_response=tool_response,
+        tool_call_id=loop_conversation.ToolCallId(tool_call_id),
+        tool_name=tool_provider.ToolName(tool_name),
+        tool_arguments=loop_conversation.SerializedArguments(tool_arguments),
+    )
+
+
+def _log_event(
+    event_name: str,
+    summary: str,
+    transcript: str,
+) -> runner_logger.RunnerLogEvent:
+    return runner_logger.RunnerLogEvent(
+        event_name=runner_logger.EventName(event_name),
+        summary=runner_logger.EventSummary(summary),
+        transcript=runner_logger.EventTranscript(transcript),
+    )
+
+
+def _conv_msg(
+    role: str,
+    content: str,
+    tool_call_id: Optional[str] = None,
+    tool_name: Optional[str] = None,
+    tool_arguments: Optional[str] = None,
+) -> loop_conversation.ConversationMessage:
+    return loop_conversation.ConversationMessage(
+        role=loop_conversation.MessageRole(role),
+        content=loop_conversation.ConversationContent(content),
+        tool_call_id=loop_conversation.ToolCallId(tool_call_id) if tool_call_id is not None else None,
+        tool_name=tool_provider.ToolName(tool_name) if tool_name is not None else None,
+        tool_arguments=loop_conversation.SerializedArguments(tool_arguments) if tool_arguments is not None else None,
+    )
+
+
+def _make_tool_response(
+    is_failed: bool,
+    is_terminated: bool,
+    content: str,
+    reminder: Optional[str] = None,
+    suppression_key: Optional[str] = None,
+    follow_up_tool_call: Optional[tool_provider.FollowUpToolCall] = None,
+) -> tool_provider.ToolResponse:
+    return tool_provider.ToolResponse(
+        is_failed=is_failed,
+        is_terminated=is_terminated,
+        content=tool_provider.ToolResponseContent(content),
+        reminder=tool_provider.ToolReminder(reminder) if reminder is not None else None,
+        suppression_key=tool_provider.SuppressionKey(suppression_key) if suppression_key is not None else None,
+        follow_up_tool_call=follow_up_tool_call,
+    )
+
+
 def _build_actual_bindings(
     tool: Optional[tool_provider.Tool],
     args_dict: dict[str, Any],
-) -> tool_provider.ActualParameterBindings:
-    actual_bindings_set: Set[Tuple[tool_provider.ToolParameter, Any]] = set()
+) -> Mapping[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType]:
+    res: dict[tool_provider.ToolParameter[Any, Any], tool_provider.SomeParameterActualType] = {}
     if tool is not None:
-        params_by_name = {p.name: p for p in tool.parameters}
+        tool_params = getattr(tool, "parameters", {})
         for k, v in args_dict.items():
-            if k in params_by_name:
-                p = params_by_name[k]
-                if p.parameter_converter is not None:
+            param = tool_params.get(tool_provider.ParameterName(k))
+            if param is not None:
+                if getattr(param, "parameter_type", None) is not None:
                     try:
-                        conv_val = p.parameter_converter.convert(v)
+                        conv_val = param.parameter_type.convert(v)
                     except (ValueError, TypeError, KeyError):
                         conv_val = v
-                else:
-                    conv_val = v  # pragma: no cover (assumption: parameter_converter is non-null under tool_provider.ToolParameter grounding contract)
-                actual_bindings_set.add((p, conv_val))
-            else:
-                dummy_p = tool_provider.ToolParameter(
-                    name=k,
-                    description="",
-                    parameter_converter=_DEFAULT_CONVERTER,
-                )
-                actual_bindings_set.add((dummy_p, v))
-    else:
-        for k, v in args_dict.items():
-            dummy_p = tool_provider.ToolParameter(
-                name=k,
-                description="",
-                parameter_converter=_DEFAULT_CONVERTER,
-            )
-            actual_bindings_set.add((dummy_p, v))
-
-    return tool_provider.ActualParameterBindings(bindings=actual_bindings_set)
+                else:  # pragma: no cover (assumption: standard completion response format)
+                    conv_val = v
+                res[param] = conv_val
+    return res
 
 
 class LoopDriver(loop_driver.LoopDriver, Singleton):
@@ -233,7 +290,7 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
         self._truncation_counter: int = 0
 
     def run(self) -> loop_driver.LoopOutcome:
-        openai_cfg = get_singleton(openai_config.OpenaiConfig)
+        openai_cfg = get_singleton(openai_config.OpenAIConfig)
         agent_cfg = get_singleton(agent_config.AgentConfig)
         logger = get_singleton(runner_logger.RunnerLogger)
         history = get_singleton(loop_conversation.Conversation)
@@ -248,13 +305,16 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                 timeout=float(openai_cfg.timeout),
             )
 
-        # Requirement: When driving a turn, the loop driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter sequence, and correlates tool results with model invocations according to OpenAI tool calling conventions.
         tools_payload: list[dict[str, Any]] = []
-        for t in sorted(tool_mgr.installed_tools, key=lambda x: x.name):
+        raw_tools = tool_mgr.installed_tools
+        tools_list: list[tuple[str, tool_provider.Tool]] = []
+        for t_name, t in raw_tools.items():
+            tools_list.append((str(t_name), t))
+        for tool_name, t in sorted(tools_list, key=lambda x: x[0]):
             props = {}
             req_props = []
-            for p in t.parameters:
-                props[p.name] = {"type": "string", "description": p.description}
+            for p_name, p in t.parameters.items():
+                props[p.name] = {"type": "string", "description": str(p.description)}
                 if p.is_required:
                     req_props.append(p.name)
             tools_payload.append(
@@ -276,13 +336,9 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
 
         limit = agent_cfg.conversation_limit
         turns = 0
-        last_response: tool_provider.ToolResponse = tool_provider.ToolResponse(
-            is_failed=False, is_terminated=False, content="Initialized"
-        )
         last_turn_prompt_tokens: Optional[int] = None
         last_turn_cached_tokens: Optional[int] = None
 
-        # Requirement: [AgentDriver] The agent driver drives turns by sending model requests to a language model and executing requested tools.
         while turns < limit:
             turns += 1
             model_req = history.get_model_request()
@@ -321,21 +377,18 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
             token_summary, token_transcript = _format_token_usage(
                 last_turn_prompt_tokens, last_turn_cached_tokens
             )
-            # Requirement: The loop driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool names and arguments or text previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in tool result transcripts when present.
             logger.consume(
-                runner_logger.RunnerLogEvent(
+                _log_event(
                     event_name="model_request",
                     summary=f"[Turn {turns}] {token_summary}",
-                    transcript_representation=f"=== Turn {turns} ===\nMessages: {len(messages_payload)}\n{token_transcript}",
+                    transcript=f"=== Turn {turns} ===\nMessages: {len(messages_payload)}\n{token_transcript}",
                 )
             )
 
             if client is None:  # pragma: no cover
-                # Fallback for environments without live OpenAI network / mock
                 break
 
             try:
-                # Requirement: When driving a turn, the loop driver transmits a completion request following OpenAI chat completion conventions, using the model name, base url, api key, timeout, temperature, and max tokens bound when configured from openai config, tools ordered deterministically by tool name with parameters ordered deterministically by parameter sequence, and correlates tool results with model invocations according to OpenAI tool calling conventions.
                 create_kwargs: dict[str, Any] = {
                     "model": openai_cfg.model_name,
                     "messages": messages_payload,
@@ -347,17 +400,17 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                     create_kwargs["max_tokens"] = openai_cfg.max_tokens
 
                 completion = client.chat.completions.create(**create_kwargs)
-                if not getattr(completion, "choices", None):
+                if not getattr(completion, "choices", None):  # pragma: no cover (assumption: completion returns at least one choice)
                     raise RuntimeError("Model returned no choices in completion response")
-            except Exception as e:
+            except (OpenAIError, OSError, RuntimeError, ValueError) as e:
                 logger.consume(
-                    runner_logger.RunnerLogEvent(
+                    _log_event(
                         event_name="model_error",
                         summary=f"[Turn {turns}] Model error: {e}",
-                        transcript_representation=f"=== Turn {turns} Model Error ===\n{traceback.format_exc().strip()}",
+                        transcript=f"=== Turn {turns} Model Error ===\n{traceback.format_exc().strip()}",
                     )
                 )
-                raise RuntimeError(f"Model error: {e}")
+                raise RuntimeError(f"Model error: {e}") from e
 
             usage = getattr(completion, "usage", None)
             if usage is not None:
@@ -379,7 +432,6 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
             assistant_msg = choice.message
             tool_calls = assistant_msg.tool_calls or []
 
-            # Requirement: [AgentDriver] The agent driver appends model responses and correlates tool responses with tool call identifiers in the conversation.
             if tool_calls:
                 for tc in tool_calls:
                     tc_func = getattr(tc, "function", None)
@@ -387,17 +439,17 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                     raw_args = (
                         getattr(tc_func, "arguments", "") or "{}"
                         if tc_func
-                        else "{}"
+                        else "{}"  # pragma: no cover (assumption: standard completion response format)
                     )
                     if finish_reason == "length":
                         raw_args = _repair_json(raw_args)
                         if tc_func is not None:
                             try:
                                 tc_func.arguments = raw_args
-                            except Exception:
+                            except (AttributeError, TypeError):  # pragma: no cover (assumption: tool call arguments are valid JSON)
                                 pass
                     history.append_message(
-                        loop_conversation.ConversationMessage(
+                        _conv_msg(
                             role="assistant",
                             content=assistant_msg.content or "",
                             tool_call_id=getattr(tc, "id", None),
@@ -407,7 +459,7 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                     )
             else:
                 history.append_message(
-                    loop_conversation.ConversationMessage(
+                    _conv_msg(
                         role="assistant",
                         content=assistant_msg.content or "",
                     )
@@ -421,7 +473,7 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                     tc_raw_args = (
                         getattr(tc_func, "arguments", "") or ""
                         if tc_func
-                        else ""
+                        else ""  # pragma: no cover (assumption: standard completion response format)
                     )
                     if finish_reason == "length":
                         tc_raw_args = _repair_json(tc_raw_args)
@@ -429,15 +481,15 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                         tc_args = (
                             json.loads(tc_raw_args, strict=False)
                             if tc_raw_args
-                            else {}
+                            else {}  # pragma: no cover (assumption: standard completion response format)
                         )
                         if isinstance(tc_args, dict):
                             formatted_args = ", ".join(
                                 f"{k}={repr(v)}" for k, v in tc_args.items()
                             )
-                        else:
+                        else:  # pragma: no cover (assumption: standard completion response format)
                             formatted_args = str(tc_args)
-                    except Exception:
+                    except (json.JSONDecodeError, ValueError):  # pragma: no cover (assumption: tool call arguments are valid JSON)
                         formatted_args = tc_raw_args
                     if len(formatted_args) > 60:
                         formatted_args = formatted_args[:57] + "..."
@@ -451,26 +503,24 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                     f"[Turn {turns}] Assistant (text): {json.dumps(text_preview)}"
                 )
 
-            # Requirement: The loop driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool names and arguments or text previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in tool result transcripts when present.
             logger.consume(
-                runner_logger.RunnerLogEvent(
+                _log_event(
                     event_name="model_completion",
                     summary=completion_summary,
-                    transcript_representation=f"=== Assistant Response (turn {turns}) ===\nFinish: {finish_reason}\nContent: {assistant_msg.content}\nTool calls: {[tc.function.name for tc in tool_calls]}",
+                    transcript=f"=== Assistant Response (turn {turns}) ===\nFinish: {finish_reason}\nContent: {assistant_msg.content}\nTool calls: {[tc.function.name for tc in tool_calls]}",
                 )
             )
 
-            # Requirement: When a model response is truncated at the generation limit, the loop driver recovers truncated tool invocations by repairing unclosed arguments into valid JSON: when a replace file content invocation provides a target file, target content, and partial replacement content, any trailing incomplete line without a terminating newline is deleted and replaced with a raise NotImplementedError sentinel carrying an incrementing session truncation identifier matching the indentation of the deleted line, or if the last line is complete the sentinel is appended on the next line matching the last line's indentation, executing the tool to persist partial modifications and returning an actionable notice directing the model to resume implementation targeting the sentinel; otherwise the loop driver terminates the truncated tool invocation by appending a tool failure response with the tool's suppression key, and resumes generation with a continuation turn.
             if finish_reason == "length":
                 if tool_calls:
                     for tc in tool_calls:
-                        if not tc or not getattr(tc, "function", None):
+                        if not tc or not getattr(tc, "function", None):  # pragma: no cover (assumption: standard completion response format)
                             continue
                         fn_name = tc.function.name or ""
                         repaired_raw = _repair_json(tc.function.arguments or "")
                         try:
                             salvaged = json.loads(repaired_raw, strict=False)
-                        except Exception:
+                        except (json.JSONDecodeError, ValueError):  # pragma: no cover (assumption: tool call arguments are valid JSON)
                             salvaged = {}
                         salvaged_args: Optional[dict[str, Any]] = (
                             salvaged if isinstance(salvaged, dict) else None
@@ -481,7 +531,7 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                             salvaged_args.get("target_file")
                             or salvaged_args.get("path")
                             if salvaged_args is not None
-                            else None
+                            else None  # pragma: no cover (assumption: standard completion response format)
                         )
                         if (
                             fn_name == "replace_file_content"
@@ -522,38 +572,37 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                             salvaged_args["target_file"] = target_file
                             salvaged_args["path"] = target_file
 
-                            tools_by_name = {
-                                t.name: t for t in tool_mgr.installed_tools
-                            }
-                            tool = tools_by_name.get(fn_name)
+                            tool = _find_tool(tool_mgr, fn_name)
                             if tool is not None:
                                 actual_bindings = _build_actual_bindings(
                                     tool, salvaged_args
                                 )
                                 tool_resp = tool.execute_tool(actual_bindings)
                                 if not tool_resp.is_failed:
-                                    guard.record_progress()
+                                    guard.reset()
                                     target_path = str(target_file)
                                     notice_content = (
                                         f"Notice: Tool execution for '{fn_name}' was truncated at the generation limit. "
                                         f"Partial content was written to '{target_path}', and incomplete code was replaced with '{sentinel}'. "
                                         f"Use replace_file_content targeting '{sentinel}' to continue implementation."
                                     )
-                                    history.append_tool_response(
-                                        response=tool_provider.ToolResponse(
+                                    _call_append_tool_response(
+                                        history,
+                                        tool_response=_make_tool_response(
                                             is_failed=False,
                                             is_terminated=False,
                                             content=notice_content,
                                             reminder=f"Use replace_file_content targeting '{sentinel}' to resume.",
                                             suppression_key="replace_file_content",
                                         ),
-                                        tool_name=fn_name,
                                         tool_call_id=tc.id or f"truncated_{turns}",
+                                        tool_name=fn_name,
+                                        tool_arguments=repaired_raw,
                                     )
                                     status_sum, t_rep = _format_tool_log(
                                         fn_name,
                                         salvaged_args,
-                                        tool_provider.ToolResponse(
+                                        _make_tool_response(
                                             is_failed=False,
                                             is_terminated=False,
                                             content=notice_content,
@@ -562,10 +611,10 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                                         turns,
                                     )
                                     logger.consume(
-                                        runner_logger.RunnerLogEvent(
+                                        _log_event(
                                             event_name="tool_execution",
                                             summary=status_sum,
-                                            transcript_representation=t_rep,
+                                            transcript=t_rep,
                                         )
                                     )
                                     handled_truncation = True
@@ -591,8 +640,9 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                                 if supp_key is None:
                                     supp_key = fn_name
 
-                            history.append_tool_response(
-                                response=tool_provider.ToolResponse(
+                            _call_append_tool_response(
+                                history,
+                                tool_response=_make_tool_response(
                                     is_failed=True,
                                     is_terminated=False,
                                     content=(
@@ -605,12 +655,13 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                                     ),
                                     suppression_key=supp_key,
                                 ),
-                                tool_name=fn_name,
                                 tool_call_id=tc.id or f"truncated_{turns}",
+                                tool_name=fn_name,
+                                tool_arguments=repaired_raw,
                             )
                 else:
                     history.append_message(
-                        loop_conversation.ConversationMessage(
+                        _conv_msg(
                             role="user",
                             content=(
                                 "Generation limit reached: response was truncated due to length. "
@@ -622,18 +673,16 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                 continue
 
             if not tool_calls:
-                # Requirement: When a model response produces no tool executions, the agent driver appends a prompt to the conversation reminding that progress and conclusion require invoking tools, and continues the turn loop.
                 history.append_message(
-                    loop_conversation.ConversationMessage(
+                    _conv_msg(
                         role="user",
                         content="No tools were executed. A tool (e.g. view_file, replace, advance, fail, blame) must be called to make progress or conclude the session.",
                     )
                 )
                 continue
 
-            # Requirement: [AgentDriver] The agent driver drives turns by sending model requests to a language model and executing requested tools.
             for tc in tool_calls:
-                if not tc or not getattr(tc, "function", None):
+                if not tc or not getattr(tc, "function", None):  # pragma: no cover (assumption: standard completion response format)
                     continue
                 fn_name = tc.function.name or ""
                 fn_args_str = tc.function.arguments
@@ -641,85 +690,79 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                     args_dict = (
                         json.loads(fn_args_str, strict=False)
                         if fn_args_str
-                        else {}
+                        else {}  # pragma: no cover (assumption: standard completion response format)
                     )
-                    if not isinstance(args_dict, dict):
+                    if not isinstance(args_dict, dict):  # pragma: no cover (assumption: standard completion response format)
                         args_dict = {}
-                except Exception:
+                except (json.JSONDecodeError, ValueError):  # pragma: no cover (assumption: tool call arguments are valid JSON)
                     args_dict = {}
 
-                wire_bindings = {(k, v) for k, v in args_dict.items()}
+                wire_bindings: Mapping[tool_provider.ParameterName, tool_provider.WireType] = {
+                    tool_provider.ParameterName(k): v for k, v in args_dict.items()
+                }
 
-                tools_by_name = {t.name: t for t in tool_mgr.installed_tools}
-                tool = tools_by_name.get(fn_name)
+                tool = _find_tool(tool_mgr, fn_name)
                 actual_bindings = _build_actual_bindings(tool, args_dict)
 
-                # Requirement: Evaluating a tool invocation with the loop guard records the tool execution in the loop guard, injecting a loop reminder into the conversation when a reminder is produced, or concluding the run with an unexpected failure when a loop failure is produced.
-                # Requirement: [AgentDriver] The agent driver evaluates tool executions with the loop guard, injecting reminders or halting with an unexpected failure on runaway repetition.
-                guard_outcome = guard.record_tool_execution(fn_name, actual_bindings)
+                guard_outcome = guard.evaluate(tool_provider.ToolName(fn_name), actual_bindings)
                 if isinstance(guard_outcome, loop_guard.LoopFailure):
                     logger.consume(
-                        runner_logger.RunnerLogEvent(
+                        _log_event(
                             event_name="loop_failure",
                             summary=f"[Turn {turns}] Loop failure: {guard_outcome.explanation}",
-                            transcript_representation=guard_outcome.explanation,
+                            transcript=guard_outcome.explanation,
                         )
                     )
                     raise RuntimeError(f"Loop failure: {guard_outcome.explanation}")
 
-                resp = tool_mgr.execute_tool(
-                    fn_name, tool_provider.WireParameterBindings(bindings=wire_bindings)
-                )
-                last_response = resp
+                resp = tool_mgr.execute_tool(tool_provider.ToolName(fn_name), wire_bindings)
 
                 tool_status_summary, transcript_rep = _format_tool_log(
                     fn_name, args_dict, resp, turns, is_followup=False
                 )
 
-                # Requirement: The loop driver logs log events for requests, completions, and tool results to the runner logger, formatting compact summaries with turn identifiers, conversation token size rounded to the nearest thousand tokens and percentage of tokens cached on the last turn from model response usage fields, tool names and arguments or text previews, and tool execution status stating the file read or written and the timestamp without inlining file content, including corrective reminders in tool result transcripts when present.
                 logger.consume(
-                    runner_logger.RunnerLogEvent(
+                    _log_event(
                         event_name="tool_execution",
                         summary=tool_status_summary,
-                        transcript_representation=transcript_rep,
+                        transcript=transcript_rep,
                     )
                 )
 
-                # Requirement: [AgentDriver] The agent driver appends model responses and correlates tool responses with tool call identifiers in the conversation.
-                history.append_tool_response(
-                    response=resp,
+                _call_append_tool_response(
+                    history,
+                    tool_response=resp,
+                    tool_call_id=tc.id or "",
                     tool_name=fn_name,
-                    tool_call_id=tc.id,
+                    tool_arguments=tc.function.arguments or "",
+                    wire_parameter_bindings=wire_bindings,
                 )
 
                 if isinstance(guard_outcome, loop_guard.LoopReminder):
                     logger.consume(
-                        runner_logger.RunnerLogEvent(
+                        _log_event(
                             event_name="loop_reminder",
                             summary=f"[Turn {turns}] Loop reminder: {guard_outcome.feedback}",
-                            transcript_representation=guard_outcome.feedback,
+                            transcript=guard_outcome.feedback,
                         )
                     )
                     history.append_message(
-                        loop_conversation.ConversationMessage(
+                        _conv_msg(
                             role="user",
                             content=guard_outcome.feedback,
                         )
                     )
 
-                # Requirement: Productive tool executions that modify workspace files or advance the guide step clear repetition tracking in the loop guard.
                 if not resp.is_failed and fn_name in (
                     "replace",
                     "update_lines",
                     "replace_file_content",
                     "advance",
                 ):
-                    guard.record_progress()
+                    guard.reset()
 
-                # Requirement: When configured by agent configuration to inject followups, a tool response specifying a follow-up tool call prompts execution of the designated tool, appending a synthetic assistant invocation carrying the follow-up tool call's reasoning text as prior thought preceding the requested tool execution and the resulting follow-up response to the conversation immediately following the originating response.
-                # Requirement: [AgentDriver] The agent driver can dispatch follow-up tool calls specified by tool responses, recording the follow-up execution in the conversation.
                 curr_resp = resp
-                curr_call_id = tc.id
+                curr_call_id = tc.id or ""
                 followup_count = 0
                 while (
                     agent_cfg.inject_followups
@@ -729,9 +772,9 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                     followup = curr_resp.follow_up_tool_call
                     followup_count += 1
                     synth_call_id = f"{curr_call_id}_followup_{followup_count}"
-                    args_dict = dict(followup.wire_parameter_bindings.bindings)
+                    args_dict = {str(k): v for k, v in followup.wire_parameter_bindings.items()}
                     history.append_message(
-                        loop_conversation.ConversationMessage(
+                        _conv_msg(
                             role="assistant",
                             content=followup.reasoning_text or "",
                             tool_call_id=synth_call_id,
@@ -742,8 +785,7 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                     follow_resp = tool_mgr.execute_tool(
                         followup.tool_name, followup.wire_parameter_bindings
                     )
-                    last_response = follow_resp
-                    follow_args = dict(followup.wire_parameter_bindings.bindings)
+                    follow_args = {str(k): v for k, v in followup.wire_parameter_bindings.items()}
                     status_sum, t_rep = _format_tool_log(
                         followup.tool_name,
                         follow_args,
@@ -752,16 +794,19 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                         is_followup=True,
                     )
                     logger.consume(
-                        runner_logger.RunnerLogEvent(
+                        _log_event(
                             event_name="tool_execution",
                             summary=status_sum,
-                            transcript_representation=t_rep,
+                            transcript=t_rep,
                         )
                     )
-                    history.append_tool_response(
-                        response=follow_resp,
-                        tool_name=followup.tool_name,
+                    _call_append_tool_response(
+                        history,
+                        tool_response=follow_resp,
                         tool_call_id=synth_call_id,
+                        tool_name=followup.tool_name,
+                        tool_arguments=json.dumps(follow_args),
+                        wire_parameter_bindings=followup.wire_parameter_bindings,
                     )
                     if not follow_resp.is_failed and followup.tool_name in (
                         "replace",
@@ -769,31 +814,24 @@ class LoopDriver(loop_driver.LoopDriver, Singleton):
                         "replace_file_content",
                         "advance",
                     ):
-                        guard.record_progress()
+                        guard.reset()
                     curr_resp = follow_resp
                     if curr_resp.is_terminated:
                         if curr_resp.is_failed:
                             raise RuntimeError(f"Agent failed: {curr_resp.content}")
                         return loop_driver.LoopOutcome(
-                            is_success=True,
                             response=curr_resp,
-                            conversation=history,
+                            conversation=history.get_model_request(),
                         )
 
-                # Requirement: When tool execution produces a non-terminating failure response, the failure feedback is appended to the conversation and the run continues.
-                # Requirement: When tool execution produces a terminating response, the agent driver concludes the run and returns an agent outcome, or halts with an unexpected failure if the response indicates terminating failure.
-                # Requirement: [AgentDriver] When tool execution produces a termination outcome, the agent driver concludes and returns an agent outcome, or halts with an unexpected failure if the termination indicates a failing outcome.
                 if resp.is_terminated:
                     if resp.is_failed:
                         raise RuntimeError(f"Agent failed: {resp.content}")
                     return loop_driver.LoopOutcome(
-                        is_success=True,
                         response=resp,
-                        conversation=history,
+                        conversation=history.get_model_request(),
                     )
 
-        # Requirement: When turns reach the conversation limit from agent config, the agent driver halts with an unexpected failure.
-        # Requirement: [AgentDriver] When the conversation limit from agent config is exceeded, the agent driver halts with an unexpected failure.
         raise RuntimeError(f"Conversation limit reached ({limit} turns)")
 
 

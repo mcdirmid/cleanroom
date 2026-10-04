@@ -16,7 +16,7 @@ A *cleaning pass* is an execution run that cleans dirty nodes across a target su
 
 A *build result* is the final outcome of a cleaning pass, reporting overall *success* or failure along with an execution *summary*.
 
-The *loop* is a system service that executes topological build and cleaning passes across workspace nodes.
+A system's *loop* executes topological build and cleaning passes across workspace nodes.
 
 The loop:
 

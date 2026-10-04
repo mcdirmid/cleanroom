@@ -17,7 +17,11 @@ The node config and alias manager realize session configuration and file alias r
 
 The node config caches per node info loaded for active nodes from the role config, checking the role config version to unload cached per node info when nodes are no longer being cleaned, and loading per node info for newly active nodes from target node manifests.
 
-Loading per node info for a node resolves its declared source files and templates from the manifest as the node read-write files and templates, declared template parameters as the node template parameters, direct dependencies and transitive star dependencies resolved across dependency manifests as the node read-only files excluding declared silent dependencies and read-write files, whether the node allows step mode, declared guide targets as the guide file and task guide, declared feedback dependencies as blame targets mapped to their owning dependency nodes, declared verification commands as verification checks, declared source file alias relative path as the src file alias, declared verification success message, and feedback messages from graph storage as the feedback. Parsing a task guide from guide content extracts the guide summary from content preceding the first section heading and under any heading titled `Summary`, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
+Loading per node info for a node resolves its declared source files and templates from the manifest as the node read-write files and templates, declared template parameters as the node template parameters, direct dependencies and transitive star dependencies resolved across dependency manifests as the node read-only files excluding declared silent dependencies and read-write files, whether the node allows step mode, declared guide targets as the guide file and task guide, declared feedback dependencies as blame targets mapped to their owning dependency nodes, declared verification commands as verification checks, declared source file alias relative path as the src file alias, declared verification success message, and feedback messages from graph storage as the feedback.
+
+When a node declares a guide target, the node config retrieves the guide target's manifest via the bazel manifest loader. Guide markdown content is loaded by reading the guide file resolved across workspace and runfiles trees using candidate relative paths derived from the guide target manifest's declared source file or the guide target label. An unbound guide file is provided using the relative filename derived from the guide target label.
+
+Parsing a task guide from guide content extracts the guide summary from content preceding the first section heading and under any heading titled `Summary`, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
 
 The node config dynamically aggregates session parameters across active nodes' per node info.
 
@@ -31,7 +35,7 @@ The node config dynamically provides:
 
 - Whether the node allows step mode resolved when the session contains exactly one node.
 
-- Whether step mode is active, enabled when the agent config enables step mode, the session contains exactly one node, the target node allows step mode, and session feedback is absent.
+- Whether step mode is active, active when the agent config permits step mode, the session contains exactly one node, the target node allows step mode, and session feedback is absent.
 
 - The session guide file and task guide from the single active node when guide step mode is active.
 

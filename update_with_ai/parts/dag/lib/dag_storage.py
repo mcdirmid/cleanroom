@@ -1,12 +1,16 @@
 # Requirements specified in dag_storage.pyi
-from typing import Optional, Protocol, Set
 from dataclasses import dataclass
+from typing import NewType, Optional, Protocol, Set
+
+UnitAddress = NewType("UnitAddress", str)
+RoleAddress = NewType("RoleAddress", str)
+MessageContent = NewType("MessageContent", str)
 
 
 @dataclass(frozen=True)
 class DagNode:
-    unit_address: str
-    role_address: str = ""
+    unit_address: UnitAddress
+    role_address: RoleAddress = RoleAddress("")
 
 
 @dataclass(frozen=True)
@@ -17,19 +21,18 @@ class DagDependency:
 
 @dataclass(frozen=True, init=False)
 class DagMessage:
-    content: str = ""
+    pass
 
 
 @dataclass(frozen=True)
 class ChangeMessage(DagMessage):
-    content: str = ""
+    content: MessageContent = MessageContent("")
 
 
 @dataclass(frozen=True)
 class FeedbackMessage(DagMessage):
-    content: str = ""
+    content: MessageContent = MessageContent("")
     target: Optional[DagNode] = None
-
 
 
 class DagStorage(Protocol):

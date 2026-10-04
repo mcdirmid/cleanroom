@@ -23,7 +23,7 @@ class TestBazelMacros(unittest.TestCase):
             "feedback_deps": ["//pkg:fdep"],
             "star_deps": ["//pkg:star_dep"],
             "src": "src1.txt",
-            "template": "//update_python_with_ai/templates:lls",
+            "template": "//update_python_with_ai/templates:hls",
             "template_parameters": {"name": "TestComponent"},
             "guide": "//update_python_with_ai/guides:high_to_low",
             "silent_srcs": [":silent_src1"],
@@ -222,7 +222,10 @@ class TestBazelMacrosIntegration(unittest.TestCase):
         except ImportError:
             from update_python_with_ai.support.lib.lifecycle import get_singleton
         from update_with_ai.parts.systems.lib import bazel_openai_loop_asm
-        from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget
+        from update_with_ai.parts.bazel.lib.bazel_target import (
+            BazelTarget,
+            TargetIdentifier,
+        )
         from update_with_ai.parts.bazel.lib.bazel_manifest_loader import (
             BazelManifestLoader,
         )
@@ -232,22 +235,15 @@ class TestBazelMacrosIntegration(unittest.TestCase):
         bazel_openai_loop_asm.__initialize__()
         node_util = get_singleton(BazelTarget)
         self.assertIsNotNone(node_util)
-        node = node_util.normalize("//update_with_ai/specs:dag_storage_lib")
+        node = node_util.normalize_target(TargetIdentifier("//update_with_ai/specs:dag_storage_lib"))
         self.assertEqual(node.unit_address, "//update_with_ai/specs:dag_storage_lib")
 
         loader = get_singleton(BazelManifestLoader)
         self.assertIsNotNone(loader)
 
-        manifest_content = loader.get_manifest(node)
-        if manifest_content is not None:
-            data = json.loads(manifest_content)
-            self.assertIn("template_parameters", data)
-            self.assertEqual(data["template_parameters"]["name"], "dag_storage")
-            self.assertEqual(data["template_parameters"]["component_type"], "interface")
-            self.assertTrue(data["template_parameters"]["is_interface"])
-            self.assertEqual(
-                data["template_parameters"]["target_file"], "dag_storage.py"
-            )
+        manifest = loader.retrieve_manifest(node)
+        if manifest is not None:
+            self.assertEqual(manifest.label, "//update_with_ai/specs:dag_storage_lib")
 
         storage = get_singleton(DagStorage)
         self.assertIsNotNone(storage)

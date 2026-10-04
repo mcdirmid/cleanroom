@@ -1,11 +1,25 @@
 import unittest
-from update_with_ai.parts.sandbox.lib.template_format import TemplateFormatter
+from typing import Any, Mapping
+from update_with_ai.parts.sandbox.lib.template_format import (
+    FormattedText,
+    TemplateFormatter,
+    TemplateKey,
+    TemplateText,
+)
 from update_with_ai.parts.sandbox.lib.template_format_impl import (
     TemplateFormatter as TemplateFormatterImpl,
     __initialize__,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from update_with_ai.parts.agent.lib.agent_session import agent_session
+
+
+def _text(t: str) -> TemplateText:
+    return TemplateText(t)
+
+
+def _params(p: Mapping[str, Any]) -> dict[TemplateKey, Any]:
+    return {TemplateKey(k): v for k, v in p.items()}
 
 
 class TemplateFormatImplTest(unittest.TestCase):
@@ -28,7 +42,7 @@ class TemplateFormatImplTest(unittest.TestCase):
                 },
             }
 
-            result = formatter.format_template(template, params)
+            result = formatter.format_template(_text(template), _params(params))
             expected = "# AuthService\nPackage: auth_core\nOwner: alice\nUnknown: <unbound_param>"
             # Requirement: [TemplateFormatter] The template formatter formats template text using parameters to produce formatted text.
             # Requirement: [TemplateFormatter] Substitutes parameter placeholders matching bound keys with their corresponding string representations.
@@ -42,7 +56,7 @@ class TemplateFormatImplTest(unittest.TestCase):
                     self.username = username
 
             obj_params = {"team": Lead("charlie")}
-            obj_result = formatter.format_template("Lead: <team.username>", obj_params)
+            obj_result = formatter.format_template(_text("Lead: <team.username>"), _params(obj_params))
             # Requirement: Replaces parameter placeholder tokens matching dot-separated keys in the parameters with string representations of their resolved values.
             self.assertEqual(obj_result, "Lead: charlie")
 
@@ -63,7 +77,7 @@ class TemplateFormatImplTest(unittest.TestCase):
                 "hide_line_2": False,
             }
 
-            result = formatter.format_template(template, params)
+            result = formatter.format_template(_text(template), _params(params))
             expected = "Header\nLine 1\nLine 3\nFooter"
             # Requirement: Identifies line-suffix conditional comments matching conditional markers, retaining the preceding line content when the condition key evaluates to true or is absent from parameters and omitting the line when false.
             # Requirement: [TemplateFormatter] Evaluates conditional blocks and line-suffix conditionals based on the truthiness of their condition keys in the parameters, including enclosed content when true or absent from parameters and omitting content when false.
@@ -89,7 +103,7 @@ class TemplateFormatImplTest(unittest.TestCase):
                 ],
             }
 
-            result = formatter.format_template(template, params)
+            result = formatter.format_template(_text(template), _params(params))
             expected = (
                 "## Dependencies\n"
                 "- `lib_a`\n"
@@ -126,7 +140,7 @@ class TemplateFormatImplTest(unittest.TestCase):
                 "term": "auth_token",
             }
 
-            result = formatter.format_template(template, params)
+            result = formatter.format_template(_text(template), _params(params))
             expected = "Intro\n## Terms\n- auth_token: definition\nOutro"
             # Requirement: Identifies block conditional markers enclosing multi-line sections, including enclosed lines when the condition key evaluates to true or is absent from parameters and omitting enclosed lines when false.
             # Requirement: [TemplateFormatter] Evaluates conditional blocks and line-suffix conditionals based on the truthiness of their condition keys in the parameters, including enclosed content when true or absent from parameters and omitting content when false.
@@ -151,7 +165,7 @@ class TemplateFormatImplTest(unittest.TestCase):
                 ]
             }
 
-            result = formatter.format_template(template, params)
+            result = formatter.format_template(_text(template), _params(params))
             expected = (
                 "# Operations\n"
                 "### `login`\n"
@@ -182,7 +196,7 @@ class TemplateFormatImplTest(unittest.TestCase):
             )
             params = {"items": ["item1", "item2"]}
 
-            result = formatter.format_template(formatted_template, params)
+            result = formatter.format_template(_text(formatted_template), _params(params))
             expected = "# Header\n\n- `item1`\n- `item2`\n\n## Footer"
             # Requirement: Normalizes extraneous blank lines introduced around block directive comments by formatting tools to preserve tight list spacing.
             self.assertEqual(result, expected)
@@ -196,7 +210,7 @@ class TemplateFormatImplTest(unittest.TestCase):
             line_tmpl = "- <item> <!-- for: item in missing_items -->"
             # Requirement: Identifies line-suffix loop comments matching collection iteration markers, repeating the preceding line content for each item in the resolved sequence with the item variable bound in the parameter context.
             # Requirement: Retains parameter placeholder tokens whose keys do not resolve to values in the parameters without modification.
-            res_line = formatter.format_template(line_tmpl, {})
+            res_line = formatter.format_template(_text(line_tmpl), _params({}))
             self.assertEqual(res_line, "- <item>")
 
             # Nested block loop
@@ -214,7 +228,7 @@ class TemplateFormatImplTest(unittest.TestCase):
                 ]
             }
             # Requirement: Identifies block loop markers enclosing multi-line sections, repeating enclosed lines for each element in the resolved sequence with the loop variable bound in the parameter context.
-            res_nested = formatter.format_template(nested_tmpl, nested_params)
+            res_nested = formatter.format_template(_text(nested_tmpl), _params(nested_params))
             self.assertEqual(res_nested, "Group: Admins\n- alice\n- bob")
 
             # Unbound block loop: renders body with unbound context
@@ -222,7 +236,7 @@ class TemplateFormatImplTest(unittest.TestCase):
                 "<!-- for: x in absent_list -->\nItem: <x>\n<!-- endfor -->"
             )
             # Requirement: Identifies block loop markers enclosing multi-line sections, repeating enclosed lines for each element in the resolved sequence with the loop variable bound in the parameter context.
-            res_unbound_block = formatter.format_template(unbound_block_tmpl, {})
+            res_unbound_block = formatter.format_template(_text(unbound_block_tmpl), _params({}))
             self.assertEqual(res_unbound_block, "Item: <x>")
 
     def test_nested_and_unbound_conditionals(self) -> None:
@@ -241,14 +255,14 @@ class TemplateFormatImplTest(unittest.TestCase):
             )
             # Requirement: Identifies block conditional markers enclosing multi-line sections, including enclosed lines when the condition key evaluates to true or is absent from parameters and omitting enclosed lines when false.
             res_nested_if = formatter.format_template(
-                nested_if_tmpl, {"outer_flag": True, "inner_flag": True}
+                _text(nested_if_tmpl), _params({"outer_flag": True, "inner_flag": True})
             )
             self.assertEqual(res_nested_if, "Outer\nInner")
 
             # Unbound block if: retains body content
             unbound_if_tmpl = "<!-- if: absent_flag -->\nDefault text\n<!-- endif -->"
             # Requirement: Identifies block conditional markers enclosing multi-line sections, including enclosed lines when the condition key evaluates to true or is absent from parameters and omitting enclosed lines when false.
-            res_unbound_if = formatter.format_template(unbound_if_tmpl, {})
+            res_unbound_if = formatter.format_template(_text(unbound_if_tmpl), _params({}))
             self.assertEqual(res_unbound_if, "Default text")
 
 

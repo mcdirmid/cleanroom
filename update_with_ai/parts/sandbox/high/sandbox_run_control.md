@@ -12,9 +12,9 @@ Autonomous agents require unambiguous control tools to signal when a task is fin
 
 ## Types and Behavior
 
-A *resolve tool* is a polymorphic tool service defining a file alias *resolve target* parameter identifying the active node being resolved.
+A polymorphic *resolve tool* defines a file alias *resolve target* parameter identifying the active node being resolved.
 
-The *run controller* is an agent session service configured with per-node blame targets and node config verification checks. The run controller provides tools for terminating agent sessions and attributing outcomes.
+An agent session's *run controller* is configured with per-node blame targets and node config verification checks. The run controller provides tools for terminating agent sessions and attributing outcomes.
 
 The run controller:
 

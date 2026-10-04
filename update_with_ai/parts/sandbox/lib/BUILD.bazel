@@ -1,4 +1,4 @@
-# update_with_ai/parts/sandbox/lib/BUILD.bazel
+# staging/parts/sandbox/lib/BUILD.bazel
 
 load("//bin:pyright_library.bzl", "pyright_library")
 load("//update_python_with_ai/support/lib:build_derived_test.bzl", "build_derived_test")
@@ -247,4 +247,3 @@ pyright_library(
 build_derived_test(
     name = "targets_derived_test",
 )
-

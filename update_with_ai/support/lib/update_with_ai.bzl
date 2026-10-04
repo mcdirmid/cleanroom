@@ -406,6 +406,12 @@ def update_with_ai(
         node = ":{}".format(name),  # the node manifest
         **_rule_kwargs
     )
+    _mark_dirty_target = name + "_mark_dirty"
+    _update_ai_node_dirty_rule(
+        name = _mark_dirty_target,
+        node = ":{}".format(name),  # the node manifest
+        **_rule_kwargs
+    )
 
     # Create a change target that pretends the node was cleaned with changes:
     # the CLI argument becomes the change part of a message broadcast to the
@@ -413,6 +419,15 @@ def update_with_ai(
     _change_target = name + "_change"
     _update_ai_node_change_rule(
         name = _change_target,
+        node = ":{}".format(name),  # the node manifest
+        **_rule_kwargs
+    )
+
+    # Create a mark_clean target that clears all messages for the node
+    # so it can be seen as clean.
+    _mark_clean_target = name + "_mark_clean"
+    _update_ai_node_mark_clean_rule(
+        name = _mark_clean_target,
         node = ":{}".format(name),  # the node manifest
         **_rule_kwargs
     )
@@ -567,14 +582,10 @@ def _update_ai_node_clean_impl(ctx):
         "        root_node = DagNode(unit_address=manifest_data['unit'], role_address=manifest_data.get('role', ''))",
         "    else:",
         "        node_label = manifest_data.get('label')",
-        "        root_node = node_util.normalize(node_label)",
+        "        root_node = node_util.normalize_target(node_label)",
         "    loader = get_singleton(BazelManifestLoader)",
         "    storage = get_singleton(DagStorage)",
-        "    manifest = loader.get_manifest(root_node)",
-        "    if manifest:",
-        "        loader.load_manifest(manifest, storage)",
-        "    elif 'label' in manifest_data:",
-        "        loader.load_manifest(TargetManifest(manifest_raw), storage)",
+        "    loader.load_manifest(root_node)",
         "    runner = get_singleton(Loop)",
         "",
         '    print(f"Model config: {resolved_config}")',
@@ -679,7 +690,7 @@ _update_ai_node_clean_rule = rule(
         "_canonical_roles": attr.label_list(
             default = [
                 Label("//update_python_with_ai:high"),
-                Label("//update_python_with_ai:requirements"),
+                Label("//update_python_with_ai:planning"),
                 Label("//update_python_with_ai:grounding"),
                 Label("//update_python_with_ai:low"),
                 Label("//update_python_with_ai:lib"),
@@ -792,7 +803,7 @@ def _update_ai_node_feedback_impl(ctx):
         "        target_node = DagNode(unit_address=manifest_data['unit'], role_address=manifest_data.get('role', ''))",
         "    else:",
         "        node_label = manifest_data.get('label')",
-        "        target_node = node_util.normalize(node_label)",
+        "        target_node = node_util.normalize_target(node_label)",
         "    runner = get_singleton(Loop)",
         "    try:",
         "        for m in messages:",
@@ -896,13 +907,15 @@ def _update_ai_node_dirty_impl(ctx):
         "try:",
         "    from update_with_ai.parts.systems.lib import bazel_openai_loop_asm",
         "    from update_with_ai.parts.loop.lib.loop import Loop",
-        "    from update_with_ai.parts.dag.lib.dag_storage import ChangeMessage, DagNode",
+        "    from update_with_ai.parts.dag.lib.dag_storage import ChangeMessage, DagNode, DagStorage",
         "    from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget",
+        "    from update_with_ai.parts.bazel.lib.bazel_manifest_loader import BazelManifestLoader, TargetManifest",
         "except ImportError:",
         "    from lib import bazel_openai_loop_asm",
         "    from lib.loop import Loop",
-        "    from lib.dag_storage import ChangeMessage, DagNode",
+        "    from lib.dag_storage import ChangeMessage, DagNode, DagStorage",
         "    from lib.bazel_target import BazelTarget",
+        "    from lib.bazel_manifest_loader import BazelManifestLoader, TargetManifest",
         "",
         "def main():",
         "    # The change text defaults to 'check' when no argument is given.",
@@ -941,10 +954,15 @@ def _update_ai_node_dirty_impl(ctx):
         "        target_node = DagNode(unit_address=manifest_data['unit'], role_address=manifest_data.get('role', ''))",
         "    else:",
         "        node_label = manifest_data.get('label')",
-        "        target_node = node_util.normalize(node_label)",
+        "        target_node = node_util.normalize_target(node_label)",
+        "    loader = get_singleton(BazelManifestLoader)",
+        "    storage = get_singleton(DagStorage)",
+        "    loader.load_manifest(target_node)",
         "    runner = get_singleton(Loop)",
         "    try:",
+        "        storage.register_dependent(target_node)",
         "        runner.mark_node_dirty(target_node, ChangeMessage(content=change))",
+        '        print(f"Registered {target_node} as dependent on dependencies and marked dirty")',
         "    except KeyboardInterrupt:",
         '        print("Interrupted.", file=sys.stderr)',
         "        sys.exit(130)",
@@ -986,6 +1004,144 @@ def _update_ai_node_dirty_impl(ctx):
 
 _update_ai_node_dirty_rule = rule(
     implementation = _update_ai_node_dirty_impl,
+    executable = True,
+    attrs = {
+        "node": attr.label(
+            mandatory = True,
+            doc = "The node target (must produce a manifest)",
+            aspects = [_collect_manifests],
+        ),
+        "_dag_runner": attr.label(
+            default = Label("//update_with_ai/parts/systems/lib:bazel_openai_loop_asm"),
+            providers = [PyInfo],
+        ),
+    },
+)
+
+# ============================================================================
+# Rule: update_ai_node_mark_clean (generates a mark_clean target per node)
+# ============================================================================
+
+def _update_ai_node_mark_clean_impl(ctx):
+    """Generates a Python binary that clears all messages for the node."""
+    _node = ctx.attr.node
+    _manifest = _node[DefaultInfo].files.to_list()[0]  # _manifest.json
+    _manifest_filename = _manifest.basename  # just the filename
+
+    # Generate a Python wrapper
+    _wrapper_py = ctx.actions.declare_file(ctx.label.name + ".py")
+    _lines = [
+        "#!/usr/bin/env python3",
+        "import json",
+        "import sys",
+        "import os",
+        "",
+        "# Ensure lib is importable from runfiles",
+        "_runfiles_root = None",
+        'for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
+        '    if base and os.path.isdir(base):',
+        "        _runfiles_root = base",
+        "        break",
+        "if not _runfiles_root:",
+        "    _runfiles_root = os.getcwd()",
+        "for cand in (_runfiles_root, os.path.join(_runfiles_root, '_main'), os.path.join(_runfiles_root, 'cleanroom'), os.path.join(_runfiles_root, 'update_with_ai'), os.path.join(_runfiles_root, 'update_python_with_ai'), os.path.join(_runfiles_root, '_main', 'update_with_ai'), os.path.join(_runfiles_root, '_main', 'update_python_with_ai')):",
+        "    if os.path.isdir(cand) and cand not in sys.path:",
+        "        sys.path.insert(0, cand)",
+        "try:",
+        "    from support.lib.lifecycle import get_singleton",
+        "except ImportError:",
+        "    try:",
+        "        from update_python_with_ai.support.lib.lifecycle import get_singleton",
+        "    except ImportError:",
+        "        from update_with_ai.support.lib.lifecycle import get_singleton",
+        "try:",
+        "    from update_with_ai.parts.systems.lib import bazel_openai_loop_asm",
+        "    from update_with_ai.parts.dag.lib import dag_storage",
+        "    from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget",
+        "except ImportError:",
+        "    from lib import bazel_openai_loop_asm",
+        "    from lib import dag_storage",
+        "    from lib.bazel_target import BazelTarget",
+        "",
+        "def main():",
+        "    # Determine workspace root from runfiles or cwd",
+        "    _runfiles_root = None",
+        '    for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
+        '        if os.path.isdir(os.path.join(base, "_main")):',
+        '            _runfiles_root = os.path.join(base, "_main")',
+        "            break",
+        "    workspace_root = os.environ.get(\"BUILD_WORKSPACE_DIRECTORY\", \"\") or _runfiles_root or os.getcwd()",
+        '    if "BUILD_WORKSPACE_DIRECTORY" in os.environ and os.path.isdir(os.environ["BUILD_WORKSPACE_DIRECTORY"]):',
+        '        os.chdir(os.environ["BUILD_WORKSPACE_DIRECTORY"])',
+        "",
+        "    # Find the manifest in runfiles",
+        "    _manifest_path = None",
+        '    manifest_name = "{}"'.format(_manifest_filename),
+        '    for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
+        "        if base:",
+        "            candidate = os.path.join(base, manifest_name)",
+        "            if os.path.isfile(candidate):",
+        "                _manifest_path = candidate",
+        "                break",
+        "",
+        "    if not _manifest_path:",
+        "        # Fallback: manifest is alongside the executable",
+        '        _script_dir = os.path.dirname(os.path.abspath(__file__)) or "."',
+        "        _manifest_path = os.path.join(_script_dir, manifest_name)",
+        "",
+        "    with open(_manifest_path) as f:",
+        "        manifest_data = json.load(f)",
+        "",
+        "    bazel_openai_loop_asm.__initialize__()",
+        "    node_util = get_singleton(BazelTarget)",
+        "    if 'unit' in manifest_data:",
+        "        target_node = dag_storage.DagNode(unit_address=manifest_data['unit'], role_address=manifest_data.get('role', ''))",
+        "    else:",
+        "        node_label = manifest_data.get('label')",
+        "        target_node = node_util.normalize_target(node_label)",
+        "    storage = get_singleton(dag_storage.DagStorage)",
+        "    try:",
+        "        storage.clear_messages(target_node)",
+        '        print(f"Cleared messages for {target_node}")',
+        "    except KeyboardInterrupt:",
+        '        print("Interrupted.", file=sys.stderr)',
+        "        sys.exit(130)",
+        "    sys.exit(0)",
+        "",
+        'if __name__ == "__main__":',
+        "    main()",
+        "",
+    ]
+    ctx.actions.write(
+        output = _wrapper_py,
+        content = "\n".join(_lines),
+        is_executable = True,
+    )
+
+    _manifest_depsets = []
+    if OutputGroupInfo in ctx.attr.node:
+        _manifest_depsets.append(ctx.attr.node[OutputGroupInfo].manifests)
+    _runfiles = ctx.runfiles(
+        files = [
+            _wrapper_py,
+            _manifest,
+        ],
+        transitive_files = depset(
+            transitive = _manifest_depsets + [
+                ctx.attr.node[DefaultInfo].transitive_sources if hasattr(ctx.attr.node[DefaultInfo], "transitive_sources") else depset([]),
+            ],
+        ),
+    ).merge(ctx.runfiles(transitive_files = ctx.attr._dag_runner[PyInfo].transitive_sources))
+
+    return [
+        DefaultInfo(
+            executable = _wrapper_py,
+            runfiles = _runfiles,
+        ),
+    ]
+
+_update_ai_node_mark_clean_rule = rule(
+    implementation = _update_ai_node_mark_clean_impl,
     executable = True,
     attrs = {
         "node": attr.label(
@@ -1044,12 +1200,12 @@ def _update_ai_node_change_impl(ctx):
         "try:",
         "    from update_with_ai.parts.systems.lib import bazel_openai_loop_asm",
         "    from update_with_ai.parts.loop.lib.loop import Loop",
-        "    from update_with_ai.parts.dag.lib.dag_storage import ChangeMessage, DagNode",
+        "    from update_with_ai.parts.dag.lib.dag_storage import ChangeMessage, DagNode, DagStorage",
         "    from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget",
         "except ImportError:",
         "    from lib import bazel_openai_loop_asm",
         "    from lib.loop import Loop",
-        "    from lib.dag_storage import ChangeMessage, DagNode",
+        "    from lib.dag_storage import ChangeMessage, DagNode, DagStorage",
         "    from lib.bazel_target import BazelTarget",
         "",
         "def main():",
@@ -1093,10 +1249,13 @@ def _update_ai_node_change_impl(ctx):
         "        origin_node = DagNode(unit_address=manifest_data['unit'], role_address=manifest_data.get('role', ''))",
         "    else:",
         "        node_label = manifest_data.get('label')",
-        "        origin_node = node_util.normalize(node_label)",
+        "        origin_node = node_util.normalize_target(node_label)",
         "    runner = get_singleton(Loop)",
+        "    storage = get_singleton(DagStorage)",
         "    try:",
         "        runner.broadcast_node_change(origin_node, ChangeMessage(content=change))",
+        "        storage.clear_dependents(origin_node)",
+        '        print(f"Broadcasted change from {origin_node} and cleared dependents")',
         "    except KeyboardInterrupt:",
         '        print("Interrupted.", file=sys.stderr)',
         "        sys.exit(130)",
@@ -1222,9 +1381,8 @@ def _update_ai_node_prompt_impl(ctx):
         "        node = DagNode(unit_address=manifest_data['unit'], role_address=manifest_data.get('role', ''))",
         "        loader = get_singleton(BazelManifestLoader)",
         "        storage = get_singleton(DagStorage)",
-        "        m = loader.get_manifest(node)",
-        "        if m:",
-        "            loader.load_manifest(m, storage)",
+        "        loader.load_manifest(node)",
+        "        if hasattr(storage, 'get_node_definition'):",
         "            defn = storage.get_node_definition(node)",
         "            if defn:",
         "                prompt = str(defn.task_prompt)",
@@ -1283,7 +1441,7 @@ _update_ai_node_prompt_rule = rule(
         "_canonical_roles": attr.label_list(
             default = [
                 Label("//update_python_with_ai:high"),
-                Label("//update_python_with_ai:requirements"),
+                Label("//update_python_with_ai:planning"),
                 Label("//update_python_with_ai:grounding"),
                 Label("//update_python_with_ai:low"),
                 Label("//update_python_with_ai:lib"),
@@ -1414,12 +1572,18 @@ def _define_role_impl(ctx):
         "allows_step_mode": ctx.attr.allows_step_mode,
         "role_deps": ctx.attr.role_deps,
         "silent_role_deps": ctx.attr.silent_role_deps,
+        "stub_role_deps": ctx.attr.stub_role_deps,
         "star_role_deps": ctx.attr.star_role_deps,
         "silent_cross_role_deps": ctx.attr.silent_cross_role_deps,
         "feedback_role_deps": ctx.attr.feedback_role_deps,
         "active_component_types": ctx.attr.active_component_types,
         "verify_template": ctx.attr.verify_template,
         "verification_success_message": ctx.attr.verification_success_message,
+        "persona": ctx.attr.persona,
+        "workspace_files": ctx.attr.workspace_files,
+        "tools": ctx.attr.tools,
+        "node_deps": ctx.attr.node_deps,
+        "derive_build_template": ctx.attr.derive_build_template,
     }
     ctx.actions.write(
         output = manifest,
@@ -1458,6 +1622,10 @@ _define_role_rule = rule(
             default = True,
             doc = "Whether step mode is permitted for this role",
         ),
+        "node_deps": attr.string_list(
+            default = [],
+            doc = "Fixed node target labels included as direct non-star dependencies for every node with this role",
+        ),
         "role_deps": attr.string_list(
             default = [],
             doc = "Intra-unit role dependencies",
@@ -1465,6 +1633,10 @@ _define_role_rule = rule(
         "silent_role_deps": attr.string_list(
             default = [],
             doc = "Intra-unit silent role dependencies",
+        ),
+        "stub_role_deps": attr.string_list(
+            default = [],
+            doc = "Intra-unit read-only stub role dependencies",
         ),
         "star_role_deps": attr.string_list(
             default = [],
@@ -1489,6 +1661,22 @@ _define_role_rule = rule(
         "verification_success_message": attr.string(
             default = "",
             doc = "Verification success message template",
+        ),
+        "persona": attr.string(
+            default = "",
+            doc = "Human-readable persona for role workspace instructions",
+        ),
+        "workspace_files": attr.string_list(
+            default = [],
+            doc = "Repository-relative files or directories to include in the role workspace",
+        ),
+        "tools": attr.string_list(
+            default = [],
+            doc = "Repository-relative tool files or linters required by this role for isolated workspace provisioning (subagentless execution); files the agent reads in the agent loop must be declared as node_deps instead",
+        ),
+        "derive_build_template": attr.string(
+            default = "",
+            doc = "Command template executed before workspace provisioning/sync to derive child BUILD.bazel from parent BUILD.bazel (parameterized with {unit_dir})",
         ),
     },
 )
@@ -1555,15 +1743,56 @@ def define_role(
         prompt_template = "",
         guide = None,
         allows_step_mode = True,
+        node_deps = [],
         role_deps = [],
         silent_role_deps = [],
+        stub_role_deps = [],
         star_role_deps = [],
         silent_cross_role_deps = [],
         feedback_role_deps = [],
         active_component_types = ["implementation", "assembly", "interface", "external"],
         verify_template = "",
         verification_success_message = "",
+        persona = "",
+        workspace_files = [],
+        tools = [],
+        derive_build_template = "",
         visibility = None):
+    """Defines a role target encapsulating role metadata, dependency relationships, and templates.
+
+    Args:
+        name: Role name (e.g. 'low', 'grounding', 'lib', 'test').
+        src_pattern: Source file pattern parameterized with {unit_dir} and {unit_name}.
+        template: Optional template file label initializing missing target source files.
+        prompt_template: Task prompt template parameterized with unit metadata.
+        guide: Optional guide node label whose declared source is the role guide.
+        allows_step_mode: Whether step mode is permitted for this role.
+        node_deps: Fixed node target labels included as direct non-star dependencies
+            for every node instantiated for this role (e.g. specification nodes like
+            //update_python_with_ai/support/lib:framework_spec). These are cleaned before
+            run and their declared src output is made readable to the agent in the session.
+        role_deps: Intra-unit role dependencies within the same unit (cleaned before run
+            and readable).
+        silent_role_deps: Intra-unit silent role dependencies (not readable by agent).
+        stub_role_deps: Intra-unit read-only stub role dependencies.
+        star_role_deps: Cross-unit star role dependencies expanded across transitive unit deps.
+        silent_cross_role_deps: Cross-unit silent role dependencies.
+        feedback_role_deps: Intra-unit feedback role dependencies receiving blame.
+        active_component_types: Component classifications for which this role is active.
+        verify_template: Verification shell command template executed by verify().
+        verification_success_message: Success message presented when verify() passes.
+        persona: Human-readable persona describing the agent's role responsibilities.
+        workspace_files: Repository-relative files or directories copied to isolated workspaces.
+        tools: Repository-relative tool files or linters copied to isolated workspaces
+            for subagentless execution (e.g. cleanroom-sync); files
+            that the agent needs to inspect during an agent loop must be declared as
+            node_deps instead.
+        derive_build_template: Pre-sync command template deriving child BUILD.bazel.
+        visibility: Optional target visibility list.
+
+    Returns:
+        The apparent label string of the defined role (':' + name).
+    """
     _rule_kwargs = {}
     if visibility != None:
         _rule_kwargs["visibility"] = visibility
@@ -1574,14 +1803,20 @@ def define_role(
         prompt_template = prompt_template,
         guide = guide,
         allows_step_mode = allows_step_mode,
+        node_deps = node_deps,
         role_deps = role_deps,
         silent_role_deps = silent_role_deps,
+        stub_role_deps = stub_role_deps,
         star_role_deps = star_role_deps,
         silent_cross_role_deps = silent_cross_role_deps,
         feedback_role_deps = feedback_role_deps,
         active_component_types = active_component_types,
         verify_template = verify_template,
         verification_success_message = verification_success_message,
+        persona = persona,
+        workspace_files = workspace_files,
+        tools = tools,
+        derive_build_template = derive_build_template,
         **_rule_kwargs
     )
     return ":" + name
@@ -1631,9 +1866,21 @@ def define_node(name, unit, role, src = "", config = None, visibility = None):
         node = ":{}".format(name),
         **_rule_kwargs
     )
+    _mark_dirty_target = name + "_mark_dirty"
+    _update_ai_node_dirty_rule(
+        name = _mark_dirty_target,
+        node = ":{}".format(name),
+        **_rule_kwargs
+    )
     _change_target = name + "_change"
     _update_ai_node_change_rule(
         name = _change_target,
+        node = ":{}".format(name),
+        **_rule_kwargs
+    )
+    _mark_clean_target = name + "_mark_clean"
+    _update_ai_node_mark_clean_rule(
+        name = _mark_clean_target,
         node = ":{}".format(name),
         **_rule_kwargs
     )
@@ -1644,3 +1891,278 @@ def define_node(name, unit, role, src = "", config = None, visibility = None):
         **_rule_kwargs
     )
     return ":" + name
+
+# ============================================================================
+# Rule & Macro: batch_mark_clean
+# ============================================================================
+
+def _update_ai_batch_mark_clean_impl(ctx):
+    """Generates a Python executable that batch marks matching nodes clean and resets reverse dependencies."""
+    _wrapper_py = ctx.actions.declare_file(ctx.label.name + ".py")
+    _default_role = ctx.attr.role
+    _default_scope = ctx.attr.scope_dir if ctx.attr.scope_dir else ctx.label.package
+
+    _lines = [
+        "#!/usr/bin/env python3",
+        "import argparse",
+        "import fnmatch",
+        "import os",
+        "import re",
+        "import subprocess",
+        "import sys",
+        "import xml.etree.ElementTree as ET",
+        "",
+        'DEFAULT_ROLE = "{}"'.format(_default_role),
+        'DEFAULT_SCOPE = "{}"'.format(_default_scope),
+        "",
+        "def load_package_data(path):",
+        "    if not os.path.isfile(path):",
+        "        return {}",
+        '    with open(path, "r", encoding="utf-8") as f:',
+        "        content = f.read()",
+        "    nodes = {}",
+        "    current_node_id = None",
+        "    current_messages = []",
+        "    current_rev_deps = []",
+        "    for line in content.splitlines():",
+        "        stripped = line.strip()",
+        '        if stripped.startswith("node_id:"):',
+        '            current_node_id = stripped.split(":", 1)[1].strip().strip(\'"\')',
+        "            current_messages = []",
+        "            current_rev_deps = []",
+        "            nodes[current_node_id] = {",
+        '                "messages": current_messages,',
+        '                "reverse_dependencies": current_rev_deps,',
+        "            }",
+        '        elif stripped.startswith("reverse_dependencies:"):',
+        '            rev_dep = stripped.split(":", 1)[1].strip().strip(\'"\')',
+        "            current_rev_deps.append(rev_dep)",
+        '        elif stripped.startswith("kind:"):',
+        '            kind = stripped.split(":", 1)[1].strip().strip(\'"\')',
+        '            current_messages.append({"kind": kind, "content": ""})',
+        '        elif stripped.startswith("content:") and current_messages:',
+        '            content_val = stripped.split(":", 1)[1].strip().strip(\'"\')',
+        '            current_messages[-1]["content"] = content_val',
+        "    return nodes",
+        "",
+        "def save_package_data(path, node_records):",
+        "    lines = []",
+        "    for node_id in sorted(node_records.keys()):",
+        "        record = node_records[node_id]",
+        '        lines.append("node {")',
+        '        lines.append(\'  node_id: "\' + node_id + \'"\')',
+        '        for msg in record.get("messages", []):',
+        '            lines.append("  messages {")',
+        '            lines.append(\'    kind: "\' + msg.get("kind", "change") + \'"\')',
+        '            lines.append(\'    content: "\' + msg.get("content", "") + \'"\')',
+        '            lines.append("  }")',
+        '        for rev_dep in sorted(record.get("reverse_dependencies", [])):',
+        '            lines.append(\'  reverse_dependencies: "\' + rev_dep + \'"\')',
+        '        lines.append("}")',
+        '    content = "\\n".join(lines) + "\\n"',
+        "    os.makedirs(os.path.dirname(path), exist_ok=True)",
+        '    with open(path, "w", encoding="utf-8") as f:',
+        "        f.write(content)",
+        "",
+        "def matches_role(node_id, role):",
+        "    if not role:",
+        "        return True",
+        '    role_norm = role.split(":")[-1].strip("/")',
+        '    if "#" in node_id:',
+        '        node_role = node_id.split("#", 1)[1]',
+        '        node_role_norm = node_role.split(":")[-1].strip("/")',
+        "        return node_role_norm == role_norm",
+        "    return False",
+        "",
+        "def matches_pattern(node_id, pattern):",
+        "    if not pattern:",
+        "        return True",
+        "    pattern = pattern.strip()",
+        "    if not pattern:",
+        "        return True",
+        '    if any(c in pattern for c in ("*", "?", "[", "]")):',
+        "        return fnmatch.fnmatchcase(node_id, pattern) or fnmatch.fnmatchcase(node_id, f'*{pattern}*')",
+        "    return pattern in node_id",
+        "",
+        "def discover_defined_nodes(workspace_root, scope):",
+        "    nodes = set()",
+        '    query_target = f"//{scope}/..." if scope else "//..."',
+        "    try:",
+        "        proc = subprocess.run(",
+        '            ["bazel", "query", f\'kind("_define_node_rule", {query_target})\', "--output=xml"],',
+        "            cwd=workspace_root,",
+        "            capture_output=True,",
+        "            text=True,",
+        "            timeout=30,",
+        "        )",
+        "        if proc.returncode == 0 and proc.stdout:",
+        "            root = ET.fromstring(proc.stdout)",
+        '            for rule in root.findall(\'.//rule[@class="_define_node_rule"]\'):',
+        '                unit = rule.find(\'label[@name="unit"]\')',
+        '                role = rule.find(\'label[@name="role"]\')',
+        "                if unit is not None and role is not None:",
+        '                    u_val = unit.get("value", "")',
+        '                    r_val = role.get("value", "")',
+        "                    if u_val and r_val:",
+        '                        nodes.add(f"{u_val}#{r_val}")',
+        "    except Exception:",
+        "        pass",
+        "",
+        "    if not nodes:",
+        '        roles = ["high", "planning", "low", "grounding", "lib", "test", "qa", "coverage"]',
+        "        target_dir = os.path.join(workspace_root, scope) if scope else workspace_root",
+        "        if os.path.isdir(target_dir):",
+        "            for r, dirs, files in os.walk(target_dir):",
+        '                if "BUILD.bazel" in files or "BUILD" in files:',
+        '                    build_file = "BUILD.bazel" if "BUILD.bazel" in files else "BUILD"',
+        "                    try:",
+        '                        with open(os.path.join(r, build_file), "r", encoding="utf-8") as f:',
+        "                            content = f.read()",
+        '                        rel_pkg = os.path.relpath(r, workspace_root).replace(os.sep, "/")',
+        '                        found = re.findall(r\'update_python_with_ai\\s*\\(\\s*name\\s*=\\s*["\\\']([^"\\\']+)["\\\']\', content)',
+        "                        for u in found:",
+        "                            for role in roles:",
+        '                                nodes.add(f"//{rel_pkg}:{u}#//update_python_with_ai:{role}")',
+        "                    except Exception:",
+        "                        pass",
+        "    return sorted(nodes)",
+        "",
+        "def main():",
+        '    parser = argparse.ArgumentParser(description="Batch mark nodes clean and reset reverse dependencies.")',
+        '    parser.add_argument("pattern", nargs="?", default="", help="Optional substring or glob pattern to filter node IDs (e.g. \'sandbox\', \'*sandbox*\')")',
+        '    parser.add_argument("-f", "--filter", dest="filter_flag", default="", help="Filter pattern (alternative to positional argument)")',
+        '    parser.add_argument("--role", default=DEFAULT_ROLE, help="Role name to filter (default: %(default)s)")',
+        '    parser.add_argument("--scope", default=DEFAULT_SCOPE, help="Workspace-relative directory to scan (default: %(default)s)")',
+        '    parser.add_argument("--dry-run", action="store_true", help="Print matching nodes without modifying files")',
+        '    parser.add_argument("-v", "--verbose", action="store_true", help="Print all matching nodes including already clean ones")',
+        "    args = parser.parse_args()",
+        "",
+        '    workspace_root = os.environ.get("BUILD_WORKSPACE_DIRECTORY", "") or os.getcwd()',
+        '    if "BUILD_WORKSPACE_DIRECTORY" in os.environ and os.path.isdir(os.environ["BUILD_WORKSPACE_DIRECTORY"]):',
+        '        os.chdir(os.environ["BUILD_WORKSPACE_DIRECTORY"])',
+        "",
+        "    pattern = args.filter_flag or args.pattern",
+        "    role = args.role",
+        "    scope = args.scope",
+        "    target_dir = os.path.join(workspace_root, scope) if scope else workspace_root",
+        "    if not os.path.isdir(target_dir):",
+        '        print(f"Error: Scope directory does not exist: {target_dir}", file=sys.stderr)',
+        "        sys.exit(1)",
+        "",
+        "    defined_nodes = discover_defined_nodes(workspace_root, scope)",
+        "",
+        "    textproto_files = set()",
+        "    for root_dir, _dirs, files in os.walk(target_dir):",
+        '        if ".update_with_ai.textproto" in files:',
+        '            textproto_files.add(os.path.join(root_dir, ".update_with_ai.textproto"))',
+        "",
+        "    node_to_pkg = {}",
+        "    for node_id in defined_nodes:",
+        '        unit = node_id.split("#")[0]',
+        '        pkg = unit.split(":")[0].lstrip("/")',
+        "        node_to_pkg[node_id] = pkg",
+        '        tp = os.path.join(workspace_root, pkg, ".update_with_ai.textproto")',
+        "        if os.path.isfile(tp):",
+        "            textproto_files.add(tp)",
+        "",
+        "    pkg_data = {}",
+        "    for tp in textproto_files:",
+        "        pkg_data[tp] = load_package_data(tp)",
+        "",
+        "    all_candidate_nodes = set(defined_nodes)",
+        "    for tp, data in pkg_data.items():",
+        "        for nid in data.keys():",
+        "            all_candidate_nodes.add(nid)",
+        "",
+        "    total_matched = []",
+        "    total_reset = []",
+        "    total_already_clean = []",
+        "    modified_tps = set()",
+        "",
+        "    for node_id in sorted(all_candidate_nodes):",
+        "        if matches_role(node_id, role) and matches_pattern(node_id, pattern):",
+        "            total_matched.append(node_id)",
+        "            pkg = node_to_pkg.get(node_id)",
+        "            if not pkg:",
+        '                unit = node_id.split("#")[0]',
+        '                pkg = unit.split(":")[0].lstrip("/")',
+        '            tp = os.path.join(workspace_root, pkg, ".update_with_ai.textproto")',
+        "            data = pkg_data.get(tp, {})",
+        "            record = data.get(node_id)",
+        '            had_state = bool(record and (record.get("messages") or record.get("reverse_dependencies")))',
+        "            if had_state:",
+        '                record["messages"] = []',
+        '                record["reverse_dependencies"] = []',
+        "                total_reset.append(node_id)",
+        "                modified_tps.add(tp)",
+        "            else:",
+        "                total_already_clean.append(node_id)",
+        "",
+        "    if not args.dry_run:",
+        "        for tp in modified_tps:",
+        "            save_package_data(tp, pkg_data[tp])",
+        "",
+        '    role_display = role if role else "all roles"',
+        '    pattern_display = f", pattern=\'{pattern}\'" if pattern else ""',
+        '    mode_display = " [DRY RUN]" if args.dry_run else ""',
+        '    print(f"Batch mark clean{mode_display} for role=\'{role_display}\'{pattern_display} in scope=\'{scope}\':")',
+        '    print(f"  Discovered {len(defined_nodes)} defined node(s).")',
+        '    print(f"  Matched {len(total_matched)} node(s): {len(total_reset)} reset, {len(total_already_clean)} already clean.")',
+        "    for nid in total_reset:",
+        '        print(f"    [RESET] {nid}")',
+        "    if args.verbose or len(total_matched) <= 30:",
+        "        for nid in total_already_clean:",
+        '            print(f"    [ALREADY_CLEAN] {nid}")',
+        "    elif total_already_clean:",
+        '        print(f"  {len(total_already_clean)} node(s) were already clean (use -v/--verbose to list all).")',
+        "",
+        'if __name__ == "__main__":',
+        "    main()",
+        "",
+    ]
+    ctx.actions.write(
+        output = _wrapper_py,
+        content = "\n".join(_lines),
+        is_executable = True,
+    )
+    return [
+        DefaultInfo(
+            executable = _wrapper_py,
+            runfiles = ctx.runfiles(files = [_wrapper_py]),
+        ),
+    ]
+
+_update_ai_batch_mark_clean_rule = rule(
+    implementation = _update_ai_batch_mark_clean_impl,
+    executable = True,
+    attrs = {
+        "role": attr.string(
+            default = "",
+            doc = "Optional role name to filter (e.g. 'low', 'high', 'qa'). Empty matches all roles.",
+        ),
+        "scope_dir": attr.string(
+            default = "",
+            doc = "Optional repository-relative directory to scan for .update_with_ai.textproto files. Defaults to target package.",
+        ),
+    },
+)
+
+def batch_mark_clean(name, role = "", scope_dir = "", visibility = None):
+    """Generates an executable target that batch marks nodes clean and resets reverse dependencies.
+
+    Args:
+        name: Name of the target.
+        role: Role name to filter (e.g. 'low', 'high', 'qa'). Empty matches all roles.
+        scope_dir: Workspace-relative path to scan for .update_with_ai.textproto. Defaults to package dir.
+        visibility: Bazel visibility list.
+    """
+    _rule_kwargs = {}
+    if visibility != None:
+        _rule_kwargs["visibility"] = visibility
+    _update_ai_batch_mark_clean_rule(
+        name = name,
+        role = role,
+        scope_dir = scope_dir,
+        **_rule_kwargs
+    )
+

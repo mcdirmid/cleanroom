@@ -1,0 +1,35 @@
+from __future__ import annotations
+from typing import Optional
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton, system
+from staging.parts.agent.lib.agent_session import agent_session
+from agent_session import AgentSessionTier
+import sandbox
+
+# Requirements specified in sandbox_impl.pyi
+
+class Sandbox(sandbox.Sandbox, InTier[AgentSessionTier], Singleton):
+    tier = agent_session
+
+    def __init__(self) -> None:
+        # TODO___init___body
+        pass
+
+    @property
+    def has_modifications(self) -> bool:
+        # TODO_has_modifications_body
+        raise NotImplementedError
+
+    def materialize_templates(self) -> None:
+        # TODO_materialize_templates_body
+        raise NotImplementedError
+
+
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        Sandbox,
+        keys=[Sandbox, sandbox.Sandbox, InTier[AgentSessionTier]],
+        tier=agent_session,
+    )
+
+_initialize_ = __initialize__

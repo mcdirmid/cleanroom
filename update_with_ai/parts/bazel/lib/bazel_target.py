@@ -1,16 +1,20 @@
 # Requirements specified in bazel_target.pyi
-from typing import Protocol
 from dataclasses import dataclass
-from update_with_ai.parts.dag.lib import dag_storage
+from typing import NewType, Protocol
 from update_with_ai.parts.core.lib import file_paths
+from update_with_ai.parts.dag.lib import dag_storage
+
+TargetIdentifier = NewType("TargetIdentifier", str)
 
 
-@dataclass(frozen=True, init=False)
+@dataclass(frozen=True)
 class NodeDirectory(file_paths.WorkspacePath):
     pass
 
 
 class BazelTarget(Protocol):
-    def normalize(self, raw_label: str) -> dag_storage.DagNode: ...
+    def normalize_target(
+        self, target_identifier: TargetIdentifier
+    ) -> dag_storage.DagNode: ...
 
-    def extract_directory(self, node: dag_storage.DagNode) -> NodeDirectory: ...
+    def extract_node_dir(self, node: dag_storage.DagNode) -> NodeDirectory: ...

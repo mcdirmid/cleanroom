@@ -16,7 +16,7 @@ A *task prompt* is an instruction describing the work required to clean a node.
 
 A *node definition* is metadata describing task prompts for a node.
 
-The *agent storage* is a system service that is a dag storage backed by workspace build target manifests.
+A system's *agent storage* is a dag storage backed by workspace build target manifests.
 
 The agent storage:
 

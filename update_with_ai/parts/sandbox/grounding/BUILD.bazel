@@ -1,0 +1,238 @@
+# update_with_ai/parts/sandbox/grounding/BUILD.bazel
+
+load("//bin:pyright_library.bzl", "pyright_library")
+load("//update_python_with_ai/support/lib:build_derived_test.bzl", "build_derived_test")
+
+package(default_visibility = ["//visibility:public"])
+
+pyright_library(
+    name = "sandbox",
+    srcs = ["sandbox.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_config",
+        ":tool_provider",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "sandbox_asm",
+    srcs = ["sandbox_asm.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        ":sandbox_file_editor_impl",
+        ":sandbox_file_reader_impl",
+        ":sandbox_guide_delivery_impl",
+        ":sandbox_impl",
+        ":sandbox_run_control_impl",
+        ":template_format_impl",
+        ":tool_provider_impl",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "sandbox_file_editor",
+    srcs = ["sandbox_file_editor.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_file_alias",
+        ":tool_provider",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "sandbox_file_editor_impl",
+    srcs = ["sandbox_file_editor_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_config",
+        "//update_with_ai/parts/agent/grounding:agent_file_alias",
+        "//update_with_ai/parts/agent/grounding:agent_node_config",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+        "//update_with_ai/parts/core/grounding:file_paths",
+        "//update_with_ai/parts/core/grounding:filesystem_ext",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+        ":sandbox_file_editor",
+        ":template_format",
+        ":tool_provider",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "sandbox_file_reader",
+    srcs = ["sandbox_file_reader.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_file_alias",
+        ":tool_provider",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "sandbox_file_reader_impl",
+    srcs = ["sandbox_file_reader_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_config",
+        "//update_with_ai/parts/agent/grounding:agent_file_alias",
+        "//update_with_ai/parts/agent/grounding:agent_node_config",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+        "//update_with_ai/parts/core/grounding:file_paths",
+        "//update_with_ai/parts/core/grounding:filesystem_ext",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+        ":sandbox_file_editor",
+        ":sandbox_file_reader",
+        ":template_format",
+        ":tool_provider",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "sandbox_guide_delivery",
+    srcs = ["sandbox_guide_delivery.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_file_alias",
+        "//update_with_ai/parts/agent/grounding:agent_node_config",
+        ":tool_provider",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "sandbox_guide_delivery_impl",
+    srcs = ["sandbox_guide_delivery_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_file_alias",
+        "//update_with_ai/parts/agent/grounding:agent_node_config",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+        ":sandbox_guide_delivery",
+        ":tool_provider",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "sandbox_impl",
+    srcs = ["sandbox_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_config",
+        "//update_with_ai/parts/agent/grounding:agent_node_config",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+        ":sandbox",
+        ":sandbox_file_editor",
+        ":sandbox_file_reader",
+        ":sandbox_guide_delivery",
+        ":sandbox_run_control",
+        ":tool_provider",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "sandbox_run_control",
+    srcs = ["sandbox_run_control.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_file_alias",
+        "//update_with_ai/parts/agent/grounding:agent_node_config",
+        "//update_with_ai/parts/dag/grounding:dag_config",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+        ":sandbox_file_editor",
+        ":sandbox_guide_delivery",
+        ":tool_provider",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "sandbox_run_control_impl",
+    srcs = ["sandbox_run_control_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_config",
+        "//update_with_ai/parts/agent/grounding:agent_file_alias",
+        "//update_with_ai/parts/agent/grounding:agent_node_config",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+        "//update_with_ai/parts/dag/grounding:dag_config",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+        "//update_with_ai/parts/dag/grounding:dag_subgraph",
+        ":sandbox",
+        ":sandbox_file_editor",
+        ":sandbox_guide_delivery",
+        ":sandbox_run_control",
+        ":template_format",
+        ":tool_provider",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "template_format",
+    srcs = ["template_format.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "template_format_impl",
+    srcs = ["template_format_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+        "//update_with_ai/parts/core/grounding:commonmark_ext",
+        ":template_format",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "tool_provider",
+    srcs = ["tool_provider.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "tool_provider_impl",
+    srcs = ["tool_provider_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+        ":tool_provider",
+    ],
+    imports = ["../../..", "."],
+)
+
+build_derived_test(
+    name = "targets_derived_test",
+)

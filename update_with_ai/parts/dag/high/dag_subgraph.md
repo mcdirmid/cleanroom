@@ -12,7 +12,7 @@ Coordinating multi-node agent workflows requires inspecting graph progress, iden
 
 ## Types and Behavior
 
-The *dag subgraph* is a system service that models an active execution subgraph rooted at a target node in dag storage.
+A system's *dag subgraph* models an active execution subgraph rooted at a target node in dag storage.
 
 The dag subgraph:
 

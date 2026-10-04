@@ -1,0 +1,43 @@
+from __future__ import annotations
+from typing import Optional, Sequence
+from support.lib.lifecycle import LifecycleRegistry, Singleton, get_default_registry, get_singleton, system
+from staging.parts.agent.lib.agent_session import agent_session
+from agent_session import AgentSessionTier
+import loop_conversation
+import tool_provider
+
+# Requirements specified in openai_conversation_impl.pyi
+
+class Conversation(loop_conversation.Conversation, InTier[AgentSessionTier], Singleton):
+    tier = agent_session
+
+    def __init__(self) -> None:
+        # TODO___init___body
+        pass
+
+    def initialize(self, initial_messages: Sequence[loop_conversation.ConversationMessage]) -> None:
+        # TODO_initialize_body
+        raise NotImplementedError
+
+    def append_message(self, message: loop_conversation.ConversationMessage) -> None:
+        # TODO_append_message_body
+        raise NotImplementedError
+
+    def append_tool_response(self, tool_response: tool_provider.ToolResponse, tool_call_id: loop_conversation.ToolCallId, tool_name: tool_provider.ToolName, tool_arguments: loop_conversation.SerializedArguments) -> None:
+        # TODO_append_tool_response_body
+        raise NotImplementedError
+
+    def get_model_request(self) -> loop_conversation.ModelRequest:
+        # TODO_get_model_request_body
+        raise NotImplementedError
+
+
+def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:
+    reg = get_default_registry() if registry is None else registry
+    reg.register_singleton(
+        Conversation,
+        keys=[Conversation, loop_conversation.Conversation, InTier[AgentSessionTier]],
+        tier=agent_session,
+    )
+
+_initialize_ = __initialize__

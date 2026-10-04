@@ -1,7 +1,7 @@
 # bazel_asm assembly component
 
 assembles: bazel_manifest_loader_impl, bazel_node_config_impl, bazel_storage_impl, bazel_target_impl, file_paths_impl
-imports: agent_config, bazel_target_labels_ext, filesystem_ext, json_manifest_ext, tool_provider, update_with_ai_proto_ext
+imports: agent_config, bazel_manifest_ext, bazel_target_labels_ext, filesystem_ext, tool_provider, update_with_ai_proto_ext
 implements: agent_file_alias, agent_node_config, agent_storage, bazel_manifest_loader, bazel_target, dag_storage, file_paths
 
 ## Purpose
@@ -10,7 +10,7 @@ The bazel_asm assembly component aggregates workspace manifest loading, dependen
 
 Building an autonomous multi-agent development environment requires integrating build graph parsing, persistent message delivery, topological target execution, and sanitized file alias configuration into a cohesive Bazel subsystem. Fragmented workspace configuration forces callers to orchestrate individual Bazel infrastructure components imperatively, introducing initialization order defects and incomplete workspace bindings. The bazel_asm assembly component unifies these implementations into a dedicated assembly, realizing workspace contracts while propagating unclosed service dependencies to the root program assembly.
 
-**Out of scope:** The bazel_asm assembly component does not parse command-line options, define remote provider communication protocols, manage host operating system processes, or assemble agent, DAG, and sandbox subsystems; these are handled by other components.
+**Out of scope:** The bazel_asm assembly component does not parse command-line options, define remote provider communication protocols, manage host operating system processes, or assemble other subsystems; these are handled by other components.
 
 ## Types and Behavior
 

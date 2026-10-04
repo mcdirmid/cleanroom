@@ -15,11 +15,15 @@ Agent guidance documents contain disparate front-matter, structural summaries, a
 
 When initialized for an agent session, the guide delivery obtains its guide parsed from configured guide file content. Parsing extracts the guide summary from content preceding the first section heading and under any heading titled `Summary`, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
 
-Passing verification satisfies prerequisite milestone criteria for step advancement. Advancing a step when verification passes:
+Passing verification satisfies prerequisite milestone criteria for step advancement.
+
+Advancing a step when verification passes:
 
 - Emits a response presenting the next step section content introduced by `Now check carefully:` alongside instructions to check carefully, make edits if the source file does not conform to any checklist item, and call advance() only when conforming, transitioning to that step section when further step sections remain.
 
-Failing verification preserves the current delivery position while communicating diagnostic feedback. Advancing a step when verification fails:
+Failing verification preserves the current delivery position while communicating diagnostic feedback.
+
+Advancing a step when verification fails:
 
 - Emits a response combining the initial primer content (or guide summary when an initial primer is omitted), any configured verification failure instructions, and failure diagnostics without activating a step section when no step section has been delivered yet.
 

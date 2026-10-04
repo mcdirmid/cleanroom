@@ -10,7 +10,7 @@ Interacting with remote language model endpoints requires explicit target model 
 
 ## Types and Behavior
 
-The *openai config* is a system service that provides connection coordinates and model parameters for language model requests.
+A system's *openai config* provides connection coordinates and model parameters for language model requests.
 
 The openai config provides:
 

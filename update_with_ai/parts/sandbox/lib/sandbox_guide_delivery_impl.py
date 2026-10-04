@@ -23,14 +23,14 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
         self._step_index: int = 0
 
     def initialize(self) -> None:
-        # Requirement: Initializing the guide delivery obtains its guide from the node config.
         cfg = get_singleton(agent_node_config.NodeConfig)
         self._guide = cfg.guide
         self._initial_primer = None
         self._step_index = 0
 
-    def set_initial_primer(self, primer: str) -> None:
-        # Requirement: Can record an initial primer.
+    def record_initial_primer(
+        self, primer: sandbox_guide_delivery.InitialPrimer
+    ) -> None:
         self._initial_primer = primer
 
     @property
@@ -39,13 +39,12 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
             try:
                 cfg = get_singleton(agent_node_config.NodeConfig)
                 self._guide = cfg.guide
-            except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):  # pragma: no cover (assumption: session singleton NodeConfig resolvable)
-                pass  # pragma: no cover
+            except (LifecycleResolutionError, KeyError, RuntimeError, ValueError):  # pragma: no cover (assumption: NodeConfig registered in AgentSessionTier)
+                pass
         return self._guide
 
     @property
     def has_steps_remaining(self) -> bool:
-        # Requirement: [GuideDelivery] Steps remaining indicates whether further step sections remain to be completed.
         g = self.guide
         if g is None:
             return False
@@ -54,7 +53,6 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
     def parse_guide(
         self, content: agent_file_alias.FileContent
     ) -> agent_node_config.NodeGuide:
-        # Requirement: Guide parsing extracts the summary from content preceding the first section heading and under any heading titled `Summary`, captures verification failure instructions when a section heading begins with `Verification failure`, and creates sequential step sections for subsequent level-two headings while excluding sections whose title begins with `Summary`, `Lint checks`, or `Verification failure`.
         raw = str(content)
         lines = raw.splitlines()
         summary_lines: List[str] = []
@@ -76,9 +74,11 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
                     elif not current_title.startswith("Lint checks"):
                         sections.append(
                             agent_node_config.StepSection(
-                                index=len(sections),
-                                title=current_title,
-                                content="\n".join(current_section_lines).strip(),
+                                index=agent_node_config.StepIndex(len(sections)),
+                                title=agent_node_config.StepTitle(current_title),
+                                content=agent_node_config.StepContent(
+                                    "\n".join(current_section_lines).strip()
+                                ),
                             )
                         )
                 current_title = line[3:].strip()
@@ -94,9 +94,11 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
             elif not current_title.startswith("Lint checks"):
                 sections.append(
                     agent_node_config.StepSection(
-                        index=len(sections),
-                        title=current_title,
-                        content="\n".join(current_section_lines).strip(),
+                        index=agent_node_config.StepIndex(len(sections)),
+                        title=agent_node_config.StepTitle(current_title),
+                        content=agent_node_config.StepContent(
+                            "\n".join(current_section_lines).strip()
+                        ),
                     )
                 )
 
@@ -104,21 +106,26 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
             summary_lines = current_section_lines
 
         vf_text = (
-            "\n".join(verification_failure_lines).strip()
+            agent_node_config.VerificationFailureInstructions(
+                "\n".join(verification_failure_lines).strip()
+            )
             if verification_failure_lines is not None
             else None
         )
 
         return agent_node_config.NodeGuide(
-            summary="\n".join(summary_lines).strip(),
+            summary=agent_node_config.GuideSummary(
+                "\n".join(summary_lines).strip()
+            ),
             sections=sections,
             verification_failure=vf_text,
         )
 
     def advance_step(
-        self, verification_passed: bool, failure_diagnostics: Optional[str] = None
+        self,
+        verification_passed: bool,
+        failure_diagnostics: agent_node_config.VerificationDiagnostic,
     ) -> Optional[tool_provider.ToolResponse]:
-        # Requirement: When no guide is configured or no step sections remain, the guide delivery indicates that no steps remain and advancing produces no response.
         g = self.guide
         if g is None or not self.has_steps_remaining:
             return None
@@ -131,20 +138,17 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
                     f"\n\n## Verification failure\n{g.verification_failure}"
                 )
             if self._step_index == 0:
-                # Requirement: Advancing a step when verification fails emits a response combining the initial primer content (or guide summary when an initial primer is omitted), any configured verification failure instructions, and failure diagnostics without activating a step section when no step section has been delivered yet.
                 base_text = self._initial_primer if self._initial_primer else g.summary
                 content = f"{base_text}{vf_block}\n\nVerification failed:\n{diag_text}".strip()
             else:
-                # Requirement: Advancing a step when verification fails emits a response combining the current step section content introduced by Now check carefully:, any configured verification failure instructions, and failure diagnostics without advancing to subsequent sections when a step section is currently active.
                 section = g.sections[self._step_index - 1]
                 content = f"## {section.title}\nNow check carefully:\n{section.content}{vf_block}\n\nVerification failed:\n{diag_text}".strip()
             return tool_provider.ToolResponse(
                 is_failed=True,
                 is_terminated=False,
-                content=content,
+                content=tool_provider.ToolResponseContent(content),
             )
 
-        # Requirement: Advancing a step when verification passes emits a response presenting the next step section content introduced by Now check carefully: alongside instructions to check carefully, make edits if the source file does not conform to any checklist item, and call advance() only when conforming, transitioning to that step section when further step sections remain.
         section = g.sections[self._step_index]
         self._step_index += 1
         content = (
@@ -154,7 +158,7 @@ class GuideDelivery(sandbox_guide_delivery.GuideDelivery, Singleton):
         return tool_provider.ToolResponse(
             is_failed=False,
             is_terminated=False,
-            content=content,
+            content=tool_provider.ToolResponseContent(content),
         )
 
 

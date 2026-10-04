@@ -47,7 +47,7 @@ class SandboxImplTest(unittest.TestCase):
             # Requirement: Materializing startup templates delegates to the edit manager to write template content to missing read-write files without overwriting existing files.
             # Requirement: Materializing startup templates populates missing read-write files without overwriting existing files.
             self.assertFalse(self.edit_mgr.templates_materialized)
-            sb.materialize_startup_templates()
+            sb.materialize_templates()
             self.assertTrue(self.edit_mgr.templates_materialized)
 
 

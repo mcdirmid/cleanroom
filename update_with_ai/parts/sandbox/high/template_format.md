@@ -14,7 +14,9 @@ Multi-stage agent pairing requires readable template files that survive Abstract
 
 An agent session's *template formatter* formats template documents using supplied parameter bindings.
 
-The template formatter can *format template* text using *parameters* to produce formatted text. When formatting template text, the template formatter:
+The template formatter can *format template* text using *parameters* to produce formatted text.
+
+When formatting template text, the template formatter:
 
 - Substitutes parameter placeholders matching bound keys with their corresponding string representations.
 

@@ -10,7 +10,9 @@ Specification files, developer guides, and starter templates depend on standard 
 
 ## Grounding Gaps Covered
 
-The commonmark_ext component provides external formatting knowledge and token mechanics for parsing and structuring CommonMark documents with embedded directives:
+The commonmark_ext component provides external formatting knowledge and token mechanics for parsing and structuring CommonMark documents with embedded directives.
+
+Grounding gaps covered include:
 
 - HTML comment block and inline handling: Identifies CommonMark HTML block type 2 comments and inline raw HTML comments delimited by opening and closing markers, ensuring directives are recognized as non-rendering metadata by standard Markdown parsers and viewers.
 

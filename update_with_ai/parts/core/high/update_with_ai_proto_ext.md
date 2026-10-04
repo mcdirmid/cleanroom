@@ -10,7 +10,9 @@ Package directory message persistence uses a structured text format mapping node
 
 ## Grounding Gaps Covered
 
-The update_with_ai_proto_ext component provides the external domain knowledge and protobuf serialization mechanics required to store and retrieve package-level message records:
+The update_with_ai_proto_ext component provides the external domain knowledge and protobuf serialization mechanics required to store and retrieve package-level message records.
+
+Grounding gaps covered include:
 
 - Protobuf text format schema: Defines the message record structure used in `.update_with_ai.textproto` files, organizing package data into node entries with node identifier strings, lists of pending messages carrying kind discriminators and payload text, and lists of reverse dependency target strings.
 

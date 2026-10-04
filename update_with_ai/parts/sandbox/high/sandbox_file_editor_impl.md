@@ -31,13 +31,17 @@ On successful execution, an editing tool writes the updated file content to the 
 
 The replace file content tool is named `replace_file_content`, accepting in sequence a file alias *path* parameter, an integer *start_line* parameter defining the starting line of the search window, an integer *end_line* parameter defining the ending line of the search window, a boolean *allow_multiple* parameter, a text *target_content* parameter specifying the exact text to replace within the search window, and a text *replacement_content* parameter.
 
-The target content parameter specifies a missing message function that produces diagnostic feedback based on supplied parameter names. Evaluating the missing message function:
+The target content parameter specifies a missing message function that produces diagnostic feedback based on supplied parameter names.
+
+Evaluating the missing message function:
 
 - Explains that start line and end line only restrict the search window when line range arguments are supplied.
 
 - Explains that target content must match existing text to append or insert content when line range arguments are omitted.
 
-Tool execution applies text replacements to designated read-write file content. Tool execution:
+Tool execution applies text replacements to designated read-write file content.
+
+Tool execution:
 
 - Implicitly binds the target file to the last file read or edited in the edit manager if that file is a read-write file, informs the agent with a warning in the response content that the path was implicitly bound while allowing the tool execution to proceed, or fails if no file has been read or edited or if the last read or edited file is not a read-write file, when the path parameter is omitted.
 
@@ -59,7 +63,9 @@ Tool execution applies text replacements to designated read-write file content. 
 
 - Writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file writes occurred on success.
 
-The edit manager executes can write to validate file write access. Executing can write:
+The edit manager executes can write to validate file write access.
+
+Executing can write:
 
 - Fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be written.
 

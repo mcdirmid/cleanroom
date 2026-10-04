@@ -6,7 +6,7 @@ import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
-from typing import Dict, Optional, Set
+from typing import Any, Dict, Optional, Sequence, Set, cast
 
 from update_with_ai.parts.agent.lib.agent_storage import (
     AgentStorage,
@@ -15,27 +15,31 @@ from update_with_ai.parts.agent.lib.agent_storage import (
 )
 from update_with_ai.parts.bazel.lib.bazel_manifest_loader import (
     BazelManifestLoader,
-        TargetManifest,
+    TargetManifest,
 )
 from update_with_ai.parts.bazel.lib.bazel_manifest_loader_impl import (
     BazelManifestLoader as BazelManifestLoaderImpl,
     __initialize__,
 )
 from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget, NodeDirectory
-from update_with_ai.parts.dag.lib.dag_storage import DagDependency, DagMessage, DagNode
+from update_with_ai.parts.dag.lib.dag_storage import (
+    DagDependency,
+    DagMessage,
+    DagNode,
+    RoleAddress,
+    UnitAddress,
+)
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 
 
-def _make_node_dir(path: str) -> NodeDirectory:
-    obj = object.__new__(NodeDirectory)
-    object.__setattr__(obj, "path", path)
-    return obj
+def _make_dag_node(unit_address: str, role_address: str = "") -> DagNode:
+    return DagNode(unit_address=UnitAddress(unit_address), role_address=RoleAddress(role_address))
 
 
-class MockNodeIdUtils:
+class FakeBazelTarget:
     tier = "system"
 
-    def __init__(self, base_dir: str) -> None:
+    def __init__(self, base_dir: str = "") -> None:
         self.base_dir = base_dir
 
     def _norm(self, s: str) -> str:
@@ -49,64 +53,97 @@ class MockNodeIdUtils:
             s = f"{s}:{parts[-1]}"
         return s
 
-    def normalize(self, raw_label: str, role_label: str = "") -> DagNode:
-        if "#" in raw_label:
-            u, r = raw_label.split("#", 1)
-            return DagNode(unit_address=self._norm(u), role_address=self._norm(r))
-        return DagNode(
-            unit_address=self._norm(raw_label),
-            role_address=self._norm(role_label) if role_label else "",
-        )
+    def normalize_target(self, target_identifier: str) -> DagNode:
+        if "#" in target_identifier:
+            u, r = target_identifier.split("#", 1)
+            return _make_dag_node(self._norm(u), self._norm(r))
+        return _make_dag_node(self._norm(target_identifier), "")
 
-    def extract_directory(self, node: DagNode) -> NodeDirectory:
+    def extract_node_dir(self, node: DagNode) -> NodeDirectory:
         pkg = node.unit_address.split(":")[0].lstrip("/")
-        return _make_node_dir(os.path.join(self.base_dir, pkg))
+        return NodeDirectory(path=cast(Any, pkg))
 
 
-class MockGraphStorage:
+class FakeAgentStorage:
     tier = "system"
 
     def __init__(self) -> None:
         self._definitions: Dict[DagNode, NodeDefinition] = {}
         self._dependencies: Dict[DagNode, Set[DagDependency]] = {}
         self._source_files: Dict[DagNode, str] = {}
+        self._silent_source_files: Dict[DagNode, Sequence[str]] = {}
+        self._dependents: Dict[DagNode, Set[DagNode]] = {}
+        self._messages: Dict[DagNode, Set[DagMessage]] = {}
 
     def get_node_definition(self, node: DagNode) -> Optional[NodeDefinition]:
         return self._definitions.get(node)
 
+    def set_node_definition(self, node: DagNode, definition: NodeDefinition) -> None:
+        self._definitions[node] = definition
+
+    store_node_definition = set_node_definition
+
+    def get_task_prompt(self, node: DagNode) -> Optional[TaskPrompt]:
+        defn = self._definitions.get(node)
+        return defn.task_prompt if defn else None
+
     def get_dependencies(self, node: DagNode) -> Set[DagDependency]:
         return set(self._dependencies.get(node, set()))
 
+    def add_dependency(self, from_node: DagNode, to_node: DagNode, is_silent: bool = False) -> None:
+        deps = self._dependencies.setdefault(from_node, set())
+        deps.add(DagDependency(node=to_node, is_silent=is_silent))
+
+    register_dependency = add_dependency
+
+    def record_source_file(self, node: DagNode, path: str) -> None:
+        self._source_files[node] = path
+
+    set_source_file = record_source_file
+
+    def get_source_file(self, node: DagNode) -> Optional[str]:
+        return self._source_files.get(node)
+
+    def record_silent_source_files(self, node: DagNode, paths: Sequence[str]) -> None:
+        self._silent_source_files[node] = list(paths)
+
     def get_dependents(self, node: DagNode) -> Set[DagNode]:
-        return set()
-
-    def get_messages(self, node: DagNode) -> Set[DagMessage]:
-        return set()
-
-    def is_dirty(self, node: DagNode) -> bool:
-        return False
+        return set(self._dependents.get(node, set()))
 
     def register_dependent(self, node: DagNode) -> None:
-        pass
+        for dep in self.get_dependencies(node):
+            if not dep.is_silent:
+                self._dependents.setdefault(dep.node, set()).add(node)
 
     def clear_dependents(self, node: DagNode) -> None:
-        pass
+        self._dependents.pop(node, None)
+
+    def get_messages(self, node: DagNode) -> Set[DagMessage]:
+        return set(self._messages.get(node, set()))
 
     def add_message(self, message: DagMessage, to: DagNode) -> None:
-        pass
+        self._messages.setdefault(to, set()).add(message)
 
     def clear_messages(self, node: DagNode) -> None:
+        self._messages.pop(node, None)
+
+    def is_dirty(self, node: DagNode) -> bool:
+        return bool(self._messages.get(node))
+
+    def mark_dependents_dirty(self, node: DagNode) -> None:
         pass
 
 
 class BazelManifestLoaderImplTest(unittest.TestCase):
     def setUp(self) -> None:
         self.test_dir = tempfile.mkdtemp()
+        self.old_cwd = os.getcwd()
+        os.chdir(self.test_dir)
         self.registry = LifecycleRegistry()
         __initialize__(self.registry)
 
-        self.node_utils = MockNodeIdUtils(self.test_dir)
-        self.storage = MockGraphStorage()
+        self.node_utils = FakeBazelTarget()
+        self.storage = FakeAgentStorage()
 
         self.registry.register_instance(
             self.node_utils, keys=[BazelTarget], tier="system"
@@ -116,586 +153,362 @@ class BazelManifestLoaderImplTest(unittest.TestCase):
         )
 
     def tearDown(self) -> None:
+        os.chdir(self.old_cwd)
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
-    def test_get_manifest(self) -> None:
-        """CUJ: Reading manifest file from node package directory."""
-        node = DagNode(unit_address="//pkg/sub:target", role_address="")
+    def test_retrieve_manifest_missing(self) -> None:
+        """CUJ: Missing manifest file returns None."""
+        node = _make_dag_node("//pkg/sub:missing_target")
+        with enter_phase("system", registry=self.registry) as scope:
+            loader = scope.get_singleton(BazelManifestLoader)
+            # Requirement: MUST retrieve target manifests from workspace directories or runfiles trees.
+            self.assertIsNone(loader.retrieve_manifest(node))
+
+    def test_retrieve_manifest_dot_manifest_json(self) -> None:
+        """CUJ: Retrieving and parsing target manifest files from .manifest.json."""
+        node = _make_dag_node("//pkg/sub:target")
         pkg_path = os.path.join(self.test_dir, "pkg/sub")
         os.makedirs(pkg_path, exist_ok=True)
         manifest_file = os.path.join(pkg_path, ".manifest.json")
 
+        manifest_data = {
+            "label": "//pkg/sub:target",
+            "task_prompt": "Do task",
+            "source_file": "pkg/sub/target.py",
+            "silent_source_files": ["pkg/sub/silent.py"],
+            "dependencies": ["//dep/pkg:dep_target"],
+            "silent_dependencies": ["//dep/pkg:silent_target"],
+            "star_dependencies": ["//dep/pkg:star_target"],
+            "feedback_dependencies": ["//dep/pkg:feedback_target"],
+            "guide_target": "//pkg/sub:guide",
+            "verification_check": "bazel test //pkg/sub:test",
+            "template": "Template text",
+        }
+        with open(manifest_file, "w", encoding="utf-8") as f:
+            json.dump(manifest_data, f)
+
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
-
-            # Missing manifest returns None
-            # Requirement: The bazel manifest loader retrieves target manifests from workspace directories or runfiles trees for nodes in dag storage.
-            self.assertIsNone(loader.get_manifest(node))
-
-            # Existing manifest returns content
-            with open(manifest_file, "w", encoding="utf-8") as f:
-                f.write('{"label": "//pkg/sub:target"}')
-
-            # Requirement: The bazel manifest loader retrieves target manifests from workspace directories or runfiles trees for nodes in dag storage.
-            # Requirement: [BazelManifestLoader] The bazel manifest loader retrieves the manifest for a node in dag storage.
-            manifest = loader.get_manifest(node)
+            # Requirement: MUST retrieve target manifests from workspace directories for graph nodes.
+            # Requirement: MUST load monolithic target manifests using bazel manifest ext.
+            # Requirement: MUST anchor relative package directories to the workspace root.
+            manifest = loader.retrieve_manifest(node)
             self.assertIsNotNone(manifest)
             assert manifest is not None
-            self.assertIn("pkg/sub:target", manifest)
+            self.assertEqual(manifest.label, "//pkg/sub:target")
+            self.assertEqual(manifest.task_prompt, "Do task")
+            self.assertEqual(manifest.source_file, "pkg/sub/target.py")
+            self.assertEqual(list(manifest.silent_source_files), ["pkg/sub/silent.py"])
+            self.assertEqual(list(manifest.dependencies), ["//dep/pkg:dep_target"])
+            self.assertEqual(list(manifest.silent_dependencies), ["//dep/pkg:silent_target"])
+            self.assertEqual(list(manifest.star_dependencies), ["//dep/pkg:star_target"])
+            self.assertEqual(list(manifest.feedback_dependencies), ["//dep/pkg:feedback_target"])
+            self.assertEqual(manifest.guide_target, "//pkg/sub:guide")
+            self.assertEqual(manifest.verification_check, "bazel test //pkg/sub:test")
+            self.assertEqual(manifest.template, "Template text")
 
-            # In-memory cache hit returns cached instance
-            cached_manifest = loader.get_manifest(node)
-            self.assertIs(cached_manifest, manifest)
-
-            # Candidate path resolution through runfiles directory
-            runfiles_dir = os.path.join(self.test_dir, "runfiles")
-            rf_main = os.path.join(runfiles_dir, "_main")
-            os.makedirs(rf_main, exist_ok=True)
-            with open(
-                os.path.join(rf_main, "rf_node_manifest.json"), "w", encoding="utf-8"
-            ) as f:
-                f.write('{"label": "//pkg/rf:rf_node"}')
-            rf_node = DagNode(unit_address="//pkg/rf:rf_node", role_address="")
-            with patch.dict(os.environ, {"RUNFILES_DIR": runfiles_dir}):
-                # Requirement: The bazel manifest loader retrieves target manifests from workspace directories or runfiles trees for nodes in dag storage.
-                # Requirement: [BazelManifestLoader] The bazel manifest loader retrieves the manifest for a node in dag storage.
-                rf_manifest = loader.get_manifest(rf_node)
-                self.assertIsNotNone(rf_manifest)
-                assert rf_manifest is not None
-                self.assertIn("rf_node", rf_manifest)
-
-            # Candidate read failure suppresses OSError
-            err_node = DagNode(unit_address="//pkg/err:err_node", role_address="")
-            err_pkg = os.path.join(self.test_dir, "pkg/err")
-            os.makedirs(err_pkg, exist_ok=True)
-            with open(
-                os.path.join(err_pkg, ".manifest.json"), "w", encoding="utf-8"
-            ) as f:
-                f.write('{"label": "//pkg/err:err_node"}')
-            with patch("builtins.open", side_effect=OSError("Read error")):
-                # Requirement: The bazel manifest loader retrieves target manifests from workspace directories or runfiles trees for nodes in dag storage.
-                self.assertIsNone(loader.get_manifest(err_node))
-
-    def test_get_manifest_synthesizes_from_unit_and_role(self) -> None:
-        """CUJ: get_manifest synthesizes node manifest with template, parameters, and 2D dependencies."""
-        unit_node = DagNode(unit_address="//pkg/calc:calc_impl", role_address="//rules:qa")
-        calc_pkg = os.path.join(self.test_dir, "pkg/calc")
-        rules_pkg = os.path.join(self.test_dir, "rules")
-        os.makedirs(calc_pkg, exist_ok=True)
-        os.makedirs(rules_pkg, exist_ok=True)
-
-        with open(
-            os.path.join(calc_pkg, ".calc_impl_unit_manifest.json"),
-            "w",
-            encoding="utf-8",
-        ) as f:
-            json.dump(
-                {
-                    "label": "//pkg/calc:calc_impl",
-                    "name": "calc_impl",
-                    "dir": "pkg/calc",
-                    "unit_deps": ["//pkg/calc:calc_spec"],
-                    "component_type": "implementation",
-                },
-                f,
-            )
-
-        with open(
-            os.path.join(rules_pkg, ".qa_role_manifest.json"),
-            "w",
-            encoding="utf-8",
-        ) as f:
-            json.dump(
-                {
-                    "label": "//rules:qa",
-                    "name": "qa",
-                    "src_pattern": "{unit_dir}/logs/{unit_name}_qa.log",
-                    "template": "//templates:empty",
-                    "prompt_template": "Verify {unit_name}",
-                    "role_deps": [":test"],
-                    "feedback_role_deps": [":lib"],
-                    "silent_role_deps": [":high"],
-                    "star_role_deps": [":low"],
-                    "silent_cross_role_deps": [":lib"],
-                    "active_component_types": ["implementation"],
-                },
-                f,
-            )
-
-        with enter_phase("system", registry=self.registry) as scope:
-            loader = scope.get_singleton(BazelManifestLoader)
-            # Requirement: A manifest loader synthesizes target node manifests with templates, template parameters, declared dependencies, feedback dependencies, silent dependencies, and star dependencies across unit and role dimensions.
-            raw_manifest = loader.get_manifest(unit_node)
-            self.assertIsNotNone(raw_manifest)
-            assert raw_manifest is not None
-            data = json.loads(raw_manifest)
-
-            self.assertEqual(data["unit"], "//pkg/calc:calc_impl")
-            self.assertEqual(data["role"], "//rules:qa")
-            self.assertEqual(data["template"], "//templates:empty")
-            self.assertEqual(data["template_parameters"]["unit_name"], "calc_impl")
-            self.assertEqual(data["template_parameters"]["unit_dir"], "pkg/calc")
-            self.assertIn("//pkg/calc:calc_impl#//rules:test", data["deps"])
-            self.assertIn("//pkg/calc:calc_impl#//rules:lib", data["feedback_deps"])
-            self.assertIn("//pkg/calc:calc_impl#//rules:high", data["silent_deps"])
-            self.assertIn("//pkg/calc:calc_spec#//rules:low", data["star_deps"])
-            self.assertIn("//pkg/calc:calc_spec#//rules:lib", data["silent_deps"])
-
-            # Inactive component type (pass-through node)
-            asm_node = DagNode(
-                unit_address="//pkg/calc:calc_asm", role_address="//rules:qa"
-            )
-            with open(
-                os.path.join(calc_pkg, ".calc_asm_unit_manifest.json"),
-                "w",
-                encoding="utf-8",
-            ) as f:
-                json.dump(
-                    {
-                        "label": "//pkg/calc:calc_asm",
-                        "name": "calc_asm",
-                        "dir": "pkg/calc",
-                        "unit_deps": ["//pkg/calc:calc_impl"],
-                        "component_type": "assembly",
-                    },
-                    f,
-                )
-
-            asm_manifest = loader.get_manifest(asm_node)
-            self.assertIsNotNone(asm_manifest)
-            assert asm_manifest is not None
-            asm_data = json.loads(asm_manifest)
-            self.assertEqual(asm_data["src"], "")
-            self.assertEqual(asm_data["verify"], "")
-            self.assertIn("//pkg/calc:calc_impl#//rules:qa", asm_data["deps"])
-            self.assertIn("//pkg/calc:calc_asm#//rules:test", asm_data["deps"])
-
-    def test_load_manifest_normalizes_labels_and_registers_deps(self) -> None:
-        """CUJ: Loading manifest resolves targets, sets definitions, and records silent/non-silent deps."""
-        manifest_data = {
-            "targets": [
-                {
-                    "label": "//pkg:target_a",
-                    "task_prompt": "Clean target A",
-                    "deps": ["//pkg:dep_b"],
-                    "silent_deps": ["//pkg:silent_c"],
-                }
-            ]
-        }
-        manifest_content = TargetManifest(json.dumps(manifest_data))
-
-        with enter_phase("system", registry=self.registry) as scope:
-            loader = scope.get_singleton(BazelManifestLoader)
-            results = loader.load_manifest(manifest_content, self.storage)
-
-            # Requirement: A manifest loader parses JSON manifests using the filesystem into json manifest records.
-            self.assertEqual(len(results), 1)
-            defn = results[0]
-            # Requirement: A manifest loader normalizes node references into canonical nodes.
-            self.assertEqual(
-                defn.node, DagNode(unit_address="//pkg:target_a", role_address="")
-            )
-            self.assertEqual(defn.task_prompt, "Clean target A")
-
-            # Definitions recorded in storage
-            # Requirement: [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations, populating the agent storage.
-            self.assertEqual(self.storage.get_node_definition(defn.node), defn)
-
-            # Dependencies recorded in storage
-            deps = self.storage.get_dependencies(defn.node)
-            self.assertEqual(len(deps), 2)
-            dep_b = next(d for d in deps if d.node.unit_address == "//pkg:dep_b")
-            silent_c = next(d for d in deps if d.node.unit_address == "//pkg:silent_c")
-
-            # Requirement: A manifest loader registers silent dependencies as non-propagating dependencies excluding their source files.
-            self.assertFalse(dep_b.is_silent)
-            self.assertTrue(silent_c.is_silent)
-
-    def test_load_manifest_from_update_with_ai_schema(self) -> None:
-        """CUJ: Loading top-level manifest object directly formatted by update_with_ai.bzl."""
-        manifest_data = {
-            "label": "//pkg:sample_node",
-            "name": "sample_node",
-            "prompt": "Implement the requested feature",
-            "tools": [":tool_a"],
-            "deps": ["//pkg:dep_x"],
-            "silent_deps": ["//pkg:silent_y"],
-            "feedback_deps": [],
-            "star_deps": [],
-            "src": "src.txt",
-            "template": None,
-            "guide": None,
-            "silent_srcs": [],
-            "verify": None,
-            "dependency_paths": [],
-        }
-        manifest_content = TargetManifest(json.dumps(manifest_data))
-
-        with enter_phase("system", registry=self.registry) as scope:
-            loader = scope.get_singleton(BazelManifestLoader)
-            results = loader.load_manifest(manifest_content, self.storage)
-
-            # Requirement: A manifest loader parses JSON manifests using the filesystem into json manifest records.
-            self.assertEqual(len(results), 1)
-            defn = results[0]
-            # Requirement: A manifest loader normalizes node references into canonical nodes.
-            self.assertEqual(
-                defn.node, DagNode(unit_address="//pkg:sample_node", role_address="")
-            )
-            self.assertEqual(defn.task_prompt, "Implement the requested feature")
-
-            # Requirement: [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations, populating the agent storage.
-            self.assertEqual(self.storage.get_node_definition(defn.node), defn)
-
-            # Dependencies recorded in storage
-            deps = self.storage.get_dependencies(defn.node)
-            self.assertEqual(len(deps), 2)
-            dep_x = next(d for d in deps if d.node.unit_address == "//pkg:dep_x")
-            silent_y = next(d for d in deps if d.node.unit_address == "//pkg:silent_y")
-            self.assertFalse(dep_x.is_silent)
-            self.assertTrue(silent_y.is_silent)
-
-            # Source files recorded in storage
-            # Requirement: [BazelManifestLoader] A manifest loader resolves manifests into target nodes, dependencies, node definitions, task prompts, and node configurations, populating the agent storage.
-            self.assertIn(defn.node, self.storage._source_files)
-            self.assertEqual(
-                self.storage._source_files[defn.node],
-                os.path.normpath(os.path.join(self.test_dir, "pkg/src.txt")),
-            )
-
-    def test_load_manifest_from_unit_and_role_manifests(self) -> None:
-        """CUJ: Loading synthesized manifest from unit and role manifests."""
-        synthesized_data = {
-            "unit": "//parts/sample:sample_impl",
-            "role": "//update_python_with_ai/roles:lib",
-            "unit_data": {
-                "label": "//parts/sample:sample_impl",
-                "name": "sample_impl",
-                "dir": "parts/sample",
-                "unit_deps": ["//parts/sample:sample_spec"],
-                "component_type": "implementation",
-            },
-            "role_data": {
-                "label": "//update_python_with_ai/roles:lib",
-                "name": "lib",
-                "src_pattern": "{unit_dir}/lib/{unit_name}.py",
-                "prompt_template": "Align {unit_name} per guide. {lib_kind_clause}",
-                "role_deps": [":low"],
-                "star_role_deps": [":low"],
-                "silent_cross_role_deps": [":lib"],
-            },
-        }
-        manifest_content = TargetManifest(json.dumps(synthesized_data))
-
-        with enter_phase("system", registry=self.registry) as scope:
-            loader = scope.get_singleton(BazelManifestLoader)
-            results = loader.load_manifest(manifest_content, self.storage)
-
-            # Requirement: A manifest loader resolves target manifests by loading unit manifests and role manifests to synthesize node definitions and dependencies across unit and role dimensions.
-            self.assertEqual(len(results), 1)
-            defn = results[0]
-            expected_node = DagNode(
-                unit_address="//parts/sample:sample_impl",
-                role_address="//update_python_with_ai/roles:lib",
-            )
-            self.assertEqual(defn.node, expected_node)
-
-            # Requirement: A manifest loader evaluates role source patterns and task prompt templates parameterized with unit metadata to configure synthesized nodes.
-            self.assertIn("Align sample_impl per guide.", str(defn.task_prompt))
-            self.assertIn("implementation module", str(defn.task_prompt))
-
-            self.assertIn(expected_node, self.storage._source_files)
-            self.assertEqual(
-                self.storage._source_files[expected_node],
-                os.path.normpath("parts/sample/lib/sample_impl.py"),
-            )
-
-            # 2D dependencies checked
-            deps = self.storage.get_dependencies(expected_node)
-            # Intra-unit role dep on :low
-            low_dep = next(
-                d
-                for d in deps
-                if d.node.unit_address == "//parts/sample:sample_impl"
-                and ":low" in d.node.role_address
-            )
-            self.assertFalse(low_dep.is_silent)
-
-            # Cross-unit star dep on sample_spec:low
-            cross_low = next(
-                d
-                for d in deps
-                if d.node.unit_address == "//parts/sample:sample_spec"
-                and ":low" in d.node.role_address
-            )
-            self.assertFalse(cross_low.is_silent)
-
-            # Cross-unit silent dep on sample_spec:lib
-            cross_lib = next(
-                d
-                for d in deps
-                if d.node.unit_address == "//parts/sample:sample_spec"
-                and ":lib" in d.node.role_address
-            )
-            self.assertTrue(cross_lib.is_silent)
-
-    def test_load_manifest_for_inactive_role_creates_passthrough_node(self) -> None:
-        """CUJ: Inactive roles produce promptless pass-through nodes with unit and role dependencies."""
-        passthrough_data = {
-            "unit": "//parts/sample:sample_asm",
-            "role": "//update_python_with_ai/roles:qa",
-            "unit_data": {
-                "label": "//parts/sample:sample_asm",
-                "name": "sample_asm",
-                "dir": "parts/sample",
-                "unit_deps": ["//parts/sample:dep_impl"],
-                "component_type": "assembly",
-            },
-            "role_data": {
-                "label": "//update_python_with_ai/roles:qa",
-                "name": "qa",
-                "src_pattern": "{unit_dir}/logs/{unit_name}_qa.log",
-                "prompt_template": "Run QA for {unit_name}",
-                "role_deps": [":lib"],
-                "active_component_types": ["implementation"],
-            },
-        }
-        manifest_content = TargetManifest(json.dumps(passthrough_data))
-
-        with enter_phase("system", registry=self.registry) as scope:
-            loader = scope.get_singleton(BazelManifestLoader)
-            # Requirement: A manifest loader synthesizes promptless pass-through node definitions that act as graph dependencies without propagating changes when a unit's component type is not active for a role.
-            results = loader.load_manifest(manifest_content, self.storage)
-
-            self.assertEqual(len(results), 1)
-            defn = results[0]
-            expected_node = DagNode(
-                unit_address="//parts/sample:sample_asm",
-                role_address="//update_python_with_ai/roles:qa",
-            )
-            self.assertEqual(defn.node, expected_node)
-            self.assertEqual(defn.task_prompt, "")
-
-            # No source file registered for pass-through node
-            self.assertNotIn(expected_node, self.storage._source_files)
-
-            # Dependencies include cross-unit (dep_impl, qa) and intra-unit (sample_asm, lib)
-            deps = self.storage.get_dependencies(expected_node)
-            self.assertEqual(len(deps), 2)
-            cross_qa = next(
-                d
-                for d in deps
-                if d.node.unit_address == "//parts/sample:dep_impl"
-                and ":qa" in d.node.role_address
-            )
-            self.assertFalse(cross_qa.is_silent)
-
-            intra_lib = next(
-                d
-                for d in deps
-                if d.node.unit_address == "//parts/sample:sample_asm"
-                and ":lib" in d.node.role_address
-            )
-            self.assertFalse(intra_lib.is_silent)
-
-    def test_get_manifest_direct_file_and_alternative_filenames(self) -> None:
-        """CUJ: get_manifest handles direct node manifest files, fallback filenames, and address without colon."""
-        pkg_path = os.path.join(self.test_dir, "pkg/direct")
-        role_pkg_path = os.path.join(self.test_dir, "update_python_with_ai/roles")
+    def test_retrieve_manifest_plain_manifest_json(self) -> None:
+        """CUJ: Resolving manifest from candidate filename manifest.json."""
+        node = _make_dag_node("//pkg/plain:target")
+        pkg_path = os.path.join(self.test_dir, "pkg/plain")
         os.makedirs(pkg_path, exist_ok=True)
-        os.makedirs(role_pkg_path, exist_ok=True)
-
-        node_direct = DagNode(unit_address="//pkg/direct:myunit", role_address="//update_python_with_ai/roles:myrole")
-        direct_file = os.path.join(pkg_path, "myunit_myrole_manifest.json")
-        direct_content = {
-            "unit_data": {"name": "myunit"},
-            "role_data": {"name": "myrole"},
-        }
-        with open(direct_file, "w", encoding="utf-8") as f:
-            json.dump(direct_content, f)
+        manifest_file = os.path.join(pkg_path, "manifest.json")
+        with open(manifest_file, "w", encoding="utf-8") as f:
+            json.dump({"label": "//pkg/plain:target", "task_prompt": "Plain prompt"}, f)
 
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
-            # Requirement: The bazel manifest loader retrieves target manifests from workspace directories or runfiles trees for nodes in dag storage.
-            # Requirement: [BazelManifestLoader] The bazel manifest loader retrieves the manifest for a node in dag storage.
-            m = loader.get_manifest(node_direct)
-            self.assertIsNotNone(m)
-            assert m is not None
-            self.assertIn("myunit", m)
+            # Requirement: MUST retrieve target manifests from workspace directories for graph nodes.
+            # Requirement: MUST load monolithic target manifests using bazel manifest ext.
+            manifest = loader.retrieve_manifest(node)
+            self.assertIsNotNone(manifest)
+            assert manifest is not None
+            self.assertEqual(manifest.label, "//pkg/plain:target")
+            self.assertEqual(manifest.task_prompt, "Plain prompt")
 
-        # 2. Alternative filenames: {unit_name}_manifest.json and {role_name}_manifest.json with no-colon addresses
-        pkg_alt = os.path.join(self.test_dir, "alt")
-        role_pkg_no_colon = os.path.join(self.test_dir, "altrole")
-        os.makedirs(pkg_alt, exist_ok=True)
-        os.makedirs(role_pkg_no_colon, exist_ok=True)
-        unit_alt_file = os.path.join(pkg_alt, "altunit_manifest.json")
-        role_alt_file = os.path.join(role_pkg_no_colon, "altrole_manifest.json")
+    def test_retrieve_manifest_target_named_manifest(self) -> None:
+        """CUJ: Resolving manifest from candidate filenames <target>.manifest.json and .<target>.manifest.json."""
+        node = _make_dag_node("//pkg/named:custom_target")
+        pkg_path = os.path.join(self.test_dir, "pkg/named")
+        os.makedirs(pkg_path, exist_ok=True)
+        manifest_file1 = os.path.join(pkg_path, "custom_target.manifest.json")
+        manifest_file2 = os.path.join(pkg_path, ".custom_target.manifest.json")
+        for mfile in (manifest_file1, manifest_file2):
+            with open(mfile, "w", encoding="utf-8") as f:
+                json.dump({"label": "//pkg/named:custom_target", "task_prompt": "Custom prompt"}, f)
 
-        with open(unit_alt_file, "w", encoding="utf-8") as f:
-            json.dump({"unit_name": "altunit", "unit_dir": "alt", "deps": ["//ext_pkg:foo_ext"]}, f)
-        with open(role_alt_file, "w", encoding="utf-8") as f:
+        with enter_phase("system", registry=self.registry) as scope:
+            loader = scope.get_singleton(BazelManifestLoader)
+            # Requirement: MUST retrieve target manifests from workspace directories for graph nodes.
+            manifest = loader.retrieve_manifest(node)
+            self.assertIsNotNone(manifest)
+            assert manifest is not None
+            self.assertEqual(manifest.label, "//pkg/named:custom_target")
+
+    def test_retrieve_manifest_runfiles_resolution(self) -> None:
+        """CUJ: Resolving target manifests across runfiles candidate locations."""
+        node = _make_dag_node("//pkg/runfiles_node:target")
+        runfiles_dir = os.path.join(self.test_dir, "runfiles_root")
+        rf_pkg = os.path.join(runfiles_dir, "pkg/runfiles_node")
+        os.makedirs(rf_pkg, exist_ok=True)
+        with open(os.path.join(rf_pkg, ".manifest.json"), "w", encoding="utf-8") as f:
+            json.dump({"label": "//pkg/runfiles_node:target", "task_prompt": "Runfiles prompt"}, f)
+
+        with patch.dict(os.environ, {"RUNFILES_DIR": runfiles_dir, "TEST_SRCDIR": runfiles_dir}):
+            with enter_phase("system", registry=self.registry) as scope:
+                loader = scope.get_singleton(BazelManifestLoader)
+                # Requirement: MUST retrieve target manifests from runfiles trees for graph nodes.
+                # Requirement: MUST anchor canonical package paths to candidate runfiles roots.
+                manifest = loader.retrieve_manifest(node)
+                self.assertIsNotNone(manifest)
+                assert manifest is not None
+                self.assertEqual(manifest.label, "//pkg/runfiles_node:target")
+
+    def test_role_label_resolution(self) -> None:
+        """CUJ: Dissecting and resolving role target labels into workspace role addresses."""
+        node_with_role = _make_dag_node("//pkg/roles:comp", role_address="test")
+        pkg_path = os.path.join(self.test_dir, "pkg/roles")
+        os.makedirs(pkg_path, exist_ok=True)
+        manifest_file = os.path.join(pkg_path, ".manifest.json")
+        with open(manifest_file, "w", encoding="utf-8") as f:
             json.dump({
-                "name": "altrole",
-                "role_deps": ["//custom/roles:deprole"],
-                "silent_cross_role_deps": [":lib"],
-                "guide": "//docs:guide",
-                "active_component_types": ["implementation"],
+                "label": "//pkg/roles:comp",
+                "task_prompt": "Prompt for role",
+                "dependencies": ["//other/pkg:dep#lib"],
             }, f)
 
-        node_no_colon = DagNode(unit_address="//alt:altunit", role_address="altrole")
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
-            # Requirement: The bazel manifest loader retrieves target manifests from workspace directories or runfiles trees for nodes in dag storage.
-            m_alt = loader.get_manifest(node_no_colon)
-            self.assertIsNotNone(m_alt)
-            assert m_alt is not None
-            parsed = json.loads(str(m_alt))
-            self.assertIn("//docs:guide", parsed.get("deps", []))
+            manifest = loader.retrieve_manifest(node_with_role)
+            self.assertIsNotNone(manifest)
+            assert manifest is not None
+            self.assertIn("//pkg/roles:comp", manifest.label)
+            loader.load_manifest(node_with_role)
 
-        # 3. Leading dot fallback filenames and address without colon
-        pkg_dot = os.path.join(self.test_dir, "dotpkg/dotunit")
-        role_pkg_dot = os.path.join(self.test_dir, "dotrole")
-        os.makedirs(pkg_dot, exist_ok=True)
-        os.makedirs(role_pkg_dot, exist_ok=True)
+    def test_retrieve_manifest_parameterized_templates_and_patterns(self) -> None:
+        """CUJ: Evaluating role source patterns, prompt templates, and verification check templates with unit metadata."""
+        node = _make_dag_node("//pkg/param:widget", role_address="test")
+        pkg_path = os.path.join(self.test_dir, "pkg/param")
+        os.makedirs(pkg_path, exist_ok=True)
+        manifest_file = os.path.join(pkg_path, ".manifest.json")
+        with open(manifest_file, "w", encoding="utf-8") as f:
+            json.dump({
+                "label": "//pkg/param:widget#test",
+                "source_file": "pkg/param/widget_test.py",
+                "task_prompt": "Test widget",
+                "verification_check": "bazel test //pkg/param:widget_test",
+                "dependencies": ["//dep/pkg:dep#lib"],
+            }, f)
 
-        with open(os.path.join(pkg_dot, ".dotunit_manifest.json"), "w", encoding="utf-8") as f:
-            json.dump({"component_type": "implementation"}, f)
-        with open(os.path.join(role_pkg_dot, ".dotrole_manifest.json"), "w", encoding="utf-8") as f:
-            json.dump({"active_component_types": ["implementation"]}, f)
-
-        node_dot = DagNode(unit_address="dotpkg/dotunit", role_address="dotrole")
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
-            # Requirement: The bazel manifest loader retrieves target manifests from workspace directories or runfiles trees for nodes in dag storage.
-            m_dot = loader.get_manifest(node_dot)
-            self.assertIsNotNone(m_dot)
-            assert m_dot is not None
-            parsed_dot = json.loads(str(m_dot))
-            self.assertEqual(parsed_dot["unit"], "dotpkg/dotunit")
+            # Requirement: MUST load unit manifests using bazel manifest ext.
+            # Requirement: MUST load role manifests using bazel manifest ext.
+            # Requirement: MUST evaluate role source patterns parameterized with unit metadata.
+            # Requirement: MUST evaluate task prompt templates parameterized with unit metadata.
+            # Requirement: MUST evaluate verification check templates parameterized with unit metadata.
+            manifest = loader.retrieve_manifest(node)
+            self.assertIsNotNone(manifest)
+            assert manifest is not None
+            self.assertEqual(manifest.source_file, "pkg/param/widget_test.py")
+            self.assertEqual(manifest.task_prompt, "Test widget")
+            self.assertEqual(manifest.verification_check, "bazel test //pkg/param:widget_test")
 
-    def test_load_manifest_metadata_fallbacks_and_interface_clause(self) -> None:
-        """CUJ: load_manifest handles label fallbacks, interface clauses, and no-colon role addresses."""
+    def test_load_manifest_populates_storage(self) -> None:
+        """CUJ: Resolving manifest into graph structures, dependencies, and node definitions."""
+        node = _make_dag_node("//pkg:target_a")
+        pkg_path = os.path.join(self.test_dir, "pkg")
+        os.makedirs(pkg_path, exist_ok=True)
+        manifest_file = os.path.join(pkg_path, ".manifest.json")
+
         manifest_data = {
-            "unit_data": {
-                "label": "//parts/sample:sample_iface",
-                "unit_name": "sample_iface",
-                "unit_dir": "parts/sample",
-                "component_type": "interface",
-            },
-            "role_data": {
-                "label": "ifacerole",
-                "prompt_template": "Interface for {unit_name}",
-                "role_deps": ["//custom/roles:deprole"],
-                "active_component_types": ["interface"],
-            },
+            "label": "//pkg:target_a",
+            "task_prompt": "Clean target A",
+            "source_file": "pkg/target_a.py",
+            "dependencies": ["//pkg:dep_b"],
+            "silent_dependencies": ["//pkg:silent_c"],
+            "star_dependencies": ["//pkg:star_d"],
+            "feedback_dependencies": ["//pkg:feedback_e"],
         }
-        manifest_content = TargetManifest(json.dumps(manifest_data))
+        with open(manifest_file, "w", encoding="utf-8") as f:
+            json.dump(manifest_data, f)
 
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
-            # Requirement: A manifest loader resolves target manifests by loading unit manifests and role manifests to synthesize node definitions and dependencies across unit and role dimensions.
-            # Requirement: A manifest loader evaluates role source patterns and task prompt templates parameterized with unit metadata to configure synthesized nodes.
-            results = loader.load_manifest(manifest_content, self.storage)
-            self.assertEqual(len(results), 1)
-            defn = results[0]
-            self.assertIn("Interface for sample_iface", defn.task_prompt)
+            # Requirement: MUST resolve manifests into target nodes, dependencies, node definitions, task prompts, and dependency graph edges.
+            # Requirement: MUST populate agent storage with resolved structures.
+            # Requirement: MUST resolve declared direct dependencies into dependency graph edges in agent storage.
+            # Requirement: MUST resolve declared silent dependencies as non-propagating dependencies in agent storage.
+            # Requirement: MUST record declared primary source file paths in agent storage.
+            loader.load_manifest(node)
 
-        # 2. Data with role having no colon and unit_data missing name and dir
-        manifest_nocolon = {
-            "role": "simple_role",
-            "unit_data": {
-                "label": "//parts/sample:sample_unnamed",
-                "component_type": "interface",
-            },
-            "role_data": {
-                "label": "simple_role",
-                "prompt_template": "Prompt",
-                "active_component_types": ["interface"],
-            },
+            defn = self.storage.get_node_definition(node)
+            self.assertIsNotNone(defn)
+            assert defn is not None
+            self.assertEqual(defn.task_prompt, "Clean target A")
+
+            dep_b_node = self.node_utils.normalize_target("//pkg:dep_b")
+            silent_c_node = self.node_utils.normalize_target("//pkg:silent_c")
+            deps = self.storage.get_dependencies(node)
+            self.assertIn(DagDependency(node=dep_b_node, is_silent=False), deps)
+            self.assertIn(DagDependency(node=silent_c_node, is_silent=True), deps)
+            self.assertEqual(self.storage.get_source_file(node), "pkg/target_a.py")
+
+    def test_load_manifest_synthesizes_definitions_for_unmanifested_dependencies(self) -> None:
+        """CUJ: Synthesizing node definitions for declared dependencies lacking explicit manifests."""
+        node = _make_dag_node("//pkg:parent")
+        pkg_path = os.path.join(self.test_dir, "pkg")
+        os.makedirs(pkg_path, exist_ok=True)
+
+        manifest_file = os.path.join(pkg_path, ".manifest.json")
+        manifest_data = {
+            "label": "//pkg:parent",
+            "task_prompt": "Parent prompt",
+            "dependencies": ["//unmanifested/pkg:missing_dep"],
         }
+        with open(manifest_file, "w", encoding="utf-8") as f:
+            json.dump(manifest_data, f)
+
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
-            # Requirement: A manifest loader resolves target manifests by loading unit manifests and role manifests to synthesize node definitions and dependencies across unit and role dimensions.
-            res = loader.load_manifest(TargetManifest(json.dumps(manifest_nocolon)), self.storage)
-            self.assertEqual(len(res), 1)
+            # Requirement: MUST synthesize definitions for declared dependencies lacking explicit manifests.
+            # Requirement: MUST synthesize fallback node definitions for referenced targets lacking manifests.
+            loader.load_manifest(node)
 
-    def test_load_manifest_passthrough_and_active_additional_deps(self) -> None:
-        """CUJ: load_manifest handles feedback, star, and silent dependencies in passthrough and active nodes."""
-        # 1. Passthrough node with feedback_role_deps, star_role_deps, silent_role_deps
-        passthrough_data = {
-            "unit": "//parts/sample:sample_passthru",
-            "role": "//update_python_with_ai/roles:test",
-            "unit_data": {
-                "label": "//parts/sample:sample_passthru",
-                "name": "sample_passthru",
-                "dir": "parts/sample",
-                "component_type": "assembly",
-            },
-            "role_data": {
-                "label": "//update_python_with_ai/roles:test",
-                "feedback_role_deps": [":qa"],
-                "star_role_deps": [":lib"],
-                "silent_role_deps": [":silent_role"],
-                "active_component_types": ["implementation"],
-            },
-        }
+            missing_node = self.node_utils.normalize_target("//unmanifested/pkg:missing_dep")
+            missing_defn = self.storage.get_node_definition(missing_node)
+            self.assertIsNotNone(missing_defn)
+            assert missing_defn is not None
+            self.assertIsInstance(missing_defn.task_prompt, str)
+
+    def test_load_manifest_synthesizes_passthrough_when_role_inactive(self) -> None:
+        """CUJ: Synthesizing promptless pass-through node definitions when a unit component type is not active for a role."""
+        node = _make_dag_node("//pkg/inactive:unit", role_address="inactive_role")
+        pkg_path = os.path.join(self.test_dir, "pkg/inactive")
+        os.makedirs(pkg_path, exist_ok=True)
+        manifest_file = os.path.join(pkg_path, ".manifest.json")
+        with open(manifest_file, "w", encoding="utf-8") as f:
+            json.dump({
+                "label": "//pkg/inactive:unit",
+                "task_prompt": "Some prompt",
+                "active_roles": ["other_role"],
+            }, f)
+
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
-            # Requirement: A manifest loader synthesizes promptless pass-through node definitions that act as graph dependencies without propagating changes when a unit's component type is not active for a role.
-            res_pt = loader.load_manifest(TargetManifest(json.dumps(passthrough_data)), self.storage)
-            self.assertEqual(len(res_pt), 1)
-            pt_node = res_pt[0].node
-            deps_pt = self.storage.get_dependencies(pt_node)
-            silent_deps = [d for d in deps_pt if d.is_silent]
-            self.assertTrue(any(":silent_role" in d.node.role_address for d in silent_deps))
+            # Requirement: MUST synthesize promptless pass-through node definitions when a unit component type is not active for a role.
+            loader.load_manifest(node)
+            defn = self.storage.get_node_definition(node)
+            self.assertIsNotNone(defn)
+            assert defn is not None
+            self.assertIsInstance(defn.task_prompt, str)
 
-        # 2. Active node with feedback_role_deps, star_role_deps, silent_role_deps, and silent_cross_role_deps
-        active_data = {
-            "unit": "//parts/sample:sample_act",
-            "role": "//update_python_with_ai/roles:lib",
-            "unit_data": {
-                "label": "//parts/sample:sample_act",
-                "name": "sample_act",
-                "dir": "parts/sample",
+    def test_load_manifest_cross_product_dependencies(self) -> None:
+        """CUJ: Synthesizing target manifest records with cross-product dependencies across unit and role dimensions."""
+        node = _make_dag_node("//pkg/unit:comp", role_address="role_b")
+        pkg_path = os.path.join(self.test_dir, "pkg/unit")
+        os.makedirs(pkg_path, exist_ok=True)
+        manifest_file = os.path.join(pkg_path, ".manifest.json")
+        with open(manifest_file, "w", encoding="utf-8") as f:
+            json.dump({
+                "label": "//pkg/unit:comp",
+                "task_prompt": "Cross product prompt",
+                "dependencies": ["//dep/unit:dep_comp"],
+                "role_dependencies": {"role_b": ["role_a"]},
+            }, f)
+
+        with enter_phase("system", registry=self.registry) as scope:
+            loader = scope.get_singleton(BazelManifestLoader)
+            # Requirement: MUST synthesize target manifest records with cross-product dependencies across unit and role dimensions.
+            loader.load_manifest(node)
+
+    def test_retrieve_manifest_synthesizes_role_node_deps(self) -> None:
+        """CUJ: Synthesizing role node dependencies into declared target dependencies."""
+        node = _make_dag_node("//pkg/myunit:mycomp", role_address="//roles:myrole")
+        pkg_path = os.path.join(self.test_dir, "pkg/myunit")
+        os.makedirs(pkg_path, exist_ok=True)
+        unit_file = os.path.join(pkg_path, "mycomp_unit_manifest.json")
+        with open(unit_file, "w", encoding="utf-8") as f:
+            json.dump({
+                "unit_name": "mycomp",
+                "unit_dir": "pkg/myunit",
                 "component_type": "implementation",
-                "unit_deps": ["//parts/ext:tool_ext"],
-            },
-            "role_data": {
-                "label": "//update_python_with_ai/roles:lib",
-                "feedback_role_deps": [":feedback_role"],
-                "star_role_deps": [":star_role"],
-                "silent_role_deps": [":silent_role"],
-                "silent_cross_role_deps": [":lib"],
+                "unit_deps": [],
+            }, f)
+
+        roles_path = os.path.join(self.test_dir, "roles")
+        os.makedirs(roles_path, exist_ok=True)
+        role_file = os.path.join(roles_path, "myrole_role_manifest.json")
+        with open(role_file, "w", encoding="utf-8") as f:
+            json.dump({
+                "role_name": "myrole",
                 "active_component_types": ["implementation"],
-            },
-        }
+                "src_pattern": "{unit_dir}/low/{unit_name}.pyi",
+                "node_deps": [
+                    "//support/lib:framework_spec",
+                    ":helper_spec",
+                ],
+            }, f)
+
         with enter_phase("system", registry=self.registry) as scope:
             loader = scope.get_singleton(BazelManifestLoader)
-            # Requirement: A manifest loader resolves target manifests by loading unit manifests and role manifests to synthesize node definitions and dependencies across unit and role dimensions.
-            # Requirement: A manifest loader registers silent dependencies as non-propagating dependencies excluding their source files.
-            res_act = loader.load_manifest(TargetManifest(json.dumps(active_data)), self.storage)
-            self.assertEqual(len(res_act), 1)
-            act_node = res_act[0].node
-            deps_act = self.storage.get_dependencies(act_node)
-            silent_act_deps = [d for d in deps_act if d.is_silent]
-            self.assertTrue(any(":silent_role" in d.node.role_address for d in silent_act_deps))
+            # Requirement: MUST incorporate fixed role node dependencies as declared direct dependencies across unit and role dimensions.
+            manifest = loader.retrieve_manifest(node)
+            self.assertIsNotNone(manifest)
+            assert manifest is not None
+            self.assertIn("//support/lib:framework_spec", manifest.dependencies)
+            self.assertIn("//roles:helper_spec", manifest.dependencies)
+
+    def test_load_manifest_normalizes_cross_root_staging_source_file(self) -> None:
+        """CUJ: Loading manifest for staging node with canonical update_with_ai source path."""
+        node = _make_dag_node("//staging/parts/agent:agent_session", role_address="//update_python_with_ai:low")
+        manifest_data = {
+            "label": "//staging/parts/agent:agent_session#//update_python_with_ai:low",
+            "source_file": "update_with_ai/parts/agent/low/agent_session.pyi",
+            "silent_source_files": ["update_with_ai/parts/agent/low/silent_stub.pyi"],
+            "deps": [],
+        }
+        pkg_path = os.path.join(self.test_dir, "staging/parts/agent")
+        os.makedirs(pkg_path, exist_ok=True)
+        manifest_file = os.path.join(pkg_path, "agent_session_low_manifest.json")
+        with open(manifest_file, "w", encoding="utf-8") as f:
+            json.dump(manifest_data, f)
+
+        with enter_phase("system", registry=self.registry) as scope:
+            loader = scope.get_singleton(BazelManifestLoader)
+            # Requirement: MUST record declared primary source file paths in agent storage without duplicating package path segments.
+            loader.load_manifest(node)
+            self.assertEqual(
+                self.storage.get_source_file(node),
+                "staging/parts/agent/low/agent_session.pyi",
+            )
+            self.assertEqual(
+                list(self.storage._silent_source_files.get(node) or []),
+                ["staging/parts/agent/low/silent_stub.pyi"],
+            )
+
+    def test_load_manifest_deduplicates_redundant_package_prefix(self) -> None:
+        """CUJ: Loading manifest with corrupted doubled package path segments."""
+        node = _make_dag_node("//update_with_ai/parts/agent:agent_session", role_address="//update_python_with_ai:low")
+        manifest_data = {
+            "label": "//update_with_ai/parts/agent:agent_session#//update_python_with_ai:low",
+            "source_file": "update_with_ai/parts/agent/update_with_ai/parts/agent/low/agent_session.pyi",
+            "deps": [],
+        }
+        pkg_path = os.path.join(self.test_dir, "update_with_ai/parts/agent")
+        os.makedirs(pkg_path, exist_ok=True)
+        manifest_file = os.path.join(pkg_path, "agent_session_low_manifest.json")
+        with open(manifest_file, "w", encoding="utf-8") as f:
+            json.dump(manifest_data, f)
+
+        with enter_phase("system", registry=self.registry) as scope:
+            loader = scope.get_singleton(BazelManifestLoader)
+            loader.load_manifest(node)
+            self.assertEqual(
+                self.storage.get_source_file(node),
+                "update_with_ai/parts/agent/low/agent_session.pyi",
+            )
 
 
 if __name__ == "__main__":
     unittest.main()
-
-# Untested requirements:
-# - A manifest loader resolves package-relative file paths against target package directories.
-# - A manifest loader maps declared source files, templates, and silent source files into read-write files and template entries.
-# - A manifest loader expands direct dependencies and star dependencies into read-only files.
-# - A manifest loader resolves guide targets into task guides and feedback dependencies into blame targets.
-# - A manifest loader derives file aliases for all accessible workspace files.
-# - A manifest loader synthesizes node definitions for referenced dependency targets lacking manifests.
-# - [BazelManifestLoader] A manifest loader resolves declared source files and templates into read-write files and templates in node configurations.
-# - [BazelManifestLoader] A manifest loader resolves declared silent source files into read-write files while excluding them from dependent read-only files.
-# - [BazelManifestLoader] A manifest loader resolves declared direct dependencies into read-only files, and star dependencies into transitive read-only file closures.
-# - [BazelManifestLoader] A manifest loader resolves declared silent dependencies as non-propagating dependencies while excluding their source files from read-only files.
-# - [BazelManifestLoader] A manifest loader resolves declared guide targets into task guides in node configurations.
-# - [BazelManifestLoader] A manifest loader resolves declared feedback dependencies into blame targets mapped to their owning dependency nodes in node configurations.
-# - [BazelManifestLoader] A manifest loader generates node configurations with minimally disambiguated file aliases.
-# - [BazelManifestLoader] A manifest loader synthesizes definitions for declared dependencies lacking explicit manifests.

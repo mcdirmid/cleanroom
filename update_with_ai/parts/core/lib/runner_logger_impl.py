@@ -14,19 +14,23 @@ class RunnerLogger(runner_logger.RunnerLogger, Singleton):
         )
 
     def initialize(self) -> None:
-        # Requirement: The runner logger clears any existing transcript log file at initialization.
-        # Requirement: The transcript log file destination defaults to `agent_loop.log` or is resolved from configured environment variables.
+        self.transcript_file_path = os.environ.get(
+            "TRANSCRIPT_LOG_PATH", "agent_loop.log"
+        )
+        dirname = os.path.dirname(self.transcript_file_path)
+        if dirname:
+            os.makedirs(dirname, exist_ok=True)
         with open(self.transcript_file_path, "w", encoding="utf-8") as f:
             f.write("")
 
     def consume(self, event: runner_logger.RunnerLogEvent) -> None:
-        # Requirement: Consuming a runner log event writes a single-line compact summary to standard output.
-        if event.summary:
-            print(event.summary, flush=True)
-        # Requirement: Consuming a runner log event writes an unbuffered verbose record to the transcript log file.
-        if event.transcript_representation:
-            with open(self.transcript_file_path, "a", encoding="utf-8") as f:
-                f.write(event.transcript_representation + "\n")
+        print(event.summary, flush=True)
+        dirname = os.path.dirname(self.transcript_file_path)
+        if dirname:
+            os.makedirs(dirname, exist_ok=True)
+        with open(self.transcript_file_path, "a", encoding="utf-8") as f:
+            f.write(event.transcript + "\n")
+            f.flush()
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:

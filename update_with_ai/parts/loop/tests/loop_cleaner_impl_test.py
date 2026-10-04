@@ -8,9 +8,24 @@ from update_with_ai.parts.loop.lib.loop_cleaner_impl import (
     __initialize__,
 )
 from update_with_ai.parts.loop.lib.loop_node_cleaner import NodeCleaner
-from update_with_ai.parts.dag.lib.dag_storage import DagNode
+from update_with_ai.parts.dag.lib.dag_storage import DagNode, RoleAddress, UnitAddress
 from update_with_ai.parts.dag.lib.dag_subgraph import DagSubgraph
 from support.lib.lifecycle import LifecycleRegistry, enter_phase, get_singleton
+
+
+def _make_dag_node(unit_address: str, role_address: str = "") -> DagNode:
+    return DagNode(unit_address=UnitAddress(unit_address), role_address=RoleAddress(role_address))
+
+
+class _BoolCallable:
+    def __init__(self, val: bool) -> None:
+        self.val = val
+
+    def __call__(self) -> bool:
+        return self.val
+
+    def __bool__(self) -> bool:
+        return self.val
 
 
 class MockDagSubgraph:
@@ -25,8 +40,8 @@ class MockDagSubgraph:
         self.target = root
 
     @property
-    def is_complete(self) -> bool:
-        return len(self.batches) == 0
+    def is_complete(self) -> _BoolCallable:
+        return _BoolCallable(len(self.batches) == 0)
 
     def next_ready_batch(self) -> List[DagNode]:
         if self.batches:
@@ -56,8 +71,8 @@ class LoopCleanerImplTest(unittest.TestCase):
 
     def test_clean_success(self) -> None:
         """CUJ: Iterative topological cleaning over batches to completion."""
-        root = DagNode(unit_address="//pkg:root")
-        node_b = DagNode(unit_address="//pkg:dep")
+        root = _make_dag_node("//pkg:root")
+        node_b = _make_dag_node("//pkg:dep")
         subgraph = MockDagSubgraph(batches=[[node_b], [root]])
         cleaner = MockNodeCleaner(returns_continue=True)
 
@@ -65,14 +80,15 @@ class LoopCleanerImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=self.registry):
             loop_cleaner = get_singleton(LoopCleaner)
-            # Requirement: Target node scoping sets the target node on the dag subgraph to determine dependency-first topological order.
-            # Requirement: Cleaning processes ready batches of dirty nodes in topological order, recording node visits for each cleaned batch, and halts immediately if the node cleaner communicates that processing cannot continue.
-            # Requirement: [LoopCleaner] Cleaning dirty nodes halts if the node cleaner communicates that processing cannot continue.
-            # Requirement: [LoopCleaner] Cleaning a node cleans dirty nodes in dependency-first topological order, ensuring all dependencies of a node are clean before that node is cleaned.
-            # Requirement: Cleaning concludes when the dag subgraph is complete, indicating all reachable nodes in the target subgraph are clean.
-            # Requirement: [LoopCleaner] Cleaning concludes when all nodes in the subgraph rooted at the node are clean.
-            loop_cleaner.clean(root, cleaner)
+            # Requirement: MUST set target node on dag subgraph to determine dependency-first topological order.
+            # Requirement: MUST process ready batches of dirty nodes in topological order, recording visits for each cleaned batch.
+            # Requirement: WHEN dag subgraph is complete, MUST return true.
+            # Requirement: MUST clean dirty nodes in dependency-first topological order.
+            # Requirement: MUST ensure all dependencies of a node are clean before that node is cleaned.
+            # Requirement: WHEN all nodes in the target subgraph are clean, MUST return true.
+            result = loop_cleaner.clean(root, cleaner)
 
+            self.assertTrue(result)
             self.assertEqual(subgraph.target, root)
             self.assertEqual(cleaner.cleaned_batches, [[node_b], [root]])
             self.assertEqual(subgraph.recorded_visits, [[node_b], [root]])
@@ -80,8 +96,8 @@ class LoopCleanerImplTest(unittest.TestCase):
 
     def test_clean_halts_when_cleaner_cannot_continue(self) -> None:
         """CUJ: Cleaning halts immediately when node cleaner returns False."""
-        root = DagNode(unit_address="//pkg:root")
-        node_b = DagNode(unit_address="//pkg:dep")
+        root = _make_dag_node("//pkg:root")
+        node_b = _make_dag_node("//pkg:dep")
         subgraph = MockDagSubgraph(batches=[[node_b], [root]])
         cleaner = MockNodeCleaner(returns_continue=False)
 
@@ -89,16 +105,17 @@ class LoopCleanerImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=self.registry):
             loop_cleaner = get_singleton(LoopCleaner)
-            # Requirement: Cleaning processes ready batches of dirty nodes in topological order, recording node visits for each cleaned batch, and halts immediately if the node cleaner communicates that processing cannot continue.
-            # Requirement: [LoopCleaner] Cleaning dirty nodes halts if the node cleaner communicates that processing cannot continue.
-            loop_cleaner.clean(root, cleaner)
+            # Requirement: WHEN node cleaner communicates that processing cannot continue, MUST halt immediately.
+            # Requirement: WHEN the node cleaner communicates that processing cannot continue, MUST halt.
+            result = loop_cleaner.clean(root, cleaner)
 
+            self.assertFalse(result)
             self.assertEqual(cleaner.cleaned_batches, [[node_b]])
             self.assertFalse(subgraph.is_complete)
 
     def test_clean_already_complete(self) -> None:
         """CUJ: Cleaning an already complete subgraph executes zero batches."""
-        root = DagNode(unit_address="//pkg:root")
+        root = _make_dag_node("//pkg:root")
         subgraph = MockDagSubgraph(batches=[])
         cleaner = MockNodeCleaner(returns_continue=True)
 
@@ -106,10 +123,12 @@ class LoopCleanerImplTest(unittest.TestCase):
 
         with enter_phase("system", registry=self.registry):
             loop_cleaner = get_singleton(LoopCleaner)
-            # Requirement: Target node scoping sets the target node on the dag subgraph to determine dependency-first topological order.
-            # Requirement: Cleaning concludes when the dag subgraph is complete, indicating all reachable nodes in the target subgraph are clean.
-            loop_cleaner.clean(root, cleaner)
+            # Requirement: MUST set target node on dag subgraph to determine dependency-first topological order.
+            # Requirement: WHEN dag subgraph is complete, MUST return true.
+            # Requirement: WHEN all nodes in the target subgraph are clean, MUST return true.
+            result = loop_cleaner.clean(root, cleaner)
 
+            self.assertTrue(result)
             self.assertEqual(subgraph.target, root)
             self.assertEqual(len(cleaner.cleaned_batches), 0)
 

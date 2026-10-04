@@ -4,16 +4,20 @@ load("//bin:pyright_library.bzl", "pyright_library")
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 
 exports_files([
-    "agent_config.bzl",
     "update_with_ai.bzl",
     "guides.bzl",
-    "hls_lint.py",
-    "requirements_lint.py",
     "build_lint_common.py",
-    "lib_lint.py",
-    "test_lint.py",
-    "grounding_tool.py",
+    "grounding_support.py",
+    "grounding_support.pyi",
+    "check_build_derived.py",
 ], visibility = ["//visibility:public"])
+
+pyright_library(
+    name = "grounding_support",
+    srcs = ["grounding_support.py"],
+    pyright_deps = [],
+    visibility = ["//visibility:public"],
+)
 
 pyright_library(
     name = "build_lint_common",
@@ -22,31 +26,33 @@ pyright_library(
     visibility = ["//visibility:public"],
 )
 
-pyright_library(
+alias(
+    name = "high_lint",
+    actual = "//update_python_with_ai/support/lib:high_lint",
+    visibility = ["//visibility:public"],
+)
+
+alias(
     name = "hls_lint",
-    srcs = ["hls_lint.py"],
-    pyright_deps = [],
+    actual = "//update_python_with_ai/support/lib:high_lint",
     visibility = ["//visibility:public"],
 )
 
-pyright_library(
-    name = "requirements_lint",
-    srcs = ["requirements_lint.py"],
-    pyright_deps = [],
+alias(
+    name = "low_lint",
+    actual = "//update_python_with_ai/support/lib:low_lint",
     visibility = ["//visibility:public"],
 )
 
-pyright_library(
+alias(
     name = "lib_lint",
-    srcs = ["lib_lint.py"],
-    pyright_deps = [":build_lint_common"],
+    actual = "//update_python_with_ai/support/lib:lib_lint",
     visibility = ["//visibility:public"],
 )
 
-pyright_library(
+alias(
     name = "test_lint",
-    srcs = ["test_lint.py"],
-    pyright_deps = [":build_lint_common"],
+    actual = "//update_python_with_ai/support/lib:test_lint",
     visibility = ["//visibility:public"],
 )
 
@@ -62,22 +68,6 @@ alias(
     visibility = ["//visibility:public"],
 )
 
-py_library(
-    name = "grounding_tool_lib",
-    srcs = ["grounding_tool.py"],
-    deps = [":framework"],
-    imports = ["../.."],
-    visibility = ["//visibility:public"],
-)
-
-py_binary(
-    name = "grounding_tool",
-    srcs = ["grounding_tool.py"],
-    main = "grounding_tool.py",
-    deps = [":grounding_tool_lib"],
-    visibility = ["//visibility:public"],
-)
-
 py_binary(
     name = "evaluate_coverage",
     srcs = ["evaluate_coverage.py"],
@@ -87,121 +77,33 @@ py_binary(
 )
 
 py_library(
-    name = "cleanroom_run_logger_lib",
-    srcs = ["cleanroom_run_logger.py"],
-    visibility = ["//visibility:public"],
-)
-
-py_library(
-    name = "cleanroom_sandbox_hook_lib",
-    srcs = ["cleanroom_sandbox_hook.py"],
-    deps = [":cleanroom_run_logger_lib"],
+    name = "cleanroom_mailbox_lib",
+    srcs = ["cleanroom_mailbox.py"],
     visibility = ["//visibility:public"],
 )
 
 py_binary(
-    name = "cleanroom_sandbox_hook",
-    srcs = ["cleanroom_sandbox_hook.py"],
-    main = "cleanroom_sandbox_hook.py",
-    deps = [":cleanroom_sandbox_hook_lib"],
+    name = "cleanroom_mailbox",
+    srcs = ["cleanroom_mailbox.py"],
+    main = "cleanroom_mailbox.py",
+    deps = [":cleanroom_mailbox_lib"],
     visibility = ["//visibility:public"],
 )
 
 py_library(
-    name = "cleanroom_dag_cli_lib",
-    srcs = ["cleanroom_dag_cli.py"],
+    name = "cleanroom_workspace_tool_lib",
+    srcs = ["cleanroom_workspace_tool.py"],
     deps = [
-        ":lifecycle",
-        "//update_with_ai/parts/dag/lib:dag_storage",
-        "//update_with_ai/parts/dag/lib:dag_subgraph",
-        "//update_with_ai/parts/systems/lib:bazel_mcp_system_asm",
+        ":cleanroom_mailbox_lib",
+        ":lib_lint",
     ],
     visibility = ["//visibility:public"],
 )
 
 py_binary(
-    name = "cleanroom_dag_cli",
-    srcs = ["cleanroom_dag_cli.py"],
-    main = "cleanroom_dag_cli.py",
-    deps = [":cleanroom_dag_cli_lib"],
-    visibility = ["//visibility:public"],
-)
-
-py_library(
-    name = "cleanroom_mcp_client_lib",
-    srcs = ["cleanroom_mcp_client.py"],
-    deps = [
-        ":cleanroom_run_logger_lib",
-        "//update_with_ai/parts/antigravity/lib:antigravity_mcp_client",
-        "//update_with_ai/parts/antigravity/lib:antigravity_mcp_client_impl",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-py_binary(
-    name = "cleanroom_mcp_client",
-    srcs = ["cleanroom_mcp_client.py"],
-    main = "cleanroom_mcp_client.py",
-    deps = [":cleanroom_mcp_client_lib"],
-    visibility = ["//visibility:public"],
-)
-
-py_library(
-    name = "antigravity_token_stats_lib",
-    srcs = ["antigravity_token_stats.py"],
-    deps = [
-        "//update_with_ai/parts/antigravity/lib:antigravity_telemetry",
-        "//update_with_ai/parts/antigravity/lib:antigravity_telemetry_impl",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-py_binary(
-    name = "antigravity_token_stats",
-    srcs = ["antigravity_token_stats.py"],
-    main = "antigravity_token_stats.py",
-    deps = [":antigravity_token_stats_lib"],
-    visibility = ["//visibility:public"],
-)
-
-py_library(
-    name = "antigravity_run_monitor_lib",
-    srcs = ["antigravity_run_monitor.py"],
-    deps = [":antigravity_token_stats_lib"],
-    visibility = ["//visibility:public"],
-)
-
-py_binary(
-    name = "antigravity_run_monitor",
-    srcs = ["antigravity_run_monitor.py"],
-    main = "antigravity_run_monitor.py",
-    deps = [":antigravity_run_monitor_lib"],
-    visibility = ["//visibility:public"],
-)
-
-py_library(
-    name = "coordinator_config_lib",
-    srcs = ["coordinator_config.py"],
-    visibility = ["//visibility:public"],
-)
-
-py_library(
-    name = "cleanroom_coordinator_engine_lib",
-    srcs = ["cleanroom_coordinator_engine.py"],
-    deps = [
-        ":coordinator_config_lib",
-        ":antigravity_token_stats_lib",
-        ":cleanroom_sandbox_hook_lib",
-        ":cleanroom_mcp_client_lib",
-        ":cleanroom_dag_cli_lib",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-py_binary(
-    name = "cleanroom_coordinator_engine",
-    srcs = ["cleanroom_coordinator_engine.py"],
-    main = "cleanroom_coordinator_engine.py",
-    deps = [":cleanroom_coordinator_engine_lib"],
+    name = "cleanroom_workspace_tool",
+    srcs = ["cleanroom_workspace_tool.py"],
+    main = "cleanroom_workspace_tool.py",
+    deps = [":cleanroom_workspace_tool_lib"],
     visibility = ["//visibility:public"],
 )

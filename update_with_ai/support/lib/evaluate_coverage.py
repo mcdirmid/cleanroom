@@ -114,11 +114,26 @@ def get_non_executable_lines(file_path: Path) -> Set[int]:
         if "# pragma: no cover" in line or "# no cover" in line:
             pragma_lines.add(idx)
 
-    # Exclude pragma lines and entire statement blocks starting on them
+    # Exclude pragma lines and entire statement/handler blocks starting on them
+    block_types = (ast.stmt, ast.ExceptHandler, getattr(ast, "match_case", ()))
     for node in ast.walk(tree):
-        if isinstance(node, ast.stmt) and node.lineno in pragma_lines:
-            start = node.lineno
-            end = getattr(node, "end_lineno", node.lineno)
+        if not isinstance(node, block_types):
+            continue
+        start = getattr(node, "lineno", None)
+        pattern = getattr(node, "pattern", None)
+        if start is None and pattern is not None:
+            start = getattr(pattern, "lineno", None)
+        if start is not None and start in pragma_lines:
+            end = getattr(node, "end_lineno", None)
+            body = getattr(node, "body", None)
+            if end is None and body:
+                last_stmt = body[-1]
+                end = getattr(
+                    last_stmt,
+                    "end_lineno",
+                    getattr(last_stmt, "lineno", start),
+                )
+            end = end if end is not None else start
             for l in range(start, end + 1):
                 non_exec.add(l)
 

@@ -10,7 +10,9 @@ Configuring language model execution requires binding declarative build target p
 
 ## Grounding Gaps Covered
 
-The model_config_ext component provides external serialization and discovery knowledge for model configuration files emitted by model_config.bzl:
+The model_config_ext component provides external serialization and discovery knowledge for model configuration files emitted by model_config.bzl.
+
+Grounding gaps covered include:
 
 - Model configuration JSON extraction: Extracts the model configuration dictionary schema emitted by model_config.bzl, defining mappings for target label, target name, model identifier, remote API base url endpoint, designated API key environment variable name, request timeout duration, maximum conversation turn limit, temperature, maximum token limit, guide step mode setting, startup file inspection setting, follow-up tool call injection setting, node visit limit setting, and batch size setting.
 

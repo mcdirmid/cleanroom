@@ -1,5 +1,6 @@
 /bazel-*
 /agent_loop.log*
+/staging/
 /testing/
 __pycache__/
 *.py[cod]
@@ -11,4 +12,5 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mcp.worker_sessions.json
+.DS_Store
 

@@ -1,0 +1,170 @@
+# update_with_ai/parts/bazel/grounding/BUILD.bazel
+
+load("//bin:pyright_library.bzl", "pyright_library")
+load("//update_python_with_ai/support/lib:build_derived_test.bzl", "build_derived_test")
+
+package(default_visibility = ["//visibility:public"])
+
+pyright_library(
+    name = "bazel_asm",
+    srcs = ["bazel_asm.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/core/grounding:file_paths_impl",
+        ":bazel_manifest_loader_impl",
+        ":bazel_node_config_impl",
+        ":bazel_storage_impl",
+        ":bazel_target_impl",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "bazel_loop_impl",
+    srcs = ["bazel_loop_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/core/grounding:runner_logger",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+        "//update_with_ai/parts/dag/grounding:dag_subgraph",
+        "//update_with_ai/parts/loop/grounding:loop",
+        "//update_with_ai/parts/loop/grounding:loop_cleaner",
+        "//update_with_ai/parts/loop/grounding:loop_node_cleaner",
+        ":bazel_manifest_loader",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "bazel_manifest_ext",
+    srcs = ["bazel_manifest_ext.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "bazel_manifest_loader",
+    srcs = ["bazel_manifest_loader.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_file_alias",
+        "//update_with_ai/parts/agent/grounding:agent_storage",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+        "//update_with_ai/parts/sandbox/grounding:sandbox_file_editor",
+        ":bazel_target",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "bazel_manifest_loader_impl",
+    srcs = ["bazel_manifest_loader_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_file_alias",
+        "//update_with_ai/parts/agent/grounding:agent_storage",
+        "//update_with_ai/parts/core/grounding:file_paths",
+        "//update_with_ai/parts/core/grounding:filesystem_ext",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+        ":bazel_manifest_ext",
+        ":bazel_manifest_loader",
+        ":bazel_storage_impl",
+        ":bazel_target",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "bazel_node_config_impl",
+    srcs = ["bazel_node_config_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_config",
+        "//update_with_ai/parts/agent/grounding:agent_file_alias",
+        "//update_with_ai/parts/agent/grounding:agent_node_config",
+        "//update_with_ai/parts/agent/grounding:agent_session",
+        "//update_with_ai/parts/core/grounding:file_paths",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+        "//update_with_ai/parts/sandbox/grounding:tool_provider",
+        ":bazel_manifest_loader",
+        ":bazel_target",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "bazel_openai_config_impl",
+    srcs = ["bazel_openai_config_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_config",
+        "//update_with_ai/parts/core/grounding:model_config_ext",
+        "//update_with_ai/parts/dag/grounding:dag_config",
+        "//update_with_ai/parts/openai/grounding:openai_config",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "bazel_storage_impl",
+    srcs = ["bazel_storage_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/agent/grounding:agent_storage",
+        "//update_with_ai/parts/core/grounding:file_paths",
+        "//update_with_ai/parts/core/grounding:update_with_ai_proto_ext",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+        ":bazel_target",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "bazel_target",
+    srcs = ["bazel_target.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/core/grounding:file_paths",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "bazel_target_impl",
+    srcs = ["bazel_target_impl.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+        "//update_with_ai/parts/core/grounding:file_paths",
+        "//update_with_ai/parts/dag/grounding:dag_storage",
+        ":bazel_target",
+        ":bazel_target_labels_ext",
+    ],
+    imports = ["../../..", "."],
+)
+
+pyright_library(
+    name = "bazel_target_labels_ext",
+    srcs = ["bazel_target_labels_ext.py"],
+    deps = [],
+    pyright_deps = [
+        "//update_python_with_ai/support/lib:grounding_support",
+    ],
+    imports = ["../../..", "."],
+)
+
+build_derived_test(
+    name = "targets_derived_test",
+)

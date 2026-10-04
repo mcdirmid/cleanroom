@@ -12,9 +12,9 @@ Executing interconnected tasks in an arbitrary or concurrent sequence risks race
 
 ## Types and Behavior
 
-A *loop cleaner* is a system service that coordinates topological graph cleaning across a dag storage.
+A system's *loop cleaner* coordinates topological graph cleaning across a dag storage.
 
-A loop cleaner can *clean* a target node accepting a *node cleaner*. Cleaning a node cleans dirty nodes in dependency-first topological order, ensuring all dependencies of a node are clean before that node is cleaned. It is assumed that the node roots an acyclic subgraph.
+A loop cleaner can clean a target node accepting a node cleaner. Cleaning a node cleans dirty nodes in dependency-first topological order, ensuring all dependencies of a node are clean before that node is cleaned. It is assumed that the node roots an acyclic subgraph.
 
 Cleaning dirty nodes halts if the node cleaner communicates that processing cannot continue.
 

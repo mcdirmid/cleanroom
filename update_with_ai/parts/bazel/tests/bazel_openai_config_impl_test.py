@@ -8,10 +8,11 @@ import unittest
 from unittest.mock import patch
 from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.dag.lib.dag_config import DagConfig
-from update_with_ai.parts.openai.lib.openai_config import OpenaiConfig
+from update_with_ai.parts.openai.lib.openai_config import OpenAIConfig
 from update_with_ai.parts.bazel.lib.bazel_openai_config_impl import (
-    OpenaiConfig as OpenaiConfigImpl,
-    OpenaiConfig as ModelConfigImpl,
+    OpenAIConfig as OpenAIConfigImpl,
+    AgentConfig as AgentConfigImpl,
+    DagConfig as DagConfigImpl,
     __initialize__,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
@@ -53,57 +54,41 @@ class BazelOpenaiConfigImplTest(unittest.TestCase):
         __initialize__(reg)
 
         with enter_phase("system", registry=reg) as scope:
-            cfg = scope.get_singleton(ModelConfigImpl)
-            openai_cfg = scope.get_singleton(OpenaiConfig)
+            openai_cfg = scope.get_singleton(OpenAIConfig)
             agent_cfg = scope.get_singleton(AgentConfig)
             dag_cfg = scope.get_singleton(DagConfig)
 
             # Requirement: The openai config, agent config, and dag config resolve the target configuration from the MODEL_CONFIG_TARGET environment variable, the AGENT_CONFIG_TARGET environment variable, or the --config command-line argument, defaulting to the standard //model_configs:default target.
-            # Requirement: [OpenaiConfig] The openai config provides a model name designating the target model.
+            # Requirement: [OpenAIConfig] The openai config provides a model name designating the target model.
             self.assertEqual(openai_cfg.model_name, "gpt-4o")
-            self.assertEqual(cfg.model_name, "gpt-4o")
-            # Requirement: [OpenaiConfig] The openai config provides a base url designating the remote model API endpoint address when custom endpoint routing applies.
+            # Requirement: [OpenAIConfig] The openai config provides a base url designating the remote model API endpoint address when custom endpoint routing applies.
             self.assertIsNone(openai_cfg.base_url)
-            self.assertIsNone(cfg.base_url)
-            # Requirement: [OpenaiConfig] The openai config provides an api key providing authentication credentials when designated environment secrets apply.
+            # Requirement: [OpenAIConfig] The openai config provides an api key providing authentication credentials when designated environment secrets apply.
             self.assertIsNone(openai_cfg.api_key)
-            self.assertIsNone(cfg.api_key)
-            # Requirement: [OpenaiConfig] The openai config provides a timeout specifying the maximum duration in seconds permitted for a model request.
+            # Requirement: [OpenAIConfig] The openai config provides a timeout specifying the maximum duration in seconds permitted for a model request.
             self.assertEqual(openai_cfg.timeout, 60)
-            self.assertEqual(cfg.timeout, 60)
             # Requirement: [AgentConfig] The agent config provides the conversation limit bounding interaction turns.
             self.assertEqual(agent_cfg.conversation_limit, 20)
-            self.assertEqual(cfg.conversation_limit, 20)
             # Requirement: [AgentConfig] The agent config provides whether the agent should use step mode to communicate a guide progressively.
             self.assertTrue(agent_cfg.is_step_mode)
-            self.assertTrue(cfg.is_step_mode)
             # Requirement: [AgentConfig] The agent config provides whether the agent should perform startup reads to inspect declared files at session start.
             self.assertTrue(agent_cfg.is_startup_reads)
-            self.assertTrue(cfg.is_startup_reads)
             # Requirement: [AgentConfig] The agent config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
             self.assertTrue(agent_cfg.inject_followups)
-            self.assertTrue(cfg.inject_followups)
             # Requirement: [AgentConfig] The agent config provides whether editing tools should produce delta output.
             self.assertFalse(agent_cfg.edit_delta_output)
-            self.assertFalse(cfg.edit_delta_output)
             # Requirement: [AgentConfig] The agent config provides whether the agent should operate in mcp mode.
             self.assertFalse(agent_cfg.is_mcp_mode)
-            self.assertFalse(cfg.is_mcp_mode)
             # Requirement: [AgentConfig] The agent config provides the character retention limit bounding preserved string argument tails when tool responses are superseded.
             self.assertEqual(agent_cfg.supersede_arg_keep, 20)
-            self.assertEqual(cfg.supersede_arg_keep, 20)
-            # Requirement: [OpenaiConfig] The openai config provides a temperature specifying the sampling temperature for model requests.
+            # Requirement: [OpenAIConfig] The openai config provides a temperature specifying the sampling temperature for model requests.
             self.assertEqual(openai_cfg.temperature, 0.0)
-            self.assertEqual(cfg.temperature, 0.0)
-            # Requirement: [OpenaiConfig] The openai config provides a max tokens upper bound specifying the maximum number of response tokens permitted per request when token generation is constrained.
+            # Requirement: [OpenAIConfig] The openai config provides a max tokens upper bound specifying the maximum number of response tokens permitted per request when token generation is constrained.
             self.assertIsNone(openai_cfg.max_tokens)
-            self.assertIsNone(cfg.max_tokens)
             # Requirement: [DagConfig] The dag config provides the node visit limit bounding node visits during graph cleaning.
             self.assertEqual(dag_cfg.node_visit_limit, 500)
-            self.assertEqual(cfg.node_visit_limit, 500)
             # Requirement: [DagConfig] The dag config provides the batch size bounding dirty nodes processed together in an agent session.
             self.assertEqual(dag_cfg.batch_size, 1)
-            self.assertEqual(cfg.batch_size, 1)
 
     def test_environment_overrides(self) -> None:
         """CUJ: Overriding configuration via explicit ambient environment variables."""
@@ -135,37 +120,40 @@ class BazelOpenaiConfigImplTest(unittest.TestCase):
         __initialize__(reg)
 
         with enter_phase("system", registry=reg) as scope:
-            cfg = scope.get_singleton(ModelConfigImpl)
-            # Requirement: [OpenaiConfig] The openai config provides a model name designating the target model.
-            self.assertEqual(cfg.model_name, "custom-model")
-            # Requirement: [OpenaiConfig] The openai config provides a base url designating the remote model API endpoint address when custom endpoint routing applies.
-            self.assertEqual(cfg.base_url, "http://localhost:8000/v1")
-            # Requirement: [OpenaiConfig] The openai config provides an api key providing authentication credentials when designated environment secrets apply.
-            self.assertEqual(cfg.api_key, "secret-key-123")
-            # Requirement: [OpenaiConfig] The openai config provides a timeout specifying the maximum duration in seconds permitted for a model request.
-            self.assertEqual(cfg.timeout, 120)
+            openai_cfg = scope.get_singleton(OpenAIConfig)
+            agent_cfg = scope.get_singleton(AgentConfig)
+            dag_cfg = scope.get_singleton(DagConfig)
+
+            # Requirement: [OpenAIConfig] The openai config provides a model name designating the target model.
+            self.assertEqual(openai_cfg.model_name, "custom-model")
+            # Requirement: [OpenAIConfig] The openai config provides a base url designating the remote model API endpoint address when custom endpoint routing applies.
+            self.assertEqual(openai_cfg.base_url, "http://localhost:8000/v1")
+            # Requirement: [OpenAIConfig] The openai config provides an api key providing authentication credentials when designated environment secrets apply.
+            self.assertEqual(openai_cfg.api_key, "secret-key-123")
+            # Requirement: [OpenAIConfig] The openai config provides a timeout specifying the maximum duration in seconds permitted for a model request.
+            self.assertEqual(openai_cfg.timeout, 120)
             # Requirement: [AgentConfig] The agent config provides the conversation limit bounding interaction turns.
-            self.assertEqual(cfg.conversation_limit, 15)
-            # Requirement: [OpenaiConfig] The openai config provides a temperature specifying the sampling temperature for model requests.
-            self.assertEqual(cfg.temperature, 0.7)
-            # Requirement: [OpenaiConfig] The openai config provides a max tokens upper bound specifying the maximum number of response tokens permitted per request when token generation is constrained.
-            self.assertEqual(cfg.max_tokens, 4096)
+            self.assertEqual(agent_cfg.conversation_limit, 15)
+            # Requirement: [OpenAIConfig] The openai config provides a temperature specifying the sampling temperature for model requests.
+            self.assertEqual(openai_cfg.temperature, 0.7)
+            # Requirement: [OpenAIConfig] The openai config provides a max tokens upper bound specifying the maximum number of response tokens permitted per request when token generation is constrained.
+            self.assertEqual(openai_cfg.max_tokens, 4096)
             # Requirement: [AgentConfig] The agent config provides whether the agent should use step mode to communicate a guide progressively.
-            self.assertFalse(cfg.is_step_mode)
+            self.assertFalse(agent_cfg.is_step_mode)
             # Requirement: [AgentConfig] The agent config provides whether the agent should perform startup reads to inspect declared files at session start.
-            self.assertFalse(cfg.is_startup_reads)
+            self.assertFalse(agent_cfg.is_startup_reads)
             # Requirement: [AgentConfig] The agent config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
-            self.assertFalse(cfg.inject_followups)
+            self.assertFalse(agent_cfg.inject_followups)
             # Requirement: [AgentConfig] The agent config provides whether editing tools should produce delta output.
-            self.assertTrue(cfg.edit_delta_output)
+            self.assertTrue(agent_cfg.edit_delta_output)
             # Requirement: [AgentConfig] The agent config provides whether the agent should operate in mcp mode.
-            self.assertTrue(cfg.is_mcp_mode)
+            self.assertTrue(agent_cfg.is_mcp_mode)
             # Requirement: [AgentConfig] The agent config provides the character retention limit bounding preserved string argument tails when tool responses are superseded.
-            self.assertEqual(cfg.supersede_arg_keep, 35)
+            self.assertEqual(agent_cfg.supersede_arg_keep, 35)
             # Requirement: [DagConfig] The dag config provides the node visit limit bounding node visits during graph cleaning.
-            self.assertEqual(cfg.node_visit_limit, 42)
+            self.assertEqual(dag_cfg.node_visit_limit, 42)
             # Requirement: [DagConfig] The dag config provides the batch size bounding dirty nodes processed together in an agent session.
-            self.assertEqual(cfg.batch_size, 3)
+            self.assertEqual(dag_cfg.batch_size, 3)
 
     def test_target_module_resolution_model_config_target(self) -> None:
         """CUJ: Resolving configuration from target module file via MODEL_CONFIG_TARGET."""
@@ -201,38 +189,41 @@ class BazelOpenaiConfigImplTest(unittest.TestCase):
             __initialize__(reg)
 
             with enter_phase("system", registry=reg) as scope:
-                cfg = scope.get_singleton(ModelConfigImpl)
+                openai_cfg = scope.get_singleton(OpenAIConfig)
+                agent_cfg = scope.get_singleton(AgentConfig)
+                dag_cfg = scope.get_singleton(DagConfig)
+
                 # Requirement: The openai config, agent config, and dag config load execution parameters and authentication credentials for language model agent runs from the target module.
-                # Requirement: [OpenaiConfig] The openai config provides a model name designating the target model.
-                self.assertEqual(cfg.model_name, "qwen-35b")
-                # Requirement: [OpenaiConfig] The openai config provides a base url designating the remote model API endpoint address when custom endpoint routing applies.
-                self.assertEqual(cfg.base_url, "http://localhost:8000/v1")
-                # Requirement: [OpenaiConfig] The openai config provides an api key providing authentication credentials when designated environment secrets apply.
-                self.assertEqual(cfg.api_key, "target-key-999")
-                # Requirement: [OpenaiConfig] The openai config provides a timeout specifying the maximum duration in seconds permitted for a model request.
-                self.assertEqual(cfg.timeout, 100)
+                # Requirement: [OpenAIConfig] The openai config provides a model name designating the target model.
+                self.assertEqual(openai_cfg.model_name, "qwen-35b")
+                # Requirement: [OpenAIConfig] The openai config provides a base url designating the remote model API endpoint address when custom endpoint routing applies.
+                self.assertEqual(openai_cfg.base_url, "http://localhost:8000/v1")
+                # Requirement: [OpenAIConfig] The openai config provides an api key providing authentication credentials when designated environment secrets apply.
+                self.assertEqual(openai_cfg.api_key, "target-key-999")
+                # Requirement: [OpenAIConfig] The openai config provides a timeout specifying the maximum duration in seconds permitted for a model request.
+                self.assertEqual(openai_cfg.timeout, 100)
                 # Requirement: [AgentConfig] The agent config provides the conversation limit bounding interaction turns.
-                self.assertEqual(cfg.conversation_limit, 45)
-                # Requirement: [OpenaiConfig] The openai config provides a temperature specifying the sampling temperature for model requests.
-                self.assertEqual(cfg.temperature, 0.7)
-                # Requirement: [OpenaiConfig] The openai config provides a max tokens upper bound specifying the maximum number of response tokens permitted per request when token generation is constrained.
-                self.assertEqual(cfg.max_tokens, 4096)
+                self.assertEqual(agent_cfg.conversation_limit, 45)
+                # Requirement: [OpenAIConfig] The openai config provides a temperature specifying the sampling temperature for model requests.
+                self.assertEqual(openai_cfg.temperature, 0.7)
+                # Requirement: [OpenAIConfig] The openai config provides a max tokens upper bound specifying the maximum number of response tokens permitted per request when token generation is constrained.
+                self.assertEqual(openai_cfg.max_tokens, 4096)
                 # Requirement: [AgentConfig] The agent config provides whether the agent should use step mode to communicate a guide progressively.
-                self.assertFalse(cfg.is_step_mode)
+                self.assertFalse(agent_cfg.is_step_mode)
                 # Requirement: [AgentConfig] The agent config provides whether the agent should perform startup reads to inspect declared files at session start.
-                self.assertFalse(cfg.is_startup_reads)
+                self.assertFalse(agent_cfg.is_startup_reads)
                 # Requirement: [AgentConfig] The agent config provides whether the agent should inject followups to execute follow-up tool calls specified by tool responses.
-                self.assertFalse(cfg.inject_followups)
+                self.assertFalse(agent_cfg.inject_followups)
                 # Requirement: [AgentConfig] The agent config provides whether editing tools should produce delta output.
-                self.assertTrue(cfg.edit_delta_output)
+                self.assertTrue(agent_cfg.edit_delta_output)
                 # Requirement: [AgentConfig] The agent config provides whether the agent should operate in mcp mode.
-                self.assertTrue(cfg.is_mcp_mode)
+                self.assertTrue(agent_cfg.is_mcp_mode)
                 # Requirement: [AgentConfig] The agent config provides the character retention limit bounding preserved string argument tails when tool responses are superseded.
-                self.assertEqual(cfg.supersede_arg_keep, 40)
+                self.assertEqual(agent_cfg.supersede_arg_keep, 40)
                 # Requirement: [DagConfig] The dag config provides the node visit limit bounding node visits during graph cleaning.
-                self.assertEqual(cfg.node_visit_limit, 450)
+                self.assertEqual(dag_cfg.node_visit_limit, 450)
                 # Requirement: [DagConfig] The dag config provides the batch size bounding dirty nodes processed together in an agent session.
-                self.assertEqual(cfg.batch_size, 4)
+                self.assertEqual(dag_cfg.batch_size, 4)
 
     def test_target_module_resolution_agent_config_target(self) -> None:
         """CUJ: Resolving configuration from target module file via AGENT_CONFIG_TARGET."""
@@ -261,23 +252,25 @@ class BazelOpenaiConfigImplTest(unittest.TestCase):
             __initialize__(reg)
 
             with enter_phase("system", registry=reg) as scope:
-                cfg = scope.get_singleton(ModelConfigImpl)
-                # Requirement: [OpenaiConfig] The openai config provides a model name designating the target model.
-                self.assertEqual(cfg.model_name, "legacy-model")
-                # Requirement: [OpenaiConfig] The openai config provides a base url designating the remote model API endpoint address when custom endpoint routing applies.
-                self.assertEqual(cfg.base_url, "http://localhost:8001/v1")
-                # Requirement: [OpenaiConfig] The openai config provides an api key providing authentication credentials when designated environment secrets apply.
-                self.assertEqual(cfg.api_key, "agent-api-key-val")
-                # Requirement: [OpenaiConfig] The openai config provides a timeout specifying the maximum duration in seconds permitted for a model request.
-                self.assertEqual(cfg.timeout, 75)
+                openai_cfg = scope.get_singleton(OpenAIConfig)
+                agent_cfg = scope.get_singleton(AgentConfig)
+
+                # Requirement: [OpenAIConfig] The openai config provides a model name designating the target model.
+                self.assertEqual(openai_cfg.model_name, "legacy-model")
+                # Requirement: [OpenAIConfig] The openai config provides a base url designating the remote model API endpoint address when custom endpoint routing applies.
+                self.assertEqual(openai_cfg.base_url, "http://localhost:8001/v1")
+                # Requirement: [OpenAIConfig] The openai config provides an api key providing authentication credentials when designated environment secrets apply.
+                self.assertEqual(openai_cfg.api_key, "agent-api-key-val")
+                # Requirement: [OpenAIConfig] The openai config provides a timeout specifying the maximum duration in seconds permitted for a model request.
+                self.assertEqual(openai_cfg.timeout, 75)
                 # Requirement: [AgentConfig] The agent config provides the conversation limit bounding interaction turns.
-                self.assertEqual(cfg.conversation_limit, 30)
+                self.assertEqual(agent_cfg.conversation_limit, 30)
                 # Requirement: [AgentConfig] The agent config provides whether the agent should use step mode to communicate a guide progressively.
-                self.assertTrue(cfg.is_step_mode)
+                self.assertTrue(agent_cfg.is_step_mode)
                 # Requirement: [AgentConfig] The agent config provides whether the agent should perform startup reads to inspect declared files at session start.
-                self.assertTrue(cfg.is_startup_reads)
+                self.assertTrue(agent_cfg.is_startup_reads)
                 # Requirement: [AgentConfig] The agent config provides whether editing tools should produce delta output.
-                self.assertFalse(cfg.edit_delta_output)
+                self.assertFalse(agent_cfg.edit_delta_output)
 
     def test_target_module_resolution_cli_args(self) -> None:
         """CUJ: Resolving configuration from target module via --config and --config= CLI args."""
@@ -306,20 +299,20 @@ class BazelOpenaiConfigImplTest(unittest.TestCase):
             reg = LifecycleRegistry()
             __initialize__(reg)
             with enter_phase("system", registry=reg) as scope:
-                cfg = scope.get_singleton(ModelConfigImpl)
-                # Requirement: [OpenaiConfig] The openai config provides a model name designating the target model.
-                self.assertEqual(cfg.model_name, "cli-model")
-                # Requirement: [OpenaiConfig] The openai config provides a base url designating the remote model API endpoint address when custom endpoint routing applies.
-                self.assertEqual(cfg.base_url, "http://localhost:8002/v1")
+                openai_cfg = scope.get_singleton(OpenAIConfig)
+                # Requirement: [OpenAIConfig] The openai config provides a model name designating the target model.
+                self.assertEqual(openai_cfg.model_name, "cli-model")
+                # Requirement: [OpenAIConfig] The openai config provides a base url designating the remote model API endpoint address when custom endpoint routing applies.
+                self.assertEqual(openai_cfg.base_url, "http://localhost:8002/v1")
 
             # Test --config=<label>
             sys.argv = ["prog", "--config=//model_configs:cli-target"]
             reg2 = LifecycleRegistry()
             __initialize__(reg2)
             with enter_phase("system", registry=reg2) as scope:
-                cfg2 = scope.get_singleton(ModelConfigImpl)
-                # Requirement: [OpenaiConfig] The openai config provides a model name designating the target model.
-                self.assertEqual(cfg2.model_name, "cli-model")
+                openai_cfg2 = scope.get_singleton(OpenAIConfig)
+                # Requirement: [OpenAIConfig] The openai config provides a model name designating the target model.
+                self.assertEqual(openai_cfg2.model_name, "cli-model")
 
     def test_target_label_syntax_variants(self) -> None:
         """CUJ: Parsing various Bazel label syntax variants (@@//, @//, @pkg:name, :name, shorthand)."""
@@ -343,9 +336,9 @@ class BazelOpenaiConfigImplTest(unittest.TestCase):
                 reg = LifecycleRegistry()
                 __initialize__(reg)
                 with enter_phase("system", registry=reg) as scope:
-                    cfg = scope.get_singleton(ModelConfigImpl)
-                    # Requirement: [OpenaiConfig] The openai config provides a model name designating the target model.
-                    self.assertEqual(cfg.model_name, "variant-model")
+                    openai_cfg = scope.get_singleton(OpenAIConfig)
+                    # Requirement: [OpenAIConfig] The openai config provides a model name designating the target model.
+                    self.assertEqual(openai_cfg.model_name, "variant-model")
 
             # @//model_configs:variant
             with patch(
@@ -355,9 +348,9 @@ class BazelOpenaiConfigImplTest(unittest.TestCase):
                 reg = LifecycleRegistry()
                 __initialize__(reg)
                 with enter_phase("system", registry=reg) as scope:
-                    cfg = scope.get_singleton(ModelConfigImpl)
-                    # Requirement: [OpenaiConfig] The openai config provides a model name designating the target model.
-                    self.assertEqual(cfg.model_name, "variant-model")
+                    openai_cfg = scope.get_singleton(OpenAIConfig)
+                    # Requirement: [OpenAIConfig] The openai config provides a model name designating the target model.
+                    self.assertEqual(openai_cfg.model_name, "variant-model")
 
             # @model_configs:variant
             with patch(
@@ -367,9 +360,9 @@ class BazelOpenaiConfigImplTest(unittest.TestCase):
                 reg = LifecycleRegistry()
                 __initialize__(reg)
                 with enter_phase("system", registry=reg) as scope:
-                    cfg = scope.get_singleton(ModelConfigImpl)
-                    # Requirement: [OpenaiConfig] The openai config provides a model name designating the target model.
-                    self.assertEqual(cfg.model_name, "variant-model")
+                    openai_cfg = scope.get_singleton(OpenAIConfig)
+                    # Requirement: [OpenAIConfig] The openai config provides a model name designating the target model.
+                    self.assertEqual(openai_cfg.model_name, "variant-model")
 
             # :variant
             with patch(
@@ -379,9 +372,9 @@ class BazelOpenaiConfigImplTest(unittest.TestCase):
                 reg = LifecycleRegistry()
                 __initialize__(reg)
                 with enter_phase("system", registry=reg) as scope:
-                    cfg = scope.get_singleton(ModelConfigImpl)
-                    # Requirement: [OpenaiConfig] The openai config provides a model name designating the target model.
-                    self.assertEqual(cfg.model_name, "variant-model")
+                    openai_cfg = scope.get_singleton(OpenAIConfig)
+                    # Requirement: [OpenAIConfig] The openai config provides a model name designating the target model.
+                    self.assertEqual(openai_cfg.model_name, "variant-model")
 
             # Shorthand //model_configs/variant
             with patch(
@@ -391,9 +384,9 @@ class BazelOpenaiConfigImplTest(unittest.TestCase):
                 reg = LifecycleRegistry()
                 __initialize__(reg)
                 with enter_phase("system", registry=reg) as scope:
-                    cfg = scope.get_singleton(ModelConfigImpl)
-                    # Requirement: [OpenaiConfig] The openai config provides a model name designating the target model.
-                    self.assertEqual(cfg.model_name, "variant-model")
+                    openai_cfg = scope.get_singleton(OpenAIConfig)
+                    # Requirement: [OpenAIConfig] The openai config provides a model name designating the target model.
+                    self.assertEqual(openai_cfg.model_name, "variant-model")
 
 
 if __name__ == "__main__":

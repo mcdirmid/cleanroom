@@ -17,18 +17,21 @@ This document describes the complete toolchain architecture implemented in Clean
 |                                CLEANROOM SPECIFICATION & VERIFICATION PIPELINE        |
 +---------------------------------------------------------------------------------------+
 |                                                                                       |
-|  [High-Level Spec: .md]                                                               |
+|  [High-Level Spec: high/*.md]                                                         |
 |           |                                                                           |
 |           v (hls_lint.py)                                                             |
-|  [Grounding Stubs: .pyi]                                                              |
+|  [Planning Canvas: planning/*.md]                                                     |
 |           |                                                                           |
-|           v (grounding_tool.py: Lint -> Link -> Sync)                                 |
-|  [Inherited & Linked Groundings: .pyi]                                                |
+|           v                                                                           |
+|  [Low-Level Stubs: low/*.pyi]                                                         |
+|           |                                                                           |
+|           v (grounding_tool.py: Lint -> Link -> Compile)                              |
+|  [Groundtalk Specifications: grounding/*.gt]                                          |
 |           |                                                                           |
 |           +---------------------------------------+                                   |
 |           |                                       |                                   |
 |           v (lib_lint.py)                         v (test_lint.py)                    |
-|  [Implementation: _impl.py]              [Unit Tests: _impl_test.py]                  |
+|  [Implementation: lib/*.py]               [Unit Tests: tests/*_test.py]               |
 |           |                                       |                                   |
 |           +-------------------+-------------------+                                   |
 |                               |                                                       |
@@ -51,16 +54,16 @@ The specification toolchain lives in [`update_with_ai/support/lib/grounding_tool
 - Library: `//update_with_ai/support/lib:grounding_tool_lib`
 - Unit Test Suite: `//update_with_ai/support/tests:test_spec_toolchain` ([`update_with_ai/support/tests/test_spec_toolchain.py`](file:///Users/seanmcdirmid/projects/cleanroom/update_with_ai/support/tests/test_spec_toolchain.py))
 
-`grounding_tool.py` unifies five core capabilities into a single multi-pass compilation pipeline:
+`grounding_tool.py` unifies six core capabilities into a single multi-pass compilation and verification pipeline:
 
 ```
-Input: *.pyi Stubs
+Input: *.pyi Stubs & *.gt Specifications
    |
    +--> Pass 1: AST Linter (SpecLintVisitor)
    |       - Pure ellipsis body verification (`...`)
    |       - Structural decorator classification (@singleton_type, @poly_type, etc.)
    |       - "By-hand" typo and symbol resolution
-   |       - Docstring contract headers (PURPOSE, FRESH_REQUIREMENTS, etc.)
+   |       - Docstring contract headers (INVARIANTS, PRECONDITIONS, POSTCONDITIONS)
    |
    +--> Pass 2: Closed-World Linker (ClosedWorldLinker)
    |       - Cross-module import resolution
@@ -69,12 +72,19 @@ Input: *.pyi Stubs
    |
    +--> Pass 3: Requirements & Stub Synchronizer (SpecRegistry & compile_module_inheritance)
    |       - Zero-token MRO requirements inheritance
-   |       - Grouped provenance labeling: `[<Ancestor>] <requirement>`
    |       - Automatic `@override` member stub synthesis and stale member pruning
    |       - In-place file update (`--sync`) or compilation output (`--out-dir`)
    |
    +--> Pass 4: Zero Drift Verifier (`--check`)
-           - Verifies in-place specs match canonical inheritance expansion exactly
+   |       - Verifies in-place specs match canonical inheritance expansion exactly
+   |
+   +--> Pass 5: Groundtalk Relational Reasoner & Verifier (`GroundtalkVerifier`)
+   |       - Verifies first-order Horn clauses, bi-conditional member access (`<->`), and single-given proofs
+   |       - Enforces the state meta-rule and checks for unbound consequent wildcards (`_`)
+   |       - Verifies universal member coverage and flags duplicate provisions/requirements
+   |
+   +--> Pass 6: Groundtalk Explanation & Witness Inspection (`--explain`)
+           - Pretty-prints capability wiring, verified relational derivation steps, and near-misses
 ```
 
 ### 2.2 Pass 1: Custom "By-Hand" AST Linter (`SpecLintVisitor`)
@@ -122,8 +132,17 @@ Relying on LLMs to copy requirements down class hierarchies burns hundreds of th
 ### 2.5 CLI Invocation & Commands
 
 ```bash
-# Validate AST syntax, decorators, imports, and zero inheritance drift:
+# Validate AST syntax, decorators, imports, and zero inheritance drift across .pyi:
 bazel run //update_with_ai/support/lib:grounding_tool -- --check
+
+# Validate Groundtalk specifications (.gt):
+python3 update_with_ai/support/lib/grounding_tool.py --check update_with_ai/support/lib/core.gt update_with_ai/parts/sandbox/grounding/tool_provider.gt
+
+# Explain Groundtalk capability wiring, rules, and proofs:
+python3 update_with_ai/support/lib/grounding_tool.py --explain update_with_ai/parts/sandbox/grounding/tool_provider.gt
+
+# Mechanically derive Groundtalk scaffolding from low-level Python stubs:
+python3 update_with_ai/support/lib/pyi_to_groundtalk.py update_with_ai/parts/sandbox/low/tool_provider.pyi
 
 # Synchronize inherited requirements and @override stubs in place:
 bazel run //update_with_ai/support/lib:grounding_tool -- --sync
@@ -132,7 +151,7 @@ bazel run //update_with_ai/support/lib:grounding_tool -- --sync
 bazel run //update_with_ai/support/lib:grounding_tool -- --out-dir bazel-bin/specs/grounding/ update_with_ai/specs/grounding/*.pyi
 
 # Run test suite:
-bazel test --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress //update_with_ai/support/tests:test_spec_toolchain
+bazel test --test_output=errors --test_timeout=100 --noshow_progress --noshow_loading_progress //update_with_ai/parts/groundtalk/... //update_with_ai/support/tests:test_spec_toolchain
 ```
 
 ---
@@ -250,12 +269,25 @@ Cleanroom provides specialized linters in `update_with_ai/support/lib/` (sharing
 - Automatically maintains `update_with_ai/lib/BUILD.bazel`, extracting third-party external requirements (such as `requirement("openai")`) from dependent `.pyi` specifications and inserting required `@pip` load statements.
 
 ### 4.3 `test_lint.py`: Unit Test Alignment Linter
-- Enforces the requirements of `update_python_with_ai/guides/grounding_to_test.md`.
+- Enforces the requirements of `update_python_with_ai/guides/low_to_test.md`.
 - Verifies that test assertions carry `# Requirement: <exact text>` comments matching canonical grounding statements.
 - Verifies that every test file concludes with `# Untested requirements: None` or an explicit bulleted list of untestable requirements.
-- Automatically maintains `update_with_ai/tests/BUILD.bazel` target definitions.
+### 4.4 Groundtalk Assembly Verifier: Transitive Provenance & Deadlock Prevention
+- Validates Groundtalk assembly specifications (`*_asm.gt`).
+- Tracks requirement-to-requirement provenance edges (`[target_req] <- dep_req1, dep_req2 .`) established by constituent proofs.
+- Collects transitive provenance from any interface directly or indirectly imported into each constituent implementation, making assemblies self-contained for outer system composition.
+- Verifies requirement provenance DAGs for complete closure and detects circular dependency cycles (deadlocks) across constituent implementations.
+
+### 4.5 Groundtalk State & Interface Verification Rules
+- **State in Interfaces Permitted**: Interfaces (`*.gt`) and implementations (`*_impl.gt`) may declare virtual state under `STATE:`.
+- **`[INVALID_STATE_WRITE]`**: Enforces that only declared state fields can be written with `+`. Any atom prefixed with `+` whose predicate name is not a declared state field in the enclosing file is flagged as an invalid state write.
+- **`[STATE_META_RULE]`**: Enforces that any virtual state declared in a Groundtalk file must be **both written (with `+`) and read within that same file**. Write-only state and read-only state are flagged as errors.
+- **`[DUPLICATE_PROVISION_REQUIREMENT]`**: Enforces that no rule in `PROVISIONS:` and requirement in `REQUIREMENTS:` both provision and require the same thing (e.g. `A <- B` and `A <-? B`). The types of properties and return types of operations must not be provisioned; they must be proven instead.
+- **`[INTERFACE_PROOF_MANDATE]`**: Enforces mock integrity for unit tests. If an implementation specification (`*_impl.gt`) contains a proof for an inherited requirement whose proof steps cite only interface-level rules, interface state, and imported collaborators (requiring zero implementation-specific state or local rules), the verifier flags this as an error. The proof must be moved to the base interface (`*.gt`).
+- **Mandatory Update Consequents**: Verifies that operations updating domain state declare their postcondition using the `+` write prefix on the affected state field in the requirement rule consequent (e.g. `+node_visits(node)`).
 
 ---
+
 
 ## 5. Verification of Untestable Natural Language Diagnostics: Supervising LLM Protocol (TODO)
 
@@ -297,7 +329,7 @@ Cleanroom integrates Pyright type checking into Bazel builds via `pyright_librar
 
 ### 6.2 Problem Ledger: Solved vs. Open Verification Challenges
 
-For full analysis of grounding problems that resist prompt engineering, see **[Section 9 of `new_grounding_format.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/new_grounding_format.md#9-grounding-translation--alignment-challenges-prompt-engineering-vs-deterministic-enforcement)**.
+For full analysis of grounding problems that resist prompt engineering, see **[`groundtalk.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/groundtalk.md)** and **[`grounding_format.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/grounding_format.md)**.
 
 | Subsystem / Area | Challenge | Status | Solution Mechanism / Open Path |
 | :--- | :--- | :--- | :--- |
@@ -305,8 +337,99 @@ For full analysis of grounding problems that resist prompt engineering, see **[S
 | **AST Linting** | Dataclass empty method stubs (`__init__` / `@property`) | **SOLVED** | AST visitor in `lib_lint.py` enforces class-level type annotations. |
 | **Bazel Harness** | Silent pass bug on Pyright invocation failure | **SOLVED** | Added `set -e -o pipefail` and explicit runfiles closure in `bin/pyright_library.bzl`. |
 | **Build Architecture** | Framework dependency leakage | **SOLVED** | Analysis-phase assertion in `_pyright_test_impl` disallows `:framework`. |
+| **Proof Synthesis** | Unautomated Horn proof generation without operational actions | **UNSOLVED** *(Fundamental)* | Unguided forward-chaining and SMT solvers cannot invent existential terms across AND/OR hypergraphs; requires dense operational action steps. |
+| **Proof Authoring** | LLM logic programming limitations (Gemini 3.8 Flash) | **UNSOLVED** *(Fundamental)* | Lightweight LLMs struggle with variable unification, polarity, and citing formal 25+ step logic proofs; requires DSL compilation or AST extraction. |
 | **Test Verification** | Mock-to-protocol parity drift (`extract_target_name`) | **UNSOLVED** *(Hard)* | Requires protocol-typed mock variables (`x: Protocol = Mock()`) validated by Pyright. |
 | **API Completeness** | Missing ergonomic query accessors in protocols | **UNSOLVED** *(Hard)* | Requires formal protocol expansion rather than prompt-directed ad-hoc workarounds. |
+| **Type Hermeticity** | Primitive literals passed to domain `NewType`s | **SOLVED** | Explicit domain `NewType` constructor wrapping enforced in `low_to_lib.md` and Pyright. |
+| **Type Hermeticity** | Container type invariance (`Set[Base]` vs `Set[Sub]`) in test assertions | **SOLVED** | Explicit collection annotations or `cast(Base, ...)` documented in `low_to_test.md`. |
+| **Build Architecture** | Undeclared cross-package types in read-only `BUILD.bazel` | **SOLVED** | Private fallback container in interface aliased by implementation module. |
+| **Build Architecture** | Undeclared collaborator nominal types in test fixtures | **SOLVED** | Type-erased `cast(Any, ...)` in test fixtures to respect read-only `pyright_deps`. |
+| **Module Resolution** | Subsystem assembly cross-package constituent imports | **SOLVED** | Full package paths mandated for cross-package assembly constituents in `*_asm.py`. |
+| **Test Verification** | Mock collaborator protocol return type mismatch | **SOLVED** | Strict protocol signature & property return type checking matching `low/*.pyi`. |
+| **Test Verification** | Phantom types and illegal `TypeAliasType` constructor calls | **SOLVED** | Replaced phantom types with standard typing mappings in `low_to_test.md`. |
+| **API Hygiene** | Residual legacy members and divergent class names | **SOLVED** | Strict contract parity pruning against `low/*.pyi` enforced in `low_to_lib.md`. |
 | **Type Hermeticity** | Per-target closed typing vs. global `pyrightconfig.json` | **UNSOLVED** *(Hard)* | Requires generating per-target config files passed via `--project <file>`. |
 | **Agent QA** | Natural language diagnostic efficacy verification | **UNSOLVED** *(Hard)* | Requires asynchronous Supervising LLM evaluation questionnaire protocol. |
+
+---
+
+### 6.3 Library Implementation Alignment Patterns & Nominal Type Hermeticity
+
+During cleanroom alignment across packages in isolated role workspaces, library implementations operate under strict constraints: `BUILD.bazel` files are read-only (`chmod 444`), specifications are immutable, and Pyright enforces strict nominal subtyping. Four foundational alignment patterns govern this boundary:
+
+1. **Domain `NewType` Nominal Wrapping**:
+   - Cleanroom specifications define domain-specific nominal types (e.g. `EventName`, `MessageContent`, `TargetIdentifier`, `BuildSummary`) using `typing.NewType`.
+   - Python type checkers treat `NewType` as a distinct subtype of its underlying primitive. Passing bare primitive literals or formatting expressions (such as `event_name="build_pass_start"` or `summary=f"Pass {n}"`) produces `reportArgumentType` errors.
+   - All return values, dataclass parameters, message payloads, and collaborator method arguments typed as domain `NewType`s must be explicitly instantiated via their constructor (e.g. `EventName("build_pass_start")`, `BuildSummary(f"Pass {n}")`).
+
+2. **Undeclared Cross-Package Types & Nominal Identity Sharing**:
+   - When low-level specifications reference types from other packages (e.g. `sandbox_run_control.pyi` referencing `dag_config.BatchSize`) that are omitted from the unit's read-only `pyright_deps` in `BUILD.bazel`, importing the external package directly triggers `reportAttributeAccessIssue`.
+   - *Fallback Container Pattern*: The interface module declares a private fallback container defining the missing nominal types:
+     ```python
+     class _Types:
+         BatchSize = NewType("BatchSize", int)
+     dag_config = _Types
+     ```
+   - *Nominal Identity Collision in Split Modules*: Pyright treats distinct `NewType` calls with the same name as entirely separate nominal types. If `*_impl.py` defines its own `BatchSize = NewType(...)`, overriding methods fail with `reportIncompatibleMethodOverride`. Paired implementation modules must therefore alias the exact container instance from their companion interface module:
+     ```python
+     dag_config = sandbox_run_control.dag_config
+     ```
+     This preserves nominal type identity across split interface and implementation modules.
+
+3. **Subsystem Assembly Import Resolution**:
+   - Subsystem assembly modules (`*_asm.py`) wire together constituent singletons across both the local package and foreign packages.
+   - Intra-package constituents within the same directory use relative imports (`from . import constituent_impl`).
+   - Cross-package constituents located in other packages must be imported using their full package paths (e.g. `from update_with_ai.parts.core.lib import file_paths_impl` or `from parts.core.lib import file_paths_impl`) rather than relative imports, preventing module resolution failures during assembly registration.
+
+4. **API Hygiene & Legacy Member Pruning**:
+   - As specifications iterate, library implementations can retain divergent class names or obsolete members from earlier prototypes (such as residual properties or surplus public type aliases).
+   - Cleanroom library alignment mandates exact parity with `low/<name>.pyi` and `low/<name>_impl.pyi`. Any public class, method, property, or type alias not declared in the upstream specification must be aggressively pruned to prevent contract drift and public API pollution.
+
+---
+
+### 6.4 Unit Test Alignment Patterns: Nominal Typing, Container Invariance, and Hermetic Fixtures
+
+When authoring unit test suites (`tests/*_test.py`) against low-level specifications, test doubles and fixtures face four strict static typing and dependency boundaries:
+
+1. **Nominal Typing on Test Inputs & Factory Helpers**:
+   - Cleanroom domain specifications make extensive use of `typing.NewType` (e.g. `ToolResponseContent`, `MessageContent`, `UnitAddress`, `RoleAddress`, `ParameterName`, `ParameterDescription`, `ToolReminder`, `SuppressionKey`, `LoopFeedback`, `FailureExplanation`).
+   - Because `NewType` is invariant and not implicitly converted from `str` or `int`, test fixtures passing raw literals directly into dataclass fields (e.g. `DagNode("//pkg:unit", "lib")`) fail Pyright with `reportArgumentType`.
+   - Test suites should establish module-level factory helpers (e.g., `_make_dag_node`, `_make_response`, `_make_msg`, `_make_tool_param`) or explicitly instantiate domain constructors to guarantee 100% type soundness across test fixtures.
+
+2. **Container Type Invariance (`Set[T]`, `Mapping[K, V]`)**:
+   - In Python typing, mutable containers like `set` are invariant with respect to their type arguments. Assigning `{ChangeMessage(...)}` to a state field typed as `Set[DagMessage]` fails type analysis (`"set[ChangeMessage]" is not assignable to "Set[DagMessage]"`), even though `ChangeMessage` subclasses `DagMessage`.
+   - Test authors must either provide explicit container type annotations on fixture variables:
+     ```python
+     msgs: Set[DagMessage] = {ChangeMessage(...)}
+     ```
+     or use explicit element-level casting (`cast(DagMessage, msg)`).
+
+3. **Hermetic Test Build Boundaries & Undeclared Collaborator Types**:
+   - `test_lint.py` enforces that every library module imported by a test file must be declared in the test target's `pyright_deps` in `BUILD.bazel`.
+   - Because `BUILD.bazel` is read-only for the Test Engineer, when a collaborator nominal type is needed strictly to construct fixture inputs (for example, constructing `DagNode` where an argument type originates from an undeclared package like `file_paths`), importing that external package triggers lint failure.
+   - Test fixtures resolve this boundary via type-erased casts (`cast(Any, ...)`), constructing valid fixture objects without polluting declared build dependencies.
+
+4. **Mock Interface Parity & Phantom Type Elimination**:
+   - Test doubles mocking collaborator protocols must implement properties and methods with exact nominal type signatures matching `low/*.pyi` (for example, `Tool.parameters` returning `Mapping[ParameterName, ToolParameter[Any, Any]]` rather than loose `Mapping[str, Any]`).
+   - Legacy test suites sometimes retain phantom types (e.g. `ActualParameterBindings`, `WireParameterBindings`) or invoke `TypeAliasType` as a constructor (`WireType("1")`). Tests must use canonical standard library mappings (`Mapping[ParameterName, WireType]`) and valid parameter instances.
+
+5. **Local Linter Invocation & Multi-Package PYTHONPATH**:
+   - `test_lint.py` performs dynamic dry-run module imports (`check_test_dry_run`) to catch runtime syntax and structural errors. When invoking `test_lint.py` outside of Bazel across cleanroom subsystems, `PYTHONPATH` must include `update_python_with_ai` and all constituent library directories (`update_with_ai/parts/*/lib`) to prevent false-positive `ModuleNotFoundError` failures during test dry runs.
+
+---
+
+## 7. The Formal Proof Verification Dilemma
+
+Section 12 of **[`groundtalk.md`](file:///Users/seanmcdirmid/projects/cleanroom/design-docs/groundtalk.md)** identifies the primary architectural friction point in Cleanroom's formal verification layer:
+
+1. **Solvers Are Verifiers, Not Synthesizers**:
+   Neither Groundtalk's semi-naive Datalog engine nor external SMT/Horn solvers like Z3 can synthesize complete proofs from entry givens and leaf requirements alone. Because program methods generate new values (existential value invention) across an AND/OR hypergraph, unguided solvers return `unsat` unless supplied with the sequence of operational action facts.
+2. **Lightweight LLMs Cannot Author Formal Logic Programs**:
+   Relying on fast LLM models (e.g. Gemini 3.8 Flash) to author 27-step formal first-order relational proofs directly leads to severe failure modes: variable capture across unified terms, polarity inversions (`has_type(out x, T)`), hallucinated rule citations, and illegal shortcuts (`_` wildcards or arbitrary subtype substitutions).
+3. **Architectural Direction**:
+   Cleanroom must eliminate the requirement that the LLM write raw first-order logic programs. Future development will evaluate:
+   - **Path A**: An ergonomic high-level action DSL that elaborates into Groundtalk relational steps.
+   - **Path B**: Reverse-extracting Groundtalk proof steps directly from the Python implementation AST in `lib/*.py`.
+
 

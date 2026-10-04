@@ -1,0 +1,2 @@
+# Grounding QA Arbiter Log
+# Unresolved grounding contract omissions or mechanistic bypasses will be recorded below.

@@ -26,5 +26,8 @@
     "editor.wordBasedSuggestions": "off",
     "editor.inlineSuggest.enabled": false
   },
-  "editor.wordWrap": "on"
+  "editor.wordWrap": "on",
+  "files.associations": {
+    "*.gt": "prolog"
+  }
 }

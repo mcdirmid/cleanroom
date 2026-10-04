@@ -28,16 +28,21 @@ class Loop(loop.Loop, Singleton):
     def __init__(self) -> None:
         pass
 
-    def run_cleaning_pass(self, root: dag_storage.DagNode) -> loop.BuildResult:
+    def clean_subgraph(self, target: dag_storage.DagNode) -> loop.BuildResult:
+        root = target
         start_time = time.time()
         logger = get_singleton(runner_logger.RunnerLogger)
         root_str = _format_node(root)
         # Requirement: Telemetry capturing execution events, pass duration, and build outcome is streamed to standard output and transcript files.
         logger.consume(
             runner_logger.RunnerLogEvent(
-                event_name="build_pass_start",
-                summary=f"Starting cleaning pass for root {root_str}",
-                transcript_representation=f"=== Cleaning Pass Started: {root_str} ===",
+                event_name=runner_logger.EventName("build_pass_start"),
+                summary=runner_logger.EventSummary(
+                    f"Starting cleaning pass for root {root_str}"
+                ),
+                transcript=runner_logger.EventTranscript(
+                    f"=== Cleaning Pass Started: {root_str} ==="
+                ),
             )
         )
 
@@ -46,7 +51,6 @@ class Loop(loop.Loop, Singleton):
         cleaner = get_singleton(loop_cleaner.LoopCleaner)
         node_cleaner = get_singleton(loop_node_cleaner.NodeCleaner)
 
-        # Requirement: Target labels are resolved against workspace directories or runfiles trees to populate graph storage.
         visited: Set[dag_storage.DagNode] = set()
         queue: list[dag_storage.DagNode] = [root]
         while queue:
@@ -54,12 +58,11 @@ class Loop(loop.Loop, Singleton):
             if curr in visited:
                 continue
             visited.add(curr)
-            manifest = manifest_loader.get_manifest(curr)
-            if manifest is not None:
-                manifest_loader.load_manifest(manifest, cast(Any, storage))
+            manifest_loader.load_manifest(curr)
             for dep in storage.get_dependencies(curr):
                 if dep.node not in visited:
                     queue.append(dep.node)
+
 
         # Requirement: [Loop] The loop executes a cleaning pass over an acyclic subgraph rooted at a target node in graph storage.
         failure_reason: Optional[str] = None
@@ -93,38 +96,49 @@ class Loop(loop.Loop, Singleton):
             summary = f"Cleaning pass failed for {root_str}{reason_suffix}"
 
         telemetry_summary = f"{summary} in {duration:.1f}s"
-        # Requirement: Telemetry capturing execution events, pass duration, and build outcome is streamed to standard output and transcript files.
         logger.consume(
             runner_logger.RunnerLogEvent(
-                event_name="build_pass_end",
-                summary=telemetry_summary,
-                transcript_representation=f"=== Cleaning Pass Ended: {telemetry_summary} ===",
+                event_name=runner_logger.EventName("build_pass_end"),
+                summary=runner_logger.EventSummary(telemetry_summary),
+                transcript=runner_logger.EventTranscript(
+                    f"=== Cleaning Pass Ended: {telemetry_summary} ==="
+                ),
             )
         )
-        # Requirement: [Loop] The loop produces a build result upon pass completion.
-        return loop.BuildResult(success=success, summary=summary)
+        return loop.BuildResult(
+            success=success, summary=loop.BuildSummary(summary)
+        )
 
-    def mark_node_dirty(
-        self, target: dag_storage.DagNode, change: dag_storage.ChangeMessage
+
+    run_cleaning_pass = clean_subgraph
+
+    def mark_dirty(
+        self, target: dag_storage.DagNode, message: dag_storage.ChangeMessage
     ) -> None:
         # Requirement: [Loop] The loop marks a target node dirty by injecting a change message into its pending messages.
         storage = get_singleton(dag_storage.DagStorage)
-        storage.add_message(change, to=target)
+        storage.add_message(message, to=target)
 
-    def inject_node_feedback(
-        self, target: dag_storage.DagNode, feedback: dag_storage.FeedbackMessage
+    mark_node_dirty = mark_dirty
+
+    def inject_feedback(
+        self, target: dag_storage.DagNode, message: dag_storage.FeedbackMessage
     ) -> None:
         # Requirement: [Loop] The loop injects a caller-supplied feedback message into a target node.
         storage = get_singleton(dag_storage.DagStorage)
-        storage.add_message(feedback, to=target)
+        storage.add_message(message, to=target)
 
-    def broadcast_node_change(
-        self, origin: dag_storage.DagNode, change: dag_storage.ChangeMessage
+    inject_node_feedback = inject_feedback
+
+    def broadcast_change(
+        self, source: dag_storage.DagNode, message: dag_storage.ChangeMessage
     ) -> None:
         # Requirement: [Loop] The loop broadcasts a caller-supplied change message from a node to all of its reverse dependencies.
         storage = get_singleton(dag_storage.DagStorage)
-        for dep in storage.get_dependents(origin):
-            storage.add_message(change, to=dep)
+        for dep in storage.get_dependents(source):
+            storage.add_message(message, to=dep)
+
+    broadcast_node_change = broadcast_change
 
 
 def __initialize__(registry: Optional[LifecycleRegistry] = None) -> None:

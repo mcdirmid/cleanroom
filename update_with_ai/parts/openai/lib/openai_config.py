@@ -1,24 +1,29 @@
 # Requirements specified in openai_config.pyi
-"""OpenAI model configuration interface."""
+from typing import NewType, Optional, Protocol
 
-from typing import Optional, Protocol
+ModelName = NewType("ModelName", str)
+BaseUrl = NewType("BaseUrl", str)
+ApiKey = NewType("ApiKey", str)
+TimeoutSeconds = NewType("TimeoutSeconds", float)
+Temperature = NewType("Temperature", float)
+MaxTokens = NewType("MaxTokens", int)
 
 
-class OpenaiConfig(Protocol):
+class OpenAIConfig(Protocol):
     @property
-    def model_name(self) -> str: ...
-
-    @property
-    def base_url(self) -> Optional[str]: ...
-
-    @property
-    def api_key(self) -> Optional[str]: ...
-
-    @property
-    def timeout(self) -> int: ...
+    def model_name(self) -> ModelName: ...
 
     @property
-    def temperature(self) -> float: ...
+    def base_url(self) -> Optional[BaseUrl]: ...
 
     @property
-    def max_tokens(self) -> Optional[int]: ...
+    def api_key(self) -> Optional[ApiKey]: ...
+
+    @property
+    def timeout(self) -> TimeoutSeconds: ...
+
+    @property
+    def temperature(self) -> Temperature: ...
+
+    @property
+    def max_tokens(self) -> Optional[MaxTokens]: ...

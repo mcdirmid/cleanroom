@@ -18,10 +18,10 @@ Every guide follows this structure:
 - If the artifact has a linter, a `## Lint checks` section describes what is checked; it is never delivered as a progression step.
 - The boundary is positional: the Summary runs to the next `##` heading; each checklist section runs to the next `##` heading or end of file.
 - Checklist sections contain only `- [ ] <item>` lines.
-- Meta notes in guides are expressed as single-paragraph blockquotes: `> META: "one paragraph of meta note."`. Meta notes provide context or rationale for human authors and tooling, and are filtered out by file readers when read by an LLM agent.
+- Meta notes in guides are expressed as single-paragraph blockquotes: `> META: "one paragraph of meta note."`. Meta notes provide context or rationale for human authors and tooling, and express information blockades (file and role isolation boundaries); they are filtered out by file readers when read by an LLM agent so the agent is never confused by blockade instructions that the completed system enforces mechanically.
 - The guide reads coherently whole (Summary then sections in order) and sectioned (Summary first, then one section at a time).
 
-> META: "Guides are written for LLM readers that take every sentence literally; meta notes provide guidance for human authors and tooling while remaining invisible to the agent during execution. For the Markdown template format used to structure initial templates with HTML comment directives and parameters, see design-docs/template_format.md."
+> META: "Guides are written for LLM readers that take every sentence literally; meta notes provide guidance for human authors, tooling, and information blockades while remaining invisible to the agent during execution. For the Markdown template format used to structure initial templates with HTML comment directives and parameters, see design-docs/template_format.md."
 
 ## Guide structure
 
@@ -30,7 +30,8 @@ Every guide follows this structure:
 - [ ] An optional section titled `## Verification failure` states instructions or restrictions that apply only when verification fails; it is never delivered as a progression step
 - [ ] If the artifact has a linter, a section titled `## Lint checks` describes what the linter checks; it is never delivered as a progression step
 - [ ] Meta notes are expressed as single-paragraph blockquotes starting with `> META: "one paragraph of meta note."`
-- [ ] Meta notes contain guidance or rationale intended for human authors and meta-tools, never normative requirements or constraints for the agent (since agent readers filter out `> META:` paragraphs)
+- [ ] Meta notes contain guidance, rationale, or information blockades intended for human authors and meta-tools, never normative requirements or constraints for the agent (since agent readers filter out `> META:` paragraphs)
+- [ ] Information blockades restricting access to other files or roles are expressed strictly as meta notes; direct blockade constraints in the guide are prohibited because the completed system enforces them mechanically, and direct statements confuse the agent
 - [ ] Checklist sections contain only `- [ ] <item>` lines — no prose, no nested headings
 - [ ] The guide reads coherently whole and sectioned
 
@@ -50,7 +51,7 @@ Every guide follows this structure:
 - [ ] No instruction to run or interpret verification; verification is transparent and the reader's only verification action is calling `advance`; guides and prompts never advise about tool arguments: they can refer to advance, but they cannot refer to tool arguments or the content of advance
 - [ ] Prompts state what the artifact is, never what it is not: no negative instructions, no speculation about other modules, and no editing or tool advice
 - [ ] No instruction to do what the reader cannot do — the reader's capabilities are fixed (file reads, edits, and advance; the search tool is never installed; no execution, no shell, no test runs); a capability the reader lacks is never stated as a requirement and never as a prohibition — the reader already knows it lacks it
-- [ ] No reference to files the reader cannot read (other guides, HLS files, implementations); a label in the source material that names an unreadable file gets one sentence saying it carries no requirements
+- [ ] No reference to files the reader cannot read (other guides, HLS files, implementations); a label in the source material that names an unreadable file gets one sentence saying it carries no requirements; information blockades are expressed exclusively as meta notes rather than direct reader prohibitions that confuse the agent
 - [ ] External domain knowledge and foreign formats (third-party APIs, foreign serialization formats, runtime identifiers) are excluded from guides; external boundaries are specified in dedicated external boundary specifications (`low/<name>_ext.md`)
 - [ ] Templates provide initial creation and bootstrapping guidance through inline instruction comments; checklist sections verify that template instruction comments are deleted before final artifact completion
 - [ ] Templates follow the Markdown template format in design-docs/template_format.md, using HTML comment directives and placeholder parameters that remain readable without bindings
@@ -141,3 +142,4 @@ Every guide follows this structure:
 - [ ] Triggering — a sentence that instructs the reader ("ensure the module...") — the guide constrains; the prompt triggers
 - [ ] Checklist items helping with verification — attempting to use checklist sections to guide the reader through resolving verification errors; because guides do not advance until verification passes, checklist items cannot help the reader fix verification failures
 - [ ] Capability noise — telling the reader to run or interpret checks it has no tool for, or stating what it cannot do — the reader's capabilities are fixed; mention only actions the reader can take
+- [ ] Direct information blockades — stating information blockades or unreadable file prohibitions directly in guide text or checklist items instead of expressing them exclusively as meta notes (`> META: "..."`); the completed system enforces file isolation mechanically, and direct blockade statements confuse the agent

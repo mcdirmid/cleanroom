@@ -19,12 +19,10 @@ class Sandbox(sandbox.Sandbox, Singleton):
 
     @property
     def has_modifications(self) -> bool:
-        # Requirement: Querying file modifications delegates to the edit manager.
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
         return edit_mgr.has_modifications
 
-    def materialize_startup_templates(self) -> None:
-        # Requirement: Materializing startup templates delegates to the edit manager to write template content to missing read-write files without overwriting existing files.
+    def materialize_templates(self) -> None:
         edit_mgr = get_singleton(sandbox_file_editor.EditManager)
         edit_mgr.materialize_templates()
 

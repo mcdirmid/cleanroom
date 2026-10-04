@@ -5,6 +5,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 from typing import Any, cast, Mapping, Optional, Sequence, Set, Tuple
 
@@ -13,13 +14,12 @@ from update_with_ai.parts.agent.lib.agent_config import AgentConfig
 from update_with_ai.parts.agent.lib.agent_file_alias import (
     AliasManager,
     BoundFile,
-    DirectoryPath,
     FileAlias,
     FileContent,
     ReadOnlyFile,
     ReadWriteFile,
+    RelativePath,
     UnboundFile,
-    WorkspacePath,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
 from update_with_ai.parts.agent.lib.agent_node_config import NodeGuide, NodeConfig
@@ -34,14 +34,25 @@ from update_with_ai.parts.sandbox.lib.sandbox_file_editor_impl import (
     __initialize__,
 )
 from update_with_ai.parts.sandbox.lib.tool_provider import (
-    ActualParameterBindings,
+    ParameterName,
+    ParameterType,
     Tool,
     ToolManager,
     ToolParameter,
     ToolResponse,
-    WireParameterBindings,
-    WireString,
+    ToolResponseContent,
+    WireType,
 )
+
+
+class ActualParameterBindings(dict[Any, Any]):
+    def __init__(self, bindings: Any) -> None:
+        if isinstance(bindings, set):
+            super().__init__(dict(bindings))
+        elif isinstance(bindings, dict):
+            super().__init__(bindings)
+        else:
+            super().__init__(bindings)
 
 
 class MockToolManager:
@@ -54,15 +65,15 @@ class MockToolManager:
         self.installed_tools.add(tool)
 
     def execute_tool(
-        self, name: str, wire_parameter_bindings: WireParameterBindings
+        self, name: Any, wire_parameter_bindings: Mapping[ParameterName, WireType]
     ) -> ToolResponse:
-        return ToolResponse(is_failed=False, is_terminated=False, content="")
+        return ToolResponse(is_failed=False, is_terminated=False, content=ToolResponseContent(""))
 
 
 class MockStringConverter:
     tier = agent_session
     actual_type = str
-    wire_type = WireString()
+    wire_type = str
 
     def convert(self, wire_value: Any) -> str:
         return str(wire_value)
@@ -102,25 +113,32 @@ class MockAgentConfig:
         self.is_mcp_mode = is_mcp_mode
 
 
-def _make_directory_path(path: str) -> DirectoryPath:
-    obj = object.__new__(DirectoryPath)
-    object.__setattr__(obj, "path", path)
-    return obj
+@dataclass(frozen=True)
+class _WorkspacePathDouble:
+    path: str
+
+    def __str__(self) -> str:
+        return self.path
+
+    def __fspath__(self) -> str:
+        return self.path
 
 
-def _make_workspace_path(path: str) -> WorkspacePath:
-    obj = object.__new__(WorkspacePath)
-    object.__setattr__(obj, "path", path)
-    return obj
+def _make_workspace_path(path: str) -> Any:
+    return _WorkspacePathDouble(path)
+
+
+def _make_workspace_root(path: str) -> Any:
+    return _WorkspacePathDouble(path)
 
 
 class MockAliasManager:
     tier = agent_session
 
     def __init__(self, workspace_root: str) -> None:
-        self.workspace_root = _make_directory_path(workspace_root)
+        self.workspace_root = _make_workspace_root(workspace_root)
         self.actual_type = FileAlias
-        self.wire_type = WireString()
+        self.wire_type = str
         self.files: dict[str, FileAlias] = {}
 
     def convert(self, wire_value: Any) -> Any:
@@ -128,7 +146,7 @@ class MockAliasManager:
             return wire_value
         if str(wire_value) in self.files:
             return self.files[str(wire_value)]
-        return UnboundFile(relative_path=str(wire_value))
+        return UnboundFile(relative_path=RelativePath(str(wire_value)))
 
     def sanitize_text(self, text: str) -> str:
         return text
@@ -149,12 +167,12 @@ class MockNodeConfig:
 
     def __init__(
         self,
-        templates: Set[Tuple[BoundFile, FileContent]],
+        templates: Optional[Mapping[BoundFile, FileContent]] = None,
         template_parameters: Optional[Mapping[str, Any]] = None,
         verification_checks: Optional[Sequence[Any]] = None,
         read_write_files: Optional[Set[BoundFile]] = None,
     ) -> None:
-        self._templates = templates
+        self._templates = dict(templates or {})
         self._template_parameters = template_parameters or {}
         self._verification_checks = verification_checks or []
         self._read_write_files = read_write_files or set()
@@ -184,7 +202,7 @@ class MockNodeConfig:
         return None
 
     @property
-    def templates(self) -> Set[Tuple[BoundFile, FileContent]]:
+    def templates(self) -> Mapping[BoundFile, FileContent]:
         return self._templates
 
     @property
@@ -205,18 +223,18 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
         node = MagicMock()
         self.rw_file = ReadWriteFile(
-            relative_path="file.txt",
+            relative_path=RelativePath("file.txt"),
             workspace_path=_make_workspace_path("file.txt"),
             owning_node=node,
         )
         self.ro_file = ReadOnlyFile(
-            relative_path="readonly.txt",
+            relative_path=RelativePath("readonly.txt"),
             workspace_path=_make_workspace_path("readonly.txt"),
             owning_node=node,
         )
 
         self.missing_bound = ReadWriteFile(
-            relative_path="missing.txt",
+            relative_path=RelativePath("missing.txt"),
             workspace_path=_make_workspace_path("missing.txt"),
             owning_node=node,
         )
@@ -231,15 +249,15 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         self.agent_cfg = MockAgentConfig()
         self.alias_mgr = MockAliasManager(self.test_dir)
         self.alias_mgr.files = {
-            self.rw_file.relative_path: self.rw_file,
-            self.ro_file.relative_path: self.ro_file,
-            self.missing_bound.relative_path: self.missing_bound,
+            str(self.rw_file.relative_path): self.rw_file,
+            str(self.ro_file.relative_path): self.ro_file,
+            str(self.missing_bound.relative_path): self.missing_bound,
         }
         self.template_formatter = MockTemplateFormatter()
         self.node_cfg = MockNodeConfig(
             templates={
-                (self.rw_file, "Existing overwrite attempt"),
-                (self.missing_bound, "Starter template <param> content"),
+                self.rw_file: FileContent("Existing overwrite attempt"),
+                self.missing_bound: FileContent("Starter template <param> content"),
             },
             template_parameters={"param": "materialized"},
             read_write_files={self.rw_file, self.missing_bound},
@@ -319,7 +337,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # 1. Non-read-write file fails
             b_ro = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.ro_file),
+                    (replace_tool.path_parameter, self.ro_file),
                     (replace_tool.target_content_parameter, "Line 2"),
                     (replace_tool.replacement_content_parameter, "New Line 2"),
                 }
@@ -332,7 +350,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # 2. Content not found fails
             b_not_found = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "Not present"),
                     (replace_tool.replacement_content_parameter, "New"),
                 }
@@ -345,7 +363,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # 3. Successful replacement
             b_ok = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "Line 2"),
                     (replace_tool.replacement_content_parameter, "Updated Line 2"),
                 }
@@ -369,7 +387,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 f.write("    def hello():\n        return True\n")
             b_fuzzy = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "def hello():\n    return True"),
                     (replace_tool.replacement_content_parameter, "    def hello():\n        return False\n"),
                 }
@@ -385,7 +403,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 f.write("  pass\n    pass\n")
             b_fuzzy_multi = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "pass"),
                     (replace_tool.replacement_content_parameter, "return 1"),
                 }
@@ -398,7 +416,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 f.write("duplicate\nduplicate\n")
             b_dup = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "duplicate"),
                     (replace_tool.replacement_content_parameter, "single"),
                 }
@@ -413,7 +431,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # 5. Multiple matches succeed when allow_multiple is true
             b_dup_allowed = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "duplicate"),
                     (replace_tool.replacement_content_parameter, "single"),
                     (replace_tool.allow_multiple_parameter, True),
@@ -428,7 +446,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # 6. Replacement producing no change to file content fails
             b_no_change = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "single"),
                     (replace_tool.replacement_content_parameter, "single"),
                     (replace_tool.allow_multiple_parameter, True),
@@ -453,7 +471,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # 1. start_line < 1 fails
             b_zero_start = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "Line 1"),
                     (replace_tool.replacement_content_parameter, "New"),
                     (replace_tool.start_line_parameter, 0),
@@ -466,7 +484,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # 2. start_line > total line count + 1 fails
             b_oob_start = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "Line 1"),
                     (replace_tool.replacement_content_parameter, "New"),
                     (replace_tool.start_line_parameter, 5),
@@ -479,7 +497,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # 3. end_line < 1 fails
             b_zero_end = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "Line 1"),
                     (replace_tool.replacement_content_parameter, "New"),
                     (replace_tool.end_line_parameter, 0),
@@ -492,7 +510,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # 4. end_line > total line count fails
             b_oob_end = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "Line 1"),
                     (replace_tool.replacement_content_parameter, "New"),
                     (replace_tool.end_line_parameter, 4),
@@ -505,7 +523,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # 5. start_line > end_line fails
             b_start_gt_end = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "Line"),
                     (replace_tool.replacement_content_parameter, "New"),
                     (replace_tool.start_line_parameter, 3),
@@ -521,7 +539,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 f.write("target\ntarget\ntarget\n")
             b_scoped = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "target"),
                     (replace_tool.replacement_content_parameter, "replaced"),
                     (replace_tool.start_line_parameter, 2),
@@ -536,7 +554,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # 7. Scoped replacement fails when target_content is not found in designated range
             b_scoped_missing = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "missing"),
                     (replace_tool.replacement_content_parameter, "replaced"),
                     (replace_tool.start_line_parameter, 2),
@@ -551,7 +569,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 f.write("line 1\nline 2\ntarget line\nline 4\n")
             b_scoped_locator = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "target line"),
                     (replace_tool.replacement_content_parameter, "replaced"),
                     (replace_tool.start_line_parameter, 1),
@@ -566,7 +584,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Multi-line target content outside range reports span
             b_scoped_multiline = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "target line\nline 4"),
                     (replace_tool.replacement_content_parameter, "replaced"),
                     (replace_tool.start_line_parameter, 1),
@@ -583,7 +601,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
                 f.write("alpha alpha\nbeta\n")
             b_scoped_dup = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "alpha"),
                     (replace_tool.replacement_content_parameter, "gamma"),
                     (replace_tool.start_line_parameter, 1),
@@ -596,7 +614,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # 9. Scoped multiple matches within range succeeds when allow_multiple is true
             b_scoped_dup_allowed = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "alpha"),
                     (replace_tool.replacement_content_parameter, "gamma"),
                     (replace_tool.start_line_parameter, 1),
@@ -622,7 +640,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
             b_diff = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "Line 1"),
                     (replace_tool.replacement_content_parameter, "Header"),
                 }
@@ -643,7 +661,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
             b_no_followup = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "Header"),
                     (replace_tool.replacement_content_parameter, "Line 1"),
                 }
@@ -672,7 +690,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: The edit manager exposes whether workspace file modifications occurred during the session by comparing current workspace file content against initial content before editing.
             b_mod = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "Line 2"),
                     (replace_tool.replacement_content_parameter, "Modified Line 2"),
                 }
@@ -684,7 +702,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # 2. Revert back to original content -> has_modifications is False
             b_revert = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "Modified Line 2"),
                     (replace_tool.replacement_content_parameter, "Line 2"),
                 }
@@ -697,7 +715,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # 3. No-op replacement with identical text -> fails and has_modifications remains False
             b_noop = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "Line 2"),
                     (replace_tool.replacement_content_parameter, "Line 2"),
                 }
@@ -714,7 +732,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         nested_host = os.path.join(self.test_dir, nested_rel)
         node = MagicMock()
         missing_rw_file = ReadWriteFile(
-            relative_path="missing.txt",
+            relative_path=RelativePath("missing.txt"),
             workspace_path=_make_workspace_path(nested_rel),
             owning_node=node,
         )
@@ -727,7 +745,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Tool execution reads the file content from the filesystem, treating missing files as empty.
             b_rep = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, missing_rw_file),
+                    (replace_tool.path_parameter, missing_rw_file),
                     (replace_tool.target_content_parameter, "some_text"),
                     (replace_tool.replacement_content_parameter, "new_text"),
                 }
@@ -739,7 +757,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Tool execution writes the updated file content to the filesystem, creating any missing parent directories, and records that workspace file modifications occurred on success.
             b_create = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, missing_rw_file),
+                    (replace_tool.path_parameter, missing_rw_file),
                     (replace_tool.target_content_parameter, ""),
                     (
                         replace_tool.replacement_content_parameter,
@@ -767,7 +785,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Perform first replacement
             b1 = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "Line 2"),
                     (replace_tool.replacement_content_parameter, "Modified Line 2"),
                 }
@@ -779,7 +797,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Perform second replacement
             b2 = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "Line 1"),
                     (replace_tool.replacement_content_parameter, "Modified Line 1"),
                 }
@@ -791,52 +809,20 @@ class SandboxFileEditorImplTest(unittest.TestCase):
     def test_edit_manager_initial_content_detection_and_filesystem_modifications(
         self,
     ) -> None:
-        """CUJ: EditManager records initial contents from filesystem and detects creations, deletions, and errors."""
+        """CUJ: EditManager records initial contents from filesystem and detects modifications."""
         with enter_phase(agent_session, registry=self.registry) as scope:
             edit_mgr = scope.get_singleton(EditManager)
-            assert isinstance(edit_mgr, EditManagerImpl)
-
-            # 1. File exists on disk, record_initial_content reads it
-            existing_file = os.path.join(self.test_dir, "existing.txt")
-            with open(existing_file, "w", encoding="utf-8") as f:
-                f.write("initial data")
-            # Requirement: The edit manager exposes whether workspace file modifications occurred during the session by comparing current workspace file content against initial content before editing.
-            # Requirement: [EditManager] The edit manager exposes whether workspace file modifications occurred during the session, determined by whether workspace file contents differ from their initial state prior to editing.
-            edit_mgr.record_initial_content(existing_file)
+            edit_mgr.materialize_templates()
             self.assertFalse(edit_mgr.has_modifications)
 
-            # 2. File deleted after initial content recorded -> has_modifications is True
-            os.remove(existing_file)
+            # Modifying existing file triggers has_modifications
+            with open(self.target_path, "a", encoding="utf-8") as f:
+                f.write("more content\n")
             self.assertTrue(edit_mgr.has_modifications)
 
-            # 3. Non-existent file recorded as initial content None -> has_modifications is False while absent
-            new_file = os.path.join(self.test_dir, "new_file.txt")
-            edit_mgr.record_initial_content(new_file)
-            # Recreate existing_file so it doesn't trigger has_modifications
-            with open(existing_file, "w", encoding="utf-8") as f:
-                f.write("initial data")
-            self.assertFalse(edit_mgr.has_modifications)
-
-            # 4. Creating the new file on disk -> has_modifications is True
-            with open(new_file, "w", encoding="utf-8") as f:
-                f.write("created content")
+            # Deleting file triggers has_modifications
+            os.remove(self.target_path)
             self.assertTrue(edit_mgr.has_modifications)
-            os.remove(new_file)
-
-            # 5. Record initial content when open raises OSError
-            err_file = os.path.join(self.test_dir, "err_file.txt")
-            with open(err_file, "w", encoding="utf-8") as f:
-                f.write("err")
-            with patch("builtins.open", side_effect=OSError("Permission denied")):
-                edit_mgr.record_initial_content(err_file)
-
-            # 6. Read fails during has_modifications comparison -> has_modifications is True
-            read_err_file = os.path.join(self.test_dir, "read_err.txt")
-            with open(read_err_file, "w", encoding="utf-8") as f:
-                f.write("initial read err")
-            edit_mgr.record_initial_content(read_err_file, "initial read err")
-            with patch("builtins.open", side_effect=OSError("Read error")):
-                self.assertTrue(edit_mgr.has_modifications)
 
     def test_tool_parameter_converters(self) -> None:
         """CUJ: Parameter converters associated with tool parameters."""
@@ -845,19 +831,19 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
             # Parameter: The replace file content tool path parameter uses the alias manager to convert a file alias.
             self.assertIs(
-                replace_tool.file_alias_parameter.parameter_converter, self.alias_mgr
+                replace_tool.path_parameter.parameter_type, self.alias_mgr
             )
-            self.assertFalse(replace_tool.file_alias_parameter.is_required)
+            self.assertFalse(replace_tool.path_parameter.is_required)
             # Parameter: The replace file content tool target content parameter uses a string parameter converter to accept text.
             self.assertEqual(
-                replace_tool.target_content_parameter.parameter_converter.actual_type,
+                replace_tool.target_content_parameter.parameter_type.actual_type,
                 str,
             )
             self.assertTrue(replace_tool.target_content_parameter.is_required)
             assert replace_tool.target_content_parameter.missing_message is not None
             self.assertIn(
                 "search window",
-                replace_tool.target_content_parameter.missing_message({"start_line"}).lower(),
+                replace_tool.target_content_parameter.missing_message({ParameterName("start_line")}).lower(),
             )
             self.assertIn(
                 "append",
@@ -865,24 +851,25 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             )
             # Parameter: The replace file content tool replacement content parameter uses a string parameter converter to accept text.
             self.assertEqual(
-                replace_tool.replacement_content_parameter.parameter_converter.actual_type,
+                replace_tool.replacement_content_parameter.parameter_type.actual_type,
                 str,
             )
             # Parameter: The replace file content tool start line parameter uses an integer parameter converter to accept an integer.
             self.assertEqual(
-                replace_tool.start_line_parameter.parameter_converter.actual_type,
+                replace_tool.start_line_parameter.parameter_type.actual_type,
                 int,
             )
             # Parameter: The replace file content tool end line parameter uses an integer parameter converter to accept an integer.
             self.assertEqual(
-                replace_tool.end_line_parameter.parameter_converter.actual_type,
+                replace_tool.end_line_parameter.parameter_type.actual_type,
                 int,
             )
             # Parameter: The replace file content tool allow multiple parameter uses a boolean parameter converter to accept a boolean.
             self.assertEqual(
-                replace_tool.allow_multiple_parameter.parameter_converter.actual_type,
+                replace_tool.allow_multiple_parameter.parameter_type.actual_type,
                 bool,
             )
+
     def test_materialize_templates_runs_verification_checks(self) -> None:
         """CUJ: Running verification checks when templates are materialized."""
         mock_check = MagicMock()
@@ -891,11 +878,11 @@ class SandboxFileEditorImplTest(unittest.TestCase):
         mock_failing_check.verify.side_effect = RuntimeError("lint error")
 
         new_rw_file = ReadWriteFile(
-            relative_path="templated.txt",
+            relative_path=RelativePath("templated.txt"),
             workspace_path=_make_workspace_path("templated.txt"),
             owning_node=MagicMock(),
         )
-        self.node_cfg._templates.add((new_rw_file, FileContent("Initial template")))
+        self.node_cfg._templates[new_rw_file] = FileContent("Initial template")
         self.node_cfg._verification_checks = [mock_check, mock_failing_check]
 
         with enter_phase(agent_session, registry=self.registry) as scope:
@@ -937,7 +924,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Requirement: Editing tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
             bindings = ActualParameterBindings(
                 bindings={
-                    (replace_tool.file_alias_parameter, self.rw_file),
+                    (replace_tool.path_parameter, self.rw_file),
                     (replace_tool.target_content_parameter, "Line 1"),
                     (replace_tool.replacement_content_parameter, "New Line 1"),
                 }
@@ -1003,33 +990,59 @@ class SandboxFileEditorImplTest(unittest.TestCase):
 
             # 1. Non-read-write file fails
             # Requirement: Tool execution fails if the file alias is not a read-write file, reminding the agent that only declared read-write files can be modified.
-            resp_ro = edit_mgr.can_write(self.ro_file.relative_path)
+            resp_ro = edit_mgr.can_write(self.ro_file)
             self.assertTrue(resp_ro.is_failed)
             self.assertIsNotNone(resp_ro.reminder)
             self.assertTrue(resp_ro.reminder)
 
             # 2. Unlocked read-write file succeeds and records edit
             # Requirement: When an unlocked read-write file is supplied, tool execution records the file edit in the edit manager and produces a successful response indicating that modification is permitted.
-            resp_rw = edit_mgr.can_write(self.rw_file.relative_path)
+            resp_rw = edit_mgr.can_write(self.rw_file)
             self.assertFalse(resp_rw.is_failed)
             self.assertEqual(edit_mgr.last_read_or_edited_file, self.rw_file)
-
-            # Test passing FileAlias directly
-            resp_rw_direct = edit_mgr.can_write(self.rw_file)
-            self.assertFalse(resp_rw_direct.is_failed)
 
             # 3. Locked file fails
             edit_mgr.lock_file(self.rw_file)
             # Requirement: Tool execution fails if the file alias is locked against modification, reminding the agent that files that have been the target of a submit, fail, or blame cannot be modified.
-            resp_locked = edit_mgr.can_write(self.rw_file.relative_path)
+            resp_locked = edit_mgr.can_write(self.rw_file)
             self.assertTrue(resp_locked.is_failed)
             self.assertIsNotNone(resp_locked.reminder)
             self.assertTrue(resp_locked.reminder)
 
             # 4. Unlocking permits modification again
             edit_mgr.unlock_file(self.rw_file)
-            resp_unlocked = edit_mgr.can_write(self.rw_file.relative_path)
+            resp_unlocked = edit_mgr.can_write(self.rw_file)
             self.assertFalse(resp_unlocked.is_failed)
+
+            # 5. Write access validation passing RelativePath string rather than FileAlias instance fails with guidance
+            unregistered_rel = RelativePath("unregistered.py")
+            resp_unregistered = edit_mgr.can_write(unregistered_rel)
+            # Requirement: WHEN checking write access for a path that is not a declared read-write file or is locked against modification, MUST fail with guidance.
+            self.assertTrue(resp_unregistered.is_failed)
+
+    def test_edit_manager_has_modifications_newly_created_file(self) -> None:
+        """CUJ: Creating a new read-write file that did not exist initially registers as a modification."""
+        new_rw = ReadWriteFile(
+            relative_path=RelativePath("created_file.txt"),
+            workspace_path=_make_workspace_path("created_file.txt"),
+            owning_node=MagicMock(),
+        )
+        self.node_cfg._read_write_files.add(new_rw)
+        self.alias_mgr.files["created_file.txt"] = new_rw
+
+        with enter_phase(agent_session, registry=self.registry) as scope:
+            edit_mgr = scope.get_singleton(EditManager)
+            edit_mgr.materialize_templates()
+            created_host = os.path.join(self.test_dir, "created_file.txt")
+            self.assertFalse(os.path.exists(created_host))
+            self.assertFalse(edit_mgr.has_modifications)
+
+            # Create new file that did not exist initially
+            with open(created_host, "w", encoding="utf-8") as f:
+                f.write("new content\n")
+
+            # Requirement: WHEN workspace file contents differ from their initial state prior to editing, MUST return true.
+            self.assertTrue(edit_mgr.has_modifications)
 
     def test_file_hash(self) -> None:
         """CUJ: EditManager computes an MD5 file hash for a read-write file from its content."""
@@ -1051,7 +1064,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             self.assertEqual(missing_hash, hashlib.md5(b"").hexdigest())
 
             # Unbound file produces empty hash
-            unbound_hash = edit_mgr.file_hash(UnboundFile(relative_path="unbound.txt"))
+            unbound_hash = edit_mgr.file_hash(UnboundFile(relative_path=RelativePath("unbound.txt")))
             self.assertEqual(missing_hash, unbound_hash)
 
             # String file path converts and computes hash
@@ -1068,7 +1081,7 @@ class SandboxFileEditorImplTest(unittest.TestCase):
             # Newly added read-write file to node config gets recorded on has_modifications query
             node = MagicMock()
             new_rw = ReadWriteFile(
-                relative_path="new_file.txt",
+                relative_path=RelativePath("new_file.txt"),
                 workspace_path=_make_workspace_path("new_file.txt"),
                 owning_node=node,
             )

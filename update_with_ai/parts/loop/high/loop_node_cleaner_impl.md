@@ -23,10 +23,10 @@ Resolving dirty nodes produces:
 
 - Change messages for downstream dependent nodes when the outcome signals successful advancement with workspace file modifications, and no change messages or change summaries when no workspace files were modified.
 
-- Feedback messages containing the blame explanation and addressed to the blamed dependency node owning the blamed file when the outcome signals blame attributed to that dependency node.
+- Feedback messages containing the blame explanation and addressed strictly to the declared feedback dependency node owning the blamed file when the outcome signals blame attributed to a configured blame target of the dirty nodes, producing no propagating messages and leaving the nodes dirty when the blamed file does not match a configured blame target.
 
 - No propagating messages when the outcome signals run failure, leaving the nodes dirty and communicating that processing cannot continue.
 
 When dirty nodes define no task prompt, cleaning resolves the nodes without establishing an agent session phase, producing change messages for downstream dependent nodes when incoming pending messages indicate changes from upstream dependencies, and producing no propagating messages otherwise.
 
-Cleaning dirty nodes registers the nodes as dependents to their non-silent dependencies in graph storage, delivering resulting change messages to downstream dependents and feedback messages to their addressed dependency node.
+Cleaning dirty nodes registers the nodes as dependents to their non-silent dependencies in graph storage, delivering resulting change messages to downstream dependents and delivering feedback messages strictly to their addressed feedback dependency node. Delivering feedback messages to arbitrary dependencies, non-feedback dependencies, guides, or fixed node specifications is prohibited.
