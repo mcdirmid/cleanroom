@@ -973,6 +973,9 @@ class CleanroomWorkspaceToolTest(unittest.TestCase):
         with open(os.path.join(qa_ws, "AGENTS.md"), "r", encoding="utf-8") as f:
             qa_content = f.read()
         self.assertIn("Follow the companion guide", qa_content)
+        self.assertIn(
+            "Always Run `bin/get_work` First (Even for Out-of-Band Work)", qa_content
+        )
         self.assertNotIn(
             "call view_file on target implementation, test, and contract files",
             qa_content,
@@ -981,6 +984,9 @@ class CleanroomWorkspaceToolTest(unittest.TestCase):
         with open(os.path.join(lib_ws, "AGENTS.md"), "r", encoding="utf-8") as f:
             lib_content = f.read()
         self.assertIn("Follow the companion guide", lib_content)
+        self.assertIn(
+            "Always Run `bin/get_work` First (Even for Out-of-Band Work)", lib_content
+        )
         self.assertNotIn(
             "call view_file on both the upstream contract and the target file",
             lib_content,
@@ -1057,7 +1063,9 @@ class CleanroomWorkspaceToolTest(unittest.TestCase):
             f.write("def test_config(): pass\n")
 
         init_ts = "2026-10-04T12:00:00Z"
-        src_metadata.update_metadata(low_file, last_cleaned=init_ts, last_changed=init_ts)
+        src_metadata.update_metadata(
+            low_file, last_cleaned=init_ts, last_changed=init_ts
+        )
         src_metadata.update_metadata(
             lib_file,
             last_cleaned=init_ts,
@@ -1148,9 +1156,255 @@ class CleanroomWorkspaceToolTest(unittest.TestCase):
             lib_ws, dir_scope="staging", role_filter="lib"
         )
         self.assertEqual(len(lib_dirty), 1)
-        self.assertEqual(lib_dirty[0]["target_file"], "staging/parts/agent/lib/config.py")
+        self.assertEqual(
+            lib_dirty[0]["target_file"], "staging/parts/agent/lib/config.py"
+        )
         self.assertTrue(any("DIRTY" in r for r in lib_dirty[0]["reasons"]))
         self.assertTrue(any(critique in r for r in lib_dirty[0]["reasons"]))
+
+    def test_resolve_main_workspace_from_convention(self) -> None:
+        """Verifies resolve_main_workspace_from_convention on conventional layout and nested paths."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            main_repo = os.path.join(tmp_dir, "my_cleanroom")
+            role_ws = os.path.join(
+                tmp_dir, "role_workspaces", "my_cleanroom_test_staging"
+            )
+            os.makedirs(main_repo, exist_ok=True)
+            os.makedirs(role_ws, exist_ok=True)
+
+            # Write pathless descriptor
+            desc_path = os.path.join(role_ws, ".cleanroom_role.json")
+            with open(desc_path, "w", encoding="utf-8") as f:
+                json.dump(
+                    {
+                        "role_address": "//update_python_with_ai:test",
+                        "role_name": "test",
+                        "parts_dir": "staging",
+                    },
+                    f,
+                )
+
+            # 1. Direct role workspace root
+            main_root, ws_name, role_addr, d_scope = (
+                cleanroom_workspace_tool.resolve_main_workspace_from_convention(role_ws)
+            )
+            self.assertEqual(main_root, os.path.realpath(main_repo))
+            self.assertEqual(ws_name, "my_cleanroom")
+            self.assertEqual(role_addr, "//update_python_with_ai:test")
+            self.assertEqual(d_scope, "staging")
+
+            # 2. Deeply nested subdirectory inside role workspace
+            nested_sub = os.path.join(role_ws, "staging/parts/foo/tests")
+            os.makedirs(nested_sub, exist_ok=True)
+            n_main_root, n_ws_name, n_role_addr, n_d_scope = (
+                cleanroom_workspace_tool.resolve_main_workspace_from_convention(
+                    nested_sub
+                )
+            )
+            self.assertEqual(n_main_root, os.path.realpath(main_repo))
+            self.assertEqual(n_ws_name, "my_cleanroom")
+            self.assertEqual(n_role_addr, "//update_python_with_ai:test")
+            self.assertEqual(n_d_scope, "staging")
+
+    def test_pathless_descriptor_disk_format_and_dynamic_resolution(self) -> None:
+        """Verifies that .cleanroom_role.json on disk has NO host paths, and load_role_metadata dynamically resolves them."""
+        ws = cleanroom_workspace_tool.commission_workspace(
+            "//update_python_with_ai:test",
+            dir_scope="staging",
+            repo_root=self.test_dir,
+        )
+
+        # 1. Verify disk format has zero host paths
+        desc_path = os.path.join(ws, ".cleanroom_role.json")
+        self.assertTrue(os.path.isfile(desc_path))
+        with open(desc_path, "r", encoding="utf-8") as f:
+            raw_data = json.load(f)
+
+        self.assertNotIn("main_workspace_root", raw_data)
+        self.assertNotIn("main_workspace", raw_data)
+        self.assertEqual(raw_data["role_address"], "//update_python_with_ai:test")
+        self.assertEqual(raw_data["role_name"], "test")
+        self.assertEqual(raw_data["parts_dir"], "staging")
+
+        # 2. Verify load_role_metadata dynamically resolves main_workspace_root
+        meta = cleanroom_workspace_tool.load_role_metadata(ws)
+        self.assertIsNotNone(meta)
+        assert meta is not None
+        self.assertIn("main_workspace_root", meta)
+        self.assertEqual(
+            os.path.realpath(meta["main_workspace_root"]),
+            os.path.realpath(self.test_dir),
+        )
+        self.assertEqual(meta["main_workspace"], os.path.basename(self.test_dir))
+
+    def test_deleted_lib_file_reconstituted_and_marked_dirty(self) -> None:
+        """Verifies that deleting a lib file causes it to be marked dirty and reconstituted from template upon get_work / pull."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            main_repo = os.path.join(tmp_dir, "fake_repo")
+            part_dir = os.path.join(main_repo, "staging/parts/agent")
+            os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
+            os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
+
+            with open(
+                os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8"
+            ) as f:
+                f.write('update_python_with_ai(name = "config_impl")\n')
+
+            # Create companion low spec
+            low_file = os.path.join(part_dir, "low/config_impl.pyi")
+            cleanroom_workspace_tool.write_file_with_perms(
+                low_file,
+                "# low spec\ndef get_config() -> str: ...\n",
+                readonly=False,
+            )
+            src_metadata.update_metadata(
+                low_file,
+                last_cleaned="2026-10-04T12:00:00Z",
+                last_changed="2026-10-04T12:00:00Z",
+            )
+
+            # Commission lib role workspace
+            lib_ws = cleanroom_workspace_tool.commission_workspace(
+                "//update_python_with_ai:lib",
+                dir_scope="staging",
+                repo_root=main_repo,
+            )
+
+            # Simulate user deleting lib file in main
+            main_lib = os.path.join(part_dir, "lib/config_impl.py")
+            if os.path.exists(main_lib):
+                os.remove(main_lib)
+
+            # 1. Verify it is detected dirty
+            dirty_res = cleanroom_workspace_tool.eval_unit_dirty(
+                main_repo,
+                "staging/parts/agent",
+                "config_impl",
+                "lib",
+                cleanroom_workspace_tool.resolve_role_definition("lib", main_repo),
+            )
+            self.assertTrue(dirty_res["is_dirty"])
+            self.assertTrue(any("does not exist" in r for r in dirty_res["reasons"]))
+
+            # 2. Simulate lib role agent running get_work (pull_workspace_from_main)
+            cleanroom_workspace_tool.pull_workspace_from_main(
+                lib_ws, main_repo, "lib", dir_scope="staging"
+            )
+
+            # 3. Verify file is reconstituted in main and workspace from low spec
+            self.assertTrue(os.path.isfile(main_lib))
+            ws_lib = os.path.join(lib_ws, "staging/parts/agent/lib/config_impl.py")
+            self.assertTrue(os.path.isfile(ws_lib))
+
+            with open(ws_lib, "r", encoding="utf-8") as f:
+                content = f.read()
+            self.assertIn("Requirements specified in config_impl.pyi", content)
+
+            # 4. Verify work queue sees it ready
+            ready, blocked = cleanroom_workspace_tool.compute_role_work_queue(
+                "lib", "staging", main_repo
+            )
+            self.assertEqual(len(ready), 1)
+            self.assertEqual(ready[0]["unit_name"], "config_impl")
+            self.assertEqual(len(blocked), 0)
+
+    def test_test_role_workspace_stub_dependencies_never_leak_real_implementation(
+        self,
+    ) -> None:
+        """Verifies that in a test role workspace, stub_role_deps (lib/*.py) are ALWAYS
+        synthesized as pure read-only stubs from companion .pyi contracts and NEVER
+        overwritten by real implementation code from main during commissioning, sync, or pull."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            main_repo = os.path.join(tmp_dir, "cleanroom_main")
+            part_dir = os.path.join(main_repo, "staging/parts/calc")
+            os.makedirs(os.path.join(part_dir, "low"), exist_ok=True)
+            os.makedirs(os.path.join(part_dir, "lib"), exist_ok=True)
+            os.makedirs(os.path.join(part_dir, "tests"), exist_ok=True)
+
+            with open(
+                os.path.join(part_dir, "BUILD.bazel"), "w", encoding="utf-8"
+            ) as f:
+                f.write('update_python_with_ai(name = "calc_impl")\n')
+
+            pyi_file = os.path.join(part_dir, "low/calc_impl.pyi")
+            with open(pyi_file, "w", encoding="utf-8") as f:
+                f.write("""class Calculator:
+    def add(self, a: int, b: int) -> int: ...
+""")
+
+            real_lib_file = os.path.join(part_dir, "lib/calc_impl.py")
+            with open(real_lib_file, "w", encoding="utf-8") as f:
+                f.write("""class Calculator:
+    def add(self, a: int, b: int) -> int:
+        # SUPER SECRET REAL IMPLEMENTATION
+        return a + b
+""")
+            ts = "2026-10-05T12:00:00Z"
+            src_metadata.update_metadata(pyi_file, last_cleaned=ts, last_changed=ts)
+            src_metadata.update_metadata(
+                real_lib_file, last_cleaned=ts, last_changed=ts
+            )
+
+            # Commission test role workspace
+            test_ws = cleanroom_workspace_tool.commission_workspace(
+                "test", dir_scope="staging", repo_root=main_repo
+            )
+            ws_stub_file = os.path.join(test_ws, "staging/parts/calc/lib/calc_impl.py")
+
+            # 1. Verify stub was generated and does NOT contain real implementation
+            self.assertTrue(os.path.isfile(ws_stub_file))
+            with open(ws_stub_file, "r", encoding="utf-8") as f:
+                stub_content = f.read()
+            self.assertIn("CLEANROOM TEST STUB", stub_content)
+            self.assertIn("raise NotImplementedError", stub_content)
+            self.assertNotIn("SUPER SECRET REAL IMPLEMENTATION", stub_content)
+            st = os.stat(ws_stub_file)
+            self.assertEqual(st.st_mode & stat.S_IWUSR, 0)  # Read-only (chmod 444)
+
+            # 2. Main updates real implementation with newer event timestamp
+            ts2 = "2026-10-05T13:00:00Z"
+            src_metadata.update_metadata(
+                real_lib_file,
+                last_cleaned=ts2,
+                last_changed=ts2,
+                change_summary="Optimized add",
+            )
+
+            # 3. Test agent calls get_work (pull_workspace_from_main)
+            cleanroom_workspace_tool.pull_workspace_from_main(
+                test_ws, main_repo, "test", dir_scope="staging"
+            )
+
+            # Verify it STILL does not leak real implementation!
+            with open(ws_stub_file, "r", encoding="utf-8") as f:
+                stub_after_pull = f.read()
+            self.assertIn("CLEANROOM TEST STUB", stub_after_pull)
+            self.assertNotIn("SUPER SECRET REAL IMPLEMENTATION", stub_after_pull)
+
+            # 4. Host runs full cascade (converge_role_workspace)
+            cleanroom_workspace_tool.converge_role_workspace(
+                test_ws, main_repo, "test", parts_dirs=["staging"], phase="both"
+            )
+
+            # Verify cascade does NOT overwrite stub with real implementation
+            with open(ws_stub_file, "r", encoding="utf-8") as f:
+                stub_after_cascade = f.read()
+            self.assertIn("CLEANROOM TEST STUB", stub_after_cascade)
+            self.assertNotIn("SUPER SECRET REAL IMPLEMENTATION", stub_after_cascade)
+
+            # 5. Even if an agent accidentally/maliciously copied real implementation into ws_stub_file,
+            # pull_workspace_from_main must detect the missing CLEANROOM TEST STUB header and restore the stub!
+            os.chmod(ws_stub_file, 0o644)
+            with open(ws_stub_file, "w", encoding="utf-8") as f:
+                f.write("class LeakedCalculator: pass\n")
+
+            cleanroom_workspace_tool.pull_workspace_from_main(
+                test_ws, main_repo, "test", dir_scope="staging"
+            )
+            with open(ws_stub_file, "r", encoding="utf-8") as f:
+                restored_stub = f.read()
+            self.assertIn("CLEANROOM TEST STUB", restored_stub)
+            self.assertNotIn("LeakedCalculator", restored_stub)
 
 
 if __name__ == "__main__":

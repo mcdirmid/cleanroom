@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T05:35:22Z
+LAST_CLEANED: 2026-10-05T20:52:01Z
 LAST_CHANGED: 2026-10-05T05:35:22Z
 CHANGE: Align purpose with sandbox, add session config template resolution, and fix citations
 CODE_HASH: c8dcdcc374a8

@@ -129,8 +129,8 @@ Instead of running subagents in a single folder with software guards, Cleanroom 
 3. **Conversational Chat Economics**:
    - Instead of autonomous subagent trees, the developer opens an interactive conversation chat in each role workspace.
    - Turns benefit from high KV prompt caching, standard subscription quotas, zero subagent overhead, and direct user oversight.
-4. **Declarative Synchronization (`bin/cleanroom-sync`)**:
-   - Changes are exchanged via atomic file mailboxes (`WORK_ORDER.md` / `COMPLETED.md`) protected by POSIX `fcntl.flock`, updating `.update_with_ai.textproto` deterministically.
+4. **Zero-Sync In-Band Coordination (`bin/cleanroom`)**:
+   - Changes and state are tracked via in-band comment headers (`LAST_CLEANED`, `LAST_CHANGED`, `FEEDBACK:`), with direct Bazel submissions and self-synchronizing `bin/get_work` managed via `bin/cleanroom`.
 
 ### 4.3 Future Subagent Roadmap (If Subagents Return)
 If autonomous subagents are ever reconsidered in Antigravity:
@@ -146,7 +146,7 @@ The following components comprised Option 2 and have been removed from the repos
 
 | Component Path | Former Purpose | Reason for Removal |
 | :--- | :--- | :--- |
-| `update_with_ai/parts/antigravity/` | Coordinator and MCP client implementations (`antigravity_coordinator_impl.py`, `antigravity_mcp_client_impl.py`, telemetry, and tests) | Option 2 decommissioned; high token cost; replaced by `bin/cleanroom-sync`. |
+| `update_with_ai/parts/antigravity/` | Coordinator and MCP client implementations (`antigravity_coordinator_impl.py`, `antigravity_mcp_client_impl.py`, telemetry, and tests) | Option 2 decommissioned; high token cost; replaced by `bin/cleanroom`. |
 | `update_with_ai/parts/mcp/` | FastMCP server, access gate, role session manager, and cache arbiter | Option 2 decommissioned; daemon and dynamic MCP tool export abandoned. |
 | `update_with_ai/parts/systems/lib/cleanroom_mcp_runner_impl.py` | Standalone FastMCP server daemon entrypoint | Option 2 daemon decommissioned. |
 | `update_with_ai/parts/systems/lib/bazel_mcp_system_asm.py` | System assembly binding MCP and Bazel | Option 2 assembly decommissioned. |

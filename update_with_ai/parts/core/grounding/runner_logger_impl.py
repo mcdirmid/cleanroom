@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T06:16:52Z
+# LAST_CLEANED: 2026-10-05T20:52:01Z
 # LAST_CHANGED: 2026-10-05T06:16:52Z
 # CHANGE: Make log opening declarative and specify unbuffered flush mechanics
 # CODE_HASH: fb92c374b35b
+# GROUNDING_QA_AUDIT: 2026-10-05T20:52:01Z
 # --- END CLEANROOM METADATA ---
 
 from __future__ import annotations

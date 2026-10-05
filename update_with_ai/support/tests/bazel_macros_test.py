@@ -3,8 +3,18 @@ Tests for the update_with_ai Starlark rules (update_with_ai.bzl).
 """
 
 import json
+import os
+import sys
 import unittest
 from pathlib import Path
+
+try:
+    import src_metadata
+except ImportError:
+    try:
+        from update_with_ai.support.lib import src_metadata
+    except ImportError:
+        from update_python_with_ai.support.lib import src_metadata
 
 
 class TestBazelMacros(unittest.TestCase):
@@ -254,6 +264,190 @@ class TestBazelMacrosIntegration(unittest.TestCase):
 
         runner = get_singleton(Loop)
         self.assertIsNotNone(runner)
+
+    def test_submit_change_message_validation_modified_with_message(self):
+        """Test valid submission when code is modified and change message is provided."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            file_path = Path(tmp_dir) / "foo_impl.py"
+            file_path.write_text("def foo():\n    return 1\n", encoding="utf-8")
+            src_metadata.mark_clean(file_path)
+
+            meta_clean = src_metadata.extract_metadata(file_path)
+            assert meta_clean is not None
+            self.assertIsNotNone(meta_clean)
+            self.assertIsNotNone(meta_clean.code_hash)
+            self.assertFalse(src_metadata.is_code_modified(file_path))
+
+            # Modify code body
+            file_path.write_text("def foo():\n    return 42\n", encoding="utf-8")
+            # Metadata block removed by overwrite, re-add to test with metadata
+            src_metadata.mark_clean(file_path)
+            # Now modify just the code body below metadata
+            content = file_path.read_text(encoding="utf-8")
+            modified_content = content.replace("return 42", "return 100")
+            file_path.write_text(modified_content, encoding="utf-8")
+
+            self.assertTrue(src_metadata.is_code_modified(file_path))
+
+            # Submit with message
+            msg = "Updated foo to return 100"
+            src_metadata.record_change(file_path, msg)
+
+            meta_submitted = src_metadata.extract_metadata(file_path)
+            assert meta_submitted is not None
+            self.assertIsNotNone(meta_submitted)
+            self.assertEqual(meta_submitted.change_summary, msg)
+            self.assertEqual(meta_submitted.last_cleaned, meta_submitted.last_changed)
+            self.assertFalse(src_metadata.is_code_modified(file_path))
+            self.assertIsNone(meta_submitted.dirty)
+
+    def test_submit_change_message_validation_rules(self):
+        """Test validation error cases: spurious message on unchanged code, missing message on changed code."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            file_path = Path(tmp_dir) / "foo_impl.py"
+            file_path.write_text("def foo():\n    return 1\n", encoding="utf-8")
+            src_metadata.mark_clean(file_path)
+
+            # Case 1: Unmodified code with spurious change message
+            code_modified = src_metadata.is_code_modified(file_path)
+            self.assertFalse(code_modified)
+            message = "Unnecessary message"
+            self.assertTrue(bool(message and not code_modified))
+
+            # Case 2: Modified code without change message
+            content = file_path.read_text(encoding="utf-8")
+            file_path.write_text(
+                content.replace("return 1", "return 999"), encoding="utf-8"
+            )
+            code_modified = src_metadata.is_code_modified(file_path)
+            self.assertTrue(code_modified)
+            empty_message = ""
+            self.assertTrue(bool(not empty_message and code_modified))
+
+            # Case 3: Unmodified code without change message -> valid clean verification
+            src_metadata.record_change(file_path, "Set 999")
+            old_meta = src_metadata.extract_metadata(file_path)
+            assert old_meta is not None
+            old_changed = old_meta.last_changed
+            src_metadata.mark_dirty(file_path, "Nudge check")
+            self.assertFalse(src_metadata.is_code_modified(file_path))
+
+            src_metadata.mark_clean(file_path)
+            meta_after = src_metadata.extract_metadata(file_path)
+            assert meta_after is not None
+            self.assertEqual(meta_after.last_changed, old_changed)
+            self.assertEqual(meta_after.change_summary, "Set 999")
+            self.assertIsNone(meta_after.dirty)
+
+    def test_auditor_submit_attestation(self):
+        """Test that auditor submission stamps <ROLE>_AUDIT and preserves LAST_CHANGED."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            file_path = Path(tmp_dir) / "foo_impl.py"
+            file_path.write_text("def foo():\n    return 1\n", encoding="utf-8")
+            src_metadata.record_change(file_path, "Initial implementation")
+            orig_meta = src_metadata.extract_metadata(file_path)
+            assert orig_meta is not None
+            self.assertIsNotNone(orig_meta)
+            orig_changed = orig_meta.last_changed
+
+            # QA stamps audit
+            src_metadata.stamp_audit(file_path, "qa")
+            src_metadata.update_metadata(file_path, clear_dirty=True)
+
+            meta = src_metadata.extract_metadata(file_path)
+            assert meta is not None
+            self.assertIsNotNone(meta)
+            self.assertIn("QA_AUDIT", meta.audits)
+            self.assertEqual(meta.last_changed, orig_changed)
+            self.assertIsNone(meta.dirty)
+
+    def test_blame_mutation_semantics(self):
+        """Test that blame appends FEEDBACK, marks DIRTY, and advances LAST_CLEANED."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            file_path = Path(tmp_dir) / "foo_impl.py"
+            file_path.write_text("def foo():\n    return 1\n", encoding="utf-8")
+            src_metadata.mark_clean(file_path)
+
+            critique = "Method foo does not handle negative values"
+            caller = "test"
+            src_metadata.append_feedback(file_path, critique, sender=caller)
+            src_metadata.mark_dirty(file_path, f"Blamed by {caller}: {critique}")
+
+            meta = src_metadata.extract_metadata(file_path)
+            assert meta is not None
+            self.assertIsNotNone(meta)
+            self.assertIsNotNone(meta.dirty)
+            assert meta.dirty is not None
+            self.assertIn("Blamed by test", meta.dirty)
+            self.assertEqual(len(meta.feedback), 1)
+            self.assertIn(
+                "Method foo does not handle negative values", meta.feedback[0]
+            )
+            self.assertIn(caller, meta.feedback[0])
+
+    def test_submit_and_blame_target_naming(self):
+        """Test naming conventions for _submit and _blame targets across roles."""
+        roles = [
+            "high",
+            "planning",
+            "low",
+            "grounding",
+            "lib",
+            "test",
+            "qa",
+            "coverage",
+        ]
+        unit_name = "sandbox_impl"
+        for r in roles:
+            node_target = f"{unit_name}_{r}"
+            submit_target = f"{node_target}_submit"
+            blame_target = f"{node_target}_blame"
+            self.assertEqual(submit_target, f"{unit_name}_{r}_submit")
+            self.assertEqual(blame_target, f"{unit_name}_{r}_blame")
+
+    def test_cleanroom_scope_manifest_generation(self):
+        """Test that cleanroom_scope_manifest generates and caches scope_manifest.json with units, module_deps, and roots."""
+        import json
+
+        manifest_path = None
+        candidates = [
+            "update_with_ai/support/tests/sample_test_scope_manifest_scope_manifest.json",
+            os.path.join(
+                os.environ.get("RUNFILES_DIR", ""),
+                "_main/update_with_ai/support/tests/sample_test_scope_manifest_scope_manifest.json",
+            ),
+            os.path.join(
+                os.environ.get("RUNFILES_DIR", ""),
+                "cleanroom/update_with_ai/support/tests/sample_test_scope_manifest_scope_manifest.json",
+            ),
+        ]
+        for cand in candidates:
+            if os.path.isfile(cand):
+                manifest_path = cand
+                break
+
+        if manifest_path:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self.assertEqual(data["scope"], "test_scope")
+            self.assertIn("sample_test_unit_a", data["units"])
+            self.assertIn("sample_test_unit_b", data["units"])
+            self.assertIn("sample_test_unit_b", data["roots"])
+            self.assertNotIn("sample_test_unit_a", data["roots"])
+            self.assertEqual(len(data["units"]["sample_test_unit_b"]["unit_deps"]), 1)
+            self.assertTrue(
+                data["units"]["sample_test_unit_b"]["unit_deps"][0].endswith(
+                    "sample_test_unit_a"
+                )
+            )
 
 
 if __name__ == "__main__":

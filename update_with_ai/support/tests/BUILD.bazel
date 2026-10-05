@@ -1,8 +1,13 @@
 # update_with_ai/support/tests/BUILD.bazel
 
-load("//bin:pyright_library.bzl", "pyright_test")
 load("@rules_python//python:defs.bzl", "py_test")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//bin:pyright_library.bzl", "pyright_test")
+load(
+    "//update_with_ai/support/lib:update_with_ai.bzl",
+    "cleanroom_scope_manifest",
+    "define_unit",
+)
 
 test_suite(
     name = "lifecycle_test",
@@ -14,9 +19,31 @@ test_suite(
     tests = ["//update_python_with_ai/support/tests:lifecycle_test_type_check"],
 )
 
+define_unit(
+    name = "sample_test_unit_a",
+    unit_deps = [],
+)
+
+define_unit(
+    name = "sample_test_unit_b",
+    unit_deps = [":sample_test_unit_a"],
+)
+
+cleanroom_scope_manifest(
+    name = "sample_test_scope_manifest",
+    scope = "test_scope",
+    units = [
+        ":sample_test_unit_a",
+        ":sample_test_unit_b",
+    ],
+)
+
 pyright_test(
     name = "bazel_macros_test",
     srcs = ["bazel_macros_test.py"],
+    data = [
+        ":sample_test_scope_manifest",
+    ],
     imports = ["../.."],
     pyright_deps = [
         "//update_with_ai/parts/systems/lib:bazel_openai_loop_asm",
@@ -25,6 +52,7 @@ pyright_test(
         "//update_with_ai/parts/dag/lib:dag_storage",
         "//update_with_ai/parts/loop/lib:loop",
         "//update_python_with_ai/support/lib:lifecycle",
+        "//update_python_with_ai/support/lib:src_metadata",
     ],
 )
 
@@ -63,11 +91,11 @@ sh_test(
 py_test(
     name = "cleanroom_workspace_tool_test",
     srcs = ["cleanroom_workspace_tool_test.py"],
-    main = "cleanroom_workspace_tool_test.py",
-    imports = ["../.."],
     data = [
         "//update_python_with_ai/support/lib:check_build_derived.py",
     ],
+    imports = ["../.."],
+    main = "cleanroom_workspace_tool_test.py",
     deps = [
         "//update_with_ai/support/lib:cleanroom_workspace_tool_lib",
     ],
@@ -76,8 +104,8 @@ py_test(
 py_test(
     name = "cleanroom_role_tool_test",
     srcs = ["cleanroom_role_tool_test.py"],
-    main = "cleanroom_role_tool_test.py",
     imports = ["../.."],
+    main = "cleanroom_role_tool_test.py",
     deps = [
         "//update_with_ai/support/lib:cleanroom_role_tool_lib",
     ],
@@ -86,8 +114,8 @@ py_test(
 py_test(
     name = "grounding_support_test",
     srcs = ["grounding_support_test.py"],
-    main = "grounding_support_test.py",
     imports = ["../.."],
+    main = "grounding_support_test.py",
     deps = [
         "//update_with_ai/support/lib:grounding_support",
     ],
@@ -96,11 +124,9 @@ py_test(
 py_test(
     name = "src_metadata_test",
     srcs = ["src_metadata_test.py"],
-    main = "src_metadata_test.py",
     imports = ["../.."],
+    main = "src_metadata_test.py",
     deps = [
         "//update_with_ai/support/lib:src_metadata",
     ],
 )
-
-

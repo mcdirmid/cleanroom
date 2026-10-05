@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T06:13:26Z
+# LAST_CLEANED: 2026-10-05T20:52:01Z
 # LAST_CHANGED: 2026-10-05T06:13:26Z
 # CHANGE: Align inject_feedback and record_change with low-level contract
 # CODE_HASH: c363a35405e5
+# GROUNDING_QA_AUDIT: 2026-10-05T20:52:01Z
 # --- END CLEANROOM METADATA ---
 
 """Bazel loop implementation grounding specification module."""
@@ -185,7 +186,9 @@ class Loop(loop.Loop, InTier[SystemTier]):
         """
         storage = self.get_singleton(dag_storage.DagStorage)
         storage.add_message(message, to=target)
-        _desc: dag_storage.ChangeDescription = dag_storage.ChangeDescription(str(message.content))
+        _desc: dag_storage.ChangeDescription = dag_storage.ChangeDescription(
+            str(message.content)
+        )
         storage.mark_node_clean(target, _desc)
         raise NotImplementedError
 

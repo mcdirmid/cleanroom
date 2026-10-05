@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T05:18:02Z
+LAST_CLEANED: 2026-10-05T20:52:01Z
 LAST_CHANGED: 2026-10-05T05:18:02Z
 CHANGE: Add delegated collaborator statement for external label parser, file paths, and graph storage
 CODE_HASH: 809cff4f6926

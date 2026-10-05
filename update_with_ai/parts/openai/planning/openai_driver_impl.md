@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T05:34:22Z
+LAST_CLEANED: 2026-10-05T20:52:01Z
 LAST_CHANGED: 2026-10-05T05:34:22Z
 CHANGE: Align truncation and conversation limit failure contracts with high-level literate prose
 CODE_HASH: 153730e4711d

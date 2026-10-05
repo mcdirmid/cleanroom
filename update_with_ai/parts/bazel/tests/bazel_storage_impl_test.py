@@ -1,8 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T17:29:02Z
+# LAST_CLEANED: 2026-10-05T20:52:01Z
 # LAST_CHANGED: 2026-10-05T17:29:02Z
 # CHANGE: Add test for dirty tag dirty state
 # CODE_HASH: a2c0cc68661e
+# COVERAGE_AUDIT: 2026-10-05T20:52:01Z
+# QA_AUDIT: 2026-10-05T20:52:01Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for bazel_storage_impl aligned with grounding specifications."""
@@ -43,6 +45,7 @@ from update_with_ai.parts.dag.lib.dag_storage import (
     UnitAddress,
 )
 from support.lib.lifecycle import LifecycleRegistry, enter_phase
+
 try:
     from support.lib import src_metadata
 except ImportError:

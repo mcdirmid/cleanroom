@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T17:30:27Z
+# LAST_CLEANED: 2026-10-05T20:52:01Z
 # LAST_CHANGED: 2026-10-05T17:30:27Z
 # CHANGE: Align grounding is_dirty postcondition with dirty tag
 # CODE_HASH: dad7fd978cb9
+# GROUNDING_QA_AUDIT: 2026-10-05T20:52:01Z
 # --- END CLEANROOM METADATA ---
 
 """Bazel storage implementation grounding specification module."""

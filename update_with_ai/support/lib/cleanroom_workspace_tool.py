@@ -135,6 +135,116 @@ def get_default_role_dir(
     )
 
 
+def resolve_main_workspace_from_convention(
+    cwd: Optional[str] = None,
+) -> Tuple[str, str, str, str]:
+    """Resolves (main_workspace_root, workspace_name, role_address, dir_scope) from convention and descriptor."""
+    curr = os.path.realpath(cwd or os.getcwd())
+
+    # 1. Climb up to find the role workspace directory inside 'role_workspaces'
+    role_ws_dir = curr
+    while role_ws_dir and role_ws_dir != os.path.dirname(role_ws_dir):
+        parent = os.path.dirname(role_ws_dir)
+        if os.path.basename(parent) == "role_workspaces":
+            break
+        role_ws_dir = parent
+    else:
+        # Fallback: check if curr or any ancestor contains .cleanroom_role.json
+        cand = curr
+        found_ws = None
+        while cand and cand != os.path.dirname(cand):
+            if os.path.isfile(os.path.join(cand, ".cleanroom_role.json")):
+                found_ws = cand
+                break
+            cand = os.path.dirname(cand)
+        if found_ws:
+            role_ws_dir = found_ws
+        else:
+            raise RuntimeError(
+                f"Current workspace '{curr}' is not located inside a 'role_workspaces' directory and contains no .cleanroom_role.json."
+            )
+
+    role_ws_name = os.path.basename(role_ws_dir)
+    parent_dir = os.path.dirname(role_ws_dir)
+
+    # 2. Read pathless descriptor if present
+    cfg_file = os.path.join(role_ws_dir, ".cleanroom_role.json")
+    role_address = ""
+    dir_scope = ""
+    legacy_main_root = None
+    if os.path.isfile(cfg_file):
+        try:
+            with open(cfg_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                role_address = data.get("role_address", "")
+                dir_scope = data.get("parts_dir", "")
+                legacy_main_root = data.get("main_workspace_root")
+        except Exception:
+            pass
+
+    # 3. Match candidate main workspace directories in projects_root
+    main_root: Optional[str] = None
+    workspace_name: str = ""
+    remainder: str = ""
+
+    if os.path.basename(parent_dir) == "role_workspaces":
+        projects_root = os.path.dirname(parent_dir)
+        if os.path.isdir(projects_root):
+            for entry in sorted(os.listdir(projects_root)):
+                cand_main = os.path.join(projects_root, entry)
+                if os.path.isdir(cand_main) and entry != "role_workspaces":
+                    prefix = f"{entry}_"
+                    if role_ws_name.startswith(prefix):
+                        main_root = cand_main
+                        workspace_name = entry
+                        remainder = role_ws_name[len(prefix) :]
+                        break
+        if not main_root:
+            if legacy_main_root and os.path.isdir(legacy_main_root):
+                main_root = legacy_main_root
+                workspace_name = os.path.basename(legacy_main_root)
+            else:
+                raise RuntimeError(
+                    f"Could not locate matching main workspace for '{role_ws_name}' in '{projects_root}'."
+                )
+    else:
+        # Non-standard or test directory
+        if legacy_main_root and os.path.isdir(legacy_main_root):
+            main_root = legacy_main_root
+            workspace_name = os.path.basename(legacy_main_root)
+        else:
+            # Check siblings in parent_dir
+            for entry in sorted(os.listdir(parent_dir)):
+                cand_main = os.path.join(parent_dir, entry)
+                if os.path.isdir(cand_main) and cand_main != role_ws_dir:
+                    prefix = f"{entry}_"
+                    if role_ws_name.startswith(prefix):
+                        main_root = cand_main
+                        workspace_name = entry
+                        remainder = role_ws_name[len(prefix) :]
+                        break
+            if not main_root:
+                main_root = parent_dir
+                workspace_name = os.path.basename(parent_dir)
+
+    # 4. Fallback role parsing if descriptor was missing
+    if not role_address and main_root:
+        roles_dict = load_defined_roles(main_root)
+        known_roles = [
+            r["name"]
+            for r in roles_dict.values()
+            if isinstance(r, dict) and "name" in r
+        ]
+        for r in sorted(known_roles, key=len, reverse=True):
+            if remainder == r or remainder.startswith(f"{r}_"):
+                role_address = f"//update_python_with_ai:{r}"
+                if not dir_scope:
+                    dir_scope = remainder[len(r) :].lstrip("_") or "staging"
+                break
+
+    return main_root, workspace_name, role_address, dir_scope or "staging"
+
+
 def save_role_metadata(
     workspace_dir: str,
     role_address: str,
@@ -145,9 +255,7 @@ def save_role_metadata(
     last_sync_timestamp: Optional[str] = None,
     repo_root: Optional[str] = None,
 ) -> None:
-    """Saves .cleanroom_role.json in the workspace root."""
-    root = os.path.abspath(repo_root or _repo_root)
-    ws_name = os.path.basename(root)
+    """Saves pathless .cleanroom_role.json in the workspace root."""
     meta_path = os.path.join(workspace_dir, ".cleanroom_role.json")
     now = src_metadata.current_utc_timestamp()
 
@@ -158,19 +266,21 @@ def save_role_metadata(
     if not primary_dir:
         primary_dir = "staging"
 
+    # Normalize role_address to full label if short name was provided
+    if not role_address.startswith("//") and not role_address.startswith(":"):
+        role_address = f"//update_python_with_ai:{role_address}"
+
     existing = load_role_metadata(workspace_dir) or {}
     data: Dict[str, Any] = {
-        "main_workspace": ws_name,
-        "main_workspace_root": root,
+        "role_address": role_address,
         "role_name": role_name,
         "parts_dir": primary_dir,
-        "role_address": role_address,
         "commissioned_at": commissioned_at or existing.get("commissioned_at") or now,
         "last_sync_timestamp": last_sync_timestamp
         or existing.get("last_sync_timestamp")
         or now,
     }
-    # Keep parts_dirs for backward compatibility
+    # Keep parts_dirs for backward compatibility if present
     if parts_dirs:
         data["parts_dirs"] = list(parts_dirs)
 
@@ -178,12 +288,22 @@ def save_role_metadata(
 
 
 def load_role_metadata(workspace_dir: str) -> Optional[Dict[str, Any]]:
-    """Loads .cleanroom_role.json from a workspace directory if present."""
+    """Loads .cleanroom_role.json from a workspace directory if present, resolving main workspace convention."""
     meta_path = os.path.join(workspace_dir, ".cleanroom_role.json")
     if os.path.exists(meta_path):
         try:
             with open(meta_path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+            if isinstance(data, dict) and "main_workspace_root" not in data:
+                try:
+                    main_root, ws_name, _, _ = resolve_main_workspace_from_convention(
+                        workspace_dir
+                    )
+                    data["main_workspace_root"] = main_root
+                    data["main_workspace"] = ws_name
+                except Exception:
+                    pass
+            return data
         except Exception:
             return None
     return None
@@ -859,6 +979,113 @@ def generate_readonly_test_stub(
     write_file_with_perms(out_path, "\n".join(stub_lines) + "\n", readonly=True)
 
 
+def is_stub_dep_file(
+    rel_path: str,
+    role_def: Dict[str, Any],
+    repo_root: Optional[str] = None,
+) -> bool:
+    """Returns True if rel_path matches any role in stub_role_deps."""
+    stub_deps_raw = role_def.get("stub_role_deps", [])
+    if not stub_deps_raw:
+        return False
+    root = repo_root or _repo_root
+    for stub_target in stub_deps_raw:
+        stub_def = resolve_role_definition(stub_target, root)
+        stub_pat = stub_def.get("src_pattern", "")
+        if stub_pat:
+            s_dir, s_pfx, s_sfx = parse_pattern_info(stub_pat)
+            fname = os.path.basename(rel_path)
+            parent = os.path.basename(os.path.dirname(rel_path))
+            if (
+                parent == s_dir
+                and fname.startswith(s_pfx)
+                and fname.endswith(s_sfx)
+                and fname not in ("BUILD.bazel", "__init__.py")
+            ):
+                return True
+    return False
+
+
+def sync_stub_dep_file(
+    rel_path: str,
+    workspace_dir: str,
+    main_repo_root: str,
+    role_def: Dict[str, Any],
+    part_map: Optional[Dict[str, Tuple[str, str]]] = None,
+) -> bool:
+    """Ensures rel_path is maintained as a read-only test stub in workspace_dir.
+
+    Returns True if the stub was created or regenerated.
+    """
+    ws_f = os.path.join(workspace_dir, rel_path)
+    main_f = os.path.join(main_repo_root, rel_path)
+
+    parts = rel_path.split(os.sep)
+    if "parts" not in parts:
+        return False
+    parts_idx = parts.index("parts")
+    if len(parts) < parts_idx + 4:
+        return False
+    base_dir = os.sep.join(parts[:parts_idx])
+    part_name = parts[parts_idx + 1]
+    dep_dir = parts[parts_idx + 2]
+    fname = parts[parts_idx + 3]
+    stem = os.path.splitext(fname)[0]
+
+    part_path = (
+        os.path.join(main_repo_root, base_dir, "parts", part_name)
+        if base_dir
+        else os.path.join(main_repo_root, "parts", part_name)
+    )
+    pyi_path = find_spec_pyi(part_path, stem, repo_root=main_repo_root)
+
+    # Check if ws_f is already a valid cleanroom test stub
+    is_valid_stub = False
+    if os.path.isfile(ws_f):
+        try:
+            with open(ws_f, "r", encoding="utf-8") as f:
+                content = f.read(500)
+                if "CLEANROOM TEST STUB" in content:
+                    is_valid_stub = True
+        except OSError:
+            pass
+
+    # Check if pyi changed since stub was generated
+    needs_generation = not is_valid_stub
+    if is_valid_stub and pyi_path and os.path.isfile(pyi_path):
+        try:
+            if os.path.getmtime(pyi_path) > os.path.getmtime(ws_f):
+                needs_generation = True
+        except OSError:
+            pass
+
+    if needs_generation:
+        os.makedirs(os.path.dirname(ws_f), exist_ok=True)
+        if pyi_path and os.path.isfile(pyi_path):
+            try:
+                generate_readonly_test_stub(
+                    pyi_path,
+                    stem,
+                    ws_f,
+                    dep_dir=dep_dir,
+                    part_map=part_map,
+                )
+                return True
+            except Exception as e:
+                print(f"Warning: could not generate stub for {stem}: {e}")
+        # Fallback: synthesize minimal stub if pyi not found, NEVER copy main_f
+        stub_lines = [
+            "from __future__ import annotations",
+            f"# Requirements specified in {stem}.pyi",
+            "# CLEANROOM TEST STUB: Implementation details omitted. Refer strictly to companion .pyi file.",
+            "",
+            f"raise NotImplementedError('Cleanroom Test Stub: {stem}')\n",
+        ]
+        write_file_with_perms(ws_f, "\n".join(stub_lines), readonly=True)
+        return True
+    return False
+
+
 def write_file_with_perms(
     dst: str, content: str, readonly: bool = False, executable: bool = False
 ) -> None:
@@ -1023,28 +1250,8 @@ def ensure_role_templates_in_place(
             except OSError:
                 pass
 
-        if mod_exists:
-            existing_meta = src_metadata.extract_metadata_from_text(
-                mod_content, file_path
-            )
-            if existing_meta and (
-                existing_meta.last_cleaned
-                or existing_meta.last_changed
-                or existing_meta.feedback
-            ):
-                continue
-            if (
-                file_path.endswith("_test.py")
-                and is_uninitialized_test_module
-                and not is_uninitialized_test_module(mod_content)
-            ):
-                continue
-            elif (
-                not file_path.endswith("_test.py")
-                and is_uninitialized_module
-                and not is_uninitialized_module(mod_content)
-            ):
-                continue
+        if mod_exists and mod_content.strip():
+            continue
 
         dir_path = os.path.dirname(os.path.abspath(file_path))
         os.makedirs(dir_path, exist_ok=True)
@@ -1293,31 +1500,39 @@ def write_role_agents_md(
 
     if is_auditor:
         scope_clause = "- **Auditor Attestation Mode**: You do not author code or specification files. Your responsibility is running tests, auditing compliance, and stamping audit attestations."
-        tool_sequence = f"""1. Run `bin/get_work` to inspect pending dirty units requiring audit.
-   - **Early Exit**: If `bin/get_work` reports that all units are clean (or exits with code 0 and no dirty units), **IMMEDIATELY STOP**. Report to the user that all units in scope are clean and terminate your turn. Do NOT run further commands, query test suites, or inspect unrelated files.
-2. If units are dirty, select the first ready unit. Follow the companion guide (`{guide_rel}`) to perform verification and auditing.
+        tool_sequence = f"""1. Run `bin/get_work` to synchronize with main and inspect pending dirty units requiring audit.
+   - **Always Run `bin/get_work` First (Even for Out-of-Band Work)**: Even if you are specifically instructed to audit a unit out-of-band, **always run `bin/get_work` first**. In this zero-sync architecture, `bin/get_work` pulls the latest files from the canonical main workspace so you do not audit stale code.
+   - **Early Exit**: If `bin/get_work` reports that all units are clean (or exits with code 0 and no dirty units) and you have not been given an explicit out-of-band task, **IMMEDIATELY STOP**. Report to the user that all units in scope are clean and terminate your turn. Do NOT run further commands, query test suites, or inspect unrelated files.
+2. Select the target unit (either the first ready unit from `bin/get_work` or the specific unit requested out-of-band). Follow the companion guide (`{guide_rel}`) to perform verification and auditing.
 3. Execute verification suite:
    `{verify_cmd}`
 4. If checks pass 100%, submit verification audit attestation:
    `bin/submit <target_file>`
 5. If defects or verification failures are discovered, attribute blame or report failure per `{guide_rel}`:
-   `bin/blame <target_file> <culprit_contract> "<actionable critique>"`
+   `bin/blame <culprit-file> "<actionable critique>"`
    (or run `bin/fail <target_file> "<reason>"` if verification failed)
-6. Terminate turn. Main repository will synchronize via `cleanroom-sync`."""
+6. Loop over remaining ready units:
+   - After submitting or blaming the current unit, repeat steps 1–5 for each remaining ready unit returned by `bin/get_work`.
+   - Re-run `bin/get_work` after each submission to inspect newly ready or remaining units.
+   - Continue until `bin/get_work` reports that all units in scope are clean (or no ready units remain), then report your completed work and terminate your turn."""
     else:
         scope_clause = f"- **Strict Scope**: You are ONLY permitted to create or modify files inside `{active_dir}/`. Never attempt to edit read-only upstream contracts or configurations."
-        tool_sequence = f"""1. Run `bin/get_work` to inspect dirty units requiring work and unacted feedback.
-   - **Early Exit**: If `bin/get_work` reports that all units are clean (or exits with code 0 and no dirty units), **IMMEDIATELY STOP**. Report to the user that all units in scope are clean and terminate your turn. Do NOT run further commands, query test suites, or inspect unrelated files.
-2. If units are dirty, select the first ready unit. Follow the companion guide (`{guide_rel}`) to review upstream contracts and inspect or author the target file (`{active_dir}/<name>.<ext>`).
+        tool_sequence = f"""1. Run `bin/get_work` to synchronize with main, inspect dirty units requiring work, and check unacted feedback.
+   - **Always Run `bin/get_work` First (Even for Out-of-Band Work)**: Even if you are specifically instructed to work on a unit out-of-band, **always run `bin/get_work` first**. In this zero-sync architecture, `bin/get_work` pulls the latest upstream contracts and code from the canonical main workspace so you do not work against stale contracts.
+   - **Early Exit**: If `bin/get_work` reports that all units are clean (or exits with code 0 and no dirty units) and you have not been given an explicit out-of-band task, **IMMEDIATELY STOP**. Report to the user that all units in scope are clean and terminate your turn. Do NOT run further commands, query test suites, or inspect unrelated files.
+2. Select the target unit (either the first ready unit from `bin/get_work` or the specific unit requested out-of-band). Follow the companion guide (`{guide_rel}`) to review upstream contracts and inspect or author the target file (`{active_dir}/<name>.<ext>`).
 3. Author or update the target file using file editing tools (`replace_file_content` or `write_to_file`).
 4. Run local verification:
    `{verify_cmd}`
 5. Submit your verified work:
    - If workspace files were modified: `bin/submit <target_file> "<concise change summary>"`
    - If no workspace files were modified: `bin/submit <target_file>`
-   (or run `bin/blame <target_file> <upstream_contract> "<critique>"` if an upstream specification defect is discovered)
+   (or run `bin/blame <culprit-file> "<critique>"` if an upstream specification defect is discovered)
    (or run `bin/fail <target_file> "<reason>"` if unresolved test failure)
-6. Terminate turn. Main repository will synchronize via `cleanroom-sync`."""
+6. Loop over remaining ready units:
+   - After submitting or resolving the current unit, repeat steps 1–5 for each remaining ready unit.
+   - Re-run `bin/get_work` after each submission to inspect newly ready or remaining units.
+   - Continue processing ready units until `bin/get_work` reports that all units in scope are clean (or no ready units remain), then report your completed work and terminate your turn."""
 
     content = f"""# Cleanroom Role: {persona} ({role_label})
 
@@ -1329,6 +1544,8 @@ def write_role_agents_md(
 - **No Version Control Commands**: This workspace is an isolated cleanroom that does not use `git`. Never execute `git status`, `git diff`, `git log`, etc.
 - **Strict Confinement**: You are strictly confined to this directory scope. Never inspect outside paths.
 - **Strict Permission Rule**: You are strictly forbidden from executing `chmod`, changing file permissions, or attempting to write to read-only (`chmod 444`) files.
+- **Always Run `bin/get_work` First (Even for Out-of-Band Work)**: You MUST run `bin/get_work` at the start of every turn before taking any other action. Even if you receive explicit instructions to perform out-of-band work on a specific unit, running `bin/get_work` is mandatory because it synchronizes your workspace with the latest upstream contracts, code, and system files from the canonical main workspace. Without running `bin/get_work`, your workspace files will be stale.
+- **Process All Ready Units**: When multiple ready units are reported by `bin/get_work`, work through, verify, and submit all ready units sequentially within your turn. Do not stop after completing only one unit unless blocked by an unresolvable prerequisite or explicit user instruction.
 - **No Unsolicited Work Discovery**: `bin/get_work` is the sole source of truth for work items. If it reports no work, do not attempt to find work by running wildcard builds/tests (e.g., `bazel test //...`), inspecting tool scripts, or checking other roles/scopes.
 
 ## Prescribed Tool Sequence
@@ -1618,13 +1835,27 @@ def copy_readonly_files_and_stubs(
                                 print(
                                     f"Warning: could not generate stub for {stem}: {e}"
                                 )
-                                s_f = os.path.join(dep_src_dir, f"{stem}.py")
-                                if os.path.exists(s_f):
-                                    copy_file_with_perms(s_f, d_f, readonly=True)
+                                stub_lines = [
+                                    "from __future__ import annotations",
+                                    f"# Requirements specified in {stem}.pyi",
+                                    "# CLEANROOM TEST STUB: Implementation details omitted. Refer strictly to companion .pyi file.",
+                                    "",
+                                    f"raise NotImplementedError('Cleanroom Test Stub: {stem}')\n",
+                                ]
+                                write_file_with_perms(
+                                    d_f, "\n".join(stub_lines), readonly=True
+                                )
                         else:
-                            s_f = os.path.join(dep_src_dir, f"{stem}.py")
-                            if os.path.exists(s_f):
-                                copy_file_with_perms(s_f, d_f, readonly=True)
+                            stub_lines = [
+                                "from __future__ import annotations",
+                                f"# Requirements specified in {stem}.pyi",
+                                "# CLEANROOM TEST STUB: Implementation details omitted. Refer strictly to companion .pyi file.",
+                                "",
+                                f"raise NotImplementedError('Cleanroom Test Stub: {stem}')\n",
+                            ]
+                            write_file_with_perms(
+                                d_f, "\n".join(stub_lines), readonly=True
+                            )
                 else:
                     if not os.path.exists(dep_src_dir):
                         continue
@@ -1676,8 +1907,9 @@ import sys
 
 curr = os.getcwd()
 main_root = None
-while curr and curr != os.path.dirname(curr):
-    cfg = os.path.join(curr, ".cleanroom_role.json")
+ws_dir = curr
+while ws_dir and ws_dir != os.path.dirname(ws_dir):
+    cfg = os.path.join(ws_dir, ".cleanroom_role.json")
     if os.path.isfile(cfg):
         try:
             with open(cfg, "r", encoding="utf-8") as f:
@@ -1686,9 +1918,23 @@ while curr and curr != os.path.dirname(curr):
         except Exception:
             pass
         break
-    curr = os.path.dirname(curr)
+    ws_dir = os.path.dirname(ws_dir)
 
-search_roots = [main_root, curr] if main_root else [curr]
+if not main_root and ws_dir:
+    parent_dir = os.path.dirname(ws_dir)
+    if os.path.basename(parent_dir) == "role_workspaces":
+        projects_root = os.path.dirname(parent_dir)
+        role_ws_name = os.path.basename(ws_dir)
+        if os.path.isdir(projects_root):
+            for entry in os.listdir(projects_root):
+                cand = os.path.join(projects_root, entry)
+                if os.path.isdir(cand) and entry != "role_workspaces" and role_ws_name.startswith(f"{{entry}}_"):
+                    main_root = cand
+                    break
+
+search_roots = [ws_dir, curr]
+if main_root:
+    search_roots.append(main_root)
 for root in search_roots:
     if root and os.path.isdir(root):
         for p in [
@@ -1698,10 +1944,15 @@ for root in search_roots:
             os.path.join(root, "update_with_ai/support/lib"),
             os.path.join(root, "update_python_with_ai/support/lib"),
         ]:
-            if os.path.isdir(p) and p not in sys.path:
+            if os.path.isdir(p):
+                if p in sys.path:
+                    sys.path.remove(p)
                 sys.path.insert(0, p)
 
-from update_with_ai.support.lib import cleanroom_role_tool
+try:
+    from update_with_ai.support.lib import cleanroom_role_tool
+except ImportError:
+    import cleanroom_role_tool
 
 if __name__ == "__main__":
     sys.exit(cleanroom_role_tool.main(["{cmd}"] + sys.argv[1:]))
@@ -1842,6 +2093,164 @@ def get_ready_dirty_nodes(
                 ready_nodes.append(n)
 
     return ready_nodes
+
+
+def topological_sort_units(
+    units_list: List[Dict[str, Any]],
+    module_deps: Dict[str, List[str]],
+) -> List[Dict[str, Any]]:
+    """Topologically sorts unit dicts such that prerequisites appear before dependents."""
+    unit_map = {item["unit_name"]: item for item in units_list}
+    visited: Set[str] = set()
+    temp_mark: Set[str] = set()
+    order: List[Dict[str, Any]] = []
+
+    def visit(uname: str) -> None:
+        if uname in visited:
+            return
+        if uname in temp_mark:
+            return
+        temp_mark.add(uname)
+        for dep in sorted(module_deps.get(uname, [])):
+            if dep in unit_map:
+                visit(dep)
+        temp_mark.remove(uname)
+        visited.add(uname)
+        order.append(unit_map[uname])
+
+    for item in sorted(units_list, key=lambda x: x["unit_name"]):
+        if item["unit_name"] not in visited:
+            visit(item["unit_name"])
+
+    return order
+
+
+def get_role_upstream_chain(role_name: str, roles_def: Dict[str, Any]) -> List[str]:
+    """Returns transitive upstream role names that role_name depends on."""
+    visited: Set[str] = set()
+    order: List[str] = []
+
+    def dfs(r: str) -> None:
+        r_def = roles_def.get(r, {})
+        dep_labels = (
+            r_def.get("role_deps", [])
+            + r_def.get("star_role_deps", [])
+            + r_def.get("feedback_role_deps", [])
+        )
+        for d in dep_labels:
+            d_name = d.split(":")[-1]
+            if d_name != r and d_name in roles_def and d_name not in visited:
+                visited.add(d_name)
+                dfs(d_name)
+                order.append(d_name)
+
+    dfs(role_name)
+    return order
+
+
+def compute_role_work_queue(
+    role_name: str,
+    dir_scope: str,
+    main_repo_root: str,
+    allow_intra_role_deps: bool = True,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Computes ready and blocked dirty nodes for a role from the repository build graph."""
+    part_dirs = find_part_dirs_in_scope(main_repo_root, dir_scope)
+    all_units: Dict[str, str] = {}
+    module_deps: Dict[str, List[str]] = {}
+
+    for pd in part_dirs:
+        bf = os.path.join(main_repo_root, pd, "BUILD.bazel")
+        u_map = parse_part_units(bf) if os.path.isfile(bf) else {}
+        for uname, mdeps in u_map.items():
+            all_units[uname] = pd
+            module_deps[uname] = [d.split(":")[-1] for d in mdeps]
+
+    all_dirty = find_all_dirty_in_scope(main_repo_root, dir_scope=dir_scope)
+    dirty_lookup: Dict[Tuple[str, str], Dict[str, Any]] = {
+        (item["unit_name"], item["role"]): item for item in all_dirty
+    }
+
+    roles_def = load_defined_roles(main_repo_root)
+    clean_role = normalize_role_arg(role_name) or role_name
+    active_role_def = roles_def.get(clean_role, {})
+    upstream_roles = get_role_upstream_chain(clean_role, roles_def)
+    is_auditor = is_auditor_role(clean_role)
+    feedback_roles = [
+        d.split(":")[-1] for d in active_role_def.get("feedback_role_deps", [])
+    ]
+
+    dirty_in_role = [item for item in all_dirty if item["role"] == clean_role]
+    if not dirty_in_role:
+        return [], []
+
+    def get_transitive_deps(u: str) -> Set[str]:
+        visited: Set[str] = set()
+        queue = list(module_deps.get(u, []))
+        while queue:
+            curr = queue.pop(0)
+            if curr not in visited:
+                visited.add(curr)
+                queue.extend(module_deps.get(curr, []))
+        return visited
+
+    ready_candidates: List[Dict[str, Any]] = []
+    blocked_candidates: List[Dict[str, Any]] = []
+
+    for item in dirty_in_role:
+        uname = item["unit_name"]
+        part_dir = item.get("part_dir", "") or all_units.get(uname, "")
+        blocked_reasons: List[str] = []
+
+        # Check 1: Intra-unit upstream roles
+        for up_r in upstream_roles:
+            up_r_def = roles_def.get(up_r, {})
+            up_r_pat = up_r_def.get("src_pattern", "")
+            if up_r_pat and part_dir:
+                up_dir, _, _ = parse_pattern_info(up_r_pat)
+                # If this part does not have the upstream role's directory, it's not defined for this part
+                if not os.path.isdir(os.path.join(main_repo_root, part_dir, up_dir)):
+                    continue
+            if (uname, up_r) in dirty_lookup:
+                blocked_reasons.append(
+                    f"Upstream role '{up_r}' is dirty for unit '{uname}'"
+                )
+
+        # Check 2: Auditor feedback dependencies
+        if is_auditor:
+            for fb_r in feedback_roles:
+                if (uname, fb_r) in dirty_lookup:
+                    blocked_reasons.append(
+                        f"Feedback target '{fb_r}' is dirty or has unacted feedback for unit '{uname}'"
+                    )
+
+        # Check 3: Inter-unit module dependencies
+        transitive_deps = get_transitive_deps(uname)
+        roles_to_check = (
+            upstream_roles if allow_intra_role_deps else (upstream_roles + [clean_role])
+        )
+        for dep_u in sorted(transitive_deps):
+            dep_part = all_units.get(dep_u, part_dir)
+            for r_check in roles_to_check:
+                r_check_def = roles_def.get(r_check, {})
+                r_check_pat = r_check_def.get("src_pattern", "")
+                if r_check_pat and dep_part:
+                    r_dir, _, _ = parse_pattern_info(r_check_pat)
+                    if not os.path.isdir(os.path.join(main_repo_root, dep_part, r_dir)):
+                        continue
+                if (dep_u, r_check) in dirty_lookup:
+                    blocked_reasons.append(
+                        f"Prerequisite unit '{dep_u}' is dirty in role '{r_check}'"
+                    )
+
+        if blocked_reasons:
+            item["blocked_reasons"] = blocked_reasons
+            blocked_candidates.append(item)
+        else:
+            ready_candidates.append(item)
+
+    sorted_ready = topological_sort_units(ready_candidates, module_deps)
+    return sorted_ready, blocked_candidates
 
 
 # ==============================================================================
@@ -2261,7 +2670,7 @@ def decommission_workspace(
             for mf in modified_files[:5]:
                 print(f"      • {mf}")
         print(
-            "Run 'cleanroom-sync' first or pass '--force' to discard uncommitted work."
+            "Run 'bin/cleanroom refresh' first or pass '--force' to discard uncommitted work."
         )
         return False
 
@@ -2682,6 +3091,8 @@ def converge_role_workspace(
         all_rel_files = sorted(ws_files | main_files)
 
         for rel_path in all_rel_files:
+            if is_stub_dep_file(rel_path, role_def, repo_root=root):
+                continue
             ws_f = os.path.join(workspace_dir, rel_path)
             main_f = os.path.join(root, rel_path)
             role_writable = _is_role_writable(rel_path)
@@ -2800,6 +3211,9 @@ def converge_role_workspace(
     # =========================================================================
     # PHASE 2: OUTBOUND CASCADE (Main -> Role Workspace)
     # =========================================================================
+    # Reconstitute any missing active files in main from templates/specs first
+    prepare_role_artifacts(role_def, root, [dir_scope])
+
     ws_files = find_scoped_source_files(
         workspace_dir, dir_scope, role_def=role_def, repo_root=root
     )
@@ -2808,10 +3222,21 @@ def converge_role_workspace(
     )
     all_rel_files = sorted(ws_files | main_files)
 
+    part_map = get_part_module_map(repo_root=root, parts_bases=[dir_scope])
+
     for rel_path in all_rel_files:
         ws_f = os.path.join(workspace_dir, rel_path)
         main_f = os.path.join(root, rel_path)
         role_writable = _is_role_writable(rel_path)
+
+        if is_stub_dep_file(rel_path, role_def, repo_root=root):
+            if sync_stub_dep_file(
+                rel_path, workspace_dir, root, role_def, part_map=part_map
+            ):
+                synced_events.append(
+                    {"type": "STUB_SYNC", "target": rel_path, "dest": "workspace"}
+                )
+            continue
 
         ws_exists = os.path.isfile(ws_f)
         main_exists = os.path.isfile(main_f)
@@ -3040,8 +3465,7 @@ def converge_role_workspace(
                 os.chmod(ws_f, 0o444)
             print(f"AUDIT SYNCHRONIZED [{role_name}]: {rel_path}")
 
-    # 3. Outbound cascade templates/stubs/guides if upstream contracts changed
-    prepare_role_artifacts(role_def, root, [dir_scope])
+    # 3. Outbound cascade stubs/guides if upstream contracts changed
     copy_readonly_files_and_stubs(workspace_dir, root, role_def, [dir_scope])
     write_role_agents_md(workspace_dir, role_def, repo_root=root)
 
@@ -3088,6 +3512,184 @@ def sync_workspace(
     )
 
 
+def pull_workspace_from_main(
+    workspace_dir: str,
+    main_repo_root: str,
+    role_name: str,
+    dir_scope: str = "staging",
+    silent: bool = True,
+) -> List[Dict[str, Any]]:
+    """Silently pulls updated files in dir_scope from main into workspace_dir (one-way push)."""
+    if not os.path.isdir(main_repo_root) or not os.path.isdir(workspace_dir):
+        return []
+    clean_role = normalize_role_arg(role_name) or role_name
+    role_def = resolve_role_definition(clean_role, main_repo_root)
+    active_pattern = role_def.get("src_pattern", "")
+    active_dir, active_pfx, active_sfx = parse_pattern_info(active_pattern)
+
+    prepare_role_artifacts(role_def, main_repo_root, [dir_scope])
+
+    def _is_role_writable(rel_p: str) -> bool:
+        if is_auditor_role(clean_role):
+            return False
+        fname = os.path.basename(rel_p)
+        parent = os.path.basename(os.path.dirname(rel_p))
+        return (
+            parent == active_dir
+            and fname.startswith(active_pfx)
+            and fname.endswith(active_sfx)
+            and fname != "BUILD.bazel"
+        )
+
+    main_files = find_scoped_source_files(
+        main_repo_root, dir_scope, role_def=role_def, repo_root=main_repo_root
+    )
+    ws_files = find_scoped_source_files(
+        workspace_dir, dir_scope, role_def=role_def, repo_root=main_repo_root
+    )
+    all_rel = sorted(main_files | ws_files)
+    synced: List[Dict[str, Any]] = []
+
+    part_map = get_part_module_map(repo_root=main_repo_root, parts_bases=[dir_scope])
+
+    for rel in all_rel:
+        main_f = os.path.join(main_repo_root, rel)
+        ws_f = os.path.join(workspace_dir, rel)
+        if not os.path.isfile(main_f):
+            continue
+        role_writable = _is_role_writable(rel)
+
+        if is_stub_dep_file(rel, role_def, repo_root=main_repo_root):
+            if sync_stub_dep_file(
+                rel, workspace_dir, main_repo_root, role_def, part_map=part_map
+            ):
+                synced.append({"type": "STUB_SYNC", "target": rel, "dest": "workspace"})
+            continue
+
+        if not os.path.isfile(ws_f):
+            copy_file_with_perms(main_f, ws_f, readonly=not role_writable)
+            synced.append({"type": "NEW_FILE", "target": rel, "dest": "workspace"})
+            continue
+
+        main_meta = src_metadata.extract_metadata(main_f)
+        ws_meta = src_metadata.extract_metadata(ws_f)
+        main_ts = (main_meta.last_changed if main_meta else "") or ""
+        main_cl = (main_meta.last_cleaned if main_meta else "") or ""
+        ws_ts = (ws_meta.last_changed if ws_meta else "") or ""
+        ws_cl = (ws_meta.last_cleaned if ws_meta else "") or ""
+        main_ev = max(main_ts, main_cl)
+        ws_ev = max(ws_ts, ws_cl)
+
+        needs_pull = False
+        if not main_ev or not ws_ev:
+            try:
+                if os.path.getmtime(main_f) > os.path.getmtime(ws_f):
+                    needs_pull = True
+            except OSError:
+                pass
+        elif main_ev > ws_ev:
+            needs_pull = True
+        elif not role_writable and ws_meta and main_meta:
+            if (
+                main_meta.dirty != ws_meta.dirty
+                or main_meta.audits != ws_meta.audits
+                or main_meta.feedback != ws_meta.feedback
+                or main_meta.code_hash != ws_meta.code_hash
+            ):
+                needs_pull = True
+
+        if needs_pull:
+            copy_file_with_perms(main_f, ws_f, readonly=not role_writable)
+            synced.append({"type": "PULL", "target": rel, "dest": "workspace"})
+
+    # Update last_sync_timestamp
+    save_role_metadata(
+        workspace_dir,
+        role_address=role_def.get("label", f"//update_python_with_ai:{clean_role}"),
+        role_name=clean_role,
+        dir_scope=dir_scope,
+        last_sync_timestamp=src_metadata.current_utc_timestamp(),
+    )
+    return synced
+
+
+def refresh_system_files_fast(
+    workspace_dir: str,
+    main_repo_root: str,
+    role_name: str,
+    dir_scope: str = "staging",
+    silent: bool = True,
+) -> None:
+    """Performs fast mtime refresh of system files (configs, tools, guides, build rules) into workspace."""
+    if not os.path.isdir(main_repo_root) or not os.path.isdir(workspace_dir):
+        return
+
+    clean_role = normalize_role_arg(role_name) or role_name
+    role_def = resolve_role_definition(clean_role, main_repo_root)
+
+    # 1. Package build files in scope
+    part_dirs = find_part_dirs_in_scope(main_repo_root, dir_scope)
+    for pd in part_dirs:
+        for sub in ["", "lib", "tests", "low", "high", "planning", "grounding"]:
+            bf_rel = (
+                os.path.join(pd, sub, "BUILD.bazel")
+                if sub
+                else os.path.join(pd, "BUILD.bazel")
+            )
+            s_bf = os.path.join(main_repo_root, bf_rel)
+            d_bf = os.path.join(workspace_dir, bf_rel)
+            if os.path.isfile(s_bf):
+                if not os.path.exists(d_bf) or os.path.getmtime(
+                    s_bf
+                ) > os.path.getmtime(d_bf):
+                    copy_file_with_perms(s_bf, d_bf, readonly=True)
+
+    # 2. Configs and rules
+    for cfg in [
+        "pyrightconfig.json",
+        ".bazelrc",
+        "MODULE.bazel",
+        "WORKSPACE",
+        "update_with_ai/support/lib/cleanroom_workspace_tool.py",
+        "update_with_ai/support/lib/cleanroom_role_tool.py",
+        "update_with_ai/support/lib/src_metadata.py",
+        "update_python_with_ai/support/lib/src_metadata.py",
+    ]:
+        s = os.path.join(main_repo_root, cfg)
+        d = os.path.join(workspace_dir, cfg)
+        if os.path.isfile(s):
+            if not os.path.exists(d) or os.path.getmtime(s) > os.path.getmtime(d):
+                copy_file_with_perms(s, d, readonly=True)
+
+    # 3. Role tools
+    for tool_rel in role_def.get("tools", []):
+        s = os.path.join(main_repo_root, tool_rel)
+        d = os.path.join(workspace_dir, tool_rel)
+        if os.path.isfile(s):
+            if not os.path.exists(d) or os.path.getmtime(s) > os.path.getmtime(d):
+                copy_file_with_perms(s, d, readonly=True)
+
+    # 4. Guide
+    guide_target = role_def.get("guide", "")
+    if guide_target:
+        guide_rel = guide_target.split(":")[-1]
+        for g_cand in [
+            f"update_python_with_ai/guides/{guide_rel}.md",
+            f"update_with_ai/guides/{guide_rel}.md",
+        ]:
+            s = os.path.join(main_repo_root, g_cand)
+            d = os.path.join(workspace_dir, g_cand)
+            if os.path.isfile(s):
+                if not os.path.exists(d) or os.path.getmtime(s) > os.path.getmtime(d):
+                    copy_file_with_perms(s, d, readonly=True)
+
+    # 5. Opaque bin tools
+    deploy_workspace_bin_tools(workspace_dir)
+
+    # 6. Refresh AGENTS.md
+    write_role_agents_md(workspace_dir, role_def, repo_root=main_repo_root)
+
+
 def cleanroom_sync(
     repo_root: Optional[str] = None,
     role: Optional[str] = None,
@@ -3129,7 +3731,7 @@ def cleanroom_sync(
     existing_workspaces = find_existing_role_workspaces(repo_root=root)
     if not existing_workspaces:
         print(
-            "No commissioned role workspaces found. Commission one using: cleanroom-sync commission <ROLE> <DIR>"
+            "No commissioned role workspaces found. Commission one using: bin/cleanroom commission <ROLE> [DIR]"
         )
         return 0
 
@@ -3307,7 +3909,7 @@ def run_dirty_command(
             for r in item["reasons"]:
                 print(f"      - {r}")
         print(
-            "\nACTIONABLE NEXT STEP: Edit target file and update in-band header, then run 'cleanroom-sync' in main.\n"
+            "\nACTIONABLE NEXT STEP: Edit target file and update in-band header, then submit via 'bin/submit' or inspect with 'bin/get_work'.\n"
         )
         return 1
 
@@ -3411,32 +4013,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return cleanroom_sync()
 
     parser = argparse.ArgumentParser(
-        prog="cleanroom-sync",
+        prog="cleanroom",
         description="Cleanroom Subagentless Workspace Synchronization & Lifecycle Tool",
         epilog="""\
 Commands:
-  sync                 Synchronize all commissioned role workspaces with main
-  commission ROLE DIR  Commission a new role workspace for the specified role and directory
-  decommission ROLE DIR
-                       Decommission an active role workspace
-
-Options:
-  --sys                Recopy non-parts files (tools, configs, guides) from main into role workspaces before syncing
-
-Examples:
-  # Commission a role workspace:
-  cleanroom-sync commission lib update_with_ai/parts/agent
-
-  # Synchronize all commissioned role workspaces with main:
-  cleanroom-sync
-  cleanroom-sync sync
-
-  # Recopy system files, tools, and configs into all role workspaces and sync:
-  cleanroom-sync --sys
-  cleanroom-sync sync --sys
-
-  # Decommission a role workspace when finished:
-  cleanroom-sync decommission lib update_with_ai/parts/agent
+  commission ROLE DIR   Commission a new role workspace (e.g. //update_python_with_ai:test staging)
+  decommission ROLE [DIR]
+                        Decommission an active role workspace
+  refresh-sys [ROLE] [DIR]
+                        Refresh system files, tools, configs, and guides across role workspaces
+  dirty [DIR]           Inspect dirty targets and ready tasks in scope
+  sync                  Synchronize all commissioned role workspaces with main (legacy)
 """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -3448,42 +4035,70 @@ Examples:
 
     subparsers = parser.add_subparsers(dest="subcommand", metavar="<command>")
 
-    # sync (zero argument)
-    p_sync = subparsers.add_parser(
-        "sync",
-        help="Synchronize all commissioned role workspaces with main",
-        description="Collects changes from commissioned role workspaces into main, pushes main changes to workspaces, and synchronizes audits.",
-    )
-    p_sync.add_argument(
-        "--sys",
-        action="store_true",
-        help="Recopy non-parts files from main into all role workspaces before syncing",
-    )
-
     # commission ROLE DIR
     p_comm = subparsers.add_parser(
         "commission",
         help="Commission a role workspace (requires ROLE and DIR)",
         description="Commissions an isolated role workspace at ../role_workspaces/<ws>_<role>_<sanitized_dir>.",
     )
-    p_comm.add_argument("role", help="Role name (e.g. 'lib', 'test', 'low')")
     p_comm.add_argument(
-        "dir", help="Target directory scope (e.g. 'update_with_ai/parts/agent')"
+        "role",
+        help="Role name or label (e.g. '//update_python_with_ai:test' or 'test')",
+    )
+    p_comm.add_argument(
+        "dir",
+        help="Target directory scope (e.g. 'staging' or 'update_with_ai/parts/agent')",
     )
     p_comm.add_argument("--dest", help="Custom destination directory (optional)")
 
-    # decommission ROLE DIR [--force]
+    # decommission ROLE [DIR] [--force]
     p_decomm = subparsers.add_parser(
         "decommission",
-        help="Decommission an active role workspace (requires ROLE and DIR)",
+        help="Decommission an active role workspace (requires ROLE, optional DIR)",
         description="Safely decommissions and removes a role workspace if clean or forced.",
     )
-    p_decomm.add_argument("role", help="Role name")
-    p_decomm.add_argument("dir", help="Target directory scope")
+    p_decomm.add_argument("role", help="Role name, label, or workspace directory name")
+    p_decomm.add_argument(
+        "dir", nargs="?", default=None, help="Target directory scope (optional)"
+    )
     p_decomm.add_argument(
         "--force", action="store_true", help="Force decommission even if dirty"
     )
     p_decomm.add_argument("--dest", help="Custom destination directory (optional)")
+
+    # refresh-sys [ROLE] [DIR]
+    p_ref = subparsers.add_parser(
+        "refresh-sys",
+        help="Refresh system files across role workspaces",
+        description="Recopies non-parts files (tools, configs, guides, build rules) into role workspaces.",
+    )
+    p_ref.add_argument(
+        "role", nargs="?", default=None, help="Optional role name to filter"
+    )
+    p_ref.add_argument(
+        "dir", nargs="?", default=None, help="Optional directory scope to filter"
+    )
+
+    # dirty [DIR]
+    p_dirty = subparsers.add_parser(
+        "dirty",
+        help="Inspect dirty targets and ready tasks in scope",
+        description="Evaluates all units in directory scope and displays ready and blocked tasks.",
+    )
+    p_dirty.add_argument(
+        "dir", nargs="?", default="staging", help="Target directory scope"
+    )
+
+    # sync (legacy)
+    p_sync = subparsers.add_parser(
+        "sync",
+        help="Synchronize all commissioned role workspaces with main (legacy)",
+    )
+    p_sync.add_argument(
+        "--sys",
+        action="store_true",
+        help="Recopy non-parts files from main into all role workspaces before syncing",
+    )
 
     args = parser.parse_args(raw_args)
     sys_mode = bool(getattr(args, "sys", False))
@@ -3492,10 +4107,54 @@ Examples:
         commission_workspace(args.role, dir_scope=args.dir, dest=args.dest)
         return 0
     elif args.subcommand == "decommission":
+        root = os.path.abspath(_repo_root)
+        dir_scope = args.dir or "staging"
+        if not args.dir:
+            for ws in load_registered_workspaces(root):
+                if (
+                    ws.get("role") == normalize_role_arg(args.role)
+                    or ws.get("workspace_name") == args.role
+                    or ws.get("workspace_dir") == args.role
+                    or os.path.basename(ws.get("workspace_dir", "")) == args.role
+                ):
+                    dir_scope = ws.get("dir") or ws.get("parts_dir", "staging")
+                    break
         success = decommission_workspace(
-            args.role, dir_scope=args.dir, dest=args.dest, force=args.force
+            args.role, dir_scope=dir_scope, dest=args.dest, force=args.force
         )
         return 0 if success else 1
+    elif args.subcommand == "refresh-sys":
+        root = os.path.abspath(_repo_root)
+        active_ws = load_registered_workspaces(root)
+        target_role = normalize_role_arg(args.role) if args.role else None
+        target_dir = args.dir
+        count = 0
+        for ws in active_ws:
+            ws_role = ws.get("role") or ws.get("role_name", "")
+            ws_dir = ws.get("dir") or ws.get("parts_dir", "staging")
+            ws_path = ws.get("workspace_dir", "")
+            if not ws_role and ws_path and os.path.isdir(ws_path):
+                desc_path = os.path.join(ws_path, ROLE_DESCRIPTOR_FILE)
+                if os.path.isfile(desc_path):
+                    try:
+                        with open(desc_path, "r", encoding="utf-8") as f:
+                            rdata = json.load(f)
+                        ws_role = rdata.get("role_name") or normalize_role_arg(
+                            rdata.get("role_address", "")
+                        )
+                    except Exception:
+                        pass
+            if target_role and ws_role != target_role:
+                continue
+            if target_dir and ws_dir != target_dir:
+                continue
+            if ws_path and os.path.isdir(ws_path) and ws_role:
+                refresh_system_files_fast(ws_path, root, ws_role, dir_scope=ws_dir)
+                count += 1
+        print(f"Refreshed system files across {count} role workspace(s).")
+        return 0
+    elif args.subcommand == "dirty":
+        return run_dirty_command(dir_scope=args.dir)
     elif args.subcommand == "sync":
         return cleanroom_sync(sys_refresh=sys_mode)
 

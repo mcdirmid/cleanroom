@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T04:50:29Z
+LAST_CLEANED: 2026-10-05T20:52:01Z
 LAST_CHANGED: 2026-10-05T04:50:29Z
 CHANGE: Symmetrically introduce conversation limit in italics and refine operational policies lead-in
 CODE_HASH: c9add413856e

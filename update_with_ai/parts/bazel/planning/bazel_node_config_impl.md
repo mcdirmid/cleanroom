@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T05:30:20Z
+LAST_CLEANED: 2026-10-05T20:52:01Z
 LAST_CHANGED: 2026-10-05T05:30:20Z
 CHANGE: Eliminate regex and cache mechanics, decompose step mode, and align parameter catalog
 CODE_HASH: 5ac8e0d56618

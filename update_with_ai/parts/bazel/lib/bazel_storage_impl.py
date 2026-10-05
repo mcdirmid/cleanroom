@@ -1,8 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T17:28:49Z
+# LAST_CLEANED: 2026-10-05T20:52:01Z
 # LAST_CHANGED: 2026-10-05T17:28:49Z
 # CHANGE: Add dirty tag checks to get_messages and is_dirty
 # CODE_HASH: 313622a0527c
+# COVERAGE_AUDIT: 2026-10-05T20:52:01Z
+# QA_AUDIT: 2026-10-05T20:52:01Z
 # --- END CLEANROOM METADATA ---
 
 # Requirements specified in bazel_storage_impl.pyi

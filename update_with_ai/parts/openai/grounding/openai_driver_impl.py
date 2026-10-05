@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T06:18:39Z
+# LAST_CLEANED: 2026-10-05T20:52:01Z
 # LAST_CHANGED: 2026-10-05T06:18:39Z
 # CHANGE: Align truncation and conversation limit failure contracts with high-level literate prose
 # CODE_HASH: a21ae1a636f6
+# GROUNDING_QA_AUDIT: 2026-10-05T20:52:01Z
 # --- END CLEANROOM METADATA ---
 
 """OpenAI driver implementation grounding specification module."""

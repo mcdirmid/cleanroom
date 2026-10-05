@@ -1,16 +1,19 @@
 # update_with_ai/support/lib/BUILD.bazel
 
-load("//bin:pyright_library.bzl", "pyright_library")
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+load("//bin:pyright_library.bzl", "pyright_library")
 
-exports_files([
-    "update_with_ai.bzl",
-    "guides.bzl",
-    "build_lint_common.py",
-    "grounding_support.py",
-    "grounding_support.pyi",
-    "check_build_derived.py",
-], visibility = ["//visibility:public"])
+exports_files(
+    [
+        "update_with_ai.bzl",
+        "guides.bzl",
+        "build_lint_common.py",
+        "grounding_support.py",
+        "grounding_support.pyi",
+        "check_build_derived.py",
+    ],
+    visibility = ["//visibility:public"],
+)
 
 pyright_library(
     name = "grounding_support",
@@ -78,42 +81,44 @@ py_binary(
     name = "evaluate_coverage",
     srcs = ["evaluate_coverage.py"],
     main = "evaluate_coverage.py",
-    deps = [":lifecycle"],
     visibility = ["//visibility:public"],
+    deps = [":lifecycle"],
 )
 
 py_library(
     name = "cleanroom_workspace_tool_lib",
     srcs = ["cleanroom_workspace_tool.py"],
+    visibility = ["//visibility:public"],
     deps = [
+        ":build_lint_common",
         ":lib_lint",
         ":src_metadata",
+        ":test_lint",
     ],
-    visibility = ["//visibility:public"],
 )
 
 py_binary(
     name = "cleanroom_workspace_tool",
     srcs = ["cleanroom_workspace_tool.py"],
     main = "cleanroom_workspace_tool.py",
-    deps = [":cleanroom_workspace_tool_lib"],
     visibility = ["//visibility:public"],
+    deps = [":cleanroom_workspace_tool_lib"],
 )
 
 py_library(
     name = "cleanroom_role_tool_lib",
     srcs = ["cleanroom_role_tool.py"],
+    visibility = ["//visibility:public"],
     deps = [
         ":cleanroom_workspace_tool_lib",
         ":src_metadata",
     ],
-    visibility = ["//visibility:public"],
 )
 
 py_binary(
     name = "cleanroom_role_tool",
     srcs = ["cleanroom_role_tool.py"],
     main = "cleanroom_role_tool.py",
-    deps = [":cleanroom_role_tool_lib"],
     visibility = ["//visibility:public"],
+    deps = [":cleanroom_role_tool_lib"],
 )

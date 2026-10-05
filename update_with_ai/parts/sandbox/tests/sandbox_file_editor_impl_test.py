@@ -1,8 +1,10 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T06:01:53Z
+# LAST_CLEANED: 2026-10-05T20:52:01Z
 # LAST_CHANGED: 2026-10-05T06:01:53Z
 # CHANGE: Standardize on check files tool in editing contracts
 # CODE_HASH: 327e15bbd765
+# COVERAGE_AUDIT: 2026-10-05T20:52:01Z
+# QA_AUDIT: 2026-10-05T20:52:01Z
 # --- END CLEANROOM METADATA ---
 
 """Unit tests for sandbox_file_editor_impl aligned with grounding specifications."""

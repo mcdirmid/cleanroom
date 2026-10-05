@@ -27,11 +27,15 @@ Usage:
   # Automatically generates:
   #   //pkg:my_node           — the node manifest
   #   //pkg:my_node_clean     — binary that runs DAG cleaning on this node
+  #   //pkg:my_node_submit    — binary that submits changes/verification on this node
+  #   //pkg:my_node_blame     — binary that delivers blame/critique to this node
   #   //pkg:my_node_feedback  — binary that delivers feedback to this node
   #   //pkg:my_node_dirty     — binary that delivers a change (nudge) to this node
   #   //pkg:my_node_change    — binary that broadcasts a change from this node
   #   //pkg:my_node_prompt    — binary that prints the node's initial agent prompt
   # Run with: bazel run //pkg:my_node_clean
+  #           bazel run //pkg:my_node_submit -- "change text"
+  #           bazel run //pkg:my_node_blame -- "critique"
   #           bazel run //pkg:my_node_prompt
 """
 
@@ -67,6 +71,7 @@ def _update_with_ai_impl(ctx):
         if dep_label not in _seen:
             _all_deps.append(dep_label)
             _seen[dep_label] = True
+
     # Star deps are automatically included in deps for the same reason: the
     # star dep and the nodes in its transitive closure over deps/star deps
     # are cleaned before run, and their srcs output is readable (the closure
@@ -76,6 +81,7 @@ def _update_with_ai_impl(ctx):
         if dep_label not in _seen:
             _all_deps.append(dep_label)
             _seen[dep_label] = True
+
     # The guide node is automatically included in deps so it is cleaned before
     # this node and its manifest reaches the graph for runtime loading.
     if ctx.attr.guide:
@@ -139,8 +145,14 @@ def _collect_manifests_impl(target, ctx):
     ]
     transitive = []
     for attr_name in (
-        "deps", "silent_deps", "feedback_deps", "star_deps", "guide",
-        "unit", "role", "unit_deps",
+        "deps",
+        "silent_deps",
+        "feedback_deps",
+        "star_deps",
+        "guide",
+        "unit",
+        "role",
+        "unit_deps",
     ):
         val = getattr(ctx.rule.attr, attr_name, None)
         if val == None:
@@ -156,8 +168,14 @@ def _collect_manifests_impl(target, ctx):
 _collect_manifests = aspect(
     implementation = _collect_manifests_impl,
     attr_aspects = [
-        "deps", "silent_deps", "feedback_deps", "star_deps", "guide",
-        "unit", "role", "unit_deps",
+        "deps",
+        "silent_deps",
+        "feedback_deps",
+        "star_deps",
+        "guide",
+        "unit",
+        "role",
+        "unit_deps",
     ],
 )
 
@@ -170,7 +188,6 @@ _update_with_ai_rule = rule(
             default = "",
             doc = "The agent prompt for this node",
         ),
-
         "tools": attr.label_list(
             doc = "List of tool targets",
         ),
@@ -423,6 +440,22 @@ def update_with_ai(
         **_rule_kwargs
     )
 
+    # Create a submit target that performs node submission with change message validation
+    _submit_target = name + "_submit"
+    _update_ai_node_submit_rule(
+        name = _submit_target,
+        node = ":{}".format(name),  # the node manifest
+        **_rule_kwargs
+    )
+
+    # Create a blame target that delivers blame/critique directly to the node
+    _blame_target = name + "_blame"
+    _update_ai_node_blame_rule(
+        name = _blame_target,
+        node = ":{}".format(name),  # the node manifest
+        **_rule_kwargs
+    )
+
     # Create a mark_clean target that clears all messages and marks the subgraph clean.
     _mark_clean_target = name + "_mark_clean"
     _update_ai_node_mark_clean_rule(
@@ -497,7 +530,7 @@ def _update_ai_node_clean_impl(ctx):
         "# Ensure lib is importable from runfiles",
         "_runfiles_root = None",
         'for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
-        '    if base and os.path.isdir(base):',
+        "    if base and os.path.isdir(base):",
         "        _runfiles_root = base",
         "        break",
         "if not _runfiles_root:",
@@ -737,7 +770,7 @@ def _update_ai_node_feedback_impl(ctx):
         "# Ensure lib is importable from runfiles",
         "_runfiles_root = None",
         'for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
-        '    if base and os.path.isdir(base):',
+        "    if base and os.path.isdir(base):",
         "        _runfiles_root = base",
         "        break",
         "if not _runfiles_root:",
@@ -895,7 +928,7 @@ def _update_ai_node_dirty_impl(ctx):
         "# Ensure lib is importable from runfiles",
         "_runfiles_root = None",
         'for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
-        '    if base and os.path.isdir(base):',
+        "    if base and os.path.isdir(base):",
         "        _runfiles_root = base",
         "        break",
         "if not _runfiles_root:",
@@ -1054,7 +1087,7 @@ def _update_ai_node_mark_clean_impl(ctx):
         "# Ensure lib is importable from runfiles",
         "_runfiles_root = None",
         'for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
-        '    if base and os.path.isdir(base):',
+        "    if base and os.path.isdir(base):",
         "        _runfiles_root = base",
         "        break",
         "if not _runfiles_root:",
@@ -1237,7 +1270,7 @@ def _update_ai_node_change_impl(ctx):
         "# Ensure lib is importable from runfiles",
         "_runfiles_root = None",
         'for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
-        '    if base and os.path.isdir(base):',
+        "    if base and os.path.isdir(base):",
         "        _runfiles_root = base",
         "        break",
         "if not _runfiles_root:",
@@ -1370,6 +1403,440 @@ _update_ai_node_change_rule = rule(
 )
 
 # ============================================================================
+# Rule: update_ai_node_submit (generates a submit target per node)
+# ============================================================================
+
+def _update_ai_node_submit_impl(ctx):
+    """Generates a Python binary that executes node submission with change message validation."""
+    _node = ctx.attr.node
+    _manifest = _node[DefaultInfo].files.to_list()[0]
+    _manifest_filename = _manifest.basename
+
+    _wrapper_py = ctx.actions.declare_file(ctx.label.name + ".py")
+    _lines = [
+        "#!/usr/bin/env python3",
+        "import json",
+        "import sys",
+        "import os",
+        "from pathlib import Path",
+        "",
+        "# Ensure lib is importable from workspace or runfiles",
+        "_bwd = os.environ.get('BUILD_WORKSPACE_DIRECTORY', '')",
+        "if _bwd:",
+        "    for cand in (_bwd, os.path.join(_bwd, 'update_with_ai'), os.path.join(_bwd, 'update_python_with_ai'), os.path.join(_bwd, 'update_with_ai', 'support', 'lib'), os.path.join(_bwd, 'update_python_with_ai', 'support', 'lib')):",
+        "        if os.path.isdir(cand) and cand not in sys.path:",
+        "            sys.path.insert(0, cand)",
+        "_runfiles_root = None",
+        'for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
+        "    if base and os.path.isdir(base):",
+        "        _runfiles_root = base",
+        "        break",
+        "if not _runfiles_root:",
+        "    _runfiles_root = os.getcwd()",
+        "for cand in (_runfiles_root, os.path.join(_runfiles_root, '_main'), os.path.join(_runfiles_root, 'cleanroom'), os.path.join(_runfiles_root, 'update_with_ai'), os.path.join(_runfiles_root, 'update_python_with_ai'), os.path.join(_runfiles_root, '_main', 'update_with_ai'), os.path.join(_runfiles_root, '_main', 'update_python_with_ai'), os.path.join(_runfiles_root, '_main', 'update_with_ai', 'support', 'lib'), os.path.join(_runfiles_root, '_main', 'update_python_with_ai', 'support', 'lib'), os.path.join(_runfiles_root, 'update_with_ai', 'support', 'lib'), os.path.join(_runfiles_root, 'update_python_with_ai', 'support', 'lib')):",
+        "    if os.path.isdir(cand) and cand not in sys.path:",
+        "        sys.path.insert(0, cand)",
+        "try:",
+        "    from support.lib.lifecycle import get_singleton",
+        "except ImportError:",
+        "    try:",
+        "        from update_python_with_ai.support.lib.lifecycle import get_singleton",
+        "    except ImportError:",
+        "        from update_with_ai.support.lib.lifecycle import get_singleton",
+        "try:",
+        "    import src_metadata",
+        "except ImportError:",
+        "    try:",
+        "        from update_with_ai.support.lib import src_metadata",
+        "    except ImportError:",
+        "        from support.lib import src_metadata",
+        "try:",
+        "    import cleanroom_workspace_tool",
+        "except ImportError:",
+        "    try:",
+        "        from update_with_ai.support.lib import cleanroom_workspace_tool",
+        "    except ImportError:",
+        "        from support.lib import cleanroom_workspace_tool",
+        "try:",
+        "    from update_with_ai.parts.systems.lib import bazel_openai_loop_asm",
+        "    from update_with_ai.parts.loop.lib.loop import Loop",
+        "    from update_with_ai.parts.dag.lib.dag_storage import ChangeMessage, FeedbackMessage, DagNode, DagStorage",
+        "    from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget",
+        "    from update_with_ai.parts.bazel.lib.bazel_manifest_loader import BazelManifestLoader",
+        "except ImportError:",
+        "    from lib import bazel_openai_loop_asm",
+        "    from lib.loop import Loop",
+        "    from lib.dag_storage import ChangeMessage, FeedbackMessage, DagNode, DagStorage",
+        "    from lib.bazel_target import BazelTarget",
+        "    from lib.bazel_manifest_loader import BazelManifestLoader",
+        "",
+        "def main():",
+        "    args = sys.argv[1:]",
+        '    message = " ".join(args).strip() if args else ""',
+        "    # Determine workspace root from runfiles or cwd",
+        "    _runfiles_root = None",
+        '    for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
+        '        if os.path.isdir(os.path.join(base, "_main")):',
+        '            _runfiles_root = os.path.join(base, "_main")',
+        "            break",
+        "    workspace_root = os.environ.get(\"BUILD_WORKSPACE_DIRECTORY\", \"\") or _runfiles_root or os.getcwd()",
+        '    if "BUILD_WORKSPACE_DIRECTORY" in os.environ and os.path.isdir(os.environ["BUILD_WORKSPACE_DIRECTORY"]):',
+        '        os.chdir(os.environ["BUILD_WORKSPACE_DIRECTORY"])',
+        "",
+        "    # Find the manifest in runfiles",
+        "    _manifest_path = None",
+        '    manifest_name = "{}"'.format(_manifest_filename),
+        '    for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
+        "        if base:",
+        "            candidate = os.path.join(base, manifest_name)",
+        "            if os.path.isfile(candidate):",
+        "                _manifest_path = candidate",
+        "                break",
+        "",
+        "    if not _manifest_path:",
+        '        _script_dir = os.path.dirname(os.path.abspath(__file__)) or "."',
+        "        _manifest_path = os.path.join(_script_dir, manifest_name)",
+        "",
+        "    with open(_manifest_path) as f:",
+        "        manifest_data = json.load(f)",
+        "",
+        "    bazel_openai_loop_asm.__initialize__()",
+        "    node_util = get_singleton(BazelTarget)",
+        "    if 'unit' in manifest_data:",
+        "        origin_node = DagNode(unit_address=manifest_data['unit'], role_address=manifest_data.get('role', ''))",
+        "    else:",
+        "        node_label = manifest_data.get('label')",
+        "        origin_node = node_util.normalize_target(node_label)",
+        "    loader = get_singleton(BazelManifestLoader)",
+        "    loader.load_manifest(origin_node)",
+        "    storage = get_singleton(DagStorage)",
+        "",
+        "    role_name = origin_node.role_address.split(':')[-1] if origin_node.role_address else ''",
+        "    is_auditor = cleanroom_workspace_tool.is_auditor_role(role_name)",
+        "",
+        "    if is_auditor:",
+        "        # Auditor submission stamps <ROLE>_AUDIT on feedback dependencies",
+        "        fb_deps = storage.get_feedback_dependencies(origin_node)",
+        "        target_files = []",
+        "        if fb_deps:",
+        "            for fb_dep in fb_deps:",
+        "                fb_path = storage._resolve_source_path(fb_dep)",
+        "                if fb_path and os.path.isfile(fb_path):",
+        "                    target_files.append(fb_path)",
+        "        if not target_files:",
+        "            u_label = origin_node.unit_address",
+        "            u_dir = u_label.split(':')[0].lstrip('/')",
+        "            u_name = u_label.split(':')[-1]",
+        "            cand = os.path.join(workspace_root, u_dir, 'lib', f'{u_name}.py')",
+        "            if os.path.isfile(cand):",
+        "                target_files.append(Path(cand))",
+        "        if not target_files:",
+        "            print(f'Error: Could not locate target files to audit for {origin_node}.', file=sys.stderr)",
+        "            sys.exit(1)",
+        "        for tf in target_files:",
+        "            src_metadata.stamp_audit(tf, role_name)",
+        "            src_metadata.update_metadata(tf, clear_dirty=True)",
+        "            rel_tf = os.path.relpath(tf, workspace_root)",
+        "            print(f'Attested {role_name.upper()}_AUDIT on {rel_tf}')",
+        "        storage.clear_messages(origin_node)",
+        "        sys.exit(0)",
+        "",
+        "    # Producer submission: resolve source file path",
+        "    src_path = storage._resolve_source_path(origin_node)",
+        "    if not src_path or not os.path.isfile(src_path):",
+        "        u_label = origin_node.unit_address",
+        "        u_dir = u_label.split(':')[0].lstrip('/')",
+        "        u_name = u_label.split(':')[-1]",
+        "        role_def = cleanroom_workspace_tool.resolve_role_definition(role_name, workspace_root)",
+        "        src_pat = role_def.get('src_pattern', '')",
+        "        if src_pat:",
+        "            cand = os.path.join(workspace_root, src_pat.format(unit_dir=u_dir, unit_name=u_name))",
+        "            if os.path.isfile(cand):",
+        "                src_path = Path(cand)",
+        "",
+        "    if not src_path or not os.path.isfile(src_path):",
+        "        print(f'Error: Could not locate source file for target {origin_node}.', file=sys.stderr)",
+        "        sys.exit(1)",
+        "",
+        "    rel_src = os.path.relpath(src_path, workspace_root)",
+        "    code_modified = src_metadata.is_code_modified(src_path)",
+        "",
+        "    # Validation Rule 1: Spurious change message when unmodified",
+        "    if message and not code_modified:",
+        "        print(f'Error: Change message was provided (\"{message}\"), but the file code body has not changed.', file=sys.stderr)",
+        "        print(f'To submit an unmodified verification without changes, run: bin/submit {rel_src}', file=sys.stderr)",
+        "        sys.exit(1)",
+        "",
+        "    # Validation Rule 2: Missing change message when modified",
+        "    if not message and code_modified:",
+        "        print('Error: File code body has been modified, but no change message was provided.', file=sys.stderr)",
+        "        print(f'Please provide a change summary: bin/submit {rel_src} \"<concise change summary>\"', file=sys.stderr)",
+        "        sys.exit(1)",
+        "",
+        "    # Valid Submission Cases",
+        "    if message and code_modified:",
+        "        src_metadata.record_change(src_path, message)",
+        "        storage.clear_messages(origin_node)",
+        "        print(f'Submitted {origin_node} ({rel_src}) with change: {message}')",
+        "        sys.exit(0)",
+        "    else:",
+        "        src_metadata.mark_clean(src_path)",
+        "        storage.clear_messages(origin_node)",
+        "        print(f'Submitted {origin_node} ({rel_src}) (unmodified verification)')",
+        "        sys.exit(0)",
+        "",
+        'if __name__ == "__main__":',
+        "    main()",
+        "",
+    ]
+    ctx.actions.write(
+        output = _wrapper_py,
+        content = "\n".join(_lines),
+        is_executable = True,
+    )
+
+    _manifest_depsets = []
+    if OutputGroupInfo in ctx.attr.node:
+        _manifest_depsets.append(ctx.attr.node[OutputGroupInfo].manifests)
+    _runfiles = ctx.runfiles(
+        files = [
+            _wrapper_py,
+            _manifest,
+        ],
+        transitive_files = depset(
+            transitive = _manifest_depsets + [
+                ctx.attr.node[DefaultInfo].transitive_sources if hasattr(ctx.attr.node[DefaultInfo], "transitive_sources") else depset([]),
+            ],
+        ),
+    ).merge(
+        ctx.runfiles(transitive_files = ctx.attr._dag_runner[PyInfo].transitive_sources),
+    ).merge(
+        ctx.runfiles(transitive_files = ctx.attr._cleanroom_tool[PyInfo].transitive_sources),
+    )
+
+    return [
+        DefaultInfo(
+            executable = _wrapper_py,
+            runfiles = _runfiles,
+        ),
+    ]
+
+_update_ai_node_submit_rule = rule(
+    implementation = _update_ai_node_submit_impl,
+    executable = True,
+    attrs = {
+        "node": attr.label(
+            mandatory = True,
+            doc = "The node target (must produce a manifest)",
+            aspects = [_collect_manifests],
+        ),
+        "_dag_runner": attr.label(
+            default = Label("//update_with_ai/parts/systems/lib:bazel_openai_loop_asm"),
+            providers = [PyInfo],
+        ),
+        "_cleanroom_tool": attr.label(
+            default = Label("//update_with_ai/support/lib:cleanroom_workspace_tool_lib"),
+            providers = [PyInfo],
+        ),
+    },
+)
+
+# ============================================================================
+# Rule: update_ai_node_blame (generates a blame target per node)
+# ============================================================================
+
+def _update_ai_node_blame_impl(ctx):
+    """Generates a Python binary that delivers blame/critique directly to a node's in-band header."""
+    _node = ctx.attr.node
+    _manifest = _node[DefaultInfo].files.to_list()[0]
+    _manifest_filename = _manifest.basename
+
+    _wrapper_py = ctx.actions.declare_file(ctx.label.name + ".py")
+    _lines = [
+        "#!/usr/bin/env python3",
+        "import json",
+        "import sys",
+        "import os",
+        "from pathlib import Path",
+        "",
+        "# Ensure lib is importable from workspace or runfiles",
+        "_bwd = os.environ.get('BUILD_WORKSPACE_DIRECTORY', '')",
+        "if _bwd:",
+        "    for cand in (_bwd, os.path.join(_bwd, 'update_with_ai'), os.path.join(_bwd, 'update_python_with_ai'), os.path.join(_bwd, 'update_with_ai', 'support', 'lib'), os.path.join(_bwd, 'update_python_with_ai', 'support', 'lib')):",
+        "        if os.path.isdir(cand) and cand not in sys.path:",
+        "            sys.path.insert(0, cand)",
+        "_runfiles_root = None",
+        'for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
+        "    if base and os.path.isdir(base):",
+        "        _runfiles_root = base",
+        "        break",
+        "if not _runfiles_root:",
+        "    _runfiles_root = os.getcwd()",
+        "for cand in (_runfiles_root, os.path.join(_runfiles_root, '_main'), os.path.join(_runfiles_root, 'cleanroom'), os.path.join(_runfiles_root, 'update_with_ai'), os.path.join(_runfiles_root, 'update_python_with_ai'), os.path.join(_runfiles_root, '_main', 'update_with_ai'), os.path.join(_runfiles_root, '_main', 'update_python_with_ai'), os.path.join(_runfiles_root, '_main', 'update_with_ai', 'support', 'lib'), os.path.join(_runfiles_root, '_main', 'update_python_with_ai', 'support', 'lib'), os.path.join(_runfiles_root, 'update_with_ai', 'support', 'lib'), os.path.join(_runfiles_root, 'update_python_with_ai', 'support', 'lib')):",
+        "    if os.path.isdir(cand) and cand not in sys.path:",
+        "        sys.path.insert(0, cand)",
+        "try:",
+        "    from support.lib.lifecycle import get_singleton",
+        "except ImportError:",
+        "    try:",
+        "        from update_python_with_ai.support.lib.lifecycle import get_singleton",
+        "    except ImportError:",
+        "        from update_with_ai.support.lib.lifecycle import get_singleton",
+        "try:",
+        "    import src_metadata",
+        "except ImportError:",
+        "    try:",
+        "        from update_with_ai.support.lib import src_metadata",
+        "    except ImportError:",
+        "        from support.lib import src_metadata",
+        "try:",
+        "    import cleanroom_workspace_tool",
+        "except ImportError:",
+        "    try:",
+        "        from update_with_ai.support.lib import cleanroom_workspace_tool",
+        "    except ImportError:",
+        "        from support.lib import cleanroom_workspace_tool",
+        "try:",
+        "    from update_with_ai.parts.systems.lib import bazel_openai_loop_asm",
+        "    from update_with_ai.parts.loop.lib.loop import Loop",
+        "    from update_with_ai.parts.dag.lib.dag_storage import FeedbackMessage, DagNode, DagStorage",
+        "    from update_with_ai.parts.bazel.lib.bazel_target import BazelTarget",
+        "    from update_with_ai.parts.bazel.lib.bazel_manifest_loader import BazelManifestLoader",
+        "except ImportError:",
+        "    from lib import bazel_openai_loop_asm",
+        "    from lib.loop import Loop",
+        "    from lib.dag_storage import FeedbackMessage, DagNode, DagStorage",
+        "    from lib.bazel_target import BazelTarget",
+        "    from lib.bazel_manifest_loader import BazelManifestLoader",
+        "",
+        "def main():",
+        "    args = sys.argv[1:]",
+        "    if not args:",
+        "        print('No blame message given.', file=sys.stderr)",
+        "        print('Usage: bazel run <this target> -- \"<blame critique>\"', file=sys.stderr)",
+        "        sys.exit(1)",
+        "    critique = \" \".join(args).strip()",
+        "",
+        "    # Determine workspace root from runfiles or cwd",
+        "    _runfiles_root = None",
+        '    for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
+        '        if os.path.isdir(os.path.join(base, "_main")):',
+        '            _runfiles_root = os.path.join(base, "_main")',
+        "            break",
+        "    workspace_root = os.environ.get(\"BUILD_WORKSPACE_DIRECTORY\", \"\") or _runfiles_root or os.getcwd()",
+        '    if "BUILD_WORKSPACE_DIRECTORY" in os.environ and os.path.isdir(os.environ["BUILD_WORKSPACE_DIRECTORY"]):',
+        '        os.chdir(os.environ["BUILD_WORKSPACE_DIRECTORY"])',
+        "",
+        "    # Find the manifest in runfiles",
+        "    _manifest_path = None",
+        '    manifest_name = "{}"'.format(_manifest_filename),
+        '    for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
+        "        if base:",
+        "            candidate = os.path.join(base, manifest_name)",
+        "            if os.path.isfile(candidate):",
+        "                _manifest_path = candidate",
+        "                break",
+        "",
+        "    if not _manifest_path:",
+        '        _script_dir = os.path.dirname(os.path.abspath(__file__)) or "."',
+        "        _manifest_path = os.path.join(_script_dir, manifest_name)",
+        "",
+        "    with open(_manifest_path) as f:",
+        "        manifest_data = json.load(f)",
+        "",
+        "    bazel_openai_loop_asm.__initialize__()",
+        "    node_util = get_singleton(BazelTarget)",
+        "    if 'unit' in manifest_data:",
+        "        origin_node = DagNode(unit_address=manifest_data['unit'], role_address=manifest_data.get('role', ''))",
+        "    else:",
+        "        node_label = manifest_data.get('label')",
+        "        origin_node = node_util.normalize_target(node_label)",
+        "    loader = get_singleton(BazelManifestLoader)",
+        "    loader.load_manifest(origin_node)",
+        "    storage = get_singleton(DagStorage)",
+        "",
+        "    role_name = origin_node.role_address.split(':')[-1] if origin_node.role_address else ''",
+        "    src_path = storage._resolve_source_path(origin_node)",
+        "    if not src_path or not os.path.isfile(src_path):",
+        "        u_label = origin_node.unit_address",
+        "        u_dir = u_label.split(':')[0].lstrip('/')",
+        "        u_name = u_label.split(':')[-1]",
+        "        role_def = cleanroom_workspace_tool.resolve_role_definition(role_name, workspace_root)",
+        "        src_pat = role_def.get('src_pattern', '')",
+        "        if src_pat:",
+        "            cand = os.path.join(workspace_root, src_pat.format(unit_dir=u_dir, unit_name=u_name))",
+        "            if os.path.isfile(cand):",
+        "                src_path = Path(cand)",
+        "",
+        "    if not src_path or not os.path.isfile(src_path):",
+        "        print(f'Error: Could not locate target file for {origin_node}.', file=sys.stderr)",
+        "        sys.exit(1)",
+        "",
+        "    caller = os.environ.get('CLEANROOM_ROLE') or os.environ.get('USER') or 'cleanroom'",
+        "    src_metadata.append_feedback(src_path, critique, sender=caller)",
+        "    src_metadata.mark_dirty(src_path, f'Blamed by {caller}: {critique}')",
+        "    storage.add_message(FeedbackMessage(content=critique), to=origin_node)",
+        "    rel_src = os.path.relpath(src_path, workspace_root)",
+        "    print(f'Blamed {origin_node} ({rel_src}): {critique}')",
+        "    sys.exit(0)",
+        "",
+        'if __name__ == "__main__":',
+        "    main()",
+        "",
+    ]
+    ctx.actions.write(
+        output = _wrapper_py,
+        content = "\n".join(_lines),
+        is_executable = True,
+    )
+
+    _manifest_depsets = []
+    if OutputGroupInfo in ctx.attr.node:
+        _manifest_depsets.append(ctx.attr.node[OutputGroupInfo].manifests)
+    _runfiles = ctx.runfiles(
+        files = [
+            _wrapper_py,
+            _manifest,
+        ],
+        transitive_files = depset(
+            transitive = _manifest_depsets + [
+                ctx.attr.node[DefaultInfo].transitive_sources if hasattr(ctx.attr.node[DefaultInfo], "transitive_sources") else depset([]),
+            ],
+        ),
+    ).merge(
+        ctx.runfiles(transitive_files = ctx.attr._dag_runner[PyInfo].transitive_sources),
+    ).merge(
+        ctx.runfiles(transitive_files = ctx.attr._cleanroom_tool[PyInfo].transitive_sources),
+    )
+
+    return [
+        DefaultInfo(
+            executable = _wrapper_py,
+            runfiles = _runfiles,
+        ),
+    ]
+
+_update_ai_node_blame_rule = rule(
+    implementation = _update_ai_node_blame_impl,
+    executable = True,
+    attrs = {
+        "node": attr.label(
+            mandatory = True,
+            doc = "The node target (must produce a manifest)",
+            aspects = [_collect_manifests],
+        ),
+        "_dag_runner": attr.label(
+            default = Label("//update_with_ai/parts/systems/lib:bazel_openai_loop_asm"),
+            providers = [PyInfo],
+        ),
+        "_cleanroom_tool": attr.label(
+            default = Label("//update_with_ai/support/lib:cleanroom_workspace_tool_lib"),
+            providers = [PyInfo],
+        ),
+    },
+)
+
+# ============================================================================
 # Rule: update_ai_node_prompt (generates a prompt target per node)
 # ============================================================================
 
@@ -1390,7 +1857,7 @@ def _update_ai_node_prompt_impl(ctx):
         "# Ensure lib is importable from runfiles",
         "_runfiles_root = None",
         'for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
-        '    if base and os.path.isdir(base):',
+        "    if base and os.path.isdir(base):",
         "        _runfiles_root = base",
         "        break",
         "if not _runfiles_root:",
@@ -1578,6 +2045,17 @@ collect_node_manifests = _collect_manifests
 # Rules & Macros: define_unit, define_role, define_node
 # ============================================================================
 
+CleanroomUnitInfo = provider(
+    doc = "Provider for cleanroom unit declarations",
+    fields = {
+        "name": "Unit name",
+        "unit_name": "Unit name",
+        "unit_dir": "Package directory",
+        "unit_deps": "List of unit dependency labels",
+        "component_type": "Component type",
+    },
+)
+
 def _define_unit_impl(ctx):
     manifest = ctx.actions.declare_file("{}_unit_manifest.json".format(ctx.label.name))
     pkg_dir = ctx.label.package
@@ -1600,6 +2078,13 @@ def _define_unit_impl(ctx):
         DefaultInfo(
             files = depset([manifest]),
             runfiles = ctx.runfiles(files = [manifest]),
+        ),
+        CleanroomUnitInfo(
+            name = ctx.attr.name,
+            unit_name = ctx.attr.name,
+            unit_dir = pkg_dir,
+            unit_deps = unit_deps,
+            component_type = ctx.attr.component_type,
         ),
     ]
 
@@ -1794,6 +2279,64 @@ def define_unit(name, unit_deps = [], component_type = "implementation", visibil
     )
     return ":" + name
 
+def _cleanroom_scope_manifest_impl(ctx):
+    """Generates scope_manifest.json containing all units, module_deps, and roots."""
+    manifest = ctx.actions.declare_file("{}_scope_manifest.json".format(ctx.label.name))
+    all_units = {}
+    depended_units = {}
+
+    for u in ctx.attr.units:
+        if CleanroomUnitInfo in u:
+            info = u[CleanroomUnitInfo]
+            all_units[info.unit_name] = {
+                "name": info.unit_name,
+                "unit_dir": info.unit_dir,
+                "unit_deps": info.unit_deps,
+                "component_type": info.component_type,
+            }
+            for d in info.unit_deps:
+                dep_name = d.split(":")[-1]
+                depended_units[dep_name] = True
+
+    roots = sorted([name for name in all_units.keys() if name not in depended_units])
+
+    content = {
+        "scope": ctx.attr.scope,
+        "units": all_units,
+        "roots": roots,
+    }
+    ctx.actions.write(
+        output = manifest,
+        content = json.encode(content),
+    )
+    return [
+        DefaultInfo(
+            files = depset([manifest]),
+            runfiles = ctx.runfiles(files = [manifest]),
+        ),
+    ]
+
+_cleanroom_scope_manifest_rule = rule(
+    implementation = _cleanroom_scope_manifest_impl,
+    attrs = {
+        "scope": attr.string(
+            default = "staging",
+            doc = "Directory scope",
+        ),
+        "units": attr.label_list(
+            doc = "List of unit targets",
+        ),
+    },
+)
+
+def cleanroom_scope_manifest(name = "scope_manifest", scope = "staging", units = [], **kwargs):
+    _cleanroom_scope_manifest_rule(
+        name = name,
+        scope = scope,
+        units = units,
+        **kwargs
+    )
+
 def define_role(
         name,
         src_pattern = "",
@@ -1842,7 +2385,7 @@ def define_role(
         persona: Human-readable persona describing the agent's role responsibilities.
         workspace_files: Repository-relative files or directories copied to isolated workspaces.
         tools: Repository-relative tool files or linters copied to isolated workspaces
-            for subagentless execution (e.g. cleanroom-sync); files
+            for subagentless execution (e.g. bin/cleanroom); files
             that the agent needs to inspect during an agent loop must be declared as
             node_deps instead.
         derive_build_template: Pre-sync command template deriving child BUILD.bazel.
@@ -1936,6 +2479,18 @@ def define_node(name, unit, role, src = "", config = None, visibility = None):
         node = ":{}".format(name),
         **_rule_kwargs
     )
+    _submit_target = name + "_submit"
+    _update_ai_node_submit_rule(
+        name = _submit_target,
+        node = ":{}".format(name),
+        **_rule_kwargs
+    )
+    _blame_target = name + "_blame"
+    _update_ai_node_blame_rule(
+        name = _blame_target,
+        node = ":{}".format(name),
+        **_rule_kwargs
+    )
     _mark_clean_target = name + "_mark_clean"
     _update_ai_node_mark_clean_rule(
         name = _mark_clean_target,
@@ -1973,7 +2528,7 @@ def _update_ai_batch_mark_clean_impl(ctx):
         "# Ensure lib is importable from runfiles",
         "_runfiles_root = None",
         'for base in (os.environ.get("RUNFILES_DIR", ""), os.environ.get("BAZEL_RUNFILES", "")):',
-        '    if base and os.path.isdir(base):',
+        "    if base and os.path.isdir(base):",
         "        _runfiles_root = base",
         "        break",
         "if not _runfiles_root:",
@@ -2266,4 +2821,3 @@ def batch_mark_clean(name, role = "", scope_dir = "", visibility = None):
         scope_dir = scope_dir,
         **_rule_kwargs
     )
-

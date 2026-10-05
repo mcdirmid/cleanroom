@@ -119,14 +119,14 @@ Option 3 replaces subagents entirely by moving the isolation boundary from the *
                            CANONICAL REPOSITORY
                      (/Users/.../projects/cleanroom)
                                    │
-              bin/cleanroom-sync   │   bin/cleanroom-sync
+              bin/get_work (pull)  │   bin/submit (direct mutation)
          ┌─────────────────────────┴─────────────────────────┐
          ▼                                                   ▼
 ROLE WORKSPACE: lib                                 ROLE WORKSPACE: test
 (../role_workspaces/cleanroom_lib_<dir>)             (../role_workspaces/cleanroom_test_<dir>)
 ├── AGENTS.md (Lib Engineer)                        ├── AGENTS.md (Test Engineer)
-├── .cleanroom_role.json (Role config)              ├── .cleanroom_role.json (Role config)
-├── bin/cleanroom-dirty, bin/submit, bin/fail       ├── bin/cleanroom-dirty, bin/submit, bin/blame, bin/fail
+├── .cleanroom_role.json (Pathless descriptor)      ├── .cleanroom_role.json (Pathless descriptor)
+├── bin/get_work, bin/submit, bin/fail              ├── bin/get_work, bin/submit, bin/blame, bin/fail
 ├── parts/<unit>/lib/ (Read/Write, In-Band Meta)    ├── parts/<unit>/tests/ (Read/Write, In-Band Meta)
 ├── parts/<unit>/grounding/ (chmod 444)             ├── parts/<unit>/grounding/ (chmod 444)
 └── (tests/ completely omitted)                     ├── parts/<unit>/lib/ (READ-ONLY STUBS, chmod 444)
@@ -140,18 +140,18 @@ Interactive Chat: Lib                               Interactive Chat: Test
 ### 4.2 Core Confinement & Verification Mechanics
 
 1. **Physical Directory Isolation (`../role_workspaces/<workspace-name>_<role>_<dir>/`)**:
-   Workspaces are provisioned as visible sibling folders scoped strictly to a single directory. They contain no `.git` metadata and no paths back to the canonical repository, completely preventing git sniffing or shell traversal leaks.
+   Workspaces are provisioned as visible sibling folders scoped strictly to a single directory. They contain no `.git` metadata and no paths back to the canonical repository, completely preventing git sniffing or shell traversal leaks. The canonical repository is resolved relatively via convention (`../../<workspace_name>`).
 2. **Four-Tier Confinement Defense**:
    - *Tier 1 (Structural Oblivion)*: Unreferenced roles are not copied; real `lib` code never enters `test`, and `test` code never enters `lib`.
    - *Tier 2 (Antigravity Policy)*: `fileAccessPolicy: AGENT_SETTING_POLICY_DENY` blocks tool calls targeting paths outside the workspace.
    - *Tier 3 (OS Kernel Hardening)*: Specifications (`grounding/*.pyi`, `grounding/*.gt`), configs, and build files are set to `chmod 444`. Edits fail at the OS level.
-   - *Tier 4 (AGENTS.md Invariants)*: Strict instructions forbid `chmod` or parent directory traversal. Integrity is cryptographically audited via SHA-256 hashes during synchronization.
+   - *Tier 4 (AGENTS.md Invariants)*: Strict instructions forbid `chmod`, `git`, or parent directory traversal. Mandatory execution of `bin/get_work` ensures fresh contracts.
 3. **Read-Only Interface Stubs for Double-Blind Testing**:
    To allow the Test role to compile and type-check tests (`bazel test ..._test_type_check`) without seeing the real implementation, the workspace generator derives pure interface stubs from `.pyi` grounding specifications (`raise NotImplementedError`). Symbols match exactly, but real code is completely absent.
 4. **Stage 0 Hermetic Tool Bundles**:
    Meta-tools like `bin/grounding_tool` are packaged as frozen standalone zipapp bundles, decoupling verifier execution from mutable local workspace files.
-5. **Declarative Synchronization via In-Band Metadata (`bin/cleanroom-sync`)**:
-   Operates via in-band comment headers (`LAST_CLEANED`, `LAST_CHANGED`, `<ROLE>_AUDIT`) and omni-directional cascade synchronization, eliminating fragile filesystem modification times and external sidecar textprotos.
+5. **Zero-Sync Direct Bazel Mutations & Inbound Pull**:
+   Operates via in-band comment headers (`LAST_CLEANED`, `LAST_CHANGED`, `<ROLE>_AUDIT`), direct-to-main Bazel submissions (`_submit`), and immediate blame injection (`_blame`), eliminating manual synchronization sweeps and intermediate buffer files. Managed via `bin/cleanroom`.
 
 ### 4.3 Why Option 3 is Dramatically More Cost-Efficient
 
@@ -187,11 +187,11 @@ If autonomous subagents are reconsidered in the future, Cleanroom will **NOT** r
 flowchart TD
     subgraph MainWorkspace ["Main Canonical Workspace (cleanroom/)"]
         SuperAgent["Supervisor Agent / Coordinator"]
-        SyncTool["cleanroom-sync Tool"]
+        CleanroomTool["bin/cleanroom CLI"]
         Meta["In-Band Source Metadata (src_metadata.py)"]
         
-        SuperAgent -->|"1. Inspect dirty status (cleanroom-dirty)"| Meta
-        SuperAgent -->|"2. Cascade sync"| SyncTool
+        SuperAgent -->|"1. Inspect dirty status (bin/cleanroom dirty)"| Meta
+        SuperAgent -->|"2. Lifecycle management"| CleanroomTool
     end
 
     subgraph SiblingWorkspaces ["Sibling Role Workspaces (role_workspaces/)"]
@@ -200,25 +200,24 @@ flowchart TD
         QAWS["qa/ Workspace<br/>(Logless assembly auditor)"]
     end
 
-    SyncTool -->|"Prepare & Harden"| LibWS
-    SyncTool -->|"Prepare & Harden"| TestWS
-    SyncTool -->|"Prepare & Harden"| QAWS
+    CleanroomTool -->|"Prepare & Harden"| LibWS
+    CleanroomTool -->|"Prepare & Harden"| TestWS
+    CleanroomTool -->|"Prepare & Harden"| QAWS
 
     SuperAgent -->|"3. invoke_subagent(Workspace='../role_workspaces/cleanroom_lib_dir')"| LibAgent["Lib Subagent"]
     SuperAgent -->|"4. invoke_subagent(Workspace='../role_workspaces/cleanroom_test_dir')"| TestAgent["Test Subagent"]
 
-    LibAgent -->|"Edit & submit"| LibWS
-    TestAgent -->|"Edit & submit"| TestWS
+    LibAgent -->|"Edit & bin/submit"| LibWS
+    TestAgent -->|"Edit & bin/submit"| TestWS
 
-    LibWS -->|"5. bin/cleanroom-sync"| SyncTool
-    TestWS -->|"5. bin/cleanroom-sync"| SyncTool
-    SyncTool -->|"Harvest & cascade"| Meta
+    LibWS -->|"5. Direct Bazel mutation"| MainWorkspace
+    TestWS -->|"5. Direct Bazel mutation"| MainWorkspace
 ```
 
 #### Why This Future Architecture is Superior:
 1. **Natural OS Confinement**: The subagent runs inside `../role_workspaces/<workspace-name>_<role>_<dir>/`. The operating system and directory structure enforce Cleanroom blindness natively. No hook interceptors or daemon sentinels are required.
-2. **Simplified Agent Tooling**: The subagent does not need special MCP tools or shell CLI wrappers. It uses standard native file tools (`view_file`, `replace_file_content`), inspects tasks with `bin/cleanroom-dirty`, and simply calls `bin/submit` when finished.
-3. **No In-Tree Contamination**: The main repository remains completely untouched until verified changes are cleanly synchronized back via `cleanroom-sync`.
+2. **Simplified Agent Tooling**: The subagent does not need special MCP tools or shell CLI wrappers. It uses standard native file tools (`view_file`, `replace_file_content`), inspects tasks with `bin/get_work`, and simply calls `bin/submit` when finished.
+3. **No In-Tree Contamination**: The main repository remains completely untouched until verified changes are directly submitted via Bazel targets.
 4. **Graceful Fallback**: If subagent quota is exhausted, the developer simply opens the workspace directory in Antigravity and continues the work in an interactive conversation chat without altering a single configuration.
 
 ---
@@ -235,9 +234,9 @@ flowchart TD
 | **Token Cost Profile** | Pay-per-token (API rates) | **Extremely High** (Subagent tax, prompt repeats) | **Lowest / Most Efficient** (High KV cache hit rates) | Moderate (Isolated subagent turns without daemon tax) |
 | **Quota Sustainability** | Depends on API credit balance | **Poor** (Bursts exhaust 5h Ultra quota in minutes) | **Excellent** (Runs comfortably within standard quota) | Good (Targeted spawns without nested polling) |
 | **Verification Gate** | In-process Bazel check before submit | Python client calls server `check-files` | Local Bazel/linter check before `bin/submit` | Local Bazel/linter check before `bin/submit` |
-| **Synchronization** | Direct in-band metadata updates | Server mutates memory (Decommissioned) | In-band source metadata synced via `cleanroom-sync` | In-band source metadata synced via `cleanroom-sync` |
+| **Synchronization** | Direct in-band metadata updates | Server mutates memory (Decommissioned) | Zero-sync direct Bazel mutations & `bin/get_work` pull | Zero-sync direct Bazel mutations & `bin/get_work` pull |
 | **Human Steerability** | None (Headless batch runner) | Low (Autonomous subagent tree) | **High** (Interactive conversational pair-programming) | High (Supervisor oversight in Main Workspace) |
-| **Code Locations** | `parts/loop/`, `parts/openai/` | `parts/antigravity/`, `parts/mcp/` | `bin/cleanroom-sync`, `src_metadata.py` | Built on `bin/cleanroom-sync` |
+| **Code Locations** | `parts/loop/`, `parts/openai/` | `parts/antigravity/`, `parts/mcp/` | `bin/cleanroom`, `src_metadata.py` | Built on `bin/cleanroom` |
 | **Current Status** | **Production (Headless)** | **Candidate for Turn-Down** | **Primary (Interactive Antigravity)** | **Architectural Roadmap** |
 
 ---
@@ -251,7 +250,7 @@ To complete the turn-down of Option 2 and establish Option 3 as the definitive i
    - Update `design-docs/antigravity_integration.md` and `design-docs/bazel_role_mcp_server.md` with implementation reality notes and deprecation notices.
    - Update `design-docs/subagentless_cleanroom_workspaces.md` as the primary reference for Antigravity workflows.
 2. **Skill Streamlining**:
-   - Deprecate or retire the tiered subagent orchestration in `.agents/skills/cleanroom/SKILL.md` in favor of workflows based on `bin/cleanroom-sync` and workspace chat dispatch.
+   - Deprecate or retire the tiered subagent orchestration in `.agents/skills/cleanroom/SKILL.md` in favor of workflows based on `bin/cleanroom` and workspace chat dispatch.
 3. **Decommissioning In-Tree MCP Infrastructure**:
    - Retire the FastMCP runner daemon (`cleanroom_mcp_runner_impl.py`) and sentinel tracking (`.mcp.active`).
    - Deprecate shell-exec client wrappers (`antigravity_mcp_client_impl.py`, `cleanroom_mcp_client.py`).

@@ -398,80 +398,47 @@ Role workspaces contain only the files relevant to their specific role tier (`sr
   ```
 - **In-Band Consistency**: When the role workspace is provisioned or refreshed, the target file is copied from the canonical repo into the workspace with its embedded in-band metadata block (including any `FEEDBACK:` entries). The role agent sees the exact same context both in `WORK_ORDER.md` and when calling `view_file` on the source file itself.
 
-#### 2. Submission-Free Discovery & File Copy-Back
-Cleanroom does **not** use an intermediate submission mailbox (such as `COMPLETED.md`) for submits. Instead:
-- **Direct Workspace Editing**: Role engineers edit their assigned writable files directly in their role workspace (e.g. `lib/*.py` in `cleanroom_lib`, `tests/*_test.py` in `cleanroom_test`).
-- **Discovery on Sync**: When `bin/cleanroom-sync` executes in the primary workspace, it compares the role workspace's assigned files against the canonical repository (via content hashes / timestamps).
-- **In-Band Header Integration on Copy-Back**:
-  - The primary workspace copies the updated files back into the canonical tree.
-  - It discovers what was cleaned directly from the copied-back files, updating their in-band metadata header:
-    - `LAST_CLEANED = T_now`
-    - If the code changed: `LAST_CHANGED = T_now` and updates the single-line `CHANGE:` description.
-    - Any existing `FEEDBACK:` section in that file is automatically stripped (as the file has been cleaned).
-- By eliminating `COMPLETED.md` for submits, the file system itself is the single source of truth, removing an entire layer of redundant submission book-keeping.
+#### 2. Direct-to-Main Submissions via Bazel Targets
+Cleanroom does **not** use an intermediate submission mailbox or manual harvest sweeps. Instead:
+- **Direct Workspace Submissions**: When a role engineer finishes authoring and verifying a target, they execute `bin/submit <file> "<summary>"`.
+- **Bazel-Backed Macro Invocations**:
+  - The modified writable target is copied directly to the canonical main workspace.
+  - `bin/submit` delegates directly to `bazel run //pkg:unit_role_submit -- "[summary]"`.
+  - Bazel validates the change summary, updates `LAST_CLEANED = T_now`, sets `LAST_CHANGED = T_now` (if code changed), updates `CODE_HASH`, and clears resolved `FEEDBACK:` and `DIRTY:` markers.
+- For auditor roles, `bin/submit <file>` delegates to `bazel run //pkg:unit_qa_submit`, stamping `<ROLE>_AUDIT: T_now` into the target file header in main.
 
-#### 3. Feedback Indirection via `.cleanroom_blame_buffer.json`
-Because upstream specifications and implementations are mounted read-only (`chmod 444` or interface stubs) inside a role workspace, an agent **cannot edit an upstream file directly**, and `cleanroom-sync` will never copy non-role files back. 
+#### 3. Direct Upstream Blame via Bazel Targets
+Because upstream specifications and implementations are mounted read-only (`chmod 444` or interface stubs) inside a role workspace, an agent cannot edit an upstream file directly:
+- When an agent discovers an upstream specification defect, it executes:
+  `bin/blame <culprit-file> "<actionable critique>"`
+- `bin/blame` delegates directly to `bazel run //pkg:culprit_blame -- "<critique>"`.
+- The Bazel target injects the critique directly into the culprit's in-band `FEEDBACK:` section in canonical main and advances its `LAST_CLEANED = T_now`.
+- This immediately marks the culprit unit dirty across the repository without needing intermediate local JSON buffers.
 
-Therefore, feedback/blame targeting immutable upstream files is buffered into a lockless JSON buffer at the workspace root: **`.cleanroom_blame_buffer.json`**:
-- When an agent in a role workspace (e.g. Test or QA) discovers a defect in an upstream contract, it runs `bin/blame <file> <blame_dep> "<critique>"`.
-- `bin/blame` appends an entry to `.cleanroom_blame_buffer.json`:
-  ```json
-  [
-    {
-      "target": "staging/parts/agent/lib/agent_config.py",
-      "blamed_by": "staging/parts/agent/tests/agent_config_test.py",
-      "explanation": "Contract violation: temperature parameter must accept float values between 0.0 and 2.0 inclusive",
-      "dirty_reason": "Blamed by staging/parts/agent/tests/agent_config_test.py: Contract violation: temperature parameter must accept float values between 0.0 and 2.0 inclusive",
-      "timestamp": "2026-10-04T12:00:00Z"
-    }
-  ]
-  ```
-
-#### 4. Canonical Integration & "One and Done" Redistribution on Sync
-When `bin/cleanroom-sync` executes in the primary workspace, it runs a decoupled **two-phase sweep**:
-
-1. **Phase 1: Inbound Harvest Across ALL Workspaces**:
-   - `cleanroom-sync` scans active role workspaces for `.cleanroom_blame_buffer.json`.
-   - For each blame entry, it calls:
-     - `src_metadata.mark_dirty(target_canonical, reason=dirty_reason)`: adds `DIRTY: <dirty_reason>` and advances `LAST_CLEANED = T_now`.
-     - `src_metadata.append_feedback(target_canonical, explanation, sender=blamed_by)`: appends to `FEEDBACK:` and advances `LAST_CLEANED = T_now`.
-   - The buffer file in the role workspace is cleared.
-2. **Dynamic Timestamp Invalidation**:
-   - Because `append_feedback` advances `LAST_CLEANED = T_now`, the file's lifecycle event timestamp ($T_{\text{event}} = \max(T_{\text{changed}}, T_{\text{cleaned}})$) advances to the current moment.
-3. **Phase 2: Outbound Cascade in the SAME Run ("One and Done")**:
-   - During the immediate Phase 2 cascade of that same sync execution, the sync engine checks all workspaces.
-   - For the culprit role workspace (e.g. `cleanroom_lib`), the canonical file now has $T_{\text{main\_event}} > T_{\text{ws\_event}}$.
-   - `cleanroom-sync` immediately pushes the blamed file with its embedded `DIRTY:` tag and `FEEDBACK:` section into the culprit's workspace!
-   - When the Lib engineer runs `bin/get_work` in their workspace, the unit is immediately reported as dirty with the exact feedback reason.
+#### 4. Automatic Inbound Synchronization via `bin/get_work`
+State propagation between the canonical main repository and role workspaces is completely automated:
+- When a role agent executes `bin/get_work` at the beginning of its turn:
+  1. It silently pulls updated files, newly materialized templates, and blamed targets from canonical main.
+  2. It evaluates the global dependency graph on main, reporting ready tasks with their exact critique reasons.
+- No separate manual synchronization tool or multi-pass sweeps are required.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant TestWS as Role Workspace: Test (chmod 444 on lib)
-    participant Buffer as Buffer: .cleanroom_blame_buffer.json
-    participant MainSync as cleanroom-sync (Two-Phase Sweep)
     participant CanonRepo as Canonical Repository (Main WS)
+    participant Bazel as Bazel Build Graph
     participant LibWS as Role Workspace: Lib
 
     Note over TestWS: Test agent detects bug in lib/agent_config.py
-    TestWS->>Buffer: bin/blame lib/agent_config.py "Contract violation"
-    Note over TestWS: Test agent runs bin/submit test.py
+    TestWS->>Bazel: bin/blame test.py lib/agent_config.py "Contract violation"
+    Bazel->>CanonRepo: Inject FEEDBACK: & advance LAST_CLEANED = T_now
+    Note over CanonRepo: lib/agent_config.py is now dynamically DIRTY in main
 
-    rect rgb(240, 248, 255)
-    Note over MainSync,CanonRepo: Phase 1: Inbound Harvest (All Workspaces)
-    MainSync->>TestWS: 1. Harvest verified test.py
-    MainSync->>Buffer: 2. Read and clear .cleanroom_blame_buffer.json
-    MainSync->>CanonRepo: 3. Stamp lib/agent_config.py with DIRTY, FEEDBACK, and LAST_CLEANED = T_now
-    Note over CanonRepo: lib/agent_config.py is now dynamically DIRTY
-    end
-
-    rect rgb(255, 250, 240)
-    Note over MainSync,LibWS: Phase 2: Outbound Cascade (In the SAME sync sweep)
-    MainSync->>LibWS: 4. Push dirty lib/agent_config.py with FEEDBACK (T_main > T_ws)
-    end
-
-    Note over LibWS: Lib agent runs bin/get_work, reads feedback in header, and fixes in-place
+    Note over LibWS: Lib agent starts turn
+    LibWS->>CanonRepo: bin/get_work: Silent Inbound Pull & Global Queue Evaluation
+    CanonRepo->>LibWS: Pull updated lib/agent_config.py with FEEDBACK:
+    Note over LibWS: Lib agent inspects queue: reports READY with feedback!
 ```
 
 ### 6.5 Transparent Linter & AST Compatibility

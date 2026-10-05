@@ -1,5 +1,5 @@
 <!-- CLEANROOM METADATA
-LAST_CLEANED: 2026-10-05T05:32:13Z
+LAST_CLEANED: 2026-10-05T20:52:01Z
 LAST_CHANGED: 2026-10-05T05:32:13Z
 CHANGE: Add empty path rejection and separator/segment normalization contracts
 CODE_HASH: 8c5ad5f8c5af

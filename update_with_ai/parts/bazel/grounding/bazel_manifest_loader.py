@@ -1,8 +1,9 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T06:13:46Z
+# LAST_CLEANED: 2026-10-05T20:52:01Z
 # LAST_CHANGED: 2026-10-05T06:13:46Z
 # CHANGE: Align postconditions and class docstrings with low-level contract
 # CODE_HASH: 0ba92064695f
+# GROUNDING_QA_AUDIT: 2026-10-05T20:52:01Z
 # --- END CLEANROOM METADATA ---
 
 """Bazel manifest loader grounding specification module."""

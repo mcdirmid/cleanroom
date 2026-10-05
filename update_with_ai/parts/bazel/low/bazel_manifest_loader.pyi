@@ -1,5 +1,5 @@
 # --- CLEANROOM METADATA ---
-# LAST_CLEANED: 2026-10-05T05:39:33Z
+# LAST_CLEANED: 2026-10-05T20:52:01Z
 # LAST_CHANGED: 2026-10-05T05:39:33Z
 # CHANGE: Streamline manifest resolution by removing redundant dependency contract
 # CODE_HASH: a98631a93804
